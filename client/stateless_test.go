@@ -138,9 +138,9 @@ func TestTryDecodeJSONRPC(t *testing.T) {
 		body string
 		want bool
 	}{
-		{"valid error body", `{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"x"}}`, true},
+		{"valid error body", `{"jsonrpc":"2.0","id":1,"error":{"code":-32020,"message":"x"}}`, true},
 		{"valid result body", `{"jsonrpc":"2.0","id":1,"result":{}}`, true},
-		{"missing jsonrpc", `{"id":1,"error":{"code":-32001}}`, false},
+		{"missing jsonrpc", `{"id":1,"error":{"code":-32020}}`, false},
 		{"plain text", `<html>...`, false},
 		{"empty", ``, false},
 	}

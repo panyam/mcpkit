@@ -339,7 +339,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 
 	// SEP-2243 §Server Validation: Mcp-Method (always) and Mcp-Name
 	// (when body carries a name-shaped param) MUST match the body, or
-	// the server rejects with HTTP 400 + JSON-RPC -32001.
+	// the server rejects with HTTP 400 + JSON-RPC -32020.
 	//
 	// Gated on the session's negotiated protocol version because
 	// SEP-2243 lives in 2026-07-28 only — no dated release imposes

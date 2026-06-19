@@ -20,7 +20,7 @@ import (
 // Flow:
 //
 //  1. Cross-check MCP-Protocol-Version HTTP header against
-//     _meta[protocolVersion]. Disagreement → -32001 + HTTP 400.
+//     _meta[protocolVersion]. Disagreement → -32020 + HTTP 400.
 //  2. Dispatch via t.statelessDispatcher.Dispatch (which itself
 //     validates _meta and protocol-version against the supported
 //     list, threads RequestMeta through ctx, and routes by method).
@@ -37,7 +37,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 
 	// (1) Header / _meta version cross-check. Header may be absent
 	// (some clients only stamp _meta); _meta-only is fine. Mismatch
-	// when both are present → -32001 HeaderMismatch.
+	// when both are present → -32020 HeaderMismatch.
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
 		metaVer := peekMetaProtocolVersion(req.Params)
 		if mismatchResp := statelessVersionMismatch(id, hdrVer, metaVer); mismatchResp != nil {
@@ -52,7 +52,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// Lenient on absent headers — keeps clients that haven't adopted
 	// SEP-2243 yet working — strict on mismatched values, which is what
 	// the conformance suite locks. Header *presence* without a match
-	// surfaces -32001 via headerMismatchResponse with the diagnostic
+	// surfaces -32020 via headerMismatchResponse with the diagnostic
 	// `data` payload (header, expected, received).
 	if r.Header.Get(core.McpMethodHeader) != "" {
 		if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
@@ -135,7 +135,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 	dispatchCtx = core.WithStatelessClaims(dispatchCtx, claims)
 
 	// SSE headers are set lazily on first write so a dispatch-time
-	// error response (-32001 header mismatch, -32004 unsupported
+	// error response (-32020 header mismatch, -32004 unsupported
 	// protocol version, -32601 method not found from the bare default
 	// branch) can still be surfaced as a normal JSON-RPC response over
 	// HTTP 200 (the legacy path stages an HTTP-level auth error
@@ -215,7 +215,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 // writeStatelessResponse marshals a JSON-RPC response and writes it
 // with the SEP-2575-mandated HTTP status. Success responses go out
 // with 200; error responses use stateless.HTTPStatusForCode so
-// -32601→404, -32001/-32003/-32004/-32602/-32700/-32600→400, etc.
+// -32601→404, -32020/-32021/-32004/-32602/-32700/-32600→400, etc.
 //
 // Headers (Content-Type) MUST be set before WriteHeader; the
 // applyStagedResponseHeaders call upstream of us already stamped

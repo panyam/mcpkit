@@ -36,7 +36,7 @@ suites:
     status: PASS
     source:
       repo: panyam/mcpconformance
-      branch: feat/tasks-mrtr-extension
+      branch: fix/tasks-mrtr-error-codes
       path_var: MCPCONFORMANCE_TASKS_V2_PATH
       default_path: ../conf-tasks-mrtr
 
@@ -46,7 +46,7 @@ suites:
     status: PASS
     source:
       repo: panyam/mcpconformance
-      branch: feat/tasks-mrtr-extension
+      branch: fix/tasks-mrtr-error-codes
       path_var: MCPCONFORMANCE_MRTR_PATH
       default_path: ../conf-tasks-mrtr
 
