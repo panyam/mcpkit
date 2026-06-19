@@ -23,7 +23,7 @@ Look up tool's Execution.TaskSupport:
   └── required → server must create a task (gated on client extension)
        ↓
 Has the client negotiated the tasks extension?
-  ├── No, and TaskSupport=required → -32003 with requiredCapabilities
+  ├── No, and TaskSupport=required → -32021 with requiredCapabilities
   ├── No, and TaskSupport=optional → run sync (no task)
   └── Yes → run the handler, then peek at what it returned
        ↓
@@ -150,7 +150,7 @@ Three values:
 
 - **`TaskSupportForbidden`** (or absent `Execution`) — tool never runs as a task. Handler returns sync. Server ignores `core.GoAsyncResult` if the handler somehow returns it.
 - **`TaskSupportOptional`** — tool *may* run as a task, depending on what the handler does. If the client hasn't negotiated the tasks extension, the server falls back to sync.
-- **`TaskSupportRequired`** — tool *must* run as a task. If the client hasn't negotiated the tasks extension, the server returns `-32003` (Missing Required Client Capability) with a structured `requiredCapabilities` payload so the client knows what to add.
+- **`TaskSupportRequired`** — tool *must* run as a task. If the client hasn't negotiated the tasks extension, the server returns `-32021` (Missing Required Client Capability) with a structured `requiredCapabilities` payload so the client knows what to add.
 
 ### Client negotiation
 
@@ -692,7 +692,7 @@ err := client.CancelTask(c, taskID)
 
 | Error | When | Action |
 |---|---|---|
-| `-32003 missing required client capability` (`io.modelcontextprotocol/tasks`) | Tool has `TaskSupport=required` but client didn't declare the extension | Add `client.WithTasksExtension()` or per-request `_meta.clientCapabilities.extensions` |
+| `-32021 missing required client capability` (`io.modelcontextprotocol/tasks`) | Tool has `TaskSupport=required` but client didn't declare the extension | Add `client.WithTasksExtension()` or per-request `_meta.clientCapabilities.extensions` |
 | `-32602 request params missing required _meta envelope` | Stateless request without `_meta` | Add the SEP-2575 `_meta` envelope on every stateless request |
 | `task not found` | `tasks/get` after the TTL has expired | Reduce `pollIntervalMs` or use `WaitForTask` to avoid hitting the TTL window |
 | `errTaskTerminal` (server-side) | Trying to transition a terminal task (e.g., cancel-after-completed race) | Expected; treat as benign, the task already completed |

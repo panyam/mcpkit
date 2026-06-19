@@ -219,7 +219,7 @@ func (b *statelessBackend) ListCacheScope() string {
 // around a terminal handler that dispatches by method:
 //
 //   - "tools/call" → look up the registered tool, invoke it, translate
-//     *core.MissingCapabilityError into a SEP-2575 -32003 response.
+//     *core.MissingCapabilityError into a SEP-2575 -32021 response.
 //   - any other method → consult s.dispatcher.customHandlers (the map populated
 //     by Server.HandleMethod, used by tasks.Register for tasks/get|update|cancel).
 //     Returns -32601 when no handler is registered for the method.

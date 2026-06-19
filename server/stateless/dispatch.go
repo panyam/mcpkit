@@ -77,7 +77,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 
 	// Validate the protocol version against what this server speaks.
 	// Transport layer separately validates MCP-Protocol-Version HTTP
-	// header alignment via -32001 HeaderMismatch; here we surface a
+	// header alignment via -32020 HeaderMismatch; here we surface a
 	// version-unknown failure with -32004 + the supported list.
 	supported := d.Backend.SupportedVersions()
 	versionOK := false
@@ -131,7 +131,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		// events/subscribe, tasks/get|update|cancel, future SEPs,
 		// caller-defined endpoints) goes through the backend's
 		// middleware-aware path so:
-		//   - extension capability gating (handler emits -32003 if the
+		//   - extension capability gating (handler emits -32021 if the
 		//     per-request _meta.io.modelcontextprotocol/clientCapabilities
 		//     omits the extension declaration), and
 		//   - any server-level middleware (auth, logging, tracing)

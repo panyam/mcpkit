@@ -38,7 +38,7 @@ These exist so the upstream conformance scenario can drive specific spec invaria
 
 | Tool | What it tests |
 |---|---|
-| `test_missing_capability` | Returns `-32003` + structured `requiredCapabilities` when the per-request `_meta.clientCapabilities` lacks `sampling`. |
+| `test_missing_capability` | Returns `-32021` + structured `requiredCapabilities` when the per-request `_meta.clientCapabilities` lacks `sampling`. |
 | `test_streaming_elicitation` | Uses MRTR (`ctx.RequestInput` with `core.NewElicitationInputRequest`) to return an `InputRequiredResult` chunk — never an independent JSON-RPC request on the response stream. |
 | `test_logging_tool` | Emits `notifications/message` ONLY if the per-request `_meta.logLevel` opts in. |
 | `test_trigger_tool_change` | Adds then removes a synthetic tool, broadcasting `notifications/tools/list_changed` to every open `subscriptions/listen` stream whose filter admits it. |

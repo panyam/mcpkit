@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// HeaderMismatchData is the typed decoder for -32001 error responses.
+// HeaderMismatchData is the typed decoder for -32020 error responses.
 // Both producer surfaces (SEP-2243 routing-header validation in
 // server/header_validation.go and SEP-2575 protocol-version cross-check)
 // emit the same wire shape; these tests pin the round trip both ways.

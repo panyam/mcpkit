@@ -200,7 +200,7 @@ func TestDispatch_ServerDiscoverShape(t *testing.T) {
 
 func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
 	// The dispatcher should translate a typed *core.MissingCapabilityError
-	// from a tool handler into a JSON-RPC -32003 response with the
+	// from a tool handler into a JSON-RPC -32021 response with the
 	// required-cap payload shape. Locked here so future refactors of
 	// translateToolError surface in this test, not the conformance audit.
 	required := core.ClientCapabilities{Sampling: &struct{}{}}
@@ -236,14 +236,14 @@ func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
 	}
 	resp := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
-		t.Fatal("expected -32003 for missing-capability tool")
+		t.Fatal("expected -32021 for missing-capability tool")
 	}
 	if resp.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Errorf("got code %d, want %d (-32003)",
+		t.Errorf("got code %d, want %d (-32021)",
 			resp.Error.Code, core.ErrCodeMissingRequiredClientCapability)
 	}
 	if got := HTTPStatusForCode(resp.Error.Code); got != 400 {
-		t.Errorf("HTTPStatusForCode(-32003) = %d, want 400", got)
+		t.Errorf("HTTPStatusForCode(-32021) = %d, want 400", got)
 	}
 
 	raw, _ := json.Marshal(resp.Error.Data)

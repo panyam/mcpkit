@@ -235,9 +235,9 @@ The spec added (commit `b15331ef`) five status-specific MUST rules for the `task
 
 The spec added (commit `527e5c5b`) the requirement that servers MUST authenticate and authorize each task-related request. mcpkit binds at two layers: the streamable transport's session-hijack protection binds `Claims.Subject` at session creation and re-verifies on each POST/GET/DELETE; the task handlers then scope every store lookup to the requesting session via `store.Get(taskID, sessionID)` / `store.Cancel(taskID, sessionID)`. Cross-session attempts surface as "task not found" rather than leaking task existence.
 
-### Required-tasks return -32003 instead of silently downgrading to sync
+### Required-tasks return -32021 instead of silently downgrading to sync
 
-The spec added the requirement that a server which cannot service a request without returning `CreateTaskResult` (i.e. a tool with `TaskSupport=required`) MUST return error `-32003` (Missing Required Client Capability) with a `data.requiredCapabilities` payload, rather than silently downgrading. mcpkit's `taskV2Middleware` now evaluates `TaskSupport` before checking extension declaration; required tools called by clients that have not declared `io.modelcontextprotocol/tasks` get `-32003` with a structured payload. `TaskSupport=optional` retains the sync-fallback behaviour because the server can still service those without a task. The new error code is exported as `core.ErrCodeMissingRequiredClientCapability`.
+The spec added the requirement that a server which cannot service a request without returning `CreateTaskResult` (i.e. a tool with `TaskSupport=required`) MUST return error `-32021` (Missing Required Client Capability) with a `data.requiredCapabilities` payload, rather than silently downgrading. mcpkit's `taskV2Middleware` now evaluates `TaskSupport` before checking extension declaration; required tools called by clients that have not declared `io.modelcontextprotocol/tasks` get `-32021` with a structured payload. `TaskSupport=optional` retains the sync-fallback behaviour because the server can still service those without a task. The new error code is exported as `core.ErrCodeMissingRequiredClientCapability`.
 
 ### requestState removed from the tasks-v2 wire
 

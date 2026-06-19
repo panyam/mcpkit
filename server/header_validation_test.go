@@ -27,7 +27,7 @@ func TestValidateRoutingHeaders_MismatchedMethod(t *testing.T) {
 	h.Set("Mcp-Method", "prompts/list")
 	resp := validateRoutingHeaders(req, h)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Fatalf("expected -32001 HeaderMismatch, got %+v", resp)
+		t.Fatalf("expected -32020 HeaderMismatch, got %+v", resp)
 	}
 }
 
@@ -36,7 +36,7 @@ func TestValidateRoutingHeaders_MissingMethod(t *testing.T) {
 	h := http.Header{}
 	resp := validateRoutingHeaders(req, h)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Fatalf("expected -32001 HeaderMismatch, got %+v", resp)
+		t.Fatalf("expected -32020 HeaderMismatch, got %+v", resp)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestValidateRoutingHeaders_MismatchedName(t *testing.T) {
 	h.Set("Mcp-Name", "wrong_tool")
 	resp := validateRoutingHeaders(req, h)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Fatalf("expected -32001 HeaderMismatch for name mismatch, got %+v", resp)
+		t.Fatalf("expected -32020 HeaderMismatch for name mismatch, got %+v", resp)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestValidateRoutingHeaders_MissingNameWhenBodyHasName(t *testing.T) {
 	h.Set("Mcp-Method", "tools/call")
 	resp := validateRoutingHeaders(req, h)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Fatalf("expected -32001 HeaderMismatch for missing Mcp-Name, got %+v", resp)
+		t.Fatalf("expected -32020 HeaderMismatch for missing Mcp-Name, got %+v", resp)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestValidateRoutingHeaders_CaseSensitiveValue(t *testing.T) {
 	h.Set("Mcp-Method", "TOOLS/LIST")
 	resp := validateRoutingHeaders(req, h)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Fatalf("expected -32001 HeaderMismatch for case-mismatched header value, got %+v", resp)
+		t.Fatalf("expected -32020 HeaderMismatch for case-mismatched header value, got %+v", resp)
 	}
 }
 
@@ -118,14 +118,14 @@ func TestValidateRoutingHeaders_MismatchedResourcesReadURI(t *testing.T) {
 	h.Set("Mcp-Name", "file:///tmp/other.txt")
 	resp := validateRoutingHeaders(req, h)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Fatalf("expected -32001 HeaderMismatch for URI mismatch, got %+v", resp)
+		t.Fatalf("expected -32020 HeaderMismatch for URI mismatch, got %+v", resp)
 	}
 }
 
 // SEP-2663 elevates Mcp-Name: <taskId> to a required client header on
 // tasks/get, tasks/update, and tasks/cancel. The SEP-2243 universal
 // MUST therefore applies — server rejects mismatched or missing
-// Mcp-Name with -32001 HeaderMismatch.
+// Mcp-Name with -32020 HeaderMismatch.
 func TestValidateRoutingHeaders_TasksMethodsCarryTaskID(t *testing.T) {
 	for _, method := range []string{"tasks/get", "tasks/update", "tasks/cancel"} {
 		method := method
@@ -145,7 +145,7 @@ func TestValidateRoutingHeaders_TasksMethodsCarryTaskID(t *testing.T) {
 			h.Set("Mcp-Name", "task-xyz")
 			resp := validateRoutingHeaders(req, h)
 			if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-				t.Fatalf("expected -32001 HeaderMismatch for taskId mismatch, got %+v", resp)
+				t.Fatalf("expected -32020 HeaderMismatch for taskId mismatch, got %+v", resp)
 			}
 		})
 		t.Run(method+"/missing", func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestValidateRoutingHeaders_TasksMethodsCarryTaskID(t *testing.T) {
 			h.Set("Mcp-Method", method)
 			resp := validateRoutingHeaders(req, h)
 			if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
-				t.Fatalf("expected -32001 HeaderMismatch for missing Mcp-Name, got %+v", resp)
+				t.Fatalf("expected -32020 HeaderMismatch for missing Mcp-Name, got %+v", resp)
 			}
 		})
 	}

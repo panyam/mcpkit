@@ -102,7 +102,9 @@ const (
 	// reject with this code when the client did not declare
 	// io.modelcontextprotocol/tasks). Reusable for any future extension
 	// whose required-mode path needs the same affordance.
-	ErrCodeMissingRequiredClientCapability = -32003
+	//
+	// Renumbered from -32003 per modelcontextprotocol/modelcontextprotocol#2907.
+	ErrCodeMissingRequiredClientCapability = -32021
 
 	// ErrCodeHeaderMismatch indicates an HTTP-header / body cross-check
 	// failure. Two surfaces use the same code:
@@ -114,7 +116,9 @@ const (
 	//     and the _meta protocolVersion field do not agree.
 	//
 	// Both surfaces pair the code with HTTP 400 Bad Request.
-	ErrCodeHeaderMismatch = -32001
+	//
+	// Renumbered from -32001 per modelcontextprotocol/modelcontextprotocol#2907.
+	ErrCodeHeaderMismatch = -32020
 
 	// ErrCodeUnsupportedProtocolVersion is returned by the SEP-2575
 	// stateless wire when the request's protocol version is unknown or
@@ -189,7 +193,7 @@ func NewErrorResponseWithData(id json.RawMessage, code int, message string, data
 }
 
 // HeaderMismatchData is the typed shape of the structured `data` payload
-// carried on every -32001 ErrCodeHeaderMismatch response. Clients decode
+// carried on every -32020 ErrCodeHeaderMismatch response. Clients decode
 // resp.Error.Data into this to inspect which header disagreed with what
 // value. Matches the wire shape emitted by both surfaces that use the
 // code (SEP-2243 routing-header validation and SEP-2575 protocol-version
