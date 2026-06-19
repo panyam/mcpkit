@@ -29,7 +29,7 @@ func newStatelessTestServer(t *testing.T, mode stateless.Mode) (*Server, string,
 	); err != nil {
 		t.Fatalf("AddTool: %v", err)
 	}
-	// And a tool that triggers the -32003 path so we can exercise
+	// And a tool that triggers the -32021 path so we can exercise
 	// translateToolError end-to-end.
 	if err := s.Registry().AddTool(
 		core.ToolDef{Name: "test_missing_capability"},
@@ -169,7 +169,7 @@ func TestStatelessRouting_DualMode_RemovedMethodReturns404(t *testing.T) {
 }
 
 // TestStatelessRouting_DualMode_HeaderMismatchReturns400 verifies the
-// -32001 + HTTP 400 path when MCP-Protocol-Version header and the _meta
+// -32020 + HTTP 400 path when MCP-Protocol-Version header and the _meta
 // protocolVersion field disagree.
 func TestStatelessRouting_DualMode_HeaderMismatchReturns400(t *testing.T) {
 	_, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
@@ -191,7 +191,7 @@ func TestStatelessRouting_DualMode_HeaderMismatchReturns400(t *testing.T) {
 	}
 	r := decode(t, resp)
 	if r.Error == nil || r.Error.Code != core.ErrCodeHeaderMismatch {
-		t.Errorf("expected -32001, got %+v", r.Error)
+		t.Errorf("expected -32020, got %+v", r.Error)
 	}
 }
 
@@ -276,7 +276,7 @@ func TestStatelessRouting_LegacyOnly_DiscoverFallsThrough(t *testing.T) {
 }
 
 // TestStatelessRouting_DualMode_ToolsCallMissingCap404 verifies the
-// end-to-end -32003 + HTTP 400 path: a tool handler returns
+// end-to-end -32021 + HTTP 400 path: a tool handler returns
 // *core.MissingCapabilityError, the dispatcher translates it, and
 // the transport stamps the right HTTP status.
 func TestStatelessRouting_DualMode_ToolsCallMissingCap(t *testing.T) {
@@ -302,7 +302,7 @@ func TestStatelessRouting_DualMode_ToolsCallMissingCap(t *testing.T) {
 	}
 	r := decode(t, resp)
 	if r.Error == nil || r.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Errorf("expected -32003, got %+v", r.Error)
+		t.Errorf("expected -32021, got %+v", r.Error)
 	}
 }
 

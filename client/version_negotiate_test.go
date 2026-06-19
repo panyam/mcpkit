@@ -45,7 +45,7 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 		{
 			"32001-with-supported-draft",
 			&rpcResponse{Error: &core.Error{
-				Code: -32001, Message: "Unsupported protocol version",
+				Code: -32020, Message: "Unsupported protocol version",
 				Data: map[string]any{"supported": []any{"2026-07-28"}},
 			}},
 			true, "2026-07-28",
@@ -61,7 +61,7 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 		{
 			"32001-header-mismatch-no-supported",
 			&rpcResponse{Error: &core.Error{
-				Code: -32001, Message: "header mismatch",
+				Code: -32020, Message: "header mismatch",
 				Data: map[string]any{"header": "Mcp-Method", "expected": "tools/list", "received": "tools/call"},
 			}},
 			false, "",
@@ -102,7 +102,7 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 }
 
 // End-to-end retry: a stateless-wire client should retry exactly once
-// when the server returns -32001 + data.supported on the first POST, and
+// when the server returns -32020 + data.supported on the first POST, and
 // observe a SUCCESS on the second. Mirrors the upstream request-metadata
 // conformance scenario's retry probe (closes #523's WARNING).
 func TestRawCallRetryOnUnsupportedVersion(t *testing.T) {
@@ -114,7 +114,7 @@ func TestRawCallRetryOnUnsupportedVersion(t *testing.T) {
 		count := postCount.Add(1)
 
 		// First request: respond server/discover so Connect() succeeds,
-		// then on the first follow-up call return -32001 + supported list.
+		// then on the first follow-up call return -32020 + supported list.
 		if req.Method == "server/discover" {
 			firstVersionHeader.Store(r.Header.Get(core.HTTPProtocolVersionHeader))
 			w.Header().Set("Content-Type", "application/json")
@@ -125,12 +125,12 @@ func TestRawCallRetryOnUnsupportedVersion(t *testing.T) {
 		}
 
 		if count == 2 {
-			// First non-discover POST: reject with -32001 + supported.
+			// First non-discover POST: reject with -32020 + supported.
 			firstVersionHeader.Store(r.Header.Get(core.HTTPProtocolVersionHeader))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(fmt.Sprintf(
-				`{"jsonrpc":"2.0","id":%s,"error":{"code":-32001,"message":"Unsupported protocol version","data":{"supported":["%s"]}}}`,
+				`{"jsonrpc":"2.0","id":%s,"error":{"code":-32020,"message":"Unsupported protocol version","data":{"supported":["%s"]}}}`,
 				string(req.ID), core.DraftProtocolVersion2026V1)))
 			return
 		}

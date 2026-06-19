@@ -156,7 +156,7 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 // TestV2_RequiredTaskRejectsClientWithoutExtension verifies the merged
 // SEP-2663 required-tasks error spec. When a tool declared with
 // TaskSupport=required is invoked by a client that has not negotiated the
-// io.modelcontextprotocol/tasks extension, the server MUST return -32003
+// io.modelcontextprotocol/tasks extension, the server MUST return -32021
 // (Missing Required Client Capability) with a structured `requiredCapabilities`
 // payload — NOT silently fall through to synchronous execution.
 // TaskSupport=optional retains the sync-fallback behaviour because the
@@ -170,14 +170,14 @@ func TestV2_RequiredTaskRejectsClientWithoutExtension(t *testing.T) {
 		"arguments": map[string]any{},
 	})
 	if err == nil {
-		t.Fatal("must-task without extension should reject with -32003, got nil error")
+		t.Fatal("must-task without extension should reject with -32021, got nil error")
 	}
 	rpcErr, ok := err.(*client.RPCError)
 	if !ok {
 		t.Fatalf("expected *client.RPCError, got %T: %v", err, err)
 	}
 	if rpcErr.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Errorf("code = %d, want %d (-32003 Missing Required Client Capability)",
+		t.Errorf("code = %d, want %d (-32021 Missing Required Client Capability)",
 			rpcErr.Code, core.ErrCodeMissingRequiredClientCapability)
 	}
 
@@ -202,7 +202,7 @@ func TestV2_RequiredTaskRejectsClientWithoutExtension(t *testing.T) {
 }
 
 // TestV2_TasksGetRejectedWithoutExtension verifies tasks/get returns
-// -32003 (Missing Required Client Capability, SEP-2575) when the client has
+// -32021 (Missing Required Client Capability, SEP-2575) when the client has
 // not negotiated the tasks extension.
 func TestV2_TasksGetRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
@@ -222,7 +222,7 @@ func TestV2_TasksGetRejectedWithoutExtension(t *testing.T) {
 }
 
 // TestV2_TasksCancelRejectedWithoutExtension verifies tasks/cancel returns
-// -32003 when the client has not negotiated the tasks extension.
+// -32021 when the client has not negotiated the tasks extension.
 func TestV2_TasksCancelRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
@@ -466,7 +466,7 @@ func TestV2_UpdateTerminalRejected(t *testing.T) {
 	}
 }
 
-// TestV2_UpdateRejectedWithoutExtension verifies tasks/update returns -32003
+// TestV2_UpdateRejectedWithoutExtension verifies tasks/update returns -32021
 // (Missing Required Client Capability, SEP-2575) when the client did not
 // negotiate the tasks extension at session level.
 func TestV2_UpdateRejectedWithoutExtension(t *testing.T) {

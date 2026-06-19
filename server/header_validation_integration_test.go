@@ -124,7 +124,7 @@ func TestHeaderValidation_DraftSession_RejectsMismatchedMethod(t *testing.T) {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 	if e := decodeJSONRPCError(t, resp); e == nil || e.Code != core.ErrCodeHeaderMismatch {
-		t.Errorf("error code = %+v, want -32001", e)
+		t.Errorf("error code = %+v, want -32020", e)
 	}
 }
 
@@ -183,6 +183,6 @@ func TestHeaderValidation_DraftSession_MismatchedToolName(t *testing.T) {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
 	if e := decodeJSONRPCError(t, resp); e == nil || e.Code != core.ErrCodeHeaderMismatch {
-		t.Errorf("error code = %+v, want -32001", e)
+		t.Errorf("error code = %+v, want -32020", e)
 	}
 }

@@ -241,11 +241,12 @@ func TestErrorPayloadShapes(t *testing.T) {
 
 func TestErrorCodeConstants(t *testing.T) {
 	// Lock the numeric values — wire codes are part of the public contract.
-	if ErrCodeHeaderMismatch != -32001 {
-		t.Errorf("ErrCodeHeaderMismatch = %d, want -32001", ErrCodeHeaderMismatch)
+	// Renumbered per modelcontextprotocol/modelcontextprotocol#2907.
+	if ErrCodeHeaderMismatch != -32020 {
+		t.Errorf("ErrCodeHeaderMismatch = %d, want -32020", ErrCodeHeaderMismatch)
 	}
-	if ErrCodeMissingRequiredClientCapability != -32003 {
-		t.Errorf("ErrCodeMissingRequiredClientCapability = %d, want -32003", ErrCodeMissingRequiredClientCapability)
+	if ErrCodeMissingRequiredClientCapability != -32021 {
+		t.Errorf("ErrCodeMissingRequiredClientCapability = %d, want -32021", ErrCodeMissingRequiredClientCapability)
 	}
 	if ErrCodeUnsupportedProtocolVersion != -32004 {
 		t.Errorf("ErrCodeUnsupportedProtocolVersion = %d, want -32004", ErrCodeUnsupportedProtocolVersion)

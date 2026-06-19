@@ -268,7 +268,7 @@ func registerDiagnosticTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "test_missing_capability",
-			Description: "SEP-2575 conformance hook: rejects with -32003 when the per-request _meta.clientCapabilities lacks 'sampling'.",
+			Description: "SEP-2575 conformance hook: rejects with -32021 when the per-request _meta.clientCapabilities lacks 'sampling'.",
 			InputSchema: map[string]any{"type": "object"},
 		},
 		func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {

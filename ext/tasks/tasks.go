@@ -333,7 +333,7 @@ func (tasksExtensionProvider) Extension() core.Extension {
 //     level (initialize handshake) or per-request (SEP-2575 _meta).
 //   - Registers tasks/get, tasks/update, and tasks/cancel handlers, gated
 //     on session-level extension support; otherwise the handlers return
-//     -32003 (Missing Required Client Capability, SEP-2575) with a
+//     -32021 (Missing Required Client Capability, SEP-2575) with a
 //     machine-readable `requiredCapabilities` payload so unsupported
 //     clients can self-describe what to add.
 //   - Does NOT register tasks/result or tasks/list (removed in v2).
@@ -360,7 +360,7 @@ func Register(cfg Config) {
 }
 
 // gateOnTasksExtension wraps a tasks/* handler so unsupported clients get
-// -32003 (Missing Required Client Capability, SEP-2575) instead of the real
+// -32021 (Missing Required Client Capability, SEP-2575) instead of the real
 // handler's response. The error data carries the same `requiredCapabilities`
 // shape the required-task middleware emits, so a client that hits the
 // gate can self-describe what to add and retry.
@@ -370,7 +370,7 @@ func Register(cfg Config) {
 // clientCapabilities override (SEP-2575 stateless wire). The latter is the
 // only path available on the stateless wire — there is no initialize
 // handshake to seed session caps from — so without it tasks/* would always
-// emit -32003 on the stateless wire even when the client did declare the
+// emit -32021 on the stateless wire even when the client did declare the
 // extension per-request.
 func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -412,7 +412,7 @@ func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 //
 //  1. taskSupport=forbidden/absent → pass through (sync execution).
 //  2. taskSupport=optional/required + client hasn't negotiated the tasks
-//     extension → -32003 for required, sync fallback for optional.
+//     extension → -32021 for required, sync fallback for optional.
 //  3. Otherwise run the handler synchronously via next() FIRST, then dispatch
 //     on the returned result:
 //     - core.InputRequiredResult → MRTR round; return as-is, no task created.
@@ -478,7 +478,7 @@ func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) serve
 		if !core.ClientSupportsExtensionForRequest(ctx, core.TasksExtensionID, perRequestCapsRaw) {
 			// Per the merged SEP-2663: if the server cannot service the
 			// request without returning CreateTaskResult — i.e. the tool's
-			// TaskSupport is `required` — it MUST return -32003 with a
+			// TaskSupport is `required` — it MUST return -32021 with a
 			// machine-readable `requiredCapabilities` payload so the client
 			// can self-describe what to add. For `optional`, the server still
 			// CAN service the request without a task, so falling through to
