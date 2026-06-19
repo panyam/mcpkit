@@ -127,13 +127,13 @@ type UnsupportedProtocolVersionData struct {
 }
 
 // MissingRequiredClientCapabilityData is the structured error payload for
-// ErrCodeMissingRequiredClientCapability (-32003). RequiredCapabilities
+// ErrCodeMissingRequiredClientCapability (-32021). RequiredCapabilities
 // mirrors the ClientCapabilities shape — the server returns the same
 // capability object it expects the client to declare, so the client can
 // merge it into its next request's _meta[MetaKeyClientCapabilities] and
 // retry. Example: {"elicitation": {}} for a tool that requires elicitation.
 //
-// HTTP status: 400. JSON-RPC code: -32003.
+// HTTP status: 400. JSON-RPC code: -32021.
 //
 // Wire-shape note: the SEP-2575 conformance scenario as of this writing
 // checks for a string-array shape (Array.isArray + .includes("sampling")),
@@ -146,7 +146,7 @@ type MissingRequiredClientCapabilityData struct {
 }
 
 // HeaderMismatch payload note: the structured data for ErrCodeHeaderMismatch
-// (-32001) is a generic {reason, header, expected, received, ...} map built
+// (-32020) is a generic {reason, header, expected, received, ...} map built
 // by the SEP-2243 path (server/header_validation.go) — shared by both the
 // SEP-2243 routing-header check (Mcp-Method/Mcp-Name) and the SEP-2575
 // version-header cross-check (MCP-Protocol-Version vs _meta protocolVersion).
@@ -157,7 +157,7 @@ type MissingRequiredClientCapabilityData struct {
 // return when the per-request _meta.clientCapabilities does not declare
 // a capability the handler needs. The stateless dispatcher detects the
 // type via errors.As at the tools/call boundary and translates it into
-// a JSON-RPC -32003 response carrying MissingRequiredClientCapabilityData.
+// a JSON-RPC -32021 response carrying MissingRequiredClientCapabilityData.
 //
 // Usage from inside a tool handler under the SEP-2575 wire:
 //

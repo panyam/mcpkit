@@ -8,7 +8,7 @@ This doc captures how skills work end-to-end under the stateless model, the data
 
 ## How a stateless skills client works
 
-1. **Probe.** Client GETs `skill://index.json` (or `/.well-known/agent-skills/index.json` over the HTTP bridge if one exists). Success means skills-capable. 404 or `-32003` "Missing Required Capabilities" (per SEP-2575) means no.
+1. **Probe.** Client GETs `skill://index.json` (or `/.well-known/agent-skills/index.json` over the HTTP bridge if one exists). Success means skills-capable. 404 or `-32021` "Missing Required Capabilities" (per SEP-2575) means no.
 2. **Cache the index.** Server returns `ttlMs` (SEP-2549) so the client knows when to re-poll. Public skills can ship with `cacheScope: public` so shared proxies and CDNs can hold the index.
 3. **Pick a skill, fetch `SKILL.md`.** Verify the SHA-256 digest from the index against the bytes. Cache.
 4. **Lazy-fetch support files on demand.** Same digest check per file.
@@ -37,7 +37,7 @@ Net: marginally more polling traffic on `index.json`, offset by digest-gated rea
 
 - **Capability discovery becomes probe-based** rather than handshake-declared. The probe is cheap (one HEAD or one GET on `index.json`), but it does mean a client cannot know up-front whether a server supports skills. In practice this is acceptable: clients trying to load a skill will either find one or not, and the failure mode is clean.
 - **Version negotiation has nowhere obvious to live.** `initialize` was where a server could advertise `extensions["io.modelcontextprotocol/skills"] = {version: "1.2"}` once such a field existed. In stateless, that information has to surface elsewhere. See open question 2 below.
-- **Server-side gating inverts.** Stateful: server could refuse a `resources/read skill://...` because the client didn't negotiate the capability. Stateless: the request itself is the asking, so the server either has the resource or returns `-32602` / `-32003`. Cleaner, fewer edge cases.
+- **Server-side gating inverts.** Stateful: server could refuse a `resources/read skill://...` because the client didn't negotiate the capability. Stateless: the request itself is the asking, so the server either has the resource or returns `-32602` / `-32021`. Cleaner, fewer edge cases.
 - **Horizontal scale is a clean win.** No sticky sessions, no shared session stores. Skills servers behind a CDN with `cacheScope: public` on `index.json` and the archives become trivial to scale.
 - **Tool-allowlist server-name resolution** (raised in WG discussion 2026-06-02) is no harder in stateless. It was always a client-side identity question; `initialize` was not where it lived. Out of scope here.
 
@@ -90,7 +90,7 @@ Both questions had answers already in flight upstream. The WG champion pointed a
 ## References
 
 - SEP-2640 (Skills Extension): `modelcontextprotocol/modelcontextprotocol#2640`
-- SEP-2575 (stateless protocol core, also home of `subscriptions/listen`, `-32003`, and `server/discover`): in the 2026-07-28 RC bundle
+- SEP-2575 (stateless protocol core, also home of `subscriptions/listen`, `-32021`, and `server/discover`): in the 2026-07-28 RC bundle
 - `server/discover` spec: `modelcontextprotocol.io/specification/draft/server/discover`
 - Extension Versioning proposal (in flight): `modelcontextprotocol/agents-wg#18`
 - SEP-2133 (Extensions Track, reverse-DNS identification): in the 2026-07-28 RC bundle

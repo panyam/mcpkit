@@ -13,8 +13,8 @@ import (
 // the JSON body. Specifically:
 //
 //	-32601 Method not found              → 404 Not Found
-//	-32001 HeaderMismatch                → 400 Bad Request
-//	-32003 MissingRequiredClientCap      → 400 Bad Request
+//	-32020 HeaderMismatch                → 400 Bad Request
+//	-32021 MissingRequiredClientCap      → 400 Bad Request
 //	-32004 UnsupportedProtocolVersion    → 400 Bad Request
 //	-32602 Invalid params                → 400 Bad Request (missing _meta etc.)
 //	-32700 Parse / -32600 InvalidRequest → 400 Bad Request

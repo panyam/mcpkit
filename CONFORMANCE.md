@@ -43,8 +43,8 @@ These suites exercise SEP-specific behavior beyond what upstream's tier-check co
 
 | Suite | Covers | Stage | Status | Source | Tracking |
 |---|---|:---:|:---:|---|---|
-| `testconf-tasks-v2` | SEP-2663 Tasks v2 | 8d | **PASS** | [`panyam/mcpconformance@feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension) | — |
-| `testconf-mrtr` | SEP-2322 MRTR | 8e | **PASS** | [`panyam/mcpconformance@feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension) | — |
+| `testconf-tasks-v2` | SEP-2663 Tasks v2 | 8d | **PASS** | [`panyam/mcpconformance@fix/tasks-mrtr-error-codes`](https://github.com/panyam/mcpconformance/tree/fix/tasks-mrtr-error-codes) | — |
+| `testconf-mrtr` | SEP-2322 MRTR | 8e | **PASS** | [`panyam/mcpconformance@fix/tasks-mrtr-error-codes`](https://github.com/panyam/mcpconformance/tree/fix/tasks-mrtr-error-codes) | — |
 | `testconf-file-inputs` | SEP-2356 File inputs | 8f | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
 | `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
 | `testconf-stateless` | SEP-2575 Stateless wire | - | **PASS**<sup>1</sup> | [`modelcontextprotocol/conformance@main`](https://github.com/modelcontextprotocol/conformance/tree/main) | — |
@@ -59,8 +59,8 @@ Each suite's Makefile target reads `MCPCONFORMANCE_*_PATH` to find its scenario 
 
 | Suite | Env var | Default path | Clone command |
 |---|---|---|---|
-| `testconf-tasks-v2` | `MCPCONFORMANCE_TASKS_V2_PATH` | `../conf-tasks-mrtr` | `git clone -b feat/tasks-mrtr-extension https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr` |
-| `testconf-mrtr` | `MCPCONFORMANCE_MRTR_PATH` | `../conf-tasks-mrtr` | `git clone -b feat/tasks-mrtr-extension https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr` |
+| `testconf-tasks-v2` | `MCPCONFORMANCE_TASKS_V2_PATH` | `../conf-tasks-mrtr` | `git clone -b fix/tasks-mrtr-error-codes https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr` |
+| `testconf-mrtr` | `MCPCONFORMANCE_MRTR_PATH` | `../conf-tasks-mrtr` | `git clone -b fix/tasks-mrtr-error-codes https://github.com/panyam/mcpconformance.git ../conf-tasks-mrtr` |
 | `testconf-file-inputs` | `MCPCONFORMANCE_FILE_INPUTS_PATH` | `../conf-pending` | `git clone -b pending https://github.com/panyam/mcpconformance.git ../conf-pending` |
 | `testconf-auth-server` | `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` | `git clone -b pending https://github.com/panyam/mcpconformance.git ../conf-pending` |
 | `testconf-stateless` | `MCPCONFORMANCE_STATELESS_PATH` | `../conf-upstream-main` | `git clone -b main https://github.com/modelcontextprotocol/conformance.git ../conf-upstream-main` |

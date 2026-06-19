@@ -114,7 +114,7 @@ func hasStatelessMetaProtocolVersion(params json.RawMessage) bool {
 	return probe.Meta.ProtocolVersion != ""
 }
 
-// statelessVersionMismatch returns a -32001 HeaderMismatch JSON-RPC
+// statelessVersionMismatch returns a -32020 HeaderMismatch JSON-RPC
 // response when the MCP-Protocol-Version HTTP header and the _meta
 // protocolVersion field disagree. Delegates to the SEP-2243-shape
 // headerMismatchResponse (server/header_validation.go) so both
@@ -123,7 +123,7 @@ func hasStatelessMetaProtocolVersion(params json.RawMessage) bool {
 //
 // Returns nil when the values agree OR when either is absent
 // (absent header is handled upstream of detection; absent _meta
-// is the dispatcher's -32602 path, not -32001).
+// is the dispatcher's -32602 path, not -32020).
 func statelessVersionMismatch(id json.RawMessage, headerVer, metaVer string) *core.Response {
 	if headerVer == "" || metaVer == "" || headerVer == metaVer {
 		return nil

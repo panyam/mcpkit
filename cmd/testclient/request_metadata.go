@@ -16,7 +16,7 @@ package main
 //   - sep-2575-http-version-header-matches-meta
 //   - sep-2575-client-declares-{roots,sampling,elicitation}-capability
 //   - sep-2575-client-retry-supported-version (WARNING — client doesn't
-//     yet retry on -32001; tracked separately)
+//     yet retry on -32020; tracked separately)
 //
 // We use `ClientModeStateless` rather than `Adaptive` so the test
 // fails fast if the server somehow declined stateless — the scenario

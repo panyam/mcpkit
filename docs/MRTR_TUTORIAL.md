@@ -582,7 +582,7 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
 |---|---|---|
 | `-32602 invalid params: request params missing required _meta envelope` | Stateless request without `_meta` | Add the SEP-2575 `_meta` envelope. |
 | `ErrRequestStateMalformed` / `Invalid signature` / `Expired` | `requestState` tampered, replayed across tools, or older than TTL | Restart the tool call from round 1. |
-| `-32003 missing required client capability` | Server needs a capability (e.g., `tasks` extension) the client didn't declare | Update the client's `_meta.clientCapabilities` to declare it. |
+| `-32021 missing required client capability` | Server needs a capability (e.g., `tasks` extension) the client didn't declare | Update the client's `_meta.clientCapabilities` to declare it. |
 
 ---
 

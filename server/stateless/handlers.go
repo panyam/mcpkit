@@ -10,7 +10,7 @@ import (
 
 // SEP-2575 per-method handlers. Kept small and intentionally cap-blind:
 // per-request capability gating that the conformance suite exercises
-// (the -32003 path) is emitted by tool handlers themselves via a typed
+// (the -32021 path) is emitted by tool handlers themselves via a typed
 // *core.MissingCapabilityError that this dispatcher translates at the
 // tools/call boundary. Keeps the dispatcher logic per-method-uniform.
 
@@ -84,7 +84,7 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 
 // translateToolError converts a tool-handler error into the right
 // JSON-RPC error shape. Typed *core.MissingCapabilityError becomes
-// the SEP-2575 -32003 + structured requiredCapabilities payload so
+// the SEP-2575 -32021 + structured requiredCapabilities payload so
 // the conformance "ServerRejectsUndeclaredCapability" check passes.
 // Everything else falls back to -31000 ErrCodeToolExecutionError.
 func translateToolError(id json.RawMessage, err error) *core.Response {

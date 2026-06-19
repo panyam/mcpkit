@@ -195,7 +195,7 @@ func TestStateless_ToolsCall_OptionalTask_WithExtension(t *testing.T) {
 
 // TestStateless_ToolsCall_OptionalTask_NoExtension verifies the SEP-2663
 // fall-through: a TaskSupport=optional tool called without the tasks
-// extension declared returns a synchronous ToolResult, not -32003.
+// extension declared returns a synchronous ToolResult, not -32021.
 func TestStateless_ToolsCall_OptionalTask_NoExtension(t *testing.T) {
 	url := newStatelessTaskServer(t)
 
@@ -219,7 +219,7 @@ func TestStateless_ToolsCall_OptionalTask_NoExtension(t *testing.T) {
 
 // TestStateless_ToolsCall_RequiredTask_NoExtension covers
 // `tasks-required-task-error`: TaskSupport=required without the extension
-// declared MUST return -32003 with structured requiredCapabilities.
+// declared MUST return -32021 with structured requiredCapabilities.
 func TestStateless_ToolsCall_RequiredTask_NoExtension(t *testing.T) {
 	url := newStatelessTaskServer(t)
 
@@ -229,10 +229,10 @@ func TestStateless_ToolsCall_RequiredTask_NoExtension(t *testing.T) {
 		"_meta":     metaWithCaps(false),
 	})
 	if resp.Error == nil {
-		t.Fatalf("expected -32003, got success: %+v", resp.Result)
+		t.Fatalf("expected -32021, got success: %+v", resp.Result)
 	}
 	if resp.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Fatalf("error code = %d, want %d (-32003); body=%+v",
+		t.Fatalf("error code = %d, want %d (-32021); body=%+v",
 			resp.Error.Code, core.ErrCodeMissingRequiredClientCapability, resp.Error)
 	}
 
@@ -253,7 +253,7 @@ func TestStateless_ToolsCall_RequiredTask_NoExtension(t *testing.T) {
 
 // TestStateless_TasksGet_NoExtension covers
 // `tasks-methods-gated-without-extension`: tasks/get on the stateless wire
-// without the per-request extension declaration MUST return -32003 (not
+// without the per-request extension declaration MUST return -32021 (not
 // -32601 "method not found", which is what an unrouted method emits).
 func TestStateless_TasksGet_NoExtension(t *testing.T) {
 	url := newStatelessTaskServer(t)
@@ -263,10 +263,10 @@ func TestStateless_TasksGet_NoExtension(t *testing.T) {
 		"_meta":  metaWithCaps(false),
 	})
 	if resp.Error == nil {
-		t.Fatalf("expected -32003, got success: %+v", resp.Result)
+		t.Fatalf("expected -32021, got success: %+v", resp.Result)
 	}
 	if resp.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Fatalf("error code = %d, want %d (-32003); body=%+v",
+		t.Fatalf("error code = %d, want %d (-32021); body=%+v",
 			resp.Error.Code, core.ErrCodeMissingRequiredClientCapability, resp.Error)
 	}
 }
@@ -282,10 +282,10 @@ func TestStateless_TasksUpdate_NoExtension(t *testing.T) {
 		"_meta":          metaWithCaps(false),
 	})
 	if resp.Error == nil {
-		t.Fatalf("expected -32003, got success: %+v", resp.Result)
+		t.Fatalf("expected -32021, got success: %+v", resp.Result)
 	}
 	if resp.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Fatalf("error code = %d, want %d (-32003); body=%+v",
+		t.Fatalf("error code = %d, want %d (-32021); body=%+v",
 			resp.Error.Code, core.ErrCodeMissingRequiredClientCapability, resp.Error)
 	}
 }
@@ -299,10 +299,10 @@ func TestStateless_TasksCancel_NoExtension(t *testing.T) {
 		"_meta":  metaWithCaps(false),
 	})
 	if resp.Error == nil {
-		t.Fatalf("expected -32003, got success: %+v", resp.Result)
+		t.Fatalf("expected -32021, got success: %+v", resp.Result)
 	}
 	if resp.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Fatalf("error code = %d, want %d (-32003); body=%+v",
+		t.Fatalf("error code = %d, want %d (-32021); body=%+v",
 			resp.Error.Code, core.ErrCodeMissingRequiredClientCapability, resp.Error)
 	}
 }

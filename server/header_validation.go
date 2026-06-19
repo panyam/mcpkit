@@ -91,8 +91,8 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 // writeHeaderMismatch writes an HTTP 400 response carrying the
 // JSON-RPC error frame from validateRoutingHeaders. Per SEP-2243 the
 // status code is MUST (400) and the JSON-RPC error code is SHOULD
-// (-32001); we emit both so the conformance warning checks also flip
-// to SUCCESS.
+// (ErrCodeHeaderMismatch); we emit both so the conformance warning
+// checks also flip to SUCCESS.
 func writeHeaderMismatch(w http.ResponseWriter, errResp *core.Response) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
@@ -100,7 +100,11 @@ func writeHeaderMismatch(w http.ResponseWriter, errResp *core.Response) {
 	if err != nil {
 		// Fall back to a plain JSON shape; should never happen for our
 		// own well-formed Response value, but don't drop the status code.
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"header mismatch"}}`))
+		// Build the code from the constant so this path can never drift
+		// from ErrCodeHeaderMismatch.
+		_, _ = w.Write([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":null,"error":{"code":%d,"message":"header mismatch"}}`,
+			core.ErrCodeHeaderMismatch)))
 		return
 	}
 	_, _ = w.Write(raw)

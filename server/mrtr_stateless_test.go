@@ -70,7 +70,7 @@ func newStatelessMRTRServer(t *testing.T, opts ...Option) (*Server, string, func
 // callers can add inputResponses, requestState, arguments, etc.
 //
 // Returns the decoded JSON-RPC response regardless of HTTP status — a
-// structured -32602 / -32003 maps to HTTP 4xx, and callers want to inspect
+// structured -32602 / -32021 maps to HTTP 4xx, and callers want to inspect
 // the JSON-RPC error rather than fail at the transport layer.
 func statelessToolsCall(t *testing.T, url, toolName string, extra map[string]any) *core.Response {
 	t.Helper()
