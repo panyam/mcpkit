@@ -141,11 +141,14 @@ func (e *Env) NewValidator(audience string, opts ...ValidatorOption) *auth.JWTVa
 // `subject_token` (subject_token_type=jwt) on a token-exchange
 // (RFC 8693) grant at the AS's token endpoint.
 //
-// The audience matches APIAuth.JWTAudience (the AS's configured
-// audience identifier). RFC 7523 §3 requires the assertion's `aud` to
-// identify the AS that will accept it; oneauth's validator defaults
-// the expected audience to JWTAudience when the trusted-issuer entry
-// has no Audiences pinned (which is our setup), so this matches.
+// The audience is the AS's own issuer identifier. RFC 7523 §3 requires
+// the assertion's `aud` to identify the AS that will accept it. The
+// jwt-bearer / token-exchange granter validates `aud` against its
+// configured default audience and, when the trusted-issuer entry pins
+// no Audiences (our setup), falls back to the AS issuer URL. The MCP
+// resource URL bound via the AudienceFunc is the audience for access
+// tokens, not for this upstream assertion, so we target the AS issuer
+// here explicitly.
 //
 // iat / exp are set to a 5-min validity window. nbf is unset (the jwt
 // library treats absent nbf as "no not-before constraint", which
@@ -160,7 +163,7 @@ func (e *Env) MintUpstreamAssertion(subject string) string {
 	claims := jwt.MapClaims{
 		"iss": UpstreamIdpIssuer,
 		"sub": subject,
-		"aud": e.audience,
+		"aud": e.AS.Issuer(),
 		"iat": now.Unix(),
 		"exp": now.Add(5 * time.Minute).Unix(),
 	}
