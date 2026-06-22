@@ -49,17 +49,25 @@ func TestWWWAuth401(t *testing.T) {
 }
 
 func TestWWWAuth403(t *testing.T) {
-	got := WWWAuth403("admin:write", "files:read")
-	want := `Bearer error="insufficient_scope", scope="admin:write files:read"`
+	// With PRM URL + scopes
+	got := WWWAuth403("https://mcp.example.com/.well-known/oauth-protected-resource/mcp", "admin:write", "files:read")
+	want := `Bearer error="insufficient_scope", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp", scope="admin:write files:read"`
 	if got != want {
-		t.Errorf("WWWAuth403 = %q, want %q", got, want)
+		t.Errorf("WWWAuth403 with URL = %q, want %q", got, want)
 	}
 
-	// Without scopes
-	got2 := WWWAuth403()
-	want2 := `Bearer error="insufficient_scope"`
-	if got2 != want2 {
-		t.Errorf("WWWAuth403() = %q, want %q", got2, want2)
+	// Without PRM URL, with scopes
+	gotNoURL := WWWAuth403("", "admin:write", "files:read")
+	wantNoURL := `Bearer error="insufficient_scope", scope="admin:write files:read"`
+	if gotNoURL != wantNoURL {
+		t.Errorf("WWWAuth403 empty URL = %q, want %q", gotNoURL, wantNoURL)
+	}
+
+	// Bare error, no URL, no scopes
+	gotBare := WWWAuth403("")
+	wantBare := `Bearer error="insufficient_scope"`
+	if gotBare != wantBare {
+		t.Errorf("WWWAuth403 bare = %q, want %q", gotBare, wantBare)
 	}
 }
 
