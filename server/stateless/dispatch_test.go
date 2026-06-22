@@ -18,6 +18,7 @@ type fakeBackend struct {
 	tool     func(name string) (core.ToolDef, core.ToolHandler, bool)
 	ttlMs    *int
 	scope    string
+	authErr  error // when non-nil, InvokeWithMiddleware short-circuits with it
 }
 
 func (f *fakeBackend) ServerInfo() core.ServerInfo           { return f.info }
@@ -51,12 +52,17 @@ func (f *fakeBackend) Completion(string, string) (core.CompletionHandler, bool) 
 func (f *fakeBackend) ListTTLMs() *int                                          { return f.ttlMs }
 func (f *fakeBackend) ListCacheScope() string                                   { return f.scope }
 
-// InvokeWithMiddleware returns (nil, false) so the dispatcher falls back
+// InvokeWithMiddleware returns (nil, nil, false) so the dispatcher falls back
 // to its built-in per-method handler. The fake doesn't model server-level
 // middleware or custom-method registrations — both belong to production
-// statelessBackend (server package).
-func (f *fakeBackend) InvokeWithMiddleware(context.Context, *core.Request) (*core.Response, bool) {
-	return nil, false
+// statelessBackend (server package). The authErr field, when set, models a
+// middleware short-circuit so dispatch_autherror_test.go can assert the error
+// propagates out of Dispatch unfolded.
+func (f *fakeBackend) InvokeWithMiddleware(context.Context, *core.Request) (*core.Response, error, bool) {
+	if f.authErr != nil {
+		return nil, f.authErr, true
+	}
+	return nil, nil, false
 }
 
 // validMetaParams is a params blob with the minimum valid _meta envelope.
@@ -89,7 +95,7 @@ func TestDispatch_RemovedMethodReturns32601(t *testing.T) {
 				Method:  method,
 				Params:  validMetaParams(t),
 			}
-			resp := d.Dispatch(context.Background(), req)
+			resp, _ := d.Dispatch(context.Background(), req)
 			if resp == nil || resp.Error == nil {
 				t.Fatalf("expected error response for removed method %q", method)
 			}
@@ -112,7 +118,7 @@ func TestDispatch_MissingMetaReturns32602(t *testing.T) {
 		Method:  "tools/list",
 		Params:  json.RawMessage(`{}`),
 	}
-	resp := d.Dispatch(context.Background(), req)
+	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
 		t.Fatal("expected error response for missing _meta")
 	}
@@ -140,7 +146,7 @@ func TestDispatch_UnsupportedVersionReturns32004(t *testing.T) {
 		Method:  "tools/list",
 		Params:  bad,
 	}
-	resp := d.Dispatch(context.Background(), req)
+	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
 		t.Fatal("expected error response for unsupported version")
 	}
@@ -177,7 +183,7 @@ func TestDispatch_ServerDiscoverShape(t *testing.T) {
 		Method:  "server/discover",
 		Params:  validMetaParams(t),
 	}
-	resp := d.Dispatch(context.Background(), req)
+	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error != nil {
 		t.Fatalf("server/discover failed: %+v", resp)
 	}
@@ -234,7 +240,7 @@ func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
 		Method:  "tools/call",
 		Params:  params,
 	}
-	resp := d.Dispatch(context.Background(), req)
+	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
 		t.Fatal("expected -32021 for missing-capability tool")
 	}
@@ -264,7 +270,7 @@ func TestDispatch_UnknownMethodReturns32601(t *testing.T) {
 		Method:  "frobnicate",
 		Params:  validMetaParams(t),
 	}
-	resp := d.Dispatch(context.Background(), req)
+	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeMethodNotFound {
 		t.Fatalf("got %+v, want -32601 method-not-found", resp)
 	}

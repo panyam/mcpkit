@@ -69,7 +69,16 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// sessionCtx that the stateless wire deliberately does not create.
 	ctx := core.WithResponseHeaderCollector(r.Context())
 	ctx = core.WithStatelessClaims(ctx, claims)
-	resp := t.statelessDispatcher.Dispatch(ctx, req)
+	resp, dErr := t.statelessDispatcher.Dispatch(ctx, req)
+
+	// A non-nil dispatch error is a middleware short-circuit (typically
+	// *core.AuthError). Surface it through the shared writeAuthError so the
+	// stateless wire emits the same HTTP 403 + WWW-Authenticate as the legacy
+	// wire instead of a generic -32603/HTTP 200 body (issue 815).
+	if dErr != nil {
+		writeAuthError(w, dErr)
+		return
+	}
 
 	if resp == nil {
 		// Notification (no id) — return 202 Accepted with no body.
@@ -187,7 +196,25 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 		}
 	}
 
-	resp := t.statelessDispatcher.Dispatch(dispatchCtx, req)
+	resp, dErr := t.statelessDispatcher.Dispatch(dispatchCtx, req)
+
+	// A middleware short-circuit (typically *core.AuthError) fires before the
+	// handler runs, so no SSE frame has been written yet (sseStarted is false).
+	// Surface it as an HTTP-level auth error via the shared writeAuthError —
+	// same 403 + WWW-Authenticate the legacy and non-SSE stateless paths emit
+	// (issue 815). The mu/closed guard keeps writeSSE a no-op afterward.
+	if dErr != nil {
+		mu.Lock()
+		started := sseStarted
+		mu.Unlock()
+		if !started {
+			writeAuthError(w, dErr)
+		}
+		mu.Lock()
+		closed = true
+		mu.Unlock()
+		return
+	}
 
 	// Terminal frame. resp is normally non-nil for SSE-eligible requests
 	// (notifications return 202 from handleStatelessPost and never reach
