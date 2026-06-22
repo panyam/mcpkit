@@ -239,7 +239,7 @@ func (b *statelessBackend) ListCacheScope() string {
 // which is acceptable for the single-tenant fixtures the conformance
 // suite covers; multi-tenant deployments should layer an auth-subject-
 // keyed store wrapper. Tracked for a follow-up.
-func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, bool) {
+func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, error, bool) {
 	terminal := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
 		switch req.Method {
 		case "tools/call":
@@ -266,9 +266,13 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 
 	resp, err := handler(ctx, req)
 	if err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInternal, err.Error()), true
+		// Surface the raw middleware error (typically *core.AuthError) so the
+		// transport's writeAuthError can emit the correct HTTP status +
+		// WWW-Authenticate header — mirroring the legacy wire. Folding it into
+		// a generic -32603 here would drop the 403 + scope challenge (issue 815).
+		return nil, err, true
 	}
-	return resp, true
+	return resp, nil, true
 }
 
 // callToolForStateless mirrors the legacy Dispatcher.handleToolsCall MRTR

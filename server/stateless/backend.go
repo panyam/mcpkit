@@ -73,10 +73,15 @@ type Backend interface {
 	// via Server.UseMiddleware / HandleMethod would be invisible to the
 	// stateless dispatcher.
 	//
-	// Returns (response, true) when the backend handled the request; the
-	// dispatcher uses that response verbatim. Returns (nil, false) to let
-	// the dispatcher fall back to its built-in per-method handler — used
-	// by minimal test fakes that don't carry middleware or custom-method
+	// Returns (response, err, true) when the backend handled the request.
+	// A non-nil err is a middleware short-circuit (typically *core.AuthError)
+	// that the transport surfaces as an HTTP-level response via writeAuthError
+	// — the dispatcher forwards it verbatim rather than folding it into a
+	// generic -32603 JSON-RPC body, so the legacy and stateless wires share
+	// the same 403 + WWW-Authenticate signaling (issue 815). When err is nil
+	// the response is used verbatim. Returns (nil, nil, false) to let the
+	// dispatcher fall back to its built-in per-method handler — used by
+	// minimal test fakes that don't carry middleware or custom-method
 	// registrations.
-	InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, bool)
+	InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, error, bool)
 }

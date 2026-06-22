@@ -94,7 +94,7 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 				Method:  "tools/call",
 				Params:  params,
 			}
-			resp := d.Dispatch(context.Background(), req)
+			resp, _ := d.Dispatch(context.Background(), req)
 			if resp == nil || resp.Error != nil {
 				t.Fatalf("tools/call errored: %+v", resp)
 			}

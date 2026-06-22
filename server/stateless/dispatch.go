@@ -51,10 +51,19 @@ var removedLegacyMethods = map[string]struct{}{
 	"notifications/roots/list_changed": {},
 }
 
-// Dispatch routes one stateless-wire request. The returned *core.Response
-// always carries a JSON-RPC payload; transport-layer error → HTTP status
-// mapping happens in errors.go (HTTPStatusForCode) at the transport boundary.
-func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Response {
+// Dispatch routes one stateless-wire request, returning (*core.Response, error).
+//
+// On the happy path err is nil and the *core.Response carries a JSON-RPC
+// payload; transport-layer error → HTTP status mapping happens in errors.go
+// (HTTPStatusForCode) at the transport boundary.
+//
+// A non-nil error is a middleware short-circuit (typically *core.AuthError)
+// raised by the backend's middleware chain on tools/call, prompts/get, or a
+// custom method. The transport surfaces it via writeAuthError — emitting the
+// correct HTTP status (e.g. 403) + WWW-Authenticate header — so the stateless
+// wire matches the legacy wire's auth signaling instead of folding it into a
+// generic -32603 body (issue 815). When err is non-nil the *core.Response is nil.
+func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Response, error) {
 	id := req.ID
 	if id == nil {
 		id = json.RawMessage("null")
@@ -65,14 +74,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 	// returning -32601 here is unambiguous regardless of envelope state.
 	if _, removed := removedLegacyMethods[req.Method]; removed {
 		return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
-			"method not found on SEP-2575 stateless wire: "+req.Method)
+			"method not found on SEP-2575 stateless wire: "+req.Method), nil
 	}
 
 	// Every other method requires a valid _meta envelope.
 	meta, err := core.DecodeRequestMeta(req.Params)
 	if err != nil {
 		// MetaValidationError carries the specific missing field for diagnostics.
-		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error()), nil
 	}
 
 	// Validate the protocol version against what this server speaks.
@@ -96,7 +105,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 				Supported: supported,
 				Requested: meta.ProtocolVersion,
 			},
-		)
+		), nil
 	}
 
 	// Thread the validated envelope through ctx so handlers and
@@ -106,25 +115,30 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 	// ctx.ClientCaps() can read it without an import cycle.
 	ctx = core.WithRequestMeta(ctx, meta)
 
+	// Handlers that route through the backend's middleware chain
+	// (tools/call, prompts/get, and the default custom-method branch)
+	// return (resp, err); the err is a middleware short-circuit forwarded
+	// to the transport's writeAuthError. The remaining handlers can't raise
+	// a middleware auth error, so they're wrapped with a nil error here.
 	switch req.Method {
 	case "server/discover":
-		return d.handleDiscover(id)
+		return d.handleDiscover(id), nil
 	case "tools/list":
-		return d.handleToolsList(id, req.Params)
+		return d.handleToolsList(id, req.Params), nil
 	case "tools/call":
 		return d.handleToolsCall(ctx, id, req.Params)
 	case "resources/list":
-		return d.handleResourcesList(id, req.Params)
+		return d.handleResourcesList(id, req.Params), nil
 	case "resources/read":
-		return d.handleResourcesRead(ctx, id, req.Params)
+		return d.handleResourcesRead(ctx, id, req.Params), nil
 	case "resources/templates/list":
-		return d.handleResourcesTemplatesList(id, req.Params)
+		return d.handleResourcesTemplatesList(id, req.Params), nil
 	case "prompts/list":
-		return d.handlePromptsList(id, req.Params)
+		return d.handlePromptsList(id, req.Params), nil
 	case "prompts/get":
 		return d.handlePromptsGet(ctx, id, req.Params)
 	case "completion/complete":
-		return d.handleCompletionComplete(ctx, id, req.Params)
+		return d.handleCompletionComplete(ctx, id, req.Params), nil
 	default:
 		// Any other method (custom JSON-RPC verbs registered via
 		// Server.HandleMethod — events/poll, events/list,
@@ -147,11 +161,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 			Method:  req.Method,
 			Params:  req.Params,
 		}
-		if resp, ok := d.Backend.InvokeWithMiddleware(ctx, out); ok {
-			return resp
+		if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, out); ok {
+			return resp, err
 		}
 		return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
-			"method not found: "+req.Method)
+			"method not found: "+req.Method), nil
 	}
 }
 
