@@ -2588,6 +2588,25 @@ func DoWithAuthRetry(
 			if inv, ok := ts.(core.InvalidatingTokenSource); ok {
 				inv.Invalidate()
 			}
+			// Per RFC 6750 §3.1 + SEP-2350: when the 401 challenge advertises
+			// scope=, the next token request SHOULD use that exact scope
+			// rather than whatever broader set was discovered earlier (e.g.
+			// PRM scopes_supported). PRM is the server's catalog of what it
+			// COULD accept; the WWW-Authenticate scope= is what the current
+			// operation actually NEEDS. The two are deliberately allowed to
+			// diverge by the spec (clients MUST NOT assume any set
+			// relationship between them), so a least-privilege client uses
+			// the per-operation hint when present.
+			//
+			// Falls back to plain Token() when the source isn't scope-aware
+			// or the 401 didn't carry a scope=, preserving the previous
+			// behavior for non-SEP-2350 paths.
+			wwa := resp.Header.Get("WWW-Authenticate")
+			_, scopes, _ := ssehttp.ParseWWWAuthenticate(wwa)
+			if sats, ok := ts.(core.ScopeAwareTokenSource); ok && len(scopes) > 0 {
+				_, err := sats.TokenForScopes(scopes)
+				return err
+			}
 			// Token() on a dynamic source will refresh; on a static source
 			// it returns the same token and the retry will fail → gives up.
 			_, err := ts.Token()
