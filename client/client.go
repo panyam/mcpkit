@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -2557,6 +2558,11 @@ type HTTPStatusError = ssehttp.HTTPStatusError
 // On 401: calls ts.Token() to refresh, retries once.
 // On 403: parses WWW-Authenticate for required scopes, calls
 // core.ScopeAwareTokenSource.TokenForScopes if available, retries once.
+//
+// Lazy token sources (those returning core.ErrNoTokenYet from Token) are
+// supported: the first request is sent WITHOUT an Authorization header so
+// the server's 401 can select the scope, and the OnUnauthorized path below
+// arms the source via TokenForScopes for the retry (RFC 6750 §3.1).
 func DoWithAuthRetry(
 	ts core.TokenSource,
 	buildReq func() (*http.Request, error),
@@ -2569,6 +2575,12 @@ func DoWithAuthRetry(
 	cfg := &ssehttp.AuthRetryConfig{
 		SetAuth: func(req *http.Request) error {
 			token, err := ts.Token()
+			// A lazy source defers acquisition until a challenge selects the
+			// scope: send this request unauthenticated and let the server's
+			// 401 drive OnUnauthorized. Any other error is fatal.
+			if errors.Is(err, core.ErrNoTokenYet) {
+				return nil
+			}
 			if err != nil {
 				return err
 			}
@@ -2598,12 +2610,16 @@ func DoWithAuthRetry(
 			// relationship between them), so a least-privilege client uses
 			// the per-operation hint when present.
 			//
-			// Falls back to plain Token() when the source isn't scope-aware
-			// or the 401 didn't carry a scope=, preserving the previous
-			// behavior for non-SEP-2350 paths.
+			// Route EVERY 401 on a scope-aware source through TokenForScopes,
+			// even when the challenge carries no scope= (scopes is empty).
+			// The empty call is a no-op on the scope set but arms a lazy
+			// source (issue 818) so the retry actually acquires — using the
+			// per-operation scope when present, or the source's PRM
+			// scopes_supported fallback when absent. Non-scope-aware sources
+			// (static tokens, simple bearers) fall through to Token().
 			wwa := resp.Header.Get("WWW-Authenticate")
 			_, scopes, _ := ssehttp.ParseWWWAuthenticate(wwa)
-			if sats, ok := ts.(core.ScopeAwareTokenSource); ok && len(scopes) > 0 {
+			if sats, ok := ts.(core.ScopeAwareTokenSource); ok {
 				_, err := sats.TokenForScopes(scopes)
 				return err
 			}

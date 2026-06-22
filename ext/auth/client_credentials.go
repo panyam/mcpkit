@@ -141,7 +141,7 @@ func (s *ClientCredentialsTokenSource) ensureSourceLocked() error {
 
 	scopes := s.Scopes
 	if len(scopes) == 0 {
-		scopes = info.Scopes
+		scopes = info.PRM.ScopesSupported
 	}
 
 	issuer := info.AuthorizationServers[0]
