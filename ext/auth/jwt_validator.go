@@ -272,7 +272,7 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		return &mcpcore.AuthError{
 			Code:            http.StatusForbidden,
 			Message:         "insufficient scope",
-			WWWAuthenticate: WWWAuth403(v.RequiredScopes...),
+			WWWAuthenticate: WWWAuth403(v.ResourceMetadataURL, v.RequiredScopes...),
 		}
 	}
 
