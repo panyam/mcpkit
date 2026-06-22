@@ -120,11 +120,18 @@ func seedSourceForRefresh(t *testing.T, src *OAuthTokenSource, mockAS *refreshAS
 	src.authInfo = &MCPAuthInfo{
 		AuthorizationServers: []string{mockAS.URL},
 		ASMetadata: &client.ASMetadata{
-			AuthorizationEndpoint: mockAS.URL + "/authorize",
-			TokenEndpoint:         mockAS.URL + "/token",
+			AuthorizationEndpoint:         mockAS.URL + "/authorize",
+			TokenEndpoint:                 mockAS.URL + "/token",
 			CodeChallengeMethodsSupported: []string{"S256"},
 		},
-		Scopes: []string{"read", "write"},
+	}
+	// Pin explicit scopes so Token() bypasses the lazy gate (issue 818) and
+	// exercises the refresh path these tests target, rather than deferring
+	// with core.ErrNoTokenYet. Scope selection is no longer carried on
+	// MCPAuthInfo. Preserve a caller-set scope set (some tests pin [read]
+	// to drive the step-up-skips-refresh path).
+	if len(src.Scopes) == 0 {
+		src.Scopes = []string{"read", "write"}
 	}
 	// Preset the oaClient with the caller-supplied store.
 	src.oaClient = client.NewAuthClient(mockAS.URL, store,

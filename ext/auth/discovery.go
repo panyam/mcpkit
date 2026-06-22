@@ -43,12 +43,6 @@ type MCPAuthInfo struct {
 
 	// ASMetadata is the discovered authorization server metadata.
 	ASMetadata *client.ASMetadata
-
-	// Scopes to request, determined via the MCP scope selection strategy:
-	// 1. scope from WWW-Authenticate header
-	// 2. scopes_supported from PRM
-	// 3. empty (omit scope parameter)
-	Scopes []string
 }
 
 // ProtectedResourceMetadata is the JSON structure served by the PRM endpoint (RFC 9728).
@@ -120,15 +114,20 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 	resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		// Step 2: Parse WWW-Authenticate
+		// Step 2: Parse WWW-Authenticate for the resource_metadata link.
+		//
+		// We deliberately do NOT capture the probe's scope= here. The probe
+		// hits a fixed method (initialize) whose challenge scope, if any, is
+		// the scope for THAT method — not necessarily the scope a later
+		// tools/call needs. Per RFC 6750 §3.1 the token's scope is selected
+		// per-operation from the challenge on the real request; discovery's
+		// job is endpoint resolution (PRM + AS metadata), not scope pinning.
+		// Token sources read the catalog fallback from info.PRM.ScopesSupported.
 		wwwAuth := resp.Header.Get("WWW-Authenticate")
 		if wwwAuth != "" {
-			rm, scopes, _ := ParseWWWAuthenticate(wwwAuth)
+			rm, _, _ := ParseWWWAuthenticate(wwwAuth)
 			if rm != "" {
 				info.ResourceMetadataURL = rm
-			}
-			if len(scopes) > 0 {
-				info.Scopes = scopes
 			}
 		}
 	}
@@ -202,13 +201,13 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 		return nil, fmt.Errorf("PRM has no authorization_servers")
 	}
 
-	// Step 5: Scope selection (C18)
-	// Priority: WWW-Authenticate scope (already set) > PRM scopes_supported > empty
-	if len(info.Scopes) == 0 && len(info.PRM.ScopesSupported) > 0 {
-		info.Scopes = info.PRM.ScopesSupported
-	}
+	// Scope selection is no longer pinned here. The PRM scopes_supported
+	// catalog stays available to token sources via info.PRM.ScopesSupported,
+	// but it is only a last-resort fallback: per-operation scope comes from
+	// the WWW-Authenticate challenge on the real request (RFC 6750 §3.1),
+	// observed by the token source after a 401, not pre-selected at discovery.
 
-	// Step 6: Discover AS metadata via oneauth (RFC 8414 + OIDC fallback)
+	// Step 5: Discover AS metadata via oneauth (RFC 8414 + OIDC fallback)
 	issuer := info.AuthorizationServers[0]
 	asOpts := []client.DiscoveryOption{client.WithHTTPClientForDiscovery(httpClient)}
 	if cfg.asStore != nil {
