@@ -133,11 +133,11 @@ sequenceDiagram
     participant AS as External AS
 
     MC->>OTS: Token()
-    Note right of OTS: no cached token
+    Note right of OTS: no cached token; acquisition is LAZY —<br/>Token() returns core.ErrNoTokenYet until a<br/>401/403 challenge arms it via TokenForScopes<br/>(issue 818). The steps below run on the<br/>armed call, so the challenge scope wins.
 
     rect rgb(240, 240, 255)
         Note over OTS: DiscoverMCPAuth(serverURL)
-        Note over OTS: 1. GET server -> 401<br/>2. Parse WWW-Authenticate -> resource_metadata URL<br/>3. GET PRM document -> authorization_servers
+        Note over OTS: 1. GET PRM document -> authorization_servers + scopes_supported<br/>(discovery resolves endpoints only; it no longer pins scope)
     end
 
     OTS->>OA: client.DiscoverAS(issuerURL)
@@ -410,7 +410,7 @@ Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authoriza
 | C15 | MUST use `Authorization: Bearer` header (not query string) | Done | `setAuthHeader` in client transports |
 | C16 | Auth MUST be included in every HTTP request | Done | Both client transports inject on every call/notify |
 | C17 | MUST NOT send tokens to servers other than the intended audience | Done | Token bound to specific `OAuthTokenSource.ServerURL` |
-| C18 | Scope selection: use WWW-Authenticate scope > scopes_supported > omit | Done | `DiscoverMCPAuth` scope priority logic |
+| C18 | Scope selection: use WWW-Authenticate scope > scopes_supported > omit | Done | Lazy acquisition (issue 818): `OAuthTokenSource.Token()` defers with `core.ErrNoTokenYet` until a 401/403 challenge arms it via `TokenForScopes`, so the per-operation challenge scope wins; falls back to `info.PRM.ScopesSupported` only when the challenge carries no `scope=`; omits when both empty |
 | C19 | SHOULD implement step-up auth (re-auth on 403 insufficient_scope) | Done | `doWithAuthRetry` + `ScopeAwareTokenSource.TokenForScopes` in client transport |
 | C20 | SHOULD implement retry limits for scope step-up | Done | Max 1 retry per status code (401 + 403) in `doWithAuthRetry` |
 | C21 | SHOULD use and verify state parameters | Done | oneauth `LoginWithBrowser` generates random state |
