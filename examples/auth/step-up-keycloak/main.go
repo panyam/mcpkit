@@ -37,19 +37,18 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/panyam/mcpkit/core"
 	mcpcommon "github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/mcpkit/server/stateless"
+	oneauthclient "github.com/panyam/oneauth/client"
 )
 
 const (
@@ -59,30 +58,6 @@ const (
 	scopeToolsCall     = "tools-call"
 	scopeAdminWrite    = "admin-write"
 )
-
-// discoverOIDC fetches Keycloak's openid-configuration document and returns
-// the issuer + JWKS URI. Inline rather than depending on testutil's helper
-// (test-only); ~10 lines and clearer about what we're hitting.
-func discoverOIDC(realmURL string) (issuer, jwksURI string, err error) {
-	url := realmURL + "/.well-known/openid-configuration"
-	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Get(url)
-	if err != nil {
-		return "", "", fmt.Errorf("GET %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("GET %s: status %d", url, resp.StatusCode)
-	}
-	var meta struct {
-		Issuer  string `json:"issuer"`
-		JWKSURI string `json:"jwks_uri"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
-		return "", "", fmt.Errorf("decode %s: %w", url, err)
-	}
-	return meta.Issuer, meta.JWKSURI, nil
-}
 
 func envOr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -98,10 +73,18 @@ func main() {
 	flag.Parse()
 
 	realmURL := fmt.Sprintf("%s/realms/%s", *kcURL, *realm)
-	issuer, jwksURI, err := discoverOIDC(realmURL)
+
+	// AS discovery via oneauth — same RFC 8414 + OIDC fallback path mcpkit's
+	// ext/auth.DiscoverMCPAuth uses internally. Avoids hand-rolling a
+	// well-known fetch + JSON decode, and keeps the example aligned with
+	// "oneauth is the strategic destination for MCP auth" — for any
+	// production deployment, this is the same helper you'd reach for.
+	asMeta, err := oneauthclient.DiscoverAS(realmURL)
 	if err != nil {
-		log.Fatalf("OIDC discovery failed against %s: %v", realmURL, err)
+		log.Fatalf("AS discovery failed against %s: %v", realmURL, err)
 	}
+	issuer := asMeta.Issuer
+	jwksURI := asMeta.JWKSURI
 
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
 	allScopes := []string{scopeToolsRead, scopeToolsCall, scopeAdminWrite}
