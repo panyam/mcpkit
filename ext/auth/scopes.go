@@ -26,10 +26,14 @@ func RequireScope(ctx context.Context, scope string) error {
 	if core.HasScope(ctx, scope) {
 		return nil
 	}
+	// RequireScope is the handler-level helper; the server's PRM URL is not
+	// reachable from a handler ctx today, so the emitted challenge omits the
+	// resource_metadata link. Use NewToolScopeMiddleware with WithResourceMetadataURL
+	// for middleware-level enforcement that includes the link in the 403.
 	return &core.AuthError{
 		Code:            http.StatusForbidden,
 		Message:         "insufficient scope: " + scope,
-		WWWAuthenticate: WWWAuth403(scope),
+		WWWAuthenticate: WWWAuth403("", scope),
 	}
 }
 
