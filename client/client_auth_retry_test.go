@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -224,6 +226,104 @@ func TestClient_RetryLimit_Double401(t *testing.T) {
 type localStaticToken struct{ token string }
 
 func (s *localStaticToken) Token() (string, error) { return s.token, nil }
+
+// lazyScopeAwareTokenSource models a lazy OAuth source (issue 818): Token
+// defers with core.ErrNoTokenYet until a server challenge calls TokenForScopes
+// to arm it. It records the scopes passed to each TokenForScopes call.
+type lazyScopeAwareTokenSource struct {
+	mu           sync.Mutex
+	armed        bool
+	scopesCalled [][]string
+}
+
+func (m *lazyScopeAwareTokenSource) Token() (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.armed {
+		return "", core.ErrNoTokenYet
+	}
+	return "acquired-token", nil
+}
+
+func (m *lazyScopeAwareTokenSource) TokenForScopes(scopes []string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.scopesCalled = append(m.scopesCalled, scopes)
+	m.armed = true
+	return "acquired-token", nil
+}
+
+// TestClient_LazyTokenSource_DefersThenArmsOn401 verifies the issue-818 lazy
+// path end-to-end at the transport: the first request goes out WITHOUT an
+// Authorization header (Token returned core.ErrNoTokenYet), the server's 401
+// carries scope="mcp:basic", and OnUnauthorized arms the source via
+// TokenForScopes with exactly that scope for the retry.
+func TestClient_LazyTokenSource_DefersThenArmsOn401(t *testing.T) {
+	var requestCount atomic.Int32
+	var firstAuthHeader string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := requestCount.Add(1)
+		if n == 1 {
+			firstAuthHeader = r.Header.Get("Authorization")
+			w.Header().Set("WWW-Authenticate", `Bearer scope="mcp:basic"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"ok"}`))
+	}))
+	defer ts.Close()
+
+	src := &lazyScopeAwareTokenSource{}
+	buildReq := func() (*http.Request, error) {
+		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
+	}
+
+	resp, err := client.DoWithAuthRetry(src, buildReq, http.DefaultClient.Do)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Empty(t, firstAuthHeader, "first request MUST be unauthenticated while the source defers")
+	require.Len(t, src.scopesCalled, 1)
+	assert.Equal(t, []string{"mcp:basic"}, src.scopesCalled[0],
+		"OnUnauthorized must arm the source with the per-operation challenge scope")
+}
+
+// TestClient_LazyTokenSource_401NoScopeStillArms verifies that a 401 carrying
+// no scope= still routes through TokenForScopes (with an empty scope set) to
+// arm a lazy source — the issue-818 wiring that lets the retry fall back to the
+// source's PRM scopes_supported catalog. Before the fix, OnUnauthorized only
+// called TokenForScopes when scope= was present, so a lazy source would loop
+// back to core.ErrNoTokenYet and the request would fail.
+func TestClient_LazyTokenSource_401NoScopeStillArms(t *testing.T) {
+	var requestCount atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := requestCount.Add(1)
+		if n == 1 {
+			// 401 with a bare Bearer challenge — no scope= parameter.
+			w.Header().Set("WWW-Authenticate", `Bearer`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":"ok"}`))
+	}))
+	defer ts.Close()
+
+	src := &lazyScopeAwareTokenSource{}
+	buildReq := func() (*http.Request, error) {
+		return http.NewRequest("POST", ts.URL, strings.NewReader(`{}`))
+	}
+
+	resp, err := client.DoWithAuthRetry(src, buildReq, http.DefaultClient.Do)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+	require.Len(t, src.scopesCalled, 1, "a scope-less 401 must still arm the lazy source")
+	assert.Empty(t, src.scopesCalled[0], "no challenge scope means an empty TokenForScopes call")
+}
 
 // mockInvalidatingTokenSource records the order of Invalidate() vs
 // Token() calls so a test can prove Invalidate fired before the retry's

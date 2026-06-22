@@ -204,9 +204,13 @@ func TestDiscoverMCPAuth_FullChain(t *testing.T) {
 	}
 }
 
-// TestDiscoverMCPAuth_WWWAuthenticateScope verifies that scope from the
-// WWW-Authenticate header takes priority over PRM scopes_supported (C18).
-func TestDiscoverMCPAuth_WWWAuthenticateScope(t *testing.T) {
+// TestDiscoverMCPAuth_DoesNotPinScopeFromProbe verifies that discovery no
+// longer captures the probe's WWW-Authenticate scope= for token acquisition
+// (issue 818). Discovery's job is endpoint resolution; the only scope it
+// exposes is the PRM scopes_supported catalog (info.PRM.ScopesSupported).
+// Per-operation scope is selected later from the real request's 401
+// challenge (RFC 6750 §3.1), not pinned here from a fixed probe method.
+func TestDiscoverMCPAuth_DoesNotPinScopeFromProbe(t *testing.T) {
 	srv := mockMCPAuthServer(t,
 		withHeaderScope("tools:read admin:write"),
 		withPRMScopes([]string{"tools:read", "tools:call", "admin:write"}),
@@ -218,15 +222,17 @@ func TestDiscoverMCPAuth_WWWAuthenticateScope(t *testing.T) {
 		t.Fatalf("DiscoverMCPAuth failed: %v", err)
 	}
 
-	// Scopes should come from WWW-Authenticate header, not PRM
-	if len(info.Scopes) != 2 {
-		t.Fatalf("expected 2 scopes from header, got %d: %v", len(info.Scopes), info.Scopes)
+	// The probe's scope= ("tools:read admin:write", 2 scopes) must NOT win;
+	// the catalog discovery exposes is the full PRM scopes_supported (3).
+	if got := info.PRM.ScopesSupported; len(got) != 3 {
+		t.Fatalf("expected 3 PRM scopes_supported, got %d: %v", len(got), got)
 	}
 }
 
-// TestDiscoverMCPAuth_PRMScopesFallback verifies that when WWW-Authenticate
-// has no scope parameter, scopes fall back to PRM scopes_supported (C18).
-func TestDiscoverMCPAuth_PRMScopesFallback(t *testing.T) {
+// TestDiscoverMCPAuth_PRMScopesExposed verifies that PRM scopes_supported is
+// surfaced on info.PRM for token sources to use as the catalog fallback when
+// a 401 challenge carries no scope=.
+func TestDiscoverMCPAuth_PRMScopesExposed(t *testing.T) {
 	srv := mockMCPAuthServer(t,
 		// No headerScope — WWW-Authenticate has no scope= param
 		withPRMScopes([]string{"tools:read", "tools:call"}),
@@ -238,8 +244,9 @@ func TestDiscoverMCPAuth_PRMScopesFallback(t *testing.T) {
 		t.Fatalf("DiscoverMCPAuth failed: %v", err)
 	}
 
-	if len(info.Scopes) != 2 {
-		t.Fatalf("expected 2 scopes from PRM fallback, got %d: %v", len(info.Scopes), info.Scopes)
+	if len(info.PRM.ScopesSupported) != 2 {
+		t.Fatalf("expected 2 PRM scopes_supported, got %d: %v",
+			len(info.PRM.ScopesSupported), info.PRM.ScopesSupported)
 	}
 }
 
