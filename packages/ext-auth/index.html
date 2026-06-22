@@ -254,11 +254,11 @@
     participant AS as External AS
 
     MC-&gt;&gt;OTS: Token()
-    Note right of OTS: no cached token
+    Note right of OTS: no cached token; acquisition is LAZY —&lt;br/&gt;Token() returns core.ErrNoTokenYet until a&lt;br/&gt;401/403 challenge arms it via TokenForScopes&lt;br/&gt;(issue 818). The steps below run on the&lt;br/&gt;armed call, so the challenge scope wins.
 
     rect rgb(240, 240, 255)
         Note over OTS: DiscoverMCPAuth(serverURL)
-        Note over OTS: 1. GET server -&gt; 401&lt;br/&gt;2. Parse WWW-Authenticate -&gt; resource_metadata URL&lt;br/&gt;3. GET PRM document -&gt; authorization_servers
+        Note over OTS: 1. GET PRM document -&gt; authorization_servers + scopes_supported&lt;br/&gt;(discovery resolves endpoints only; it no longer pins scope)
     end
 
     OTS-&gt;&gt;OA: client.DiscoverAS(issuerURL)
@@ -679,7 +679,7 @@
 <td>C18</td>
 <td>Scope selection: use WWW-Authenticate scope &gt; scopes_supported &gt; omit</td>
 <td>Done</td>
-<td><code>DiscoverMCPAuth</code> scope priority logic</td>
+<td>Lazy acquisition (issue 818): <code>OAuthTokenSource.Token()</code> defers with <code>core.ErrNoTokenYet</code> until a 401/403 challenge arms it via <code>TokenForScopes</code>, so the per-operation challenge scope wins; falls back to <code>info.PRM.ScopesSupported</code> only when the challenge carries no <code>scope=</code>; omits when both empty</td>
 </tr>
 <tr>
 <td>C19</td>
