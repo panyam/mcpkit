@@ -22,14 +22,29 @@ func WWWAuth401(resourceMetadataURL string, scopes ...string) string {
 }
 
 // WWWAuth403 builds a WWW-Authenticate header value for 403 Forbidden responses
-// with insufficient scope. Per MCP spec (2025-11-25), includes error code and
-// required scopes.
+// with insufficient scope. Per MCP spec (2025-11-25) and RFC 6750 §3.1, includes
+// the `error="insufficient_scope"` token plus the required scopes, and optionally
+// the `resource_metadata="<URL>"` link to the server's RFC 9728 PRM document so
+// callers don't have to fall back to the well-known path to discover it.
+//
+// resourceMetadataURL empty omits the `resource_metadata` segment entirely. This
+// is symmetric with WWWAuth401, which always emits the link, and matches the
+// shape modelcontextprotocol/typescript-sdk PR 1624 (the SEP-2350 server-side
+// reference impl) emits on its own scope-challenge 403s — see RFC 9728 §5.1
+// for the discovery semantics this enables.
+//
+// Stateless-wire 403s are the load-bearing case: there is no preceding 401 to
+// learn the PRM link from, so the very first request that lands a 403 needs
+// the link inline to discover the AS.
 //
 // Example output:
 //
-//	Bearer error="insufficient_scope", scope="admin:write files:read"
-func WWWAuth403(scopes ...string) string {
+//	Bearer error="insufficient_scope", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp", scope="admin:write files:read"
+func WWWAuth403(resourceMetadataURL string, scopes ...string) string {
 	parts := []string{`error="insufficient_scope"`}
+	if resourceMetadataURL != "" {
+		parts = append(parts, fmt.Sprintf(`resource_metadata="%s"`, resourceMetadataURL))
+	}
 	if len(scopes) > 0 {
 		parts = append(parts, fmt.Sprintf(`scope="%s"`, strings.Join(scopes, " ")))
 	}

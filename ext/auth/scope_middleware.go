@@ -22,6 +22,7 @@ type ToolScopeOption func(*toolScopeConfig)
 
 type toolScopeConfig struct {
 	includeGrantedScopes bool
+	resourceMetadataURL  string
 }
 
 // WithIncludeGrantedScopes opts the middleware into advertising the union of
@@ -47,6 +48,25 @@ type toolScopeConfig struct {
 // scopes and required scopes; tolerated alternates stay private to the server.
 func WithIncludeGrantedScopes(v bool) ToolScopeOption {
 	return func(c *toolScopeConfig) { c.includeGrantedScopes = v }
+}
+
+// WithResourceMetadataURL plumbs the server's RFC 9728 Protected Resource
+// Metadata URL into the 403 challenge the middleware emits. When set, the
+// WWW-Authenticate header carries `resource_metadata="<URL>"` alongside
+// `error="insufficient_scope"` and `scope="..."`, so clients hitting a
+// first-call 403 on the stateless wire (no preceding 401) can discover the
+// authorization server without falling back to the well-known path.
+//
+// Empty (default) omits the segment — the 401 path's PRM advertisement is
+// the only discovery hint. This is correct when every client passes through
+// a 401 before any 403, but breaks down on SEP-2575 stateless wire where the
+// first tools/call can be a 403 with no prior context.
+//
+// Typically the same URL passed to JWTValidator.ResourceMetadataURL — the two
+// configs live on separate components by design (JWTValidator emits 401s,
+// NewToolScopeMiddleware emits 403s) but referencing the same PRM document.
+func WithResourceMetadataURL(url string) ToolScopeOption {
+	return func(c *toolScopeConfig) { c.resourceMetadataURL = url }
 }
 
 // NewToolScopeMiddleware returns a server middleware that enforces per-tool
@@ -123,7 +143,7 @@ func NewToolScopeMiddleware(lookup ToolDefLookup, opts ...ToolScopeOption) serve
 			return nil, &core.AuthError{
 				Code:            http.StatusForbidden,
 				Message:         "insufficient scope",
-				WWWAuthenticate: WWWAuth403(challengeScopes...),
+				WWWAuthenticate: WWWAuth403(cfg.resourceMetadataURL, challengeScopes...),
 			}
 		}
 

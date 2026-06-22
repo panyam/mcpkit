@@ -193,7 +193,7 @@ func (v *IntrospectionValidator) Validate(r *http.Request) error {
 		return &mcpcore.AuthError{
 			Code:            http.StatusForbidden,
 			Message:         "insufficient scope",
-			WWWAuthenticate: WWWAuth403(v.cfg.RequiredScopes...),
+			WWWAuthenticate: WWWAuth403(v.cfg.ResourceMetadataURL, v.cfg.RequiredScopes...),
 		}
 	}
 
