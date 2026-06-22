@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	mcpcore "github.com/panyam/mcpkit/core"
 	"github.com/panyam/oneauth/client"
 	"github.com/panyam/oneauth/core"
 )
@@ -24,13 +25,14 @@ const tokenExpiryBuffer = 30 * time.Second
 // Per MCP spec (2025-11-25): clients MUST implement PKCE with S256,
 // MUST include resource parameter, MUST verify PKCE support in AS metadata.
 //
-// The discovery flow is:
-//  1. Probe MCP server → 401 + WWW-Authenticate header
-//  2. Fetch Protected Resource Metadata (PRM, RFC 9728)
-//  3. Discover Authorization Server metadata (RFC 8414 / OIDC)
-//  4. Validate PKCE S256 support
-//  5. Resolve client identity (pre-registered → CIMD → DCR)
-//  6. Run PKCE authorization code flow via oneauth LoginWithBrowser
+// Acquisition is lazy: the source defers the OAuth flow until a server
+// challenge selects the scope (see Token). The flow, once a challenge
+// arms the source, is:
+//  1. Fetch Protected Resource Metadata (PRM, RFC 9728)
+//  2. Discover Authorization Server metadata (RFC 8414 / OIDC)
+//  3. Validate PKCE S256 support
+//  4. Resolve client identity (pre-registered → CIMD → DCR)
+//  5. Run PKCE authorization code flow via oneauth LoginWithBrowser
 type OAuthTokenSource struct {
 	// ServerURL is the MCP server URL (used for PRM discovery and as resource indicator).
 	ServerURL string
@@ -54,8 +56,12 @@ type OAuthTokenSource struct {
 	// If nil, DefaultClientRegistration() is used.
 	DCRMeta *ClientRegistrationRequest
 
-	// Scopes to request. If empty, determined via MCP scope selection strategy
-	// (WWW-Authenticate scope > PRM scopes_supported > empty).
+	// Scopes to request. Leave empty for the default lazy behavior: the
+	// source acquires no token until a server 401/403 selects the scope via
+	// WWW-Authenticate, then uses that (falling back to PRM scopes_supported
+	// only when the challenge carries no scope=). Setting Scopes explicitly
+	// pins them and acquires eagerly on the first Token call. TokenForScopes
+	// merges challenge scopes into this set as step-up occurs.
 	Scopes []string
 
 	// CredStore persists tokens across sessions (optional).
@@ -104,6 +110,16 @@ type OAuthTokenSource struct {
 	token    string
 	expiry   time.Time
 
+	// armed reports whether acquisition has been authorized by a server
+	// challenge (TokenForScopes, called by the transport on a 401/403) or
+	// by the caller setting explicit Scopes. Until armed, Token defers and
+	// returns core.ErrNoTokenYet so the first request goes out
+	// unauthenticated and the server's WWW-Authenticate challenge selects
+	// the scope (RFC 6750 §3.1). Mutated only under mu. Invalidate
+	// deliberately leaves it set so an in-flight step-up retry still
+	// acquires rather than re-deferring.
+	armed bool
+
 	// memoryStore is the default backing store for the AuthClient when
 	// s.CredStore is nil. Allocated lazily on first Token() call; holds
 	// refresh tokens between Token() invocations so the refresh path can
@@ -136,6 +152,12 @@ type OAuthTokenSource struct {
 // token needed) while still meeting SEP-2352 when the AS truly
 // changes.
 //
+// The armed flag (Token's lazy gate) is intentionally NOT reset: the
+// transport calls Invalidate then TokenForScopes on a 401, and re-arming
+// would be redundant, but more importantly an already-armed source must
+// stay armed across a step-up retry so the re-issued Token acquires
+// rather than re-deferring with core.ErrNoTokenYet.
+//
 // Safe to call multiple times.
 func (s *OAuthTokenSource) Invalidate() {
 	s.mu.Lock()
@@ -153,7 +175,18 @@ func (s *OAuthTokenSource) Invalidate() {
 
 // Token implements core.TokenSource.
 //
-// Attempts are ordered cheap-to-expensive:
+// Acquisition is LAZY by default: until a server challenge selects the
+// scope, Token returns ("", core.ErrNoTokenYet) instead of running the
+// OAuth flow. The transport treats that sentinel as "send this request
+// without an Authorization header", the server replies 401 with a
+// per-operation WWW-Authenticate scope=, and the auth-retry path calls
+// TokenForScopes to arm the source and acquire with that exact scope
+// (RFC 6750 §3.1). This avoids pre-acquiring with the broader PRM
+// scopes_supported catalog before any operation has stated what it needs.
+// Setting explicit Scopes on the source opts out of laziness — a caller
+// that pins scopes acquires eagerly on the first Token call.
+//
+// Once armed (or with explicit Scopes), attempts are ordered cheap-to-expensive:
 //  1. In-memory cached token still valid                        -> return it
 //  2. CredStore has a non-expired credential (fast path)        -> cache + return
 //  3. Refresh path: if the stored credential has a refresh token
@@ -184,6 +217,16 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		}
 	}
 
+	// Lazy gate: defer acquisition until a server challenge has armed us
+	// (via TokenForScopes on a 401/403) or the caller pinned explicit
+	// Scopes. Returning core.ErrNoTokenYet here makes the transport send
+	// the next request unauthenticated, so the server's WWW-Authenticate
+	// scope= drives selection instead of the PRM scopes_supported catalog
+	// (RFC 6750 §3.1). Issue 818.
+	if !s.armed && len(s.Scopes) == 0 {
+		return "", mcpcore.ErrNoTokenYet
+	}
+
 	// Run MCP discovery (cached after first call)
 	if s.authInfo == nil {
 		var opts []DiscoverOption
@@ -212,10 +255,15 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		}
 	}
 
-	// Scope selection: explicit > discovery
+	// Scope selection: explicit/challenge-accumulated (s.Scopes) > PRM
+	// scopes_supported catalog fallback. s.Scopes carries both the caller's
+	// explicit scopes and any challenge scopes merged in by TokenForScopes,
+	// so a per-operation WWW-Authenticate scope (set just before this call
+	// on a 401/403) always wins over the broader PRM catalog. Empty on both
+	// means omit the scope parameter entirely (RFC 6749 §3.3).
 	scopes := s.Scopes
-	if len(scopes) == 0 {
-		scopes = s.authInfo.Scopes
+	if len(scopes) == 0 && s.authInfo.PRM != nil {
+		scopes = s.authInfo.PRM.ScopesSupported
 	}
 
 	// Client registration (C6): pre-registered > CIMD > DCR > error
@@ -378,10 +426,23 @@ func credentialCoversScopes(cred *client.ServerCredential, required []string) bo
 // OAuth flow. Stored-credential invalidation is required so the refresh
 // path cannot silently return a token scoped to the old grant — step-up
 // must re-run LoginWithBrowser to widen the scope set.
+//
+// Calling this also arms the source for acquisition (see Token's lazy
+// gate). The transport routes every 401 on a scope-aware source through
+// here — including 401s whose WWW-Authenticate carries no scope=, where
+// scopes is empty. That empty call is a no-op on the scope set but still
+// arms the source, so the subsequent Token acquires using the PRM
+// scopes_supported fallback rather than deferring with core.ErrNoTokenYet.
 func (s *OAuthTokenSource) TokenForScopes(scopes []string) (string, error) {
 	s.mu.Lock()
 	s.token = ""
 	s.expiry = time.Time{}
+	// Arm acquisition: a server challenge (or explicit step-up) has selected
+	// the scope, so the next Token call must acquire rather than defer with
+	// core.ErrNoTokenYet. Holds even when scopes is empty — an empty union
+	// is a no-op on the scope set but still flips the source out of its lazy
+	// state, so a 401 carrying no scope= falls through to the PRM catalog.
+	s.armed = true
 	s.Scopes = core.UnionScopes(s.Scopes, scopes)
 	// Wipe the stored credential so Token() skips the refresh path and
 	// goes straight to LoginWithBrowser on the next call. Applies to

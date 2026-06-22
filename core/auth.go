@@ -2,8 +2,27 @@ package core
 
 import (
 	"context"
+	"errors"
 	"net/http"
 )
+
+// ErrNoTokenYet is returned by a TokenSource.Token call when the source
+// has no token to hand out yet and is deliberately deferring acquisition
+// until the server tells it what scope to request.
+//
+// Lazy OAuth sources (e.g. auth.OAuthTokenSource) return this before any
+// operation has triggered a 401: per RFC 6750 §3.1 a least-privilege
+// client SHOULD acquire its token using the scope= from the most recent
+// WWW-Authenticate challenge rather than a broader catalog (PRM
+// scopes_supported), so the source waits for that challenge instead of
+// pre-acquiring.
+//
+// The client transport treats ErrNoTokenYet specially: it sends the next
+// request WITHOUT an Authorization header (rather than failing the
+// request), lets the server respond with a 401 carrying the per-operation
+// scope, and then drives acquisition through the auth-retry path. Any
+// other error from Token is fatal to the request.
+var ErrNoTokenYet = errors.New("no token yet: deferring acquisition until a server challenge selects the scope")
 
 // Claims holds the authenticated identity extracted from a validated request.
 // Populated by AuthValidators that also implement ClaimsProvider.
