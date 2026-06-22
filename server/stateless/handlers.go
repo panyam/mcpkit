@@ -42,7 +42,12 @@ type toolsCallEnvelope struct {
 	// dispatcher does not consume them here.
 }
 
-func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+// handleToolsCall returns (*core.Response, error). A non-nil error is a
+// middleware short-circuit (typically *core.AuthError) propagated unfolded so
+// the transport surfaces it as HTTP 403 + WWW-Authenticate rather than a
+// generic -32603 body (issue 815). The fallback path (test fakes with no
+// middleware) never returns a non-nil error.
+func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
 	// Prefer the middleware-aware path so server-level middleware (notably
 	// the v2 task middleware from ext/tasks) fires on the stateless wire
 	// just like it does on the legacy wire. Backends that don't carry
@@ -54,20 +59,20 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		Method:  "tools/call",
 		Params:  params,
 	}
-	if resp, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
-		return resp
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
 	}
 
 	// Fallback path: no middleware support on this backend.
 	var env toolsCallEnvelope
 	if err := json.Unmarshal(params, &env); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"invalid tools/call params: "+err.Error())
+			"invalid tools/call params: "+err.Error()), nil
 	}
 	def, handler, ok := d.Backend.Tool(env.Name)
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"unknown tool: "+env.Name)
+			"unknown tool: "+env.Name), nil
 	}
 	_ = def // tool definition reserved for schema validation in a follow-up commit
 
@@ -77,9 +82,9 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		Arguments: env.Arguments,
 	})
 	if err != nil {
-		return translateToolError(id, err)
+		return translateToolError(id, err), nil
 	}
-	return core.NewResponse(id, result)
+	return core.NewResponse(id, result), nil
 }
 
 // translateToolError converts a tool-handler error into the right
@@ -165,7 +170,10 @@ type promptsGetEnvelope struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
-func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+// handlePromptsGet returns (*core.Response, error). As with handleToolsCall, a
+// non-nil error is a middleware short-circuit propagated unfolded for the
+// transport's writeAuthError (issue 815); the fallback path never errors.
+func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
 	// Prefer the middleware-aware path so server-level middleware fires
 	// uniformly on the stateless wire AND so the MRTR envelope
 	// (inputResponses + requestState) is decoded and the requestState
@@ -178,8 +186,8 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 		Method:  "prompts/get",
 		Params:  params,
 	}
-	if resp, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
-		return resp
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
 	}
 
 	// Fallback path (test fakes with no middleware support): no MRTR
@@ -188,21 +196,21 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 	var env promptsGetEnvelope
 	if err := json.Unmarshal(params, &env); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"invalid prompts/get params: "+err.Error())
+			"invalid prompts/get params: "+err.Error()), nil
 	}
 	_, handler, ok := d.Backend.Prompt(env.Name)
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"unknown prompt: "+env.Name)
+			"unknown prompt: "+env.Name), nil
 	}
 	result, err := handler(core.NewPromptContext(ctx), core.PromptRequest{
 		Name:      env.Name,
 		Arguments: env.Arguments,
 	})
 	if err != nil {
-		return core.NewErrorResponse(id, core.ErrCodePromptError, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodePromptError, err.Error()), nil
 	}
-	return core.NewResponse(id, result)
+	return core.NewResponse(id, result), nil
 }
 
 // ---------- completion ----------
