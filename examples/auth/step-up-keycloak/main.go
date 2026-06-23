@@ -47,7 +47,6 @@ import (
 	mcpcommon "github.com/panyam/mcpkit/examples/common"
 	"github.com/panyam/mcpkit/ext/auth"
 	"github.com/panyam/mcpkit/server"
-	"github.com/panyam/mcpkit/server/stateless"
 	oneauthclient "github.com/panyam/oneauth/client"
 )
 
@@ -125,11 +124,12 @@ func main() {
 			))
 		},
 		TransportOptions: []server.TransportOption{
-			// SEP-2575 stateless wire so the conformance scenario can hit
-			// tools/call directly without an initialize handshake or
-			// Mcp-Session-Id. Matches the wire mode PR 1624's reference
-			// impl uses when sessionIdGenerator is undefined.
-			server.WithStatelessMode(stateless.ModeStateless),
+			// Dual mode (default) so the scenario's legacy initialize +
+			// session-id handshake works. modelcontextprotocol/typescript-sdk
+			// PR 1624's transport does not yet support the SEP-2575
+			// stateless wire (protocolVersion 2026-07-28), so the
+			// conformance scenario speaks the legacy 2025-11-25 wire to
+			// stay interop-compatible across both SUTs.
 			server.WithMux(func(mux *http.ServeMux) {
 				auth.MountAuth(mux, auth.AuthConfig{
 					ResourceURI:          listenURL,
