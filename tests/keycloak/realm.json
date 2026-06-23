@@ -18,7 +18,7 @@
       "redirectUris": ["http://localhost:*", "http://127.0.0.1:*"],
       "webOrigins": ["*"],
       "defaultClientScopes": ["openid", "email", "profile"],
-      "optionalClientScopes": ["tools-read", "tools-call", "admin-write"],
+      "optionalClientScopes": ["tools-read", "tools-call", "admin-write", "admin"],
       "protocolMappers": [
         {
           "name": "subject",
@@ -75,6 +75,13 @@
     },
     {
       "name": "admin-write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      }
+    },
+    {
+      "name": "admin",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true"
