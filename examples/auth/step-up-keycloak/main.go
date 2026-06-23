@@ -56,6 +56,7 @@ const (
 	scopeToolsRead     = "tools-read"
 	scopeToolsCall     = "tools-call"
 	scopeAdminWrite    = "admin-write"
+	scopeAdmin         = "admin"
 )
 
 func envOr(k, def string) string {
@@ -86,7 +87,7 @@ func main() {
 	jwksURI := asMeta.JWKSURI
 
 	listenURL := fmt.Sprintf("http://localhost%s", *addr)
-	allScopes := []string{scopeToolsRead, scopeToolsCall, scopeAdminWrite}
+	allScopes := []string{scopeToolsRead, scopeToolsCall, scopeAdminWrite, scopeAdmin}
 
 	prmURL := listenURL + "/.well-known/oauth-protected-resource/mcp"
 	validator := auth.NewJWTValidator(auth.JWTConfig{
@@ -112,12 +113,21 @@ func main() {
 			server.WithAuth(validator),
 		},
 		Register: func(srv *server.Server) {
+			// admin_call demonstrates the SEP-2350 OR-hierarchy: a caller
+			// satisfies the gate by holding ANY scope in AcceptedScopes, even
+			// if the literal admin-write scope is absent. The hierarchy here
+			// is "admin covers admin-write", a canonical OAuth-scope-hierarchy
+			// idiom. The 403 challenge still advertises requiredScopes only
+			// (never accepted-parents) per the least-privilege rule, which
+			// is what the scope-challenge-www-authenticate-accepted-not-leaked
+			// conformance check asserts.
 			srv.Register(core.TextTool[struct{}]("admin_call",
-				"Requires admin-write scope. Returns ok when scope is sufficient; otherwise the scope middleware returns HTTP 403 with WWW-Authenticate before this handler runs.",
+				"Requires admin-write scope. The OR-hierarchy on AcceptedScopes lets a token with the parent admin scope satisfy the gate too.",
 				func(_ core.ToolContext, _ struct{}) (string, error) {
 					return "admin_call: ok", nil
 				},
 				core.WithToolRequiredScopes(scopeAdminWrite),
+				core.WithToolAcceptedScopes(scopeAdminWrite, scopeAdmin),
 			))
 			srv.UseMiddleware(auth.NewToolScopeMiddleware(srv.Registry(),
 				auth.WithResourceMetadataURL(prmURL),

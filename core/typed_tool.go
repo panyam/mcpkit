@@ -171,6 +171,21 @@ func WithToolRequiredScopes(scopes ...string) TypedToolOption {
 	return func(c *typedToolConfig) { c.requiredScopes = scopes }
 }
 
+// WithToolAcceptedScopes sets the AcceptedScopes OR-hierarchy escape hatch
+// on the generated ToolDef. When non-empty, the scope-check gate satisfaction
+// flips from "every RequiredScopes scope must be present" (AND) to "any
+// AcceptedScopes scope must be present" (OR). Supports declarative scope
+// hierarchies — a tool that nominally requires "repo:read" can additionally
+// accept "repo" without the caller needing to spell out the AND/OR logic.
+// Empty (default) preserves the AND-only behavior set by RequiredScopes.
+//
+// AcceptedScopes is gate-only: it never appears in the 403 WWW-Authenticate
+// challenge advertisement (which carries only RequiredScopes), keeping the
+// re-auth guidance least-privilege per SEP-2350.
+func WithToolAcceptedScopes(scopes ...string) TypedToolOption {
+	return func(c *typedToolConfig) { c.acceptedScopes = scopes }
+}
+
 // WithInputSchemaOverride replaces the reflection-derived input schema with a
 // caller-supplied schema. Use this when the tool's input shape needs JSON
 // Schema 2020-12 features that struct tags cannot express — for example
