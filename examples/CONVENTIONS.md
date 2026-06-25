@@ -225,6 +225,67 @@ path lights up in Grafana.
 `defaultExporter = "stdout"` because the example's whole purpose is
 showing traces. Every other example defaults to `""`.
 
+### Wire selection (SEP-2575)
+
+Examples pick the SEP-2575 wire from a single `--wire` flag rather than
+hand-rolling `stateless.ParseMode` / `client.ParseClientMode`. Register
+it next to the telemetry flags via `common.RegisterWireFlags(flag.CommandLine)`
+and thread the handle into `common.ServerConfig.Wire`. A walkthrough that
+doesn't call `flag.Parse` uses `common.WireFromArgs()` (mirrors
+`ExporterFromArgs`).
+
+`--wire` drives BOTH halves of a demo binary so the server and the
+walkthrough client agree on one knob:
+
+- `--wire=legacy` — server `ModeLegacyOnly` + client `ClientModeLegacyOnly`
+- `--wire=dual` — server `ModeDual` + client `ClientModeAdaptive` (dual is
+  the only asymmetric mapping: a Dual server speaks both wires, so the
+  client probes then falls back)
+- `--wire=stateless` — server `ModeStateless` + client `ClientModeStateless`
+- `--wire=""` (default) — make no selection; each side falls through to
+  `MCPKIT_STATELESS_MODE` / `MCPKIT_CLIENT_MODE` env or its package default
+  (server `ModeDual`, client `ClientModeLegacyOnly`)
+
+`--server-wire` / `--client-wire` override one side when a demo needs them
+decoupled. An unrecognized token logs a warning and falls through to the
+default rather than binding a surprising wire.
+
+Canonical wiring inside `serve()` (extends the telemetry setup above):
+
+```go
+func serve() {
+    addr := flag.String("addr", ":8080", "listen address")
+    tel := common.RegisterTelemetryFlags(flag.CommandLine)
+    wire := common.RegisterWireFlags(flag.CommandLine)
+    flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
+        demokit.BoolFlag("--serve"),
+        demokit.ValueFlag("--url"),
+    ))
+
+    // ... telemetry setup ...
+
+    if err := common.RunServer(common.ServerConfig{
+        Name:           "<example-name>",
+        Addr:           *addr,
+        TracerProvider: tp,
+        Wire:           wire, // applied after TransportOptions; CLI overrides hardcoded WithStatelessMode
+    }); err != nil {
+        log.Fatalf("ListenAndServe: %v", err)
+    }
+}
+```
+
+Like the telemetry flags, the `--wire` family passes through
+`demokit.FilterArgs` unstripped in `=` form (`--wire=stateless`). Only the
+space-separated form (`--wire stateless`) needs an explicit
+`demokit.ValueFlag("--wire")` in the filter list; most examples use the
+`=` form and skip it.
+
+`examples/stateless/` is the deliberate exception: it keeps its own
+`--mode` flag defaulting to `stateless` because the SEP-2575 conformance
+fixture drives it with no flag and needs the stateless wire by default,
+not the `ModeDual` fall-through `--wire=""` would give.
+
 #### Client-side wiring (walkthrough.go)
 
 Walkthroughs (runDemo) typically don't call `flag.Parse` — they rely

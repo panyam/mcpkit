@@ -49,6 +49,7 @@ func serve() {
 	ttlMs := flag.Int("ttl-ms", -1, "cache TTL in milliseconds (negative = unset, 0 = immediately stale, positive = fresh for N ms)")
 	scope := flag.String("cache-scope", "", `SEP-2549 cacheScope: "public", "private", or "" to omit`)
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -91,6 +92,7 @@ func serve() {
 		Addr:           *addr,
 		TracerProvider: tp,
 		Options:        extraOpts,
+		Wire:           wire,
 		Register: func(srv *server.Server) {
 			srv.RegisterTool(
 				core.ToolDef{
