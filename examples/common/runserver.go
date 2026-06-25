@@ -55,6 +55,15 @@ type ServerConfig struct {
 	// WithStatelessMode, WithSSE, WithEventStore, etc.
 	TransportOptions []server.TransportOption
 
+	// Wire, when non-nil, applies --wire / --server-wire selection
+	// (from RegisterWireFlags or WireFromArgs) to the transport. It is
+	// applied AFTER TransportOptions so the CLI flag overrides any
+	// hardcoded WithStatelessMode. When no wire flag was passed the
+	// helper appends nothing and the server keeps its
+	// MCPKIT_STATELESS_MODE / stateless.DefaultMode wire. nil disables
+	// the feature entirely (the pre-Wire behavior).
+	Wire *WireFlags
+
 	// TracerProvider, when non-nil, wires SEP-414 trace middleware
 	// into the server via server.WithTracerProvider. Pass the result
 	// of commonotel.SetupTelemetry directly — it's already wrapped
@@ -129,5 +138,10 @@ func RunServer(cfg ServerConfig) error {
 	log.Printf("[%s] listening on %s", cfg.Name, cfg.Addr)
 
 	transportOpts := append([]server.TransportOption{server.WithStreamableHTTP(true)}, cfg.TransportOptions...)
+	if cfg.Wire != nil {
+		if opt, ok := cfg.Wire.ServerTransportOption(); ok {
+			transportOpts = append(transportOpts, opt)
+		}
+	}
 	return srv.ListenAndServe(transportOpts...)
 }
