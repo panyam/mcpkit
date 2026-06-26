@@ -144,9 +144,9 @@
     <div class="content-body">
         
 <h1 id="upstream-conformance-audit">Upstream Conformance Audit <a class="anchor" href="#upstream-conformance-audit">¶</a></h1>
-<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@25fd443</code> — <em>chore: bump version to 0.2.0-alpha.2 (#328)</em>.</p>
-<p><strong>mcpkit HEAD:</strong> <code>25fd443</code><br />
-<strong>Driver:</strong> <code>cmd/testserver</code> (server scenarios) + <code>cmd/testclient</code> (client scenarios)</p>
+<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@5d7abd5</code> — <em>chore: bump version to 0.2.0-alpha.7 (#367)</em>.</p>
+<p><strong>mcpkit HEAD:</strong> <code>5d7abd5</code><br />
+<strong>Driver:</strong> <code>cmd/testserver</code> (server scenarios) + <code>cmd/testclient</code> (client scenarios). SEP-2663 <code>tasks-*</code> server scenarios are graded against <code>examples/tasks-v2</code> instead, which wires <code>ext/tasks</code> in its own module (keeping the root module free of that dependency) — mirroring how <code>testconf-stateless</code> uses <code>examples/stateless</code>.</p>
 <p>Informational report — not a CI gate. Regenerate via <code>make testconf-upstream-audit</code>.</p>
 <p>Status legend: <strong>pass</strong> = no FAILURE checks · <strong>partial</strong> = at least one SUCCESS and one FAILURE · <strong>fail</strong> = all checks FAILURE · <strong>harness-gap</strong> = no <code>checks.json</code> produced (driver missing) · <strong>fork-covered</strong> = same surface graded by an existing <code>testconf-*</code> SEP fork target.</p>
 <h2 id="summary">Summary <a class="anchor" href="#summary">¶</a></h2>
@@ -167,35 +167,35 @@
 <tbody>
 <tr>
 <td>Server</td>
-<td align="right">51</td>
-<td align="right">135</td>
-<td align="right">109</td>
+<td align="right">61</td>
+<td align="right">175</td>
+<td align="right">148</td>
 <td align="right">3</td>
 <td align="right">8</td>
 <td align="right">6</td>
-<td align="right">9</td>
+<td align="right">10</td>
 <td align="right">0</td>
 </tr>
 <tr>
 <td>Client</td>
 <td align="right">40</td>
-<td align="right">1219</td>
-<td align="right">453</td>
+<td align="right">1263</td>
+<td align="right">448</td>
 <td align="right">9</td>
-<td align="right">4</td>
-<td align="right">751</td>
+<td align="right">3</td>
+<td align="right">801</td>
 <td align="right">2</td>
 <td align="right">0</td>
 </tr>
 <tr>
 <td><strong>Total</strong></td>
-<td align="right"><strong>91</strong></td>
-<td align="right"><strong>1354</strong></td>
-<td align="right"><strong>562</strong></td>
+<td align="right"><strong>101</strong></td>
+<td align="right"><strong>1438</strong></td>
+<td align="right"><strong>596</strong></td>
 <td align="right"><strong>12</strong></td>
-<td align="right"><strong>12</strong></td>
-<td align="right"><strong>757</strong></td>
 <td align="right"><strong>11</strong></td>
+<td align="right"><strong>807</strong></td>
+<td align="right"><strong>12</strong></td>
 <td align="right"><strong>0</strong></td>
 </tr>
 </tbody>
@@ -226,175 +226,175 @@
 <td><code>auth/2025-03-26-oauth-endpoint-fallback</code></td>
 <td>client</td>
 <td>partial</td>
-<td>3 fail / 8 info</td>
+<td>3 fail / 10 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/2025-03-26-oauth-metadata-backcompat</code></td>
 <td>client</td>
 <td>partial</td>
-<td>4 fail / 8 info</td>
+<td>4 fail / 10 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/authorization-server-migration</code></td>
 <td>client</td>
 <td>partial</td>
-<td>12 pass / 1 fail / 16 info</td>
+<td>2 pass / 1 fail / 4 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/basic-cimd</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 1 warn / 32 info</td>
+<td>17 pass / 1 warn / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/iss-normalized</code></td>
 <td>client</td>
 <td>pass</td>
-<td>8 pass / 12 info</td>
+<td>8 pass / 14 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/iss-not-advertised</code></td>
 <td>client</td>
 <td>pass</td>
-<td>12 pass / 16 info</td>
+<td>12 pass / 18 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/iss-supported</code></td>
 <td>client</td>
 <td>pass</td>
-<td>12 pass / 16 info</td>
+<td>12 pass / 18 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/iss-supported-missing</code></td>
 <td>client</td>
 <td>pass</td>
-<td>8 pass / 12 info</td>
+<td>8 pass / 14 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/iss-unexpected</code></td>
 <td>client</td>
 <td>pass</td>
-<td>8 pass / 12 info</td>
+<td>8 pass / 14 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/iss-wrong-issuer</code></td>
 <td>client</td>
 <td>pass</td>
-<td>8 pass / 12 info</td>
+<td>8 pass / 14 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-default</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 32 info</td>
+<td>17 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-issuer-mismatch</code></td>
 <td>client</td>
 <td>pass</td>
-<td>3 pass / 8 info</td>
+<td>3 pass / 10 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-var1</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 34 info</td>
+<td>17 pass / 36 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-var2</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 34 info</td>
+<td>17 pass / 36 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-var3</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 34 info</td>
+<td>17 pass / 36 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/pre-registration</code></td>
 <td>client</td>
 <td>pass</td>
-<td>19 pass / 36 info</td>
+<td>19 pass / 38 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/resource-mismatch</code></td>
 <td>client</td>
 <td>pass</td>
-<td>2 pass / 6 info</td>
+<td>2 pass / 8 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/scope-from-scopes-supported</code></td>
 <td>client</td>
 <td>pass</td>
-<td>18 pass / 32 info</td>
+<td>18 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/scope-from-www-authenticate</code></td>
 <td>client</td>
 <td>pass</td>
-<td>18 pass / 32 info</td>
+<td>18 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/scope-omitted-when-undefined</code></td>
 <td>client</td>
 <td>pass</td>
-<td>18 pass / 32 info</td>
+<td>18 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/scope-retry-limit</code></td>
 <td>client</td>
 <td>pass</td>
-<td>16 pass / 36 info</td>
+<td>16 pass / 38 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/scope-step-up</code></td>
 <td>client</td>
 <td>pass</td>
-<td>18 pass / 2 warn / 34 info</td>
+<td>24 pass / 46 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/token-endpoint-auth-basic</code></td>
 <td>client</td>
 <td>pass</td>
-<td>22 pass / 32 info</td>
+<td>22 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/token-endpoint-auth-none</code></td>
 <td>client</td>
 <td>pass</td>
-<td>22 pass / 32 info</td>
+<td>22 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/token-endpoint-auth-post</code></td>
 <td>client</td>
 <td>pass</td>
-<td>22 pass / 32 info</td>
+<td>22 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
@@ -821,14 +821,14 @@
 <td><code>auth/offline-access-not-supported</code></td>
 <td>client</td>
 <td>pass</td>
-<td>12 pass / 16 info</td>
+<td>12 pass / 18 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/offline-access-scope</code></td>
 <td>client</td>
 <td>pass</td>
-<td>11 pass / 1 warn / 17 info</td>
+<td>11 pass / 1 warn / 19 info</td>
 <td></td>
 </tr>
 </tbody>
@@ -882,6 +882,27 @@
 </tr>
 </tbody>
 </table>
+<h3 id="sep-2243httpsmodelcontextprotocolioseps2243-http-standardization-1-scenarios"><a href="https://modelcontextprotocol.io/seps/2243-http-standardization">SEP-2243</a> (1 scenarios) <a class="anchor" href="#sep-2243httpsmodelcontextprotocolioseps2243-http-standardization-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks-request-headers</code></td>
+<td>server</td>
+<td>pass</td>
+<td>4 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
 <h3 id="sep-2243-x-mcp-headerhttpsmodelcontextprotocoliospecificationdraftservertoolsx-mcp-header-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header">SEP-2243-X-MCP-HEADER</a> (1 scenarios) <a class="anchor" href="#sep-2243-x-mcp-headerhttpsmodelcontextprotocoliospecificationdraftservertoolsx-mcp-header-1-scenarios">¶</a></h3>
 <table>
 <thead>
@@ -924,7 +945,7 @@
 </tr>
 </tbody>
 </table>
-<h3 id="sep-2322httpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-14-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr">SEP-2322</a> (14 scenarios) <a class="anchor" href="#sep-2322httpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-14-scenarios">¶</a></h3>
+<h3 id="sep-2322httpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-16-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr">SEP-2322</a> (16 scenarios) <a class="anchor" href="#sep-2322httpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-16-scenarios">¶</a></h3>
 <table>
 <thead>
 <tr>
@@ -1034,6 +1055,20 @@
 <td>1 pass / 1 warn</td>
 <td></td>
 </tr>
+<tr>
+<td><code>tasks-mrtr-composition</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-mrtr-input</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 pass</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <h3 id="sep-2322-mrtrhttpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr">SEP-2322-MRTR</a> (1 scenarios) <a class="anchor" href="#sep-2322-mrtrhttpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-1-scenarios">¶</a></h3>
@@ -1078,7 +1113,7 @@
 </tr>
 </tbody>
 </table>
-<h3 id="sep-2575httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2575-2-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575">SEP-2575</a> (2 scenarios) <a class="anchor" href="#sep-2575httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2575-2-scenarios">¶</a></h3>
+<h3 id="sep-2575httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2575-3-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575">SEP-2575</a> (3 scenarios) <a class="anchor" href="#sep-2575httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2575-3-scenarios">¶</a></h3>
 <table>
 <thead>
 <tr>
@@ -1094,21 +1129,84 @@
 <td><code>server-stateless</code></td>
 <td>server</td>
 <td>fork-covered</td>
-<td>19 pass / 1 fail / 2 warn / 4 skip</td>
+<td>23 pass / 1 fail / 2 warn / 4 skip</td>
 <td>Also graded by <code>testconf-stateless</code></td>
 </tr>
 <tr>
 <td><code>request-metadata</code></td>
 <td>client</td>
 <td>pass</td>
-<td>5 pass / 2 skip</td>
+<td>4 pass / 1 warn / 2 skip</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-required-task-error</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2663httpsmodelcontextprotocolioseps2663-tasks-extension-6-scenarios"><a href="https://modelcontextprotocol.io/seps/2663-tasks-extension">SEP-2663</a> (6 scenarios) <a class="anchor" href="#sep-2663httpsmodelcontextprotocolioseps2663-tasks-extension-6-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks-capability-negotiation</code></td>
+<td>server</td>
+<td>pass</td>
+<td>4 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-dispatch-and-envelope</code></td>
+<td>server</td>
+<td>pass</td>
+<td>8 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-lifecycle</code></td>
+<td>server</td>
+<td>pass</td>
+<td>8 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-request-state-removal</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-status-notifications</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 skip</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-wire-fields</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 pass</td>
 <td></td>
 </tr>
 </tbody>
 </table>
 <h2 id="methodology">Methodology <a class="anchor" href="#methodology">¶</a></h2>
 <ul>
-<li><code>make testconf-upstream-audit</code> spawns <code>cmd/testserver</code> (Streamable HTTP on port 18099), builds <code>cmd/testclient</code>, then drives upstream&rsquo;s CLI: <code>node dist/index.js server --url ... --suite all</code> once, and <code>... client --command ... --scenario &lt;name&gt;</code> per scenario in a loop (sequentially — upstream&rsquo;s parallel <code>--suite all</code> mode is flaky on the client side).</li>
+<li><code>make testconf-upstream-audit</code> spawns <code>cmd/testserver</code> (Streamable HTTP on port 18099), builds <code>cmd/testclient</code>, then drives upstream&rsquo;s CLI: <code>node dist/index.js server --url ... --suite all</code> once, and <code>... client --command ... --scenario &lt;name&gt;</code> per scenario in a loop (sequentially — upstream&rsquo;s parallel <code>--suite all</code> mode is flaky on the client side). The <code>tasks-*</code> server scenarios are then re-graded against <code>examples/tasks-v2</code> on a second port (port 18101), replacing the bulk-sweep results.</li>
 <li>Upstream&rsquo;s CLI writes one <code>&lt;scenario&gt;/checks.json</code> per scenario; this report aggregates by <code>specReferences[]</code> (first matching <code>SEP-NNNN</code> wins as primary group).</li>
 <li>Scenarios with no <code>checks.json</code> are tagged <code>harness-gap</code> — they require driver work in <code>cmd/testclient</code> (or a dedicated client harness) before the upstream runner can invoke them.</li>
 <li><code>also-covered-by-fork</code> is hand-maintained in <code>scripts/conformance-audit-report.ts</code> (<code>FORK_OVERLAP</code> map). Update there as SEP-fork targets land coverage.</li>
