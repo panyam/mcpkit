@@ -193,9 +193,9 @@ var rpcErr *client.RPCError
 if errors.As(err, &rpcErr) {
     var data struct {
         Authorization struct {
-            AuthorizationContextID string ` + "`json:\"authorizationContextId\"`" + `
-        } ` + "`json:\"authorization\"`" + `
-        Elicitations []struct{ URL string ` + "`json:\"url\"`" + ` } ` + "`json:\"elicitations\"`" + `
+            AuthorizationContextID string `+"`json:\"authorizationContextId\"`"+`
+        } `+"`json:\"authorization\"`"+`
+        Elicitations []struct{ URL string `+"`json:\"url\"`"+` } `+"`json:\"elicitations\"`"+`
     }
     raw, _ := json.Marshal(rpcErr.Data)
     json.Unmarshal(raw, &data)
@@ -335,6 +335,7 @@ func openBrowser(url string) {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -369,6 +370,7 @@ func serve() {
 		Addr:           *addr,
 		Logger:         logger,
 		TracerProvider: tp,
+		Wire:           wire,
 		Register: func(srv *server.Server) {
 			srv.RegisterTool(
 				core.ToolDef{

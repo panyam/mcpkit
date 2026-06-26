@@ -34,6 +34,7 @@ func runDemo() {
 	serverURL := common.ServerURL()
 	mcpURL := serverURL + "/mcp"
 	injectURL := serverURL + "/inject"
+	wire := common.WireFromArgs()
 
 	demo := demokit.New("MCP Events — kitchen-sink (per-subscription showcase)").
 		Dir("events/kitchen-sink").
@@ -73,7 +74,11 @@ func runDemo() {
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("Vanilla MCP initialize. The events extension declares no new capability; events/* methods are registered server-side via the library.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			c = client.NewClient(mcpURL, core.ClientInfo{Name: "kitchen-sink-host", Version: "1.0"})
+			var opts []client.ClientOption
+			if opt, ok := wire.ClientOption(); ok {
+				opts = append(opts, opt)
+			}
+			c = client.NewClient(mcpURL, core.ClientInfo{Name: "kitchen-sink-host", Version: "1.0"}, opts...)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
 			} else {

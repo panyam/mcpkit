@@ -464,6 +464,7 @@ resp, _ := http.DefaultClient.Do(req) // resp.StatusCode == 403`),
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -525,6 +526,7 @@ func serve() {
 		Addr:           *addr,
 		Logger:         logger,
 		TracerProvider: tp,
+		Wire:           wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 			server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),

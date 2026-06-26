@@ -21,6 +21,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8082", "listen address")
+	wire := mcpcommon.RegisterWireFlags(flag.CommandLine)
 	flag.Parse()
 
 	env := common.NewEnv([]string{"read", "write"})
@@ -41,6 +42,7 @@ func main() {
 		Name:    "auth-jwt",
 		Version: "1.0",
 		Addr:    *addr,
+		Wire:    wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 		},

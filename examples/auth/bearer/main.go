@@ -17,6 +17,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8081", "listen address")
+	wire := mcpcommon.RegisterWireFlags(flag.CommandLine)
 	flag.Parse()
 
 	log.Printf("Token: my-secret-token")
@@ -26,6 +27,7 @@ func main() {
 		Name:    "auth-bearer",
 		Version: "1.0",
 		Addr:    *addr,
+		Wire:    wire,
 		Options: []server.Option{
 			server.WithBearerToken("my-secret-token"),
 		},
