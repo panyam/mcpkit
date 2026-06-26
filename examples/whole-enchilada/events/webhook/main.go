@@ -310,9 +310,18 @@ func (r *deliveryReceiver) handle(w http.ResponseWriter, req *http.Request) {
 	if status == 0 {
 		status = http.StatusOK
 	}
-	fmt.Printf("%s %s tenant=%-10s id=%s reply=%d body=%s\n",
+	// X-Replica is the event-server replica that delivered this POST
+	// (stamped via events.WithWebhookExtraHeaders on the server). Shown
+	// per delivery so the operator watches it rotate across replicas
+	// under make drive-chat (Phase 3). "?" when N=1 / header absent.
+	replica := req.Header.Get("X-Replica")
+	if replica == "" {
+		replica = "?"
+	}
+	fmt.Printf("%s %s replica=%s tenant=%-10s id=%s reply=%d body=%s\n",
 		time.Now().Format("15:04:05"),
 		r.prefix,
+		replica,
 		tagged.Tenant,
 		id,
 		status,
