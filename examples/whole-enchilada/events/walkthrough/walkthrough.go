@@ -165,13 +165,18 @@ docker compose start event-server-1`).Default(),
 			demokit.MakeVariant("shell", "bash", `# A bearer from any tenant (events/list just lists event types):
 T=$(make newtoken-ci TENANT=A USER=usera1 PASSWORD=usera1)
 
-# Fire it a handful of times; X-Replica flips across event-server-1/2/3:
+# Fire it a handful of times; X-Replica flips across event-server-1/2/3.
+# params._meta is the SEP-2575 stateless-wire envelope the server
+# requires on every request (protocolVersion + clientInfo +
+# clientCapabilities) — the per-request equivalent of an initialize
+# handshake. Omit it and the request falls through to the legacy
+# session path and 400s on the missing Mcp-Session-Id.
 for i in $(seq 6); do
   curl -s -D - -o /dev/null -X POST http://localhost:9090/mcp \
     -H "Authorization: Bearer $T" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"events/list","params":{}}' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"events/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl-demo","version":"0"},"io.modelcontextprotocol/clientCapabilities":{}}}}' \
     | grep -i '^x-replica'
 done`).Default(),
 		).
