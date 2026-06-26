@@ -184,6 +184,36 @@ Webhook and stream **subscribers** are not a compose tier. The demo runs them as
 3. The library fans out: stream subscribers receive the event via SSE on `events/stream`, webhook subscribers get an HTTP POST with a Standard Webhooks signature, poll subscribers see it on their next `events/poll`.
 4. Each host-run subscriber (`make webhook` / `make streamer`) verifies the signature and logs the payload.
 
+### Cross-replica delivery (why N>1 works)
+
+With N event-server replicas behind nginx, an inject lands on whichever replica nginx round-robins to, but a subscriber's stream or webhook may be bound to a **different** replica. A Redis pub/sub bus bridges them. The load-bearing invariant: **per-subscriber `Match` (tenant scoping) is re-applied on every replica** — both the origin's local fan-out and the cross-replica relay. An early "broadcast everything on receive" shortcut skipped that re-check and leaked events across tenants; `LocalDeliver` re-running `Match` is what fixes it.
+
+```mermaid
+sequenceDiagram
+    participant Drv as make inject / drive-chat
+    participant NX as nginx :9090
+    participant ES1 as event-server-1 (origin)
+    participant Redis as Redis pub/sub
+    participant ES2 as event-server-2
+    participant Sub as stream sub on ES2
+
+    Drv->>NX: POST /events/chat.message/inject
+    NX->>ES1: round-robin to one replica
+    Note over ES1: HTTPSource decode → YieldingSource.yield
+    ES1->>ES1: deliverEventToSlot (per-slot Match)<br/>→ ES1's own stream / webhook subs
+    ES1->>Redis: EventsBus.Emit → PUBLISH mcpkit.events.chat.message<br/>(stamps origin = ES1)
+    Redis-->>ES1: self-publish — origin marker matches → dropped
+    Redis-->>ES2: deliver
+    Note over ES2: Subscriber → registryRouter →<br/>YieldingSource.Receive → LocalDeliver
+    ES2->>Sub: deliverEventToSlot (per-slot Match)<br/>tenant scoping RE-APPLIED locally
+```
+
+- The **origin replica** matches + delivers to its own subscribers, then publishes the event to Redis with an origin marker.
+- The origin's own subscriber sees that marker and **drops the self-publish** — no double delivery.
+- **Other replicas** route the relayed event through `YieldingSource.Receive → LocalDeliver`, which re-runs per-slot `Match`, so tenant scoping holds locally.
+
+Full design (capability- vs subscription-shaped routing, the relay/bus seams, the origin-marker dedup): [`docs/MULTI_REPLICA.md`](../../../docs/MULTI_REPLICA.md).
+
 ### Why HTTPSource (the third source pattern)
 
 `experimental/ext/events/` ships three source patterns:
