@@ -60,6 +60,8 @@
                 
                 <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
                 
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
                 <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
                 
             </ul>
@@ -154,6 +156,7 @@
 <li><strong>SEP Coverage</strong> is sourced from upstream&rsquo;s traceability manifest, which maps each SEP to its declared requirements. A row&rsquo;s <code>Status</code> says whether upstream has emitted a check ID for every declared requirement — <em>not</em> whether mcpkit passes them. Scenario-level pass/fail per SEP lives in <a href="conformance/UPSTREAM_AUDIT.md"><code>conformance/UPSTREAM_AUDIT.md</code></a>, which grades mcpkit against every scenario upstream currently ships.</li>
 <li><strong>Open Gaps</strong> lists failing scenarios + traceability rows with no emitted check. Tracking links and one-line context come from <a href="conformance/known-gaps.yaml"><code>conformance/known-gaps.yaml</code></a>.</li>
 </ul>
+<p>Every report on this site grades an mcpkit <strong>server</strong>. For the inverse — the mcpkit <strong>client</strong> graded by an independent third-party gauntlet on the integrated stateless draft wire (<code>2026-07-28</code>) — see <a href="conformance/EXTERNAL_CHECKER.md"><code>conformance/EXTERNAL_CHECKER.md</code></a>, regenerated via <code>make testconf-external-checker</code>.</p>
 <h2 id="what-this-report-is-not">What this report is <em>not</em> <a class="anchor" href="#what-this-report-is-not">¶</a></h2>
 <p>The renderer drops the tier-check checks that depend on live GitHub state (labels, triage SLA, P0 resolution, stable release, policy signals, spec tracking). Those are useful tier-1 signals but they change daily independent of code, which would break the CI staleness gate. To see the full <code>tier-check</code> scorecard for a point-in-time tier judgement, run <code>npx @modelcontextprotocol/conformance tier-check --repo panyam/mcpkit --output markdown</code> directly.</p>
 <h2 id="regenerate-locally">Regenerate locally <a class="anchor" href="#regenerate-locally">¶</a></h2>
