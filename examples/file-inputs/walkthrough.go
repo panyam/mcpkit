@@ -35,9 +35,9 @@ var fixtureAppendixPDF []byte
 //go:embed testdata/README.txt
 var fixtureREADME []byte
 
-
 func runDemo() {
 	serverURL := common.ServerURL()
+	wire := common.WireFromArgs()
 
 	tel := common.ExporterFromArgs()
 	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
@@ -85,10 +85,16 @@ func runDemo() {
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
 		Note("`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			c = client.NewClient(serverURL+"/mcp",
-				core.ClientInfo{Name: "file-inputs-host", Version: "1.0"},
+			opts := []client.ClientOption{
 				client.WithFileInputs(),
 				client.WithTracerProvider(tp),
+			}
+			if opt, ok := wire.ClientOption(); ok {
+				opts = append(opts, opt)
+			}
+			c = client.NewClient(serverURL+"/mcp",
+				core.ClientInfo{Name: "file-inputs-host", Version: "1.0"},
+				opts...,
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
@@ -523,5 +529,3 @@ func flagValue(name string) string {
 	}
 	return ""
 }
-
-

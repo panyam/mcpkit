@@ -21,6 +21,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8083", "listen address")
+	wire := mcpcommon.RegisterWireFlags(flag.CommandLine)
 	flag.Parse()
 
 	env := common.NewEnv([]string{"read", "write", "admin"})
@@ -46,6 +47,7 @@ func main() {
 		Name:    "auth-scopes",
 		Version: "1.0",
 		Addr:    *addr,
+		Wire:    wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 		},

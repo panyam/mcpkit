@@ -21,6 +21,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8085", "listen address")
+	wire := mcpcommon.RegisterWireFlags(flag.CommandLine)
 	flag.Parse()
 
 	env := common.NewEnv([]string{"read"})
@@ -45,6 +46,7 @@ func main() {
 		Name:    "auth-public-discovery",
 		Version: "1.0",
 		Addr:    *addr,
+		Wire:    wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 			server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),

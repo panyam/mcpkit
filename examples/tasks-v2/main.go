@@ -45,6 +45,7 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -75,6 +76,7 @@ func serve() {
 		Name:           "tasks-v2-demo",
 		Addr:           *addr,
 		TracerProvider: tp,
+		Wire:           wire,
 		Register: func(srv *server.Server) {
 			registerTasksV2DemoTools(srv)
 		},
@@ -241,11 +243,11 @@ func registerTasksV2DemoTools(srv *server.Server) {
 			}
 
 			var (
-				wg          sync.WaitGroup
-				nameRes     core.ElicitationResult
-				confirmRes  core.ElicitationResult
-				nameErr     error
-				confirmErr  error
+				wg         sync.WaitGroup
+				nameRes    core.ElicitationResult
+				confirmRes core.ElicitationResult
+				nameErr    error
+				confirmErr error
 			)
 			wg.Add(2)
 			go func() {

@@ -17,6 +17,7 @@ import (
 
 func runDemo() {
 	serverURL := common.ServerURL()
+	wire := common.WireFromArgs()
 
 	tel := common.ExporterFromArgs()
 	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
@@ -94,8 +95,7 @@ if err := c.Connect(); err != nil { panic(err) }
 _ = c.ServerSupportsExtension(core.TasksExtensionID) // true once negotiated`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			c = client.NewClient(serverURL+"/mcp",
-				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
+			opts := []client.ClientOption{
 				client.WithGetSSEStream(),
 				client.WithTasksExtension(),
 				client.WithNotificationCallback(func(method string, params any) {
@@ -104,6 +104,13 @@ _ = c.ServerSupportsExtension(core.TasksExtensionID) // true once negotiated`),
 					}
 				}),
 				client.WithTracerProvider(tp),
+			}
+			if opt, ok := wire.ClientOption(); ok {
+				opts = append(opts, opt)
+			}
+			c = client.NewClient(serverURL+"/mcp",
+				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
+				opts...,
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
