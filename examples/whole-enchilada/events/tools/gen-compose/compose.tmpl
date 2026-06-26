@@ -76,7 +76,16 @@ services:
     build:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
-    # Lets the event-server reach webhook receivers running on the
+{{if ne . 1}}    # Wait for replica 1 to be healthy before starting. The FIRST
+    # GORM AutoMigrate CREATEs the schema; running it concurrently from
+    # N replicas against a fresh DB races on Postgres catalog creates
+    # (pg_type, SQLSTATE 23505), killing the losers. Once replica 1 is
+    # healthy the schema exists, so 2..N AutoMigrate as a no-op. Only
+    # bites on a fresh DB (predemo / clean-backends).
+    depends_on:
+      event-server-1:
+        condition: service_healthy
+{{end}}    # Lets the event-server reach webhook receivers running on the
     # host (e.g. `make webhook` opens a listener on the operator's
     # 127.0.0.1:<dynamic-port>). Docker Desktop on macOS/Windows
     # auto-maps host.docker.internal; Linux needs the explicit
