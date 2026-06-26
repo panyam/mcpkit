@@ -74,10 +74,10 @@ func serve() {
 	sourceExtra := flag.String("extra", "",
 		"comma-separated ad-hoc sub-mounts for --source=multi, format prefix:./path (e.g. science:./scienceskills,math:./mathskills)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
-		demokit.BoolFlag("--serve"),  // dual-mode dispatch; override demokit's value-form default
-		demokit.ValueFlag("--url"),   // walkthrough-side flag; strip from serve args
-		demokit.ValueFlag("--wire"),  // walkthrough-side flag; strip from serve args
+		demokit.BoolFlag("--serve"), // dual-mode dispatch; override demokit's value-form default
+		demokit.ValueFlag("--url"),  // walkthrough-side flag; strip from serve args
 	))
 
 	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
@@ -132,6 +132,7 @@ func serve() {
 		Addr:           *addr,
 		LogPrefix:      "[skills] ",
 		TracerProvider: tp,
+		Wire:           wire,
 		Register: func(srv *server.Server) {
 			provider.RegisterWith(srv)
 			registerRefreshTool(srv, provider)
@@ -167,4 +168,3 @@ func registerRefreshTool(srv *server.Server, provider *skills.Provider) {
 	)
 	srv.RegisterTool(tool.ToolDef, tool.Handler)
 }
-

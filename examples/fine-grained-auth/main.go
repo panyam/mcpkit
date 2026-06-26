@@ -682,6 +682,7 @@ func requestToken(b bootstrapInfo, scopes []string, authzDetails []map[string]an
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -761,6 +762,7 @@ func serve() {
 		Addr:           *addr,
 		Logger:         logger,
 		TracerProvider: tp,
+		Wire:           wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 			server.WithMiddleware(server.ToolCallLogger(logger)),
@@ -1158,4 +1160,3 @@ func nestedString(m map[string]any, path ...string) (string, bool) {
 	s, ok := cur.(string)
 	return s, ok
 }
-

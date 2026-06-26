@@ -23,6 +23,7 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
+	wire := mcpcommon.RegisterWireFlags(flag.CommandLine)
 	flag.Parse()
 
 	env := common.NewEnv([]string{"read", "write", "admin"})
@@ -60,6 +61,7 @@ func main() {
 		Name:    "auth-unified",
 		Version: "1.0",
 		Addr:    *addr,
+		Wire:    wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 			server.WithPublicMethods("initialize", "notifications/initialized", "tools/list", "prompts/list", "ping"),

@@ -15,6 +15,7 @@ import (
 
 func runDemo() {
 	serverURL := common.ServerURL()
+	wire := common.WireFromArgs()
 
 	tel := common.ExporterFromArgs()
 	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
@@ -91,8 +92,7 @@ c := client.NewClient(serverURL+"/mcp",
 if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			c = client.NewClient(serverURL+"/mcp",
-				core.ClientInfo{Name: "mrtr-demo-host", Version: "1.0"},
+			opts := []client.ClientOption{
 				client.WithElicitationHandler(func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
 					// Canned answer — accepts and returns Alice for any name elicitation.
 					return core.ElicitationResult{
@@ -112,6 +112,13 @@ if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 					return []core.Root{{URI: "file:///demo/root", Name: "Demo Root"}}, nil
 				}),
 				client.WithTracerProvider(tp),
+			}
+			if opt, ok := wire.ClientOption(); ok {
+				opts = append(opts, opt)
+			}
+			c = client.NewClient(serverURL+"/mcp",
+				core.ClientInfo{Name: "mrtr-demo-host", Version: "1.0"},
+				opts...,
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)

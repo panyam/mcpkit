@@ -70,6 +70,7 @@ func main() {
 	addr := flag.String("addr", ":3020", "listen address")
 	kcURL := flag.String("keycloak-url", envOr("KEYCLOAK_URL", defaultKeycloakURL), "Keycloak base URL")
 	realm := flag.String("realm", envOr("KC_REALM", defaultRealm), "Keycloak realm name")
+	wire := mcpcommon.RegisterWireFlags(flag.CommandLine)
 	flag.Parse()
 
 	realmURL := fmt.Sprintf("%s/realms/%s", *kcURL, *realm)
@@ -109,6 +110,7 @@ func main() {
 		Name:    "step-up-keycloak",
 		Version: "0.1.0-experimental",
 		Addr:    *addr,
+		Wire:    wire,
 		Options: []server.Option{
 			server.WithAuth(validator),
 		},
