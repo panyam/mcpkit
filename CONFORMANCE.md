@@ -13,6 +13,8 @@ This file has two parts:
 - **SEP Coverage** is sourced from upstream's traceability manifest, which maps each SEP to its declared requirements. A row's `Status` says whether upstream has emitted a check ID for every declared requirement — *not* whether mcpkit passes them. Scenario-level pass/fail per SEP lives in [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md), which grades mcpkit against every scenario upstream currently ships.
 - **Open Gaps** lists failing scenarios + traceability rows with no emitted check. Tracking links and one-line context come from [`conformance/known-gaps.yaml`](conformance/known-gaps.yaml).
 
+Every report on this site grades an mcpkit **server**. For the inverse — the mcpkit **client** graded by an independent third-party gauntlet on the integrated stateless draft wire (`2026-07-28`) — see [`conformance/EXTERNAL_CHECKER.md`](conformance/EXTERNAL_CHECKER.md), regenerated via `make testconf-external-checker`.
+
 ## What this report is *not*
 
 The renderer drops the tier-check checks that depend on live GitHub state (labels, triage SLA, P0 resolution, stable release, policy signals, spec tracking). Those are useful tier-1 signals but they change daily independent of code, which would break the CI staleness gate. To see the full `tier-check` scorecard for a point-in-time tier judgement, run `npx @modelcontextprotocol/conformance tier-check --repo panyam/mcpkit --output markdown` directly.
