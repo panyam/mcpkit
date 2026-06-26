@@ -297,10 +297,20 @@ func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.R
 		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
 			"invalid tools/call params: "+err.Error())
 	}
-	_, handler, ok := b.Tool(env.Name)
+	def, handler, ok := b.Tool(env.Name)
 	if !ok {
 		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
 			"unknown tool: "+env.Name)
+	}
+
+	// SEP-2356 file-input validation parity with the legacy dispatch path
+	// (Dispatcher.handleToolsCall). Without this the SEP-2575 stateless wire
+	// skips size/MIME enforcement entirely and invalid file args reach the
+	// handler — same -32602 + structured `data` contract on both wires.
+	if b.s.dispatcher.validateFileInputs {
+		if resp := b.s.dispatcher.validateFileInputArgs(req.ID, def.InputSchema, env.Arguments); resp != nil {
+			return resp
+		}
 	}
 
 	// SEP-2322: verify the echoed requestState (rejects tampered or expired
