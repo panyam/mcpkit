@@ -44,6 +44,7 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -74,6 +75,7 @@ func serve() {
 		Name:           "tasks-demo",
 		Addr:           *addr,
 		TracerProvider: tp,
+		Wire:           wire,
 		Register:       registerAll,
 	}); err != nil {
 		log.Fatal(err)

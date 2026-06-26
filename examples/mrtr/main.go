@@ -25,7 +25,7 @@
 //   - test_incomplete_result_multiple_inputs (A5) multiple inputRequests in one round
 //   - test_incomplete_result_multi_round     (A6) two rounds of elicitation
 //   - test_incomplete_result_elicitation     (A7) graceful handling when client
-//                                                 sends a wrong inputResponses key
+//     sends a wrong inputResponses key
 //
 // The MRTR loop is server-driven and stateless: the server returns
 // InputRequiredResult{inputRequests, requestState}; the client retries the
@@ -66,6 +66,7 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	signingKey := flag.String("signing-key", "mrtr-demo-signing-key", "HMAC key for requestState signing (empty = plaintext mode)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -90,6 +91,7 @@ func serve() {
 		Name:           "mrtr-demo",
 		Addr:           *addr,
 		TracerProvider: tp,
+		Wire:           wire,
 		Options:        extraOpts,
 		Register: func(srv *server.Server) {
 			registerMRTRTools(srv)
@@ -357,17 +359,17 @@ func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolRespon
 // mrtrTaskCompositionTool walks two distinct phases that meet at the GoAsync
 // sentinel:
 //
-//   Phase 1 (synchronous, no TaskContext):
-//     - If user_name hasn't been answered yet → return InputRequiredResult via
-//       ctx.RequestInput. taskV2Middleware sees IncompleteResult and lets it
-//       through; the client sees a normal MRTR InputRequiredResult.
-//     - Once user_name is present → return ToolResult{GoAsync: true}.
-//       taskV2Middleware mints a fresh task and spawns the continuation.
+//	Phase 1 (synchronous, no TaskContext):
+//	  - If user_name hasn't been answered yet → return InputRequiredResult via
+//	    ctx.RequestInput. taskV2Middleware sees IncompleteResult and lets it
+//	    through; the client sees a normal MRTR InputRequiredResult.
+//	  - Once user_name is present → return ToolResult{GoAsync: true}.
+//	    taskV2Middleware mints a fresh task and spawns the continuation.
 //
-//   Phase 2 (in the continuation goroutine, TaskContext attached):
-//     - Detect the TaskContext, do the "expensive" work, return a normal
-//       ToolResult. taskV2Middleware stores it as the task's terminal result;
-//       the client retrieves it via tasks/get.
+//	Phase 2 (in the continuation goroutine, TaskContext attached):
+//	  - Detect the TaskContext, do the "expensive" work, return a normal
+//	    ToolResult. taskV2Middleware stores it as the task's terminal result;
+//	    the client retrieves it via tasks/get.
 //
 // Per SEP-2663 spec separation rules:
 //   - MRTR requestState is NOT carried into the task's requestState (the task

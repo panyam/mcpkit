@@ -60,14 +60,15 @@ func serve() {
 	alertEvery := flag.Duration("alert-every", defaultAlertEvery, "synthetic alert feeder cadence")
 	presenceEvery := flag.Duration("presence-every", defaultPresenceEvery, "synthetic presence feeder cadence")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
+	// FilterArgs STRIPS the flags listed here. Strip only the --serve
+	// dispatch flag (main() consumes it via os.Args; flag.Parse would
+	// otherwise error on it). The example's own flags (--addr,
+	// --chat-every, --wire, --exporter, ...) must NOT be stripped — they
+	// reach flag.Parse via the `--flag=value` form. (They were all
+	// previously stripped here, which silently disabled --addr.)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
-		demokit.ValueFlag("--addr"),
-		demokit.ValueFlag("--chat-every"),
-		demokit.ValueFlag("--alert-every"),
-		demokit.ValueFlag("--presence-every"),
-		demokit.ValueFlag("--exporter"),
-		demokit.ValueFlag("--otlp-endpoint"),
 	))
 
 	// SEP-414 P6 observability wiring (issue 667). Default selector
@@ -95,14 +96,18 @@ func serve() {
 
 	log.Printf("[server] kitchen-sink listening on %s (MCP at /mcp; /inject for deterministic events)", *addr)
 
-	if err := wired.srv.ListenAndServe(
+	transportOpts := []server.TransportOption{
 		server.WithStreamableHTTP(true),
 		server.WithSSE(true),
 		server.WithEventStore(gohttp.NewMemoryEventStore(eventStoreCap)),
 		server.WithMux(func(mux *http.ServeMux) {
 			mux.HandleFunc("POST /inject", injectHandlerFor(wired))
 		}),
-	); err != nil {
+	}
+	if opt, ok := wire.ServerTransportOption(); ok {
+		transportOpts = append(transportOpts, opt)
+	}
+	if err := wired.srv.ListenAndServe(transportOpts...); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
 }

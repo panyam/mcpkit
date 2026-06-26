@@ -45,6 +45,7 @@ func main() {
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
+	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.BoolFlag("--serve"),
 		demokit.ValueFlag("--url"),
@@ -78,6 +79,7 @@ func serve() {
 		Name:           "file-inputs-demo",
 		Addr:           *addr,
 		TracerProvider: tp,
+		Wire:           wire,
 		Options: []server.Option{
 			// MCP Apps extension powers the in-iframe file picker apps
 			// registered in apps.go (SEP-2356 Phase 2.1).

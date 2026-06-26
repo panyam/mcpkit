@@ -15,6 +15,7 @@ import (
 
 func runDemo() {
 	serverURL := common.ServerURL()
+	wire := common.WireFromArgs()
 
 	tel := common.ExporterFromArgs()
 	tp, shutdown, err := commonotel.SetupClientTelemetry(context.Background(),
@@ -87,9 +88,15 @@ echo "SID=$SID"`).Default(),
 if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
+			opts := []client.ClientOption{
+				client.WithTracerProvider(tp),
+			}
+			if opt, ok := wire.ClientOption(); ok {
+				opts = append(opts, opt)
+			}
 			c = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
-				client.WithTracerProvider(tp),
+				opts...,
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
