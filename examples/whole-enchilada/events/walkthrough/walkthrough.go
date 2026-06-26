@@ -241,15 +241,15 @@ docker compose up -d`).Default(),
 		)
 
 	// -----------------------------------------------------------------
-	// Phase 6b — TTL negotiation matrix + receiver-behavior matrix
-	// (PRs 778, 779, 783). All three knobs orthogonal on the same
-	// `make webhook` target — TTL_MS shapes what we ask for /
-	// what we get; REPLY_STATUS shapes how the server reacts to
-	// each delivery; EXIT_AFTER shapes whether the receiver lives.
+	// Phase 6b — TTL negotiation matrix + receiver-behavior matrix.
+	// Three knobs orthogonal on the same `make webhook` target —
+	// TTL_MS shapes what we ask for / what we get; REPLY_STATUS shapes
+	// how the server reacts to each delivery; EXIT_AFTER shapes whether
+	// the receiver lives.
 	// -----------------------------------------------------------------
 
 	demo.Section("Phase 6b — TTL negotiation and receiver-behavior matrix",
-		"The just-merged spec-alignment work (PRs 778, 779, 783) introduces three orthogonal subscription knobs the operator can mix and match on `make webhook`. TTL_MS shapes the client-side suggestion to the server (absent / int / null per spec PR1 commit 99f3589c). REPLY_STATUS shapes what the receiver returns per delivery (200 default / 410 abandon / 5xx retry-then-suspend). EXIT_AFTER shapes whether the receiver lives long enough for the server's failure-based GC to fire on a no-expiry sub. This phase walks the matrix one knob at a time, ending with the capstone combo.",
+		"Three orthogonal subscription knobs the operator can mix and match on `make webhook`. TTL_MS shapes the client's TTL suggestion to the server (absent / int / null). REPLY_STATUS shapes what the receiver returns per delivery (200 default / 410 abandon / 5xx retry-then-suspend). EXIT_AFTER shapes whether the receiver lives long enough for the server's failure-based GC to fire on a no-expiry sub. This phase walks the matrix one knob at a time, ending with the capstone combo.",
 	)
 
 	demo.Step("TTL matrix — three tenants suggest different ttlMs values, observe the granted refreshBefore.").
@@ -270,7 +270,7 @@ make webhook TENANT=C USERNAME=chandan TTL_MS=null`).Default(),
 
 	demo.Step("Receiver-behavior matrix — same `make webhook` target, different reply status.").
 		Note(
-			"- Demonstrates: server's per-delivery response branching: 410 abandons THIS delivery without affecting the subscription (PR 778 / spec PR1 commit 905ade36); 500 triggers the retry loop + the suspend transition past threshold.",
+			"- Demonstrates: server's per-delivery response branching: 410 abandons THIS delivery without affecting the subscription; 500 triggers the retry loop + the suspend transition past threshold.",
 			"- Expected: 410 window logs the verification + receives the inject, server-side logs (`make logs | grep webhook`) show `abandoned per receiver 410 Gone (subscription unaffected)`; the next inject in the same tenant lands on a separate (default-200) window normally. 500 window: server retries 3× with backoff, then logs the suspend transition + posts a `terminated` envelope; the sub stays in the registry as paused, observable via `make psql-webhooks`.",
 		).
 		VerbatimVariants("Open two sibling windows, then fire injects from Admin",
@@ -290,7 +290,7 @@ make psql-webhooks`).Default(),
 
 	demo.Step("No-expiry restart-survival — restart the event-server tier, confirm the no-expiry sub stays.").
 		Note(
-			"- Demonstrates: GORM-backed WebhookStore is the durability backbone — both finite-TTL and no-expiry subs survive a rolling restart of the event-server tier because their rows persist in Postgres (PR 779 made ExpiresAt nullable; the row survives regardless).",
+			"- Demonstrates: GORM-backed WebhookStore is the durability backbone — both finite-TTL and no-expiry subs survive a rolling restart of the event-server tier because their rows persist in Postgres (a no-expiry sub stores expires_at as NULL; the row survives regardless).",
 			"- Expected: the chandan window's no-expiry sub appears in `make psql-webhooks` before AND after the restart, with `expires_at IS NULL`. A post-restart inject still lands on chandan's window. Finite-TTL subs survive the restart too — the meaningful contrast surfaces only when the CLIENT stops refreshing (which the no-expiry sub never needs to do).",
 		).
 		VerbatimVariants("With Phase 6b TTL window C still running, do this in Admin",
@@ -309,7 +309,7 @@ make inject TENANT=C EVENT=chat.message TEXT='hi after restart'`).Default(),
 
 	demo.Step("Failure-based GC capstone — no-expiry subscriber dies after 3 deliveries; server drops the sub.").
 		Note(
-			"- Demonstrates: the full failure-based GC end-to-end (PR 783). EXIT_AFTER=3 kills the receiver after 3 deliveries → next inject fails with connection_refused → server's `FailingContinuouslySince` anchors → past `EVENTS_NO_EXPIRY_GC_WINDOW=2m` (set on the event-server) the registry drops the no-expiry sub + POSTs a `terminated` envelope.",
+			"- Demonstrates: the full failure-based GC end-to-end. EXIT_AFTER=3 kills the receiver after 3 deliveries → next inject fails with connection_refused → server's `FailingContinuouslySince` anchors → past `EVENTS_NO_EXPIRY_GC_WINDOW=2m` (set on the event-server) the registry drops the no-expiry sub + POSTs a `terminated` envelope.",
 			"- Expected: the receiver window receives 3 events then exits with the log line `exit-after target reached`. Next inject lands in the server logs as a delivery retry; after ~2 minutes of continuous failure, `make psql-webhooks` no longer shows chandan's no-expiry row. The failing-continuously-since column would be visible mid-flight if you queried during the failure run.",
 		).
 		VerbatimVariants("Run in a fresh window — the receiver self-terminates",
