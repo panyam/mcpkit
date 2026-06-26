@@ -286,6 +286,37 @@ space-separated form (`--wire stateless`) needs an explicit
 fixture drives it with no flag and needs the stateless wire by default,
 not the `ModeDual` fall-through `--wire=""` would give.
 
+### Dual-mode posture (SEP-2575)
+
+Every new non-UI example MUST work on both wires — the legacy session wire
+and the SEP-2575 stateless wire — because servers default to `ModeDual`.
+`make verify-dual` enforces this for the auto-drivable examples;
+`examples/DUAL_MODE_AUDIT.md` records the per-example verdict.
+
+Rules for a dual-safe example:
+
+- **Never call `ctx.Sample` / `ctx.Elicit` in a tool handler.** Server-initiated
+  push doesn't exist on the stateless wire (no session to correlate the
+  round-trip against), so those error with `ErrNoRequestFunc`. Use the MRTR
+  pattern instead: `ctx.RequestInput(core.InputRequests{...})` with
+  `core.NewSamplingInputRequest` / `core.NewElicitationInputRequest`, which
+  threads the correlation state explicitly. See `examples/mrtr`.
+- **Don't rely on session-scoped state.** Cross-call state belongs in an
+  explicit handle threaded through tool arguments (SEP-2567); see
+  `examples/stateless`. Handle-pattern migration is tracked in issue 470.
+- **Thread `--wire`** via `common.RegisterWireFlags` + `ServerConfig.Wire`
+  (server) and `common.WireFromArgs().ClientOption()` (walkthrough) so the
+  example is driveable on either wire from one flag (see Wire selection above).
+- **Routable methods carry their name.** A handler that issues task ops or
+  other routable calls relies on the SEP-2243 `Mcp-Name` header, which the
+  typed client helpers emit automatically when params are passed as maps (see
+  `core.DeriveMcpName`). On the stateless wire there is no session to route by,
+  so a missing name fails the call.
+
+Genuinely interactive examples (browser consent, AppHost UI) may stay
+legacy-only; document the reason in `DUAL_MODE_AUDIT.md` rather than forcing a
+stateless path that can't exist.
+
 #### Client-side wiring (walkthrough.go)
 
 Walkthroughs (runDemo) typically don't call `flag.Parse` — they rely
