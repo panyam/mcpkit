@@ -100,8 +100,9 @@ func main() {
 	// per HTTP response (demo-only deployment metadata, not part of the
 	// MCP spec). For the streamer the value is set when the SSE open
 	// 200 lands and stays stable for the life of the stream; a
-	// reconnect to a different replica flips it.
-	var lastReplica atomic.Value
+	// reconnect to a different replica flips it. Package-level so
+	// printEvent can stamp it on every event line (lastReplica decl
+	// below).
 	lastReplica.Store("")
 
 	c := client.NewClient(*server, core.ClientInfo{
@@ -187,14 +188,27 @@ func main() {
 // payload for at-a-glance scanning across the operator's sibling
 // terminals. Matches the poller's print format so the two delivery
 // modes show identical output for the same source.
+// lastReplica holds the most recent X-Replica response header so
+// printEvent can stamp it on every event line. Set by the client's
+// InspectResponse hook in main; "?" until the first response lands.
+var lastReplica atomic.Value
+
+func currentReplica() string {
+	if r, ok := lastReplica.Load().(string); ok && r != "" {
+		return r
+	}
+	return "?"
+}
+
 func printEvent(prefix string, ev events.Event) {
 	var tagged struct {
 		Tenant string `json:"tenant"`
 	}
 	_ = json.Unmarshal(ev.Data, &tagged)
-	fmt.Printf("%s %s tenant=%-10s event=%s data=%s\n",
+	fmt.Printf("%s %s replica=%s tenant=%-10s event=%s data=%s\n",
 		time.Now().Format("15:04:05"),
 		prefix,
+		currentReplica(),
 		tagged.Tenant,
 		ev.Name,
 		string(ev.Data),
