@@ -16,6 +16,29 @@ type fakePayload struct {
 	Msg string `json:"msg"`
 }
 
+// TestYieldingSource_EventIDsUniqueAcrossSources reproduces the
+// multi-replica / multi-writer case: the whole-enchilada demo injects
+// round-robin across N event-server replicas, each with its own
+// YieldingSource whose cursor counter independently starts at 0. The
+// per-source cursors collide by design (cursor "5" exists on every
+// replica), but event ids MUST stay globally unique so a consumer's
+// idempotency-by-eventId doesn't silently drop distinct events.
+func TestYieldingSource_EventIDsUniqueAcrossSources(t *testing.T) {
+	const replicas, perReplica = 4, 50
+	seen := make(map[string]bool, replicas*perReplica)
+	for r := 0; r < replicas; r++ {
+		src, yield := NewYieldingSource[map[string]string](EventDef{Name: "chat.message"})
+		for i := 0; i < perReplica; i++ {
+			require.NoError(t, yield(context.Background(), map[string]string{"k": "v"}))
+		}
+		for _, e := range src.Poll("", replicas*perReplica).Events {
+			assert.False(t, seen[e.EventID], "duplicate eventId across sources: %s", e.EventID)
+			seen[e.EventID] = true
+		}
+	}
+	assert.Len(t, seen, replicas*perReplica, "every yielded event should have a unique id")
+}
+
 // TestYieldingSource_Implements verifies the constructor returns a value that
 // satisfies the EventSource interface — the library treats yielding sources
 // as ordinary EventSources for events/list and events/poll.
