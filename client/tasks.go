@@ -69,16 +69,6 @@ func (r *ToolCallResult) IsInputRequired() bool {
 	return r != nil && r.InputRequired != nil
 }
 
-// --- Wire-format params ---
-
-type tasksGetParams struct {
-	TaskID string `json:"taskId"`
-}
-
-type tasksCancelParams struct {
-	TaskID string `json:"taskId"`
-}
-
 // --- Polymorphic tools/call ---
 
 // ToolCall invokes a tool, transparently handling both the sync ToolResult
@@ -139,7 +129,11 @@ func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
 // safe to call as often as needed; servers gate this method on the
 // io.modelcontextprotocol/tasks extension being negotiated.
 func GetTask(c *Client, taskID string) (*core.DetailedTask, error) {
-	resp, err := c.Call("tasks/get", tasksGetParams{TaskID: taskID})
+	// Map (not a typed struct) so core.DeriveMcpName can read taskId and
+	// emit the Mcp-Name routing header the server requires for task ops on
+	// the SEP-2575 stateless wire (no session to route by). Same reason
+	// ToolCall passes a map. See core.DeriveMcpName.
+	resp, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +156,14 @@ func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
 	if req.TaskID == "" {
 		return fmt.Errorf("UpdateTask: missing TaskID")
 	}
-	if _, err := c.Call("tasks/update", req); err != nil {
+	// Map form so DeriveMcpName can read taskId for the Mcp-Name header
+	// (see GetTask). inputResponses is included only when non-empty to
+	// mirror the struct's `omitempty`.
+	params := map[string]any{"taskId": req.TaskID}
+	if len(req.InputResponses) > 0 {
+		params["inputResponses"] = req.InputResponses
+	}
+	if _, err := c.Call("tasks/update", params); err != nil {
 		return err
 	}
 	return nil
@@ -172,7 +173,7 @@ func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
 // response is an empty ack per SEP-2663 (no task state). Issue GetTask if
 // you need to observe the resulting "cancelled" status.
 func CancelTask(c *Client, taskID string) error {
-	if _, err := c.Call("tasks/cancel", tasksCancelParams{TaskID: taskID}); err != nil {
+	if _, err := c.Call("tasks/cancel", map[string]any{"taskId": taskID}); err != nil {
 		return err
 	}
 	return nil
