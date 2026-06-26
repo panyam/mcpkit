@@ -302,6 +302,14 @@ func TestDeriveMcpName(t *testing.T) {
 		{"nil-params", "tools/call", nil, ""},
 		{"name-not-string", "tools/call", map[string]any{"name": 42}, ""},
 		{"empty-name", "tools/call", map[string]any{"name": ""}, ""},
+		// SEP-2663 task methods route on taskId. The client task helpers
+		// MUST pass a map (not a typed struct) for this to fire — required
+		// for Mcp-Name on the stateless wire where there's no session to
+		// route task ops by.
+		{"tasks-get-taskid", "tasks/get", map[string]any{"taskId": "tsk_1"}, "tsk_1"},
+		{"tasks-update-taskid", "tasks/update", map[string]any{"taskId": "tsk_2"}, "tsk_2"},
+		{"tasks-cancel-taskid", "tasks/cancel", map[string]any{"taskId": "tsk_3"}, "tsk_3"},
+		{"tasks-get-no-taskid", "tasks/get", map[string]any{}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := DeriveMcpName(tc.method, tc.params)

@@ -48,11 +48,19 @@ const McpMethodHeader = "Mcp-Method"
 const McpNameHeader = "Mcp-Name"
 
 // DeriveMcpName extracts the [McpNameHeader] value from a JSON-RPC params
-// payload for the three methods that carry a routable name/URI: tools/call
-// (params.name), prompts/get (params.name), and resources/read (params.uri).
+// payload for the methods that carry a routable identifier: tools/call and
+// prompts/get (params.name), resources/read (params.uri), and the SEP-2663
+// task methods tasks/get, tasks/update, tasks/cancel (params.taskId).
 // Returns "" for any other method or when the field is missing / non-string
 // — callers should skip emitting Mcp-Name in that case (server-side
 // fail-closed will reject mismatches).
+//
+// This MUST mirror the server's body-side derivation (the producer and the
+// validator have to agree on which field names the routable value): see
+// server header validation's per-method name extraction. The task cases
+// matter on the SEP-2575 stateless wire — there is no session to route task
+// operations by, so the server requires Mcp-Name: <taskId> and the client
+// must supply it.
 //
 // params is the Go value the producer holds — typically `map[string]any`
 // or `map[string]string`. Other shapes (structs, json.RawMessage) return
@@ -67,6 +75,8 @@ func DeriveMcpName(method string, params any) string {
 		return mcpParamsStringField(params, "name")
 	case "resources/read":
 		return mcpParamsStringField(params, "uri")
+	case "tasks/get", "tasks/update", "tasks/cancel":
+		return mcpParamsStringField(params, "taskId")
 	}
 	return ""
 }
