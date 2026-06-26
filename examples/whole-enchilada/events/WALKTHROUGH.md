@@ -7,7 +7,7 @@ Production-shape multi-tier reference. nginx fronts the event-server tier; Keycl
 - **Open six terminals and run these.** — - Demonstrates: per-tenant delivery scoping (realm-in-bearer gates delivery) on both push surfaces.
 - **Admin — inject one event per tenant.** — - Demonstrates: per-event tenant tag is the authoritative delivery scope; same inject endpoint can target any tenant.
 - **Chat-Driver + Monitor + Admin — kill a replica mid-stream.** — - Demonstrates: Redis pub/sub fan-out keeps deliveries flowing through surviving replicas; nginx round-robin routes new connections to the survivors. Every event-server replica stamps X-Replica on its HTTP responses AND on every outbound webhook POST, so the round-robin spray is visible directly in the streamer windows' 'served by event-server-N' log lines AND in the webhook receiver's replica= field.
-- **Walkthrough — fire events/list × N, log X-Replica rotation.** — - Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across event-server-1/2/3; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.
+- **Walkthrough — fire events/list × N, log X-Replica rotation.** — - Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across the event-server replicas; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.
 - **Ad-hoc Poller — restart with the last cursor; resume gap-free.** — - Demonstrates: cross-replica cursor durability (any replica reads the same Postgres buffer).
 - **Admin — observe buffer TTL truncation.** — - Demonstrates: bounded replay (POSTGRES_BUFFER_TTL=10m in the compose); stale cursor → server returns truncated:true and client resyncs from latest.
 - **Aarti × 4 — trip a tightened subscription cap.** — - Demonstrates: cap is enforced GLOBALLY (Redis Lua-atomic INCR-with-check) — replica-locality of subscribes doesn't help bypass it.
@@ -145,7 +145,7 @@ Stack is N=3 by default. Redis Publisher/Subscriber fans every yielded event to 
 
 - Demonstrates: Redis pub/sub fan-out keeps deliveries flowing through surviving replicas; nginx round-robin routes new connections to the survivors. Every event-server replica stamps X-Replica on its HTTP responses AND on every outbound webhook POST, so the round-robin spray is visible directly in the streamer windows' 'served by event-server-N' log lines AND in the webhook receiver's replica= field.
 - The stream subscriber is the most telling check — SEP-2575 stateless wire means its open POST connection lands on ONE specific replica. Killing that replica forces a reconnection; the stream client transparently resumes against a survivor, and the next 'served by' log line shows the new X-Replica value.
-- Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. Webhook receiver logs show replica= rotating across event-server-1/2/3. After killing replica 1, webhook windows keep printing without gaps; the stream window whose connection was bound to replica 1 briefly reconnects (operator may see a terminated frame then a fresh subscribe) and resumes delivery on a surviving replica. Start replica 1 again when done; leave drive-chat running for the rest of the demo.
+- Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. Webhook receiver logs show replica= rotating across the event-server replicas. After killing replica 1, webhook windows keep printing without gaps; the stream window whose connection was bound to replica 1 briefly reconnects (operator may see a terminated frame then a fresh subscribe) and resumes delivery on a surviving replica. Start replica 1 again when done; leave drive-chat running for the rest of the demo.
 
 #### Three windows: Chat-Driver, Monitor, Admin
 
@@ -167,7 +167,7 @@ With Phase 3 still running (drive-chat + N=3 replicas), this walkthrough binary 
 
 ### Step 4: Walkthrough — fire events/list × N, log X-Replica rotation.
 
-- Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across event-server-1/2/3; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.
+- Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across the event-server replicas; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.
 - Expected: prints one line per call: 'call k served by event-server-N — events=M'. Over ~6 calls you'll see at least two distinct X-Replica values (nginx round-robin); the event count M is identical across all calls.
 
 ### Phase 5 — Cursor durability
@@ -177,14 +177,14 @@ Postgres-backed event buffer is the single source of truth across replicas. A po
 ### Step 5: Ad-hoc Poller — restart with the last cursor; resume gap-free.
 
 - Demonstrates: cross-replica cursor durability (any replica reads the same Postgres buffer).
-- Expected: after Ctrl+C, restart with --start-cursor=<N> and the poller resumes exactly where it left off, even if nginx routes the new connection to a different replica.
+- Expected: each poll prints a `cursor advanced to N` line. After Ctrl+C, restart with START_CURSOR=<N> and the poller resumes exactly where it left off, even if nginx routes the new connection to a different replica.
 
 #### Stop, note the cursor, restart
 
 ```bash
 make poller TENANT=A USERNAME=alice
-# Ctrl+C — note the last cursor printed (call it N)
-make poller TENANT=A USERNAME=alice -- --start-cursor=<N>
+# Ctrl+C — note the last "cursor advanced to N" line printed (call it N)
+make poller TENANT=A USERNAME=alice START_CURSOR=<N>
 ```
 
 ### Step 6: Admin — observe buffer TTL truncation.
@@ -211,8 +211,10 @@ Compose ships `EVENTS_QUOTA_CAPS=chat.message=10` as the default (room for norma
 #### Tighten the cap first, then run in four sibling windows; the 4th rejects
 
 ```bash
-# Lower the cap to 3 for this beat, restart the event-server tier:
-EVENTS_QUOTA_CAPS=chat.message=3 docker compose up -d event-server-1 event-server-2 event-server-3
+# Lower the cap to 3 for this beat, recreate the event-server tier
+# (no replica enumeration — compose recreates whichever event-servers
+# exist for the current N):
+EVENTS_QUOTA_CAPS=chat.message=3 docker compose up -d
 make clear-all   # clear stale aarti subs from any prior runs
 
 make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
@@ -221,7 +223,7 @@ make webhook TENANT=A USERNAME=aarti   # window 3 — succeeds (at cap)
 make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013
 
 # Restore the looser default afterwards:
-docker compose up -d event-server-1 event-server-2 event-server-3
+docker compose up -d
 ```
 
 ### Phase 6b — TTL negotiation and receiver-behavior matrix
@@ -258,11 +260,11 @@ make webhook TENANT=C USERNAME=chandan TTL_MS=null
 make webhook TENANT=A USERNAME=aarti REPLY_STATUS=410
 
 # Window 2: receiver fails with 500 — server retries then suspends.
-make webhook TENANT=A USERNAME=ananya REPLY_STATUS=500
+make webhook TENANT=A USERNAME=alex REPLY_STATUS=500
 
 # Admin window — inject one event per receiver type:
 make inject TENANT=A EVENT=chat.message TEXT='aarti gets 410, sub unaffected'
-make inject TENANT=A EVENT=chat.message TEXT='ananya gets 500, retried then suspended'
+make inject TENANT=A EVENT=chat.message TEXT='alex gets 500, retried then suspended'
 
 # Then inspect the registry:
 make psql-webhooks
@@ -381,7 +383,7 @@ One Keycloak admin click fires TWO distinct revocation paths: introspection-cach
 ### Step 17: Browser + Admin — sign alice out in Keycloak admin and watch the asgard windows die.
 
 - Demonstrates: synchronously revocable bearer tokens — the demo's headline win over plain JWT. Revocation fires across both push surfaces uniformly.
-- Expected: within ~5s, A1-Stream receives a terminal frame on its open POST response and exits (the request-scoped principal claims drop out from under the dispatcher). A2-Webhook receives a {type:terminated} envelope on its webhook stream and disconnects. B and C windows are entirely untouched — revocation is per-realm.
+- Expected: within ~5s, A1-Stream receives a terminal frame on its open POST response and exits (the request-scoped principal claims drop out from under the dispatcher). A2-Webhook receives a {type:terminated} envelope on its webhook stream and disconnects. B and C windows are entirely untouched — revocation is per-realm. The handling replica logs `[event-server] BCL fire: realm=asgard sub=... killed=N`.
 
 #### Open the browser, then tail logs in Admin
 
@@ -390,8 +392,11 @@ One Keycloak admin click fires TWO distinct revocation paths: introspection-cach
 #   http://localhost:8180/admin/master/console/#/asgard/users
 #   admin / admin → click 'alice' → Sessions → Sign out
 
-# Admin window — see the back-channel logout fire:
-docker compose logs -f event-server-1 | grep BCL
+# Admin window — see the back-channel logout fire. Keycloak POSTs to the
+# event-server.whole-enchilada round-robin alias, so the BCL lands on ANY
+# replica. Tail every service and let grep filter — only event-servers
+# emit BCL lines, so this stays correct for any N:
+docker compose logs -f | grep BCL
 ```
 
 ### That's the demo

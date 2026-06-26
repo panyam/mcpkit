@@ -17,10 +17,10 @@ import (
 )
 
 // runDemo drives the demokit walkthrough against the running compose
-// stack. serverURL / receiverURL are accepted for symmetry with the
-// stage-1 signature; serverURL is consumed by the in-binary
-// replica-rotation step (Phase 4). receiverURL is currently unused.
-func runDemo(serverURL, _ /*receiverURL*/ string) {
+// stack. serverURL is consumed by the in-binary replica-rotation step
+// (Phase 4); every other step is narrative the operator runs from
+// sibling terminals.
+func runDemo(serverURL string) {
 	demo := demokit.New("MCP Events — whole-enchilada stage 2 walkthrough").
 		Dir("events/whole-enchilada").
 		Description("Production-shape multi-tier reference. nginx fronts the event-server tier; Keycloak provides three pre-configured OAuth realms (asgard, babylon, camelot). The stack comes up silent — operator-runnable synthetic drivers (make drive-chat, make drive-presence) start producing events from sibling terminals. This walkthrough guides you through a multi-terminal demo where each tenant gets its own streaming push subscriber and webhook receiver — per-tenant isolation is the headline.").
@@ -128,7 +128,7 @@ make inject TENANT=C EVENT=chat.message TEXT='hi from Camelot'`).Default(),
 		Note(
 			"- Demonstrates: Redis pub/sub fan-out keeps deliveries flowing through surviving replicas; nginx round-robin routes new connections to the survivors. Every event-server replica stamps X-Replica on its HTTP responses AND on every outbound webhook POST, so the round-robin spray is visible directly in the streamer windows' 'served by event-server-N' log lines AND in the webhook receiver's replica= field.",
 			"- The stream subscriber is the most telling check — SEP-2575 stateless wire means its open POST connection lands on ONE specific replica. Killing that replica forces a reconnection; the stream client transparently resumes against a survivor, and the next 'served by' log line shows the new X-Replica value.",
-			"- Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. Webhook receiver logs show replica= rotating across event-server-1/2/3. After killing replica 1, webhook windows keep printing without gaps; the stream window whose connection was bound to replica 1 briefly reconnects (operator may see a terminated frame then a fresh subscribe) and resumes delivery on a surviving replica. Start replica 1 again when done; leave drive-chat running for the rest of the demo.",
+			"- Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. Webhook receiver logs show replica= rotating across the event-server replicas. After killing replica 1, webhook windows keep printing without gaps; the stream window whose connection was bound to replica 1 briefly reconnects (operator may see a terminated frame then a fresh subscribe) and resumes delivery on a surviving replica. Start replica 1 again when done; leave drive-chat running for the rest of the demo.",
 		).
 		VerbatimVariants("Three windows: Chat-Driver, Monitor, Admin",
 			demokit.MakeVariant("shell", "bash", `# Chat-Driver window — leave running for rest of demo:
@@ -157,7 +157,7 @@ docker compose start event-server-1`).Default(),
 
 	demo.Step("Walkthrough — fire events/list × N, log X-Replica rotation.").
 		Note(
-			"- Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across event-server-1/2/3; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.",
+			"- Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across the event-server replicas; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.",
 			"- Expected: prints one line per call: 'call k served by event-server-N — events=M'. Over ~6 calls you'll see at least two distinct X-Replica values (nginx round-robin); the event count M is identical across all calls.",
 		).
 		Run(runListRotation(serverURL))
@@ -173,12 +173,12 @@ docker compose start event-server-1`).Default(),
 	demo.Step("Ad-hoc Poller — restart with the last cursor; resume gap-free.").
 		Note(
 			"- Demonstrates: cross-replica cursor durability (any replica reads the same Postgres buffer).",
-			"- Expected: after Ctrl+C, restart with --start-cursor=<N> and the poller resumes exactly where it left off, even if nginx routes the new connection to a different replica.",
+			"- Expected: each poll prints a `cursor advanced to N` line. After Ctrl+C, restart with START_CURSOR=<N> and the poller resumes exactly where it left off, even if nginx routes the new connection to a different replica.",
 		).
 		VerbatimVariants("Stop, note the cursor, restart",
 			demokit.MakeVariant("shell", "bash", `make poller TENANT=A USERNAME=alice
-# Ctrl+C — note the last cursor printed (call it N)
-make poller TENANT=A USERNAME=alice -- --start-cursor=<N>`).Default(),
+# Ctrl+C — note the last "cursor advanced to N" line printed (call it N)
+make poller TENANT=A USERNAME=alice START_CURSOR=<N>`).Default(),
 		)
 
 	demo.Step("Admin — observe buffer TTL truncation.").
@@ -205,8 +205,10 @@ make poller TENANT=A USERNAME=alice -- --start-cursor=<N>`).Default(),
 			"- Expected: first three windows print steady delivery; the fourth exits immediately with -32013 ResourceExhausted limit=subscriptions max=3. We use aarti (not alice/anand) so the subscriptions from Phase 1 don't already count toward her cap.",
 		).
 		VerbatimVariants("Tighten the cap first, then run in four sibling windows; the 4th rejects",
-			demokit.MakeVariant("shell", "bash", `# Lower the cap to 3 for this beat, restart the event-server tier:
-EVENTS_QUOTA_CAPS=chat.message=3 docker compose up -d event-server-1 event-server-2 event-server-3
+			demokit.MakeVariant("shell", "bash", `# Lower the cap to 3 for this beat, recreate the event-server tier
+# (no replica enumeration — compose recreates whichever event-servers
+# exist for the current N):
+EVENTS_QUOTA_CAPS=chat.message=3 docker compose up -d
 make clear-all   # clear stale aarti subs from any prior runs
 
 make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
@@ -215,7 +217,7 @@ make webhook TENANT=A USERNAME=aarti   # window 3 — succeeds (at cap)
 make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013
 
 # Restore the looser default afterwards:
-docker compose up -d event-server-1 event-server-2 event-server-3`).Default(),
+docker compose up -d`).Default(),
 		)
 
 	// -----------------------------------------------------------------
@@ -256,11 +258,11 @@ make webhook TENANT=C USERNAME=chandan TTL_MS=null`).Default(),
 make webhook TENANT=A USERNAME=aarti REPLY_STATUS=410
 
 # Window 2: receiver fails with 500 — server retries then suspends.
-make webhook TENANT=A USERNAME=ananya REPLY_STATUS=500
+make webhook TENANT=A USERNAME=alex REPLY_STATUS=500
 
 # Admin window — inject one event per receiver type:
 make inject TENANT=A EVENT=chat.message TEXT='aarti gets 410, sub unaffected'
-make inject TENANT=A EVENT=chat.message TEXT='ananya gets 500, retried then suspended'
+make inject TENANT=A EVENT=chat.message TEXT='alex gets 500, retried then suspended'
 
 # Then inspect the registry:
 make psql-webhooks`).Default(),
@@ -373,15 +375,18 @@ make list-sources REPLICAS=3   # includes discord.message`).Default(),
 	demo.Step("Browser + Admin — sign alice out in Keycloak admin and watch the asgard windows die.").
 		Note(
 			"- Demonstrates: synchronously revocable bearer tokens — the demo's headline win over plain JWT. Revocation fires across both push surfaces uniformly.",
-			"- Expected: within ~5s, A1-Stream receives a terminal frame on its open POST response and exits (the request-scoped principal claims drop out from under the dispatcher). A2-Webhook receives a {type:terminated} envelope on its webhook stream and disconnects. B and C windows are entirely untouched — revocation is per-realm.",
+			"- Expected: within ~5s, A1-Stream receives a terminal frame on its open POST response and exits (the request-scoped principal claims drop out from under the dispatcher). A2-Webhook receives a {type:terminated} envelope on its webhook stream and disconnects. B and C windows are entirely untouched — revocation is per-realm. The handling replica logs `[event-server] BCL fire: realm=asgard sub=... killed=N`.",
 		).
 		VerbatimVariants("Open the browser, then tail logs in Admin",
 			demokit.MakeVariant("shell", "bash", `# Browser:
 #   http://localhost:8180/admin/master/console/#/asgard/users
 #   admin / admin → click 'alice' → Sessions → Sign out
 
-# Admin window — see the back-channel logout fire:
-docker compose logs -f event-server-1 | grep BCL`).Default(),
+# Admin window — see the back-channel logout fire. Keycloak POSTs to the
+# event-server.whole-enchilada round-robin alias, so the BCL lands on ANY
+# replica. Tail every service and let grep filter — only event-servers
+# emit BCL lines, so this stays correct for any N:
+docker compose logs -f | grep BCL`).Default(),
 		)
 
 	demo.Section("That's the demo",
