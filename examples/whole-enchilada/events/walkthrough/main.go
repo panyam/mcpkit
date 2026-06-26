@@ -15,20 +15,17 @@ func main() {
 	// --tui / --doc / --non-interactive / --mode / --from / --variant
 	// in os.Args and dispatches on them.
 	//
-	// Telling FilterArgs about our value-flags (--url / --receiver) is
-	// load-bearing — without those extras, FilterArgs treats the
-	// argument after our flag as a positional and trips up the parser
-	// when it sees an unexpected token.
+	// Telling FilterArgs about our value-flags (--url) is load-bearing
+	// — without those extras, FilterArgs treats the argument after our
+	// flag as a positional and trips up the parser when it sees an
+	// unexpected token.
 	serverURL := flag.String("url", envOr("MCP_URL", "http://localhost:9090"),
 		"event-server URL (default nginx frontdoor in the compose stack)")
-	receiverURL := flag.String("receiver", envOr("RECEIVER_URL", "http://localhost:9090"),
-		"receiver URL the walkthrough subscribes its webhook to")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
 		demokit.ValueFlag("--url"),
-		demokit.ValueFlag("--receiver"),
 	))
 
-	runDemo(*serverURL, *receiverURL)
+	runDemo(*serverURL)
 }
 
 func envOr(key, fallback string) string {

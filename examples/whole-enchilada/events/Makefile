@@ -51,8 +51,7 @@ tenant-realm = $(strip $(if $(filter A a,$(1)),asgard,$(if $(filter B b,$(1)),ba
 
 HOSTS_MARKER := # whole-enchilada hostnames — managed by make hosts-install
 HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
-                event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada \
-                receiver.whole-enchilada
+                event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down infraup infradown test demo readme predemo \
         newtoken newtoken-ci poller streamer webhook inject drive-chat drive-presence \
@@ -67,7 +66,6 @@ gen-compose: ## Regenerate docker-compose.yaml + nginx/nginx.conf for N event-se
 
 build: ## Build all binaries locally (without Docker). push-server stays a reference for the production-shape HTTPSource pattern (run via `go -C push-server run .`).
 	go -C event-server build -o ../bin/event-server ./
-	go -C receiver build -o ../bin/receiver ./
 	go -C poller build -o ../bin/poller ./
 	go -C webhook build -o ../bin/webhook ./
 	go -C streamer build -o ../bin/streamer ./
@@ -147,12 +145,13 @@ newtoken-ci: ## Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C U
 		--format=access-token-only
 	@echo
 
-poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
+poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Resume knob: START_CURSOR=<N> (default 0 = replay from buffer head).
 	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
-		echo "usage: make poller TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]]" >&2; exit 2; fi
+		echo "usage: make poller TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] [START_CURSOR=<N>]" >&2; exit 2; fi
 	go -C poller run . --tenant $(call tenant-realm,$(TENANT)) \
 		$(if $(TOKEN),--token $(TOKEN)) \
 		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
+		$(if $(START_CURSOR),--start-cursor $(START_CURSOR)) \
 		--event $(EVENT)
 
 webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Demo knobs: TTL_MS=<int|null> REPLY_STATUS=<int> EXIT_AFTER=<int>.
@@ -266,9 +265,11 @@ psql-webhooks: ## Print the webhooks table from Postgres — used by the no-expi
 		psql -U postgres -d events \
 		-c "SELECT id, principal, url, expires_at, status_failing_continuously_since FROM webhooks ORDER BY principal;"
 
-restart-event-servers: ## Rolling-restart the event-server replicas. Used by the no-expiry restart-survival beat — finite subs and no-expiry subs both survive (rows stay in Postgres), proving the GORM-backed WebhookStore is the durability backbone.
-	docker compose restart event-server-1 event-server-2 event-server-3
-	docker compose up -d --wait event-server-1 event-server-2 event-server-3
+restart-event-servers: ## Rolling-restart the event-server replicas. Used by the no-expiry restart-survival beat — finite subs and no-expiry subs both survive (rows stay in Postgres), proving the GORM-backed WebhookStore is the durability backbone. Replica set is discovered from compose, so it tracks whatever N the stack was generated with.
+	@svcs=$$(docker compose config --services | grep '^event-server-'); \
+		echo "[restart-event-servers] restarting: $$svcs"; \
+		docker compose restart $$svcs && \
+		docker compose up -d --wait $$svcs
 
 clean: ## docker compose down -v on the events stack + remove built binaries. Backends data is preserved — use `make clean-backends` for a full reset.
 	docker compose down -v 2>/dev/null || true
