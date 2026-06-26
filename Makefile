@@ -71,10 +71,10 @@ testconfauth: ## Run MCP Auth conformance suite (delegates to conformance/Makefi
 testconf-tasks: ## Run MCP Tasks v1 conformance (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-tasks
 
-testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based + mcpkit-local sentinel (delegates to conformance/Makefile)
+testconf-tasks-v2: ## Run SEP-2663 tasks conformance — upstream + mcpkit-local sentinel (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-tasks-v2
 
-testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based + mcpkit-local sentinel (delegates to conformance/Makefile)
+testconf-mrtr: ## Run SEP-2322 MRTR conformance — upstream + mcpkit-local sentinel (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-mrtr
 
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based (delegates to conformance/Makefile)
