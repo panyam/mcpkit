@@ -15,7 +15,17 @@ http {
         # SEP-2575 stateless wire mode (client.ClientModeStateless),
         # so every request is self-contained and any replica can
         # serve it. No session-affinity needed.
-{{range .EventServers}}        server event-server-{{.}}:8080;
+        #
+        # `resolve` (with the zone + resolver below) makes nginx
+        # re-resolve each replica's container IP on a TTL instead of
+        # caching it once at startup. Without it, restarting a replica
+        # (Phase 3 kill/start, Phase 6b/8 tier restart) leaves nginx
+        # dialing the dead IP — "connect() failed (113: Host is
+        # unreachable)" until the connect times out. Needs nginx
+        # >= 1.27.3; the image is pinned to nginx:1.27-alpine.
+        zone event-server-pool 64k;
+        resolver 127.0.0.11 ipv6=off valid=10s;
+{{range .EventServers}}        server event-server-{{.}}:8080 resolve;
 {{end}}    }
 
     # Default server (catches localhost / 127.0.0.1 / any unknown Host):
