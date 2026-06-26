@@ -35,20 +35,20 @@ suites:
     stage: 8d
     status: PASS
     source:
-      repo: panyam/mcpconformance
-      branch: fix/tasks-mrtr-error-codes
+      repo: modelcontextprotocol/conformance
+      branch: main
       path_var: MCPCONFORMANCE_TASKS_V2_PATH
-      default_path: ../conf-tasks-mrtr
+      default_path: ../conf-upstream-main
 
   - suite: testconf-mrtr
     sep: SEP-2322 MRTR
     stage: 8e
     status: PASS
     source:
-      repo: panyam/mcpconformance
-      branch: fix/tasks-mrtr-error-codes
+      repo: modelcontextprotocol/conformance
+      branch: main
       path_var: MCPCONFORMANCE_MRTR_PATH
-      default_path: ../conf-tasks-mrtr
+      default_path: ../conf-upstream-main
 
   - suite: testconf-file-inputs
     sep: SEP-2356 File inputs

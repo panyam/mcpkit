@@ -9,7 +9,7 @@
 
 MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
-MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
+MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 MCPCONFORMANCE_SKILLS_PATH      ?= $(abspath $(REPO_ROOT)/../conf-skills)
 MCPCONFORMANCE_STATELESS_PATH   ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
-MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-tasks-mrtr)
+MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)

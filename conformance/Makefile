@@ -60,10 +60,10 @@ testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs te
 	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
 
-testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based scenarios + mcpkit-local stricter sentinel
+testconf-tasks-v2: ## Run SEP-2663 tasks conformance — upstream scenarios + mcpkit-local stricter sentinel
 	@if [ ! -d "$(MCPCONFORMANCE_TASKS_V2_PATH)" ]; then \
 		echo "MCPCONFORMANCE_TASKS_V2_PATH=$(MCPCONFORMANCE_TASKS_V2_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_TASKS_V2_PATH=<path-to-clone>."; \
+		echo "Clone https://github.com/modelcontextprotocol/conformance there or set MCPCONFORMANCE_TASKS_V2_PATH=<path-to-clone>."; \
 		exit 1; \
 	fi
 	@(cd $(REPO_ROOT)/examples/tasks-v2 && go build -o tasks-v2 .)
@@ -73,10 +73,10 @@ testconf-tasks-v2: ## Run SEP-2663 tasks conformance — fork-based scenarios + 
 		npx vitest run src/scenarios/server/all-scenarios.test.ts)
 	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run tasks-v2/)
 
-testconf-mrtr: ## Run SEP-2322 MRTR conformance — fork-based scenarios + mcpkit-local stricter sentinel
+testconf-mrtr: ## Run SEP-2322 MRTR conformance — upstream scenarios + mcpkit-local stricter sentinel
 	@if [ ! -d "$(MCPCONFORMANCE_MRTR_PATH)" ]; then \
 		echo "MCPCONFORMANCE_MRTR_PATH=$(MCPCONFORMANCE_MRTR_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_MRTR_PATH=<path-to-clone>."; \
+		echo "Clone https://github.com/modelcontextprotocol/conformance there or set MCPCONFORMANCE_MRTR_PATH=<path-to-clone>."; \
 		exit 1; \
 	fi
 	@(cd $(REPO_ROOT)/examples/mrtr && go build -o mrtr-demo .)
