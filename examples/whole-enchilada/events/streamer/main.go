@@ -138,48 +138,91 @@ func main() {
 
 	log.Printf("%s opening events/stream for %q...", prefix, *eventName)
 
-	stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
-		EventName: *eventName,
-		OnEvent: func(ev events.Event) {
-			printEvent(prefix, ev)
-		},
-		OnHeartbeat: func(cursor *string) {
-			cur := "<nil>"
-			if cursor != nil {
-				cur = *cursor
+	// Reconnect loop. A killed/restarted replica (Phase 3) drops the SSE
+	// connection mid-stream; we transparently re-open against a
+	// surviving replica so delivery resumes — that is the resilience
+	// beat. A server-sent terminated frame (Phase 8 revocation) or
+	// ctrl+C exits for real. We resume "from now" (nil cursor) rather
+	// than from the last cursor: gap-free cross-replica replay needs a
+	// globally-consistent cursor (issue 833), which the per-replica
+	// counter doesn't provide today, so on reconnect we pick up live
+	// delivery on the survivor and skip the brief in-flight gap.
+	const reconnectBackoff = 1 * time.Second
+	for attempt := 0; ; attempt++ {
+		var terminated bool
+		stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
+			EventName: *eventName,
+			OnEvent: func(ev events.Event) {
+				printEvent(prefix, ev)
+			},
+			OnHeartbeat: func(cursor *string) {
+				cur := "<nil>"
+				if cursor != nil {
+					cur = *cursor
+				}
+				log.Printf("%s heartbeat cursor=%s", prefix, cur)
+			},
+			OnTruncated: func(cursor *string) {
+				cur := "<nil>"
+				if cursor != nil {
+					cur = *cursor
+				}
+				log.Printf("%s TRUNCATED — server signaled a gap; resumed at cursor=%s", prefix, cur)
+			},
+			OnError: func(e error) {
+				log.Printf("%s upstream error (transient — subscription stays active): %v", prefix, e)
+			},
+			OnTerminated: func(e error) {
+				terminated = true
+				if e != nil {
+					log.Printf("%s TERMINATED: %v", prefix, e)
+				} else {
+					log.Printf("%s TERMINATED (clean)", prefix)
+				}
+			},
+		})
+		if err != nil {
+			// Open failed — every replica may be momentarily down
+			// (e.g. mid rolling-restart). Back off and retry unless
+			// we're shutting down.
+			log.Printf("%s stream open failed: %v — retrying in %s", prefix, err, reconnectBackoff)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(reconnectBackoff):
 			}
-			log.Printf("%s heartbeat cursor=%s", prefix, cur)
-		},
-		OnTruncated: func(cursor *string) {
-			cur := "<nil>"
-			if cursor != nil {
-				cur = *cursor
-			}
-			log.Printf("%s TRUNCATED — server signaled a gap; resumed at cursor=%s", prefix, cur)
-		},
-		OnError: func(e error) {
-			log.Printf("%s upstream error (transient — subscription stays active): %v", prefix, e)
-		},
-		OnTerminated: func(e error) {
-			if e != nil {
-				log.Printf("%s TERMINATED: %v", prefix, e)
-			} else {
-				log.Printf("%s TERMINATED (clean)", prefix)
-			}
-		},
-	})
-	if err != nil {
-		log.Fatalf("%s stream open failed: %v", prefix, err)
-	}
-	log.Printf("%s subscribed — listening for events", prefix)
+			continue
+		}
+		if attempt == 0 {
+			log.Printf("%s subscribed — listening for events", prefix)
+		} else {
+			log.Printf("%s reconnected (attempt %d) — resuming on replica=%s", prefix, attempt, currentReplica())
+		}
 
-	// Block until the stream goroutine exits (operator hit ctrl+C OR
-	// server sent terminated OR the underlying call errored).
-	<-stream.Done()
-	if e := stream.Err(); e != nil {
-		log.Printf("%s stream ended with error: %v", prefix, e)
-	} else {
-		log.Printf("%s stream ended cleanly", prefix)
+		<-stream.Done()
+
+		// ctrl+C / SIGTERM — operator asked to stop.
+		if ctx.Err() != nil {
+			log.Printf("%s shutdown", prefix)
+			return
+		}
+		// Server intentionally ended the subscription (revocation,
+		// Phase 8). The token is dead — don't reconnect.
+		if terminated {
+			log.Printf("%s subscription terminated by server — exiting", prefix)
+			return
+		}
+		// Transport drop (killed replica, Phase 3) — reconnect.
+		if e := stream.Err(); e != nil {
+			log.Printf("%s connection lost (%v) — reconnecting to a surviving replica...", prefix, e)
+		} else {
+			log.Printf("%s stream ended without a terminate frame — reconnecting...", prefix)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(reconnectBackoff):
+		}
 	}
 }
 
