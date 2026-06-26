@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# iterm-6up.sh — open iTerm2 with a 2×3 grid of subscriber sessions
+# iterm-6up.sh — open iTerm2 with a 3×2 grid of subscriber sessions
 # against the running whole-enchilada stack.
 #
-#   row 1 (top):    streamer  A | streamer  B | streamer  C
-#   row 2 (bottom): webhook A | webhook B | webhook C
+#   col 1 (left):  streamer A | webhook A   (row 1)
+#                  streamer B | webhook B   (row 2)
+#                  streamer C | webhook C   (row 3)
 #
 # Each pane runs `make <verb> TENANT=<X> USERNAME=user<x>1 PASSWORD=user<x>1`,
 # so the binaries do their own ROPC login. Six fresh Keycloak sessions
@@ -55,9 +56,10 @@ WEBHOOK_C=$(cmd_for C webhook chandan)
 # AppleScript split semantics (iTerm2):
 #   - "split vertically"   → vertical divider, new pane to the RIGHT
 #   - "split horizontally" → horizontal divider, new pane BELOW
-# Order: build the top row with two vertical splits (A → A|B → A|B|C),
-# then drop a horizontal divider on each top column to add its
-# webhook pane below. Result is a clean 2×3 grid.
+# Order: build the left column with two horizontal splits
+# (A → A/B → A/B/C, top to bottom), then drop a vertical divider on
+# each left pane to add its webhook pane to the right. Result is a
+# clean 3×2 grid.
 osascript <<APPLESCRIPT
 tell application "iTerm"
     activate
@@ -66,23 +68,23 @@ tell application "iTerm"
         set pollA to current session
         tell pollA
             write text "$STREAM_A"
-            set pollB to (split vertically with default profile)
+            set pollB to (split horizontally with default profile)
         end tell
         tell pollB
             write text "$STREAM_B"
-            set pollC to (split vertically with default profile)
+            set pollC to (split horizontally with default profile)
         end tell
         tell pollC to write text "$STREAM_C"
         tell pollA
-            set webA to (split horizontally with default profile)
+            set webA to (split vertically with default profile)
         end tell
         tell webA to write text "$WEBHOOK_A"
         tell pollB
-            set webB to (split horizontally with default profile)
+            set webB to (split vertically with default profile)
         end tell
         tell webB to write text "$WEBHOOK_B"
         tell pollC
-            set webC to (split horizontally with default profile)
+            set webC to (split vertically with default profile)
         end tell
         tell webC to write text "$WEBHOOK_C"
     end tell
