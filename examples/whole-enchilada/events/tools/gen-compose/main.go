@@ -6,7 +6,6 @@
 //
 //	event-server.whole-enchilada    — round-robin pool of all N event-server replicas
 //	event-server-<i>.whole-enchilada — direct pin to replica i (1..N)
-//	receiver.whole-enchilada         — example webhook consumer
 //
 // Synthetic event producers (chat / presence) used to live in an in-
 // compose push-server tier; they're now operator-runnable host drivers
@@ -41,7 +40,6 @@ var nginxTmpl string
 type tmplCtx struct {
 	N                int    // event-server replica count
 	InjectBearer     string // shared secret env-default
-	WebhookSecret    string // receiver secret env-default
 	KCResourceSecret string // pre-baked client_secret for the mcp-event-server confidential client in all realms (DEMO ONLY — rotate in production)
 	EventServers     []int  // 1..N
 }
@@ -58,7 +56,6 @@ func main() {
 	ctx := tmplCtx{
 		N:                *n,
 		InjectBearer:     "stage-1-shared-secret",
-		WebhookSecret:    "whsec_demo_secret_change_me_in_production",
 		KCResourceSecret: "mcpkit-demo-secret-DEMO-ONLY",
 		EventServers:     seq(*n),
 	}
