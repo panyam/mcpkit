@@ -342,7 +342,61 @@ func registerTasksV2DemoTools(srv *server.Server) {
 		},
 	})
 
+	// test_tool_with_task: SEP-2322 MRTR + SEP-2663 task composition. The
+	// handler gathers user_name via an MRTR round (input_required at the
+	// tools/call level) and only then escalates to async by returning the
+	// GoAsync sentinel; the continuation goroutine does the work with the
+	// gathered name. The upstream tasks-mrtr-composition scenario drives this.
+	srv.RegisterTool(
+		core.ToolDef{
+			Name:        "test_tool_with_task",
+			Description: "MRTR elicit for user_name, then escalate to async via GoAsync. The continuation goroutine returns a greeting.",
+			InputSchema: map[string]any{"type": "object"},
+			Execution:   &core.ToolExecution{TaskSupport: core.TaskSupportRequired},
+		},
+		mrtrTaskCompositionTool,
+	)
+
 	// Register v2 tasks on the server (canonical RegisterTasks since SEP-2663
 	// — v2 takes the canonical name; v1 lives at RegisterTasksV1).
 	tasks.Register(tasks.Config{Server: srv})
+}
+
+// mrtrTaskCompositionTool walks two phases that meet at the GoAsync sentinel.
+// Phase 1 (sync): drive the MRTR round-trip for user_name; do NOT mint a task
+// until the input is in hand. Phase 2 (continuation goroutine, TaskContext
+// attached): the inputResponses gathered in phase 1 are still on ctx, so the
+// async work uses the name. Per SEP-2663 the MRTR requestState is not carried
+// into the task's own state.
+func mrtrTaskCompositionTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+	// Phase 2: running inside the continuation goroutine.
+	if tasks.GetTaskContext(ctx) != nil {
+		time.Sleep(50 * time.Millisecond)
+		var er struct {
+			Action  string `json:"action"`
+			Content struct {
+				Name string `json:"name"`
+			} `json:"content"`
+		}
+		if raw := ctx.InputResponse("user_name"); raw != nil {
+			_ = json.Unmarshal(raw, &er)
+		}
+		if er.Content.Name == "" {
+			return core.ErrorResult("task continuation lost user_name"), nil
+		}
+		return core.TextResult(fmt.Sprintf("Hello, %s! (computed in task)", er.Content.Name)), nil
+	}
+
+	// Phase 1: synchronous. Gather user_name via MRTR before minting a task.
+	if ctx.InputResponse("user_name") == nil {
+		return ctx.RequestInput(core.InputRequests{
+			"user_name": core.InputRequest{
+				Method: "elicitation/create",
+				Params: json.RawMessage(`{"message":"What is your name?","requestedSchema":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}}`),
+			},
+		})
+	}
+
+	// MRTR loop complete; escalate to async.
+	return core.GoAsyncResult{}, nil
 }

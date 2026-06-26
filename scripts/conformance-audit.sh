@@ -20,12 +20,21 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONF_DIR="${MCPCONFORMANCE_BASE_PATH:?MCPCONFORMANCE_BASE_PATH must be set}"
 AUDIT_OUT="${AUDIT_OUT:-/tmp/conf-audit}"
 AUDIT_PORT="${AUDIT_PORT:-18099}"
+# SEP-2663 tasks scenarios are graded against examples/tasks-v2 (its own module
+# with ext/tasks wired in), NOT cmd/testserver — keeping the root module free of
+# the ext/tasks dependency. Same split as testconf-stateless / examples/stateless.
+AUDIT_TASKS_PORT="${AUDIT_TASKS_PORT:-18101}"
 
 SERVER_PID=""
+TASKS_PID=""
 cleanup() {
     if [ -n "$SERVER_PID" ]; then
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    if [ -n "$TASKS_PID" ]; then
+        kill "$TASKS_PID" 2>/dev/null || true
+        wait "$TASKS_PID" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -92,6 +101,50 @@ fi
     --suite all \
     -o "$AUDIT_OUT/server" \
     > "$SERVER_REDIRECT" 2>&1) || true
+
+# --- 4b. Re-grade SEP-2663 tasks scenarios against examples/tasks-v2 ---------
+#
+# cmd/testserver is intentionally minimal and does NOT implement the tasks
+# extension (that would pull ext/tasks into the root module). The bulk `--suite
+# all` sweep above therefore fails the tasks-* scenarios with "unknown tool".
+# Those throwaway results are discarded here and the scenarios are re-graded
+# against examples/tasks-v2 — a standalone module that wires ext/tasks — on a
+# second port. Mirrors how testconf-stateless grades examples/stateless. The
+# committed verdict for tasks scenarios comes entirely from examples/tasks-v2.
+echo ""
+echo "=== Re-grading SEP-2663 tasks scenarios against examples/tasks-v2 ==="
+rm -rf "$AUDIT_OUT"/server/server-tasks-*
+(cd "$REPO_ROOT/examples/tasks-v2" && go build -o tasks-v2 .)
+STREAMABLE=1 "$REPO_ROOT/examples/tasks-v2/tasks-v2" --serve --addr ":$AUDIT_TASKS_PORT" \
+    > "$AUDIT_OUT/tasks-v2.log" 2>&1 &
+TASKS_PID=$!
+echo -n "Waiting for tasks-v2..."
+for i in $(seq 1 30); do
+    if curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:$AUDIT_TASKS_PORT/mcp" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json, text/event-stream" \
+        -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"audit","version":"0.0"}}}' \
+        2>/dev/null | grep -q "200"; then
+        echo " ready"
+        break
+    fi
+    echo -n "."
+    sleep 1
+done
+TASKS_SCENARIOS=$(cd "$CONF_DIR" && node dist/index.js list --server 2>/dev/null \
+    | awk '/^  - /{print $2}' | grep '^tasks-')
+for scenario in $TASKS_SCENARIOS; do
+    (cd "$CONF_DIR" && node dist/index.js server \
+        --url "http://localhost:$AUDIT_TASKS_PORT/mcp" \
+        --scenario "$scenario" \
+        --suite all \
+        -o "$AUDIT_OUT/server" \
+        >> "$AUDIT_OUT/server/tasks-run.log" 2>&1) || true
+done
+kill "$TASKS_PID" 2>/dev/null || true
+wait "$TASKS_PID" 2>/dev/null || true
+TASKS_PID=""
+echo "Re-graded $(echo "$TASKS_SCENARIOS" | wc -l | tr -d ' ') tasks scenarios against examples/tasks-v2"
 
 # --- 5. Run upstream client scenarios (sequential — parallel mode is flaky) -
 
