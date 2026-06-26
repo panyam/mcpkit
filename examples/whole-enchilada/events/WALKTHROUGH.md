@@ -144,7 +144,7 @@ Stack is N=3 by default. Redis Publisher/Subscriber fans every yielded event to 
 ### Step 3: Chat-Driver + Monitor + Admin — kill a replica mid-stream.
 
 - Demonstrates: Redis pub/sub fan-out keeps deliveries flowing through surviving replicas; nginx round-robin routes new connections to the survivors. Every event-server replica stamps X-Replica on its HTTP responses AND on every outbound webhook POST. Every subscriber window prints `replica=event-server-N` on each event line — the webhook receiver reads it off the delivery POST, the streamer/poller off their response header — so the round-robin spray is visible per delivery, not just on connect.
-- The stream subscriber is the most telling check — SEP-2575 stateless wire means its open POST connection lands on ONE specific replica, so its `replica=` stays fixed while it's bound. Killing that replica forces a reconnection; the stream client transparently resumes against a survivor and its event lines flip to the new `replica=` value.
+- The stream subscriber is the most telling check — SEP-2575 stateless wire means its open POST connection lands on ONE specific replica, so its `replica=` stays fixed while it's bound. Killing that replica drops the SSE connection; the streamer logs `connection lost ... reconnecting to a surviving replica` and transparently re-opens, and its event lines resume with the new `replica=` value. (It resumes live delivery, not gap-free replay across replicas — that needs the global cursor, issue 833.)
 - Expected: Once make drive-chat runs, A1/B1/C1/A2/B2/C2 all start ticking through their tenant's events. Redis MONITOR shows publish mcpkit.events.chat.message ... on every event. Webhook receiver logs show replica= rotating across the event-server replicas. After killing replica 1, webhook windows keep printing without gaps; the stream window whose connection was bound to replica 1 briefly reconnects (operator may see a terminated frame then a fresh subscribe) and resumes delivery on a surviving replica. Start replica 1 again when done; leave drive-chat running for the rest of the demo.
 
 #### Three windows: Chat-Driver, Monitor, Admin
@@ -169,6 +169,24 @@ With Phase 3 still running (drive-chat + N=3 replicas), this walkthrough binary 
 
 - Demonstrates: replica-agnostic read path. nginx round-robin spreads calls across the event-server replicas; every replica answers from the same in-process source registry, so the response is byte-identical content-wise.
 - Expected: prints one line per call: 'call k served by event-server-N — events=M'. Over ~6 calls you'll see at least two distinct X-Replica values (nginx round-robin); the event count M is identical across all calls.
+- Try it by hand: the Run step does this in-binary, but the shell variant below is the same events/list call via curl so you can watch the X-Replica response header rotate yourself. Any tenant's token works — events/list just enumerates event types.
+
+#### Same events/list call by curl — watch X-Replica rotate
+
+```bash
+# A bearer from any tenant (events/list just lists event types):
+T=$(make newtoken-ci TENANT=A USER=usera1 PASSWORD=usera1)
+
+# Fire it a handful of times; X-Replica flips across event-server-1/2/3:
+for i in $(seq 6); do
+  curl -s -D - -o /dev/null -X POST http://localhost:9090/mcp \
+    -H "Authorization: Bearer $T" \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"events/list","params":{}}' \
+    | grep -i '^x-replica'
+done
+```
 
 ### Phase 5 — Cursor durability
 
