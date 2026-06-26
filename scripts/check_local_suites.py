@@ -20,7 +20,8 @@ checked here. Tracked separately.
 
 Allowlists for targets that are NOT individual SEP suites:
     testconf, testconfall, testconfauth, testconf-tasks (v1 frozen),
-    testconf-upstream-audit, testconf-elicitation.
+    testconf-upstream-audit, testconf-elicitation,
+    testconf-external-checker.
 
 Exit codes:
     0   manifest and Makefile agree
@@ -57,6 +58,7 @@ ALLOWLIST = {
     "testconf-tasks",  # SEP-2663 v1, frozen, no SEP coverage row
     "testconf-elicitation",  # SEP-1036, lives in conformance/elicitation/
     "testconf-upstream-audit",  # informational audit, not a SEP suite
+    "testconf-external-checker",  # external client-side gauntlet vs val.town, not a per-SEP fork suite; published via conformance/EXTERNAL_CHECKER.md
 }
 
 # Matches a testconf-* target definition at the start of a Makefile line.
