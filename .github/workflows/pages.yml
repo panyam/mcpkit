@@ -17,6 +17,7 @@ on:
       - 'CAPABILITIES.md'
       - 'conformance/UPSTREAM_AUDIT.md'
       - 'conformance/FIXTURE_AUDIT.md'
+      - 'conformance/EXTERNAL_CHECKER.md'
       - 'conformance/apps/COMPAT.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
