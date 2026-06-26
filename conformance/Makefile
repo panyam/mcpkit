@@ -35,6 +35,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills \
         testconf-elicitation testconf-upstream-audit \
+        testconf-external-checker \
         refresh-conformance check-conformance-stale \
         sync-conformance check-conformance-sync help
 
@@ -274,6 +275,15 @@ testconf-upstream-audit: ## Audit mcpkit against modelcontextprotocol/conformanc
 		exit 1; \
 	fi
 	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/conformance-audit.sh
+
+# External, third-party CLIENT-side gauntlet. Hits a live val.town endpoint that
+# grades the mcpkit client against the integrated stateless draft wire
+# (2026-07-28 / DRAFT-2026-v1). Deliberately NOT in the `test` umbrella above and
+# NOT a CI gate — the endpoint is external + ephemeral. Run manually; the report
+# is a point-in-time snapshot like UPSTREAM_AUDIT.md. Override the target with
+# EXTERNAL_CHECKER_URL=<url> when the dated endpoint rotates.
+testconf-external-checker: ## Grade the mcpkit CLIENT against the external stateless-draft checker (live network). Output: conformance/EXTERNAL_CHECKER.md.
+	cd $(REPO_ROOT) && go run ./cmd/external-checker $(if $(EXTERNAL_CHECKER_URL),-url $(EXTERNAL_CHECKER_URL),)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}'
