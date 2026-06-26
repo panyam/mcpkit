@@ -2,6 +2,8 @@ package events
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -696,6 +698,22 @@ func (s *YieldingSource[Data]) SetEmitHook(hook func(context.Context, Event)) {
 	s.mu.Unlock()
 }
 
+// newEventID returns a globally-unique event id (random, "evt_"
+// prefixed). It deliberately does NOT derive from the per-source cursor
+// counter: every YieldingSource instance starts its counter at 0, so in
+// a multi-replica / multi-writer deployment (e.g. the whole-enchilada
+// demo, where injects round-robin across N event-server replicas) N
+// sources would mint colliding "evt_<n>" ids and break a consumer's
+// idempotency-by-eventId. A random id needs no cross-replica
+// coordination. The cursor still carries the monotone-int64 ordering
+// contract for poll resume; making the CURSOR globally consistent
+// across replicas is a separate, larger change (tracked in a follow-up).
+func newEventID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	return "evt_" + base64.RawURLEncoding.EncodeToString(b[:])
+}
+
 func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 	// One-shot terminated check. Sources that have signaled terminal
 	// can't deliver new events to subscribers (chans are closed).
@@ -717,7 +735,7 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 
 	seq := s.seq.Add(1)
 	event := Event{
-		EventID:   fmt.Sprintf("evt_%d", seq),
+		EventID:   newEventID(),
 		Name:      s.def.Name,
 		Timestamp: now.Format(time.RFC3339),
 		Data:      raw,
