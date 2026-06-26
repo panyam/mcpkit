@@ -5,13 +5,13 @@ Multi-tier reference deployment for the [MCP Events extension](https://github.co
 ```
 Host  ──[MCP / SSE]──>  Nginx  ──>  Event-server  <──[HTTP /events/<name>/inject]──  Push-server
                                           │
-                                          └──[webhook POST]──>  Receiver  (example consumer)
+                                          └──[webhook POST]──>  Your receivers  (host-run `make webhook`)
 ```
 
 ## What stage 1 ships
 
-- **Compose graph** (`docker-compose.yaml`) with nginx + N event-server replicas + M push-server replicas + one example receiver, plus commented-out blocks for stages 2/3/4 (Keycloak, Postgres, Redis, admin frontend, OTel + Grafana / Loki / Mimir).
-- **Templated** — `make gen-compose N=<n> M=<m>` regenerates the compose YAML and nginx config for arbitrary replica counts.
+- **Compose graph** (`docker-compose.yaml`) with nginx + N event-server replicas. Webhook and stream subscribers run as host processes (`make webhook` / `make streamer`), not compose services.
+- **Templated** — `make gen-compose N=<n>` regenerates the compose YAML and nginx config for arbitrary replica counts.
 - **DNS naming convention** — every service answers a `*.whole-enchilada` hostname both inside the compose network and (with `make hosts-install`) from the host shell / browser. See "Hostname routing" below.
 - **All three delivery modes** work end-to-end: poll, push (SSE), webhook.
 - **In-memory stores** — restart wipes state. Stage 3 plugs in Postgres + Redis.
@@ -173,15 +173,16 @@ The event-server's `tryEnableAuth()` picks up `OAUTH_ISSUER` and fetches JWKS fr
 |---|---|---|
 | **nginx** | Frontdoor reverse proxy. Routes by `Host` header to per-service backends. | Single entry point; client-facing TLS termination point in production. |
 | **event-server** (N replicas) | MCP Events extension (events/list, events/poll, events/subscribe, events/stream), webhook delivery, push fanout. | Scales with MCP client count + delivery throughput. |
-| **push-server** (M replicas) | Source-side concerns — upstream integration (real-world: Discord WebSocket, Telegram bot, OAuth refresh; this demo: synthetic chat + presence feeders). Pushes events into the event-server via `events.HTTPSource` over HTTP. | Scales with upstream-integration count, not with MCP client count. Credentials for upstreams live here, never in the event-server. |
-| **receiver** | **Example** webhook consumer. Verifies Standard Webhooks signatures, exposes `/__received` for the walkthrough + e2e drainage. | In production, your receivers are your own apps in your own infra; this one is here to show the wire shape. |
+| **push-server** (reference) | Source-side concerns — upstream integration (real-world: Discord WebSocket, Telegram bot, OAuth refresh; this demo: synthetic chat + presence feeders, run as host drivers under `drivers/synth/`). Pushes events into the event-server via `events.HTTPSource` over HTTP. | Scales with upstream-integration count, not with MCP client count. Credentials for upstreams live here, never in the event-server. |
+
+Webhook and stream **subscribers** are not a compose tier. The demo runs them as host processes (`make webhook` / `make streamer`) that reach the stack through `host.docker.internal` — exactly how your own apps would consume events in production.
 
 ### How events flow
 
-1. `push-server` calls `eventsclient.Pusher.PushNamed("chat.message", data)` against `http://event-server.whole-enchilada/events/chat.message/inject`.
+1. A producer (host driver via `make inject` / `make drive-chat`, or in production the `push-server` via `eventsclient.Pusher.PushNamed("chat.message", data)`) POSTs to `http://event-server.whole-enchilada/events/chat.message/inject`.
 2. `event-server`'s `events.HTTPSource[ChatMessageData]` handler decodes and yields into the library's `YieldingSource`.
-3. The library fans out: push subscribers receive the event via SSE on `events/stream`, webhook subscribers get an HTTP POST with a Standard Webhooks signature, poll subscribers see it on their next `events/poll`.
-4. The `receiver` verifies the signature and logs the payload.
+3. The library fans out: stream subscribers receive the event via SSE on `events/stream`, webhook subscribers get an HTTP POST with a Standard Webhooks signature, poll subscribers see it on their next `events/poll`.
+4. Each host-run subscriber (`make webhook` / `make streamer`) verifies the signature and logs the payload.
 
 ### Why HTTPSource (the third source pattern)
 
@@ -204,9 +205,6 @@ Every service answers a `<role>.whole-enchilada` hostname via Docker network ali
 | `nginx.whole-enchilada` | nginx frontdoor (port 80) |
 | `event-server.whole-enchilada` | Round-robins across all N event-server replicas |
 | `event-server-1.whole-enchilada`, `event-server-2.whole-enchilada`, … | Specific replica (regex-routed by nginx) |
-| `pusher.whole-enchilada` | Round-robins across all M push-server admin ports |
-| `pusher-1.whole-enchilada`, `pusher-2.whole-enchilada`, … | Specific push-server (admin port) |
-| `receiver.whole-enchilada` | Example webhook consumer |
 
 **From the host shell**, install the `/etc/hosts` entries once:
 
@@ -239,12 +237,12 @@ The directory layout and the `*.whole-enchilada` naming convention are forward-c
 
 ```
 whole-enchilada/
-├── docker-compose.yaml     # GENERATED (committed default: N=1, M=1)
+├── docker-compose.yaml     # GENERATED (committed default: N=3)
 ├── nginx/nginx.conf        # GENERATED
 ├── tools/gen-compose/      # Template + Go renderer
 ├── event-server/           # MCP Events server, HTTPSource consumer
-├── push-server/            # Synthetic feeders + Pusher client
-├── receiver/               # Example webhook consumer
+├── push-server/            # Synthetic feeders + Pusher client (reference; demo uses host drivers)
+├── webhook/, streamer/, poller/, inject/, drivers/  # host-run subscribers + producers
 ├── walkthrough/            # demokit walkthrough binary
 ├── Makefile                # demo-up / test / demo-down / gen-compose
 ├── README.md               # this file

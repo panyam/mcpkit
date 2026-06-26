@@ -64,6 +64,10 @@ func main() {
 		"Event source name to poll.")
 	interval := flag.Duration("interval", 1*time.Second,
 		"Cadence between polls. Lower = more responsive; higher = less server load.")
+	startCursor := flag.String("start-cursor", envOr("START_CURSOR", "0"),
+		"Cursor to begin polling from. Default \"0\" replays the buffer from the head. "+
+			"Pass a value the poller printed on a prior run (\"cursor advanced to N\") to resume from there — "+
+			"the resume is gap-free across replicas because every replica reads the same Postgres buffer.")
 	flag.Parse()
 
 	if *token == "" && *username != "" && *password != "" {
@@ -126,11 +130,13 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Start from cursor "0" so the demo can see backfill (events
-	// injected before the poller started). Stage-2 demos are short
-	// enough that the buffer fits; longer-running production would
-	// poll from head (cursor: "" or omitted).
-	cursor := "0"
+	// Start from --start-cursor (default "0") so the demo can see
+	// backfill (events injected before the poller started). Stage-2
+	// demos are short enough that the buffer fits; longer-running
+	// production would poll from head (cursor: "" or omitted). Passing
+	// a cursor printed by a prior run resumes gap-free from there.
+	cursor := *startCursor
+	log.Printf("%s starting from cursor %q", prefix, cursor)
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
 
@@ -145,8 +151,11 @@ func main() {
 				log.Printf("%s token invalidated by AS (401) — exiting", prefix)
 				return
 			}
-			if cur != nil {
+			if cur != nil && *cur != cursor {
 				cursor = *cur
+				// Surface the cursor so the operator can Ctrl+C and
+				// resume with `make poller ... START_CURSOR=<N>`.
+				log.Printf("%s cursor advanced to %s", prefix, cursor)
 			}
 		}
 	}

@@ -74,14 +74,4 @@ http {
             proxy_set_header Connection "";
         }
     }
-
-    # receiver.whole-enchilada — example webhook consumer.
-    server {
-        listen 80;
-        server_name receiver.whole-enchilada;
-        location / {
-            proxy_pass http://receiver:9090;
-            proxy_set_header Host $host;
-        }
-    }
 }
