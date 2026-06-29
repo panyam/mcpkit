@@ -142,6 +142,16 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeResourceError, err.Error())
 	}
+	// SEP-2549: fill the resources/read cache-hint defaults for any field
+	// the handler left unset, mirroring the legacy dispatcher's
+	// applyReadCacheControl so WithReadResourceCacheControl behaves
+	// identically on both wires. A handler that set either field keeps it.
+	if result.TTLMs == nil {
+		result.TTLMs = d.Backend.ReadTTLMs()
+	}
+	if result.CacheScope == "" {
+		result.CacheScope = d.Backend.ReadCacheScope()
+	}
 	return core.NewResponse(id, result)
 }
 

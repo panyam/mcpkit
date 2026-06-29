@@ -63,6 +63,14 @@ type Backend interface {
 	ListTTLMs() *int
 	ListCacheScope() string
 
+	// ReadTTLMs / ReadCacheScope are the SEP-2549 cache-hint defaults for
+	// resources/read responses (distinct from the list hints). A handler
+	// that sets either field on its result keeps it; these supply the
+	// server-wide default for the unset fields. Mirrors the legacy
+	// dispatcher's applyReadCacheControl so both wires emit identical hints.
+	ReadTTLMs() *int
+	ReadCacheScope() string
+
 	// InvokeWithMiddleware runs the server's middleware chain around
 	// invoking the given request, returning the JSON-RPC response.
 	//
