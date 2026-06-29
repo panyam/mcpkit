@@ -4,7 +4,7 @@
 0.2.43
 
 ## Provides
-- mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05
+- mcp-protocol-negotiation: Version negotiation supporting MCP 2026-07-28 (draft, preferred), 2025-11-25, 2025-03-26, and 2024-11-05. The `initialize` handshake negotiates the client-proposed version against `server/dispatch.go::supportedProtocolVersions` (2026-07-28 listed first); the SEP-2575 stateless wire advertises `core.SupportedStatelessVersions` (2026-07-28 only) independently.
 - mcp-initialization-gating: Enforces initialize/initialized handshake before accepting requests
 - mcp-tool-error-semantics: Spec-compliant isError tool results (not JSON-RPC errors) for handler failures
 - mcp-tool-result-meta-extras: `core.ToolResultMeta.Extras` (`map[string]any`) carries extension- or feature-namespaced metadata alongside the typed `NextCursor` + `RelatedTask` fields. Custom `MarshalJSON` / `UnmarshalJSON` spread the map at the top level of the `_meta` object; typed fields win on key collision. Mirrors the `ErrorData.Extra` pattern in `core/jsonrpc.go`. Unlocks extension fixtures that need vendor keys on tool results without per-fixture library forks — pdf-server's `display_pdf` uses it to emit `_meta.interactEnabled` / `_meta.viewUUID` matching upstream's wire shape
