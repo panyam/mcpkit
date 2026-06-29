@@ -405,7 +405,7 @@ func TestClient_4xxJSONRPCErrorParsed(t *testing.T) {
 			w.Write(out)
 			return
 		}
-		// Simulate a -32004 + HTTP 400 from a SEP-2575 server.
+		// Simulate a -32022 + HTTP 400 from a SEP-2575 server.
 		out, _ := json.Marshal(map[string]any{
 			"jsonrpc": "2.0", "id": req.ID,
 			"error": map[string]any{
@@ -426,7 +426,7 @@ func TestClient_4xxJSONRPCErrorParsed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	// Should be a JSON-RPC error with -32004, not an HTTPStatusError.
+	// Should be a JSON-RPC error with -32022, not an HTTPStatusError.
 	if _, ok := err.(*HTTPStatusError); ok {
 		t.Errorf("got HTTPStatusError, want JSON-RPC error: %v", err)
 	}

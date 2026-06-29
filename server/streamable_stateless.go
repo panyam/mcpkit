@@ -144,7 +144,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 	dispatchCtx = core.WithStatelessClaims(dispatchCtx, claims)
 
 	// SSE headers are set lazily on first write so a dispatch-time
-	// error response (-32020 header mismatch, -32004 unsupported
+	// error response (-32020 header mismatch, -32022 unsupported
 	// protocol version, -32601 method not found from the bare default
 	// branch) can still be surfaced as a normal JSON-RPC response over
 	// HTTP 200 (the legacy path stages an HTTP-level auth error
@@ -242,7 +242,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 // writeStatelessResponse marshals a JSON-RPC response and writes it
 // with the SEP-2575-mandated HTTP status. Success responses go out
 // with 200; error responses use stateless.HTTPStatusForCode so
-// -32601→404, -32020/-32021/-32004/-32602/-32700/-32600→400, etc.
+// -32601→404, -32020/-32021/-32022/-32602/-32700/-32600→400, etc.
 //
 // Headers (Content-Type) MUST be set before WriteHeader; the
 // applyStagedResponseHeaders call upstream of us already stamped

@@ -5,19 +5,17 @@ import (
 )
 
 // SEP-2575 §protocol-version-header: when a server rejects a request with
-// JSON-RPC error code -32020 / -32004 and returns `data.supported: [...]`,
+// JSON-RPC error code -32020 / -32022 and returns `data.supported: [...]`,
 // the client SHOULD pick a mutually supported version and retry. This file
 // holds the pure decision helpers; the retry orchestration lives in
 // client.go::rawCallWithContext.
 
 // isUnsupportedVersionError reports whether resp is a server rejection
 // that should trigger version-retry. The signal is the presence of a
-// non-empty `data.supported` string array on a -32020 or -32004 error —
-// both codes appear in the wild (mcpkit's own server uses -32004, the
-// upstream conformance scenario emits -32020), and the semantic
-// discriminator is the supported-list payload, not the code itself.
-// HeaderMismatchData's -32020 responses don't carry `supported`, so
-// the predicate naturally distinguishes them.
+// non-empty `data.supported` string array on a -32020 or -32022 error —
+// the semantic discriminator is the supported-list payload, not the code
+// itself. HeaderMismatchData's -32020 responses don't carry `supported`,
+// so the predicate naturally distinguishes them.
 //
 // Returns (true, picked) when the supported list intersects mcpkit's
 // stateless-wire support set and a usable downgrade exists; otherwise

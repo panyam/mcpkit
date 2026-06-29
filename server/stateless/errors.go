@@ -15,7 +15,7 @@ import (
 //	-32601 Method not found              → 404 Not Found
 //	-32020 HeaderMismatch                → 400 Bad Request
 //	-32021 MissingRequiredClientCap      → 400 Bad Request
-//	-32004 UnsupportedProtocolVersion    → 400 Bad Request
+//	-32022 UnsupportedProtocolVersion    → 400 Bad Request
 //	-32602 Invalid params                → 400 Bad Request (missing _meta etc.)
 //	-32700 Parse / -32600 InvalidRequest → 400 Bad Request
 //	-32010 SubscriptionLimitExceeded     → 429 Too Many Requests

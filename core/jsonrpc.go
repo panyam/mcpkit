@@ -126,7 +126,12 @@ const (
 	// {supported: [...], requested: "..."} (see UnsupportedProtocolVersionData)
 	// so the client can pick a mutually supported version and retry.
 	// HTTP status: 400.
-	ErrCodeUnsupportedProtocolVersion = -32004
+	//
+	// Value is -32022 per the SEP-2575 draft JSON schema. mcpkit emitted
+	// -32004 through v0.3.0 — the upstream conformance server scenario only
+	// asserts HTTP 400 + the data members, not the numeric code, so the
+	// off-schema value slipped through. Aligned to -32022 afterward.
+	ErrCodeUnsupportedProtocolVersion = -32022
 )
 
 // NewResponse creates a success response for the given request ID.

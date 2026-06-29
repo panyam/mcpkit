@@ -494,7 +494,7 @@ type Client struct {
 	// SEP-2575 _meta envelope and the MCP-Protocol-Version HTTP header on
 	// every stateless-wire request. Initialized to
 	// core.DraftProtocolVersion2026V1 in NewClient and updated when a
-	// server rejects a request with -32020/-32004 + data.supported and
+	// server rejects a request with -32020/-32022 + data.supported and
 	// the intersection with [core.SupportedStatelessVersions] yields a
 	// usable downgrade. Guarded by negotiatedVersionMu — reads happen on
 	// every request, writes only on retry, so RWMutex is the right shape.
@@ -1610,7 +1610,7 @@ func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) 
 			return c.doRawCall(method, params, cc)
 		})
 	}
-	// SEP-2575 §protocol-version-header: on -32020/-32004 + data.supported,
+	// SEP-2575 §protocol-version-header: on -32020/-32022 + data.supported,
 	// downgrade the negotiated version (so subsequent requests stop hitting
 	// the same rejection) and retry this call once with a fresh _meta envelope
 	// + MCP-Protocol-Version header. Bounded to one attempt — if the retry
@@ -1919,7 +1919,7 @@ func (t *streamableClientTransport) callWithContext(method string, data []byte, 
 	// Non-2xx responses (401/403 already handled by DoWithAuthRetry).
 	// SEP-2575 stateless servers return 4xx with a JSON-RPC error body
 	// for HeaderMismatch (-32020), MissingRequiredClientCap (-32021),
-	// UnsupportedVersion (-32004), method-not-found on removed methods
+	// UnsupportedVersion (-32022), method-not-found on removed methods
 	// (-32601), etc. Gated on stateless-wire mode AND Content-Type so
 	// legacy 4xx/5xx with non-JSON bodies still surface as HTTPStatusError
 	// (preserves backward-compat for callers that consume header data

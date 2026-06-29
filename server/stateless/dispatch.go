@@ -87,7 +87,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Res
 	// Validate the protocol version against what this server speaks.
 	// Transport layer separately validates MCP-Protocol-Version HTTP
 	// header alignment via -32020 HeaderMismatch; here we surface a
-	// version-unknown failure with -32004 + the supported list.
+	// version-unknown failure with -32022 + the supported list.
 	supported := d.Backend.SupportedVersions()
 	versionOK := false
 	for _, sv := range supported {
