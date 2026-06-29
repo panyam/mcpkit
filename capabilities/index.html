@@ -145,10 +145,10 @@
         
 <h1 id="mcpkit">MCPKit <a class="anchor" href="#mcpkit">¶</a></h1>
 <h2 id="version">Version <a class="anchor" href="#version">¶</a></h2>
-<p>0.2.43</p>
+<p>0.3.0</p>
 <h2 id="provides">Provides <a class="anchor" href="#provides">¶</a></h2>
 <ul>
-<li>mcp-protocol-negotiation: Version negotiation supporting MCP 2025-11-25 and 2024-11-05</li>
+<li>mcp-protocol-negotiation: Version negotiation supporting MCP 2026-07-28 (draft, preferred), 2025-11-25, 2025-03-26, and 2024-11-05. The <code>initialize</code> handshake negotiates the client-proposed version against <code>server/dispatch.go::supportedProtocolVersions</code> (2026-07-28 listed first); the SEP-2575 stateless wire advertises <code>core.SupportedStatelessVersions</code> (2026-07-28 only) independently.</li>
 <li>mcp-initialization-gating: Enforces initialize/initialized handshake before accepting requests</li>
 <li>mcp-tool-error-semantics: Spec-compliant isError tool results (not JSON-RPC errors) for handler failures</li>
 <li>mcp-tool-result-meta-extras: <code>core.ToolResultMeta.Extras</code> (<code>map[string]any</code>) carries extension- or feature-namespaced metadata alongside the typed <code>NextCursor</code> + <code>RelatedTask</code> fields. Custom <code>MarshalJSON</code> / <code>UnmarshalJSON</code> spread the map at the top level of the <code>_meta</code> object; typed fields win on key collision. Mirrors the <code>ErrorData.Extra</code> pattern in <code>core/jsonrpc.go</code>. Unlocks extension fixtures that need vendor keys on tool results without per-fixture library forks — pdf-server&rsquo;s <code>display_pdf</code> uses it to emit <code>_meta.interactEnabled</code> / <code>_meta.viewUUID</code> matching upstream&rsquo;s wire shape</li>
