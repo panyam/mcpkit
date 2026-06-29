@@ -16,12 +16,15 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SUBMODULES=(
-    "ext/auth"
-    "ext/ui"
-    "ext/protogen"
-    "cmd/testclient"
-)
+
+# Discover every sub-module dynamically (mirrors the Makefile's SUB_MODS_ALL)
+# so the check never goes stale when a sub-module is added or moved — e.g.
+# protogen relocating from ext/ to experimental/ext/ used to silently break
+# this hardcoded list. Modules that don't require the root are skipped below.
+SUBMODULES=()
+while IFS= read -r gomod; do
+    SUBMODULES+=("$(dirname "${gomod#"$REPO_ROOT"/}")")
+done < <(find "$REPO_ROOT" -name go.mod -not -path '*/node_modules/*' -not -path "$REPO_ROOT/go.mod" | sort)
 
 fail=0
 for sub in "${SUBMODULES[@]}"; do
