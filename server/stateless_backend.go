@@ -215,6 +215,16 @@ func (b *statelessBackend) ListCacheScope() string {
 	return b.s.options.listCacheScope
 }
 
+// ReadTTLMs returns the SEP-2549 ttlMs default for resources/read responses.
+func (b *statelessBackend) ReadTTLMs() *int {
+	return b.s.options.readTTLMs
+}
+
+// ReadCacheScope returns the SEP-2549 cacheScope default for resources/read responses.
+func (b *statelessBackend) ReadCacheScope() string {
+	return b.s.options.readCacheScope
+}
+
 // InvokeWithMiddleware runs the server's middleware chain (s.options.middleware)
 // around a terminal handler that dispatches by method:
 //

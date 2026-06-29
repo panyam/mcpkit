@@ -11,14 +11,17 @@ import (
 // fakeBackend is a minimal Backend for dispatcher tests. Each field is
 // optional; nil functions return empty values.
 type fakeBackend struct {
-	info     core.ServerInfo
-	caps     core.ServerCapabilities
-	versions []string
-	tools    []core.ToolDef
-	tool     func(name string) (core.ToolDef, core.ToolHandler, bool)
-	ttlMs    *int
-	scope    string
-	authErr  error // when non-nil, InvokeWithMiddleware short-circuits with it
+	info      core.ServerInfo
+	caps      core.ServerCapabilities
+	versions  []string
+	tools     []core.ToolDef
+	tool      func(name string) (core.ToolDef, core.ToolHandler, bool)
+	resource  func(uri string) (core.ResourceDef, core.ResourceHandler, bool)
+	ttlMs     *int
+	scope     string
+	readTTL   *int
+	readScope string
+	authErr   error // when non-nil, InvokeWithMiddleware short-circuits with it
 }
 
 func (f *fakeBackend) ServerInfo() core.ServerInfo           { return f.info }
@@ -37,7 +40,10 @@ func (f *fakeBackend) Tool(name string) (core.ToolDef, core.ToolHandler, bool) {
 	return core.ToolDef{}, nil, false
 }
 func (f *fakeBackend) Resources() []core.ResourceDef { return nil }
-func (f *fakeBackend) Resource(string) (core.ResourceDef, core.ResourceHandler, bool) {
+func (f *fakeBackend) Resource(uri string) (core.ResourceDef, core.ResourceHandler, bool) {
+	if f.resource != nil {
+		return f.resource(uri)
+	}
 	return core.ResourceDef{}, nil, false
 }
 func (f *fakeBackend) ResourceTemplates() []core.ResourceTemplate { return nil }
@@ -51,6 +57,8 @@ func (f *fakeBackend) Prompt(string) (core.PromptDef, core.PromptHandler, bool) 
 func (f *fakeBackend) Completion(string, string) (core.CompletionHandler, bool) { return nil, false }
 func (f *fakeBackend) ListTTLMs() *int                                          { return f.ttlMs }
 func (f *fakeBackend) ListCacheScope() string                                   { return f.scope }
+func (f *fakeBackend) ReadTTLMs() *int                                          { return f.readTTL }
+func (f *fakeBackend) ReadCacheScope() string                                   { return f.readScope }
 
 // InvokeWithMiddleware returns (nil, nil, false) so the dispatcher falls back
 // to its built-in per-method handler. The fake doesn't model server-level
@@ -131,7 +139,7 @@ func TestDispatch_MissingMetaReturns32602(t *testing.T) {
 	}
 }
 
-func TestDispatch_UnsupportedVersionReturns32004(t *testing.T) {
+func TestDispatch_UnsupportedVersionReturns32022(t *testing.T) {
 	d := New(&fakeBackend{versions: []string{core.DraftProtocolVersion2026V1}})
 	bad := json.RawMessage(`{
 		"_meta": {
@@ -150,15 +158,23 @@ func TestDispatch_UnsupportedVersionReturns32004(t *testing.T) {
 	if resp == nil || resp.Error == nil {
 		t.Fatal("expected error response for unsupported version")
 	}
+	// Pin the literal wire value, not just the constant: the SEP-2575 draft
+	// schema fixes this at -32022, and the upstream server conformance
+	// scenario does NOT assert the code (only HTTP 400 + the data members),
+	// so without a literal check a drift here would pass conformance.
+	if resp.Error.Code != -32022 {
+		t.Errorf("got code %d, want -32022 (SEP-2575 UnsupportedProtocolVersion)",
+			resp.Error.Code)
+	}
 	if resp.Error.Code != core.ErrCodeUnsupportedProtocolVersion {
-		t.Errorf("got code %d, want %d (-32004)",
-			resp.Error.Code, core.ErrCodeUnsupportedProtocolVersion)
+		t.Errorf("constant ErrCodeUnsupportedProtocolVersion = %d, drifted from wire value -32022",
+			core.ErrCodeUnsupportedProtocolVersion)
 	}
 	if got := HTTPStatusForCode(resp.Error.Code); got != 400 {
-		t.Errorf("HTTPStatusForCode(-32004) = %d, want 400", got)
+		t.Errorf("HTTPStatusForCode(-32022) = %d, want 400", got)
 	}
 
-	// Payload shape MUST carry supported + requested per upstream schema.
+	// Payload shape MUST carry supported + requested per the draft schema.
 	raw, _ := json.Marshal(resp.Error.Data)
 	var data core.UnsupportedProtocolVersionData
 	if err := json.Unmarshal(raw, &data); err != nil {
@@ -170,6 +186,82 @@ func TestDispatch_UnsupportedVersionReturns32004(t *testing.T) {
 	if data.Requested != "1900-01-01" {
 		t.Errorf("data.Requested = %q, want %q", data.Requested, "1900-01-01")
 	}
+}
+
+// TestDispatch_ResourcesReadAppliesReadCacheDefaults pins the legacy↔stateless
+// parity for SEP-2549: a server configured with WithReadResourceCacheControl
+// must emit the same ttlMs / cacheScope hints on resources/read over the
+// stateless wire as it does on the legacy wire, and a handler-set value must
+// win over the default.
+func TestDispatch_ResourcesReadAppliesReadCacheDefaults(t *testing.T) {
+	ttl := 4200
+	resWith := func(r core.ResourceResult) func(string) (core.ResourceDef, core.ResourceHandler, bool) {
+		return func(string) (core.ResourceDef, core.ResourceHandler, bool) {
+			return core.ResourceDef{URI: "file://x"}, func(core.ResourceContext, core.ResourceRequest) (core.ResourceResult, error) {
+				return r, nil
+			}, true
+		}
+	}
+	readReq := func() *core.Request {
+		return &core.Request{
+			JSONRPC: "2.0",
+			ID:      json.RawMessage("9"),
+			Method:  "resources/read",
+			Params: json.RawMessage(`{
+				"uri": "file://x",
+				"_meta": {
+					"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+					"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
+					"io.modelcontextprotocol/clientCapabilities": {}
+				}
+			}`),
+		}
+	}
+	decode := func(t *testing.T, resp *core.Response) core.ResourceResult {
+		t.Helper()
+		if resp == nil || resp.Error != nil {
+			t.Fatalf("resources/read failed: %+v", resp)
+		}
+		raw, _ := json.Marshal(resp.Result)
+		var got core.ResourceResult
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("decode result: %v", err)
+		}
+		return got
+	}
+
+	t.Run("default applied when handler leaves hints unset", func(t *testing.T) {
+		d := New(&fakeBackend{
+			readTTL:   &ttl,
+			readScope: "private",
+			resource:  resWith(core.ResourceResult{}),
+		})
+		resp, _ := d.Dispatch(context.Background(), readReq())
+		got := decode(t, resp)
+		if got.TTLMs == nil || *got.TTLMs != ttl {
+			t.Errorf("TTLMs = %v, want %d (read default)", got.TTLMs, ttl)
+		}
+		if got.CacheScope != "private" {
+			t.Errorf("CacheScope = %q, want private (read default)", got.CacheScope)
+		}
+	})
+
+	t.Run("handler value overrides the default", func(t *testing.T) {
+		handlerTTL := 99
+		d := New(&fakeBackend{
+			readTTL:   &ttl,
+			readScope: "private",
+			resource:  resWith(core.ResourceResult{TTLMs: &handlerTTL, CacheScope: "public"}),
+		})
+		resp, _ := d.Dispatch(context.Background(), readReq())
+		got := decode(t, resp)
+		if got.TTLMs == nil || *got.TTLMs != handlerTTL {
+			t.Errorf("TTLMs = %v, want %d (handler override)", got.TTLMs, handlerTTL)
+		}
+		if got.CacheScope != "public" {
+			t.Errorf("CacheScope = %q, want public (handler override)", got.CacheScope)
+		}
+	})
 }
 
 func TestDispatch_ServerDiscoverShape(t *testing.T) {
