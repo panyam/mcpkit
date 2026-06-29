@@ -51,9 +51,9 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 			true, "2026-07-28",
 		},
 		{
-			"32004-with-supported-draft",
+			"32022-with-supported-draft",
 			&rpcResponse{Error: &core.Error{
-				Code: -32004, Message: "UnsupportedVersion",
+				Code: -32022, Message: "UnsupportedVersion",
 				Data: map[string]any{"supported": []any{"2026-07-28"}},
 			}},
 			true, "2026-07-28",
@@ -67,9 +67,9 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 			false, "",
 		},
 		{
-			"32004-supported-no-overlap",
+			"32022-supported-no-overlap",
 			&rpcResponse{Error: &core.Error{
-				Code: -32004, Message: "UnsupportedVersion",
+				Code: -32022, Message: "UnsupportedVersion",
 				Data: map[string]any{"supported": []any{"2024-11-05"}},
 			}},
 			false, "",
@@ -85,7 +85,7 @@ func TestIsUnsupportedVersionError(t *testing.T) {
 		{
 			"typed-string-slice-supported",
 			&rpcResponse{Error: &core.Error{
-				Code: -32004,
+				Code: -32022,
 				Data: map[string]any{"supported": []string{"2026-07-28"}},
 			}},
 			true, "2026-07-28",

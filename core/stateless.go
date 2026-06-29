@@ -120,7 +120,7 @@ func DecodeRequestMeta(rawParams json.RawMessage) (*RequestMeta, error) {
 // so the client can pick a fallback; Requested echoes the version string
 // the client sent for diagnostics.
 //
-// HTTP status: 400. JSON-RPC code: ErrCodeUnsupportedProtocolVersion (-32004).
+// HTTP status: 400. JSON-RPC code: ErrCodeUnsupportedProtocolVersion (-32022).
 type UnsupportedProtocolVersionData struct {
 	Supported []string `json:"supported"`
 	Requested string   `json:"requested"`

@@ -248,7 +248,7 @@ func TestErrorCodeConstants(t *testing.T) {
 	if ErrCodeMissingRequiredClientCapability != -32021 {
 		t.Errorf("ErrCodeMissingRequiredClientCapability = %d, want -32021", ErrCodeMissingRequiredClientCapability)
 	}
-	if ErrCodeUnsupportedProtocolVersion != -32004 {
-		t.Errorf("ErrCodeUnsupportedProtocolVersion = %d, want -32004", ErrCodeUnsupportedProtocolVersion)
+	if ErrCodeUnsupportedProtocolVersion != -32022 {
+		t.Errorf("ErrCodeUnsupportedProtocolVersion = %d, want -32022", ErrCodeUnsupportedProtocolVersion)
 	}
 }

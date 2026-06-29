@@ -26,7 +26,7 @@ import (
 //
 //  3. tryDecodeJSONRPC — the SEP-2575 wire returns 4xx with a JSON-RPC
 //     error body for several conditions (HeaderMismatch -32020,
-//     MissingRequiredCap -32021, UnsupportedVersion -32004, Method-
+//     MissingRequiredCap -32021, UnsupportedVersion -32022, Method-
 //     NotFound -32601 on removed methods). The transport tries to
 //     decode 4xx bodies as JSON-RPC before falling back to the
 //     legacy HTTPStatusError shape.
@@ -161,7 +161,7 @@ func (c *Client) buildRequestMeta() map[string]any {
 
 // getNegotiatedVersion returns the protocol version the client emits on
 // the SEP-2575 stateless wire. Initialized to DraftProtocolVersion2026V1
-// in NewClient; mutated by setNegotiatedVersion when a server -32020/-32004
+// in NewClient; mutated by setNegotiatedVersion when a server -32020/-32022
 // response triggers a retry-with-downgrade.
 func (c *Client) getNegotiatedVersion() string {
 	c.negotiatedVersionMu.RLock()
