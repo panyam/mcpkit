@@ -1,7 +1,7 @@
 # MCPKit
 
 ## Version
-0.2.43
+0.3.0
 
 ## Provides
 - mcp-protocol-negotiation: Version negotiation supporting MCP 2026-07-28 (draft, preferred), 2025-11-25, 2025-03-26, and 2024-11-05. The `initialize` handshake negotiates the client-proposed version against `server/dispatch.go::supportedProtocolVersions` (2026-07-28 listed first); the SEP-2575 stateless wire advertises `core.SupportedStatelessVersions` (2026-07-28 only) independently.

@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/cmd/mcpskills
 go 1.26.4
 
 require (
-	github.com/panyam/mcpkit v0.2.45
+	github.com/panyam/mcpkit v0.3.0
 	github.com/panyam/mcpkit/cmd/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/skills v0.0.0-00010101000000-000000000000
 	github.com/spf13/cobra v1.10.1
@@ -12,6 +12,7 @@ require (
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
