@@ -1,7 +1,19 @@
 # MCPKit Makefile
 
-# Sub-modules that get tagged alongside the root module
-SUB_MODS_TO_TAG := ext/auth ext/otel ext/ui experimental/ext/protogen cmd/testclient cmd/common cmd/mcpskills examples/mcpskills-walkthrough tests/e2e tests/keycloak
+# Sub-modules that get tagged alongside the root module. Every importable
+# sub-module (its own go.mod, `require`s the root) needs a tag here so
+# downstream can `go get <module>@vX.Y.Z` — `replace` directives are ignored
+# by non-main modules. ext/tasks, ext/skills, stores/redis, and the
+# experimental events modules were added once they shipped their own go.mod.
+SUB_MODS_TO_TAG := \
+	ext/auth ext/otel ext/ui ext/tasks ext/skills \
+	stores/redis \
+	experimental/ext/events \
+	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
+	experimental/ext/events/clients/go \
+	cmd/testclient cmd/common cmd/mcpskills \
+	examples/mcpskills-walkthrough \
+	tests/e2e tests/keycloak
 
 # Conformance test orchestration lives in `conformance/Makefile`.
 # Per-suite MCPCONFORMANCE_*_PATH vars are documented there.
