@@ -41,15 +41,27 @@ type EnterpriseManagedTokenSource struct {
 
 	// ClientSecret authenticates the MCP client at the AS via
 	// `client_secret_basic` (RFC 6749 §2.3.1) on the jwt-bearer grant
-	// request. Required.
+	// request. Required when ClientID is set (confidential client); leave
+	// empty when using ClientMetadataURL (public CIMD client).
 	ClientSecret string
+
+	// ClientMetadataURL is a CIMD (Client ID Metadata Document) URL
+	// (draft-ietf-oauth-client-id-metadata-document). When set and ClientID
+	// is empty, this URL is used as the client_id — a public client with no
+	// secret. This is the DCR-free client-identity path from ID-JAG draft §5:
+	// a globally-resolvable client_id the IdP can embed in the ID-JAG without
+	// the client having pre-registered at the MCP AS. ClientID
+	// (pre-registration) takes priority when both are set.
+	ClientMetadataURL string
 
 	// IdpClientID is the client identity sent on the IdP token exchange.
 	// SEP-990 §6.1 notes the IdP "needs to be aware of the MCP Client's
 	// client_id that it normally uses with the MCP Server"; this field
 	// names the client at the IdP, which may differ from ClientID above.
 	// Optional — empty falls back to the unauthenticated token-exchange
-	// path (AuthMethodNone), which the conformance fixture accepts.
+	// path (AuthMethodNone), which the conformance fixture accepts. When
+	// empty and ClientMetadataURL is set, the CIMD URL is used as the
+	// IdP-side client_id too, keeping one global identity across both stages.
 	IdpClientID string
 
 	// IdpIDToken is the signed ID token issued by the IdP for the user.
@@ -114,11 +126,8 @@ func (s *EnterpriseManagedTokenSource) ensureDiscoveredLocked() error {
 	if s.authInfo != nil {
 		return nil
 	}
-	if s.ClientID == "" {
-		return fmt.Errorf("EnterpriseManagedTokenSource: ClientID is required")
-	}
-	if s.ClientSecret == "" {
-		return fmt.Errorf("EnterpriseManagedTokenSource: ClientSecret is required")
+	if _, _, err := s.resolveClientID(); err != nil {
+		return err
 	}
 	if s.IdpIDToken == "" {
 		return fmt.Errorf("EnterpriseManagedTokenSource: IdpIDToken is required")
@@ -147,9 +156,44 @@ func (s *EnterpriseManagedTokenSource) ensureDiscoveredLocked() error {
 	return nil
 }
 
+// resolveClientID resolves the MCP client's identity at the MCP authorization
+// server, in priority order:
+//  1. Pre-registered ClientID (with ClientSecret) — a confidential client.
+//  2. ClientMetadataURL — a CIMD URL used as the client_id with no secret (a
+//     public client). Enables the DCR-free path in ID-JAG draft §5.
+//
+// Returns an error if neither is set, or if the CIMD URL is malformed. Mirrors
+// OAuthTokenSource.resolveClientID (minus DCR, which the EMA flow does not use).
+func (s *EnterpriseManagedTokenSource) resolveClientID() (clientID, clientSecret string, err error) {
+	if s.ClientID != "" {
+		if s.ClientSecret == "" {
+			return "", "", fmt.Errorf("EnterpriseManagedTokenSource: ClientSecret is required when ClientID is set")
+		}
+		return s.ClientID, s.ClientSecret, nil
+	}
+	if s.ClientMetadataURL != "" {
+		if err := client.ValidateCIMDURL(s.ClientMetadataURL); err != nil {
+			return "", "", fmt.Errorf("EnterpriseManagedTokenSource: invalid ClientMetadataURL: %w", err)
+		}
+		return s.ClientMetadataURL, "", nil
+	}
+	return "", "", fmt.Errorf("EnterpriseManagedTokenSource: client identity required — set ClientID (with ClientSecret) or ClientMetadataURL")
+}
+
 func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 	asIssuer := s.authInfo.AuthorizationServers[0]
 	asTokenEndpoint := s.authInfo.ASMetadata.TokenEndpoint
+
+	clientID, clientSecret, err := s.resolveClientID()
+	if err != nil {
+		return "", err
+	}
+	// The IdP-side client_id defaults to the CIMD URL when IdpClientID is
+	// unset, so a single global client identity flows through both stages.
+	idpClientID := s.IdpClientID
+	if idpClientID == "" {
+		idpClientID = s.ClientMetadataURL
+	}
 
 	// Stage 1 — IdP RFC 8693 token exchange. ClientSecret/ClientAssertion
 	// are intentionally left empty: SEP-990 has the IdP authorize on the
@@ -160,7 +204,7 @@ func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 
 	// oneauth 0.1.9 (#217): TokenExchange now takes (ctx, *TokenExchangeRequest).
 	exch, err := idp.TokenExchange(context.Background(), &client.TokenExchangeRequest{
-		ClientID:           s.IdpClientID,
+		ClientID:           idpClientID,
 		SubjectToken:       s.IdpIDToken,
 		SubjectTokenType:   "urn:ietf:params:oauth:token-type:id_token",
 		RequestedTokenType: "urn:ietf:params:oauth:token-type:id-jag",
@@ -174,8 +218,9 @@ func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 		return "", fmt.Errorf("idp token exchange returned no access_token")
 	}
 
-	// Stage 2 — AS RFC 7523 §2.1 jwt-bearer grant. ClientSecret travels via
-	// client_secret_basic per the AS's advertised auth methods.
+	// Stage 2 — AS RFC 7523 §2.1 jwt-bearer grant. A pre-registered ClientID
+	// authenticates via client_secret_basic; a CIMD client sends client_id
+	// only (oneauth's SelectAuthMethod picks AuthMethodNone on empty secret).
 	as := client.NewAuthClient(asTokenEndpoint, nil,
 		client.WithASMetadata(&client.ASMetadata{
 			TokenEndpoint:            asTokenEndpoint,
@@ -183,8 +228,8 @@ func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 		}))
 
 	cred, err := as.JwtBearerGrant(context.Background(), &client.JwtBearerGrantRequest{
-		ClientID:     s.ClientID,
-		ClientSecret: s.ClientSecret,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		Assertion:    exch.AccessToken,
 	})
 	if err != nil {
