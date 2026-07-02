@@ -79,7 +79,7 @@ suites:
       branch: main
       path_var: MCPCONFORMANCE_STATELESS_PATH
       default_path: ../conf-upstream-main
-    note: "25 pass / 1 known upstream-test fail (array-vs-object requiredCapabilities)."
+    note: "30/30 as of upstream 0.2.0-alpha.9 (#376 fixed the former array-vs-object requiredCapabilities test)."
 
   - suite: testconf-skills
     sep: SEP-2640 Skills

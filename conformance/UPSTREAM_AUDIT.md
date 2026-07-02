@@ -1,8 +1,8 @@
 # Upstream Conformance Audit
 
-Snapshot of mcpkit graded against `modelcontextprotocol/conformance@5d7abd5` — *chore: bump version to 0.2.0-alpha.7 (#367)*.
+Snapshot of mcpkit graded against `modelcontextprotocol/conformance@794dcab` — *chore: bump version to 0.2.0-alpha.9 (#377)*.
 
-**mcpkit HEAD:** `5d7abd5`  
+**mcpkit HEAD:** `794dcab`  
 **Driver:** `cmd/testserver` (server scenarios) + `cmd/testclient` (client scenarios). SEP-2663 `tasks-*` server scenarios are graded against `examples/tasks-v2` instead, which wires `ext/tasks` in its own module (keeping the root module free of that dependency) — mirroring how `testconf-stateless` uses `examples/stateless`.
 
 Informational report — not a CI gate. Regenerate via `make testconf-upstream-audit`.
@@ -13,9 +13,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 61 | 175 | 148 | 3 | 8 | 6 | 10 | 0 |
-| Client | 40 | 1263 | 448 | 9 | 3 | 801 | 2 | 0 |
-| **Total** | **101** | **1438** | **596** | **12** | **11** | **807** | **12** | **0** |
+| Server | 61 | 175 | 149 | 11 | 8 | 6 | 1 | 0 |
+| Client | 40 | 1263 | 449 | 9 | 2 | 801 | 2 | 0 |
+| **Total** | **101** | **1438** | **598** | **20** | **10** | **807** | **3** | **0** |
 
 ## Harness gaps
 
@@ -150,7 +150,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-custom-header-server-validation` | server | pass | 5 skip |  |
+| `http-custom-header-server-validation` | server | fail | 5 fail | `Not testable: server exposes no tool with x-mcp-header annotations, so none of the custom-header val…` |
 | `http-custom-headers` | client | pass | 18 pass |  |
 
 ### [SEP-2243-SERVER-VALIDATION](https://modelcontextprotocol.io/specification/draft/basic/transports#server-validation) (1 scenarios)
@@ -208,14 +208,14 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `caching` | server | partial | 6 pass / 1 fail |  |
+| `caching` | server | pass | 7 pass |  |
 
 ### [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (3 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `server-stateless` | server | fork-covered | 23 pass / 1 fail / 2 warn / 4 skip | Also graded by `testconf-stateless` |
-| `request-metadata` | client | pass | 4 pass / 1 warn / 2 skip |  |
+| `server-stateless` | server | fork-covered | 23 pass / 5 fail / 2 warn | Also graded by `testconf-stateless` |
+| `request-metadata` | client | pass | 5 pass / 2 skip |  |
 | `tasks-required-task-error` | server | pass | 2 pass |  |
 
 ### [SEP-2663](https://modelcontextprotocol.io/seps/2663-tasks-extension) (6 scenarios)
