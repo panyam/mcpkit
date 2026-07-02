@@ -18,6 +18,15 @@
 // Higher-level affordances (provider, index generator, archives, client
 // helpers) live in sibling files in this package.
 //
+// No code execution, no disk staging. A skill is treated as data delivered
+// over MCP resource primitives, never as code to run. This package neither
+// imports os/exec nor stages skill content to a real filesystem: archive
+// unpacking returns in-memory UnpackedEntry values, and nothing writes
+// skill bytes to disk. This is the mcpkit reference posture for the SEP-2640
+// code-execution concern raised in the June 2026 core-maintainer review; it
+// is enforced by TestNoCodeExecutionSurface, so a regression fails the
+// build rather than silently widening the attack surface.
+//
 // See: https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640
 package skills
 
