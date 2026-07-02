@@ -1,5 +1,14 @@
 // Example: SEP-2350 step-up auth against Keycloak.
 //
+// Deprecated: superseded by the provider-neutral examples/auth/step-up, which
+// takes -issuer/-audience and validates the same wire shape against any AS
+// (Keycloak, Okta, Entra, ...). For Keycloak, run:
+//
+//	go run ./examples/auth/step-up -issuer http://localhost:8180/realms/mcpkit-test
+//
+// This directory stays as-is through v0.3.x for the in-flight review and is
+// slated for removal in a later release.
+//
 // Experimental. SEP-2350 (client-side scope accumulation in step-up
 // authorization) is merged into the spec, but the server-side reference
 // implementation in modelcontextprotocol/typescript-sdk PR 1624 is still under
