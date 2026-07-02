@@ -24,6 +24,7 @@ type asRequest struct {
 	grantType     string
 	assertion     string
 	authorization string
+	clientID      string
 }
 
 // enterpriseMockServers stands up two httptest.Servers — one for the IdP
@@ -103,6 +104,7 @@ func newEnterpriseMockServers(t *testing.T) *enterpriseMockServers {
 			grantType:     r.PostForm.Get("grant_type"),
 			assertion:     r.PostForm.Get("assertion"),
 			authorization: r.Header.Get("Authorization"),
+			clientID:      r.PostForm.Get("client_id"),
 		}
 		if m.asResponder != nil {
 			status, body := m.asResponder(m.lastAS)
@@ -217,6 +219,76 @@ func TestEnterpriseManagedTokenSource_IdpClientIDFlowsThrough(t *testing.T) {
 	}
 }
 
+// TestEnterpriseManagedTokenSource_CIMD_RoundTrip verifies the DCR-free path:
+// a CIMD client-id URL (no ClientID/ClientSecret) travels as client_id at both
+// the IdP exchange and the MCP AS grant, with no client secret (public client).
+func TestEnterpriseManagedTokenSource_CIMD_RoundTrip(t *testing.T) {
+	mock := newEnterpriseMockServers(t)
+	const cimd = "https://client.example.com/metadata.json"
+	ts := &EnterpriseManagedTokenSource{
+		ServerURL:         mock.mcpAndAS.URL + "/mcp",
+		ClientMetadataURL: cimd, // instead of ClientID/ClientSecret
+		IdpIDToken:        "idtoken12345abcdef",
+		IdpTokenEndpoint:  mock.idp.URL + "/token",
+		HTTPClient:        mock.mcpAndAS.Client(),
+		AllowInsecure:     true,
+	}
+	if _, err := ts.Token(); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	// Stage 2 (MCP AS): CIMD URL is the client_id; no basic auth / secret.
+	if got := mock.lastAS.clientID; got != cimd {
+		t.Errorf("as client_id = %q, want %q", got, cimd)
+	}
+	if mock.lastAS.authorization != "" {
+		t.Errorf("as Authorization = %q, want empty (public CIMD client)", mock.lastAS.authorization)
+	}
+	// Stage 1 (IdP): CIMD URL flows through as the IdP-side client_id too
+	// (IdpClientID unset), keeping one global identity across both stages.
+	if got := mock.lastIdp.clientID; got != cimd {
+		t.Errorf("idp client_id = %q, want %q", got, cimd)
+	}
+}
+
+// TestEnterpriseManagedTokenSource_CIMD_PriorityAndValidation covers the
+// pre-registered-wins-over-CIMD precedence and CIMD URL validation.
+func TestEnterpriseManagedTokenSource_CIMD_PriorityAndValidation(t *testing.T) {
+	t.Run("pre-registered ClientID wins over CIMD", func(t *testing.T) {
+		mock := newEnterpriseMockServers(t)
+		ts := &EnterpriseManagedTokenSource{
+			ServerURL:         mock.mcpAndAS.URL + "/mcp",
+			ClientID:          "mcp-client",
+			ClientSecret:      "mcp-secret",
+			ClientMetadataURL: "https://client.example.com/metadata.json",
+			IdpIDToken:        "idtoken12345abcdef",
+			IdpTokenEndpoint:  mock.idp.URL + "/token",
+			HTTPClient:        mock.mcpAndAS.Client(),
+			AllowInsecure:     true,
+		}
+		if _, err := ts.Token(); err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+		if !strings.HasPrefix(mock.lastAS.authorization, "Basic ") {
+			t.Errorf("as Authorization = %q, want Basic (ClientID takes priority over CIMD)", mock.lastAS.authorization)
+		}
+	})
+	t.Run("invalid CIMD URL", func(t *testing.T) {
+		mock := newEnterpriseMockServers(t)
+		ts := &EnterpriseManagedTokenSource{
+			ServerURL:         mock.mcpAndAS.URL + "/mcp",
+			ClientMetadataURL: "http://client.example.com/metadata.json", // not https
+			IdpIDToken:        "idtoken12345abcdef",
+			IdpTokenEndpoint:  mock.idp.URL + "/token",
+			HTTPClient:        mock.mcpAndAS.Client(),
+			AllowInsecure:     true,
+		}
+		_, err := ts.Token()
+		if err == nil || !strings.Contains(err.Error(), "ClientMetadataURL") {
+			t.Errorf("err = %v, want ClientMetadataURL validation error", err)
+		}
+	})
+}
+
 func TestEnterpriseManagedTokenSource_ValidationErrors(t *testing.T) {
 	mock := newEnterpriseMockServers(t)
 	base := EnterpriseManagedTokenSource{
@@ -233,7 +305,7 @@ func TestEnterpriseManagedTokenSource_ValidationErrors(t *testing.T) {
 		mut     func(*EnterpriseManagedTokenSource)
 		wantMsg string
 	}{
-		{"missing ClientID", func(s *EnterpriseManagedTokenSource) { s.ClientID = "" }, "ClientID is required"},
+		{"missing client identity", func(s *EnterpriseManagedTokenSource) { s.ClientID = "" }, "client identity required"},
 		{"missing ClientSecret", func(s *EnterpriseManagedTokenSource) { s.ClientSecret = "" }, "ClientSecret is required"},
 		{"missing IdpIDToken", func(s *EnterpriseManagedTokenSource) { s.IdpIDToken = "" }, "IdpIDToken is required"},
 		{"missing IdpTokenEndpoint", func(s *EnterpriseManagedTokenSource) { s.IdpTokenEndpoint = "" }, "IdpTokenEndpoint is required"},
