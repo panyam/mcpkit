@@ -125,22 +125,16 @@ testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/st
 	SKIPS=$$(grep -c '"status": "SKIPPED"' $$CHECKS); \
 	WARNS=$$(grep -c '"status": "WARNING"' $$CHECKS); \
 	echo "testconf-stateless: $$PASSES pass / $$FAILS fail / $$WARNS warn / $$SKIPS skip (artifact: $$CHECKS)"; \
-	UNEXPECTED=$$(grep -B 2 '"status": "FAILURE"' $$CHECKS | grep '"name"' | grep -v "ServerRejectsUndeclaredCapability" | wc -l | tr -d ' '); \
-	if [ "$$UNEXPECTED" -gt 0 ]; then \
+	if [ "$$FAILS" -gt 0 ]; then \
 		echo "Unexpected FAILURE rows:"; \
 		grep -B 2 '"status": "FAILURE"' $$CHECKS | head -60; \
 		exit 1; \
-	fi; \
-	if [ "$$FAILS" -gt 1 ]; then \
-		echo "More FAILURE rows than the known upstream-test bug (-32003 array-vs-object); aborting"; \
-		grep -B 2 '"status": "FAILURE"' $$CHECKS | head -60; \
-		exit 1; \
 	fi
-# Known upstream test bug: ServerRejectsUndeclaredCapability checks for
-# requiredCapabilities as a string-array but the SEP-2575 schema says
-# ClientCapabilities object. mcpkit follows the schema; the test will
-# align in a follow-up upstream PR. Until then this target tolerates
-# exactly one FAILURE row and verifies it's that specific check.
+# Suite is fully green (30/30) as of modelcontextprotocol/conformance
+# 0.2.0-alpha.9. Upstream #376 fixed the former ServerRejectsUndeclaredCapability
+# bug (it had checked requiredCapabilities as a string-array; the SEP-2575
+# schema says ClientCapabilities object, which mcpkit follows). The target now
+# requires zero FAILURE rows — if upstream regresses, we want to catch it.
 
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
 	@if [ ! -d "$(MCPCONFORMANCE_FILE_INPUTS_PATH)" ]; then \
@@ -204,7 +198,7 @@ testconf-skills: ## Run SEP-2640 skills conformance — drives examples/skills v
 	@if [ ! -d "$(MCPCONFORMANCE_SKILLS_PATH)" ]; then \
 		echo "MCPCONFORMANCE_SKILLS_PATH=$(MCPCONFORMANCE_SKILLS_PATH) does not exist."; \
 		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_SKILLS_PATH=<path-to-clone>."; \
-		echo "Default expects the main branch (PR 330) checked out at ../conf-main."; \
+		echo "Default expects the chore/sep-2640-yaml branch checked out at ../conf-skills."; \
 		exit 1; \
 	fi
 	@(cd $(REPO_ROOT)/examples/skills && go build -o skills-demo .)
