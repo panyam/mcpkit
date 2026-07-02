@@ -1,5 +1,7 @@
 # step-up-keycloak
 
+> **Deprecated.** Superseded by the provider-neutral [`../step-up`](../step-up), which takes `-issuer`/`-audience` and validates the same wire shape against any authorization server (Keycloak, Okta, Entra, ...). For Keycloak: `go run ./examples/auth/step-up -issuer http://localhost:8180/realms/mcpkit-test`. This directory stays through v0.3.x for the in-flight review and is slated for removal in a later release.
+
 **Experimental.** SEP-2350 server-side scope-challenge demo running against a Keycloak realm.
 
 An experimental Go SDK exercising the same conformance scenario the TypeScript reference implementation in [`modelcontextprotocol/typescript-sdk` PR 1624](https://github.com/modelcontextprotocol/typescript-sdk/pull/1624) is being validated against. The canonical end-to-end runbook lives in [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance/pull/19) under `examples/auth-fixtures/keycloak/README.md` on the `feat/sep-2350-server-scope-challenge` branch. This README is the mcpkit-side runbook for the same flow.
