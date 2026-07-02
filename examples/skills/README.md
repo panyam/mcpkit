@@ -4,6 +4,12 @@ End-to-end example for SEP-2640 (Skills extension): a mcpkit server that
 exposes Agent Skills under the `skill://` URI scheme, plus a demokit
 walkthrough that drives a host against it.
 
+> **Looking for the minimal shape?** This example is the **full** surface —
+> archives (`.tar.gz` / `.zip`), remote source adapters (GitHub, archive
+> directories, multi-source mounts), and fsnotify-driven invalidation. For the
+> scoped-down core the WG blessed on 2026-06-30 (a skills file + tool handling,
+> load-on-demand, no archives), start with [`examples/skills-core`](../skills-core).
+
 The walkthrough exercises the SEP's wire shape step by step:
 capability declaration, the discovery index, SHA-256 digest
 verification, and reading both single-segment and nested-prefix skills.
