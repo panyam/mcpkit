@@ -144,8 +144,8 @@
     <div class="content-body">
         
 <h1 id="upstream-conformance-audit">Upstream Conformance Audit <a class="anchor" href="#upstream-conformance-audit">¶</a></h1>
-<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@5d7abd5</code> — <em>chore: bump version to 0.2.0-alpha.7 (#367)</em>.</p>
-<p><strong>mcpkit HEAD:</strong> <code>5d7abd5</code><br />
+<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@794dcab</code> — <em>chore: bump version to 0.2.0-alpha.9 (#377)</em>.</p>
+<p><strong>mcpkit HEAD:</strong> <code>794dcab</code><br />
 <strong>Driver:</strong> <code>cmd/testserver</code> (server scenarios) + <code>cmd/testclient</code> (client scenarios). SEP-2663 <code>tasks-*</code> server scenarios are graded against <code>examples/tasks-v2</code> instead, which wires <code>ext/tasks</code> in its own module (keeping the root module free of that dependency) — mirroring how <code>testconf-stateless</code> uses <code>examples/stateless</code>.</p>
 <p>Informational report — not a CI gate. Regenerate via <code>make testconf-upstream-audit</code>.</p>
 <p>Status legend: <strong>pass</strong> = no FAILURE checks · <strong>partial</strong> = at least one SUCCESS and one FAILURE · <strong>fail</strong> = all checks FAILURE · <strong>harness-gap</strong> = no <code>checks.json</code> produced (driver missing) · <strong>fork-covered</strong> = same surface graded by an existing <code>testconf-*</code> SEP fork target.</p>
@@ -169,20 +169,20 @@
 <td>Server</td>
 <td align="right">61</td>
 <td align="right">175</td>
-<td align="right">148</td>
-<td align="right">3</td>
+<td align="right">149</td>
+<td align="right">11</td>
 <td align="right">8</td>
 <td align="right">6</td>
-<td align="right">10</td>
+<td align="right">1</td>
 <td align="right">0</td>
 </tr>
 <tr>
 <td>Client</td>
 <td align="right">40</td>
 <td align="right">1263</td>
-<td align="right">448</td>
+<td align="right">449</td>
 <td align="right">9</td>
-<td align="right">3</td>
+<td align="right">2</td>
 <td align="right">801</td>
 <td align="right">2</td>
 <td align="right">0</td>
@@ -191,11 +191,11 @@
 <td><strong>Total</strong></td>
 <td align="right"><strong>101</strong></td>
 <td align="right"><strong>1438</strong></td>
-<td align="right"><strong>596</strong></td>
-<td align="right"><strong>12</strong></td>
-<td align="right"><strong>11</strong></td>
+<td align="right"><strong>598</strong></td>
+<td align="right"><strong>20</strong></td>
+<td align="right"><strong>10</strong></td>
 <td align="right"><strong>807</strong></td>
-<td align="right"><strong>12</strong></td>
+<td align="right"><strong>3</strong></td>
 <td align="right"><strong>0</strong></td>
 </tr>
 </tbody>
@@ -848,9 +848,9 @@
 <tr>
 <td><code>http-custom-header-server-validation</code></td>
 <td>server</td>
-<td>pass</td>
-<td>5 skip</td>
-<td></td>
+<td>fail</td>
+<td>5 fail</td>
+<td><code>Not testable: server exposes no tool with x-mcp-header annotations, so none of the custom-header val…</code></td>
 </tr>
 <tr>
 <td><code>http-custom-headers</code></td>
@@ -1107,8 +1107,8 @@
 <tr>
 <td><code>caching</code></td>
 <td>server</td>
-<td>partial</td>
-<td>6 pass / 1 fail</td>
+<td>pass</td>
+<td>7 pass</td>
 <td></td>
 </tr>
 </tbody>
@@ -1129,14 +1129,14 @@
 <td><code>server-stateless</code></td>
 <td>server</td>
 <td>fork-covered</td>
-<td>23 pass / 1 fail / 2 warn / 4 skip</td>
+<td>23 pass / 5 fail / 2 warn</td>
 <td>Also graded by <code>testconf-stateless</code></td>
 </tr>
 <tr>
 <td><code>request-metadata</code></td>
 <td>client</td>
 <td>pass</td>
-<td>4 pass / 1 warn / 2 skip</td>
+<td>5 pass / 2 skip</td>
 <td></td>
 </tr>
 <tr>
