@@ -207,6 +207,7 @@ for _, e := range idx.Skills {
 			return nil
 		})
 
+	common.SetupRenderer(demo)
 	demo.Execute()
 }
 
