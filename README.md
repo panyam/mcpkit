@@ -63,7 +63,7 @@ mcpkit passes the [official MCP conformance suite](https://github.com/modelconte
 | Server (base protocol) | MCP 2025-11-25 | **30/30** scenarios |
 | Auth | MCP authorization | **14/14** scenarios |
 | MCP Apps | ext-apps | **21** tests |
-| Tasks v1 (frozen) | — | **27/27** |
+| Tasks v1 (frozen) | — | **26/27** (1 skipped — SDK-client limitation) |
 | Tasks v2 | [SEP-2663](https://github.com/modelcontextprotocol/conformance) | **47/47** (upstream) |
 | MRTR | [SEP-2322](https://github.com/modelcontextprotocol/conformance) | **3/3** negative (upstream) |
 | Stateless wire | [SEP-2575](https://github.com/modelcontextprotocol/conformance) | **30/30** (upstream) |

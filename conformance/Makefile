@@ -53,9 +53,16 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 	cd $(REPO_ROOT) && bash scripts/conformance-auth-test.sh
 
 testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
-	@(cd $(REPO_ROOT)/examples/tasks && go build -o tasks .) && \
-	$(REPO_ROOT)/examples/tasks/tasks --serve -addr :18091 & PID=$$!; \
-	sleep 1; \
+	@cd $(REPO_ROOT)/examples/tasks && go build -o tasks .
+	@$(REPO_ROOT)/examples/tasks/tasks --serve -addr :18091 & PID=$$!; \
+	for i in $$(seq 1 30); do \
+		curl -sf -o /dev/null -X POST http://localhost:18091/mcp \
+			-H "Content-Type: application/json" \
+			-H "Accept: application/json, text/event-stream" \
+			-d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"healthcheck","version":"0.0"}}}' \
+			&& break; \
+		sleep 0.5; \
+	done; \
 	(cd $(CONFORMANCE_DIR) && npm install --silent && \
 	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
 	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
