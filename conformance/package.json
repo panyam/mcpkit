@@ -10,9 +10,9 @@
     "test:list-ttl": "npx tsx --test list-ttl/scenarios.test.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "latest",
-    "@modelcontextprotocol/node": "latest",
-    "@modelcontextprotocol/server": "latest",
+    "@modelcontextprotocol/client": "2.0.0-beta.2",
+    "@modelcontextprotocol/node": "2.0.0-beta.2",
+    "@modelcontextprotocol/server": "2.0.0-beta.2",
     "@cfworker/json-schema": "^4.1.1",
     "tsx": "^4.0.0",
     "vitest": "^2.0.0"
