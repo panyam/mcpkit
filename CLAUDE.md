@@ -11,7 +11,7 @@ make test-ui           # ext/ui sub-module
 make test-e2e          # E2E tests (auth + apps)
 make testconf          # MCP conformance suite (needs Node.js)
 make testconfauth      # Auth conformance (client OAuth)
-make testconf-tasks    # Tasks v1 conformance (27 scenarios, local)
+make testconf-tasks    # Tasks v1 conformance (27 scenarios, local; 26 pass + 1 skip — v1 sampling push vs 2.0 SDK client)
 make testconf-tasks-v2 # SEP-2663 — upstream @ MCPCONFORMANCE_TASKS_V2_PATH + mcpkit-local stricter sentinel
 make testconf-mrtr     # SEP-2322 — upstream @ MCPCONFORMANCE_MRTR_PATH + mcpkit-local stricter sentinel
 make testconf-list-ttl # SEP-2549 — fork @ MCPCONFORMANCE_LIST_TTL_PATH (5 checks, 3 fixtures)
@@ -120,7 +120,7 @@ Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server 30/30, Auth 14/14, Apps 21, Tasks v1 27/27, Tasks v2 47/47 (SEP-2663, upstream), MRTR 3/3 negative (SEP-2322, upstream), List-TTL 5/5 (SEP-2549), File-Inputs 7/7 (SEP-2356), Stateless 30/30 (SEP-2575; upstream `modelcontextprotocol/conformance#376` fixed the former array-vs-object `requiredCapabilities` test that mcpkit had always been correct on), Keycloak 12/12, testall 9/9 logical stages. Tasks v2, MRTR, and SEP-2575 stateless all run against [`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance) `main` directly (merged upstream; no fork needed). See CAPABILITIES.md `mcp-tasks-v2-conformance` and `mcp-stateless-wire`.
+Server 30/30, Auth 14/14, Apps 21, Tasks v1 26/27 (1 skip — v1 task-sampling push not dispatched by the 2.0 SDK client; sampling is SEP-2577 deprecated), Tasks v2 47/47 (SEP-2663, upstream), MRTR 3/3 negative (SEP-2322, upstream), List-TTL 5/5 (SEP-2549), File-Inputs 7/7 (SEP-2356), Stateless 30/30 (SEP-2575; upstream `modelcontextprotocol/conformance#376` fixed the former array-vs-object `requiredCapabilities` test that mcpkit had always been correct on), Keycloak 12/12, testall 9/9 logical stages. Tasks v2, MRTR, and SEP-2575 stateless all run against [`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance) `main` directly (merged upstream; no fork needed). See CAPABILITIES.md `mcp-tasks-v2-conformance` and `mcp-stateless-wire`.
 
 ## Tasks v1 vs v2
 
