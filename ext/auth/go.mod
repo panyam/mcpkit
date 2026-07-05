@@ -6,7 +6,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/panyam/gocurrent v0.1.1
 	github.com/panyam/mcpkit v0.3.0
-	github.com/panyam/oneauth v0.1.31
+	github.com/panyam/oneauth v0.1.35
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/otel/sdk v1.39.0
 	go.opentelemetry.io/otel/trace v1.39.0
