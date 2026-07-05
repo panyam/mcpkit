@@ -20,6 +20,7 @@ serve-scopes:           ; go run ./scopes
 serve-session-binding:  ; go run ./session-binding
 serve-public-discovery: ; go run ./public-discovery
 serve-unified:          ; go run ./unified
+serve-enterprise-managed: ; go run ./enterprise-managed  ## EMA / SEP-990 ID-JAG chain (in-process oneauth IdP + AS)
 
-.PHONY: demo note serve readme build serve-bearer serve-jwt serve-scopes serve-session-binding serve-public-discovery serve-unified
+.PHONY: demo note serve readme build serve-bearer serve-jwt serve-scopes serve-session-binding serve-public-discovery serve-unified serve-enterprise-managed
 .DEFAULT_GOAL := demo
