@@ -34,10 +34,10 @@ type fakeSpan struct {
 	ended  bool
 }
 
-func (s *fakeSpan) End()                            { s.ended = true }
-func (s *fakeSpan) SetAttribute(k, v string)        { s.attrs[k] = v }
-func (s *fakeSpan) RecordError(err error)           { s.errors = append(s.errors, err) }
-func (s *fakeSpan) AddLink(mcpcore.Link)            {}
+func (s *fakeSpan) End()                     { s.ended = true }
+func (s *fakeSpan) SetAttribute(k, v string) { s.attrs[k] = v }
+func (s *fakeSpan) RecordError(err error)    { s.errors = append(s.errors, err) }
+func (s *fakeSpan) AddLink(mcpcore.Link)     {}
 
 type fakeTracerProvider struct {
 	mu    sync.Mutex
@@ -233,6 +233,17 @@ func TestJWTValidator_Trace_FullValidate_NoActiveSpan_StillEmitsJWKSChild(t *tes
 // per-test fixture self-contained — examples/auth/common can't be
 // imported (it depends on ext/auth — would be a cycle).
 func setupTestJWKS(t *testing.T, subject string, scopes []string) (jwksURL, issuer, token string, cleanup func()) {
+	return setupTestJWKSClaims(t, func(c jwt.MapClaims) {
+		c["sub"] = subject
+		c["scopes"] = scopes
+	})
+}
+
+// setupTestJWKSClaims is setupTestJWKS with full control over the token's
+// claim set (mutate receives the base claims — iss/aud/exp/iat prefilled — and
+// adds sub/scope-shape/etc). Lets tests mint tokens in each IdP's scope claim
+// format (scopes/scp array, scope/scp string) against a real JWKS.
+func setupTestJWKSClaims(t *testing.T, mutate func(jwt.MapClaims)) (jwksURL, issuer, token string, cleanup func()) {
 	t.Helper()
 
 	privPEM, pubPEM, err := utils.GenerateRSAKeyPair(2048)
@@ -272,13 +283,12 @@ func setupTestJWKS(t *testing.T, subject string, scopes []string) (jwksURL, issu
 	issuer = "https://test.example.com"
 
 	claims := jwt.MapClaims{
-		"iss":    issuer,
-		"aud":    "https://mcp.test",
-		"sub":    subject,
-		"exp":    time.Now().Add(time.Hour).Unix(),
-		"iat":    time.Now().Unix(),
-		"scopes": scopes,
+		"iss": issuer,
+		"aud": "https://mcp.test",
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iat": time.Now().Unix(),
 	}
+	mutate(claims)
 	jwtTok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	jwtTok.Header["kid"] = kid
 	token, err = jwtTok.SignedString(privKey)

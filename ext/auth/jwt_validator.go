@@ -253,18 +253,20 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		return v.unauthorized("missing subject")
 	}
 
-	// Extract scopes — handle both formats:
+	// Extract scopes — handle the formats different IdPs emit:
 	//   "scopes": ["read", "write"]  (oneauth array format)
-	//   "scope": "read write"        (Keycloak/RFC 6749 space-delimited string)
+	//   "scp":    ["read", "write"]  (Okta / Azure AD / Entra array format)
+	//   "scope":  "read write"        (Keycloak / RFC 6749 space-delimited string)
+	//   "scp":    "read write"        (some IdPs emit scp as a space-delimited string)
 	var scopes []string
-	if scopesRaw, ok := mapClaims["scopes"].([]any); ok {
-		for _, s := range scopesRaw {
-			if str, ok := s.(string); ok {
-				scopes = append(scopes, str)
-			}
-		}
-	} else if scopeStr, ok := mapClaims["scope"].(string); ok && scopeStr != "" {
-		scopes = strings.Fields(scopeStr)
+	if arr := stringArrayClaim(mapClaims["scopes"]); arr != nil {
+		scopes = arr
+	} else if arr := stringArrayClaim(mapClaims["scp"]); arr != nil {
+		scopes = arr
+	} else if s := scopeStr(mapClaims["scope"]); s != "" {
+		scopes = strings.Fields(s)
+	} else if s := scopeStr(mapClaims["scp"]); s != "" {
+		scopes = strings.Fields(s)
 	}
 
 	// Check required scopes
@@ -280,6 +282,7 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	standardClaims := map[string]bool{
 		"sub": true, "iss": true, "aud": true, "exp": true,
 		"iat": true, "nbf": true, "jti": true, "type": true, "scopes": true,
+		"scope": true, "scp": true,
 	}
 	customClaims := make(map[string]any)
 	for k, v := range mapClaims {
@@ -437,6 +440,30 @@ func (v *JWTValidator) unauthorized(msg string) *mcpcore.AuthError {
 		Message:         msg,
 		WWWAuthenticate: WWWAuth401(v.ResourceMetadataURL, v.AllScopes...),
 	}
+}
+
+// stringArrayClaim returns the claim as a []string when it is a JSON array of
+// strings (the "scopes" / "scp" array shape oneauth, Okta, and Azure/Entra
+// emit), or nil when the claim is absent or not a string array.
+func stringArrayClaim(raw any) []string {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, s := range arr {
+		if str, ok := s.(string); ok {
+			out = append(out, str)
+		}
+	}
+	return out
+}
+
+// scopeStr returns the claim as a string when it is one (the space-delimited
+// "scope" / "scp" shape Keycloak and RFC 6749 issuers emit), else "".
+func scopeStr(raw any) string {
+	s, _ := raw.(string)
+	return s
 }
 
 // Start begins background JWKS key refresh. Call this once at startup.
