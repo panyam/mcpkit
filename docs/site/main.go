@@ -12,11 +12,14 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
+	"fmt"
 	"html/template"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	s3 "github.com/panyam/s3gen"
@@ -101,6 +104,52 @@ func renderMarkdownFile(relPath string) template.HTML {
 	return template.HTML(buf.String())
 }
 
+// repoBlobBase is the GitHub blob URL prefix (…/blob/main/), read from
+// content/SiteMetadata.json so the repo lives in one place. gitfile builds
+// source links against it.
+var repoBlobBase = func() string {
+	base := "https://github.com/panyam/mcpkit"
+	if data, err := os.ReadFile(filepath.Join("content", "SiteMetadata.json")); err == nil {
+		var m map[string]any
+		if json.Unmarshal(data, &m) == nil {
+			if r, ok := m["repository"].(string); ok && r != "" {
+				base = r
+			}
+		}
+	}
+	return strings.TrimRight(base, "/") + "/blob/main/"
+}()
+
+// gitLineSuffix matches a trailing ":<line>" or "#L<line>" reference on a path
+// (e.g. server/server.go:541). GitHub uses the #L<line> anchor form.
+var gitLineSuffix = regexp.MustCompile(`^(.*?)(?::|#L)(\d+)$`)
+
+// gitfile renders a repository-relative path as a link to its source on GitHub,
+// shown as inline <code>. It exists so any filename mentioned in a wrapper (or
+// prose we control) becomes a clickable source link instead of dead text.
+//
+//	{{ gitfile "server/server.go" }}       → <a …/blob/main/server/server.go><code>server/server.go</code></a>
+//	{{ gitfile "core/tool.go:445" }}        → links to …/core/tool.go#L445, shown as core/tool.go:445
+//
+// The path is NOT validated against the working tree (docs/site builds from a
+// checkout that may not contain every referenced module), so a typo yields a
+// 404 link, not a build failure.
+func gitfile(relPath string) template.HTML {
+	clean := strings.TrimSpace(relPath)
+	if clean == "" {
+		return ""
+	}
+	display := clean
+	target := clean
+	if m := gitLineSuffix.FindStringSubmatch(clean); m != nil {
+		target = m[1] + "#L" + m[2]
+		display = m[1] + ":" + m[2]
+	}
+	href := repoBlobBase + target
+	return template.HTML(fmt.Sprintf(`<a href="%s"><code>%s</code></a>`,
+		template.HTMLEscapeString(href), template.HTMLEscapeString(display)))
+}
+
 var markdown = goldmark.New(
 	goldmark.WithExtensions(
 		extension.GFM,
@@ -136,6 +185,7 @@ var Site = &s3.Site{
 	CommonFuncMap: map[string]any{
 		"includeFile":        includeFile,
 		"renderMarkdownFile": renderMarkdownFile,
+		"gitfile":            gitfile,
 	},
 }
 
