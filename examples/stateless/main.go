@@ -153,14 +153,13 @@ func newCartStore() server.HandleStore[Cart] {
 }
 
 func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
-	srv.RegisterTool(
-		core.ToolDef{
-			Name: "create_cart",
-			Description: "Create an empty shopping cart and return its handle id. " +
-				"SEP-2567: subsequent tools thread cart_id as a parameter.",
-			InputSchema: map[string]any{"type": "object"},
-		},
-		func(_ core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
+	// create_cart takes no input. The schema override keeps the exact
+	// {"type":"object"} the SEP-2575 conformance fixture asserts (TypedTool's
+	// reflected schema would add $schema + properties:{}).
+	srv.Register(core.TypedTool[struct{}, core.ToolResult]("create_cart",
+		"Create an empty shopping cart and return its handle id. "+
+			"SEP-2567: subsequent tools thread cart_id as a parameter.",
+		func(_ core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			id := carts.Mint(Cart{}, 0)
 			out := map[string]any{"cart_id": id}
 			raw, _ := json.Marshal(out)
@@ -169,31 +168,19 @@ func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
 				StructuredContent: out,
 			}, nil
 		},
-	)
+		core.WithInputSchemaOverride(map[string]any{"type": "object"}),
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "add_item",
-			Description: "Add an item to a cart. Updates the cart's running total in place.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"cart_id":  map[string]any{"type": "string"},
-					"sku":      map[string]any{"type": "string"},
-					"quantity": map[string]any{"type": "integer", "minimum": 1},
-				},
-				"required": []string{"cart_id", "sku", "quantity"},
-			},
-		},
-		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				CartID   string `json:"cart_id"`
-				SKU      string `json:"sku"`
-				Quantity int    `json:"quantity"`
-			}
-			if err := json.Unmarshal(req.Arguments, &args); err != nil {
-				return core.ToolResult{}, fmt.Errorf("invalid arguments: %w", err)
-			}
+	type addItemInput struct {
+		CartID   string `json:"cart_id"`
+		SKU      string `json:"sku"`
+		Quantity int    `json:"quantity"`
+	}
+	// Schema pinned via override so the fixture's asserted wire shape
+	// (including quantity's minimum) is preserved byte-for-byte.
+	srv.Register(core.TypedTool[addItemInput, core.ToolResult]("add_item",
+		"Add an item to a cart. Updates the cart's running total in place.",
+		func(_ core.ToolContext, args addItemInput) (core.ToolResult, error) {
 			cart, ok := carts.Get(args.CartID)
 			if !ok {
 				return core.ToolResult{}, fmt.Errorf("unknown cart_id: %s", args.CartID)
@@ -223,25 +210,23 @@ func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
 				StructuredContent: out,
 			}, nil
 		},
-	)
-
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "checkout",
-			Description: "Check out a cart and return an order id. Deletes the cart handle.",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{"cart_id": map[string]any{"type": "string"}},
-				"required":   []string{"cart_id"},
+		core.WithInputSchemaOverride(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"cart_id":  map[string]any{"type": "string"},
+				"sku":      map[string]any{"type": "string"},
+				"quantity": map[string]any{"type": "integer", "minimum": 1},
 			},
-		},
-		func(_ core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				CartID string `json:"cart_id"`
-			}
-			if err := json.Unmarshal(req.Arguments, &args); err != nil {
-				return core.ToolResult{}, fmt.Errorf("invalid arguments: %w", err)
-			}
+			"required": []string{"cart_id", "sku", "quantity"},
+		}),
+	))
+
+	type checkoutInput struct {
+		CartID string `json:"cart_id"`
+	}
+	srv.Register(core.TypedTool[checkoutInput, core.ToolResult]("checkout",
+		"Check out a cart and return an order id. Deletes the cart handle.",
+		func(_ core.ToolContext, args checkoutInput) (core.ToolResult, error) {
 			cart, ok := carts.Get(args.CartID)
 			if !ok {
 				return core.ToolResult{}, fmt.Errorf("unknown cart_id: %s", args.CartID)
@@ -259,7 +244,12 @@ func registerCartTools(srv *server.Server, carts server.HandleStore[Cart]) {
 				StructuredContent: out,
 			}, nil
 		},
-	)
+		core.WithInputSchemaOverride(map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"cart_id": map[string]any{"type": "string"}},
+			"required":   []string{"cart_id"},
+		}),
+	))
 }
 
 // ----- SEP-2575 diagnostic tools (conformance fixture) -----
