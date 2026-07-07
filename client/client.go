@@ -558,7 +558,7 @@ func (c *Client) Connect() error {
 	}
 	if timeout > 0 {
 		done := make(chan error, 1)
-		go func() { done <- c.doConnect() }()
+		safeGo("client.connect", func() { done <- c.doConnect() })
 		select {
 		case err := <-done:
 			return err
@@ -656,18 +656,17 @@ func (c *Client) doConnect() error {
 	//   ClientModeLegacyOnly→ original behavior, drop through.
 	if c.mode == ClientModeStateless {
 		c.useStatelessWire = true
-		// Populate ServerInfo via discover so callers don't see a
-		// zero ServerInfo struct post-Connect. Failure here is fatal
-		// for stateless mode — the client explicitly opted in.
-		dr, fallback, err := c.adaptiveProbe()
-		if err != nil {
-			return fmt.Errorf("stateless mode: server/discover failed: %w", err)
+		// server/discover is an optional optimization to pre-populate
+		// ServerInfo, not a precondition for connecting. The SEP-2575 draft
+		// permits a stateless client to begin with any request, so a
+		// discover-less server is still reachable. Probe best-effort: if
+		// discover works, capture ServerInfo + extensions; on RPC error or
+		// method-not-found, proceed with an unpopulated ServerInfo and let the
+		// first real request succeed. (issue 829)
+		if dr, fallback, err := c.adaptiveProbe(); err == nil && !fallback {
+			c.ServerInfo = dr.ServerInfo
+			c.captureServerExtensions(dr.Capabilities)
 		}
-		if fallback {
-			return fmt.Errorf("stateless mode: server does not implement server/discover")
-		}
-		c.ServerInfo = dr.ServerInfo
-		c.captureServerExtensions(dr.Capabilities)
 		c.startKeepalive()
 		return nil
 	}
@@ -774,7 +773,7 @@ func (c *Client) startKeepalive() {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.keepaliveCancel = cancel
 
-	go func() {
+	safeGo("client.keepalive", func() {
 		ticker := time.NewTicker(c.keepaliveInterval)
 		defer ticker.Stop()
 
@@ -803,7 +802,7 @@ func (c *Client) startKeepalive() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // Close terminates the client session and transport.
@@ -1766,7 +1765,7 @@ func (t *streamableClientTransport) openGetSSEStream() {
 	t.getSSECancel = cancel
 	t.getSSEResp = resp
 	t.getSSEDone = make(chan struct{})
-	go t.backgroundGetReader(resp.Body)
+	safeGo("client.getReader", func() { t.backgroundGetReader(resp.Body) })
 }
 
 // backgroundGetReader reads SSE events from a GET SSE stream and dispatches
@@ -2271,7 +2270,7 @@ func (t *sseClientTransport) connect() error {
 
 	// Start background reader to demux SSE events.
 	t.done = make(chan struct{})
-	go t.backgroundReader()
+	safeGo("client.backgroundReader", t.backgroundReader)
 
 	return nil
 }

@@ -159,10 +159,10 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 
 	for {
 		// Start a read in a goroutine so we can select on ctx.Done().
-		go func() {
+		safeGo("stdio.readFrame", func() {
 			data, err := gohttp.ReadFrame(reader)
 			readCh <- readResult{data, err}
-		}()
+		})
 
 		select {
 		case <-ctx.Done():

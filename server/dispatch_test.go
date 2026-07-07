@@ -24,6 +24,12 @@ func initDispatcher(d *Dispatcher) {
 		JSONRPC: "2.0",
 		Method:  "notifications/initialized",
 	})
+	// issue 421: the production default rejects a duplicate initialize once a
+	// session has negotiated. Several tests reuse a helper-initialized
+	// dispatcher and then dispatch initialize again to observe the response.
+	// Opt those into re-initialization here so the strict default is exercised
+	// only by the dedicated Test_Issue421_* cases (which build a raw dispatcher).
+	d.allowReinitialize = true
 }
 
 func testDispatcher() *Dispatcher {
@@ -447,8 +453,13 @@ func TestDispatchInitializeVersion2025(t *testing.T) {
 // TestDispatchInitializeUnsupportedVersion verifies that the server rejects an unknown
 // protocol version with a JSON-RPC error code -32602 (invalid params) and includes
 // the list of supported versions in the error data, per the MCP spec.
+// TestDispatchInitializeUnsupportedVersion verifies the MCP version-negotiation
+// handshake (spec 2025-03-26): when the client requests a version the server
+// does not support, the server does NOT error — it responds with its preferred
+// (latest) supported version and lets the client decide whether to proceed on
+// that version or disconnect. (Gap 1 — was: reject with -32602.)
 func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
-	d := testDispatcher()
+	d := NewDispatcher(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
@@ -459,26 +470,40 @@ func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
 	if resp == nil {
 		t.Fatal("response is nil")
 	}
-	if resp.Error == nil {
-		t.Fatal("expected error for unsupported version, got success")
+	if resp.Error != nil {
+		t.Fatalf("expected fallback success, got error: %+v", resp.Error)
+	}
+	var result map[string]any
+	if err := resp.ResultAs(&result); err != nil {
+		t.Fatal(err)
+	}
+	// The server must reply with the version it chose — its preferred (latest).
+	want := supportedProtocolVersions[0]
+	if result["protocolVersion"] != want {
+		t.Errorf("protocolVersion = %v, want preferred fallback %q", result["protocolVersion"], want)
+	}
+	if d.negotiatedVersion != want {
+		t.Errorf("negotiatedVersion = %q, want %q", d.negotiatedVersion, want)
+	}
+}
+
+// TestDispatchInitializeMissingProtocolVersion verifies that an initialize with
+// an empty protocolVersion (the field is REQUIRED) is still rejected — the
+// fallback in Gap 1 applies to present-but-unsupported values, not to a
+// malformed/absent field.
+func TestDispatchInitializeMissingProtocolVersion(t *testing.T) {
+	d := NewDispatcher(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  json.RawMessage(`{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+	})
+	if resp == nil || resp.Error == nil {
+		t.Fatalf("expected error for missing protocolVersion, got %+v", resp)
 	}
 	if resp.Error.Code != core.ErrCodeInvalidParams {
 		t.Errorf("error code = %d, want %d", resp.Error.Code, core.ErrCodeInvalidParams)
-	}
-	// core.Error data must contain a "supported" array listing valid versions.
-	// Round-trip through JSON to normalize types (the in-memory struct uses
-	// concrete Go types, but a real client would see JSON).
-	raw, err := json.Marshal(resp.Error.Data)
-	if err != nil {
-		t.Fatalf("failed to marshal error data: %v", err)
-	}
-	var data map[string][]string
-	if err := json.Unmarshal(raw, &data); err != nil {
-		t.Fatalf("failed to unmarshal error data: %v", err)
-	}
-	versions := data["supported"]
-	if len(versions) < 2 {
-		t.Errorf("expected at least 2 supported versions, got %d", len(versions))
 	}
 }
 

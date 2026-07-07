@@ -110,7 +110,7 @@ func (q *Quota) Reserve(principal, eventName string) error {
 	}
 	resp, _ := q.store.ReserveQuota(context.Background(), ReserveQuotaRequest{
 		Principal: principal,
-		EventName: eventName,
+		Key:       eventName, // events buckets the generic quota Key by event-type name
 		Max:       cap,
 	})
 	if !resp.Granted {
@@ -146,7 +146,7 @@ func (q *Quota) Release(principal, eventName string) {
 	}
 	_, _ = q.store.ReleaseQuota(context.Background(), ReleaseQuotaRequest{
 		Principal: principal,
-		EventName: eventName,
+		Key:       eventName,
 	})
 }
 

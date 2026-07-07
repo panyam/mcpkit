@@ -122,6 +122,41 @@ func TestValidateRoutingHeaders_MismatchedResourcesReadURI(t *testing.T) {
 	}
 }
 
+// SEP-2243 lists prompts/get among the name-carrying methods
+// (params.name). mcpkit's own client stamps Mcp-Name for prompts/get via
+// core.DeriveMcpName, so the server must validate it symmetrically with
+// tools/call — matched passes, mismatched and missing are rejected.
+func TestValidateRoutingHeaders_PromptsGetCarriesName(t *testing.T) {
+	t.Run("matched", func(t *testing.T) {
+		req := makeReq(t, "prompts/get", map[string]any{"name": "greeting", "arguments": map[string]any{}})
+		h := http.Header{}
+		h.Set("Mcp-Method", "prompts/get")
+		h.Set("Mcp-Name", "greeting")
+		if resp := validateRoutingHeaders(req, h); resp != nil {
+			t.Fatalf("matched Mcp-Name on prompts/get should pass, got %+v", resp)
+		}
+	})
+	t.Run("mismatched", func(t *testing.T) {
+		req := makeReq(t, "prompts/get", map[string]any{"name": "greeting"})
+		h := http.Header{}
+		h.Set("Mcp-Method", "prompts/get")
+		h.Set("Mcp-Name", "wrong_prompt")
+		resp := validateRoutingHeaders(req, h)
+		if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+			t.Fatalf("expected -32020 HeaderMismatch for prompts/get name mismatch, got %+v", resp)
+		}
+	})
+	t.Run("missing", func(t *testing.T) {
+		req := makeReq(t, "prompts/get", map[string]any{"name": "greeting"})
+		h := http.Header{}
+		h.Set("Mcp-Method", "prompts/get")
+		resp := validateRoutingHeaders(req, h)
+		if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+			t.Fatalf("expected -32020 HeaderMismatch for missing Mcp-Name on prompts/get, got %+v", resp)
+		}
+	})
+}
+
 // SEP-2663 elevates Mcp-Name: <taskId> to a required client header on
 // tasks/get, tasks/update, and tasks/cancel. The SEP-2243 universal
 // MUST therefore applies — server rejects mismatched or missing

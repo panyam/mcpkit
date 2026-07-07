@@ -517,7 +517,7 @@ func (q *Quota) countForTest(principal, eventName string) int {
 	defer q.mu.Unlock()
 	resp, _ := q.store.CountQuota(context.Background(), CountQuotaRequest{
 		Principal: principal,
-		EventName: eventName,
+		Key: eventName,
 	})
 	return resp.Count
 }

@@ -1168,7 +1168,7 @@ func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []by
 		return false
 	}
 	tc := traceContextForDelivery(ctx, event)
-	go r.deliver(target, event.EventID, event.Name, body, tc)
+	safeGo("events.webhook.deliver", func() { r.deliver(target, event.EventID, event.Name, body, tc) })
 	return true
 }
 
@@ -1278,7 +1278,7 @@ func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
 		// outside the loop so each target's delivery span lifetime
 		// is independent). See SEP-414 P6 (issue 683).
 		tc := traceContextForDelivery(ctx, delivered)
-		go r.deliver(t, delivered.EventID, delivered.Name, body, tc)
+		safeGo("events.webhook.deliver", func() { r.deliver(t, delivered.EventID, delivered.Name, body, tc) })
 	}
 }
 
