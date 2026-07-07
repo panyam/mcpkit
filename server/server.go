@@ -78,6 +78,7 @@ type serverOptions struct {
 	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
 	allowReinitialize    bool                     // WithAllowReinitialize — opt-in acceptance of a duplicate initialize (off by default; issue 421)
+	taskBucketKeyer      core.TaskBucketKeyer     // WithTaskBucketKeyer — per-request task-store isolation bucket (nil = session ID; issue 485)
 	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
 	notificationRelay       NotificationRelay           // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
@@ -544,6 +545,30 @@ func WithAllowReinitialize() Option {
 	return func(o *serverOptions) { o.allowReinitialize = true }
 }
 
+// WithTaskBucketKeyer sets how the task store isolates tasks per request
+// (issue 485). The keyer maps a request context to the bucket key used as the
+// store's sessionID argument for Create / Get / Update / Cancel / List.
+//
+// Default (option NOT set): the bucket is the transport session ID. On the
+// legacy wire that is the per-connection session; on the SEP-2575 stateless
+// wire it is "" (no session), so all stateless tasks share one bucket per
+// process — fine for single-tenant deployments, a cross-tenant isolation hole
+// for multi-tenant ones.
+//
+// Multi-tenant stateless deployments install a keyer that derives the bucket
+// from an authenticated subject so tenants cannot see each other's tasks, e.g.:
+//
+//	server.WithTaskBucketKeyer(func(ctx context.Context) string {
+//	    return auth.SubjectFromContext(ctx) // your auth accessor
+//	})
+//
+// The keyer takes a raw context.Context, so mcpkit never imports ext/auth — the
+// coupling to auth is code the deployer writes. Applies to both the v1
+// (RegisterTasksV1) and v2 (ext/tasks) surfaces and both wires.
+func WithTaskBucketKeyer(keyer core.TaskBucketKeyer) Option {
+	return func(o *serverOptions) { o.taskBucketKeyer = keyer }
+}
+
 // WithRootsFetchTimeout sets the deadline for server-to-client roots/list
 // requests issued after notifications/roots/list_changed. Default is 30s.
 // Decrease for aggressive fail-fast; increase for slow clients with large
@@ -573,6 +598,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s.dispatcher.validateFileInputs = s.options.validateFileInputs
 	s.dispatcher.allowLegacyOnDraft = s.options.allowLegacyOnDraft
 	s.dispatcher.allowReinitialize = s.options.allowReinitialize
+	s.dispatcher.taskBucketKeyer = s.options.taskBucketKeyer
 	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.
@@ -818,6 +844,11 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 
 	// Set the session ID so middleware and handlers can access it via ctx.SessionID().
 	core.SetSessionID(ctx, d.sessionID)
+
+	// Install the task-store bucket keyer (issue 485) so the v1/v2 task
+	// surfaces resolve isolation via core.TaskBucketKey. Nil = no-op (default
+	// session-ID keying).
+	ctx = core.WithTaskBucketKeyer(ctx, d.taskBucketKeyer)
 
 	// SEP-2243: stage the Mcp-Method response header carrying the JSON-RPC
 	// method name (e.g. "tools/call", "tasks/get"). Pairs with Mcp-Name
