@@ -91,7 +91,7 @@ func WithStdioTransport(r io.Reader, w io.Writer) ClientOption {
 func (t *StdioTransport) Connect(ctx context.Context) error {
 	t.reader = bufio.NewReader(t.r)
 	t.done = make(chan struct{})
-	go t.readLoop()
+	safeGo("client.stdio.readLoop", t.readLoop)
 	return nil
 }
 

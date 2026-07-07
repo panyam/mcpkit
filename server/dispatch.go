@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -144,6 +146,15 @@ type Dispatcher struct {
 	// rejected with -32602. Set via WithAllowLegacyOnDraft() for servers
 	// that prefer leniency over strict spec conformance.
 	allowLegacyOnDraft bool
+
+	// allowReinitialize opts into accepting a second initialize on an
+	// already-negotiated session (protocol re-negotiation). Default false:
+	// once a session has negotiated a version, a duplicate initialize is
+	// rejected with -32600 and the existing session state is preserved, so a
+	// misbehaving or hostile client cannot rewrite the negotiated version or
+	// advertised client identity mid-flight (issue 421). Set via
+	// WithAllowReinitialize().
+	allowReinitialize bool
 }
 
 // applyReadCacheControl fills the SEP-2549 ttlMs / cacheScope hints on a
@@ -282,6 +293,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		readTTLMs:            d.readTTLMs,
 		readCacheScope:       d.readCacheScope,
 		allowLegacyOnDraft:   d.allowLegacyOnDraft,
+		allowReinitialize:    d.allowReinitialize,
 	}
 }
 
@@ -328,11 +340,28 @@ func (d *Dispatcher) RegisterCompletion(refType, name string, handler core.Compl
 
 // Dispatch routes a JSON-RPC request and returns the response.
 // Returns nil for notifications (no response expected).
-func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Response {
+func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *core.Response) {
 	id := req.ID
 	if id == nil {
 		id = json.RawMessage("null")
 	}
+
+	// A user-provided handler (or a framework bug) that panics must not crash
+	// the host process. Recover here, at the single synchronous dispatch entry
+	// point, so every tool/resource/prompt/completion/custom handler is covered.
+	// A request (has an ID) gets a -32603 internal error; a notification gets
+	// nil. Panic detail + stack go to the log, never to the wire (issue 420).
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("mcpkit: recovered panic in handler dispatch",
+				"method", req.Method, "panic", r, "stack", string(debug.Stack()))
+			if req.ID != nil {
+				resp = core.NewErrorResponse(id, core.ErrCodeInternal, "internal error")
+			} else {
+				resp = nil
+			}
+		}
+	}()
 
 	switch req.Method {
 	case "initialize":
@@ -367,7 +396,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 		// must carry _meta or the server MUST reject with -32602 InvalidParams.
 		// allowLegacyOnDraft (WithAllowLegacyOnDraft) is an opt-in escape
 		// hatch for server authors who want to be forgiving — off by default.
-		if d.negotiatedVersion == core.DraftProtocolVersion2026V1 && !d.allowLegacyOnDraft {
+		// The version gate is resolved via protocol_features.go so all
+		// version-gated behavior lives in one table.
+		if d.protocolFeatures().StatelessMetaRequired && !d.allowLegacyOnDraft {
 			if _, err := core.DecodeRequestMeta(req.Params); err != nil {
 				field := "io.modelcontextprotocol/protocolVersion"
 				if mve, ok := err.(*core.MetaValidationError); ok && mve.Field != "_meta" {
@@ -423,23 +454,31 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Resp
 }
 
 func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage) *core.Response {
+	// Reject a duplicate initialize once the session has negotiated a version
+	// (issue 421). Overwriting negotiatedVersion / clientCaps / clientInfo
+	// would let a client downgrade the protocol or change its advertised
+	// identity mid-session. The existing state is left untouched. Opt into
+	// re-negotiation with WithAllowReinitialize().
+	if d.negotiatedVersion != "" && !d.allowReinitialize {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidRequest,
+			"session already initialized: duplicate initialize is not allowed")
+	}
+
 	var p initializeParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "invalid initialize params: "+err.Error())
 	}
 
-	negotiated := ""
-	for _, sv := range supportedProtocolVersions {
-		if sv == p.ProtocolVersion {
-			negotiated = sv
-			break
-		}
-	}
-	if negotiated == "" {
+	// A completely absent protocolVersion is a malformed initialize (the field
+	// is REQUIRED); reject it. A present-but-unsupported version, by contrast,
+	// is a normal negotiation outcome handled by negotiateProtocolVersion.
+	if p.ProtocolVersion == "" {
 		return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
-			"unsupported protocol version: "+p.ProtocolVersion,
+			"missing required protocolVersion in initialize params",
 			map[string]any{"supported": supportedProtocolVersions})
 	}
+
+	negotiated := negotiateProtocolVersion(p.ProtocolVersion)
 
 	d.negotiatedVersion = negotiated
 	d.clientCaps = p.Capabilities

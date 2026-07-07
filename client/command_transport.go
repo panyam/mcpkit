@@ -147,10 +147,10 @@ func (ct *CommandTransport) Connect(ctx context.Context) error {
 	ct.done = make(chan struct{})
 
 	// Monitor process exit in background.
-	go func() {
+	safeGo("command.wait", func() {
 		cmd.Wait()
 		close(ct.done)
-	}()
+	})
 
 	// Create and connect the stdio transport over the process pipes.
 	ct.stdio = NewStdioTransport(stdout, stdin)

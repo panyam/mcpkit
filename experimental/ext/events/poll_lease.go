@@ -164,7 +164,7 @@ func (t *PollLeaseTable) Touch(principal, eventName string, params map[string]an
 	// cheap and avoids a separate atomic.
 	if !t.started {
 		t.started = true
-		go t.runSweeper()
+		safeGo("events.poll.sweeper", t.runSweeper)
 	}
 
 	existing, ok := t.leases[key]

@@ -13,7 +13,7 @@ import (
 func TestInMemoryQuotaStore_ReserveBelowMaxGrants(t *testing.T) {
 	s := NewInMemoryQuotaStore()
 	resp, err := s.ReserveQuota(context.Background(), ReserveQuotaRequest{
-		Principal: "alice", EventName: "chat.message", Max: 3,
+		Principal: "alice", Key: "chat.message", Max: 3,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted)
@@ -24,13 +24,13 @@ func TestInMemoryQuotaStore_ReserveAtMaxDenies(t *testing.T) {
 	s := NewInMemoryQuotaStore()
 	for i := 0; i < 2; i++ {
 		resp, err := s.ReserveQuota(context.Background(), ReserveQuotaRequest{
-			Principal: "alice", EventName: "chat.message", Max: 2,
+			Principal: "alice", Key: "chat.message", Max: 2,
 		})
 		require.NoError(t, err)
 		require.True(t, resp.Granted)
 	}
 	denied, err := s.ReserveQuota(context.Background(), ReserveQuotaRequest{
-		Principal: "alice", EventName: "chat.message", Max: 2,
+		Principal: "alice", Key: "chat.message", Max: 2,
 	})
 	require.NoError(t, err)
 	assert.False(t, denied.Granted, "third reservation must be denied")
@@ -40,11 +40,11 @@ func TestInMemoryQuotaStore_ReserveAtMaxDenies(t *testing.T) {
 func TestInMemoryQuotaStore_ReleaseDecrements(t *testing.T) {
 	s := NewInMemoryQuotaStore()
 	ctx := context.Background()
-	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", EventName: "e", Max: 5})
-	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", EventName: "e", Max: 5})
-	_, _ = s.ReleaseQuota(ctx, ReleaseQuotaRequest{Principal: "alice", EventName: "e"})
+	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", Key:       "e", Max: 5})
+	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", Key:       "e", Max: 5})
+	_, _ = s.ReleaseQuota(ctx, ReleaseQuotaRequest{Principal: "alice", Key:       "e"})
 
-	resp, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", EventName: "e"})
+	resp, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", Key:       "e"})
 	assert.Equal(t, 1, resp.Count)
 }
 
@@ -53,25 +53,25 @@ func TestInMemoryQuotaStore_ReleaseAtZeroIsNoOp(t *testing.T) {
 	ctx := context.Background()
 	// Release before any Reserve must be a silent no-op (no underflow,
 	// no panic). The contract is the QuotaStore's, not the wrapper's.
-	_, err := s.ReleaseQuota(ctx, ReleaseQuotaRequest{Principal: "alice", EventName: "e"})
+	_, err := s.ReleaseQuota(ctx, ReleaseQuotaRequest{Principal: "alice", Key:       "e"})
 	require.NoError(t, err)
-	resp, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", EventName: "e"})
+	resp, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", Key:       "e"})
 	assert.Equal(t, 0, resp.Count, "release-at-zero must not push the count negative")
 }
 
-func TestInMemoryQuotaStore_KeyScopedByPrincipalAndEventName(t *testing.T) {
+func TestInMemoryQuotaStore_KeyScopedByPrincipalAndKey(t *testing.T) {
 	s := NewInMemoryQuotaStore()
 	ctx := context.Background()
-	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", EventName: "chat.message", Max: 10})
-	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", EventName: "chat.message", Max: 10})
+	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", Key:       "chat.message", Max: 10})
+	_, _ = s.ReserveQuota(ctx, ReserveQuotaRequest{Principal: "alice", Key:       "chat.message", Max: 10})
 
 	// Other (principal, eventName) tuples must be unaffected.
-	cross1, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", EventName: "alert.fired"})
-	cross2, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "bob", EventName: "chat.message"})
+	cross1, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", Key:       "alert.fired"})
+	cross2, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "bob", Key:       "chat.message"})
 	assert.Equal(t, 0, cross1.Count)
 	assert.Equal(t, 0, cross2.Count)
 
-	own, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", EventName: "chat.message"})
+	own, _ := s.CountQuota(ctx, CountQuotaRequest{Principal: "alice", Key:       "chat.message"})
 	assert.Equal(t, 2, own.Count)
 }
 

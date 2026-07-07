@@ -70,7 +70,7 @@ func (d *Dispatcher) handleRootsListChanged() {
 	d.rootsStale = false
 	d.rootsMu.Unlock()
 
-	go d.refreshRoots(push)
+	safeGo("roots.refresh", func() { d.refreshRoots(push) })
 }
 
 // refreshRoots issues a single server-to-client roots/list request, stores

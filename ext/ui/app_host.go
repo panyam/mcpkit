@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"sync"
 
 	"github.com/panyam/mcpkit/client"
@@ -240,8 +242,16 @@ func (h *AppHost) handleAppRequest(ctx context.Context, req *core.Request) *core
 func (h *AppHost) handleAppNotification(method string, params json.RawMessage) {
 	switch method {
 	case "notifications/tools/list_changed":
-		// Refresh cached tool list in the background.
+		// Refresh cached tool list in the background. Recover so a panic in the
+		// refresh (or a user-registered handler it reaches) can't crash the host
+		// process (issue 420).
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("mcpkit/ui: recovered panic in app-tools refresh",
+						"panic", r, "stack", string(debug.Stack()))
+				}
+			}()
 			if h.ctx != nil {
 				h.RefreshAppTools(h.ctx)
 			}

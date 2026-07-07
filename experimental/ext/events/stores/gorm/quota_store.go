@@ -10,11 +10,13 @@ import (
 )
 
 // quotaRow is the GORM model for quota counters. The primary key is
-// (Principal, EventName) — the same composite key the in-memory store
-// uses.
+// (Principal, Key) — the same composite key the in-memory store uses.
+// The column is pinned to quota_key because GORM's default name for a Key
+// field ("key") is a SQL reserved word. Field renamed from EventName in the
+// #774 lift; fresh-deploys-only migration convention (recreate the table).
 type quotaRow struct {
 	Principal string `gorm:"primaryKey"`
-	EventName string `gorm:"primaryKey"`
+	Key       string `gorm:"column:quota_key;primaryKey"`
 	// No `default:0` tag — GORM would interpret it as "if Count is 0,
 	// let the DB pick the default", omitting genuine zero values from
 	// INSERTs and breaking the ReserveQuota CAS semantics.
@@ -68,12 +70,12 @@ func (s *quotaStore) ReserveQuota(ctx context.Context, req events.ReserveQuotaRe
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row quotaRow
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("principal = ? AND event_name = ?", req.Principal, req.EventName).
+			Where("principal = ? AND quota_key = ?", req.Principal, req.Key).
 			First(&row).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// First reservation for this tuple — create the row with count=1.
 			// req.Max is asserted > 0 by the wrapper before the call.
-			row = quotaRow{Principal: req.Principal, EventName: req.EventName, Count: 1}
+			row = quotaRow{Principal: req.Principal, Key: req.Key, Count: 1}
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
@@ -106,7 +108,7 @@ func (s *quotaStore) ReserveQuota(ctx context.Context, req events.ReserveQuotaRe
 func (s *quotaStore) ReleaseQuota(ctx context.Context, req events.ReleaseQuotaRequest) (events.ReleaseQuotaResponse, error) {
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return tx.Model(&quotaRow{}).
-			Where("principal = ? AND event_name = ? AND count > 0", req.Principal, req.EventName).
+			Where("principal = ? AND quota_key = ? AND count > 0", req.Principal, req.Key).
 			UpdateColumn("count", gorm.Expr("count - 1")).Error
 	})
 	if err != nil {
@@ -121,7 +123,7 @@ func (s *quotaStore) ReleaseQuota(ctx context.Context, req events.ReleaseQuotaRe
 func (s *quotaStore) CountQuota(ctx context.Context, req events.CountQuotaRequest) (events.CountQuotaResponse, error) {
 	var row quotaRow
 	err := s.db.WithContext(ctx).
-		Where("principal = ? AND event_name = ?", req.Principal, req.EventName).
+		Where("principal = ? AND quota_key = ?", req.Principal, req.Key).
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return events.CountQuotaResponse{Count: 0}, nil

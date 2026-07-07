@@ -68,7 +68,7 @@ func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
 		r.logf("[webhook] PostGap: marshal failed: %v", err)
 		return
 	}
-	go r.deliverControl(resp.Target, "gap", body)
+	safeGo("events.control.gap", func() { r.deliverControl(resp.Target, "gap", body) })
 }
 
 // PostTerminated delivers a {type:terminated, error:...} envelope to
@@ -100,7 +100,7 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 		r.logf("[webhook] PostTerminated: marshal failed: %v", err)
 		return
 	}
-	go r.deliverControl(target, "terminated", body)
+	safeGo("events.control.terminated", func() { r.deliverControl(target, "terminated", body) })
 }
 
 // TerminateBySession fires {type:terminated} envelopes to every
@@ -183,7 +183,7 @@ func (r *WebhookRegistry) postTerminatedSilent(target WebhookTarget, controlErr 
 		r.logf("[webhook] postTerminatedSilent: marshal failed: %v", err)
 		return
 	}
-	go r.deliverControl(target, "terminated", body)
+	safeGo("events.control.terminated", func() { r.deliverControl(target, "terminated", body) })
 }
 
 // deliverControl POSTs a control envelope synchronously (caller starts
