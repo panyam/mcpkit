@@ -71,22 +71,19 @@ func main() {
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			srv = server.NewServer(core.ServerInfo{Name: "demo-server", Version: "1.0"})
 
-			srv.RegisterTool(
-				core.ToolDef{Name: "server_echo", Description: "Echo back the input", InputSchema: map[string]any{
-					"type": "object", "properties": map[string]any{"msg": map[string]any{"type": "string"}},
-				}},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-					var args struct{ Msg string `json:"msg"` }
-					req.Bind(&args)
-					return core.TextResult("echo: " + args.Msg), nil
+			type echoInput struct {
+				Msg string `json:"msg,omitempty" jsonschema:"description=Message to echo back"`
+			}
+			srv.Register(core.TextTool[echoInput]("server_echo", "Echo back the input",
+				func(ctx core.ToolContext, input echoInput) (string, error) {
+					return "echo: " + input.Msg, nil
 				},
-			)
-			srv.RegisterTool(
-				core.ToolDef{Name: "server_time", Description: "Get current time", InputSchema: map[string]any{"type": "object"}},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-					return core.TextResult(time.Now().Format(time.RFC3339)), nil
+			))
+			srv.Register(core.TextTool[struct{}]("server_time", "Get current time",
+				func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return time.Now().Format(time.RFC3339), nil
 				},
-			)
+			))
 			fmt.Println("  Server created with 2 tools: server_echo, server_time")
 			return nil
 		})
