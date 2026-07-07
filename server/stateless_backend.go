@@ -244,11 +244,13 @@ func (b *statelessBackend) ReadCacheScope() string {
 // emissions silently drop, which matches the SEP-2575 design (no server-
 // initiated push); clients observe state via tasks/get polling.
 //
-// All stateless task store entries currently key under sessionID=""
-// (no session). This means stateless tasks share one bucket per process,
-// which is acceptable for the single-tenant fixtures the conformance
-// suite covers; multi-tenant deployments should layer an auth-subject-
-// keyed store wrapper. Tracked for a follow-up.
+// By default, stateless task store entries key under sessionID="" (no
+// session), so stateless tasks share one bucket per process — fine for the
+// single-tenant fixtures the conformance suite covers. Multi-tenant
+// deployments install a server.WithTaskBucketKeyer that derives the bucket
+// from an authenticated subject; the keyer is injected onto the request
+// context in the stateless POST handlers (streamable_stateless.go) and the
+// v1/v2 task surfaces resolve it via core.TaskBucketKey (issue 485).
 func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, error, bool) {
 	terminal := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
 		switch req.Method {

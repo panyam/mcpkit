@@ -573,7 +573,7 @@ func spawnGoAsyncTask(
 		PollInterval:  pollMs,
 	}
 	store := rt.store
-	sessionID := core.GetSessionID(ctx)
+	sessionID := core.TaskBucketKey(ctx)
 	if err := store.Create(info, sessionID); err != nil {
 		return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
 	}
@@ -736,7 +736,7 @@ func wrapSyncAsCompletedTask(
 		PollInterval:  pollMs,
 	}
 	store := rt.store
-	sessionID := core.GetSessionID(ctx)
+	sessionID := core.TaskBucketKey(ctx)
 	if err := store.Create(info, sessionID); err != nil {
 		return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
 	}
@@ -787,7 +787,7 @@ func makeV2GetHandler(rt *v2TaskRuntime) server.MethodHandler {
 		// otherwise; AddLink with a zero origin is silently dropped.
 		core.SpanFromContext(ctx).AddLink(core.LinkFromTraceContext(rt.getOrigin(p.TaskID)))
 
-		sid := ctx.SessionID()
+		sid := core.TaskBucketKey(ctx)
 		info, ok := rt.store.Get(p.TaskID, sid)
 		if !ok {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
@@ -864,7 +864,7 @@ func makeV2UpdateHandler(rt *v2TaskRuntime) server.MethodHandler {
 		// makeV2GetHandler for the rationale.
 		core.SpanFromContext(ctx).AddLink(core.LinkFromTraceContext(rt.getOrigin(p.TaskID)))
 
-		sid := ctx.SessionID()
+		sid := core.TaskBucketKey(ctx)
 		info, ok := rt.store.Get(p.TaskID, sid)
 		if !ok {
 			// Open spec question (PLAN.md): tasks/update for unknown taskId
@@ -903,11 +903,11 @@ func makeV2CancelHandler(rt *v2TaskRuntime) server.MethodHandler {
 		// return the same empty ack as on an active task so clients don't
 		// have to race observation vs cancel. Skip the store mutation in
 		// that case.
-		if info, ok := rt.store.Get(p.TaskID, ctx.SessionID()); ok && info.Status.IsTerminal() {
+		if info, ok := rt.store.Get(p.TaskID, core.TaskBucketKey(ctx)); ok && info.Status.IsTerminal() {
 			return core.NewResponse(id, core.CancelTaskResult{})
 		}
 
-		info, err := rt.store.Cancel(p.TaskID, ctx.SessionID())
+		info, err := rt.store.Cancel(p.TaskID, core.TaskBucketKey(ctx))
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
