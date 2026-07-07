@@ -79,6 +79,7 @@ type serverOptions struct {
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
 	allowReinitialize    bool                     // WithAllowReinitialize — opt-in acceptance of a duplicate initialize (off by default; issue 421)
 	taskBucketKeyer      core.TaskBucketKeyer     // WithTaskBucketKeyer — per-request task-store isolation bucket (nil = session ID; issue 485)
+	supportedVersions    []string                 // WithSupportedVersions — per-server protocol version override (nil = package default; issue 419)
 	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
 	notificationRelay       NotificationRelay           // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
@@ -594,6 +595,37 @@ func WithTaskBucketKeyer(keyer core.TaskBucketKeyer) Option {
 	return func(o *serverOptions) { o.taskBucketKeyer = keyer }
 }
 
+// WithSupportedVersions overrides, for this server only, the set of MCP
+// protocol versions accepted at initialize and on the MCP-Protocol-Version
+// header (issue 419). Pass the versions the server should support, newest
+// first — the first entry is the one the server offers when a client requests
+// a version outside the set.
+//
+// Default (option NOT set): the package-level default
+// (2026-07-28 / 2025-11-25 / 2025-03-26 / 2024-11-05). Operators use this to
+// drop older versions per deployment, e.g. refuse 2024-11-05:
+//
+//	server.WithSupportedVersions("2026-07-28", "2025-11-25", "2025-03-26")
+//
+// Behavior with the configured set:
+//   - initialize requesting a version in the set negotiates that version;
+//     requesting one outside the set negotiates the set's preferred (first)
+//     version, and the client proceeds on it or disconnects (MCP 2025-03-26
+//     §Version Negotiation — same as the default handshake, just over a
+//     narrower set).
+//   - a post-initialize MCP-Protocol-Version header carrying a version outside
+//     the set is rejected with HTTP 400.
+//
+// Passing an empty list is a no-op (the default set stays in effect); order is
+// preserved as given.
+func WithSupportedVersions(versions ...string) Option {
+	return func(o *serverOptions) {
+		if len(versions) > 0 {
+			o.supportedVersions = versions
+		}
+	}
+}
+
 // WithRootsFetchTimeout sets the deadline for server-to-client roots/list
 // requests issued after notifications/roots/list_changed. Default is 30s.
 // Decrease for aggressive fail-fast; increase for slow clients with large
@@ -640,6 +672,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s.dispatcher.allowLegacyOnDraft = s.options.allowLegacyOnDraft
 	s.dispatcher.allowReinitialize = s.options.allowReinitialize
 	s.dispatcher.taskBucketKeyer = s.options.taskBucketKeyer
+	s.dispatcher.configuredVersions = s.options.supportedVersions
 	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.

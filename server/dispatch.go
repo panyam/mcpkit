@@ -147,6 +147,12 @@ type Dispatcher struct {
 	// that prefer leniency over strict spec conformance.
 	allowLegacyOnDraft bool
 
+	// configuredVersions overrides the package-level supportedProtocolVersions
+	// for this server when non-empty (issue 419). Set via WithSupportedVersions;
+	// read through protocolVersions() so negotiation, the MCP-Protocol-Version
+	// header check, and the discover advertise all see the operator's set.
+	configuredVersions []string
+
 	// taskBucketKeyer derives the task-store isolation bucket for each request
 	// (issue 485). Nil = default (session ID). Set via WithTaskBucketKeyer;
 	// injected onto the request context in dispatchWithOpts and the stateless
@@ -300,6 +306,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		readCacheScope:       d.readCacheScope,
 		allowLegacyOnDraft:   d.allowLegacyOnDraft,
 		allowReinitialize:    d.allowReinitialize,
+		configuredVersions:   d.configuredVersions,
 		taskBucketKeyer:      d.taskBucketKeyer,
 	}
 }
@@ -482,10 +489,10 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	if p.ProtocolVersion == "" {
 		return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
 			"missing required protocolVersion in initialize params",
-			map[string]any{"supported": supportedProtocolVersions})
+			map[string]any{"supported": d.protocolVersions()})
 	}
 
-	negotiated := negotiateProtocolVersion(p.ProtocolVersion)
+	negotiated := negotiateProtocolVersion(d.protocolVersions(), p.ProtocolVersion)
 
 	d.negotiatedVersion = negotiated
 	d.clientCaps = p.Capabilities
