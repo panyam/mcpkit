@@ -28,10 +28,16 @@ targeted spec version.
 
 ### Breaking
 - **conformant-by-default** — safe-default SEP options flip from opt-in to
-  opt-out. Servers built with `server.NewServer(info)` now emit spec-conformant
-  defaults for options where a semantically-equivalent zero-value exists
-  (SEP-2549 list/read cache hints). New `server.WithoutXxx()` opt-outs for the
-  rare divergence. (issue 496)
+  opt-out. `server.NewServer(info)` now emits the SEP-2549 cache-control hints
+  by default: list responses (tools/prompts/resources/templates) carry
+  `ttlMs: 0` + `cacheScope: "public"`; `resources/read` carries `ttlMs: 0` +
+  `cacheScope: "private"` (conservative — read content often varies per user).
+  `ttlMs: 0` is "immediately stale", the same effective behavior as omitting the
+  field but present so the SEP-2549 MUST check passes. Handlers still override
+  per-read. New `server.WithoutListCacheControl()` /
+  `server.WithoutReadResourceCacheControl()` opt-outs restore omission.
+  *Behavior change:* list/read responses that previously omitted these fields
+  now include them. (issue 496)
 - **`server/stateless` collapsed into `server/`** — the sibling package and its
   standalone `Dispatcher` are gone; a single `server.Dispatcher` branches by
   wire internally. Import-path breaking for anyone importing `server/stateless`.
