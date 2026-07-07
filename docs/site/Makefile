@@ -18,6 +18,7 @@ GH_REMOTE_URL ?= $(shell git -C ../.. config --get remote.origin.url)
 
 build:
 	@echo "Building mcpkit docs site..."
+	@rm -rf dist   # purge stale output so removed pages never linger in a deploy
 	MCPKIT_DOCS_ENV=production go run . -build
 	@cp -R static dist/docs/static
 	@cd ../.. && uv run scripts/collect_walkthroughs.py
