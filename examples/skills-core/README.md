@@ -1,5 +1,7 @@
 # examples/skills-core
 
+> ⚠ **Experimental** — the minimal [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) (Skills) shape, a draft SEP. Wire format may change.
+
 The **minimal** SEP-2640 shape: a skills file served over MCP's Resources
 primitive, plus tool handling, consumed load-on-demand. This is the
 scoped-down core the Skills Over MCP Working Group blessed at its
@@ -61,3 +63,7 @@ disk. That invariant is enforced by `TestNoCodeExecutionSurface` in the
 
 See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the generated step-by-step (run
 `make readme` to regenerate).
+
+## Next steps
+
+- [Skills — the full surface (archives, remote, fsnotify)](../skills/)

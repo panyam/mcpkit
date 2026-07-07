@@ -1,6 +1,6 @@
 # URL Elicitation — Consent Approval Flow (UC1)
 
-> ⚠ **EXPERIMENTAL** — Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.
+> ⚠ **Experimental** — Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.
 
 A scripted MCP host walking through the **UC1 consent approval flow**: a tool call gets denied with a JSON-RPC `-32042` (URLElicitationRequired) carrying a consent URL; the host opens the URL in a browser; the user approves; the server pushes a `notifications/elicitation/complete` notification over SSE; the host auto-retries with the `authorizationContextId` and gets the result.
 
@@ -37,3 +37,8 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 
 - CORS is applied via `server.WithHandlerWrap(cors)` so it covers `/mcp` plus the `/approve` route registered through `server.WithMux`. Browser-based MCP hosts (MCPJam) need `Mcp-Session-Id` in both Allow- and Expose-Headers; the canonical CORS configuration lives in this example's `serve()` block.
 - The walkthrough's "Approve" button click is a real human-in-the-loop step; CI runs would need either a headless browser or a synthetic `POST /approve?ctx=...`.
+
+## Next steps
+
+- [Fine-grained auth — UC2 + UC3 of the same SEP](../fine-grained-auth/)
+- [MRTR — the underlying input_required round-trip](../mrtr/)

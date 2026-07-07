@@ -1,5 +1,7 @@
 # BookService — protoc-gen-go-mcp Example
 
+> ⚠ **Experimental** — build-time codegen (`experimental/ext/protogen`), not a wire protocol.
+
 End-to-end example demonstrating all three MCP primitives generated from proto annotations.
 
 ## MCPKit Features Used
@@ -101,3 +103,8 @@ Or in `.claude/settings.json`:
   }
 }
 ```
+
+## Next steps
+
+- [Getting started](../../getting-started/)
+- [protogen design](../../../experimental/ext/protogen/docs/DESIGN.md)

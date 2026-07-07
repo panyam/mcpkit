@@ -1,5 +1,7 @@
 # Telegram Events Example
 
+> ⚠ **Experimental** — MCP Events, a draft extension ([spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1)), built on [experimental/ext/events](../../../experimental/ext/events/). Wire format may change.
+
 Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Telegram as the event source. Built on the [`experimental/ext/events`](../../../experimental/ext/events/) library.
 
 Companion to [Clare Liguori's TypeScript implementation](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/tree/main/telegram-reference-server). Also a lighter mirror of the [discord-events demo](../discord/) — same protocol, different bot SDK.
@@ -126,3 +128,8 @@ Server logs which posture is active at startup.
 | `make poll` | Python polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 All Python clients share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.
+
+## Next steps
+
+- [Discord events — same protocol, different source](../discord/)
+- [Events library](../../../experimental/ext/events/)
