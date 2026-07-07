@@ -72,6 +72,12 @@ targeted spec version.
   through a single `featuresForVersion` table (`server/protocol_features.go`)
   instead of scattered `negotiatedVersion == "..."` checks, so a new
   version-gated SEP is wired in one place across both wires.
+- **`server.WithSupportedVersions(...)`** — override the accepted protocol
+  versions per server so operators can drop older ones (e.g. refuse
+  `2024-11-05`). `initialize` negotiates within the configured set (requests
+  outside it get the set's preferred version); a post-init
+  `MCP-Protocol-Version` header outside the set is HTTP 400. The stateless wire
+  advertises its own draft-version set independently. (issue 419)
 
 ### Deprecated (unchanged in 0.4.0 — removal deferred)
 - SEP-2577 Roots / Sampling / Logging surfaces keep their `// Deprecated:`
