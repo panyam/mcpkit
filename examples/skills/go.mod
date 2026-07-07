@@ -12,7 +12,7 @@ replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 
 require (
 	github.com/panyam/demokit v0.0.30
-	github.com/panyam/mcpkit v0.3.0
+	github.com/panyam/mcpkit v0.3.1
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/skills v0.0.0-00010101000000-000000000000
 )
