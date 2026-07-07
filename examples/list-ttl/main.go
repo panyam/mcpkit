@@ -94,16 +94,11 @@ func serve() {
 		Options:        extraOpts,
 		Wire:           wire,
 		Register: func(srv *server.Server) {
-			srv.RegisterTool(
-				core.ToolDef{
-					Name:        "ping",
-					Description: "Returns 'pong'",
-					InputSchema: map[string]any{"type": "object"},
+			srv.Register(core.TextTool[struct{}]("ping", "Returns 'pong'",
+				func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return "pong", nil
 				},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-					return core.TextResult("pong"), nil
-				},
-			)
+			))
 
 			srv.RegisterResource(
 				core.ResourceDef{
