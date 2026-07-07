@@ -197,7 +197,7 @@ func Stream(parent context.Context, sess *client.Client, opts StreamOptions) (*S
 	// returns StreamEventsResult (after our cancel) or returns an
 	// immediate error (e.g., validation failure).
 	callDone := make(chan error, 1)
-	go func() {
+	safeGo("eventsclient.stream", func() {
 		defer close(s.done)
 		cc := client.NewCallContext(ctx).WithNotifyHook(hook)
 		_, err := sess.CallContext(cc, "events/stream", params)
@@ -209,7 +209,7 @@ func Stream(parent context.Context, sess *client.Client, opts StreamOptions) (*S
 			s.err.Store(&ePtr)
 		}
 		callDone <- err
-	}()
+	})
 
 	// Wait for first active OR an early error from the call.
 	select {

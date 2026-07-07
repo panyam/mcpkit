@@ -139,7 +139,7 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 		opts.OnRefresh()
 	}
 
-	go s.refreshLoop(parent)
+	safeGo("eventsclient.refresh", func() { s.refreshLoop(parent) })
 	return s, nil
 }
 

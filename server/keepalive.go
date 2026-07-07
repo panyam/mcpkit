@@ -26,7 +26,7 @@ type sessionKeepalive struct {
 func (k *sessionKeepalive) start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	k.cancel = cancel
-	go k.run(ctx)
+	safeGo("keepalive.run", func() { k.run(ctx) })
 }
 
 // stop terminates the keepalive goroutine.

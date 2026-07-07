@@ -558,7 +558,7 @@ func (c *Client) Connect() error {
 	}
 	if timeout > 0 {
 		done := make(chan error, 1)
-		go func() { done <- c.doConnect() }()
+		safeGo("client.connect", func() { done <- c.doConnect() })
 		select {
 		case err := <-done:
 			return err
@@ -773,7 +773,7 @@ func (c *Client) startKeepalive() {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.keepaliveCancel = cancel
 
-	go func() {
+	safeGo("client.keepalive", func() {
 		ticker := time.NewTicker(c.keepaliveInterval)
 		defer ticker.Stop()
 
@@ -802,7 +802,7 @@ func (c *Client) startKeepalive() {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // Close terminates the client session and transport.
@@ -1765,7 +1765,7 @@ func (t *streamableClientTransport) openGetSSEStream() {
 	t.getSSECancel = cancel
 	t.getSSEResp = resp
 	t.getSSEDone = make(chan struct{})
-	go t.backgroundGetReader(resp.Body)
+	safeGo("client.getReader", func() { t.backgroundGetReader(resp.Body) })
 }
 
 // backgroundGetReader reads SSE events from a GET SSE stream and dispatches
@@ -2270,7 +2270,7 @@ func (t *sseClientTransport) connect() error {
 
 	// Start background reader to demux SSE events.
 	t.done = make(chan struct{})
-	go t.backgroundReader()
+	safeGo("client.backgroundReader", t.backgroundReader)
 
 	return nil
 }
