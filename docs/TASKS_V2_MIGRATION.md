@@ -251,6 +251,6 @@ SEP-2322's `core.InputRequiredResult.RequestState` (the MRTR multi-round-trip su
 - SEP-2322 (MRTR base types): https://github.com/modelcontextprotocol/specification/pull/2322
 - SEP-2575 (per-request capabilities): pattern adopted from spec discussion
 - SEP-2243 (Mcp-Name HTTP header): adopted from spec discussion
-- Implementation plan + open questions: [`PLAN.md`](../PLAN.md)
+- Implementation plan + open questions: [`SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md)
 - v2 example walkthrough: [`examples/tasks-v2/WALKTHROUGH.md`](../examples/tasks-v2/WALKTHROUGH.md)
 - v2 conformance suite: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) (8 ClientScenario classes / ~33 internal checks; upstream Draft PR modelcontextprotocol/conformance#262). Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../conformance/tasks-v2/).
