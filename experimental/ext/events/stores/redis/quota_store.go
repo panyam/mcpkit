@@ -62,7 +62,7 @@ return next
 `)
 
 // QuotaStore implements events.QuotaStore over Redis atomic counters.
-// One key per (Principal, EventName) tuple under
+// One key per (Principal, Key) tuple under
 // "<Options.ChannelPrefix>.quota.<principal>.<eventName>".
 //
 // ReserveQuota and ReleaseQuota are both atomic via per-call Lua
@@ -86,7 +86,7 @@ func NewQuotaStore(opts Options) (*QuotaStore, error) {
 	return &QuotaStore{opts: eventsDefaults(opts)}, nil
 }
 
-// ReserveQuota claims one slot for (Principal, EventName) only if
+// ReserveQuota claims one slot for (Principal, Key) only if
 // the current count is strictly less than Max. Atomic via a Lua
 // script — concurrent Reserves on the same key never race. Refreshes
 // the key's TTL on success so active counters slide forward with
@@ -97,7 +97,7 @@ func NewQuotaStore(opts Options) (*QuotaStore, error) {
 // connection drop, NOSCRIPT mid-script-cache transition) surface as
 // the second return.
 func (s *QuotaStore) ReserveQuota(ctx context.Context, req events.ReserveQuotaRequest) (events.ReserveQuotaResponse, error) {
-	key := s.opts.QuotaKeyFor(req.Principal, req.EventName)
+	key := s.opts.QuotaKeyFor(req.Principal, req.Key)
 	ttlSecs := int(s.opts.QuotaTTL.Seconds())
 	raw, err := reserveScript.Run(ctx, s.opts.Client, []string{key}, req.Max, ttlSecs).Result()
 	if err != nil {
@@ -115,26 +115,26 @@ func (s *QuotaStore) ReserveQuota(ctx context.Context, req events.ReserveQuotaRe
 	}, nil
 }
 
-// ReleaseQuota returns one slot for (Principal, EventName). Decrements
+// ReleaseQuota returns one slot for (Principal, Key). Decrements
 // the counter if currently > 0; deletes the key when the decrement
 // brings it to zero (keeps Redis's KEYS view clean). Release-at-zero
 // is a silent no-op — matches the in-memory store's contract so
 // double-release doesn't underflow.
 func (s *QuotaStore) ReleaseQuota(ctx context.Context, req events.ReleaseQuotaRequest) (events.ReleaseQuotaResponse, error) {
-	key := s.opts.QuotaKeyFor(req.Principal, req.EventName)
+	key := s.opts.QuotaKeyFor(req.Principal, req.Key)
 	if _, err := releaseScript.Run(ctx, s.opts.Client, []string{key}).Result(); err != nil {
 		return events.ReleaseQuotaResponse{}, fmt.Errorf("redisstore: ReleaseQuota EVAL failed: %w", err)
 	}
 	return events.ReleaseQuotaResponse{}, nil
 }
 
-// CountQuota reads the current count for (Principal, EventName)
+// CountQuota reads the current count for (Principal, Key)
 // without mutating state. Returns 0 for absent keys (never reserved,
 // or already TTL-expired). Storage errors surface as the second
 // return; Redis's "key does not exist" is NOT an error — it's
 // just Count=0.
 func (s *QuotaStore) CountQuota(ctx context.Context, req events.CountQuotaRequest) (events.CountQuotaResponse, error) {
-	key := s.opts.QuotaKeyFor(req.Principal, req.EventName)
+	key := s.opts.QuotaKeyFor(req.Principal, req.Key)
 	v, err := s.opts.Client.Get(ctx, key).Int()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
