@@ -1,5 +1,7 @@
 # SEP-2322 MRTR — Ephemeral InputRequiredResult Round-Trips
 
+> **Stable** — implements [SEP-2322](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322) (MRTR), merged into the MCP spec.
+
 Demonstrates the SEP-2322 ephemeral Multi Round-Trip Requests pattern:
 the server returns `InputRequiredResult{inputRequests, requestState}`
 when it needs more input from the client; the client resolves each
@@ -84,3 +86,8 @@ testconf-mrtr` from the repo root.
 | Single dispatcher | [`client.HandleServerRequestWithContext`](../../client/client.go) — same switch handles real server-initiated requests AND MRTR-synthesized ones |
 | Conformance | [panyam/mcpconformance — `src/scenarios/server/mrtr/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/mrtr) (upstream Draft PR modelcontextprotocol/conformance#262); local sentinel: [`conformance/mrtr/`](../../conformance/mrtr/) |
 | SEP | [SEP-2322 spec PR](https://github.com/modelcontextprotocol/specification/pull/2322) |
+
+## Next steps
+
+- [Tasks v2 — reuses the same input_required envelope](../tasks-v2/)
+- [MRTR tutorial](../../docs/MRTR_TUTORIAL.md)

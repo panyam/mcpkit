@@ -743,17 +743,34 @@ Pick whichever the example actually needs — both are first-class.
 
 ## 5. README.md
 
-Hand-curated narrative. Required sections (in order):
+Hand-curated narrative. The READMEs render on the docs site as the
+examples/tutorials track (issue 508), so they should read as tutorials, not
+just reference. Required sections (in order):
 
 1. **Title + one-paragraph what-this-is**
-2. **Quick Start** — the exact two commands a reader runs (typically
+2. **Status line** — a one-line blockquote directly under the title stating
+   maturity and the spec it tracks, so a reader sees at a glance whether the
+   feature is stable or experimental (mcpkit ships several draft SEPs ahead of
+   the spec — say so). Format:
+   - Stable, merged SEP: `> **Stable** — implements [SEP-N](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/N) (<Name>), merged into the MCP spec.`
+   - Experimental / draft SEP: `> ⚠ **Experimental** — tracks [SEP-N](.../pull/N) (<Name>), a draft SEP. Wire format may change.`
+   - Core / no numbered SEP: `> **Stable** — MCP base protocol (<area>).`
+
+   The SEP PR is the canonical spec-and-discussion venue (don't invent a Discord
+   invite; the repo has none). Use `modelcontextprotocol/modelcontextprotocol/pull/N`,
+   not the old `.../specification/...` path.
+3. **Quick Start** — the exact two commands a reader runs (typically
    `make serve` in one terminal, `make demo` in another).
-3. **What it demonstrates** — bullet list mapping to the demokit steps.
-4. **Architecture** — Mermaid block-or-sequence diagram if the example has
+4. **What it demonstrates** — bullet list mapping to the demokit steps.
+5. **Architecture** — Mermaid block-or-sequence diagram if the example has
    non-trivial topology (separate processes, webhook callbacks, MCP Apps
    bridge).
-5. **Where to look in the code** — bullet list of `path/file.go:symbol`
+6. **Where to look in the code** — bullet list of `path/file.go:symbol`
    pointers, mirroring the closing `Section()` in `walkthrough.go`.
+7. **Next steps** — 1-3 links pointing the reader onward: the most related
+   example(s) and the canonical design/migration doc. Use repo-relative links
+   (`../other-example/`) so they resolve both on GitHub and on the rendered
+   site.
 
 Optional: "What's still pending" (phase tracker), "Setup — getting an API
 token", "Make targets" (only if the Makefile has more than the baseline four).

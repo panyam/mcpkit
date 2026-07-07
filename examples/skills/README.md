@@ -1,5 +1,7 @@
 # examples/skills
 
+> ⚠ **Experimental** — tracks [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) (Skills), a draft SEP. Wire format may change.
+
 End-to-end example for SEP-2640 (Skills extension): a mcpkit server that
 exposes Agent Skills under the `skill://` URI scheme, plus a demokit
 walkthrough that drives a host against it.
@@ -115,3 +117,7 @@ classes are tracked under mcpkit#567.
 - SEP-2640: <https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640>
 - Agent Skills specification: <https://agentskills.io/specification>
 - Working group: skills-over-mcp-wg
+
+## Next steps
+
+- [Skills — the minimal core shape](../skills-core/)

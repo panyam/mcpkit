@@ -1,5 +1,7 @@
 # MCP Apps Examples
 
+> **Stable** — MCP Apps extension (`ext/ui`). Needs a host with Apps/iframe support (see below).
+
 Servers exposing **MCP Apps** — interactive HTML/JS UIs that an MCP host renders inside an iframe. The host and app communicate bidirectionally via the App Bridge (postMessage protocol).
 
 > ⚠ **MCP Apps require a host that supports the Apps extension.** [MCPJam](https://mcpjam.com) is the easiest way to test these locally — it's a browser-based MCP host with iframe support. Claude Desktop / VS Code do not yet render MCP Apps.
@@ -65,3 +67,8 @@ See [`docs/APPS_DESIGN.md`](../../docs/APPS_DESIGN.md) for the full architecture
 - [App Bridge JS source](../../ext/ui/assets/) — the JS shipped to the app iframe
 - [`docs/APPS_HOST.md`](../../docs/APPS_HOST.md) — implementing your own MCP App host
 - [`examples/host/01-apphost`](../host/01-apphost/) — `AppHost` walkthrough (Go-side host implementation)
+
+## Next steps
+
+- [Host-side AppHost APIs](../host/01-apphost/)
+- [MCP Apps design](../../docs/APPS_DESIGN.md)

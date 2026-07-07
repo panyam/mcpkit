@@ -1,5 +1,7 @@
 # Multi-Server Registry
 
+> **Stable** — MCP Apps host-side APIs (`ext/ui`: ServerRegistry).
+
 Demonstrates ServerRegistry managing 3 MCP servers with tool aggregation, collision resolution, and app bridge integration.
 
 ## What you'll learn
@@ -134,3 +136,8 @@ go run ./examples/host/02-multi-server/ --non-interactive
 - **Step 7**: CallToolOn routes to weather regardless of resolver
 - **Step 8**: After removing clock, `get_time` returns "unknown tool" error
 - **Step 9**: After AddWithBridge, 8 tools listed including `app_stopwatch` (source=app)
+
+## Next steps
+
+- [AppHost basics](../01-apphost/)
+- [MCP Apps](../../apps/)
