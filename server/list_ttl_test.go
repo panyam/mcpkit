@@ -20,7 +20,11 @@ func TestWithListTTLMs_AppliesToAllFourEndpoints(t *testing.T) {
 		wantPresent bool
 		wantTTL     float64
 	}{
-		{"unset omits ttlMs", nil, false, 0},
+		// Conformant-by-default (issue 496): with no option the server now emits
+		// an explicit ttlMs:0 (was: omitted). WithoutListCacheControl restores
+		// omission; a negative WithListTTLMs also omits.
+		{"default surfaces explicit immediately-stale", nil, true, 0},
+		{"opt-out omits ttlMs", []Option{WithoutListCacheControl()}, false, 0},
 		{"positive surfaces value", []Option{WithListTTLMs(300000)}, true, 300000},
 		{"zero surfaces explicit immediately-stale", []Option{WithListTTLMs(0)}, true, 0},
 		{"negative treated as unset", []Option{WithListTTLMs(-1)}, false, 0},
@@ -154,6 +158,42 @@ func TestReadResource_ServerDefaultCacheControl(t *testing.T) {
 	if m["cacheScope"] != core.CacheScopePrivate {
 		t.Errorf("cacheScope = %v, want %q; raw=%s", m["cacheScope"], core.CacheScopePrivate, res.Raw)
 	}
+}
+
+// TestReadResource_ConformantDefault verifies conformant-by-default (issue 496):
+// with no option, resources/read emits ttlMs:0 + cacheScope:private, and
+// WithoutReadResourceCacheControl restores omission of both fields.
+func TestReadResource_ConformantDefault(t *testing.T) {
+	t.Run("default surfaces ttlMs0 + private", func(t *testing.T) {
+		c := newReadTTLClient(t, nil, "")
+		res, err := c.Call("resources/read", map[string]any{"uri": "file:///fixture"})
+		if err != nil {
+			t.Fatalf("resources/read: %v", err)
+		}
+		var m map[string]any
+		json.Unmarshal(res.Raw, &m)
+		if ttl, ok := m["ttlMs"].(float64); !ok || ttl != 0 {
+			t.Errorf("default ttlMs = %v, want explicit 0; raw=%s", m["ttlMs"], res.Raw)
+		}
+		if m["cacheScope"] != core.CacheScopePrivate {
+			t.Errorf("default cacheScope = %v, want %q; raw=%s", m["cacheScope"], core.CacheScopePrivate, res.Raw)
+		}
+	})
+	t.Run("opt-out omits both", func(t *testing.T) {
+		c := newReadTTLClient(t, nil, "", WithoutReadResourceCacheControl())
+		res, err := c.Call("resources/read", map[string]any{"uri": "file:///fixture"})
+		if err != nil {
+			t.Fatalf("resources/read: %v", err)
+		}
+		var m map[string]any
+		json.Unmarshal(res.Raw, &m)
+		if _, ok := m["ttlMs"]; ok {
+			t.Errorf("opt-out should omit ttlMs; raw=%s", res.Raw)
+		}
+		if _, ok := m["cacheScope"]; ok {
+			t.Errorf("opt-out should omit cacheScope; raw=%s", res.Raw)
+		}
+	})
 }
 
 // TestReadResource_HandlerOverridesCacheControl verifies a resource handler
