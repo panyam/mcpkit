@@ -38,32 +38,32 @@ func TestQuotaStore_ReserveReleaseCount_RoundTrip(t *testing.T) {
 	ctx := t.Context()
 
 	resp, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 3,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 3,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted)
 	assert.Equal(t, 1, resp.Count, "post-increment value")
 
 	cnt, err := s.CountQuota(ctx, events.CountQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message",
+		Principal: "tenant-a/alice", Key: "chat.message",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, cnt.Count)
 
 	_, err = s.ReleaseQuota(ctx, events.ReleaseQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message",
+		Principal: "tenant-a/alice", Key: "chat.message",
 	})
 	require.NoError(t, err)
 
 	cnt, err = s.CountQuota(ctx, events.CountQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message",
+		Principal: "tenant-a/alice", Key: "chat.message",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, cnt.Count, "release should bring count back to zero")
 
 	// And the slot is reusable.
 	resp, err = s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 3,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 3,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted)
@@ -81,7 +81,7 @@ func TestQuotaStore_ReserveRespectsMax(t *testing.T) {
 
 	for i := 1; i <= max; i++ {
 		resp, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-			Principal: "tenant-a/alice", EventName: "chat.message", Max: max,
+			Principal: "tenant-a/alice", Key: "chat.message", Max: max,
 		})
 		require.NoError(t, err)
 		assert.True(t, resp.Granted, "Reserve #%d should succeed", i)
@@ -90,7 +90,7 @@ func TestQuotaStore_ReserveRespectsMax(t *testing.T) {
 
 	// One over the cap.
 	resp, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: max,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: max,
 	})
 	require.NoError(t, err)
 	assert.False(t, resp.Granted, "Reserve at cap must be rejected")
@@ -107,19 +107,19 @@ func TestQuotaStore_ReleaseAtZeroIsNoOp(t *testing.T) {
 
 	// Release before any Reserve.
 	_, err := s.ReleaseQuota(ctx, events.ReleaseQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message",
+		Principal: "tenant-a/alice", Key: "chat.message",
 	})
 	assert.NoError(t, err, "Release-at-zero must not error")
 
 	cnt, err := s.CountQuota(ctx, events.CountQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message",
+		Principal: "tenant-a/alice", Key: "chat.message",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, cnt.Count, "Count must stay at zero (no negative)")
 }
 
 // TestQuotaStore_PerPrincipalEventIsolation verifies the key scheme
-// keeps (Principal, EventName) tuples isolated. A Reserve for
+// keeps (Principal, Key) tuples isolated. A Reserve for
 // (alice, chat) MUST NOT count against (bob, chat) or (alice, presence).
 // Two tenants of the same backend would corrupt each other if this
 // failed.
@@ -129,20 +129,20 @@ func TestQuotaStore_PerPrincipalEventIsolation(t *testing.T) {
 
 	// Fill alice's chat.message slot.
 	_, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 1,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 1,
 	})
 	require.NoError(t, err)
 
 	// bob's chat.message should still be free.
 	resp, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/bob", EventName: "chat.message", Max: 1,
+		Principal: "tenant-a/bob", Key: "chat.message", Max: 1,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted, "bob's chat.message must be independent of alice's")
 
 	// alice's presence.changed should still be free.
 	resp, err = s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "presence.changed", Max: 1,
+		Principal: "tenant-a/alice", Key: "presence.changed", Max: 1,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted, "alice's presence.changed must be independent of chat.message")
@@ -157,14 +157,14 @@ func TestQuotaStore_CountReadsWithoutMutation(t *testing.T) {
 	ctx := t.Context()
 
 	_, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 5,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 5,
 	})
 	require.NoError(t, err)
 
 	// 10 Counts in a row — none should bump the value.
 	for i := 0; i < 10; i++ {
 		cnt, err := s.CountQuota(ctx, events.CountQuotaRequest{
-			Principal: "tenant-a/alice", EventName: "chat.message",
+			Principal: "tenant-a/alice", Key: "chat.message",
 		})
 		require.NoError(t, err)
 		assert.Equal(t, 1, cnt.Count, "Count must stay at 1 after %d reads", i+1)
@@ -187,7 +187,7 @@ func TestQuotaStore_PrefixIsolation(t *testing.T) {
 	// Fill demoA's (alice, chat) slot.
 	for i := 0; i < 3; i++ {
 		resp, err := sA.ReserveQuota(ctx, events.ReserveQuotaRequest{
-			Principal: "alice", EventName: "chat", Max: 3,
+			Principal: "alice", Key: "chat", Max: 3,
 		})
 		require.NoError(t, err)
 		require.True(t, resp.Granted)
@@ -195,13 +195,13 @@ func TestQuotaStore_PrefixIsolation(t *testing.T) {
 
 	// demoB's (alice, chat) MUST be empty.
 	cnt, err := sB.CountQuota(ctx, events.CountQuotaRequest{
-		Principal: "alice", EventName: "chat",
+		Principal: "alice", Key: "chat",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 0, cnt.Count, "ChannelPrefix isolation: demoB must not see demoA's counts")
 
 	resp, err := sB.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "alice", EventName: "chat", Max: 1,
+		Principal: "alice", Key: "chat", Max: 1,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted, "demoB's slot must still be available despite demoA being at cap")
@@ -230,14 +230,14 @@ func TestQuotaStore_TTLExpiresLeakedReserve(t *testing.T) {
 
 	// Fill the slot with Max=1 so any further Reserve is blocked.
 	resp, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 1,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 1,
 	})
 	require.NoError(t, err)
 	require.True(t, resp.Granted)
 
 	// Cap blocks immediately.
 	resp, err = s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 1,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 1,
 	})
 	require.NoError(t, err)
 	require.False(t, resp.Granted)
@@ -247,7 +247,7 @@ func TestQuotaStore_TTLExpiresLeakedReserve(t *testing.T) {
 
 	// Leaked slot evicted; Reserve succeeds again.
 	resp, err = s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message", Max: 1,
+		Principal: "tenant-a/alice", Key: "chat.message", Max: 1,
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.Granted, "after TTL expiry, the leaked slot must be reclaimable")
@@ -255,7 +255,7 @@ func TestQuotaStore_TTLExpiresLeakedReserve(t *testing.T) {
 
 // TestQuotaStore_ConcurrentReserveAtomicity is the load-bearing
 // atomicity check: 100 goroutines race to Reserve against a Max=10
-// cap on the same (Principal, EventName) key. The Lua script MUST
+// cap on the same (Principal, Key) key. The Lua script MUST
 // produce exactly 10 Granted=true responses, never 11, never 9.
 // A naive GET-then-INCR would race here and over-grant.
 func TestQuotaStore_ConcurrentReserveAtomicity(t *testing.T) {
@@ -273,7 +273,7 @@ func TestQuotaStore_ConcurrentReserveAtomicity(t *testing.T) {
 			defer wg.Done()
 			<-start
 			resp, err := s.ReserveQuota(ctx, events.ReserveQuotaRequest{
-				Principal: "tenant-a/alice", EventName: "chat.message", Max: max,
+				Principal: "tenant-a/alice", Key: "chat.message", Max: max,
 			})
 			if err == nil && resp.Granted {
 				atomic.AddInt64(&granted, 1)
@@ -287,7 +287,7 @@ func TestQuotaStore_ConcurrentReserveAtomicity(t *testing.T) {
 
 	// Final count matches.
 	cnt, err := s.CountQuota(ctx, events.CountQuotaRequest{
-		Principal: "tenant-a/alice", EventName: "chat.message",
+		Principal: "tenant-a/alice", Key: "chat.message",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, max, cnt.Count)

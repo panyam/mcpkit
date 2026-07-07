@@ -18,49 +18,49 @@ func TestQuotaStore_ReserveReleaseCount(t *testing.T) {
 			store := bk.newQuotaStore(t)
 			ctx := context.Background()
 
-			cntResp, err := store.CountQuota(ctx, events.CountQuotaRequest{Principal: "alice", EventName: "chat"})
+			cntResp, err := store.CountQuota(ctx, events.CountQuotaRequest{Principal: "alice", Key: "chat"})
 			require.NoError(t, err)
 			assert.Equal(t, 0, cntResp.Count)
 
 			// Reserve up to Max
 			for i := 1; i <= 3; i++ {
-				resp, err := store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "alice", EventName: "chat", Max: 3})
+				resp, err := store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "alice", Key: "chat", Max: 3})
 				require.NoError(t, err)
 				assert.True(t, resp.Granted, "reservation %d should be granted", i)
 				assert.Equal(t, i, resp.Count)
 			}
 
 			// Fourth reservation must be denied
-			resp, err := store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "alice", EventName: "chat", Max: 3})
+			resp, err := store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "alice", Key: "chat", Max: 3})
 			require.NoError(t, err)
 			assert.False(t, resp.Granted)
 			assert.Equal(t, 3, resp.Count)
 
 			// Release returns a slot
-			_, err = store.ReleaseQuota(ctx, events.ReleaseQuotaRequest{Principal: "alice", EventName: "chat"})
+			_, err = store.ReleaseQuota(ctx, events.ReleaseQuotaRequest{Principal: "alice", Key: "chat"})
 			require.NoError(t, err)
-			cntResp, err = store.CountQuota(ctx, events.CountQuotaRequest{Principal: "alice", EventName: "chat"})
+			cntResp, err = store.CountQuota(ctx, events.CountQuotaRequest{Principal: "alice", Key: "chat"})
 			require.NoError(t, err)
 			assert.Equal(t, 2, cntResp.Count)
 
 			// Now reservation works again
-			resp, err = store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "alice", EventName: "chat", Max: 3})
+			resp, err = store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "alice", Key: "chat", Max: 3})
 			require.NoError(t, err)
 			assert.True(t, resp.Granted)
 			assert.Equal(t, 3, resp.Count)
 
 			// Different (principal, eventName) is independent
-			resp, err = store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "bob", EventName: "chat", Max: 3})
+			resp, err = store.ReserveQuota(ctx, events.ReserveQuotaRequest{Principal: "bob", Key: "chat", Max: 3})
 			require.NoError(t, err)
 			assert.True(t, resp.Granted)
 			assert.Equal(t, 1, resp.Count)
 
 			// Release at zero is silent no-op (matches in-memory contract)
 			for i := 0; i < 10; i++ {
-				_, err = store.ReleaseQuota(ctx, events.ReleaseQuotaRequest{Principal: "carol", EventName: "chat"})
+				_, err = store.ReleaseQuota(ctx, events.ReleaseQuotaRequest{Principal: "carol", Key: "chat"})
 				require.NoError(t, err)
 			}
-			cntResp, err = store.CountQuota(ctx, events.CountQuotaRequest{Principal: "carol", EventName: "chat"})
+			cntResp, err = store.CountQuota(ctx, events.CountQuotaRequest{Principal: "carol", Key: "chat"})
 			require.NoError(t, err)
 			assert.Equal(t, 0, cntResp.Count)
 		})
@@ -97,7 +97,7 @@ func TestQuotaStore_ConcurrentReserveAtomicity(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					resp, err := store.ReserveQuota(ctx, events.ReserveQuotaRequest{
-						Principal: "alice", EventName: "chat", Max: max,
+						Principal: "alice", Key: "chat", Max: max,
 					})
 					if err != nil {
 						t.Errorf("ReserveQuota: %v", err)
@@ -113,7 +113,7 @@ func TestQuotaStore_ConcurrentReserveAtomicity(t *testing.T) {
 			assert.Equal(t, int64(max), granted.Load(),
 				"expected exactly %d grants under contention, got %d", max, granted.Load())
 
-			cntResp, err := store.CountQuota(ctx, events.CountQuotaRequest{Principal: "alice", EventName: "chat"})
+			cntResp, err := store.CountQuota(ctx, events.CountQuotaRequest{Principal: "alice", Key: "chat"})
 			require.NoError(t, err)
 			assert.Equal(t, max, cntResp.Count)
 		})
