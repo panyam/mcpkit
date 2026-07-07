@@ -513,6 +513,37 @@ logger := common.NewMCPLogger("[mcp] ",
 )
 ```
 
+### Tool registration style (issue 851)
+
+Prefer typed registration for tools with real inputs: define an input struct
+and register via `srv.Register(core.TextTool[In](...))` or
+`core.TypedTool[In, Out](...)`. mcpkit derives the JSON Schema from the struct
+tags and hands the handler a decoded, validated value — no hand-written
+`map[string]any` schema, no `req.Bind` / `json.Unmarshal(req.Arguments)`. Pick
+`Out` by what the handler returns: `string` (→ `TextTool`), `core.ToolResult`
+(sync with `IsError` / structured content), or `core.ToolResponse` (MRTR / task
+variants). `examples/getting-started` is the reference shape.
+
+Raw `srv.RegisterTool(core.ToolDef{...}, handler)` is still correct — do **not**
+force a conversion — in these cases:
+
+- **The handler needs the raw `core.ToolRequest`.** MRTR / task-composition
+  handlers (`examples/mrtr`, `examples/tasks-v2`'s `test_tool_with_task`) drive
+  `ctx.RequestInput` / `ctx.InputResponse` and return `core.ToolResponse`; a
+  typed input struct adds nothing.
+- **The schema needs JSON Schema features struct tags can't express** —
+  conditional `if/then/else`, `allOf`/`anyOf`, `$anchor`/`$ref`, or the
+  SEP-2356 `x-mcp-file` marker (`examples/file-inputs`). Use
+  `core.WithInputSchemaOverride(...)` with a typed handler, or stay raw.
+- **The tool is a conformance fixture whose wire schema is asserted.** Convert
+  to a typed handler but pin the exact schema with
+  `core.WithInputSchemaOverride(...)` — `TypedTool`'s reflected schema adds
+  `$schema` + `properties:{}`, which can drift an asserted `tools/list` shape.
+  `examples/stateless` does this; verify with the relevant `make testconf-*`.
+
+An empty-input tool (`struct{}`) gains nothing from typing beyond consistency;
+converting one is optional, not required.
+
 ---
 
 ## 3. walkthrough.go
