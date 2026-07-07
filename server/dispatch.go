@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -338,11 +340,28 @@ func (d *Dispatcher) RegisterCompletion(refType, name string, handler core.Compl
 
 // Dispatch routes a JSON-RPC request and returns the response.
 // Returns nil for notifications (no response expected).
-func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) *core.Response {
+func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *core.Response) {
 	id := req.ID
 	if id == nil {
 		id = json.RawMessage("null")
 	}
+
+	// A user-provided handler (or a framework bug) that panics must not crash
+	// the host process. Recover here, at the single synchronous dispatch entry
+	// point, so every tool/resource/prompt/completion/custom handler is covered.
+	// A request (has an ID) gets a -32603 internal error; a notification gets
+	// nil. Panic detail + stack go to the log, never to the wire (issue 420).
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("mcpkit: recovered panic in handler dispatch",
+				"method", req.Method, "panic", r, "stack", string(debug.Stack()))
+			if req.ID != nil {
+				resp = core.NewErrorResponse(id, core.ErrCodeInternal, "internal error")
+			} else {
+				resp = nil
+			}
+		}
+	}()
 
 	switch req.Method {
 	case "initialize":

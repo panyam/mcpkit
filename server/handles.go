@@ -158,7 +158,7 @@ func NewInMemoryHandleStore[T any](opts ...HandleStoreOption) *InMemoryHandleSto
 	if s.gcInterval > 0 {
 		s.gcStop = make(chan struct{})
 		s.gcDone = make(chan struct{})
-		go s.gcLoop()
+		safeGo("handles.gcLoop", s.gcLoop)
 	}
 	return s
 }

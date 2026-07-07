@@ -529,7 +529,7 @@ func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts
 	s.subscribers = append(s.subscribers, slot)
 	s.mu.Unlock()
 
-	go func() {
+	safeGo("events.subscriber.cleanup", func() {
 		<-ctx.Done()
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -544,7 +544,7 @@ func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts
 		// chan. Idempotent so YieldTerminated's close + this cleanup
 		// don't race into a double-close.
 		slot.closeChan()
-	}()
+	})
 
 	sender := func(event Event) { slot.deliverEvent(event) }
 	return slot.ch, sender
