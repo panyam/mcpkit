@@ -147,6 +147,12 @@ type Dispatcher struct {
 	// that prefer leniency over strict spec conformance.
 	allowLegacyOnDraft bool
 
+	// taskBucketKeyer derives the task-store isolation bucket for each request
+	// (issue 485). Nil = default (session ID). Set via WithTaskBucketKeyer;
+	// injected onto the request context in dispatchWithOpts and the stateless
+	// POST handlers so the v1/v2 task surfaces resolve it via core.TaskBucketKey.
+	taskBucketKeyer core.TaskBucketKeyer
+
 	// allowReinitialize opts into accepting a second initialize on an
 	// already-negotiated session (protocol re-negotiation). Default false:
 	// once a session has negotiated a version, a duplicate initialize is
@@ -294,6 +300,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		readCacheScope:       d.readCacheScope,
 		allowLegacyOnDraft:   d.allowLegacyOnDraft,
 		allowReinitialize:    d.allowReinitialize,
+		taskBucketKeyer:      d.taskBucketKeyer,
 	}
 }
 

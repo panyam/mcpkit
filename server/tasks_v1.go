@@ -249,7 +249,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfigV1) Middlewar
 			PollInterval:  pollMs,
 		}
 		store := rt.store
-		sessionID := core.GetSessionID(ctx)
+		sessionID := core.TaskBucketKey(ctx)
 		if err := store.Create(info, sessionID); err != nil {
 			return core.NewErrorResponse(req.ID, -32603, "failed to create task: "+err.Error()), nil
 		}
@@ -356,7 +356,7 @@ func makeGetHandler(rt *taskRuntime) MethodHandler {
 		}
 
 		// Fall through to TaskStore.
-		info, ok := rt.store.Get(p.TaskID, ctx.SessionID())
+		info, ok := rt.store.Get(p.TaskID, core.TaskBucketKey(ctx))
 		if !ok {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 		}
@@ -396,7 +396,7 @@ func makeResultHandler(rt *taskRuntime) MethodHandler {
 			}
 
 			// 2. Check if the task is terminal.
-			sid := ctx.SessionID()
+			sid := core.TaskBucketKey(ctx)
 			info, found := store.Get(p.TaskID, sid)
 			if !found {
 				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
@@ -448,7 +448,7 @@ func makeListHandler(store TaskStore) MethodHandler {
 		if params != nil {
 			json.Unmarshal(params, &p)
 		}
-		tasks, nextCursor := store.List(p.Cursor, 50, ctx.SessionID())
+		tasks, nextCursor := store.List(p.Cursor, 50, core.TaskBucketKey(ctx))
 		if tasks == nil {
 			tasks = []core.TaskInfo{}
 		}
@@ -467,7 +467,7 @@ func makeCancelHandler(rt *taskRuntime) MethodHandler {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}
-		info, err := rt.store.Cancel(p.TaskID, ctx.SessionID())
+		info, err := rt.store.Cancel(p.TaskID, core.TaskBucketKey(ctx))
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 		}

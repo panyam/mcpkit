@@ -46,8 +46,12 @@ targeted spec version.
 - **Panic recovery in library goroutines** — a panic in a tool/background
   goroutine is recovered and surfaced as an error instead of crashing the host
   process. (issue 420)
-- **v2 task-store multi-tenant isolation** — fixes `sessionID=""` bucket-sharing
-  so tasks from distinct tenants no longer collide in one bucket. (issue 485)
+- **v2 task-store multi-tenant isolation** — new `server.WithTaskBucketKeyer`
+  derives the per-request task-store bucket from a `context.Context` (e.g. an
+  auth subject) instead of the transport session. On the SEP-2575 stateless
+  wire every task otherwise keys under `sessionID=""`, so tenants shared one
+  bucket; the keyer closes that hole. Applies to v1 and v2, both wires; default
+  behavior unchanged (session-ID keying). No `ext/auth` dependency. (issue 485)
 - **`ClientModeStateless` works against discover-less servers** — `Connect` no
   longer hard-requires `server/discover`, so mcpkit connects to draft servers
   that don't expose discovery. (issue 829)
