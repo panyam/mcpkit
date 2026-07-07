@@ -956,96 +956,62 @@ func docPath(docID string) string {
 // --- Tool registration ---
 
 func registerTools(srv *server.Server) {
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:           "read_document",
-			Description:    "Read a document from the document store. Requires tools-read scope.",
-			RequiredScopes: []string{scopeRead},
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"docId": {"type": "string", "description": "Document ID (seeds: doc-001, doc-123, doc-456)"}
-				}
-			}`),
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				DocID string `json:"docId"`
+	type readDocInput struct {
+		DocID string `json:"docId,omitempty" jsonschema:"description=Document ID (seeds doc-001 / doc-123 / doc-456)"`
+	}
+	srv.Register(core.TypedTool[readDocInput, core.ToolResult]("read_document",
+		"Read a document from the document store. Requires tools-read scope.",
+		func(ctx core.ToolContext, input readDocInput) (core.ToolResult, error) {
+			docID := input.DocID
+			if docID == "" {
+				docID = "doc-001"
 			}
-			json.Unmarshal(req.Arguments, &args)
-			if args.DocID == "" {
-				args.DocID = "doc-001"
-			}
-			body, err := os.ReadFile(docPath(args.DocID))
+			body, err := os.ReadFile(docPath(docID))
 			if err != nil {
 				if os.IsNotExist(err) {
 					return core.ErrorResult(fmt.Sprintf(
-						"document %q not found in %s", args.DocID, docDir)), nil
+						"document %q not found in %s", docID, docDir)), nil
 				}
-				return core.ErrorResult(fmt.Sprintf("read %q: %v", args.DocID, err)), nil
+				return core.ErrorResult(fmt.Sprintf("read %q: %v", docID, err)), nil
 			}
-			return core.TextResult(fmt.Sprintf("[%s] %s", args.DocID, body)), nil
+			return core.TextResult(fmt.Sprintf("[%s] %s", docID, body)), nil
 		},
-	)
+		core.WithToolRequiredScopes(scopeRead),
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:           "update_document",
-			Description:    "Write content to a document in the store. Requires tools-call scope.",
-			RequiredScopes: []string{scopeCall},
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"docId":   {"type": "string", "description": "Document ID (will be created if it doesn't exist)"},
-					"content": {"type": "string", "description": "New content"}
-				},
-				"required": ["docId", "content"]
-			}`),
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				DocID   string `json:"docId"`
-				Content string `json:"content"`
-			}
-			json.Unmarshal(req.Arguments, &args)
-			path := docPath(args.DocID)
-			if err := os.WriteFile(path, []byte(args.Content), 0o644); err != nil {
-				return core.ErrorResult(fmt.Sprintf("write %q: %v", args.DocID, err)), nil
+	type updateDocInput struct {
+		DocID   string `json:"docId" jsonschema:"description=Document ID (created if it doesn't exist),required"`
+		Content string `json:"content" jsonschema:"description=New content,required"`
+	}
+	srv.Register(core.TypedTool[updateDocInput, core.ToolResult]("update_document",
+		"Write content to a document in the store. Requires tools-call scope.",
+		func(ctx core.ToolContext, input updateDocInput) (core.ToolResult, error) {
+			path := docPath(input.DocID)
+			if err := os.WriteFile(path, []byte(input.Content), 0o644); err != nil {
+				return core.ErrorResult(fmt.Sprintf("write %q: %v", input.DocID, err)), nil
 			}
 			return core.TextResult(fmt.Sprintf(
 				"Document %q updated (%d bytes written to %s).",
-				args.DocID, len(args.Content), path)), nil
+				input.DocID, len(input.Content), path)), nil
 		},
-	)
+		core.WithToolRequiredScopes(scopeCall),
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "initiate_payment",
-			Description: "Initiate a payment. Requires an RAR-bound token with payment_initiation authorization_details (UC3).",
-			// Authorization is checked by paymentAuthorizationMiddleware (registered
-			// alongside scope middleware in serve()). Handler runs only on success.
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"amount":   {"type": "string", "description": "Payment amount"},
-					"currency": {"type": "string", "description": "Currency code (e.g., EUR, USD)"},
-					"payee":    {"type": "string", "description": "Payee name"}
-				},
-				"required": ["amount", "currency", "payee"]
-			}`),
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				Amount   string `json:"amount"`
-				Currency string `json:"currency"`
-				Payee    string `json:"payee"`
-			}
-			json.Unmarshal(req.Arguments, &args)
-			return core.TextResult(fmt.Sprintf(
+	// initiate_payment: authorization is checked by paymentAuthorizationMiddleware
+	// (registered alongside scope middleware in serve()). Handler runs only on success.
+	type paymentInput struct {
+		Amount   string `json:"amount" jsonschema:"description=Payment amount,required"`
+		Currency string `json:"currency" jsonschema:"description=Currency code (e.g. EUR / USD),required"`
+		Payee    string `json:"payee" jsonschema:"description=Payee name,required"`
+	}
+	srv.Register(core.TextTool[paymentInput]("initiate_payment",
+		"Initiate a payment. Requires an RAR-bound token with payment_initiation authorization_details (UC3).",
+		func(ctx core.ToolContext, input paymentInput) (string, error) {
+			return fmt.Sprintf(
 				"Payment of %s %s to %s initiated successfully.",
-				args.Amount, args.Currency, args.Payee)), nil
+				input.Amount, input.Currency, input.Payee), nil
 		},
-	)
+	))
 }
 
 // paymentAuthorizationMiddleware short-circuits tools/call for initiate_payment

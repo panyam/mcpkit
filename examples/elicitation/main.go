@@ -372,29 +372,18 @@ func serve() {
 		TracerProvider: tp,
 		Wire:           wire,
 		Register: func(srv *server.Server) {
-			srv.RegisterTool(
-				core.ToolDef{
-					Name:        "access_protected_resource",
-					Description: "Access a protected resource. Requires user approval via URL consent flow on first call.",
-					InputSchema: json.RawMessage(`{
-						"type": "object",
-						"properties": {
-							"resourceId": {"type": "string", "description": "Resource to access"}
-						}
-					}`),
-				},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-					var args struct {
-						ResourceID string `json:"resourceId"`
+			type accessInput struct {
+				ResourceID string `json:"resourceId,omitempty" jsonschema:"description=Resource to access"`
+			}
+			srv.Register(core.TextTool[accessInput]("access_protected_resource", "Access a protected resource. Requires user approval via URL consent flow on first call.",
+				func(ctx core.ToolContext, input accessInput) (string, error) {
+					rid := input.ResourceID
+					if rid == "" {
+						rid = "default-resource"
 					}
-					json.Unmarshal(req.Arguments, &args)
-					if args.ResourceID == "" {
-						args.ResourceID = "default-resource"
-					}
-					return core.TextResult(fmt.Sprintf(
-						"Access granted to resource %q (approved via consent)", args.ResourceID)), nil
+					return fmt.Sprintf("Access granted to resource %q (approved via consent)", rid), nil
 				},
-			)
+			))
 			srv.UseMiddleware(consentMiddleware(consent, listenURL))
 		},
 		TransportOptions: []server.TransportOption{
