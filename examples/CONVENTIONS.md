@@ -14,6 +14,16 @@ Reference examples (the canon):
 - `examples/events/discord/` — non-UI, scripted walkthrough, live event injection.
 - `examples/apps/vanilla/` — UI / MCP Apps (host-driven, no scripted walkthrough).
 
+**Documented exception — `examples/getting-started/`.** This is the minimal
+quickstart the docs-site Get Started guide extracts snippets from. It is
+deliberately **not** a demokit walkthrough and does **not** use
+`examples/common`: it is a plain `server/` + `client/` pair whose only
+dependency is `github.com/panyam/mcpkit`, so a newcomer reading the Get Started
+page can copy the code into their own project verbatim. `/example-audit` should
+skip it (no `--serve` dispatch, no `runDemo`, no `WALKTHROUGH.md`, no
+`common.RunServer`). Every other non-UI example follows the full convention
+below.
+
 ---
 
 ## 1. Directory layout

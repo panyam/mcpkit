@@ -19,6 +19,13 @@ on:
       - 'conformance/FIXTURE_AUDIT.md'
       - 'conformance/EXTERNAL_CHECKER.md'
       - 'conformance/apps/COMPAT.md'
+      # Examples gallery (issue 508 on-ramp): READMEs + generated WALKTHROUGH.md
+      # feed the per-example pages; bundle/ demokit trace players are re-mirrored
+      # by collect_walkthroughs.py on every build.
+      - 'examples/**/*.md'
+      - 'examples/**/bundle/**'
+      # Tutorials / concepts track.
+      - 'tutorials/**/*.md'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

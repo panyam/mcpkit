@@ -268,6 +268,20 @@ pre code {
 
 .btn-secondary:hover { background: var(--bg-soft); }
 
+/* Landing — hero code sample */
+.hero-code { margin: 0 0 2.5rem 0; }
+.hero-code-label { color: var(--fg-muted); font-size: 0.95rem; margin: 0 0 0.6rem 0; }
+.hero-snippet {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.2rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+.hero-code-follow { margin: 0.7rem 0 0 0; font-size: 0.95rem; }
+
 .pillars {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

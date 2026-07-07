@@ -1,67 +1,72 @@
 ---
-title: "mcpkit"
-description: "Go library for building production-grade MCP servers and clients."
+description: "A batteries-included Go SDK for the Model Context Protocol — spec-conformant, with a stack of draft SEPs already built in."
 ---
 
 <section class="hero">
     <h1>mcpkit</h1>
-    <p class="hero-tagline">A Go library for building production-grade Model Context Protocol servers and clients.</p>
+    <p class="hero-tagline">A batteries-included Go SDK for the Model Context Protocol. Spec-conformant server and client — plus working implementations of the draft SEPs most SDKs haven't shipped yet.</p>
     <div class="hero-actions">
-        <a class="btn btn-primary" href="{{ .Site.PathPrefix }}/conformance/">View the conformance report</a>
+        <a class="btn btn-primary" href="{{ .Site.PathPrefix }}/get-started/">Get started</a>
+        <a class="btn btn-secondary" href="{{ .Site.PathPrefix }}/examples/">Browse examples</a>
         <a class="btn btn-secondary" href="{{ (json "SiteMetadata.json" "repository") }}">GitHub</a>
     </div>
 </section>
 
+<section class="hero-code">
+    <p class="hero-code-label">A complete MCP server — one typed tool, over Streamable HTTP:</p>
+<pre class="hero-snippet"><code>srv := server.NewServer(core.ServerInfo{Name: "hello", Version: "0.1.0"})
+
+srv.Register(core.TextTool[greetInput]("greet", "Say hello to someone by name",
+    func(ctx core.ToolContext, input greetInput) (string, error) {
+        return "Hello, " + input.Name + "!", nil
+    },
+))
+
+srv.Run(":8787") // then point Claude Code, MCPJam, or any MCP host at it
+</code></pre>
+    <p class="hero-code-follow"><a href="{{ .Site.PathPrefix }}/get-started/">Full walkthrough — install, server, client, run →</a></p>
+</section>
+
 <section class="pillars">
     <div class="pillar">
-        <h3>Conformance</h3>
-        <p>Per-SEP coverage, scenario-level grading against upstream <code>main</code>, and fixture-level parity — refreshed by CI on every PR.</p>
+        <h3>Get Started</h3>
+        <p>Install, a minimal server, a minimal client, and run it — about two minutes to green.</p>
+        <p><a href="{{ .Site.PathPrefix }}/get-started/">Start here</a></p>
+    </div>
+
+    <div class="pillar">
+        <h3>Batteries included</h3>
+        <p>Auth (JWT / OAuth / DCR), long-running tasks, interactive apps, tracing, an events bus, and skills — shown end to end through 20+ runnable examples.</p>
         <p>
-            <a href="{{ .Site.PathPrefix }}/conformance/">Coverage matrix</a> ·
-            <a href="{{ .Site.PathPrefix }}/conformance/upstream-audit/">Upstream audit</a> ·
-            <a href="{{ .Site.PathPrefix }}/conformance/fixture-audit/">Fixture audit</a> ·
-            <a href="{{ .Site.PathPrefix }}/conformance/external-checker/">External checker</a>
+            <a href="{{ .Site.PathPrefix }}/guides/auth/">Guides</a> ·
+            <a href="{{ .Site.PathPrefix }}/examples/">Examples</a>
         </p>
     </div>
 
     <div class="pillar">
-        <h3>Capabilities</h3>
-        <p>Feature inventory tracked alongside the spec — what mcpkit ships today, what's deferred, what's experimental.</p>
+        <h3>Ahead of the spec</h3>
+        <p>mcpkit tracks draft SEPs and ships them early — tasks (2663), MRTR (2322), list-TTL (2549), file inputs (2356), stateless wire (2575), skills (2640), and more. Experimental surfaces are clearly marked.</p>
         <p><a href="{{ .Site.PathPrefix }}/capabilities/">Browse capabilities</a></p>
     </div>
 
     <div class="pillar">
-        <h3>Packages</h3>
-        <p>Per-package READMEs for <code>core</code>, <code>server</code>, <code>client</code>, and the <code>ext/*</code> sub-modules.</p>
+        <h3>Conformance you can check</h3>
+        <p>Per-SEP coverage, scenario-level grading against upstream <code>main</code>, and fixture-level parity — refreshed by CI on every PR.</p>
         <p>
-            <a href="{{ .Site.PathPrefix }}/packages/core/">core</a> ·
-            <a href="{{ .Site.PathPrefix }}/packages/server/">server</a> ·
-            <a href="{{ .Site.PathPrefix }}/packages/client/">client</a> ·
-            <a href="{{ .Site.PathPrefix }}/packages/ext-auth/">ext/auth</a> ·
-            <a href="{{ .Site.PathPrefix }}/packages/ext-tasks/">ext/tasks</a> ·
-            <a href="{{ .Site.PathPrefix }}/packages/ext-ui/">ext/ui</a>
-        </p>
-    </div>
-
-    <div class="pillar">
-        <h3>Design Docs</h3>
-        <p>Architectural notes and migration guides for the SEPs mcpkit implements.</p>
-        <p>
-            <a href="{{ .Site.PathPrefix }}/design/apps/">MCP Apps</a> ·
-            <a href="{{ .Site.PathPrefix }}/design/tasks-v2-migration/">Tasks v2</a> ·
-            <a href="{{ .Site.PathPrefix }}/design/sep-2567-handles/">SEP-2567 handles</a> ·
-            <a href="{{ .Site.PathPrefix }}/design/sep-2577-deprecations/">SEP-2577 deprecations</a>
+            <a href="{{ .Site.PathPrefix }}/conformance/">Coverage matrix</a> ·
+            <a href="{{ .Site.PathPrefix }}/conformance/upstream-audit/">Upstream audit</a>
         </p>
     </div>
 </section>
 
 <section class="why">
-    <h2>Why a site, not just the README?</h2>
+    <h2>Why Go, and why mcpkit?</h2>
     <p>
-        mcpkit's conformance posture is a public contract, not an internal scorecard.
-        Once it shows up in the
-        <a href="https://github.com/modelcontextprotocol/conformance">upstream conformance discussion</a>
-        and in the MCP Discord, a stable URL with navigation beats a tree of markdown blobs.
-        The source-of-truth files still live in the repository — this site only renders them.
+        If you're building MCP servers in Go and want more than a minimal protocol
+        shim, mcpkit is the adventurous end of the SDK spectrum: it implements the
+        base protocol to conformance and then keeps going into the draft SEPs that
+        define where MCP is heading. The learning path here — Get Started, Guides,
+        Examples, Concepts — is built to get you productive fast and then take you
+        as deep as you want to go. The conformance report is the receipt.
     </p>
 </section>
