@@ -135,7 +135,7 @@ Or add it to Claude Desktop / VS Code MCP settings:
 
 You have a working server and client. Now reach for the batteries:
 
-- **[Guides](../guides/)** — task-oriented how-tos: transports, auth (JWT / OAuth /
+- **[Guides](../guides/transports/)** — task-oriented how-tos: transports, auth (JWT / OAuth /
   DCR), long-running tasks, interactive apps, tracing, deployment.
 - **[Examples](../examples/)** — 20+ runnable, guided walkthroughs. This is where the
   draft-SEP batteries are shown end to end.

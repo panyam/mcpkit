@@ -16,11 +16,14 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	s3 "github.com/panyam/s3gen"
 	"github.com/yuin/goldmark"
@@ -101,8 +104,128 @@ func renderMarkdownFile(relPath string) template.HTML {
 		log.Printf("docs/site: render %s: %v", relPath, err)
 		return ""
 	}
-	return template.HTML(buf.String())
+	srcDir := path.Dir(filepath.ToSlash(filepath.Clean(relPath)))
+	return template.HTML(rewriteRepoLinks(buf.String(), srcDir))
 }
+
+// The source-of-truth markdown carries repo-relative links (./other.md,
+// ../examples/x/main.go, ../../docs/Y.md) written for GitHub. On the rendered
+// site those don't resolve — the site doesn't mirror the repo layout and hosts
+// no source files. rewriteRepoLinks fixes each relative href/src at render time:
+//   - a doc that has its own site page  -> that page's site URL
+//   - any other existing repo file/dir  -> GitHub source URL (raw host for <img>)
+//   - a site-only relative link (../guides/, ../examples/) or external/anchor -> left as-is
+// See sourceToSite for how the doc→page map is derived.
+
+// repoTreeBase / rawBase mirror repoBlobBase for directory and raw-image links.
+var (
+	repoRootURL  = strings.TrimSuffix(repoBlobBase, "/blob/main/")
+	repoTreeBase = repoRootURL + "/tree/main/"
+	rawBase      = strings.Replace(repoRootURL, "github.com", "raw.githubusercontent.com", 1) + "/main/"
+)
+
+// sourceToSite maps a repo-relative markdown path (a wrapper's `source:` front
+// matter) to the site URL that renders it, so links to a doc that has its own
+// page land on-site instead of on GitHub. Built lazily from the content/
+// wrappers on first render (after cwd is docs/site).
+var (
+	s2sOnce sync.Once
+	s2sMap  map[string]string
+)
+
+var frontMatterSource = regexp.MustCompile(`(?m)^source:\s*"?([^"\n]+?)"?\s*$`)
+
+func sourceToSite() map[string]string {
+	s2sOnce.Do(func() {
+		m := map[string]string{}
+		_ = filepath.WalkDir("content", func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".html") {
+				return nil
+			}
+			data, rerr := os.ReadFile(p)
+			if rerr != nil {
+				return nil
+			}
+			mt := frontMatterSource.FindSubmatch(data)
+			if mt == nil {
+				return nil
+			}
+			src := path.Clean(strings.TrimSpace(string(mt[1])))
+			rel, _ := filepath.Rel("content", p)
+			rel = filepath.ToSlash(rel)
+			var sitePath string
+			if path.Base(rel) == "index.html" {
+				sitePath = path.Dir(rel)
+			} else {
+				sitePath = strings.TrimSuffix(rel, ".html")
+			}
+			url := sitePathPrefix + "/"
+			if sitePath != "" && sitePath != "." {
+				url += sitePath + "/"
+			}
+			m[src] = url
+			return nil
+		})
+		s2sMap = m
+	})
+	return s2sMap
+}
+
+var hrefOrSrc = regexp.MustCompile(`(href|src)="([^"]*)"`)
+
+func rewriteRepoLinks(html, srcDir string) string {
+	if srcDir == "." {
+		srcDir = ""
+	}
+	return hrefOrSrc.ReplaceAllStringFunc(html, func(match string) string {
+		mt := hrefOrSrc.FindStringSubmatch(match)
+		attr, u := mt[1], mt[2]
+		switch {
+		case u == "",
+			strings.HasPrefix(u, "http://"), strings.HasPrefix(u, "https://"),
+			strings.HasPrefix(u, "mailto:"), strings.HasPrefix(u, "//"),
+			strings.HasPrefix(u, "#"), strings.HasPrefix(u, "/"),
+			strings.HasPrefix(u, "data:"):
+			return match
+		}
+		frag := ""
+		if i := strings.IndexAny(u, "#?"); i >= 0 {
+			frag, u = u[i:], u[:i]
+		}
+		if u == "" {
+			return match
+		}
+		target := path.Clean(path.Join(srcDir, u))
+		if target == ".." || strings.HasPrefix(target, "../") {
+			return match // escapes repo root — leave alone
+		}
+		// (a) doc with its own site page.
+		if site, ok := sourceToSite()[target]; ok {
+			return attr + `="` + site + frag + `"`
+		}
+		// (b) directory whose README has a site page.
+		if site, ok := sourceToSite()[path.Join(target, "README.md")]; ok {
+			return attr + `="` + site + frag + `"`
+		}
+		// (c) an existing repo file/dir — point at the real source on GitHub.
+		info, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(target)))
+		if err != nil {
+			return match // not a repo path — a site-only relative link; leave it.
+		}
+		if attr == "src" {
+			return attr + `="` + rawBase + target + frag + `"`
+		}
+		if info.IsDir() {
+			return attr + `="` + repoTreeBase + target + frag + `"`
+		}
+		return attr + `="` + repoBlobBase + target + frag + `"`
+	})
+}
+
+// sitePathPrefix is the site's URL base. Kept as a const (not read off Site)
+// so the link rewriter can reference it without an initialization cycle
+// through Site's CommonFuncMap.
+const sitePathPrefix = "/mcpkit"
 
 // repoBlobBase is the GitHub blob URL prefix (…/blob/main/), read from
 // content/SiteMetadata.json so the repo lives in one place. gitfile builds
@@ -169,7 +292,7 @@ var markdown = goldmark.New(
 var Site = &s3.Site{
 	OutputDir:   "./dist/docs",
 	ContentRoot: "./content",
-	PathPrefix:  "/mcpkit",
+	PathPrefix:  sitePathPrefix,
 	TemplateFolders: []string{
 		"./templates",
 	},

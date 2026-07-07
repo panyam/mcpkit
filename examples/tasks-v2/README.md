@@ -66,7 +66,7 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 ## Where to look in the code
 
 - v1 example: [`examples/tasks/`](../tasks/)
-- Server library: [`server/tasks_v2.go`](../../server/tasks_v2.go)
+- Server library: [`ext/tasks/tasks.go`](../../ext/tasks/tasks.go)
 - Wire types: [`core/task_v2.go`](../../core/task_v2.go)
 - Client helpers: [`client/tasks.go`](../../client/tasks.go) (`ToolCall`, `GetTask`, `WaitForTask`, `UpdateTask`, `CancelTask`)
 - Conformance scenarios: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks)

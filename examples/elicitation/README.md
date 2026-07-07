@@ -30,7 +30,7 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 
 - Walkthrough steps + denial parsing: [`main.go`](main.go) (the `runDemo` block)
 - Consent middleware + store + `/approve` handler: [`main.go`](main.go) (after `serve()`)
-- SEP-2643 wire constants: [`core.MetaKeyAuthorizationContextID`](../../core/meta.go) and the `-32042` URLElicitationRequired error code
+- SEP-2643 wire constants: [`core.MetaKeyAuthorizationContextID`](../../core/authorization_denial_experimental.go) and the `-32042` URLElicitationRequired error code
 - Companion: [`examples/fine-grained-auth/`](../fine-grained-auth/) — UC2 (scope step-up) + UC3 (RAR per-payment credentials)
 
 ## Notes
