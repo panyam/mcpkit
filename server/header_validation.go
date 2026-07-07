@@ -9,20 +9,10 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// sep2243EnforcedVersions enumerates the negotiated MCP protocol
-// versions that mandate SEP-2243 routing-header validation server-side.
-// SEP-2243 is currently draft-only; widen this list when a dated
-// release picks up the requirement (and the official SDKs ship clients
-// that emit Mcp-Method / Mcp-Name).
-var sep2243EnforcedVersions = map[string]bool{
-	core.DraftProtocolVersion2026V1: true,
-}
-
-// isSEP2243EnforcedVersion reports whether the session's negotiated
-// protocol version requires Mcp-Method / Mcp-Name validation.
-func isSEP2243EnforcedVersion(negotiated string) bool {
-	return sep2243EnforcedVersions[negotiated]
-}
+// Whether a negotiated protocol version mandates SEP-2243 routing-header
+// validation lives in the version feature-set resolver
+// (ProtocolFeatures.RoutingHeaderValidation in protocol_features.go), so all
+// version gating stays in one table.
 
 // validateRoutingHeaders enforces SEP-2243 §Server Validation: the
 // `Mcp-Method` header MUST be present and exactly match the JSON-RPC
@@ -73,6 +63,17 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 			return "uri", "", true
 		}
 		return "uri", p.URI, true
+	case "prompts/get":
+		// SEP-2243 lists prompts/get among the name-carrying methods
+		// (params.name); mcpkit's own client stamps Mcp-Name for it via
+		// core.DeriveMcpName, so the server must validate it symmetrically.
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return "name", "", true
+		}
+		return "name", p.Name, true
 	case "tasks/get", "tasks/update", "tasks/cancel":
 		// SEP-2663 elevates Mcp-Name: <taskId> to a required client
 		// header on these methods, so SEP-2243's universal MUST applies.

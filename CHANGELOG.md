@@ -7,6 +7,87 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each release also has a fuller write-up under [`docs/releases/`](docs/releases/).
 Releases before 0.3.0 were tag-only and are not back-filled here.
 
+## [0.4.0] - Unreleased
+
+Full notes: [`docs/releases/v0.4.0.md`](docs/releases/v0.4.0.md).
+
+> **Not tagged as `v0.4.0` yet.** This entry is the accumulating target for the
+> breaking bundle. Work-in-progress lands under intermediate **`v0.3.x`** tags
+> while the issues below are worked through; the `v0.4.0` tag is cut only once
+> the full bundle is complete. Until then, treat this section as the running
+> plan, not a shipped release.
+
+API-breaking bundle. 0.4.0 gathers the backward-incompatible API changes we
+had queued behind a version boundary while mcpkit still has no external clients
+to migrate. It does **not** remove any protocol capability. The SEP-2577
+Roots / Sampling / Logging surfaces stay in place with their `// Deprecated:`
+annotations; removal is deferred to a later release (tracked separately),
+no earlier than the spec actually drops them (~2027). Keeping those surfaces
+also preserves conformance against the deprecated-but-in-spec features on the
+targeted spec version.
+
+### Breaking
+- **conformant-by-default** — safe-default SEP options flip from opt-in to
+  opt-out. Servers built with `server.NewServer(info)` now emit spec-conformant
+  defaults for options where a semantically-equivalent zero-value exists
+  (SEP-2549 list/read cache hints). New `server.WithoutXxx()` opt-outs for the
+  rare divergence. (issue 496)
+- **`server/stateless` collapsed into `server/`** — the sibling package and its
+  standalone `Dispatcher` are gone; a single `server.Dispatcher` branches by
+  wire internally. Import-path breaking for anyone importing `server/stateless`.
+  Migration: drop the `server/stateless` import; the types you used are now on
+  `server`. (issue 493)
+- **`QuotaStore` lifted to root `stores/`; `EventName` field renamed to `Key`.**
+  The reservation-counter shape is generic `(Principal, Key) → counter`; the
+  events SDK maps its `EventName` call sites through a one-line adapter. Breaking
+  for external `QuotaStore` implementors (experimental surface). (issue 774)
+
+### Added / Fixed
+- **Panic recovery in library goroutines** — a panic in a tool/background
+  goroutine is recovered and surfaced as an error instead of crashing the host
+  process. (issue 420)
+- **v2 task-store multi-tenant isolation** — fixes `sessionID=""` bucket-sharing
+  so tasks from distinct tenants no longer collide in one bucket. (issue 485)
+- **`ClientModeStateless` works against discover-less servers** — `Connect` no
+  longer hard-requires `server/discover`, so mcpkit connects to draft servers
+  that don't expose discovery. (issue 829)
+- **Protocol hardening** — server validates `Mcp-Name` for `prompts/get`
+  (SEP-2243, issue 838), validates the `MCP-Protocol-Version` header against the
+  body `protocolVersion` on `initialize` (issue 422), and rejects a duplicate
+  `initialize` after a session is established (opt back in with
+  `server.WithAllowReinitialize()`, issue 421).
+- **Spec-compliant version negotiation** — on `initialize`, an unsupported
+  requested `protocolVersion` now negotiates the server's preferred (latest)
+  supported version and replies with it, instead of erroring with `-32602`
+  (MCP 2025-03-26 §Version Negotiation). An absent `protocolVersion` is still
+  rejected as malformed. *Behavior change:* a client that previously relied on
+  the error must now check the returned `protocolVersion`.
+- **Version feature-set resolver** — the version-gated behaviors (SEP-2243
+  routing-header validation, SEP-2575 stateless `_meta` requirement) now resolve
+  through a single `featuresForVersion` table (`server/protocol_features.go`)
+  instead of scattered `negotiatedVersion == "..."` checks, so a new
+  version-gated SEP is wired in one place across both wires.
+
+### Deprecated (unchanged in 0.4.0 — removal deferred)
+- SEP-2577 Roots / Sampling / Logging surfaces keep their `// Deprecated:`
+  blocks and full runtime behavior. Removal is deferred to a future release
+  (no earlier than the spec drops them, ~2027). See
+  [`docs/SEP_2577_DEPRECATIONS.md`](docs/SEP_2577_DEPRECATIONS.md).
+
+### Already-landed breaks carried since 0.3.0 (documented here for the record)
+- Handler return ABI is sealed-interface: `ToolHandler` returns
+  `(core.ToolResponse, error)`, `PromptHandler` returns
+  `(core.PromptResponse, error)`. (issue 486 / PR 487)
+- experimental events request field renamed `params` → `arguments` on the wire
+  and in Go structs. (PR 778)
+- experimental events error codes generalized to the spec's reusable set.
+  (issue 491)
+- Error-code alignment landed on `main` since v0.3.0:
+  `UnsupportedProtocolVersion` → **-32022**; `resources/read` cache defaults now
+  applied on the stateless wire.
+
+[0.4.0]: https://github.com/panyam/mcpkit/releases/tag/v0.4.0
+
 ## [0.3.0] - 2026-06-29
 
 Full notes: [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md).

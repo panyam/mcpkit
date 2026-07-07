@@ -656,18 +656,17 @@ func (c *Client) doConnect() error {
 	//   ClientModeLegacyOnly→ original behavior, drop through.
 	if c.mode == ClientModeStateless {
 		c.useStatelessWire = true
-		// Populate ServerInfo via discover so callers don't see a
-		// zero ServerInfo struct post-Connect. Failure here is fatal
-		// for stateless mode — the client explicitly opted in.
-		dr, fallback, err := c.adaptiveProbe()
-		if err != nil {
-			return fmt.Errorf("stateless mode: server/discover failed: %w", err)
+		// server/discover is an optional optimization to pre-populate
+		// ServerInfo, not a precondition for connecting. The SEP-2575 draft
+		// permits a stateless client to begin with any request, so a
+		// discover-less server is still reachable. Probe best-effort: if
+		// discover works, capture ServerInfo + extensions; on RPC error or
+		// method-not-found, proceed with an unpopulated ServerInfo and let the
+		// first real request succeed. (issue 829)
+		if dr, fallback, err := c.adaptiveProbe(); err == nil && !fallback {
+			c.ServerInfo = dr.ServerInfo
+			c.captureServerExtensions(dr.Capabilities)
 		}
-		if fallback {
-			return fmt.Errorf("stateless mode: server does not implement server/discover")
-		}
-		c.ServerInfo = dr.ServerInfo
-		c.captureServerExtensions(dr.Capabilities)
 		c.startKeepalive()
 		return nil
 	}
