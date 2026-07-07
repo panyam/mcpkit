@@ -341,14 +341,13 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// (when body carries a name-shaped param) MUST match the body, or
 	// the server rejects with HTTP 400 + JSON-RPC -32020.
 	//
-	// Gated on the session's negotiated protocol version because
-	// SEP-2243 lives in 2026-07-28 only — no dated release imposes
-	// the routing-header contract today, and the SDKs every MCP client
-	// uses (official TS/Python, mcpjam, VS Code, Cursor, ...) do not
-	// emit these headers yet. Validating unconditionally would 400
-	// every existing client. Once SEP-2243 ships in a dated release
-	// the gate can widen to include that version.
-	if isSEP2243EnforcedVersion(dispatcher.negotiatedVersion) {
+	// Gated on the session's negotiated protocol version via the version
+	// feature-set resolver (protocol_features.go) because SEP-2243 lives in
+	// 2026-07-28 only — no dated release imposes the routing-header contract
+	// today, and the SDKs every MCP client uses (official TS/Python, mcpjam,
+	// VS Code, Cursor, ...) do not emit these headers yet. Validating
+	// unconditionally would 400 every existing client.
+	if dispatcher.protocolFeatures().RoutingHeaderValidation {
 		if errResp := validateRoutingHeaders(&req, r.Header); errResp != nil {
 			writeHeaderMismatch(w, errResp)
 			return
@@ -542,6 +541,23 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 	if t.config.maxSessions > 0 && t.sessionCount() >= t.config.maxSessions {
 		http.Error(w, "too many sessions", http.StatusServiceUnavailable)
 		return
+	}
+
+	// SEP-2028 / issue 422: when the transport-level MCP-Protocol-Version
+	// header and the initialize body's protocolVersion are both present and
+	// disagree, reject before negotiation. Otherwise a client could pin one
+	// version in the header while negotiating a different one in the body, and
+	// the server would silently honor the body — dropping the transport hint.
+	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
+		var bp struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		if err := json.Unmarshal(req.Params, &bp); err == nil && bp.ProtocolVersion != "" && bp.ProtocolVersion != hdrVer {
+			http.Error(w, fmt.Sprintf(
+				"MCP-Protocol-Version header (%s) does not match initialize body protocolVersion (%s)",
+				hdrVer, bp.ProtocolVersion), http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Create session dispatcher and dispatch initialize

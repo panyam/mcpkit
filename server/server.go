@@ -77,6 +77,7 @@ type serverOptions struct {
 	readTTLMs            *int                     // SEP-2549 resources/read default cache-freshness hint (ms); handler may override per-read
 	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
 	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
+	allowReinitialize    bool                     // WithAllowReinitialize — opt-in acceptance of a duplicate initialize (off by default; issue 421)
 	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
 	notificationRelay       NotificationRelay           // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
@@ -527,6 +528,22 @@ func WithAllowLegacyOnDraft() Option {
 	return func(o *serverOptions) { o.allowLegacyOnDraft = true }
 }
 
+// WithAllowReinitialize opts into accepting a second initialize on an
+// already-negotiated session (protocol re-negotiation).
+//
+// Default (option NOT set): once a session has negotiated a protocol version,
+// a duplicate initialize is rejected with -32600 Invalid Request and the
+// existing session state (negotiated version, client capabilities, client
+// identity) is preserved. This stops a misbehaving or hostile client from
+// rewriting session state mid-flight — downgrading the negotiated version or
+// changing the advertised client identity (issue 421).
+//
+// Set this only if your deployment genuinely re-negotiates the protocol on a
+// live session.
+func WithAllowReinitialize() Option {
+	return func(o *serverOptions) { o.allowReinitialize = true }
+}
+
 // WithRootsFetchTimeout sets the deadline for server-to-client roots/list
 // requests issued after notifications/roots/list_changed. Default is 30s.
 // Decrease for aggressive fail-fast; increase for slow clients with large
@@ -555,6 +572,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s.dispatcher.skipSchemaValidation = s.options.skipSchemaValidation
 	s.dispatcher.validateFileInputs = s.options.validateFileInputs
 	s.dispatcher.allowLegacyOnDraft = s.options.allowLegacyOnDraft
+	s.dispatcher.allowReinitialize = s.options.allowReinitialize
 	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.

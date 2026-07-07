@@ -274,10 +274,13 @@ func TestClient_AdaptiveAgainstLegacyServer(t *testing.T) {
 	}
 }
 
-// TestClient_StatelessModeForbidsFallback verifies that
-// ClientModeStateless explicitly refuses to fall back. If the server
-// returns -32601 for server/discover, Connect MUST error.
-func TestClient_StatelessModeForbidsFallback(t *testing.T) {
+// TestClient_StatelessModeDiscoverlessBestEffort verifies that
+// ClientModeStateless treats server/discover as an optional optimization, not a
+// precondition (issue 829). The SEP-2575 draft lets a stateless client begin
+// with any request, so a server that returns -32601 for server/discover is
+// still reachable: Connect succeeds, marks the stateless wire, and leaves
+// ServerInfo unpopulated for the first real request to fill in.
+func TestClient_StatelessModeDiscoverlessBestEffort(t *testing.T) {
 	fake := &fakeMCPServer{
 		handler: func(method string, _ json.RawMessage) (int, []byte) {
 			body, _ := json.Marshal(map[string]any{
@@ -293,12 +296,14 @@ func TestClient_StatelessModeForbidsFallback(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(url, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeStateless))
-	err := c.Connect()
-	if err == nil {
-		t.Fatal("expected error in stateless mode against legacy server, got nil")
+	if err := c.Connect(); err != nil {
+		t.Fatalf("stateless Connect against a discover-less server should succeed, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "server/discover") {
-		t.Errorf("error message = %q, want mention of server/discover", err.Error())
+	if !c.useStatelessWire {
+		t.Error("expected client to be on the stateless wire")
+	}
+	if c.ServerInfo.Name != "" {
+		t.Errorf("expected unpopulated ServerInfo, got name=%q", c.ServerInfo.Name)
 	}
 }
 
