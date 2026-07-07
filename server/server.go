@@ -453,6 +453,31 @@ func WithReadResourceCacheControl(ttlMs int, scope string) Option {
 	}
 }
 
+// WithoutListCacheControl turns OFF the conformant-by-default SEP-2549 list
+// cache hints (issue 496), so tools/list, prompts/list, resources/list, and
+// resources/templates/list responses omit both ttlMs and cacheScope. Use this
+// only if you deliberately want no cache-control hint on list responses; most
+// servers should keep the default (ttlMs:0, scope:public) or set explicit
+// values with WithListCacheControl.
+func WithoutListCacheControl() Option {
+	return func(o *serverOptions) {
+		o.listTTLMs = nil
+		o.listCacheScope = ""
+	}
+}
+
+// WithoutReadResourceCacheControl turns OFF the conformant-by-default SEP-2549
+// resources/read cache hints (issue 496), so read responses omit both ttlMs and
+// cacheScope unless a handler sets them per-read. Prefer keeping the default
+// (ttlMs:0, scope:private) or setting explicit values with
+// WithReadResourceCacheControl.
+func WithoutReadResourceCacheControl() Option {
+	return func(o *serverOptions) {
+		o.readTTLMs = nil
+		o.readCacheScope = ""
+	}
+}
+
 // WithSchemaValidation toggles call-time JSON Schema validation of tool
 // arguments and prompt arguments against their declared schemas. When
 // enabled (the default), the dispatcher validates incoming arguments
@@ -584,6 +609,22 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	s := &Server{
 		dispatcher: NewDispatcher(info),
 	}
+	// Conformant-by-default (issue 496): seed the SEP-2549 cache-control hints
+	// that have a safe, semantically-equivalent zero value BEFORE applying user
+	// options, so servers are spec-conformant on the SEP-2549 MUST parts without
+	// the caller having to know the option exists. ttlMs:0 = "immediately stale"
+	// (same effective behavior as omitting the field, but present so the
+	// conformance check passes); list scope defaults public, read scope defaults
+	// private (conservative — resources/read often varies per authenticated
+	// user). Callers override with WithList/ReadResourceCacheControl or turn the
+	// hints off entirely with WithoutList/ReadResourceCacheControl.
+	listTTLDefault := 0
+	readTTLDefault := 0
+	s.options.listTTLMs = &listTTLDefault
+	s.options.listCacheScope = core.CacheScopePublic
+	s.options.readTTLMs = &readTTLDefault
+	s.options.readCacheScope = core.CacheScopePrivate
+
 	for _, opt := range opts {
 		opt(&s.options)
 	}
