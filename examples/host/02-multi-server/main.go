@@ -66,12 +66,11 @@ func main() {
 		srv := server.NewServer(core.ServerInfo{Name: name, Version: "1.0"})
 		for tName, desc := range tools {
 			n := tName
-			srv.RegisterTool(
-				core.ToolDef{Name: n, Description: desc, InputSchema: map[string]any{"type": "object"}},
-				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-					return core.TextResult(fmt.Sprintf("[%s] %s: ok", name, n)), nil
+			srv.Register(core.TextTool[struct{}](n, desc,
+				func(ctx core.ToolContext, _ struct{}) (string, error) {
+					return fmt.Sprintf("[%s] %s: ok", name, n), nil
 				},
-			)
+			))
 		}
 		xport := server.NewInProcessTransport(srv)
 		c := client.NewClient("memory://", core.ClientInfo{Name: "registry-demo", Version: "1.0"},

@@ -175,27 +175,14 @@ func serve() {
 // All four are intentionally trivial so the demo's value lives in
 // the span shape, not the tool surface.
 func registerDemoTools(srv *server.Server) {
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "echo",
-			Description: "Returns the message argument unchanged. Baseline span shape — single-RPC trace, no surprises.",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"message": map[string]any{
-						"type":        "string",
-						"description": "Text to echo back.",
-					},
-				},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct {
-				Message string `json:"message"`
-			}
-			_ = req.Bind(&args)
-			if args.Message == "" {
-				args.Message = "ok"
+	type echoInput struct {
+		Message string `json:"message,omitempty" jsonschema:"description=Text to echo back"`
+	}
+	srv.Register(core.TextTool[echoInput]("echo", "Returns the message argument unchanged. Baseline span shape — single-RPC trace, no surprises.",
+		func(ctx core.ToolContext, input echoInput) (string, error) {
+			msg := input.Message
+			if msg == "" {
+				msg = "ok"
 			}
 			// Demonstration of issue 668's log↔trace pivot: the
 			// otelslog bridge reads the active span via ctx and
@@ -203,59 +190,35 @@ func registerDemoTools(srv *server.Server) {
 			// Loki panel in Grafana, click the resulting log line's
 			// `traceID` field — Grafana jumps to the matching Tempo
 			// trace and renders this dispatch span as the root.
-			slog.InfoContext(ctx, "echo tool invoked", "message", args.Message)
-			return core.TextResult(args.Message), nil
+			slog.InfoContext(ctx, "echo tool invoked", "message", msg)
+			return msg, nil
 		},
-	)
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "slow_echo",
-			Description: "Sleeps 750ms then echoes. Span duration is visible in Tempo's trace view.",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+	srv.Register(core.TextTool[struct{}]("slow_echo", "Sleeps 750ms then echoes. Span duration is visible in Tempo's trace view.",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			time.Sleep(750 * time.Millisecond)
-			return core.TextResult("slow_echo: slept 750ms"), nil
+			return "slow_echo: slept 750ms", nil
 		},
-	)
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "failing_tool",
-			Description: "Returns ToolResult{IsError: true}. Span carries mcp.tool.is_error=\"true\" — renders red in Grafana.",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+	srv.Register(core.TypedTool[struct{}, core.ToolResult]("failing_tool", "Returns ToolResult{IsError: true}. Span carries mcp.tool.is_error=\"true\" — renders red in Grafana.",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResult, error) {
 			return core.ToolResult{
 				IsError: true,
 				Content: []core.Content{{Type: "text", Text: "simulated tool failure"}},
 			}, nil
 		},
-	)
+	))
 
-	srv.RegisterTool(
-		core.ToolDef{
-			Name:        "count_tool",
-			Description: "Calls ctx.Progress 3 times. Parent span's notifications fan out as outbound spans with _meta.traceparent stamped.",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-		},
-		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+	srv.Register(core.TextTool[struct{}]("count_tool", "Calls ctx.Progress 3 times. Parent span's notifications fan out as outbound spans with _meta.traceparent stamped.",
+		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			for i := 1; i <= 3; i++ {
 				ctx.Progress(float64(i), 3, fmt.Sprintf("step %d/3", i))
 			}
-			return core.TextResult("count_tool: emitted 3 progress notifications"), nil
+			return "count_tool: emitted 3 progress notifications", nil
 		},
-	)
+	))
 }
 
 // tempoExploreURL builds a Grafana Explore deep link pre-filtered to
