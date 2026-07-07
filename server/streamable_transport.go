@@ -361,7 +361,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// some clients may send a different supported version than was negotiated.
 	if protoVer := r.Header.Get(mcpProtocolVersionHeader); protoVer != "" {
 		supported := false
-		for _, sv := range supportedProtocolVersions {
+		for _, sv := range dispatcher.protocolVersions() {
 			if protoVer == sv {
 				supported = true
 				break

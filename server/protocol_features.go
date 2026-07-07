@@ -10,27 +10,41 @@ import "github.com/panyam/mcpkit/core"
 // transport code. Centralizing keeps the legacy and stateless wires from
 // drifting (a recurring parity trap) and gives contributors one table to read.
 
+// protocolVersions returns the protocol versions this dispatcher accepts —
+// the operator-configured set (WithSupportedVersions) when non-empty, else the
+// package-level default. This is the single reader that negotiation, the
+// MCP-Protocol-Version header check, and the discover advertise consult, so a
+// per-server override applies uniformly (issue 419).
+func (d *Dispatcher) protocolVersions() []string {
+	if len(d.configuredVersions) > 0 {
+		return d.configuredVersions
+	}
+	return supportedProtocolVersions
+}
+
 // preferredProtocolVersion is the version the server offers when a client
 // requests one it does not support. Per the MCP version-negotiation handshake
 // this SHOULD be the latest version the server supports, which is the first
 // entry in supportedProtocolVersions.
-func preferredProtocolVersion() string {
-	return supportedProtocolVersions[0]
+func preferredProtocolVersion(versions []string) string {
+	return versions[0]
 }
 
 // negotiateProtocolVersion implements the MCP initialize version handshake
-// (spec 2025-03-26 §Version Negotiation): if the client's requested version is
-// supported, echo it back; otherwise respond with the server's preferred
-// (latest) supported version and let the client decide whether to proceed on
-// that version or disconnect. This replaces the older behavior of rejecting an
-// unsupported version outright.
-func negotiateProtocolVersion(requested string) string {
-	for _, sv := range supportedProtocolVersions {
+// (spec 2025-03-26 §Version Negotiation) over the given supported set: if the
+// client's requested version is in the set, echo it back; otherwise respond
+// with the set's preferred (first) version and let the client decide whether to
+// proceed on that version or disconnect. This replaces the older behavior of
+// rejecting an unsupported version outright. The set is the server's configured
+// versions (WithSupportedVersions) or the package default — see
+// Dispatcher.protocolVersions.
+func negotiateProtocolVersion(versions []string, requested string) string {
+	for _, sv := range versions {
 		if sv == requested {
 			return sv
 		}
 	}
-	return preferredProtocolVersion()
+	return preferredProtocolVersion(versions)
 }
 
 // ProtocolFeatures describes the version-gated behaviors active for a given
