@@ -1,5 +1,7 @@
 # Tasks Example Server
 
+> **Stable (frozen)** — MCP Tasks v1 (spec 2025-11-25). Superseded by [tasks-v2](../tasks-v2/) ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) for new work.
+
 > **SEP-2577 deprecation note**: this example demonstrates `TaskContext.TaskSample(...)`, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See [`docs/SEP_2577_DEPRECATIONS.md`](../../docs/SEP_2577_DEPRECATIONS.md) for the migration story.
 
 Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
@@ -566,3 +568,8 @@ Create a task and send progress notifications from the tool handler.
 | `../../client/tasks_v1.go` | v1 client helpers: GetTaskV1, ToolCallAsTaskV1, etc. |
 | `../../docs/TASKS_V2_MIGRATION.md` | v1 → v2 migration guide (current canonical doc) |
 
+
+## Next steps
+
+- [Tasks v2 — the canonical async model](../tasks-v2/)
+- [v1 → v2 migration](../../docs/TASKS_V2_MIGRATION.md)

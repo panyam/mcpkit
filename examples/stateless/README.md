@@ -1,5 +1,7 @@
 # examples/stateless — SEP-2575 stateless wire + SEP-2567 handle pattern
 
+> **Stable** — implements [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (stateless wire) + the [SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567) handle pattern.
+
 > **SEP-2577 deprecation note**: this example uses `core.EmitLog(...)`, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See [`docs/SEP_2577_DEPRECATIONS.md`](../../docs/SEP_2577_DEPRECATIONS.md) for the migration story.
 
 A single mcpkit server that demonstrates two complementary draft SEPs:
@@ -61,3 +63,8 @@ A scripted demokit walkthrough that drives the cart story end-to-end is intentio
 - The server runs in `stateless.ModeStateless` by default (conformance suite wants a pure stateless surface). `--mode=dual` opens the legacy wire alongside.
 - `HandleStore[Cart]` is the interface; the default `NewHandleStore[Cart](...)` returns the in-memory impl. Persistent backends (Redis etc.) for cross-replica deployments are tracked in `mcpkit#471` — they drop in without changing tool-handler call sites.
 - `add_item` uses `HandleStore.Put(cart_id, ...)` to update in place so the client's handle stays stable across rounds (the SEP-2567 happy path).
+
+## Next steps
+
+- [MRTR — input gathering on the stateless wire](../mrtr/)
+- [SEP-2567 handle pattern](../../docs/SEP_2567_HANDLES.md)

@@ -1,5 +1,7 @@
 # SEP-2549 List TTL — Cache Hints on List and Read Results
 
+> **Stable** — implements [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) (List TTL), merged into the MCP spec.
+
 Demonstrates the SEP-2549 cache hints — `ttlMs` (integer milliseconds) and
 `cacheScope` (`public`/`private`) — that an MCP server attaches to every
 paginated list response (`tools/list`, `prompts/list`, `resources/list`,
@@ -7,7 +9,7 @@ paginated list response (`tools/list`, `prompts/list`, `resources/list`,
 cache the registered surface between `notifications/list_changed` instead
 of re-fetching on every poll.
 
-Spec: [SEP-2549](https://github.com/modelcontextprotocol/specification/pull/2549).
+Spec: [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549).
 Migration notes: [docs/LIST_TTL_MIGRATION.md](../../docs/LIST_TTL_MIGRATION.md).
 
 ## ttlMs contract
@@ -91,4 +93,8 @@ test run. Drive it via `make testconf-list-ttl` from the repo root.
 | Client helpers | [`client.ListToolsPage`](../../client/iterators.go) and siblings, [`client.ReadResourceFull`](../../client/client.go) |
 | Migration guide | [`docs/LIST_TTL_MIGRATION.md`](../../docs/LIST_TTL_MIGRATION.md) |
 | Conformance | [SEP-2549 scenarios on panyam/mcpconformance `pending`](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl) — drive via `make testconf-list-ttl` |
-| SEP | [SEP-2549 spec PR](https://github.com/modelcontextprotocol/specification/pull/2549) |
+| SEP | [SEP-2549 spec PR](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) |
+
+## Next steps
+
+- [List TTL migration notes](../../docs/LIST_TTL_MIGRATION.md)

@@ -1,5 +1,7 @@
 # Auth Examples
 
+> **Stable** — MCP authorization (base spec): JWT/JWKS validation, Protected Resource Metadata, OAuth discovery, DCR.
+
 MCP servers demonstrating mcpkit's auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.
 
 > **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering public discovery, JWT/JWKS, scope step-up (403 + WWW-Authenticate), and session binding. Run it with `make serve` + `make demo`.
@@ -68,3 +70,8 @@ See `mcp.json` for a ready-to-use multi-server configuration, or for the unified
 - `tests/e2e/` — E2E auth integration tests
 - `tests/keycloak/` — Keycloak interop tests (real OIDC)
 
+
+## Next steps
+
+- [Fine-grained authorization (scope step-up, RAR)](../fine-grained-auth/)
+- [Auth design & spec compliance](../../ext/auth/docs/DESIGN.md)

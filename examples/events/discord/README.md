@@ -1,5 +1,7 @@
 # Discord Events Example
 
+> ⚠ **Experimental** — MCP Events, a draft extension ([spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1)), built on [experimental/ext/events](../../../experimental/ext/events/). Wire format may change.
+
 Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Discord as the event source. Built on the [`experimental/ext/events`](../../../experimental/ext/events/) library.
 
 Companion to the [Telegram example](../telegram/) — shows the events library handles structurally different payloads (Discord has nested author objects, embeds, threads, mentions vs Telegram's flat text model).
@@ -187,3 +189,8 @@ The events package itself depends only on `core.Claims` (the abstract auth contr
 | `make poll` | Python polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 The Python clients (`make list / listen / webhook / poll`) are convenient for ad-hoc poking. The walkthrough above (`make demo`) is the canonical tour. Both share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.
+
+## Next steps
+
+- [Telegram events — same protocol, different source](../telegram/)
+- [Events library](../../../experimental/ext/events/)

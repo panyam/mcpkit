@@ -1,6 +1,6 @@
 # Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)
 
-> ⚠ **EXPERIMENTAL** — Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end. Wire format may change as the SEP evolves.
+> ⚠ **Experimental** — Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end. Wire format may change as the SEP evolves.
 
 A scripted MCP host walking through two of the SEP-2643 use cases:
 
@@ -45,3 +45,8 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 - CORS for browser-based MCP hosts is applied via `server.WithHandlerWrap(cors)` so it covers `/mcp` plus the `auth.MountAuth` routes plus `/demo/bootstrap` uniformly. Same pattern as `examples/elicitation/`.
 - The walkthrough's "no user interaction" assumption is **demo only**. A real banking host would prompt the user to confirm the payment amount/payee before requesting the RAR-bound token.
 - The custom `isError=true` and `tool=` color rules on the demo server logger are passed as variadic extras to `common.NewMCPLogger` — they layer on top of the canonical 5-rule set without re-declaring it.
+
+## Next steps
+
+- [Elicitation — UC1 of the same SEP](../elicitation/)
+- [Auth basics](../auth/)
