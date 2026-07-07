@@ -2102,6 +2102,11 @@ func (t *streamableClientTransport) postResponse(resp *core.Response) {
 	if err != nil {
 		return
 	}
+	// No SEP-2243 Mcp-Method header here (issue 517): this POST carries a
+	// JSON-RPC *response* to a server-to-client request, not a request method,
+	// so there is no method for a routing intermediary to key on. Whether a
+	// response should echo the originating request's method is an open SEP-2243
+	// question; until the spec settles it, no header is set.
 	buildReq := func() (*http.Request, error) {
 		req, err := http.NewRequest("POST", t.url, bytes.NewReader(raw))
 		if err != nil {
@@ -2467,6 +2472,10 @@ func (t *sseClientTransport) call(_ string, data []byte) (*rpcResponse, error) {
 	}
 }
 
+// notify ignores its method argument by design (issue 517): the legacy SSE
+// transport predates SEP-2243, and setting the Mcp-Method routing header on a
+// deprecated wire is not worth the risk of surprising legacy proxies. The
+// SEP-2243 routing headers are emitted on the Streamable HTTP transport only.
 func (t *sseClientTransport) notify(_ string, data []byte) error {
 	// Check if the background reader is already dead before POSTing.
 	select {
