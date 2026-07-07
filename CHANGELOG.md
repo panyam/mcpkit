@@ -38,11 +38,6 @@ targeted spec version.
   `server.WithoutReadResourceCacheControl()` opt-outs restore omission.
   *Behavior change:* list/read responses that previously omitted these fields
   now include them. (issue 496)
-- **`server/stateless` collapsed into `server/`** — the sibling package and its
-  standalone `Dispatcher` are gone; a single `server.Dispatcher` branches by
-  wire internally. Import-path breaking for anyone importing `server/stateless`.
-  Migration: drop the `server/stateless` import; the types you used are now on
-  `server`. (issue 493)
 - **`QuotaStore` lifted to root `stores/`; `EventName` field renamed to `Key`.**
   The reservation-counter shape is generic `(Principal, Key) → counter`; the
   events SDK maps its `EventName` call sites through a one-line adapter. Breaking
