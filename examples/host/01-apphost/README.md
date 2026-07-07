@@ -1,5 +1,7 @@
 # AppHost — Host-Side App Management
 
+> **Stable** — MCP Apps host-side APIs (`ext/ui`: AppHost).
+
 Demonstrates AppHost mediating between an MCP server and an app bridge with bidirectional tool calls.
 
 ## What you'll learn
@@ -132,3 +134,8 @@ go run ./examples/host/01-apphost/ --non-interactive
 - **Step 6**: CallAppTool returns "Hello, World!" and counter increments to 2
 - **Step 7**: App calls server_echo, result includes "echo: from the app"
 - **Step 8**: After dynamic registration, 3 app tools listed (app_greet, app_counter, app_dice)
+
+## Next steps
+
+- [Multi-server registry](../02-multi-server/)
+- [MCP Apps (the iframe UIs a host renders)](../../apps/)

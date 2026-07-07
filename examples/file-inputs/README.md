@@ -1,5 +1,7 @@
 # SEP-2356 File Inputs — Data URI File Arguments
 
+> ⚠ **Experimental** — tracks [SEP-2356](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2356) (File Inputs), a draft SEP. Wire format may change.
+
 Demonstrates the `x-mcp-file` JSON Schema extension: a server marks string
 properties of `format: "uri"` as file pickers, the client encodes the
 selected file as an RFC 2397 base64 data URI
@@ -136,3 +138,8 @@ This example exercises Phase 1.1 (types) + 1.2 (data URIs) + a starter
   boilerplate.
 - **2.x** — `mcp.selectFile()` in the MCP Apps bridge so an in-iframe app
   can prompt the user for a file and forward the data URI to a tool.
+
+## Next steps
+
+- [Elicitation — another client-interaction flow](../elicitation/)
+- [MRTR — the input_required round-trip](../mrtr/)

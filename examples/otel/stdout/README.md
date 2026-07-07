@@ -1,5 +1,7 @@
 # examples/otel/stdout — SEP-414 Trace Context Propagation
 
+> **Stable** — implements SEP-414 (OpenTelemetry trace context). See [docs/SEP_414_OTEL.md](../../../docs/SEP_414_OTEL.md).
+
 Interactive demokit walkthrough showing how to wire OpenTelemetry
 tracing into BOTH sides of an MCP exchange using the
 [`ext/otel`](../../../ext/otel/) adapter — `server.WithTracerProvider`
@@ -121,3 +123,8 @@ surface is unchanged. Polished walkthroughs for Jaeger and OTLP live in
 SEP-414 P5 on [issue 312][issue].
 
 [issue]: https://github.com/panyam/mcpkit/issues/312
+
+## Next steps
+
+- [SEP-414 tracing design](../../../docs/SEP_414_OTEL.md)
+- [Events — another trace-propagation surface](../../events/discord/)

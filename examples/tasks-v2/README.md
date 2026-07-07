@@ -1,5 +1,7 @@
 # MCP Tasks v2 (SEP-2663) — Server-Directed Async + MRTR
 
+> **Stable** — implements [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (Tasks v2), merged into the MCP spec.
+
 Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-driven model: the *server* decides when to create a task, and clients call `tools/call` normally with no task hint.
 
 > **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `make serve` + `make demo`.
@@ -69,3 +71,8 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 - Client helpers: [`client/tasks.go`](../../client/tasks.go) (`ToolCall`, `GetTask`, `WaitForTask`, `UpdateTask`, `CancelTask`)
 - Conformance scenarios: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks)
 - Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../../conformance/tasks-v2/)
+
+## Next steps
+
+- [MRTR — the input_required envelope tasks v2 reuses](../mrtr/)
+- [Tasks tutorial](../../docs/TASKS_TUTORIAL.md)
