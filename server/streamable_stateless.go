@@ -69,6 +69,10 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// sessionCtx that the stateless wire deliberately does not create.
 	ctx := core.WithResponseHeaderCollector(r.Context())
 	ctx = core.WithStatelessClaims(ctx, claims)
+	// Task-store isolation bucket (issue 485): on the stateless wire the default
+	// bucket is "" (no session), so a keyer is what gives multi-tenant tenants
+	// their own task buckets. This path bypasses dispatchWithOpts, so inject here.
+	ctx = core.WithTaskBucketKeyer(ctx, t.server.dispatcher.taskBucketKeyer)
 	resp, dErr := t.statelessDispatcher.Dispatch(ctx, req)
 
 	// A non-nil dispatch error is a middleware short-circuit (typically
@@ -142,6 +146,8 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 
 	dispatchCtx := core.WithResponseHeaderCollector(r.Context())
 	dispatchCtx = core.WithStatelessClaims(dispatchCtx, claims)
+	// Task-store isolation bucket (issue 485) — see handleStatelessPost.
+	dispatchCtx = core.WithTaskBucketKeyer(dispatchCtx, t.server.dispatcher.taskBucketKeyer)
 
 	// SSE headers are set lazily on first write so a dispatch-time
 	// error response (-32020 header mismatch, -32022 unsupported
