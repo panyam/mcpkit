@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.3.1
+	github.com/panyam/mcpkit v0.4.0-b1
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 )

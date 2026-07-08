@@ -6,7 +6,7 @@ replace github.com/panyam/mcpkit => ../..
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
-	github.com/panyam/mcpkit v0.3.1
+	github.com/panyam/mcpkit v0.4.0-b1
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stretchr/testify v1.11.1
 )
