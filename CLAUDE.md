@@ -26,7 +26,7 @@ make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML 
                        # stage 5a/5b cover ext/otel + examples/otel/stdout (issue 634 wiring)
                        # stage 7d covers experimental/ext/events/stores/redis (issue 634 wiring)
 make audit             # govulncheck + gosec + gitleaks + race
-make tag-push V=vX.Y.Z # Tag root + all sub-modules and push
+make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; pre-release form is vX.Y.Z-bN)
 ```
 
 ## Package Layout
