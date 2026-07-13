@@ -55,17 +55,15 @@ targeted spec version.
 ### Added / Fixed
 - **`core.RawJSON`** — a typed, parse-once wrapper for JSON-RPC raw values
   (params / `_meta` / …) with `Bind` / `Meta` / `Field` helpers; wire-transparent
-  (round-trips identically to `json.RawMessage`). First slice of issue 733; the
-  trace middleware now shares one parse across its `_meta` readers (trace
-  context / baggage / tracelink) — ~3× faster + ~3× less alloc on large
-  `tools/call` payloads. The `Request.Params` type flip is a later slice.
-- **`core.Request.ParamsLazy()`** — a per-request cached `RawJSON` so every
-  metadata reader on one request shares a single parse (issue 733 slice 2).
-  `RawJSON.Meta()` now extracts only the `_meta` bytes (never copies a large
-  `arguments` sibling), and the SEP-2575 `_meta` gate + trace middleware read
-  through the shared cache: metadata-only decode stays flat-allocation
-  regardless of payload size, and trace + gate together scan params once (2×
-  faster at 1 MB). Additive — `Params` is still `json.RawMessage`.
+  (round-trips identically to `json.RawMessage`). This is the read-side type
+  behind the `Request.Params` flip above (issue 733). Every metadata reader on
+  one request shares a single parse: the trace middleware's `_meta` readers
+  (trace context / baggage / tracelink) and the SEP-2575 `_meta` gate now read
+  through one cached parse instead of each re-scanning params. `Meta()` extracts
+  only the `_meta` bytes and never copies a large `arguments` sibling, so
+  metadata-only decode stays flat-allocation regardless of payload size —
+  ~3× faster + ~3× less alloc on large `tools/call` payloads, and trace + gate
+  together scan params once (2× faster at 1 MB).
 - **Panic recovery in library goroutines** — a panic in a tool/background
   goroutine is recovered and surfaced as an error instead of crashing the host
   process. (issue 420)
