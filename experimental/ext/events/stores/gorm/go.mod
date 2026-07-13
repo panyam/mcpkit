@@ -30,7 +30,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/mcpkit v0.4.0-b1 // indirect
+	github.com/panyam/mcpkit v0.4.0-b2 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
