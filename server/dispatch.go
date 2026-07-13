@@ -413,7 +413,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 		// The version gate is resolved via protocol_features.go so all
 		// version-gated behavior lives in one table.
 		if d.protocolFeatures().StatelessMetaRequired && !d.allowLegacyOnDraft {
-			if _, err := core.DecodeRequestMeta(req.Params); err != nil {
+			if _, err := core.DecodeRequestMetaFromRawJSON(req.ParamsLazy()); err != nil {
 				field := "io.modelcontextprotocol/protocolVersion"
 				if mve, ok := err.(*core.MetaValidationError); ok && mve.Field != "_meta" {
 					field = "io.modelcontextprotocol/" + mve.Field
