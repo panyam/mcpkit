@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/panyam/mcpkit/core"
@@ -121,7 +120,7 @@ func NewToolScopeMiddleware(lookup ToolDefLookup, opts ...ToolScopeOption) serve
 		var params struct {
 			Name string `json:"name"`
 		}
-		if err := json.Unmarshal(req.Params, &params); err != nil {
+		if err := req.Params.Bind(&params); err != nil {
 			// Malformed params — let the dispatcher handle the parse error.
 			return next(ctx, req)
 		}

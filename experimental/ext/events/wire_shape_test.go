@@ -109,7 +109,7 @@ func TestPoll_FlatRequestShape(t *testing.T) {
 	})
 	require.NoError(t, err)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(rawReq),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "flat top-level shape must be accepted; got %+v", resp.Error)
@@ -129,7 +129,7 @@ func TestPoll_RejectsLegacyWrapper(t *testing.T) {
 	})
 	require.NoError(t, err)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(rawReq),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "legacy wrapper must be rejected, not silently parsed as empty")
@@ -201,7 +201,7 @@ func TestPoll_MaxAgeFiltersOldEvents(t *testing.T) {
 		"maxAge": 5,
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(rawReq),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -241,7 +241,7 @@ func TestPoll_MaxAgeZeroMeansNoFilter(t *testing.T) {
 		// maxAge intentionally omitted
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: rawReq,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(rawReq),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -280,7 +280,7 @@ func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFil
 	})
 	initParams := json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: initParams,
+		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: core.NewRawJSON(initParams),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)

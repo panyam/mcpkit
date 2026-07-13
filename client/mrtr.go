@@ -193,7 +193,7 @@ func DefaultInputHandler(c *Client) InputHandler {
 func dispatchMRTRInputRequest(ctx context.Context, c *Client, req core.InputRequest) (json.RawMessage, error) {
 	synth := &core.Request{
 		Method: req.Method,
-		Params: req.Params,
+		Params: core.NewRawJSON(req.Params),
 		ID:     json.RawMessage(`"mrtr"`),
 	}
 	resp := c.HandleServerRequestWithContext(ctx, synth)

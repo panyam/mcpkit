@@ -152,7 +152,7 @@ func TestToolExec_RegisterAndDispatch(t *testing.T) {
 
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"greet"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"greet"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("tools/call failed: %s", resp.Error.Message)

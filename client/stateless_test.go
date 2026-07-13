@@ -167,7 +167,7 @@ func (f *fakeMCPServer) start() (*httptest.Server, string) {
 		body, _ := io.ReadAll(r.Body)
 		var req core.Request
 		_ = json.Unmarshal(body, &req)
-		status, resBody := f.handler(req.Method, req.Params)
+		status, resBody := f.handler(req.Method, req.Params.Raw())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		w.Write(resBody)
@@ -323,7 +323,7 @@ func TestClient_StatelessWire_SendsMetaAndHeader(t *testing.T) {
 		_ = json.Unmarshal(body, &req)
 		seen = append(seen, observed{
 			method: req.Method,
-			params: req.Params,
+			params: req.Params.Raw(),
 			header: r.Header.Get(core.HTTPProtocolVersionHeader),
 		})
 		switch req.Method {

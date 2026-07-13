@@ -3,7 +3,6 @@ package skills
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -625,7 +624,7 @@ func skillURIValidationMiddleware(ctx context.Context, req *core.Request, next s
 	var envelope struct {
 		URI string `json:"uri"`
 	}
-	if err := json.Unmarshal(req.Params, &envelope); err != nil {
+	if err := req.Params.Bind(&envelope); err != nil {
 		return next(ctx, req)
 	}
 	if !strings.HasPrefix(envelope.URI, Scheme+"://") {

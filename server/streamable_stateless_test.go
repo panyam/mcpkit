@@ -343,7 +343,7 @@ func TestStatelessRouting_DetectionPriorities(t *testing.T) {
 				p, _ := json.Marshal(validMetaParams())
 				params = p
 			}
-			req := &core.Request{Method: c.method, Params: params}
+			req := &core.Request{Method: c.method, Params: core.NewRawJSON(params)}
 			got := detectWireKind(r, nil, req, stateless.ModeDual)
 			if got != c.want {
 				t.Errorf("detectWireKind = %v, want %v", got, c.want)

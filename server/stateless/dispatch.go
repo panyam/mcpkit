@@ -78,7 +78,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Res
 	}
 
 	// Every other method requires a valid _meta envelope.
-	meta, err := core.DecodeRequestMetaFromRawJSON(req.ParamsLazy())
+	meta, err := core.DecodeRequestMetaFromRawJSON(&req.Params)
 	if err != nil {
 		// MetaValidationError carries the specific missing field for diagnostics.
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error()), nil
@@ -124,21 +124,21 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Res
 	case "server/discover":
 		return d.handleDiscover(id), nil
 	case "tools/list":
-		return d.handleToolsList(id, req.Params), nil
+		return d.handleToolsList(id, req.Params.Raw()), nil
 	case "tools/call":
-		return d.handleToolsCall(ctx, id, req.Params)
+		return d.handleToolsCall(ctx, id, req.Params.Raw())
 	case "resources/list":
-		return d.handleResourcesList(id, req.Params), nil
+		return d.handleResourcesList(id, req.Params.Raw()), nil
 	case "resources/read":
-		return d.handleResourcesRead(ctx, id, req.Params), nil
+		return d.handleResourcesRead(ctx, id, req.Params.Raw()), nil
 	case "resources/templates/list":
-		return d.handleResourcesTemplatesList(id, req.Params), nil
+		return d.handleResourcesTemplatesList(id, req.Params.Raw()), nil
 	case "prompts/list":
-		return d.handlePromptsList(id, req.Params), nil
+		return d.handlePromptsList(id, req.Params.Raw()), nil
 	case "prompts/get":
-		return d.handlePromptsGet(ctx, id, req.Params)
+		return d.handlePromptsGet(ctx, id, req.Params.Raw())
 	case "completion/complete":
-		return d.handleCompletionComplete(ctx, id, req.Params), nil
+		return d.handleCompletionComplete(ctx, id, req.Params.Raw()), nil
 	default:
 		// Any other method (custom JSON-RPC verbs registered via
 		// Server.HandleMethod — events/poll, events/list,

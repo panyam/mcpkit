@@ -140,7 +140,7 @@ func TestAddResourceTemplate_OverwriteUpdatesHandler(t *testing.T) {
 
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://items/42"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://items/42"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("resources/read failed: %s", resp.Error.Message)

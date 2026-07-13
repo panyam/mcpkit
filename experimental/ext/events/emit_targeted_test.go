@@ -159,7 +159,7 @@ func TestEmitToSubscription_Push_RoutesToOneStream(t *testing.T) {
 		defer close(streamDone)
 		_, _ = srv.Dispatch(streamCtx, &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`100`),
-			Method: "events/stream", Params: rawReq,
+			Method: "events/stream", Params: core.NewRawJSON(rawReq),
 		})
 	}()
 
@@ -244,7 +244,7 @@ func TestEmitToSubscription_Webhook_RoutesToOneTarget(t *testing.T) {
 		raw, _ := json.Marshal(body)
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/subscribe", Params: raw,
+			Method: "events/subscribe", Params: core.NewRawJSON(raw),
 		})
 		require.NoError(t, err)
 		require.Nil(t, resp.Error, "subscribe failed: %+v", resp.Error)
@@ -281,7 +281,7 @@ func TestEmitToSubscription_Webhook_RoutesToOneTarget(t *testing.T) {
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`),
-		Method: "events/unsubscribe", Params: unsubBody,
+		Method: "events/unsubscribe", Params: core.NewRawJSON(unsubBody),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -340,7 +340,7 @@ func TestEmitToSubscription_Webhook_RefreshKeepsSameID(t *testing.T) {
 		raw, _ := json.Marshal(subParams)
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/subscribe", Params: raw,
+			Method: "events/subscribe", Params: core.NewRawJSON(raw),
 		})
 		require.NoError(t, err)
 		require.Nil(t, resp.Error)

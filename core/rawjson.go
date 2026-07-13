@@ -62,6 +62,16 @@ func NewRawJSON(raw json.RawMessage) RawJSON {
 	return RawJSON{raw: raw, lazy: &rawJSONLazy{}}
 }
 
+// MarshalRawJSON marshals v to JSON and wraps the result as a RawJSON —
+// convenience for assigning a typed value to a Request.Params field.
+func MarshalRawJSON(v any) (RawJSON, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return RawJSON{}, err
+	}
+	return NewRawJSON(b), nil
+}
+
 // object parses and caches the top-level JSON object once. Returns a nil spine
 // (no error) for an absent value, and an error when the value is not a JSON
 // object — Field/Meta treat both as "no field".

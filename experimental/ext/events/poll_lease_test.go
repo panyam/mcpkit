@@ -360,7 +360,7 @@ func finishInitHandshake(t *testing.T, srv *server.Server) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
-		Params:  initParams,
+		Params:  core.NewRawJSON(initParams),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "initialize should succeed; got %+v", resp.Error)
@@ -385,7 +385,7 @@ func dispatchPoll(t *testing.T, srv *server.Server, name string, params map[stri
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "events/poll",
-		Params:  raw,
+		Params:  core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "events/poll returned error: %+v", resp.Error)

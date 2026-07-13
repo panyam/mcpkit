@@ -50,7 +50,7 @@ func TestStreamableHTTP_EmitRetryHintReachesGetSSEStream(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("1"),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`)),
 	}
 	initBody, _ := json.Marshal(initReq)
 	resp, err := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader(string(initBody)))
@@ -96,7 +96,7 @@ func TestStreamableHTTP_EmitRetryHintReachesGetSSEStream(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("2"),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"slow_tool","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"slow_tool","arguments":{}}`)),
 	}
 	callBody, _ := json.Marshal(callReq)
 	postReq, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(string(callBody)))
@@ -152,7 +152,7 @@ func TestStreamableHTTP_EmitRetryHintNoOpWithoutGetStream(t *testing.T) {
 	// Initialize.
 	initBody, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`)),
 	})
 	resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader(string(initBody)))
 	sessionID := resp.Header.Get("Mcp-Session-Id")
@@ -170,7 +170,7 @@ func TestStreamableHTTP_EmitRetryHintNoOpWithoutGetStream(t *testing.T) {
 	// Use JSON Accept so the response is synchronous.
 	callBody, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"hint_tool","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"hint_tool","arguments":{}}`)),
 	})
 	postReq, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(string(callBody)))
 	postReq.Header.Set("Content-Type", "application/json")

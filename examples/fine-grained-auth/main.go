@@ -1034,7 +1034,7 @@ func paymentAuthorizationMiddleware() server.Middleware {
 				Payee    string `json:"payee"`
 			} `json:"arguments"`
 		}
-		if err := json.Unmarshal(req.Params, &envelope); err != nil {
+		if err := req.Params.Bind(&envelope); err != nil {
 			return next(ctx, req)
 		}
 		if envelope.Name != "initiate_payment" {

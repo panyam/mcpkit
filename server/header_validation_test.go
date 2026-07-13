@@ -16,7 +16,7 @@ func makeReq(t *testing.T, method string, params any) *core.Request {
 		if err != nil {
 			t.Fatalf("marshal params: %v", err)
 		}
-		r.Params = raw
+		r.Params = core.NewRawJSON(raw)
 	}
 	return r
 }

@@ -52,7 +52,7 @@ func TestToolScopeMiddleware_403WithWWWAuth(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"update_doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"update_doc"}`)),
 	}
 
 	resp, err := mw(ctx, req, next)
@@ -85,7 +85,7 @@ func TestToolScopeMiddleware_PassThroughWhenSufficient(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"update_doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"update_doc"}`)),
 	}
 
 	resp, err := mw(ctx, req, next)
@@ -109,7 +109,7 @@ func TestToolScopeMiddleware_NonToolsCallPassesThrough(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://x"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://x"}`)),
 	}
 
 	_, err := mw(context.Background(), req, next)
@@ -132,7 +132,7 @@ func TestToolScopeMiddleware_UnknownToolPassesThrough(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"does_not_exist"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"does_not_exist"}`)),
 	}
 
 	_, err := mw(withClaims(context.Background()), req, next)
@@ -158,7 +158,7 @@ func TestToolScopeMiddleware_NoRequiredScopesPassesThrough(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"public_tool"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"public_tool"}`)),
 	}
 
 	_, err := mw(context.Background(), req, next)
@@ -184,7 +184,7 @@ func TestToolScopeMiddleware_AllRequiredScopesChecked(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"sensitive"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"sensitive"}`)),
 	}
 
 	_, err := mw(ctx, req, next)
@@ -225,7 +225,7 @@ func TestToolScopeMiddleware_AcceptedScopesHierarchyPasses(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"read_repo"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"read_repo"}`)),
 	}
 
 	_, err := mw(ctx, req, next)
@@ -257,7 +257,7 @@ func TestToolScopeMiddleware_AcceptedScopesEmptyFallsBackToAND(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"update_doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"update_doc"}`)),
 	}
 
 	_, err := mw(ctx, req, next)
@@ -291,7 +291,7 @@ func TestToolScopeMiddleware_AcceptedScopesDeniedAdvertisesRequiredOnly(t *testi
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"read_repo"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"read_repo"}`)),
 	}
 
 	_, err := mw(ctx, req, next)
@@ -324,7 +324,7 @@ func TestToolScopeMiddleware_IncludeGrantedScopesOffByDefault(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"update_doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"update_doc"}`)),
 	}
 
 	_, err := mw(ctx, req, next)
@@ -356,7 +356,7 @@ func TestToolScopeMiddleware_IncludeGrantedScopesUnionsInChallenge(t *testing.T)
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"update_doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"update_doc"}`)),
 	}
 
 	_, err := mw(ctx, req, next)
@@ -389,7 +389,7 @@ func TestToolScopeMiddleware_IncludeGrantedScopesEmptyGrantedSameAsOff(t *testin
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"update_doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"update_doc"}`)),
 	}
 
 	_, err := mw(ctx, req, next)

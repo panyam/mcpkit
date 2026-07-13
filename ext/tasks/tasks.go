@@ -446,7 +446,7 @@ func taskV2Middleware(reg *server.Registry, rt *v2TaskRuntime, cfg Config) serve
 				ClientCapabilitiesRaw json.RawMessage `json:"io.modelcontextprotocol/clientCapabilities,omitempty"`
 			} `json:"_meta,omitempty"`
 		}
-		if err := json.Unmarshal(req.Params, &envelope); err != nil {
+		if err := req.Params.Bind(&envelope); err != nil {
 			return next(ctx, req)
 		}
 

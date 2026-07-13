@@ -149,12 +149,12 @@ func traceMiddleware(c *Client, tp core.TracerProvider) ClientMiddleware {
 //	defer span.End()
 //	// ... dispatch as usual; record outcome via recordInboundOutcome
 func traceInboundDispatch(tp core.TracerProvider, ctx context.Context, req *core.Request) (context.Context, core.Span) {
-	tc := core.ExtractTraceContextFromParams(req.Params)
+	tc := core.ExtractTraceContextFromParams(req.Params.Raw())
 	ctx = core.WithTraceContext(ctx, tc)
 	// W3C Baggage on inbound server-to-client requests follows the
 	// same shape: read once from `_meta.baggage`, attach via ctx so
 	// the handler can see it via core.BaggageFromContext.
-	bg := core.ExtractBaggageFromParams(req.Params)
+	bg := core.ExtractBaggageFromParams(req.Params.Raw())
 	ctx = core.WithBaggage(ctx, bg)
 	attrs := []core.Attribute{
 		{Key: "mcp.method", Value: req.Method},

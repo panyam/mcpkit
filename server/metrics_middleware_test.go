@@ -222,7 +222,7 @@ func TestMetrics_NonToolCall_SkipsToolMetrics(t *testing.T) {
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/list",
-		Params: json.RawMessage(`{}`),
+		Params: core.NewRawJSON(json.RawMessage(`{}`)),
 	}
 	_, err := srv.dispatchWithNotifyAndRequest(srv.dispatcher, context.Background(), nil, nil, nil, req)
 	require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestMetrics_TransportError_RecordsInternalErrorCode(t *testing.T) {
 	transportErr := errors.New("simulated transport error")
 	resp, err := mw(context.Background(), &core.Request{
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"x"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"x"}`)),
 	}, func(context.Context, *core.Request) (*core.Response, error) {
 		return nil, transportErr
 	})

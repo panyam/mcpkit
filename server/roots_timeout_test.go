@@ -64,7 +64,7 @@ func TestRoots_CustomFetchTimeout(t *testing.T) {
 	})
 	initResp, err := xport.Call(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize",
-		Params: paramsRaw,
+		Params: core.NewRawJSON(paramsRaw),
 	})
 	require.NoError(t, err)
 	require.Nil(t, initResp.Error)

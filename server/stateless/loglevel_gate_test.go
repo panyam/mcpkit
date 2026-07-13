@@ -92,7 +92,7 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage("1"),
 				Method:  "tools/call",
-				Params:  params,
+				Params:  core.NewRawJSON(params),
 			}
 			resp, _ := d.Dispatch(context.Background(), req)
 			if resp == nil || resp.Error != nil {
