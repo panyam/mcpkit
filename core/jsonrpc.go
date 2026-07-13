@@ -13,6 +13,26 @@ type Request struct {
 	ID      json.RawMessage `json:"id"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params,omitempty"`
+
+	// paramsLazy caches the RawJSON view of Params so every reader on the same
+	// *Request shares one parse (issue 733). Unexported — ignored on the wire.
+	paramsLazy *RawJSON
+}
+
+// ParamsLazy returns a RawJSON view of Params, cached on the request. Every
+// caller on the same *Request shares the cache, so a dispatch path that reads
+// the metadata from several places (trace middleware, the SEP-2575 _meta gate,
+// routing-header validation) scans Params once instead of once per reader.
+//
+// Additive bridge ahead of the Params type flip (issue 733 slice 3): Params
+// stays json.RawMessage. Not safe for concurrent first-callers on one *Request;
+// the dispatch/middleware chain reads sequentially per request.
+func (r *Request) ParamsLazy() *RawJSON {
+	if r.paramsLazy == nil {
+		rj := NewRawJSON(r.Params)
+		r.paramsLazy = &rj
+	}
+	return r.paramsLazy
 }
 
 // Response is a JSON-RPC 2.0 response.

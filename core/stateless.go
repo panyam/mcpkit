@@ -86,32 +86,35 @@ func (e *MetaValidationError) Error() string {
 // An absent params (empty raw) is treated as "missing _meta" — the wire
 // requires _meta on every stateless request.
 func DecodeRequestMeta(rawParams json.RawMessage) (*RequestMeta, error) {
-	if len(rawParams) == 0 {
+	m := NewRawJSON(rawParams)
+	return DecodeRequestMetaFromRawJSON(&m)
+}
+
+// DecodeRequestMetaFromRawJSON is the RawJSON form of DecodeRequestMeta
+// (issue 733). It reads the SEP-2575 per-request `_meta` envelope through the
+// message's cached, spine-free Meta() — so on a request whose metadata is also
+// read elsewhere (trace middleware) the params are scanned once, and a large
+// `arguments` sibling is never copied. Prefer this via req.ParamsLazy() on the
+// dispatch path.
+func DecodeRequestMetaFromRawJSON(m *RawJSON) (*RequestMeta, error) {
+	meta, ok := m.Meta()
+	if !ok {
 		return nil, &MetaValidationError{Field: "_meta"}
 	}
-	var probe struct {
-		Meta json.RawMessage `json:"_meta"`
-	}
-	if err := json.Unmarshal(rawParams, &probe); err != nil {
+	var rm RequestMeta
+	if err := meta.Bind(&rm); err != nil {
 		return nil, &MetaValidationError{Field: "_meta"}
 	}
-	if len(probe.Meta) == 0 || string(probe.Meta) == "null" {
-		return nil, &MetaValidationError{Field: "_meta"}
-	}
-	var meta RequestMeta
-	if err := json.Unmarshal(probe.Meta, &meta); err != nil {
-		return nil, &MetaValidationError{Field: "_meta"}
-	}
-	if meta.ProtocolVersion == "" {
+	if rm.ProtocolVersion == "" {
 		return nil, &MetaValidationError{Field: "protocolVersion"}
 	}
-	if meta.ClientInfo == nil {
+	if rm.ClientInfo == nil {
 		return nil, &MetaValidationError{Field: "clientInfo"}
 	}
-	if meta.ClientCapabilities == nil {
+	if rm.ClientCapabilities == nil {
 		return nil, &MetaValidationError{Field: "clientCapabilities"}
 	}
-	return &meta, nil
+	return &rm, nil
 }
 
 // UnsupportedProtocolVersionData is the structured error payload returned

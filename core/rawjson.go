@@ -40,6 +40,20 @@ type rawJSONLazy struct {
 	once  sync.Once
 	spine map[string]json.RawMessage
 	err   error
+
+	// _meta is cached separately from the spine: Meta extracts only the
+	// _meta bytes so it never copies a large sibling `arguments` value, which
+	// the spine (map[string]json.RawMessage) would. See Meta.
+	metaOnce sync.Once
+	meta     RawJSON
+	metaOK   bool
+}
+
+func (m *RawJSON) ensureLazy() *rawJSONLazy {
+	if m.lazy == nil {
+		m.lazy = &rawJSONLazy{}
+	}
+	return m.lazy
 }
 
 // NewRawJSON wraps raw bytes. The bytes are not copied; callers must not mutate
@@ -52,16 +66,14 @@ func NewRawJSON(raw json.RawMessage) RawJSON {
 // (no error) for an absent value, and an error when the value is not a JSON
 // object — Field/Meta treat both as "no field".
 func (m *RawJSON) object() (map[string]json.RawMessage, error) {
-	if m.lazy == nil {
-		m.lazy = &rawJSONLazy{}
-	}
-	m.lazy.once.Do(func() {
+	lz := m.ensureLazy()
+	lz.once.Do(func() {
 		if len(m.raw) == 0 {
 			return
 		}
-		m.lazy.err = json.Unmarshal(m.raw, &m.lazy.spine)
+		lz.err = json.Unmarshal(m.raw, &lz.spine)
 	})
-	return m.lazy.spine, m.lazy.err
+	return lz.spine, lz.err
 }
 
 // Field returns the top-level value for key as a sub-RawJSON. ok is false when
@@ -81,9 +93,37 @@ func (m *RawJSON) Field(key string) (RawJSON, bool) {
 	return RawJSON{raw: v, lazy: &rawJSONLazy{}}, true
 }
 
-// Meta returns the `_meta` object as a sub-RawJSON — sugar for Field("_meta"),
-// the dominant metadata-reader pattern (SEP-414 / 2575 / 2243 / 2322).
-func (m *RawJSON) Meta() (RawJSON, bool) { return m.Field("_meta") }
+// Meta returns the `_meta` object as a sub-RawJSON, ok=false when absent, null,
+// or non-object — the dominant metadata-reader pattern (SEP-414 / 2575 / 2243 /
+// 2322).
+//
+// Unlike Field, Meta does NOT build the full spine: it extracts only the
+// `_meta` bytes via a targeted probe, so it scans the value once but never
+// copies a large sibling `arguments` blob (which the spine's
+// map[string]json.RawMessage would). The result is cached, so many readers on
+// one message share a single scan. This keeps the common metadata-only path —
+// including the SEP-2575 stateless gate that runs on every request — as cheap
+// as a hand-rolled `_meta` probe, plus caching.
+func (m *RawJSON) Meta() (RawJSON, bool) {
+	lz := m.ensureLazy()
+	lz.metaOnce.Do(func() {
+		if len(m.raw) == 0 {
+			return
+		}
+		var probe struct {
+			Meta json.RawMessage `json:"_meta"`
+		}
+		if err := json.Unmarshal(m.raw, &probe); err != nil {
+			return
+		}
+		if len(probe.Meta) == 0 || string(probe.Meta) == "null" {
+			return
+		}
+		lz.meta = NewRawJSON(probe.Meta)
+		lz.metaOK = true
+	})
+	return lz.meta, lz.metaOK
+}
 
 // Bind decodes the whole raw value into v — the typed / handler path. A nil or
 // empty value is a no-op that leaves v unchanged (an absent params does not
