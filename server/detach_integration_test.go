@@ -64,14 +64,14 @@ func TestDetach_ToolSurvivesPerToolTimeout(t *testing.T) {
 
 	postJSONRPC(t, postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`)),
 	})
 	// Skip reading init response.
 	postJSONRPC(t, postURL, &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
 
 	postJSONRPC(t, postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"slow_detached","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"slow_detached","arguments":{}}`)),
 	})
 
 	// Wait for tool to finish.
@@ -130,13 +130,13 @@ func TestDetach_NonDetachedToolCancelledByTimeout(t *testing.T) {
 
 	postJSONRPC(t, postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`)),
 	})
 	postJSONRPC(t, postURL, &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
 
 	postJSONRPC(t, postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"slow_normal","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"slow_normal","arguments":{}}`)),
 	})
 
 	time.Sleep(300 * time.Millisecond)
@@ -181,7 +181,7 @@ func TestStreamableHTTP_DetachedToolPreservesRetryHint(t *testing.T) {
 	// Initialize.
 	initBody, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`)),
 	})
 	resp, _ := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader(string(initBody)))
 	sessionID := resp.Header.Get("Mcp-Session-Id")
@@ -208,7 +208,7 @@ func TestStreamableHTTP_DetachedToolPreservesRetryHint(t *testing.T) {
 	// POST tools/call.
 	callBody, _ := json.Marshal(&core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"combo_tool","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"combo_tool","arguments":{}}`)),
 	})
 	postReq, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(string(callBody)))
 	postReq.Header.Set("Content-Type", "application/json")

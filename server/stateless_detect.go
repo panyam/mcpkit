@@ -79,7 +79,7 @@ func detectWireKind(r *http.Request, body []byte, req *core.Request, mode statel
 	}
 
 	// Signal 3: params._meta carries a protocolVersion (stateless envelope).
-	if hasStatelessMetaProtocolVersion(req.Params) {
+	if hasStatelessMetaProtocolVersion(req.Params.Raw()) {
 		return wireStateless
 	}
 

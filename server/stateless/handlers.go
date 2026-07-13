@@ -57,7 +57,7 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 		JSONRPC: "2.0",
 		ID:      id,
 		Method:  "tools/call",
-		Params:  params,
+		Params:  core.NewRawJSON(params),
 	}
 	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
 		return resp, err
@@ -194,7 +194,7 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 		JSONRPC: "2.0",
 		ID:      id,
 		Method:  "prompts/get",
-		Params:  params,
+		Params:  core.NewRawJSON(params),
 	}
 	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
 		return resp, err

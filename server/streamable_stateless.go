@@ -39,7 +39,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// (some clients only stamp _meta); _meta-only is fine. Mismatch
 	// when both are present → -32020 HeaderMismatch.
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
-		metaVer := peekMetaProtocolVersion(req.Params)
+		metaVer := peekMetaProtocolVersion(req.Params.Raw())
 		if mismatchResp := statelessVersionMismatch(id, hdrVer, metaVer); mismatchResp != nil {
 			writeStatelessResponse(w, mismatchResp)
 			return
@@ -187,7 +187,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 
 	// Header / _meta version cross-check (mirrored from handleStatelessPost).
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
-		metaVer := peekMetaProtocolVersion(req.Params)
+		metaVer := peekMetaProtocolVersion(req.Params.Raw())
 		if mismatchResp := statelessVersionMismatch(req.ID, hdrVer, metaVer); mismatchResp != nil {
 			writeHeaderMismatch(w, mismatchResp)
 			return

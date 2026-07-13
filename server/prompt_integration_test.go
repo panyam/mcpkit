@@ -92,7 +92,7 @@ func TestPromptsGetSimple(t *testing.T) {
 	d := testPromptDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
-		Params: json.RawMessage(`{"name":"simple"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"simple"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
@@ -113,7 +113,7 @@ func TestPromptsGetWithArgs(t *testing.T) {
 	d := testPromptDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
-		Params: json.RawMessage(`{"name":"greet","arguments":{"name":"World"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"greet","arguments":{"name":"World"}}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
@@ -131,7 +131,7 @@ func TestPromptsGetUnknown(t *testing.T) {
 	d := testPromptDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
-		Params: json.RawMessage(`{"name":"nonexistent"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"nonexistent"}`)),
 	})
 	if resp.Error == nil {
 		t.Fatal("expected error for unknown prompt")
@@ -147,7 +147,7 @@ func TestPromptsCapabilities(t *testing.T) {
 	d := testPromptDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	var result map[string]any
 	resp.ResultAs(&result)

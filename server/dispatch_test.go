@@ -18,7 +18,7 @@ func initDispatcher(d *Dispatcher) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
@@ -66,7 +66,7 @@ func TestDispatchInitialize(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 
 	if resp == nil {
@@ -168,7 +168,7 @@ func TestDispatchToolsCall(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`3`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"echo","arguments":{"message":"hello"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{"message":"hello"}}`)),
 	})
 
 	if resp == nil {
@@ -251,7 +251,7 @@ func TestDispatchToolsCall_HandlerReturnsTypedVariants(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(`9`),
 				Method:  "tools/call",
-				Params:  json.RawMessage(`{"name":"typed_variant","arguments":{}}`),
+				Params:  core.NewRawJSON(json.RawMessage(`{"name":"typed_variant","arguments":{}}`)),
 			})
 			if resp == nil || resp.Error != nil {
 				t.Fatalf("unexpected error: %+v", resp)
@@ -276,7 +276,7 @@ func TestDispatchToolsCallUnknown(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`4`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"nonexistent","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"nonexistent","arguments":{}}`)),
 	})
 
 	if resp == nil {
@@ -296,7 +296,7 @@ func TestDispatchToolsCallBadParams(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`5`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`not json`),
+		Params:  core.NewRawJSON(json.RawMessage(`not json`)),
 	})
 
 	if resp == nil {
@@ -362,7 +362,7 @@ func TestDispatchToolsCallHandlerError(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`10`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"failing","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"failing","arguments":{}}`)),
 	})
 
 	if resp == nil {
@@ -431,7 +431,7 @@ func TestDispatchInitializeVersion2025(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 
 	if resp == nil {
@@ -464,7 +464,7 @@ func TestDispatchInitializeUnsupportedVersion(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"1999-01-01","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"1999-01-01","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 
 	if resp == nil {
@@ -497,7 +497,7 @@ func TestDispatchInitializeMissingProtocolVersion(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if resp == nil || resp.Error == nil {
 		t.Fatalf("expected error for missing protocolVersion, got %+v", resp)
@@ -537,7 +537,7 @@ func TestDispatchInitializeStoresClientInfo(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true}},"clientInfo":{"name":"my-client","version":"2.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{"roots":{"listChanged":true}},"clientInfo":{"name":"my-client","version":"2.0"}}`)),
 	})
 
 	if d.clientInfo.Name != "my-client" {
@@ -567,7 +567,7 @@ func TestDispatchBeforeInitialized(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 
 	resp := d.Dispatch(context.Background(), &core.Request{
@@ -602,7 +602,7 @@ func TestDispatchToolsCallBeforeAnyInit(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"echo","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{}}`)),
 	})
 
 	if resp == nil {
@@ -644,7 +644,7 @@ func TestDispatchLoggingSetLevel(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`10`),
 		Method:  "logging/setLevel",
-		Params:  json.RawMessage(`{"level":"warning"}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"level":"warning"}`)),
 	})
 
 	if resp == nil {
@@ -675,7 +675,7 @@ func TestDispatchLoggingSetLevelAllLevels(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(`1`),
 				Method:  "logging/setLevel",
-				Params:  json.RawMessage(`{"level":"` + level + `"}`),
+				Params:  core.NewRawJSON(json.RawMessage(`{"level":"` + level + `"}`)),
 			})
 			if resp.Error != nil {
 				t.Fatalf("logging/setLevel(%q) failed: %s", level, resp.Error.Message)
@@ -692,7 +692,7 @@ func TestDispatchLoggingSetLevelInvalid(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`11`),
 		Method:  "logging/setLevel",
-		Params:  json.RawMessage(`{"level":"trace"}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"level":"trace"}`)),
 	})
 
 	if resp == nil {
@@ -714,7 +714,7 @@ func TestDispatchLoggingSetLevelBeforeInit(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "logging/setLevel",
-		Params:  json.RawMessage(`{"level":"info"}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"level":"info"}`)),
 	})
 
 	if resp == nil {
@@ -737,7 +737,7 @@ func TestDispatchLoggingCapability(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 
 	if resp.Error != nil {
@@ -776,7 +776,7 @@ func TestDispatchToolsCallWithProgressToken(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"my-token"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"my-token"}}`)),
 	})
 
 	if gotToken != "my-token" {
@@ -802,7 +802,7 @@ func TestDispatchToolsCallWithoutProgressToken(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"no_progress","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"no_progress","arguments":{}}`)),
 	})
 
 	if gotToken != nil {
@@ -995,7 +995,7 @@ func TestInitializeWithClientExtensions(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params: json.RawMessage(`{
+		Params: core.NewRawJSON(json.RawMessage(`{
 			"protocolVersion": "2024-11-05",
 			"capabilities": {
 				"extensions": {
@@ -1005,7 +1005,7 @@ func TestInitializeWithClientExtensions(t *testing.T) {
 				}
 			},
 			"clientInfo": {"name": "test-client", "version": "1.0"}
-		}`),
+		}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("initialize error: %s", resp.Error.Message)

@@ -124,7 +124,7 @@ func TestStructuredContentInDispatch(t *testing.T) {
 	)
 
 	// Initialize
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	srv.Dispatch(context.Background(), initReq)
 	srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
 
@@ -132,7 +132,7 @@ func TestStructuredContentInDispatch(t *testing.T) {
 	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		ID:     json.RawMessage(`2`),
 		Method: "tools/call",
-		Params: json.RawMessage(`{"name":"structured"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"structured"}`)),
 	})
 
 	require.NotNil(t, resp)

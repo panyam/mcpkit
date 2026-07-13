@@ -51,7 +51,7 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 		var p struct {
 			Name string `json:"name"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := req.Params.Bind(&p); err != nil {
 			return "name", "", true
 		}
 		return "name", p.Name, true
@@ -59,7 +59,7 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 		var p struct {
 			URI string `json:"uri"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := req.Params.Bind(&p); err != nil {
 			return "uri", "", true
 		}
 		return "uri", p.URI, true
@@ -70,7 +70,7 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 		var p struct {
 			Name string `json:"name"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := req.Params.Bind(&p); err != nil {
 			return "name", "", true
 		}
 		return "name", p.Name, true
@@ -80,7 +80,7 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 		var p struct {
 			TaskID string `json:"taskId"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := req.Params.Bind(&p); err != nil {
 			return "taskId", "", true
 		}
 		return "taskId", p.TaskID, true

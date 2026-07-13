@@ -243,7 +243,7 @@ func buildSecretValidationStack(t *testing.T) *server.Server {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
-		Params:  initParams,
+		Params:  core.NewRawJSON(initParams),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "initialize should succeed; got %+v", resp.Error)
@@ -268,7 +268,7 @@ func callSubscribeHandler(t *testing.T, params map[string]any) *core.Response {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "events/subscribe",
-		Params:  raw,
+		Params:  core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	return resp
@@ -283,7 +283,7 @@ func callUnsubscribeHandler(t *testing.T, params map[string]any) *core.Response 
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "events/unsubscribe",
-		Params:  raw,
+		Params:  core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	return resp

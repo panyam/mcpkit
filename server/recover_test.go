@@ -24,7 +24,7 @@ func Test_Issue420_PanicHandlerReturnsError(t *testing.T) {
 
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"boom","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"boom","arguments":{}}`)),
 	})
 	if resp == nil || resp.Error == nil {
 		t.Fatalf("expected an error response from a panicking handler, got %+v", resp)
@@ -51,7 +51,7 @@ func Test_Issue420_PanicNotificationNoResponse(t *testing.T) {
 	// tools/call with no ID (notification shape) — panic must recover to nil.
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", Method: "tools/call",
-		Params: json.RawMessage(`{"name":"boom","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"boom","arguments":{}}`)),
 	})
 	if resp != nil {
 		t.Errorf("expected nil for a panicking notification, got %+v", resp)

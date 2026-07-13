@@ -71,7 +71,7 @@ func newStreamTestStack(t *testing.T, unsafeAnon string, opts ...streamStackOpti
 	// Initialize the session so handlers will dispatch.
 	initParams := json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)
 	resp, err := transport.Call(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: initParams,
+		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: core.NewRawJSON(initParams),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -129,7 +129,7 @@ func (s *streamTestStack) startStream(t *testing.T, params map[string]any) *runn
 	done := make(chan streamResult, 1)
 	go func() {
 		resp, err := s.transport.Call(ctx, &core.Request{
-			JSONRPC: "2.0", ID: json.RawMessage(`42`), Method: "events/stream", Params: rawParams,
+			JSONRPC: "2.0", ID: json.RawMessage(`42`), Method: "events/stream", Params: core.NewRawJSON(rawParams),
 		})
 		done <- streamResult{resp: resp, err: err}
 	}()

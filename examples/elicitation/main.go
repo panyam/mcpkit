@@ -414,7 +414,7 @@ func consentMiddleware(store *consentStore, baseURL string) server.Middleware {
 				AuthzContextID string `json:"io.modelcontextprotocol/authorization-context-id"`
 			} `json:"_meta"`
 		}
-		if err := json.Unmarshal(req.Params, &envelope); err != nil {
+		if err := req.Params.Bind(&envelope); err != nil {
 			return next(ctx, req)
 		}
 

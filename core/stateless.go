@@ -94,7 +94,7 @@ func DecodeRequestMeta(rawParams json.RawMessage) (*RequestMeta, error) {
 // (issue 733). It reads the SEP-2575 per-request `_meta` envelope through the
 // message's cached, spine-free Meta() — so on a request whose metadata is also
 // read elsewhere (trace middleware) the params are scanned once, and a large
-// `arguments` sibling is never copied. Prefer this via req.ParamsLazy() on the
+// `arguments` sibling is never copied. Prefer this via &req.Params on the
 // dispatch path.
 func DecodeRequestMetaFromRawJSON(m *RawJSON) (*RequestMeta, error) {
 	meta, ok := m.Meta()

@@ -51,7 +51,7 @@ func buildAuthGateStackWithOpts(t *testing.T, unsafeAnon string, extra ...Webhoo
 	})
 	initParams := json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: initParams,
+		JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize", Params: core.NewRawJSON(initParams),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -67,7 +67,7 @@ func dispatchSubscribe(t *testing.T, srv *server.Server, params map[string]any) 
 	raw, err := json.Marshal(params)
 	require.NoError(t, err)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe", Params: raw,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe", Params: core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	return resp
@@ -205,7 +205,7 @@ func TestUnsubscribe_ByTuple(t *testing.T) {
 	rawUnsub, err := json.Marshal(unsubParams)
 	require.NoError(t, err)
 	unsubResp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "events/unsubscribe", Params: rawUnsub,
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "events/unsubscribe", Params: core.NewRawJSON(rawUnsub),
 	})
 	require.NoError(t, err)
 	require.Nil(t, unsubResp.Error)

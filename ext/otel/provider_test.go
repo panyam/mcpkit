@@ -234,7 +234,7 @@ func TestEndToEnd_ServerWithTracerProvider(t *testing.T) {
 	initParams := `{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1.0"}}`
 	_, err := srv.Dispatch(context.Background(), &core.Request{
 		ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(initParams),
+		Params: core.NewRawJSON(json.RawMessage(initParams)),
 	})
 	require.NoError(t, err)
 	_, _ = srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
@@ -244,7 +244,7 @@ func TestEndToEnd_ServerWithTracerProvider(t *testing.T) {
 	toolParams := `{"name":"echo","_meta":{"traceparent":"00-` + parentTID + `-` + parentSID + `-01"}}`
 	_, err = srv.Dispatch(context.Background(), &core.Request{
 		ID: json.RawMessage(`2`), Method: "tools/call",
-		Params: json.RawMessage(toolParams),
+		Params: core.NewRawJSON(json.RawMessage(toolParams)),
 	})
 	require.NoError(t, err)
 

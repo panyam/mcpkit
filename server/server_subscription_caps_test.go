@@ -27,7 +27,7 @@ func subscribeReq(id int, uri string) *core.Request {
 	params, _ := json.Marshal(struct {
 		URI string `json:"uri"`
 	}{URI: uri})
-	return &core.Request{JSONRPC: "2.0", ID: idRaw, Method: "resources/subscribe", Params: params}
+	return &core.Request{JSONRPC: "2.0", ID: idRaw, Method: "resources/subscribe", Params: core.NewRawJSON(params)}
 }
 
 func unsubscribeReq(id int, uri string) *core.Request {
@@ -35,7 +35,7 @@ func unsubscribeReq(id int, uri string) *core.Request {
 	params, _ := json.Marshal(struct {
 		URI string `json:"uri"`
 	}{URI: uri})
-	return &core.Request{JSONRPC: "2.0", ID: idRaw, Method: "resources/unsubscribe", Params: params}
+	return &core.Request{JSONRPC: "2.0", ID: idRaw, Method: "resources/unsubscribe", Params: core.NewRawJSON(params)}
 }
 
 func makeCapTestServer(t *testing.T, opts ...Option) *Server {

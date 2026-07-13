@@ -50,7 +50,7 @@ func TestConcurrentRequestsGetCorrectResponses(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(fmt.Sprintf(`%d`, idx+100)),
 				Method:  "tools/call",
-				Params:  params,
+				Params:  core.NewRawJSON(params),
 			})
 			results[idx] = resp
 		}(i)
@@ -93,7 +93,7 @@ func TestDuplicateRequestIDRejected(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      json.RawMessage(`"dup-id"`),
 			Method:  "tools/call",
-			Params:  json.RawMessage(`{"name":"slow"}`),
+			Params:  core.NewRawJSON(json.RawMessage(`{"name":"slow"}`)),
 		})
 	}()
 
@@ -105,7 +105,7 @@ func TestDuplicateRequestIDRejected(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`"dup-id"`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"slow"}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"slow"}`)),
 	})
 
 	require.NotNil(t, secondResp)

@@ -232,8 +232,8 @@ func (m *mrtrParamsCaptureMiddleware) middleware() server.Middleware {
 		if req.Method == "tools/call" {
 			m.mu.Lock()
 			// Copy so any later mutation doesn't bleed into our snapshot.
-			cp := make(json.RawMessage, len(req.Params))
-			copy(cp, req.Params)
+			cp := make(json.RawMessage, req.Params.Len())
+			copy(cp, req.Params.Raw())
 			m.rounds = append(m.rounds, cp)
 			m.mu.Unlock()
 		}

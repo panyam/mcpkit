@@ -142,7 +142,7 @@ func dispatchToolsCall(t *testing.T, srv *Server, ctx context.Context, params st
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "tools/call",
-		Params: json.RawMessage(params),
+		Params: core.NewRawJSON(json.RawMessage(params)),
 	}
 	return srv.dispatchWithNotifyAndRequest(srv.dispatcher, ctx, nil, notify, request, req)
 }
@@ -321,7 +321,7 @@ func dispatchResourcesRead(t *testing.T, srv *Server, ctx context.Context, param
 	req := &core.Request{
 		ID:     json.RawMessage(`1`),
 		Method: "resources/read",
-		Params: json.RawMessage(params),
+		Params: core.NewRawJSON(json.RawMessage(params)),
 	}
 	return srv.dispatchWithNotifyAndRequest(srv.dispatcher, ctx, nil, nil, nil, req)
 }

@@ -112,7 +112,7 @@ func (b *InProcessAppBridge) handleToolsCall(req *core.Request) (*core.Response,
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
 	}
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := req.Params.Bind(&params); err != nil {
 		return &core.Response{
 			ID:    req.ID,
 			Error: &core.Error{Code: core.ErrCodeInvalidParams, Message: fmt.Sprintf("invalid params: %v", err)},
@@ -165,7 +165,7 @@ func (b *InProcessAppBridge) SendToHost(ctx context.Context, method string, para
 
 	resp := handler(ctx, &core.Request{
 		Method: method,
-		Params: raw,
+		Params: core.NewRawJSON(raw),
 	})
 	return resp, nil
 }

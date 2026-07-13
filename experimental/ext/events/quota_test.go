@@ -138,7 +138,7 @@ func TestQuota_Webhook_RejectsThirdSubscribe(t *testing.T) {
 		raw, _ := json.Marshal(body)
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/subscribe", Params: raw,
+			Method: "events/subscribe", Params: core.NewRawJSON(raw),
 		})
 		require.NoError(t, err)
 		return resp
@@ -191,7 +191,7 @@ func TestQuota_Webhook_UnsubscribeReleases(t *testing.T) {
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`),
-		Method: "events/subscribe", Params: subBody,
+		Method: "events/subscribe", Params: core.NewRawJSON(subBody),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -201,7 +201,7 @@ func TestQuota_Webhook_UnsubscribeReleases(t *testing.T) {
 	// new sub — quota count must not double.
 	resp, err = srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`),
-		Method: "events/subscribe", Params: subBody,
+		Method: "events/subscribe", Params: core.NewRawJSON(subBody),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -215,7 +215,7 @@ func TestQuota_Webhook_UnsubscribeReleases(t *testing.T) {
 	})
 	resp, err = srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`3`),
-		Method: "events/unsubscribe", Params: unsubBody,
+		Method: "events/unsubscribe", Params: core.NewRawJSON(unsubBody),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -260,7 +260,7 @@ func TestQuota_Webhook_TTLPruneReleases(t *testing.T) {
 		})
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/subscribe", Params: body,
+			Method: "events/subscribe", Params: core.NewRawJSON(body),
 		})
 		require.NoError(t, err)
 		return resp
@@ -313,7 +313,7 @@ func TestQuota_Webhook_OnSubscribeErrorReleases(t *testing.T) {
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`),
-		Method: "events/subscribe", Params: body,
+		Method: "events/subscribe", Params: core.NewRawJSON(body),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "on_subscribe error should reject")
@@ -350,7 +350,7 @@ func TestQuota_Push_RejectsOverCap(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage([]byte{'"', 's', byte('0' + idx), '"'}),
 				Method:  "events/stream",
-				Params:  rawReq,
+				Params:  core.NewRawJSON(rawReq),
 			})
 			if resp != nil && resp.Error != nil {
 				errCh <- errors.New(resp.Error.Message)
@@ -418,7 +418,7 @@ func TestQuota_Poll_RejectsOverCap(t *testing.T) {
 		})
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/poll", Params: body,
+			Method: "events/poll", Params: core.NewRawJSON(body),
 		})
 		require.NoError(t, err)
 		return resp
@@ -494,7 +494,7 @@ func TestQuota_OnSubscribeNeverFiresWhenAtCap(t *testing.T) {
 		})
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/subscribe", Params: body,
+			Method: "events/subscribe", Params: core.NewRawJSON(body),
 		})
 		require.NoError(t, err)
 		return resp

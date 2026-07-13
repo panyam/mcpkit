@@ -87,7 +87,7 @@ func TestResourcesRead(t *testing.T) {
 	d := testResourceDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
@@ -107,7 +107,7 @@ func TestResourcesReadBinary(t *testing.T) {
 	d := testResourceDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://binary"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://binary"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
@@ -125,7 +125,7 @@ func TestResourcesReadUnknown(t *testing.T) {
 	d := testResourceDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://nonexistent"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://nonexistent"}`)),
 	})
 	if resp.Error == nil {
 		t.Fatal("expected error for unknown resource")
@@ -163,7 +163,7 @@ func TestResourcesTemplateRead(t *testing.T) {
 	d := testResourceDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://items/42"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://items/42"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
@@ -182,7 +182,7 @@ func TestResourcesCapabilities(t *testing.T) {
 	// Re-initialize to check capabilities (testResourceDispatcher already initializes)
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	var result map[string]any
 	resp.ResultAs(&result)
@@ -220,7 +220,7 @@ func TestResourcesSubscribe(t *testing.T) {
 	d, _ := testSubscriptionDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("resources/subscribe error: %s", resp.Error.Message)
@@ -239,12 +239,12 @@ func TestResourcesUnsubscribe(t *testing.T) {
 	// Subscribe first
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 	// Unsubscribe
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "resources/unsubscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("resources/unsubscribe error: %s", resp.Error.Message)
@@ -269,7 +269,7 @@ func TestResourcesSubscribeNotInitialized(t *testing.T) {
 	// Do NOT call initDispatcher — session is not initialized
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 	if resp.Error == nil {
 		t.Fatal("expected error for subscribe before initialization")
@@ -285,7 +285,7 @@ func TestResourcesSubscribeCapabilities(t *testing.T) {
 	d, _ := testSubscriptionDispatcher()
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	var result map[string]any
 	resp.ResultAs(&result)
@@ -309,7 +309,7 @@ func TestResourcesSubscribeCapabilitiesDisabled(t *testing.T) {
 	d := testResourceDispatcher() // uses default dispatcher without subscriptions
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	var result map[string]any
 	resp.ResultAs(&result)
@@ -348,7 +348,7 @@ func TestResourcesSubscribeNotification(t *testing.T) {
 	// Subscribe
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("subscribe error: %s", resp.Error.Message)
@@ -391,13 +391,13 @@ func TestResourcesUnsubscribeStopsNotification(t *testing.T) {
 	// Subscribe
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 
 	// Unsubscribe
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "resources/unsubscribe",
-		Params: json.RawMessage(`{"uri":"test://doc"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://doc"}`)),
 	})
 
 	// Trigger — should NOT deliver
@@ -450,11 +450,11 @@ func TestResourcesSubscribeMultipleSessions(t *testing.T) {
 	// Both subscribe
 	d1.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://shared"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://shared"}`)),
 	})
 	d2.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://shared"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://shared"}`)),
 	})
 
 	// Trigger
@@ -510,7 +510,7 @@ func TestResourcesReadMeta(t *testing.T) {
 	// Resource with _meta
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"ui://app/view"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"ui://app/view"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
@@ -553,7 +553,7 @@ func TestResourcesReadMeta(t *testing.T) {
 	// Resource without _meta
 	resp2 := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://plain"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://plain"}`)),
 	})
 	if resp2.Error != nil {
 		t.Fatalf("error: %s", resp2.Error.Message)

@@ -167,7 +167,7 @@ func ToolCallLogger(logger *log.Logger) Middleware {
 		var params struct {
 			Name string `json:"name"`
 		}
-		_ = json.Unmarshal(req.Params, &params)
+		_ = req.Params.Bind(&params)
 
 		resp, err := next(ctx, req)
 

@@ -150,7 +150,7 @@ func newRootsHarness(t *testing.T, clientRootsCap bool) *rootsHarness {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
-		Params:  paramsRaw,
+		Params:  core.NewRawJSON(paramsRaw),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, initResp)

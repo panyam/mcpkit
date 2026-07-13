@@ -113,7 +113,7 @@ func TestSessionTimeoutPausesDuringActiveRequest(t *testing.T) {
 	// Call slow tool — takes 300ms, timeout is 50ms
 	resp, err := streamablePost(ts.URL+"/mcp", sessionID, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"slow"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"slow"}`)),
 	})
 	if err != nil {
 		t.Fatalf("slow tool call failed: %v", err)

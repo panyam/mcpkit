@@ -7,32 +7,30 @@ import (
 
 // JSON-RPC 2.0 types for MCP protocol communication.
 
-// Request is a JSON-RPC 2.0 request envelope.
+// Request is a JSON-RPC 2.0 request envelope. A notification is a Request with
+// no ID (see IsNotification).
+//
+// Params is a RawJSON (issue 733): read it with req.Params.Bind(&typed) /
+// req.Params.Meta() / req.Params.Field(key), and the raw bytes with
+// req.Params.Raw(). Every reader on one *Request shares a single parse.
 type Request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
 	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
-
-	// paramsLazy caches the RawJSON view of Params so every reader on the same
-	// *Request shares one parse (issue 733). Unexported — ignored on the wire.
-	paramsLazy *RawJSON
+	Params  RawJSON         `json:"params,omitempty"`
 }
 
-// ParamsLazy returns a RawJSON view of Params, cached on the request. Every
-// caller on the same *Request shares the cache, so a dispatch path that reads
-// the metadata from several places (trace middleware, the SEP-2575 _meta gate,
-// routing-header validation) scans Params once instead of once per reader.
-//
-// Additive bridge ahead of the Params type flip (issue 733 slice 3): Params
-// stays json.RawMessage. Not safe for concurrent first-callers on one *Request;
-// the dispatch/middleware chain reads sequentially per request.
-func (r *Request) ParamsLazy() *RawJSON {
-	if r.paramsLazy == nil {
-		rj := NewRawJSON(r.Params)
-		r.paramsLazy = &rj
-	}
-	return r.paramsLazy
+// MarshalJSON emits params only when non-empty. RawJSON is a struct, so the
+// `omitempty` tag cannot omit it, and JSON-RPC forbids `"params":null` (params,
+// if present, MUST be an array or object). Wire output is byte-identical to the
+// old json.RawMessage field.
+func (r Request) MarshalJSON() ([]byte, error) {
+	return MarshalJSON(struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      json.RawMessage `json:"id"`
+		Method  string          `json:"method"`
+		Params  json.RawMessage `json:"params,omitempty"`
+	}{r.JSONRPC, r.ID, r.Method, r.Params.Raw()})
 }
 
 // Response is a JSON-RPC 2.0 response.
