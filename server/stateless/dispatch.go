@@ -78,7 +78,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Res
 	}
 
 	// Every other method requires a valid _meta envelope.
-	meta, err := core.DecodeRequestMeta(req.Params)
+	meta, err := core.DecodeRequestMetaFromRawJSON(req.ParamsLazy())
 	if err != nil {
 		// MetaValidationError carries the specific missing field for diagnostics.
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error()), nil

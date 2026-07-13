@@ -151,13 +151,12 @@ func WithTracerProvider(tp core.TracerProvider) Option {
 // non-Noop provider.
 func traceMiddleware(tp core.TracerProvider) Middleware {
 	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
-		// One RawJSON over req.Params, shared across every _meta reader below
-		// (trace context, baggage, tracelink). The top-level spine is parsed
-		// once — a large `arguments` sibling is scanned once, not once per
-		// reader (issue 733).
-		params := core.NewRawJSON(req.Params)
+		// Shared per-request RawJSON: every _meta reader below (trace context,
+		// baggage, tracelink) and the dispatch-path SEP-2575 gate scan Params
+		// once via req.ParamsLazy() instead of once per reader (issue 733).
+		params := req.ParamsLazy()
 
-		tc := core.ExtractTraceContextFromRawJSON(&params)
+		tc := core.ExtractTraceContextFromRawJSON(params)
 		if tc.IsZero() {
 			tc = core.TraceContextFromContext(ctx)
 		}
@@ -169,7 +168,7 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 		// two are independent W3C standards (SEP-2028 § Predefined
 		// Groups), so an absent baggage value does not affect the
 		// trace context resolution.
-		bg := core.ExtractBaggageFromRawJSON(&params)
+		bg := core.ExtractBaggageFromRawJSON(params)
 		if bg.IsZero() {
 			bg = core.BaggageFromContext(ctx)
 		}
@@ -226,7 +225,7 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 		// stitching the logical operation across separate W3C traces.
 		// Zero / malformed tracelink is silently dropped — AddLink on
 		// the noop / invalid path is a no-op (CAS-guarded wrapper).
-		if linkTC := core.ExtractTraceLinkFromRawJSON(&params); !linkTC.IsZero() {
+		if linkTC := core.ExtractTraceLinkFromRawJSON(params); !linkTC.IsZero() {
 			span.AddLink(core.LinkFromTraceContext(linkTC))
 		}
 
