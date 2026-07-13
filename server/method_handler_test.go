@@ -27,7 +27,7 @@ func TestCustomMethod_Dispatch(t *testing.T) {
 	testutil.InitHandshake(srv)
 	resp, _ := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "custom/echo",
-		Params: json.RawMessage(`{"msg":"hello"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"msg":"hello"}`)),
 	})
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)

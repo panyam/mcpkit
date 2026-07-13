@@ -234,7 +234,7 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 
 	// Header / _meta cross-check (same precedence as handleStatelessPost).
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
-		metaVer := peekMetaProtocolVersion(req.Params)
+		metaVer := peekMetaProtocolVersion(req.Params.Raw())
 		if resp := statelessVersionMismatch(id, hdrVer, metaVer); resp != nil {
 			writeStatelessResponse(w, resp)
 			return
@@ -242,14 +242,14 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	}
 
 	// _meta envelope validation.
-	if _, err := core.DecodeRequestMeta(req.Params); err != nil {
+	if _, err := core.DecodeRequestMetaFromRawJSON(&req.Params); err != nil {
 		writeStatelessResponse(w, core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error()))
 		return
 	}
 
 	// Filter decode.
 	var params stateless.SubscribeParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
+	if err := req.Params.Bind(&params); err != nil {
 		writeStatelessResponse(w, core.NewErrorResponse(id, core.ErrCodeInvalidParams,
 			"invalid subscriptions/listen params: "+err.Error()))
 		return

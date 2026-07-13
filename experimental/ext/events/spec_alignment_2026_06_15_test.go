@@ -89,7 +89,7 @@ func TestPoll_WireShape_UsesArgumentsNotParams(t *testing.T) {
 	raw, err := json.Marshal(body)
 	require.NoError(t, err)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: raw,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "events/poll with arguments MUST be accepted")
@@ -125,7 +125,7 @@ func TestUnsubscribe_WireShape_UsesArgumentsNotParams(t *testing.T) {
 	raw, err := json.Marshal(unsubBody)
 	require.NoError(t, err)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "events/unsubscribe", Params: raw,
+		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "events/unsubscribe", Params: core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "events/unsubscribe with arguments MUST be accepted")

@@ -43,7 +43,7 @@ func subscribeWithTTL(t *testing.T, srv *server.Server, ttlMsJSON string) map[st
 
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe",
-		Params: json.RawMessage(body),
+		Params: core.NewRawJSON(json.RawMessage(body)),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "subscribe failed: %+v", resp.Error)
@@ -175,7 +175,7 @@ func TestRefreshBefore_WireShape_NullSerialisesAsJSONNull(t *testing.T) {
 		`","secret":"` + generateSecret() + `"}}`
 	resp, err := srvAdapter(srv).Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe",
-		Params: json.RawMessage(body),
+		Params: core.NewRawJSON(json.RawMessage(body)),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -247,7 +247,7 @@ func TestCanonicalKey_IndependentOfTTLMs(t *testing.T) {
 		body += `}`
 		resp, err := srvAdapter(srv).Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe",
-			Params: json.RawMessage(body),
+			Params: core.NewRawJSON(json.RawMessage(body)),
 		})
 		require.NoError(t, err)
 		require.Nil(t, resp.Error)

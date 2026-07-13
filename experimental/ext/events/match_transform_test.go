@@ -269,7 +269,7 @@ func TestMatchTransform_Webhook_MatchAndTransformPerTarget(t *testing.T) {
 		raw, _ := json.Marshal(body)
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/subscribe", Params: raw,
+			Method: "events/subscribe", Params: core.NewRawJSON(raw),
 		})
 		require.NoError(t, err)
 		require.Nil(t, resp.Error, "subscribe failed: %+v", resp.Error)
@@ -374,7 +374,7 @@ func TestMatchTransform_Webhook_FiltersByEventName(t *testing.T) {
 	raw, _ := json.Marshal(body)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`),
-		Method: "events/subscribe", Params: raw,
+		Method: "events/subscribe", Params: core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -418,7 +418,7 @@ func TestMatchTransform_Poll_AppliesPerCall(t *testing.T) {
 		raw, _ := json.Marshal(body)
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`),
-			Method: "events/poll", Params: raw,
+			Method: "events/poll", Params: core.NewRawJSON(raw),
 		})
 		require.NoError(t, err)
 		require.Nil(t, resp.Error, "poll failed: %+v", resp.Error)
@@ -511,7 +511,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`),
-		Method: "events/subscribe", Params: subBody,
+		Method: "events/subscribe", Params: core.NewRawJSON(subBody),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error)
@@ -548,7 +548,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	})
 	resp, err = srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`),
-		Method: "events/poll", Params: pollBody,
+		Method: "events/poll", Params: core.NewRawJSON(pollBody),
 	})
 	require.NoError(t, err)
 	w, ok := resp.Result.(pollResultWire)

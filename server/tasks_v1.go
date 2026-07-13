@@ -194,7 +194,7 @@ func taskMiddleware(reg *Registry, rt *taskRuntime, cfg TasksConfigV1) Middlewar
 				ProgressToken any `json:"progressToken"`
 			} `json:"_meta"`
 		}
-		if err := json.Unmarshal(req.Params, &envelope); err != nil {
+		if err := req.Params.Bind(&envelope); err != nil {
 			return next(ctx, req) // let dispatch handle the parse error
 		}
 

@@ -83,3 +83,36 @@ examples/apps/compat/*/.test-results/
 # scratch only, the docker run mounts them into the container.
 .tmp-fixture-linux-amd64-*
 /discord_tracking
+
+# cmd + docs-site tool binaries (`go build .` output).
+cmd/mcpskills/mcpskills
+docs/site/site
+
+# apps/compat fixture binaries. `go build .` produces a bare dir-name
+# binary; each fixture's local .gitignore only covered the `-demo`
+# Makefile output, so the bare name slipped through. List them here.
+examples/apps/compat/basic-preact/basic-preact
+examples/apps/compat/basic-react/basic-react
+examples/apps/compat/basic-solid/basic-solid
+examples/apps/compat/basic-svelte/basic-svelte
+examples/apps/compat/basic-vanillajs/basic-vanillajs
+examples/apps/compat/basic-vue/basic-vue
+examples/apps/compat/budget-allocator/budget-allocator
+examples/apps/compat/cohort-heatmap/cohort-heatmap
+examples/apps/compat/customer-segmentation/customer-segmentation
+examples/apps/compat/debug-server/debug-server
+examples/apps/compat/integration/integration
+examples/apps/compat/map/map
+examples/apps/compat/pdf-server/pdf-server
+examples/apps/compat/quickstart/quickstart
+examples/apps/compat/scenario-modeler/scenario-modeler
+examples/apps/compat/shadertoy/shadertoy
+examples/apps/compat/sheet-music/sheet-music
+examples/apps/compat/system-monitor/system-monitor
+examples/apps/compat/threejs/threejs
+examples/apps/compat/transcript/transcript
+examples/apps/compat/wiki-explorer/wiki-explorer
+
+# other example `go build .` outputs
+examples/mcpskills-walkthrough/mcpskills-walkthrough
+examples/otel/stdout/stdout

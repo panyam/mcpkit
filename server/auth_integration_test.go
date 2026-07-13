@@ -197,7 +197,7 @@ func TestExtensionRegistration(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      []byte(`1`),
 		Method:  "initialize",
-		Params:  []byte(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}`),
+		Params:  core.NewRawJSON([]byte(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}`)),
 	})
 	if dErr != nil {
 		t.Fatalf("dispatch transport error: %v", dErr)

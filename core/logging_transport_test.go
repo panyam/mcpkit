@@ -98,7 +98,7 @@ func TestLoggingTransport_LogBodiesIncludesJSON(t *testing.T) {
 
 	_, err := lt.Call(context.Background(), &Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"echo"}`),
+		Params: NewRawJSON(json.RawMessage(`{"name":"echo"}`)),
 	})
 	require.NoError(t, err)
 
@@ -121,7 +121,7 @@ func TestLoggingTransport_NoBodiesByDefault(t *testing.T) {
 
 	_, err := lt.Call(context.Background(), &Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"echo"}`),
+		Params: NewRawJSON(json.RawMessage(`{"name":"echo"}`)),
 	})
 	require.NoError(t, err)
 

@@ -8,9 +8,9 @@ import (
 )
 
 func TestRequest_ParamsLazy_SharesCache(t *testing.T) {
-	req := &Request{Params: json.RawMessage(`{"name":"x","_meta":{"a":1}}`)}
-	a := req.ParamsLazy()
-	b := req.ParamsLazy()
+	req := &Request{Params: NewRawJSON(json.RawMessage(`{"name":"x","_meta":{"a":1}}`))}
+	a := &req.Params
+	b := &req.Params
 	if a != b {
 		t.Fatal("ParamsLazy should return the same cached *RawJSON")
 	}
@@ -83,7 +83,7 @@ func BenchmarkDecodeRequestMeta(b *testing.B) {
 }
 
 // BenchmarkSharedMetaReaders compares two readers (trace context + SEP-2575
-// gate) sharing one req.ParamsLazy() parse vs each scanning params itself.
+// gate) sharing one &req.Params parse vs each scanning params itself.
 func BenchmarkSharedMetaReaders(b *testing.B) {
 	meta := `"_meta":{"traceparent":"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01","io.modelcontextprotocol/protocolVersion":"2025-11-25","io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}`
 	blob := strings.Repeat("x", 1<<20)
@@ -99,9 +99,9 @@ func BenchmarkSharedMetaReaders(b *testing.B) {
 	b.Run("sharedParamsLazy", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			req := &Request{Params: params}
-			_ = ExtractTraceContextFromRawJSON(req.ParamsLazy())
-			_, _ = DecodeRequestMetaFromRawJSON(req.ParamsLazy())
+			req := &Request{Params: NewRawJSON(params)}
+			_ = ExtractTraceContextFromRawJSON(&req.Params)
+			_, _ = DecodeRequestMetaFromRawJSON(&req.Params)
 		}
 	})
 }

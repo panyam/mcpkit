@@ -157,7 +157,7 @@ func (f *lifecycleFixture) dispatch(method string, params map[string]any) *core.
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  method,
-		Params:  raw,
+		Params:  core.NewRawJSON(raw),
 	})
 	require.NoError(f.t, err)
 	return resp
@@ -446,7 +446,7 @@ func TestLifecycle_Push_OpenCloseFiresHooksOnce(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      json.RawMessage(`2`),
 			Method:  "events/stream",
-			Params:  rawReq,
+			Params:  core.NewRawJSON(rawReq),
 		})
 	}()
 
@@ -492,7 +492,7 @@ func TestLifecycle_Push_OnSubscribeError_RejectsStream(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`3`),
 		Method:  "events/stream",
-		Params:  rawReq,
+		Params:  core.NewRawJSON(rawReq),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error)
@@ -579,7 +579,7 @@ func TestLifecycle_Poll_OnSubscribeError_Rejects(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`4`),
 		Method:  "events/poll",
-		Params:  raw,
+		Params:  core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Error, "poll on_subscribe error should surface via JSON-RPC error")
@@ -629,7 +629,7 @@ func TestLifecycle_Webhook_ConcurrentSubscribe_FiresOnce(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      idRaw,
 				Method:  "events/subscribe",
-				Params:  raw,
+				Params:  core.NewRawJSON(raw),
 			})
 			if derr != nil || (resp != nil && resp.Error != nil) {
 				fails.Add(1)

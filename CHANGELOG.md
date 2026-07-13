@@ -27,6 +27,15 @@ also preserves conformance against the deprecated-but-in-spec features on the
 targeted spec version.
 
 ### Breaking
+- **`core.Request.Params` is now `core.RawJSON`** (was `json.RawMessage`) —
+  issue 733 slice 3, the final slice of the params-handling change. Read it with
+  `req.Params.Bind(&typed)` / `.Meta()` / `.Field(key)` and the raw bytes with
+  `req.Params.Raw()`; construct with `core.NewRawJSON(bytes)` or
+  `core.MarshalRawJSON(v)`. A notification is still a `Request` with no ID, so
+  its params flip too. Wire output is byte-identical — `Request.MarshalJSON`
+  preserves param omission (JSON-RPC forbids `"params":null`). The transitional
+  `ParamsLazy()` bridge is removed (`req.Params` *is* the cached parse now).
+  Breaking for anyone constructing or reading `core.Request.Params` directly.
 - **conformant-by-default** — safe-default SEP options flip from opt-in to
   opt-out. `server.NewServer(info)` now emits the SEP-2549 cache-control hints
   by default: list responses (tools/prompts/resources/templates) carry

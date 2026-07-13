@@ -25,7 +25,7 @@ func TestCompletionComplete(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"my-prompt"},"argument":{"name":"arg1","value":"v"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"ref":{"type":"ref/prompt","name":"my-prompt"},"argument":{"name":"arg1","value":"v"}}`)),
 	})
 
 	if resp == nil {
@@ -60,7 +60,7 @@ func TestCompletionCompleteNoHandler(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"unregistered"},"argument":{"name":"arg","value":""}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"ref":{"type":"ref/prompt","name":"unregistered"},"argument":{"name":"arg","value":""}}`)),
 	})
 
 	if resp == nil {
@@ -93,7 +93,7 @@ func TestCompletionCompleteBeforeInit(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"x"},"argument":{"name":"a","value":""}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"ref":{"type":"ref/prompt","name":"x"},"argument":{"name":"a","value":""}}`)),
 	})
 
 	if resp == nil {
@@ -118,7 +118,7 @@ func TestCompletionCapability(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 
 	var result map[string]any
@@ -144,7 +144,7 @@ func TestCompletionCompleteResourceRef(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`{"ref":{"type":"ref/resource","uri":"file:///{path}"},"argument":{"name":"path","value":"/"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"ref":{"type":"ref/resource","uri":"file:///{path}"},"argument":{"name":"path","value":"/"}}`)),
 	})
 
 	if resp.Error != nil {
@@ -170,7 +170,7 @@ func TestCompletionCompleteBadParams(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`not json`),
+		Params:  core.NewRawJSON(json.RawMessage(`not json`)),
 	})
 
 	if resp.Error == nil {
@@ -204,7 +204,7 @@ func TestCompletionMaxItems(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"big-prompt"},"argument":{"name":"x","value":""}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"ref":{"type":"ref/prompt","name":"big-prompt"},"argument":{"name":"x","value":""}}`)),
 	})
 
 	if resp.Error != nil {
@@ -244,7 +244,7 @@ func TestCompletionUnderLimit(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "completion/complete",
-		Params:  json.RawMessage(`{"ref":{"type":"ref/prompt","name":"small-prompt"},"argument":{"name":"x","value":""}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"ref":{"type":"ref/prompt","name":"small-prompt"},"argument":{"name":"x","value":""}}`)),
 	})
 
 	if resp.Error != nil {

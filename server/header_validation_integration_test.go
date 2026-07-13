@@ -53,7 +53,7 @@ func initDraftSession(t *testing.T, url string) string {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"draft-test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"draft-test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatalf("initialize POST failed: %v", err)
@@ -174,7 +174,7 @@ func TestHeaderValidation_DraftSession_MismatchedToolName(t *testing.T) {
 
 	resp, err := postWithHeaders(ts.URL+"/mcp", sessionID,
 		&core.Request{JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "tools/call",
-			Params: json.RawMessage(`{"name":"echo","arguments":{"message":"hi"}}`)},
+			Params: core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{"message":"hi"}}`))},
 		map[string]string{"Mcp-Method": "tools/call", "Mcp-Name": "wrong_tool"})
 	if err != nil {
 		t.Fatalf("POST: %v", err)

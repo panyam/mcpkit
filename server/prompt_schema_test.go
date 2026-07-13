@@ -89,7 +89,7 @@ func TestPromptsGetPassesTypedArguments(t *testing.T) {
 
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
-		Params: json.RawMessage(`{"name":"q","arguments":{"limit":42,"verbose":true}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"q","arguments":{"limit":42,"verbose":true}}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)

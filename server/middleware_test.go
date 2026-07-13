@@ -38,14 +38,14 @@ func TestMiddleware_SeesAllRequests(t *testing.T) {
 	)
 
 	// Initialize
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	srv.Dispatch(context.Background(), initReq)
 
 	// Initialized notification
 	srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
 
 	// Tool call
-	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: json.RawMessage(`{"name":"echo"}`)}
+	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: core.NewRawJSON(json.RawMessage(`{"name":"echo"}`))}
 	srv.Dispatch(context.Background(), toolReq)
 
 	assert.Contains(t, methods, "initialize")
@@ -75,7 +75,7 @@ func TestMiddleware_ChainOrder(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "mw-test", Version: "1.0"},
 		WithMiddleware(mw1, mw2))
 
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	srv.Dispatch(context.Background(), initReq)
 
 	// mw1 is outermost: runs before mw2 on request, after mw2 on response
@@ -109,12 +109,12 @@ func TestMiddleware_ShortCircuit(t *testing.T) {
 	)
 
 	// Initialize first
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	srv.Dispatch(context.Background(), initReq)
 	srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
 
 	// Tool call should be blocked
-	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: json.RawMessage(`{"name":"echo"}`)}
+	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: core.NewRawJSON(json.RawMessage(`{"name":"echo"}`))}
 	resp, err := srv.Dispatch(context.Background(), toolReq)
 	require.NoError(t, err)
 
@@ -144,7 +144,7 @@ func TestMiddleware_AccessContext(t *testing.T) {
 
 	// Use dispatchWithNotify to go through the middleware chain with claims
 	claims := &core.Claims{Subject: "test-user", Scopes: []string{"read"}}
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	d := srv.dispatcher
 	srv.dispatchWithNotify(d, context.Background(), claims, nil, initReq)
 
@@ -177,12 +177,12 @@ func TestMiddleware_ToolTimeoutPreserved(t *testing.T) {
 	)
 
 	// Initialize
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	srv.Dispatch(context.Background(), initReq)
 	srv.Dispatch(context.Background(), &core.Request{Method: "notifications/initialized"})
 
 	// Tool call should timeout
-	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: json.RawMessage(`{"name":"slow"}`)}
+	toolReq := &core.Request{ID: json.RawMessage(`2`), Method: "tools/call", Params: core.NewRawJSON(json.RawMessage(`{"name":"slow"}`))}
 	resp, err := srv.Dispatch(context.Background(), toolReq)
 	require.NoError(t, err)
 
@@ -200,7 +200,7 @@ func TestLoggingMiddleware(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "mw-test", Version: "1.0"},
 		WithMiddleware(LoggingMiddleware(logger)))
 
-	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)}
+	initReq := &core.Request{ID: json.RawMessage(`1`), Method: "initialize", Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`))}
 	srv.Dispatch(context.Background(), initReq)
 
 	output := buf.String()

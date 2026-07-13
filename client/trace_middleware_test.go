@@ -312,7 +312,7 @@ func TestClientTrace_InboundExtractsTraceparent(t *testing.T) {
 	)
 
 	params := json.RawMessage(`{"maxTokens":16,"_meta":{"traceparent":"` + tpInbound + `"}}`)
-	req := &core.Request{ID: json.RawMessage(`1`), Method: "sampling/createMessage", Params: params}
+	req := &core.Request{ID: json.RawMessage(`1`), Method: "sampling/createMessage", Params: core.NewRawJSON(params)}
 	resp := c.HandleServerRequestWithContext(context.Background(), req)
 
 	require.NotNil(t, resp)
@@ -335,7 +335,7 @@ func TestClientTrace_InboundWithoutTraceparent_FreshTrace(t *testing.T) {
 		}),
 	)
 
-	req := &core.Request{ID: json.RawMessage(`1`), Method: "roots/list", Params: json.RawMessage(`{}`)}
+	req := &core.Request{ID: json.RawMessage(`1`), Method: "roots/list", Params: core.NewRawJSON(json.RawMessage(`{}`))}
 	resp := c.HandleServerRequestWithContext(context.Background(), req)
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
@@ -355,7 +355,7 @@ func TestClientTrace_InboundMalformedTraceparent_DropsSilently(t *testing.T) {
 	)
 
 	params := json.RawMessage(`{"_meta":{"traceparent":"not-a-real-traceparent","tracestate":"vendor=x"}}`)
-	req := &core.Request{ID: json.RawMessage(`1`), Method: "roots/list", Params: params}
+	req := &core.Request{ID: json.RawMessage(`1`), Method: "roots/list", Params: core.NewRawJSON(params)}
 	resp := c.HandleServerRequestWithContext(context.Background(), req)
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)
@@ -375,7 +375,7 @@ func TestClientTrace_InboundHandlerError_RecordsErrorCode(t *testing.T) {
 	)
 
 	params := json.RawMessage(`{"maxTokens":1,"_meta":{"traceparent":"` + tpInbound + `"}}`)
-	req := &core.Request{ID: json.RawMessage(`1`), Method: "sampling/createMessage", Params: params}
+	req := &core.Request{ID: json.RawMessage(`1`), Method: "sampling/createMessage", Params: core.NewRawJSON(params)}
 	resp := c.HandleServerRequestWithContext(context.Background(), req)
 	require.NotNil(t, resp)
 	require.NotNil(t, resp.Error)
@@ -392,7 +392,7 @@ func TestClientTrace_InboundUnknownMethod_RecordsMethodNotFound(t *testing.T) {
 		WithTracerProvider(tp),
 	)
 
-	req := &core.Request{ID: json.RawMessage(`1`), Method: "wat/wat", Params: json.RawMessage(`{}`)}
+	req := &core.Request{ID: json.RawMessage(`1`), Method: "wat/wat", Params: core.NewRawJSON(json.RawMessage(`{}`))}
 	resp := c.HandleServerRequestWithContext(context.Background(), req)
 	require.NotNil(t, resp)
 	require.NotNil(t, resp.Error)
@@ -450,7 +450,7 @@ func TestClientTrace_InboundExtractsBaggageOntoCtx(t *testing.T) {
 	)
 
 	params := json.RawMessage(`{"maxTokens":16,"_meta":{"traceparent":"` + tpInbound + `","baggage":"userId=bob"}}`)
-	req := &core.Request{ID: json.RawMessage(`1`), Method: "sampling/createMessage", Params: params}
+	req := &core.Request{ID: json.RawMessage(`1`), Method: "sampling/createMessage", Params: core.NewRawJSON(params)}
 	resp := c.HandleServerRequestWithContext(context.Background(), req)
 	require.NotNil(t, resp)
 	require.Nil(t, resp.Error)

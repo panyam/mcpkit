@@ -117,7 +117,7 @@ func newMetricsMiddleware(mp core.MeterProvider) Middleware {
 		var toolName string
 		var start time.Time
 		if isToolCall {
-			toolName = parseToolCallName(req.Params)
+			toolName = parseToolCallName(req.Params.Raw())
 			start = time.Now()
 		}
 

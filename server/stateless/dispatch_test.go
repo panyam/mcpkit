@@ -101,7 +101,7 @@ func TestDispatch_RemovedMethodReturns32601(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage("1"),
 				Method:  method,
-				Params:  validMetaParams(t),
+				Params:  core.NewRawJSON(validMetaParams(t)),
 			}
 			resp, _ := d.Dispatch(context.Background(), req)
 			if resp == nil || resp.Error == nil {
@@ -124,7 +124,7 @@ func TestDispatch_MissingMetaReturns32602(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("2"),
 		Method:  "tools/list",
-		Params:  json.RawMessage(`{}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{}`)),
 	}
 	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
@@ -152,7 +152,7 @@ func TestDispatch_UnsupportedVersionReturns32022(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("3"),
 		Method:  "tools/list",
-		Params:  bad,
+		Params:  core.NewRawJSON(bad),
 	}
 	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
@@ -207,14 +207,14 @@ func TestDispatch_ResourcesReadAppliesReadCacheDefaults(t *testing.T) {
 			JSONRPC: "2.0",
 			ID:      json.RawMessage("9"),
 			Method:  "resources/read",
-			Params: json.RawMessage(`{
+			Params: core.NewRawJSON(json.RawMessage(`{
 				"uri": "file://x",
 				"_meta": {
 					"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 					"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
 					"io.modelcontextprotocol/clientCapabilities": {}
 				}
-			}`),
+			}`)),
 		}
 	}
 	decode := func(t *testing.T, resp *core.Response) core.ResourceResult {
@@ -273,7 +273,7 @@ func TestDispatch_ServerDiscoverShape(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("4"),
 		Method:  "server/discover",
-		Params:  validMetaParams(t),
+		Params:  core.NewRawJSON(validMetaParams(t)),
 	}
 	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error != nil {
@@ -330,7 +330,7 @@ func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("5"),
 		Method:  "tools/call",
-		Params:  params,
+		Params:  core.NewRawJSON(params),
 	}
 	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil {
@@ -360,7 +360,7 @@ func TestDispatch_UnknownMethodReturns32601(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("6"),
 		Method:  "frobnicate",
-		Params:  validMetaParams(t),
+		Params:  core.NewRawJSON(validMetaParams(t)),
 	}
 	resp, _ := d.Dispatch(context.Background(), req)
 	if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeMethodNotFound {
