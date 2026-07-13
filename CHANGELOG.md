@@ -44,6 +44,12 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **`core.RawJSON`** — a typed, parse-once wrapper for JSON-RPC raw values
+  (params / `_meta` / …) with `Bind` / `Meta` / `Field` helpers; wire-transparent
+  (round-trips identically to `json.RawMessage`). First slice of issue 733; the
+  trace middleware now shares one parse across its `_meta` readers (trace
+  context / baggage / tracelink) — ~3× faster + ~3× less alloc on large
+  `tools/call` payloads. The `Request.Params` type flip is a later slice.
 - **Panic recovery in library goroutines** — a panic in a tool/background
   goroutine is recovered and surfaced as an error instead of crashing the host
   process. (issue 420)
