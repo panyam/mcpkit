@@ -552,7 +552,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 		var bp struct {
 			ProtocolVersion string `json:"protocolVersion"`
 		}
-		if err := json.Unmarshal(req.Params, &bp); err == nil && bp.ProtocolVersion != "" && bp.ProtocolVersion != hdrVer {
+		if err := req.Params.Bind(&bp); err == nil && bp.ProtocolVersion != "" && bp.ProtocolVersion != hdrVer {
 			http.Error(w, fmt.Sprintf(
 				"MCP-Protocol-Version header (%s) does not match initialize body protocolVersion (%s)",
 				hdrVer, bp.ProtocolVersion), http.StatusBadRequest)
@@ -583,7 +583,7 @@ func (t *streamableTransport) handleInitialize(w http.ResponseWriter, r *http.Re
 
 	// Success: create session and return with Mcp-Session-Id.
 	// Check if client suggested a session ID via _suggestedSessionId.
-	sessionID := t.resolveSessionID(req.Params)
+	sessionID := t.resolveSessionID(req.Params.Raw())
 	dispatcher.sessionID = sessionID
 	// Bind authenticated principal to session — prevents hijacking.
 	// Uses the encoded form (Tenant + "/" + Subject) so two realms

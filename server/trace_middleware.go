@@ -153,8 +153,8 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 	return func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
 		// Shared per-request RawJSON: every _meta reader below (trace context,
 		// baggage, tracelink) and the dispatch-path SEP-2575 gate scan Params
-		// once via req.ParamsLazy() instead of once per reader (issue 733).
-		params := req.ParamsLazy()
+		// once via &req.Params instead of once per reader (issue 733).
+		params := &req.Params
 
 		tc := core.ExtractTraceContextFromRawJSON(params)
 		if tc.IsZero() {
@@ -182,7 +182,7 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 			attrs = append(attrs, core.Attribute{Key: "mcp.session.id", Value: sid})
 		}
 		if req.Method == "tools/call" {
-			if name := parseToolCallName(req.Params); name != "" {
+			if name := parseToolCallName(req.Params.Raw()); name != "" {
 				attrs = append(attrs, core.Attribute{Key: "mcp.tool.name", Value: name})
 			}
 		}
@@ -197,7 +197,7 @@ func traceMiddleware(tp core.TracerProvider) Middleware {
 		// unambiguous from the URI alone; non-manifest URIs surface as
 		// `mcp.skill.uri` only.
 		if req.Method == "resources/read" || req.Method == "resources/directory/read" {
-			if uri := parseResourceReadURI(req.Params); uri != "" {
+			if uri := parseResourceReadURI(req.Params.Raw()); uri != "" {
 				attrs = append(attrs, core.Attribute{Key: "mcp.resource.uri", Value: uri})
 				if path, file, ok := decomposeSkillURI(uri); ok {
 					attrs = append(attrs, core.Attribute{Key: "mcp.skill.uri", Value: uri})

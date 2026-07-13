@@ -104,7 +104,7 @@ func (c *Client) reconnect() error {
 		ID:      marshalID(c.nextRequestID()),
 		Method:  "initialize",
 	}
-	initReq.Params, _ = json.Marshal(initializeParams{
+	initReq.Params, _ = core.MarshalRawJSON(initializeParams{
 		ProtocolVersion: "2025-11-25",
 		Capabilities:    core.ClientCapabilities{},
 		ClientInfo:      c.info,

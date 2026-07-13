@@ -76,14 +76,14 @@ func TestNotifyResourceUpdatedFromHandler(t *testing.T) {
 	// d1 subscribes to "test://res". d2 does not.
 	d1.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/subscribe",
-		Params: json.RawMessage(`{"uri":"test://res"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://res"}`)),
 	})
 
 	// Call the tool via d1's dispatch context. The tool handler calls
 	// core.NotifyResourceUpdated(ctx, "test://res").
 	resp, dErr := srv.dispatchWith(d1, context.Background(), nil, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"mutate","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"mutate","arguments":{}}`)),
 	})
 	if dErr != nil {
 		t.Fatalf("dispatch transport error: %v", dErr)

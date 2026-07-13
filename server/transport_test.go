@@ -157,7 +157,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -201,7 +201,7 @@ func TestSSEInitAndToolCall(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"echo","arguments":{"message":"hello"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{"message":"hello"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -272,7 +272,7 @@ func TestSSENotification(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -516,7 +516,7 @@ func TestSSELoggingNotification(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -542,7 +542,7 @@ func TestSSELoggingNotification(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "logging/setLevel",
-		Params:  json.RawMessage(`{"level":"debug"}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"level":"debug"}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -558,7 +558,7 @@ func TestSSELoggingNotification(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`3`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"log_emitter","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"log_emitter","arguments":{}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -655,7 +655,7 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 	// Init handshake
 	resp, _ := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	resp.Body.Close()
 	readSSEEvent(reader) // consume init response
@@ -666,7 +666,7 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 	// Set level to error (high threshold)
 	resp, _ = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "logging/setLevel",
-		Params: json.RawMessage(`{"level":"error"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"level":"error"}`)),
 	})
 	resp.Body.Close()
 	readSSEEvent(reader) // consume setLevel response
@@ -674,7 +674,7 @@ func TestSSELoggingFilteredByLevel(t *testing.T) {
 	// Call tool that emits debug (should be filtered)
 	resp, _ = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`3`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"debug_logger","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"debug_logger","arguments":{}}`)),
 	})
 	resp.Body.Close()
 
@@ -732,7 +732,7 @@ func TestSSEProgressNotification(t *testing.T) {
 	// Initialize
 	resp, _ := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	resp.Body.Close()
 	readSSEEvent(reader)
@@ -743,7 +743,7 @@ func TestSSEProgressNotification(t *testing.T) {
 	// Call tool with progress token
 	resp, _ = postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"test-token"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"progress_tool","arguments":{},"_meta":{"progressToken":"test-token"}}`)),
 	})
 	resp.Body.Close()
 

@@ -76,7 +76,7 @@ func initializeSSESession(t *testing.T, postURL string, reader *gohttp.SSEEventR
 	t.Helper()
 	resp, err := postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatalf("initialize POST failed: %v", err)
@@ -140,7 +140,7 @@ func TestSSESessionGracePeriod(t *testing.T) {
 	// Make a tool call WITHOUT re-initializing — proves session state survived.
 	postJSON(postURL2, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`10`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"echo","arguments":{"message":"after-reconnect"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{"message":"after-reconnect"}}`)),
 	})
 	ev, err := readSSEEvent(reader2)
 	if err != nil {
@@ -231,7 +231,7 @@ func TestSSELastEventIDReplay(t *testing.T) {
 	// Make a tool call to generate events with IDs.
 	postJSON(postURL, &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`10`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"echo","arguments":{"message":"stored-event"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{"message":"stored-event"}}`)),
 	})
 	readSSEEvent(reader) // consume tool response
 

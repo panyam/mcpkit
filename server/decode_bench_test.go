@@ -49,7 +49,7 @@ func BenchmarkToolsCallDispatch(b *testing.B) {
 			name := fmt.Sprintf("schema=%v/args=%dKB", schema, sz>>10)
 			b.Run(name, func(b *testing.B) {
 				d := benchDispatcher(b, schema)
-				req := &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call", Params: benchToolsParams(sz)}
+				req := &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call", Params: core.NewRawJSON(benchToolsParams(sz))}
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

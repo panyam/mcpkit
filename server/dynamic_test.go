@@ -96,7 +96,7 @@ func TestRemoveTool(t *testing.T) {
 	// Tool works
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"ephemeral"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"ephemeral"}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("tool call before removal failed: %s", resp.Error.Message)
@@ -116,7 +116,7 @@ func TestRemoveTool(t *testing.T) {
 	// tools/call should fail
 	resp = d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`3`), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"ephemeral"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"ephemeral"}`)),
 	})
 	if resp.Error == nil {
 		t.Fatal("tool call after removal should fail")
@@ -233,7 +233,7 @@ func TestRemoveResource(t *testing.T) {
 
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "resources/read",
-		Params: json.RawMessage(`{"uri":"test://temp"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"uri":"test://temp"}`)),
 	})
 	if resp.Error == nil {
 		t.Fatal("resources/read should fail after removal")
@@ -303,7 +303,7 @@ func TestRemovePrompt(t *testing.T) {
 
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "prompts/get",
-		Params: json.RawMessage(`{"name":"temp-prompt"}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"temp-prompt"}`)),
 	})
 	if resp.Error == nil {
 		t.Fatal("prompts/get should fail after removal")
@@ -393,7 +393,7 @@ func TestListChangedCapabilityAdvertised(t *testing.T) {
 		t.Helper()
 		resp := d.Dispatch(context.Background(), &core.Request{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-			Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+			Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 		})
 		raw, _ := core.MarshalJSON(resp.Result)
 		var result struct {

@@ -66,7 +66,7 @@ func streamableInit(t *testing.T, url string) string {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatalf("initialize POST failed: %v", err)
@@ -113,7 +113,7 @@ func TestStreamableInitAndToolCall(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"echo","arguments":{"message":"hello"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{"message":"hello"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestStreamableInitReturnsSessionID(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -389,7 +389,7 @@ func TestStreamableAuthRequired(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -415,7 +415,7 @@ func TestStreamableMaxSessions(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -486,7 +486,7 @@ func TestStreamableCustomPrefix(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -533,7 +533,7 @@ func streamableInitWithLogging(t *testing.T, url string) string {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`99`),
 		Method:  "logging/setLevel",
-		Params:  json.RawMessage(`{"level":"debug"}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"level":"debug"}`)),
 	})
 	if err != nil {
 		t.Fatalf("logging/setLevel failed: %v", err)
@@ -589,7 +589,7 @@ func TestStreamableSSEResponse(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"log_tool","arguments":{}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -636,7 +636,7 @@ func TestStreamableSSEFallback(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"log_tool","arguments":{}}`)),
 	})
 	httpReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -671,7 +671,7 @@ func TestStreamableSSENotificationOrder(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"log_tool","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"log_tool","arguments":{}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -717,7 +717,7 @@ func TestStreamableSSENoNotifications(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"echo","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"echo","arguments":{}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -748,7 +748,7 @@ func TestStreamableDNSRebindingRejectsInvalidOrigin(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -778,7 +778,7 @@ func TestStreamableDNSRebindingAcceptsLocalhost(t *testing.T) {
 				JSONRPC: "2.0",
 				ID:      json.RawMessage(`1`),
 				Method:  "initialize",
-				Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+				Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 			})
 			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")

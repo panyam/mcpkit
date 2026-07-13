@@ -16,7 +16,7 @@ func Test_Issue421_DuplicateInitializeRejected(t *testing.T) {
 
 	first := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"alice","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"alice","version":"1.0"}}`)),
 	})
 	if first == nil || first.Error != nil {
 		t.Fatalf("first initialize should succeed, got %+v", first)
@@ -29,7 +29,7 @@ func Test_Issue421_DuplicateInitializeRejected(t *testing.T) {
 	// Second initialize: different version + different client identity.
 	second := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"mallory","version":"9.9"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"mallory","version":"9.9"}}`)),
 	})
 	if second == nil || second.Error == nil || second.Error.Code != core.ErrCodeInvalidRequest {
 		t.Fatalf("expected -32600 InvalidRequest on duplicate initialize, got %+v", second)
@@ -51,11 +51,11 @@ func Test_Issue421_ReinitializeAllowedWithOption(t *testing.T) {
 
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"alice","version":"1.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"alice","version":"1.0"}}`)),
 	})
 	second := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`2`), Method: "initialize",
-		Params: json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"alice2","version":"2.0"}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"alice2","version":"2.0"}}`)),
 	})
 	if second == nil || second.Error != nil {
 		t.Fatalf("re-initialize should succeed with allowReinitialize, got %+v", second)

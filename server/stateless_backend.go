@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -260,7 +259,7 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 			return b.callPromptForStateless(ctx, req), nil
 		default:
 			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
-				return h(core.NewMethodContext(ctx), req.ID, req.Params), nil
+				return h(core.NewMethodContext(ctx), req.ID, req.Params.Raw()), nil
 			}
 			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
 				"method not found: "+req.Method), nil
@@ -305,7 +304,7 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 // upstream of this call so we don't re-validate here.
 func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.Request) *core.Response {
 	var env toolsCallEnvelope
-	if err := json.Unmarshal(req.Params, &env); err != nil {
+	if err := req.Params.Bind(&env); err != nil {
 		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
 			"invalid tools/call params: "+err.Error())
 	}
@@ -394,7 +393,7 @@ func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.R
 // exercises it.
 func (b *statelessBackend) callPromptForStateless(ctx context.Context, req *core.Request) *core.Response {
 	var env promptsGetEnvelope
-	if err := json.Unmarshal(req.Params, &env); err != nil {
+	if err := req.Params.Bind(&env); err != nil {
 		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
 			"invalid prompts/get params: "+err.Error())
 	}

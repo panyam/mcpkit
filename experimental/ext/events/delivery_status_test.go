@@ -61,7 +61,7 @@ func dispatchSubscribeForStatus(t *testing.T, srv *server.Server, callbackURL, s
 	raw, err := json.Marshal(params)
 	require.NoError(t, err)
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
-		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe", Params: raw,
+		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/subscribe", Params: core.NewRawJSON(raw),
 	})
 	require.NoError(t, err)
 	require.Nil(t, resp.Error, "expected success; got %+v", resp.Error)

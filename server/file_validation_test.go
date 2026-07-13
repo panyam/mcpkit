@@ -152,7 +152,7 @@ func TestFileInputCapGating_StripsKeywordWithoutCap(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	}
 	resp, _ := srv.Dispatch(context.Background(), initReq)
 	require.Nil(t, resp.Error, "initialize should succeed")
@@ -206,7 +206,7 @@ func TestFileInputCapGating_PreservesKeywordWithCap(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{"fileInputs":{}},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{"fileInputs":{}},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	}
 	resp, _ := srv.Dispatch(context.Background(), initReq)
 	require.Nil(t, resp.Error, "initialize should succeed")

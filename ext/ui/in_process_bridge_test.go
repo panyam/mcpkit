@@ -126,7 +126,7 @@ func TestBridge_Send_ToolsCall(t *testing.T) {
 	resp, err := b.Send(context.Background(), &core.Request{
 		Method: "tools/call",
 		ID:     json.RawMessage(`2`),
-		Params: params,
+		Params: core.NewRawJSON(params),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestBridge_Send_UnknownTool(t *testing.T) {
 	resp, err := b.Send(context.Background(), &core.Request{
 		Method: "tools/call",
 		ID:     json.RawMessage(`3`),
-		Params: params,
+		Params: core.NewRawJSON(params),
 	})
 	if err != nil {
 		t.Fatal(err)

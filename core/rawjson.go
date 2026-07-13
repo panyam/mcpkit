@@ -27,10 +27,12 @@ import (
 // struct exists; string-keyed access trades away compile-time safety.
 //
 // The zero value is a usable empty/absent value. Construct from bytes with
-// NewRawJSON. The lazy spine is built on first Field/Meta call and cached;
-// reads on a single RawJSON are not yet safe for concurrent goroutines (the
-// dispatch/middleware chain reads sequentially per request) — that hardens
-// when Request.Params flips to RawJSON (issue 733 slice 3).
+// NewRawJSON. The lazy spine is built on first Field/Meta call and cached.
+// Reads on a RawJSON constructed via NewRawJSON or decoded via UnmarshalJSON
+// (both allocate the lazy holder up front) are safe for concurrent goroutines —
+// the cache is guarded by sync.Once. The one unguarded case is the zero value's
+// first lazy initialization; construct via NewRawJSON before sharing a value
+// across goroutines.
 type RawJSON struct {
 	raw  json.RawMessage
 	lazy *rawJSONLazy
@@ -60,6 +62,16 @@ func (m *RawJSON) ensureLazy() *rawJSONLazy {
 // them afterward (same contract as json.RawMessage).
 func NewRawJSON(raw json.RawMessage) RawJSON {
 	return RawJSON{raw: raw, lazy: &rawJSONLazy{}}
+}
+
+// MarshalRawJSON marshals v to JSON and wraps the result as a RawJSON —
+// convenience for assigning a typed value to a Request.Params field.
+func MarshalRawJSON(v any) (RawJSON, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return RawJSON{}, err
+	}
+	return NewRawJSON(b), nil
 }
 
 // object parses and caches the top-level JSON object once. Returns a nil spine

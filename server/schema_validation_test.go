@@ -30,7 +30,7 @@ func newSchemaTestServer(t *testing.T, opts ...server.Option) *server.Server {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	}
 	resp, _ := srv.Dispatch(context.Background(), initReq)
 	require.Nil(t, resp.Error, "initialize should succeed")
@@ -56,7 +56,7 @@ func callTool(t *testing.T, srv *server.Server, name string, args any) *core.Res
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`2`),
 		Method:  "tools/call",
-		Params:  params,
+		Params:  core.NewRawJSON(params),
 	}
 	resp, _ := srv.Dispatch(context.Background(), req)
 	return resp
@@ -74,7 +74,7 @@ func getPrompt(t *testing.T, srv *server.Server, name string, args map[string]an
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`3`),
 		Method:  "prompts/get",
-		Params:  params,
+		Params:  core.NewRawJSON(params),
 	}
 	resp, _ := srv.Dispatch(context.Background(), req)
 	return resp
@@ -243,7 +243,7 @@ func TestToolValidateNullArguments(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`4`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"noargs","arguments":null}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"noargs","arguments":null}`)),
 	}
 	resp, _ := srv.Dispatch(context.Background(), req)
 	require.Nil(t, resp.Error, "null arguments should validate against object schema")

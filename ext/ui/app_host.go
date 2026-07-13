@@ -130,7 +130,7 @@ func (h *AppHost) CallAppTool(ctx context.Context, name string, args map[string]
 
 	resp, err := h.bridge.Send(ctx, &core.Request{
 		Method: "tools/call",
-		Params: params,
+		Params: core.NewRawJSON(params),
 	})
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func (h *AppHost) handleAppRequest(ctx context.Context, req *core.Request) *core
 	// was wired on the iframe side this returns zero and the span emits
 	// with no parent — same shape as auth running outside a traced
 	// dispatch.
-	tc := core.ExtractTraceContextFromParams(req.Params)
+	tc := core.ExtractTraceContextFromParams(req.Params.Raw())
 	if !tc.IsZero() {
 		ctx = core.WithTraceContext(ctx, tc)
 	}
@@ -224,7 +224,7 @@ func (h *AppHost) handleAppRequest(ctx context.Context, req *core.Request) *core
 	)
 	defer span.End()
 
-	callResult, err := h.client.Call(req.Method, json.RawMessage(req.Params))
+	callResult, err := h.client.Call(req.Method, req.Params.Raw())
 	if err != nil {
 		span.RecordError(err)
 		return &core.Response{

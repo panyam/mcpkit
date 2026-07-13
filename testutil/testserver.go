@@ -109,7 +109,7 @@ func InitHandshake(d interface {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
@@ -124,13 +124,13 @@ func ToolCallRequest(name string, args map[string]any) *core.Request {
 		params["arguments"] = args
 	}
 	raw, _ := json.Marshal(params)
-	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "tools/call", Params: raw}
+	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "tools/call", Params: core.NewRawJSON(raw)}
 }
 
 // ResourceReadRequest builds a JSON-RPC resources/read request for direct dispatch testing.
 func ResourceReadRequest(uri string) *core.Request {
 	raw, _ := json.Marshal(map[string]string{"uri": uri})
-	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "resources/read", Params: raw}
+	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "resources/read", Params: core.NewRawJSON(raw)}
 }
 
 // PromptGetRequest builds a JSON-RPC prompts/get request for direct dispatch testing.
@@ -140,7 +140,7 @@ func PromptGetRequest(name string, args map[string]string) *core.Request {
 		params["arguments"] = args
 	}
 	raw, _ := json.Marshal(params)
-	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "prompts/get", Params: raw}
+	return &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`99`), Method: "prompts/get", Params: core.NewRawJSON(raw)}
 }
 
 // ForAllTransports runs fn as a subtest against all 4 MCP transport types:

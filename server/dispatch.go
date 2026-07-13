@@ -379,14 +379,14 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 
 	switch req.Method {
 	case "initialize":
-		return d.handleInitialize(id, req.Params)
+		return d.handleInitialize(id, req.Params.Raw())
 
 	case "notifications/initialized", "initialized":
 		d.initialized = true
 		return nil
 
 	case "notifications/cancelled":
-		d.handleCancelled(req.Params)
+		d.handleCancelled(req.Params.Raw())
 		return nil
 
 	case "notifications/roots/list_changed":
@@ -413,7 +413,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 		// The version gate is resolved via protocol_features.go so all
 		// version-gated behavior lives in one table.
 		if d.protocolFeatures().StatelessMetaRequired && !d.allowLegacyOnDraft {
-			if _, err := core.DecodeRequestMetaFromRawJSON(req.ParamsLazy()); err != nil {
+			if _, err := core.DecodeRequestMetaFromRawJSON(&req.Params); err != nil {
 				field := "io.modelcontextprotocol/protocolVersion"
 				if mve, ok := err.(*core.MetaValidationError); ok && mve.Field != "_meta" {
 					field = "io.modelcontextprotocol/" + mve.Field
@@ -437,30 +437,30 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 
 		switch req.Method {
 		case "tools/list":
-			return d.handleToolsList(id, req.Params)
+			return d.handleToolsList(id, req.Params.Raw())
 		case "tools/call":
-			return d.handleToolsCall(ctx, id, req.Params)
+			return d.handleToolsCall(ctx, id, req.Params.Raw())
 		case "resources/list":
-			return d.handleResourcesList(id, req.Params)
+			return d.handleResourcesList(id, req.Params.Raw())
 		case "resources/read":
-			return d.handleResourcesRead(ctx, id, req.Params)
+			return d.handleResourcesRead(ctx, id, req.Params.Raw())
 		case "resources/templates/list":
-			return d.handleResourcesTemplatesList(id, req.Params)
+			return d.handleResourcesTemplatesList(id, req.Params.Raw())
 		case "resources/subscribe":
-			return d.handleResourcesSubscribe(id, req.Params)
+			return d.handleResourcesSubscribe(id, req.Params.Raw())
 		case "resources/unsubscribe":
-			return d.handleResourcesUnsubscribe(id, req.Params)
+			return d.handleResourcesUnsubscribe(id, req.Params.Raw())
 		case "prompts/list":
-			return d.handlePromptsList(id, req.Params)
+			return d.handlePromptsList(id, req.Params.Raw())
 		case "prompts/get":
-			return d.handlePromptsGet(ctx, id, req.Params)
+			return d.handlePromptsGet(ctx, id, req.Params.Raw())
 		case "logging/setLevel":
-			return d.handleLoggingSetLevel(id, req.Params)
+			return d.handleLoggingSetLevel(id, req.Params.Raw())
 		case "completion/complete":
-			return d.handleCompletionComplete(ctx, id, req.Params)
+			return d.handleCompletionComplete(ctx, id, req.Params.Raw())
 		default:
 			if h, ok := d.customHandlers[req.Method]; ok {
-				return h(core.NewMethodContext(ctx), id, req.Params)
+				return h(core.NewMethodContext(ctx), id, req.Params.Raw())
 			}
 			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}

@@ -29,7 +29,7 @@ func TestDispatch_MiddlewareAuthErrorPropagates(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("1"),
 		Method:  "tools/call",
-		Params:  validMetaParams(t),
+		Params:  core.NewRawJSON(validMetaParams(t)),
 	}
 	resp, err := d.Dispatch(context.Background(), req)
 
@@ -64,7 +64,7 @@ func TestDispatch_MiddlewareAuthErrorPropagatesForCustomMethod(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("2"),
 		Method:  "events/poll",
-		Params:  validMetaParams(t),
+		Params:  core.NewRawJSON(validMetaParams(t)),
 	}
 	resp, err := d.Dispatch(context.Background(), req)
 

@@ -195,7 +195,7 @@ func (t *StdioTransport) readLoop() {
 		if req.IsNotification() {
 			// Server-to-client notification.
 			if t.notifyHandler != nil {
-				t.notifyHandler(req.Method, req.Params)
+				t.notifyHandler(req.Method, req.Params.Raw())
 			}
 			continue
 		}

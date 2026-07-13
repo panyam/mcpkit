@@ -20,7 +20,7 @@ func initServer(srv *Server) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`0`),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
 	})
 	srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0",
@@ -42,7 +42,7 @@ func TestServerDispatch(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"greet","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"greet","arguments":{}}`)),
 	})
 	if dErr != nil {
 		t.Fatalf("dispatch transport error: %v", dErr)
@@ -80,7 +80,7 @@ func TestServerToolTimeout(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage(`1`),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"slow","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"slow","arguments":{}}`)),
 	})
 	if dErr != nil {
 		t.Fatalf("dispatch transport error: %v", dErr)

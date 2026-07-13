@@ -135,7 +135,7 @@ func TestAppHost_HandleAppRequest_ToolCall(t *testing.T) {
 	req := &core.Request{
 		Method: "tools/call",
 		ID:     json.RawMessage(`42`),
-		Params: json.RawMessage(`{"name":"server_tool","arguments":{"x":1}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"server_tool","arguments":{"x":1}}`)),
 	}
 
 	// Verify the request handler receives the right method.
@@ -147,7 +147,7 @@ func TestAppHost_HandleAppRequest_ToolCall(t *testing.T) {
 			t.Errorf("method = %q, want tools/call", req.Method)
 		}
 		var params map[string]any
-		json.Unmarshal(req.Params, &params)
+		req.Params.Bind(&params)
 		if params["name"] != "server_tool" {
 			t.Errorf("tool name = %v, want server_tool", params["name"])
 		}
@@ -157,7 +157,7 @@ func TestAppHost_HandleAppRequest_ToolCall(t *testing.T) {
 		return &core.Response{ID: req.ID, Result: json.RawMessage(result)}
 	})
 
-	resp, err := bridge.SendToHost(context.Background(), req.Method, json.RawMessage(req.Params))
+	resp, err := bridge.SendToHost(context.Background(), req.Method, req.Params.Raw())
 	if err != nil {
 		t.Fatal(err)
 	}

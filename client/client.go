@@ -926,7 +926,7 @@ func (c *Client) dispatchServerRequest(ctx context.Context, req *core.Request) *
 			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "sampling not supported")
 		}
 		var params core.CreateMessageRequest
-		if err := json.Unmarshal(req.Params, &params); err != nil {
+		if err := req.Params.Bind(&params); err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "invalid sampling params: "+err.Error())
 		}
 		result, err := c.samplingHandler(ctx, params)
@@ -940,7 +940,7 @@ func (c *Client) dispatchServerRequest(ctx context.Context, req *core.Request) *
 			return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "elicitation not supported")
 		}
 		var params core.ElicitationRequest
-		if err := json.Unmarshal(req.Params, &params); err != nil {
+		if err := req.Params.Bind(&params); err != nil {
 			return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "invalid elicitation params: "+err.Error())
 		}
 		// Reject URL mode if client didn't declare URL support.
@@ -1638,7 +1638,7 @@ func (c *Client) doRawCall(method string, params any, cc *CallContext) (*rpcResp
 		Method:  method,
 	}
 	if wrapped != nil {
-		req.Params, _ = json.Marshal(wrapped)
+		req.Params, _ = core.MarshalRawJSON(wrapped)
 	}
 	data, _ := json.Marshal(req)
 	return c.transport.callWithContext(method, data, cc)
@@ -1656,7 +1656,7 @@ func (c *Client) notifyMethod(method string, params any) error {
 		Method:  method,
 	}
 	if params != nil {
-		req.Params, _ = json.Marshal(params)
+		req.Params, _ = core.MarshalRawJSON(params)
 	}
 	data, _ := json.Marshal(req)
 

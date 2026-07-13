@@ -85,7 +85,7 @@ func TestSSE_EmitRetryHintReachesClient(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("1"),
 		Method:  "initialize",
-		Params:  json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"0"}}`)),
 	})
 	if _, err := readSSEEventWithRetry(reader); err != nil {
 		t.Fatalf("read init response: %v", err)
@@ -99,7 +99,7 @@ func TestSSE_EmitRetryHintReachesClient(t *testing.T) {
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("2"),
 		Method:  "tools/call",
-		Params:  json.RawMessage(`{"name":"long_running","arguments":{}}`),
+		Params:  core.NewRawJSON(json.RawMessage(`{"name":"long_running","arguments":{}}`)),
 	})
 
 	// Read until we see retry: 30000. SendRetry emits a bare event (no
@@ -142,7 +142,7 @@ func TestSSE_EmitRetryHintNoOpOnNonSSEPath(t *testing.T) {
 	initDispatcher(d)
 	resp := d.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "tools/call",
-		Params: json.RawMessage(`{"name":"t","arguments":{}}`),
+		Params: core.NewRawJSON(json.RawMessage(`{"name":"t","arguments":{}}`)),
 	})
 	if resp.Error != nil {
 		t.Fatalf("unexpected error: %s", resp.Error.Message)
