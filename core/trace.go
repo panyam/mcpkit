@@ -339,16 +339,25 @@ func InjectTraceContext(meta map[string]any, tc TraceContext) {
 // (tools/call's `name`/`arguments`, prompts/get's `name`, ...) — all of
 // them carry the same `_meta` shape per the MCP spec.
 func ExtractTraceContextFromParams(params json.RawMessage) TraceContext {
-	if len(params) == 0 {
+	m := NewRawJSON(params)
+	return ExtractTraceContextFromRawJSON(&m)
+}
+
+// ExtractTraceContextFromRawJSON is the RawJSON form of
+// ExtractTraceContextFromParams (issue 733). It reads `_meta.traceparent` /
+// `tracestate` through the message's parse-once spine, so a middleware that
+// also reads other `_meta` fields (baggage, tracelink) shares a single parse
+// of params instead of decoding the whole envelope again per field.
+func ExtractTraceContextFromRawJSON(m *RawJSON) TraceContext {
+	meta, ok := m.Meta()
+	if !ok {
 		return TraceContext{}
 	}
-	var envelope struct {
-		Meta map[string]any `json:"_meta"`
-	}
-	if err := json.Unmarshal(params, &envelope); err != nil {
+	var metaMap map[string]any
+	if err := meta.Bind(&metaMap); err != nil {
 		return TraceContext{}
 	}
-	return ExtractTraceContext(envelope.Meta)
+	return ExtractTraceContext(metaMap)
 }
 
 // InjectTraceContextIntoParams returns a params value with `_meta.traceparent`
@@ -425,19 +434,24 @@ func InjectTraceContextIntoParams(params any, tc TraceContext) any {
 //
 // Defensive: never panics on malformed input.
 func ExtractTraceLinkFromParams(params json.RawMessage) TraceContext {
-	if len(params) == 0 {
+	m := NewRawJSON(params)
+	return ExtractTraceLinkFromRawJSON(&m)
+}
+
+// ExtractTraceLinkFromRawJSON is the RawJSON form of ExtractTraceLinkFromParams
+// (issue 733) — reads `_meta.io.modelcontextprotocol/tracelink` through the
+// message's parse-once spine, sharing the parse with the other `_meta` readers
+// in the trace middleware.
+func ExtractTraceLinkFromRawJSON(m *RawJSON) TraceContext {
+	meta, ok := m.Meta()
+	if !ok {
 		return TraceContext{}
 	}
-	var envelope struct {
-		Meta map[string]any `json:"_meta"`
-	}
-	if err := json.Unmarshal(params, &envelope); err != nil {
+	var metaMap map[string]any
+	if err := meta.Bind(&metaMap); err != nil {
 		return TraceContext{}
 	}
-	if envelope.Meta == nil {
-		return TraceContext{}
-	}
-	tp, _ := envelope.Meta[MetaKeyTraceLink].(string)
+	tp, _ := metaMap[MetaKeyTraceLink].(string)
 	if !isValidTraceparent(tp) {
 		return TraceContext{}
 	}

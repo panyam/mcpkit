@@ -118,16 +118,24 @@ func InjectBaggage(meta map[string]any, b Baggage) {
 // fails the same structural validation as ExtractBaggage. Mirror of
 // ExtractTraceContextFromParams.
 func ExtractBaggageFromParams(params json.RawMessage) Baggage {
-	if len(params) == 0 {
+	m := NewRawJSON(params)
+	return ExtractBaggageFromRawJSON(&m)
+}
+
+// ExtractBaggageFromRawJSON is the RawJSON form of ExtractBaggageFromParams
+// (issue 733) — reads `_meta.baggage` through the message's parse-once spine so
+// it shares the parse of params with the trace-context and tracelink readers in
+// the trace middleware.
+func ExtractBaggageFromRawJSON(m *RawJSON) Baggage {
+	meta, ok := m.Meta()
+	if !ok {
 		return ""
 	}
-	var envelope struct {
-		Meta map[string]any `json:"_meta"`
-	}
-	if err := json.Unmarshal(params, &envelope); err != nil {
+	var metaMap map[string]any
+	if err := meta.Bind(&metaMap); err != nil {
 		return ""
 	}
-	return ExtractBaggage(envelope.Meta)
+	return ExtractBaggage(metaMap)
 }
 
 // InjectBaggageIntoParams returns a params value with
