@@ -172,6 +172,15 @@ services:
       # "stale cursor truncates" walkthrough beat doesn't need an hour
       # of patience.
       POSTGRES_BUFFER_TTL: ${POSTGRES_BUFFER_TTL:-10m}
+      # EVENTS_STORE_MINT_CURSORS — cross-replica cursor consistency
+      # (issue 833). On by default: the Postgres buffer store assigns each
+      # event's cursor from its own write sequence, so the N replicas
+      # writing chat.message (round-robined by `make inject`) get globally
+      # monotone, collision-free cursors and events/poll resume is gap-free
+      # across replicas. Set to false to fall back to per-replica in-process
+      # counters and watch the collision (cursor "5" minted on every
+      # replica) — the teaching contrast for the walkthrough.
+      EVENTS_STORE_MINT_CURSORS: ${EVENTS_STORE_MINT_CURSORS:-true}
     # `--exporter=auto` means best-effort OTLP with Noop fallback when
     # the collector is unreachable. common.RegisterTelemetryFlags
     # doesn't read EXPORTER from env, so we wire it via the CLI flag;
@@ -303,6 +312,15 @@ services:
       # "stale cursor truncates" walkthrough beat doesn't need an hour
       # of patience.
       POSTGRES_BUFFER_TTL: ${POSTGRES_BUFFER_TTL:-10m}
+      # EVENTS_STORE_MINT_CURSORS — cross-replica cursor consistency
+      # (issue 833). On by default: the Postgres buffer store assigns each
+      # event's cursor from its own write sequence, so the N replicas
+      # writing chat.message (round-robined by `make inject`) get globally
+      # monotone, collision-free cursors and events/poll resume is gap-free
+      # across replicas. Set to false to fall back to per-replica in-process
+      # counters and watch the collision (cursor "5" minted on every
+      # replica) — the teaching contrast for the walkthrough.
+      EVENTS_STORE_MINT_CURSORS: ${EVENTS_STORE_MINT_CURSORS:-true}
     # `--exporter=auto` means best-effort OTLP with Noop fallback when
     # the collector is unreachable. common.RegisterTelemetryFlags
     # doesn't read EXPORTER from env, so we wire it via the CLI flag;
@@ -434,6 +452,15 @@ services:
       # "stale cursor truncates" walkthrough beat doesn't need an hour
       # of patience.
       POSTGRES_BUFFER_TTL: ${POSTGRES_BUFFER_TTL:-10m}
+      # EVENTS_STORE_MINT_CURSORS — cross-replica cursor consistency
+      # (issue 833). On by default: the Postgres buffer store assigns each
+      # event's cursor from its own write sequence, so the N replicas
+      # writing chat.message (round-robined by `make inject`) get globally
+      # monotone, collision-free cursors and events/poll resume is gap-free
+      # across replicas. Set to false to fall back to per-replica in-process
+      # counters and watch the collision (cursor "5" minted on every
+      # replica) — the teaching contrast for the walkthrough.
+      EVENTS_STORE_MINT_CURSORS: ${EVENTS_STORE_MINT_CURSORS:-true}
     # `--exporter=auto` means best-effort OTLP with Noop fallback when
     # the collector is unreachable. common.RegisterTelemetryFlags
     # doesn't read EXPORTER from env, so we wire it via the CLI flag;
