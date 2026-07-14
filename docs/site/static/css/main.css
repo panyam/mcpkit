@@ -416,8 +416,40 @@ pre.has-copy:hover .copy-btn,
 
 /* Responsive */
 @media (max-width: 800px) {
-    .page { grid-template-columns: 1fr; }
-    .sidebar { position: static; max-height: none; }
+    .page {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+    /* Sidebar stacks above the content; un-stick it and set it off with a
+       rule so the section nav reads as its own block. */
+    .sidebar {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+        padding-bottom: 1.25rem;
+        border-bottom: 1px solid var(--border);
+    }
     .pillars { grid-template-columns: 1fr; }
-    .top-nav { display: none; }
+    /* The stacked sidebar carries the section nav, so the duplicate top-nav
+       section links are hidden — but keep GitHub and the theme toggle
+       reachable (the toggle lives in the top nav). */
+    .top-nav { gap: 0.9rem; }
+    .top-nav-link:not(.external) { display: none; }
+    /* Wide tables scroll within their own box instead of forcing the page
+       to scroll sideways. */
+    .content table {
+        display: block;
+        width: max-content;
+        max-width: 100%;
+        overflow-x: auto;
+    }
+}
+
+@media (max-width: 560px) {
+    .page { padding: 1rem; }
+    .site-header-inner,
+    .site-footer-inner { padding-left: 1rem; padding-right: 1rem; }
+    .content { max-width: 100%; }
+    .hero h1 { font-size: 1.9rem; }
+    .hero-tagline { font-size: 1rem; }
 }
