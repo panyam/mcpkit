@@ -11,12 +11,19 @@ type ClientRegistrationRequest = client.ClientRegistrationRequest
 type ClientRegistrationResponse = client.ClientRegistrationResponse
 
 // RegisterClient is re-exported from oneauth/client. Performs RFC 7591
-// Dynamic Client Registration against the given endpoint.
+// Dynamic Client Registration against the given endpoint. RFC 7591 §3.2.1 —
+// the registration response carries the assigned client_id (and, for
+// confidential clients, client_secret), which the token source then uses;
+// oneauth parses the response, mcpkit consumes the client_id.
 var RegisterClient = client.RegisterClient
 
 // DefaultClientRegistration returns a sensible default DCR request for an MCP client.
 // This remains in mcpkit because the defaults are MCP-specific (client name,
 // redirect URIs, grant types, auth method, application_type).
+//
+// RFC 7591 §2 — the client metadata fields sent on the registration request
+// (redirect_uris, grant_types, response_types, token_endpoint_auth_method,
+// application_type, client_name).
 //
 // ApplicationType is set to "native" per SEP-837: MCP clients are CLI/SDK
 // (installed) clients, not web-server-hosted clients.
