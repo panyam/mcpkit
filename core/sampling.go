@@ -8,12 +8,12 @@ import (
 
 // Sentinel errors for sampling.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 var ErrSamplingNotSupported = errors.New("client does not support sampling")
 
 // SamplingMessage is a single message in a sampling/createMessage request.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type SamplingMessage struct {
 	Role    string  `json:"role"`
 	Content Content `json:"content"`
@@ -38,7 +38,7 @@ func (m *SamplingMessage) UnmarshalJSON(data []byte) error {
 
 // ModelHint provides hints about which model the server prefers for sampling.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type ModelHint struct {
 	Name string `json:"name,omitempty"`
 }
@@ -46,7 +46,7 @@ type ModelHint struct {
 // ModelPreferences describes the server's preferences for model selection
 // when the client performs LLM sampling.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type ModelPreferences struct {
 	Hints                []ModelHint `json:"hints,omitempty"`
 	CostPriority         *float64   `json:"costPriority,omitempty"`
@@ -57,7 +57,7 @@ type ModelPreferences struct {
 // SamplingMeta holds protocol-level metadata for a sampling request.
 // Serialized as "_meta" in the sampling/createMessage params.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type SamplingMeta struct {
 	// UI contains MCP Apps presentation metadata.
 	// When set, the host can associate the sampling request with a UI resource.
@@ -72,7 +72,7 @@ type SamplingMeta struct {
 // CreateMessageRequest is the params for a sampling/createMessage server-to-client request.
 // The server sends this to ask the client to perform LLM inference.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type CreateMessageRequest struct {
 	Messages         []SamplingMessage `json:"messages"`
 	SystemPrompt     string            `json:"systemPrompt,omitempty"`
@@ -87,7 +87,7 @@ type CreateMessageRequest struct {
 
 // CreateMessageResult is the client's response to a sampling/createMessage request.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type CreateMessageResult struct {
 	Model      string  `json:"model"`
 	StopReason string  `json:"stopReason,omitempty"`
@@ -135,7 +135,7 @@ func (r *CreateMessageResult) UnmarshalJSON(data []byte) error {
 //	    return mcpkit.TextResult(result.Content.Text), nil
 //	}
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func Sample(ctx context.Context, req CreateMessageRequest) (CreateMessageResult, error) {
 	sc := sessionFromContext(ctx)
 	if sc == nil || sc.request == nil {
