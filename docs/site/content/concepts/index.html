@@ -1,0 +1,56 @@
+---
+title: "Concepts"
+description: "Deep dives into how mcpkit implements the MCP protocol — session bring-up, transports, notifications, the request lifecycle, extension surfaces, reverse calls, MRTR, tracing, and events."
+---
+
+<section class="hero">
+    <h1>Concepts</h1>
+    <p class="hero-tagline">Nine deep dives into how mcpkit implements the protocol — not API reference, but the "why it works this way" behind each surface. Read them in order for a full tour, or jump to the one you need.</p>
+</section>
+
+<section class="pillars">
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/bringup/">Bring-up</a></h3>
+        <p>Session establishment: transport, auth, version negotiation, capabilities, and the initialized handshake.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/transport-mechanics/">Transport mechanics</a></h3>
+        <p>How the streamable-HTTP and stdio transports move requests, responses, and server-initiated pushes.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/notifications/">Notifications</a></h3>
+        <p>The six notification families, their direction and capability gates, and per-session fan-out.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/request-anatomy/">Anatomy of a request</a></h3>
+        <p>The end-to-end journey of a request through mcpkit's dispatch pipeline, step by step.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/extension-mechanisms/">Extension mechanisms</a></h3>
+        <p>The four extension surfaces and how mcpkit organizes core / ext / experimental.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/reverse-call/">Reverse calls</a></h3>
+        <p>Server-initiated sampling, elicitation, and roots/list — and how the handler context gates them.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/mrtr/">MRTR internals</a></h3>
+        <p>The InputRequiredResult envelope, signed requestState, and the client auto-loop.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/tracing/">Tracing</a></h3>
+        <p>W3C trace context across the MCP wire — off by default, zero-overhead when unconfigured.</p>
+    </div>
+
+    <div class="pillar">
+        <h3><a href="{{ .Site.PathPrefix }}/concepts/events/">Events</a></h3>
+        <p>The experimental cross-replica events bus: push, poll, webhooks, and trace propagation.</p>
+    </div>
+</section>

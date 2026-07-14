@@ -11,6 +11,10 @@
             <a class="top-nav-link" href="{{ $Site.PathPrefix }}/{{ .url }}">{{ .name }}</a>
             {{ end }}
             <a class="top-nav-link external" href="{{ (json "SiteMetadata.json" "repository") }}">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
         </nav>
     </div>
 </header>

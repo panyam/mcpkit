@@ -7,6 +7,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- Apply the saved theme before first paint to avoid a flash. No
+         saved choice = leave unset so the CSS @media(prefers-color-scheme)
+         follows the OS. -->
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="{{ if .FrontMatter.description }}{{ .FrontMatter.description }}{{ else }}{{ (json "SiteMetadata.json" "siteDescription") }}{{ end }}">
     <title>{{ if .FrontMatter.title }}{{ .FrontMatter.title }} · {{ end }}{{ (json "SiteMetadata.json" "siteName") }}</title>
@@ -44,6 +53,51 @@
         mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
         await mermaid.run();
       }
+    </script>
+
+    <!--
+      Copy buttons: add a "Copy" control to every code block. Mermaid
+      fences are excluded (they render to <pre class="mermaid"> above, and
+      language-mermaid is filtered here regardless of ordering). Vanilla,
+      dependency-free — same pattern as the mermaid loader.
+    -->
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    <!-- Dark-mode toggle: flip the effective theme and persist it. The
+         head script applies the saved choice before paint. -->
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
     </script>
 </body>
 </html>

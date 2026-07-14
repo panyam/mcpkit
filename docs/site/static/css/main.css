@@ -15,6 +15,39 @@
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
 }
 
+/* Dark theme. The color tokens above thread through the whole sheet via
+   var(--...), so overriding them here re-themes everything. Two triggers:
+   the OS preference when the visitor hasn't chosen (:not([data-theme]))
+   and an explicit toggle ([data-theme="dark"]); [data-theme="light"]
+   always pins the light defaults above. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --fg: #e8e8e6;
+        --fg-muted: #b2b2af;
+        --fg-faint: #868682;
+        --bg: #16171a;
+        --bg-soft: #1e1f23;
+        --bg-code: #1c1d21;
+        --border: #2e2f34;
+        --link: #7ba3e0;
+        --link-hover: #a9c4ef;
+        --accent: #e8843c;
+    }
+}
+
+:root[data-theme="dark"] {
+    --fg: #e8e8e6;
+    --fg-muted: #b2b2af;
+    --fg-faint: #868682;
+    --bg: #16171a;
+    --bg-soft: #1e1f23;
+    --bg-code: #1c1d21;
+    --border: #2e2f34;
+    --link: #7ba3e0;
+    --link-hover: #a9c4ef;
+    --accent: #e8843c;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -54,6 +87,68 @@ pre code {
     background: transparent;
     padding: 0;
 }
+
+/* Copy button (added by the copy-button script in BasePage.html) */
+pre.has-copy {
+    position: relative;
+}
+
+.copy-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    padding: 0.15rem 0.5rem;
+    font: inherit;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+pre.has-copy:hover .copy-btn,
+.copy-btn:focus-visible {
+    opacity: 1;
+}
+
+.copy-btn:hover {
+    color: var(--fg);
+    border-color: var(--fg-faint);
+}
+
+/* Dark-mode toggle in the header. The icon reflects the current theme:
+   sun in light, moon in dark. Default (no data-theme) follows the OS. */
+.theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-muted);
+    cursor: pointer;
+    padding: 0.2rem 0.45rem;
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.theme-toggle:hover {
+    color: var(--fg);
+    border-color: var(--fg-faint);
+}
+
+.theme-toggle-dark { display: none; }
+.theme-toggle-light { display: inline; }
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .theme-toggle-light { display: none; }
+    :root:not([data-theme]) .theme-toggle-dark { display: inline; }
+}
+
+:root[data-theme="dark"] .theme-toggle-light { display: none; }
+:root[data-theme="dark"] .theme-toggle-dark { display: inline; }
+:root[data-theme="light"] .theme-toggle-light { display: inline; }
+:root[data-theme="light"] .theme-toggle-dark { display: none; }
 
 /* Header */
 .site-header {
