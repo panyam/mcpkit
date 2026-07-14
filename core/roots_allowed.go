@@ -33,7 +33,7 @@ import (
 // allows "/workspace/src/main.go" but NOT "/workspace-other/y". Both
 // the root and the path are cleaned via filepath.Clean before comparison.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func IsPathAllowed(ctx context.Context, path string) bool {
 	sc := sessionFromContext(ctx)
 	if sc == nil || sc.allowedRoots == nil {
@@ -58,7 +58,7 @@ func IsPathAllowed(ctx context.Context, path string) bool {
 // snapshot from the allowed-roots function — it may change on the next
 // call if client roots update.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func AllowedRoots(ctx context.Context) []string {
 	sc := sessionFromContext(ctx)
 	if sc == nil || sc.allowedRoots == nil {
@@ -72,7 +72,7 @@ func AllowedRoots(ctx context.Context) []string {
 // the computed root set during session setup. Must be called AFTER
 // ContextWithSession.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func SetAllowedRoots(ctx context.Context, fn func() []string) context.Context {
 	if sc := sessionFromContext(ctx); sc != nil {
 		sc.allowedRoots = fn

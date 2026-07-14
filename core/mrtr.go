@@ -151,7 +151,7 @@ func (r InputRequiredResult) MarshalJSON() ([]byte, error) {
 // dispatch path will surface that as a client-side validation error so
 // the round trip still terminates rather than hanging.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func NewSamplingInputRequest(req CreateMessageRequest) InputRequest {
 	raw, _ := MarshalJSON(req)
 	return InputRequest{
@@ -184,7 +184,7 @@ func NewElicitationInputRequest(req ElicitationRequest) InputRequest {
 // stay on the common path. Used by the SEP-2322
 // `input-required-result-basic-list-roots` conformance scenario.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func NewListRootsInputRequest() InputRequest {
 	return InputRequest{
 		Method: "roots/list",
@@ -197,7 +197,7 @@ func NewListRootsInputRequest() InputRequest {
 // Used on the second tools/call round after the client has answered
 // the sampling request.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func DecodeSamplingInputResponse(raw json.RawMessage) (CreateMessageResult, error) {
 	var out CreateMessageResult
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -220,7 +220,7 @@ func DecodeElicitationInputResponse(raw json.RawMessage) (ElicitationResult, err
 // RootsListResult — symmetric with NewListRootsInputRequest. Used on the
 // second tools/call round after the client has reported its current roots.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func DecodeListRootsInputResponse(raw json.RawMessage) (RootsListResult, error) {
 	var out RootsListResult
 	if err := json.Unmarshal(raw, &out); err != nil {
