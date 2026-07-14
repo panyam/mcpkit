@@ -74,6 +74,14 @@ var (
 	// extractor's ErrArchiveTooLarge (WG threat model T6, issue 867).
 	ErrResourceTooLarge = errors.New("skills: resource exceeds max size")
 
+	// ErrSupportingFileUnpinned is returned by Client.ReadSkillFileVerified
+	// when the index entry carries no per-file digest for the requested
+	// supporting file (issue 866). It is a secure-by-default signal: a host
+	// that asked to verify a file against its pin, but found none, should
+	// not silently fall back to an unverified read. Hosts that want a
+	// best-effort read of an unpinned file call ReadSkillFile directly.
+	ErrSupportingFileUnpinned = errors.New("skills: supporting file not pinned in index")
+
 	// ErrServerByteBudgetExceeded is returned when a Client's cumulative
 	// fetched-byte total would exceed the budget set via
 	// WithServerByteBudget. The budget spans every ReadSkillURI-path read

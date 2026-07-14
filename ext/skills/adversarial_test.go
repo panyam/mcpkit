@@ -39,9 +39,10 @@ import (
 //     name-collision, live-read-divergence, cumulative-budget) — these
 //     require a full HOST (approval persistence, cross-origin trust, unpack
 //     budgets); a consumer library cannot satisfy them alone.
-//   - adv-supporting-file-digest-swap — a KNOWN GAP in mcpkit (issue 839 /
-//     gap G13): the index digest covers SKILL.md only, so supporting files
-//     read via resources/read are unpinned. Asserted-as-gap below.
+//   - adv-supporting-file-digest-swap — COVERED as of issue 866: the
+//     Indexer pins every supporting file in IndexEntry.Files, and
+//     Client.ReadSkillFileVerified rejects a swapped file on read with
+//     ErrDigestMismatch. Asserted-as-covered below (was gap G13).
 func TestAdversarialCorpus_NonArchiveSlice(t *testing.T) {
 	// adv-content-rotation (Den D7) + the digest MUST at SEP line 204.
 	// Oracle: "A host that re-verifies MUST reject the rotated read — the
@@ -104,29 +105,40 @@ func TestAdversarialCorpus_NonArchiveSlice(t *testing.T) {
 		}
 	})
 
-	// Coverage disclosure — keeps this mapping honest. The one known gap is
-	// asserted so a future fix flags the disclosure as stale.
-	t.Run("coverage-disclosure", func(t *testing.T) {
-		// adv-supporting-file-digest-swap (Den B1) — KNOWN GAP (issue 839 /
-		// G13). The index carries ONE digest per entry (SKILL.md), so
-		// supporting files fetched via resources/read are not integrity-
-		// pinned. Assert the shape that makes the gap real: an index entry
-		// exposes a single Digest field and no per-supporting-file digests.
+	// adv-supporting-file-digest-swap (Den B1) — COVERED as of issue 866.
+	// The Indexer pins every supporting file in IndexEntry.Files, and
+	// Client.ReadSkillFileVerified rejects a swapped file on read. This was
+	// gap G13; the assertion now proves coverage so a regression flags it.
+	t.Run("supporting-file-digest-swap", func(t *testing.T) {
 		sc, _ := connectSkillsClient(t, "testdata/valid")
 		idx, err := sc.ListSkills(context.Background())
 		if err != nil {
 			t.Fatalf("ListSkills: %v", err)
 		}
-		entry, ok := idx.Lookup("skill://git-workflow/SKILL.md")
+		entry, ok := idx.Lookup(pdfManifestURI)
 		if !ok {
-			t.Fatal("git-workflow not in index")
+			t.Fatal("pdf-processing not in index")
 		}
-		if entry.Digest == "" {
-			t.Fatal("expected a SKILL.md digest on the entry")
+		pins := entry.FileDigests()
+		if len(pins) == 0 {
+			t.Fatal("expected supporting-file pins under _meta; gap G13 has regressed")
 		}
-		t.Logf("KNOWN GAP adv-supporting-file-digest-swap (G13): IndexEntry.Digest pins SKILL.md only; "+
-			"supporting files are unpinned. entry=%q digest=%s", entry.URL, entry.Digest)
+		manifest, err := sc.ReadSkillManifest(context.Background(), pdfManifestURI)
+		if err != nil {
+			t.Fatalf("ReadSkillManifest: %v", err)
+		}
+		// Point the pin at a divergent digest to model a swapped supporting
+		// file. The re-verifying host MUST reject the read.
+		tampered := withTamperedPin(entry, pins[0].Path, "sha256:"+strings.Repeat("0", 64))
+		_, err = sc.ReadSkillFileVerified(context.Background(), tampered, manifest, pins[0].Path)
+		if !errors.Is(err, skills.ErrDigestMismatch) {
+			t.Fatalf("swapped supporting file err = %v, want ErrDigestMismatch", err)
+		}
+	})
 
+	// Coverage disclosure — keeps this mapping honest for the cases mcpkit
+	// intentionally does not cover in this slice.
+	t.Run("coverage-disclosure", func(t *testing.T) {
 		t.Log("OUT OF SLICE (archive, deferred per discussion 2994; covered in archive_test.go): " +
 			"adv-archive-traversal, adv-archive-symlink-escape, adv-archive-hardlink-escape, " +
 			"adv-decompression-bomb, adv-archive-setuid, adv-archive-non-regular, adv-cumulative-budget, " +
