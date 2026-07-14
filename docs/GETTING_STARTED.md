@@ -57,7 +57,7 @@ func main() {
 		},
 	))
 
-	log.Println("listening on http://localhost:8787/mcp")
+	log.Println("getting-started server listening on http://localhost:8787/mcp")
 	if err := srv.Run(":8787"); err != nil { // Streamable HTTP
 		log.Fatal(err)
 	}
