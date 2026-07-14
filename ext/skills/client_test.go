@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -140,7 +141,7 @@ func TestClient_Index_Lookup_Miss(t *testing.T) {
 	if ok {
 		t.Errorf("Lookup hit for unknown URL, got %+v", entry)
 	}
-	if entry != (skills.IndexEntry{}) {
+	if !reflect.DeepEqual(entry, skills.IndexEntry{}) {
 		t.Errorf("miss should return zero IndexEntry, got %+v", entry)
 	}
 }

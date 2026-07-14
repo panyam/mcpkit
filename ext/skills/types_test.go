@@ -3,6 +3,7 @@ package skills_test
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -101,7 +102,7 @@ func TestIndexEntry_RoundTrip(t *testing.T) {
 		t.Fatalf("round-trip lost entries: %d → %d", len(orig.Skills), len(second.Skills))
 	}
 	for i := range orig.Skills {
-		if orig.Skills[i] != second.Skills[i] {
+		if !reflect.DeepEqual(orig.Skills[i], second.Skills[i]) {
 			t.Errorf("entry %d: round-trip mismatch\n  orig = %#v\n  new  = %#v", i, orig.Skills[i], second.Skills[i])
 		}
 	}
