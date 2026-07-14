@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/panyam/mcpkit/client"
@@ -43,6 +44,12 @@ import (
 type Client struct {
 	mcp *client.Client
 	cfg clientConfig
+
+	// mu guards consumed, the running total charged against
+	// cfg.serverByteBudget. Kept separate from cfg (immutable after
+	// construction) because it is the one piece of mutable Client state.
+	mu       sync.Mutex
+	consumed int64
 }
 
 // NewClient builds a SEP-2640 host helper over the given mcpkit client.
@@ -53,12 +60,15 @@ type Client struct {
 //
 //   - WithTracerProvider — span emission around read methods + Activate
 //   - WithActivationHook — non-OTel telemetry callback fired from Activate
+//   - WithMaxResourceBytes — per-resource fetch-size cap (issue 867)
+//   - WithServerByteBudget — cumulative fetch-size budget (issue 867)
 //
-// With no options, the helper behaves identically to the pre-P7 shape:
-// zero overhead, no spans, no hook calls. NoopTracerProvider is the
-// default — call sites do not nil-check.
+// With no options, the helper behaves identically to the pre-P7 shape
+// aside from the per-resource size cap, which defaults to
+// DefaultMaxResourceBytes: zero telemetry overhead, no spans, no hook
+// calls. NoopTracerProvider is the default — call sites do not nil-check.
 func NewClient(mcp *client.Client, opts ...Option) *Client {
-	cfg := clientConfig{tp: core.NoopTracerProvider{}}
+	cfg := clientConfig{tp: core.NoopTracerProvider{}, maxResourceBytes: DefaultMaxResourceBytes}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -159,7 +169,7 @@ func (c *Client) ReadSkillURI(ctx context.Context, uri string) ([]byte, error) {
 		span.RecordError(err)
 		return nil, fmt.Errorf("skills: read %s: %w", uri, err)
 	}
-	bytes, err := extractBytes(result.Contents, uri)
+	bytes, err := c.boundedBytes(result.Contents, uri)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -500,6 +510,62 @@ func isNotFoundErr(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "unknown resource")
+}
+
+// BytesConsumed reports the running total charged against the Client's
+// WithServerByteBudget across every skill:// read so far. Returns 0 when
+// no budget is configured or nothing has been read yet. Safe for
+// concurrent use.
+func (c *Client) BytesConsumed() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.consumed
+}
+
+// boundedBytes extracts the served bytes from a resources/read result
+// while enforcing the per-resource size cap (WithMaxResourceBytes) and
+// the cumulative server byte budget (WithServerByteBudget).
+//
+// The per-resource size is bounded before a blob is base64-decoded: the
+// decoded length is at most DecodedLen(len(base64)) for a blob and the
+// raw string length for text, so an oversized payload is rejected
+// without incurring the decode (or a subsequent hash) allocation. On
+// success the actual decoded byte count is charged against the
+// cumulative budget.
+func (c *Client) boundedBytes(contents []core.ResourceReadContent, uri string) ([]byte, error) {
+	if len(contents) == 0 {
+		return nil, fmt.Errorf("skills: %s: empty contents", uri)
+	}
+	ct := contents[0]
+
+	var estimate int64
+	if ct.Blob != "" {
+		estimate = int64(base64.StdEncoding.DecodedLen(len(ct.Blob)))
+	} else {
+		estimate = int64(len(ct.Text))
+	}
+	if c.cfg.maxResourceBytes > 0 && estimate > c.cfg.maxResourceBytes {
+		return nil, fmt.Errorf("%w: %s is ~%d bytes, cap %d",
+			ErrResourceTooLarge, uri, estimate, c.cfg.maxResourceBytes)
+	}
+
+	bytes, err := extractBytes(contents, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.cfg.serverByteBudget > 0 {
+		c.mu.Lock()
+		total := c.consumed + int64(len(bytes))
+		if total > c.cfg.serverByteBudget {
+			c.mu.Unlock()
+			return nil, fmt.Errorf("%w: %s would push total to %d, budget %d",
+				ErrServerByteBudgetExceeded, uri, total, c.cfg.serverByteBudget)
+		}
+		c.consumed = total
+		c.mu.Unlock()
+	}
+	return bytes, nil
 }
 
 // extractBytes pulls the served bytes out of a ResourceResult's

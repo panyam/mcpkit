@@ -64,6 +64,23 @@ var (
 	// directoryRead: true. Returning a typed error from the pre-call
 	// guard keeps the contract explicit at the call site.
 	ErrDirectoryReadNotSupported = errors.New("skills: server does not advertise the directoryRead capability")
+
+	// ErrResourceTooLarge is returned by the Client read path when a
+	// fetched resource exceeds the per-resource size cap configured via
+	// WithMaxResourceBytes (default DefaultMaxResourceBytes). The size is
+	// bounded before a blob is base64-decoded, so an oversized payload is
+	// rejected without incurring the decode (or a subsequent hash)
+	// allocation. This is the individual-file counterpart to the archive
+	// extractor's ErrArchiveTooLarge (WG threat model T6, issue 867).
+	ErrResourceTooLarge = errors.New("skills: resource exceeds max size")
+
+	// ErrServerByteBudgetExceeded is returned when a Client's cumulative
+	// fetched-byte total would exceed the budget set via
+	// WithServerByteBudget. The budget spans every ReadSkillURI-path read
+	// (manifest, supporting file, ReadAndVerify) on that Client, so a walk
+	// that fetches many individually-small files is still bounded past an
+	// aggregate ceiling. Disabled by default; opt in per Client.
+	ErrServerByteBudgetExceeded = errors.New("skills: server byte budget exceeded")
 )
 
 // Index validation errors.

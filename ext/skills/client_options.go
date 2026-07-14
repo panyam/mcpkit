@@ -18,6 +18,58 @@ type Option func(*clientConfig)
 type clientConfig struct {
 	tp             core.TracerProvider
 	activationHook func(context.Context, ActivationEvent)
+
+	// maxResourceBytes caps the size of any single skill:// read. 0
+	// leaves the DefaultMaxResourceBytes default in place; a negative
+	// value disables the cap. See WithMaxResourceBytes.
+	maxResourceBytes int64
+
+	// serverByteBudget caps the cumulative bytes a Client fetches across
+	// all skill:// reads. 0 (the default) disables the budget. See
+	// WithServerByteBudget.
+	serverByteBudget int64
+}
+
+// DefaultMaxResourceBytes is the per-resource size cap the Client applies
+// to skill:// reads when no WithMaxResourceBytes option is supplied.
+// 10 MiB comfortably fits a SKILL.md and ordinary supporting files while
+// rejecting payloads engineered to exhaust memory at fetch time (WG
+// threat model T6, issue 867). It mirrors the archive extractor's own
+// DefaultArchiveMaxBytes cap, applied to the individual-file paths the
+// archive cap does not cover. Pass -1 to WithMaxResourceBytes to disable.
+const DefaultMaxResourceBytes int64 = 10 * 1024 * 1024
+
+// WithMaxResourceBytes sets the per-resource size cap for skill:// reads
+// (ReadSkillURI and everything that flows through it: ReadSkillManifest,
+// ReadSkillFile, ReadAndVerify). A read whose payload exceeds n is
+// rejected with ErrResourceTooLarge before a blob is base64-decoded, so
+// an oversized payload never incurs the decode or a subsequent hash
+// allocation.
+//
+// n <= 0 disables the cap (n == 0 is treated as "use the default" at
+// construction; pass -1 to explicitly remove the cap). Default is
+// DefaultMaxResourceBytes (10 MiB).
+//
+// Note: the underlying resources/read call still buffers the full
+// JSON-RPC response in memory before this cap is applied — bounding that
+// requires a streaming read on the core client. This option bounds the
+// decode + hash amplification and the retained bytes, which is the SDK
+// surface ext/skills controls.
+func WithMaxResourceBytes(n int64) Option {
+	return func(c *clientConfig) { c.maxResourceBytes = n }
+}
+
+// WithServerByteBudget sets a cumulative cap on the total bytes a Client
+// fetches across every skill:// read for its lifetime. Once the running
+// total plus the next read would exceed n, that read is rejected with
+// ErrServerByteBudgetExceeded. This bounds a directory walk that fetches
+// many individually-small supporting files past an aggregate ceiling,
+// which the per-resource cap alone does not catch.
+//
+// n <= 0 disables the budget (the default). Reads are charged their
+// decoded byte count; the running total is available via BytesConsumed.
+func WithServerByteBudget(n int64) Option {
+	return func(c *clientConfig) { c.serverByteBudget = n }
 }
 
 // WithTracerProvider opts the Client into SEP-414 P7 (#748) span
