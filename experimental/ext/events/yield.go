@@ -23,10 +23,12 @@ const (
 type YieldingOption func(*yieldingConfig)
 
 type yieldingConfig struct {
-	maxSize         int
-	cursorless      bool
-	subscriberBuf   int
-	bufferStore     EventBufferStore
+	maxSize           int
+	cursorless        bool
+	subscriberBuf     int
+	bufferStore       EventBufferStore
+	cursorProvider    CursorProvider
+	cursorProviderSet bool
 }
 
 // SubscriberEvent flows on the channel returned by YieldingSource.Subscribe.
@@ -183,6 +185,25 @@ func WithEventBufferStore(s EventBufferStore) YieldingOption {
 	}
 }
 
+// WithCursorProvider sets the CursorProvider that mints this source's
+// cursors (issue 833). The default is a fresh InProcessCursors — a
+// per-source in-memory counter, correct for a single writer. Pass
+// RedisCursors (shared INCR) or any CursorProvider for a source written
+// by multiple replicas.
+//
+// Precedence: an explicit provider set here always wins. Without it, a
+// cursor-providing bufferStore (CursorProvidingStore) mints on write;
+// failing that, InProcessCursors. A nil provider is ignored (keeps the
+// default) so the option is safe to call unconditionally.
+func WithCursorProvider(p CursorProvider) YieldingOption {
+	return func(c *yieldingConfig) {
+		if p != nil {
+			c.cursorProvider = p
+			c.cursorProviderSet = true
+		}
+	}
+}
+
 // WithoutCursors marks the source as cursorless: events are emitted with
 // `cursor: null` on the wire, the source does not buffer events, and
 // events/poll always returns empty. Use for ephemeral-state sources where
@@ -248,13 +269,26 @@ func NewYieldingSource[Data any](def EventDef, opts ...YieldingOption) (*Yieldin
 		def.Cursorless = true
 	}
 
+	cursorProvider := cfg.cursorProvider
+	if cursorProvider == nil {
+		cursorProvider = NewInProcessCursors()
+	}
 	s := &YieldingSource[Data]{
-		def:           def,
-		maxSize:       cfg.maxSize,
-		cursorless:    cfg.cursorless,
-		subscriberBuf: cfg.subscriberBuf,
-		bufferStore:   cfg.bufferStore,
-		tp:            core.NoopTracerProvider{},
+		def:            def,
+		maxSize:        cfg.maxSize,
+		cursorless:     cfg.cursorless,
+		subscriberBuf:  cfg.subscriberBuf,
+		bufferStore:    cfg.bufferStore,
+		cursorProvider: cursorProvider,
+		tp:             core.NoopTracerProvider{},
+	}
+	// Precedence (issue 833): an explicit CursorProvider wins; otherwise a
+	// cursor-providing store mints on write for this source; otherwise the
+	// InProcessCursors default above. Resolved once here, not per yield.
+	if !cfg.cursorProviderSet && !cfg.cursorless {
+		if cps, ok := s.bufferStore.(CursorProvidingStore); ok && cps.ProvidesCursor(def.Name) {
+			s.storeMintsCursor = true
+		}
 	}
 	yield := func(ctx context.Context, data Data) error {
 		return s.yield(ctx, data)
@@ -295,7 +329,15 @@ type YieldingSource[Data any] struct {
 	maxSize       int
 	cursorless    bool
 	subscriberBuf int
-	seq           atomic.Int64
+
+	// cursorProvider mints the cursor in the we-mint path (issue 833).
+	// Defaults to a fresh InProcessCursors (the historical per-source
+	// atomic counter). storeMintsCursor, computed once at construction,
+	// is true when the bufferStore assigns cursors itself for this
+	// source AND no explicit provider was set — then yield leaves
+	// Event.Cursor nil and the store stamps it on Append.
+	cursorProvider   CursorProvider
+	storeMintsCursor bool
 
 	mu          sync.RWMutex
 	entries     []yieldedEntry[Data]
@@ -733,15 +775,21 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 		return fmt.Errorf("yield: marshal: %w", err)
 	}
 
-	seq := s.seq.Add(1)
 	event := Event{
 		EventID:   newEventID(),
 		Name:      s.def.Name,
 		Timestamp: now.Format(time.RFC3339),
 		Data:      raw,
 	}
-	if !s.cursorless {
-		cursor := strconv.FormatInt(seq, 10)
+	// Cursor provenance (issue 833): we-mint via the CursorProvider before
+	// the write, unless a cursor-providing store assigns it on Append (in
+	// which case Event.Cursor stays nil here and is stamped from the
+	// Append response below). Cursorless sources carry no cursor at all.
+	if !s.cursorless && !s.storeMintsCursor {
+		cursor, err := s.cursorProvider.Next(ctx, s.def.Name)
+		if err != nil {
+			return fmt.Errorf("yield: mint cursor: %w", err)
+		}
 		event.Cursor = &cursor
 	}
 
@@ -767,27 +815,36 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 		}
 	}
 	if !s.cursorless {
-		// Only buffer when cursored — cursorless sources don't support
-		// poll-side replay, so retaining events would just waste memory.
-		s.entries = append(s.entries, yieldedEntry[Data]{data: data, event: event})
-		if len(s.entries) > s.maxSize {
-			s.entries = s.entries[len(s.entries)-s.maxSize:]
-		}
 		// Mirror to the cross-replica buffer store (issue 727) when
 		// configured. The dual-write is cheap for the in-memory case
 		// and load-bearing for cross-replica deployments where
 		// Poll() must answer consistently regardless of which
 		// replica handles it. Errors are logged but don't fail the
 		// yield — local subscribers still see the event via the
-		// in-memory ring above.
+		// in-memory ring below.
+		//
+		// Append runs BEFORE the local ring append (issue 833): in the
+		// store-minted path the cursor isn't known until the write
+		// returns, so we stamp Event.Cursor from the response and only
+		// then buffer/fan out the fully-cursored event.
 		if s.bufferStore != nil {
-			if _, err := s.bufferStore.Append(ctx, AppendEventRequest{
+			resp, err := s.bufferStore.Append(ctx, AppendEventRequest{
 				SourceName: s.def.Name, Event: event,
-			}); err != nil {
+			})
+			if err != nil {
 				// TODO: surface via a Logger option once we add one.
 				// For now silent — yield should not block on store errors.
 				_ = err
+			} else if s.storeMintsCursor && resp.Cursor != "" {
+				c := resp.Cursor
+				event.Cursor = &c
 			}
+		}
+		// Only buffer when cursored — cursorless sources don't support
+		// poll-side replay, so retaining events would just waste memory.
+		s.entries = append(s.entries, yieldedEntry[Data]{data: data, event: event})
+		if len(s.entries) > s.maxSize {
+			s.entries = s.entries[len(s.entries)-s.maxSize:]
 		}
 	}
 	// Snapshot subscribers under the lock, then drop the lock before

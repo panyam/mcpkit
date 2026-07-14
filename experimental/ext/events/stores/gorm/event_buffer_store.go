@@ -36,6 +36,12 @@ type eventBufferRow struct {
 // pluralization rules; operators reading psql expect `event_buffer`.
 func (eventBufferRow) TableName() string { return "event_buffer" }
 
+// Compile-time capability checks.
+var (
+	_ events.EventBufferStore     = (*eventBufferStore)(nil)
+	_ events.CursorProvidingStore = (*eventBufferStore)(nil)
+)
+
 // eventBufferStore is the GORM-backed events.EventBufferStore impl.
 // Concurrency safety comes from the database (Postgres autoincrement
 // is atomic; SQLite serializes the whole transaction). Per-source
@@ -44,6 +50,13 @@ func (eventBufferRow) TableName() string { return "event_buffer" }
 type eventBufferStore struct {
 	db  *gorm.DB
 	ttl time.Duration
+
+	// provideCursors mints cursors on write from sequence_no rather than
+	// storing the caller's cursor verbatim (issue 833). When set, the
+	// store implements events.CursorProvidingStore and, for every source
+	// it backs, sequence_no is the effective cursor everywhere (Append
+	// returns it, Poll/Latest/Recent/Truncate filter and project on it).
+	provideCursors bool
 }
 
 // NewEventBufferStore returns a GORM-backed EventBufferStore. The
@@ -66,18 +79,31 @@ func NewEventBufferStore(db *gorm.DB, opts ...Option) (events.EventBufferStore, 
 			return nil, err
 		}
 	}
-	return &eventBufferStore{db: db, ttl: cfg.bufferTTL}, nil
+	return &eventBufferStore{db: db, ttl: cfg.bufferTTL, provideCursors: cfg.provideCursors}, nil
 }
 
-// Append inserts the event with expires_at = NOW() + ttl. The
-// caller's Event.Cursor is stored verbatim — the YieldingSource's
-// atomic counter is the authoritative monotone-per-source source of
-// cursor values; the DB just persists what the caller produced. The
-// sequence_no column is autoincrement-assigned by the DB and serves
-// as a stable PK + insertion-order tiebreaker; it's not visible on
-// the wire.
+// ProvidesCursor reports whether this store mints cursors on write. It is
+// the events.CursorProvidingStore capability (issue 833), enabled by
+// WithProvideCursors. One table, one sequence — the store mints for every
+// source it backs, so source is ignored.
+func (s *eventBufferStore) ProvidesCursor(string) bool { return s.provideCursors }
+
+// Append inserts the event with expires_at = NOW() + ttl.
 //
-// Required Event fields: EventID, Cursor (non-nil), Timestamp.
+// Cursor provenance depends on the store's mode (issue 833):
+//   - Default (verbatim): the caller's Event.Cursor is stored as-is —
+//     the YieldingSource's CursorProvider is the authoritative source of
+//     cursor values. Required Event fields: EventID, Cursor (non-nil),
+//     Timestamp.
+//   - WithProvideCursors (store-minted): the caller passes a nil
+//     Event.Cursor and the DB-assigned sequence_no becomes the cursor,
+//     returned in AppendEventResponse.Cursor. sequence_no is populated on
+//     the same INSERT (RETURNING / LastInsertId), so no extra round trip.
+//     The verbatim cursor column is left empty for these rows; the read
+//     paths project sequence_no as the cursor.
+//
+// The sequence_no column is autoincrement-assigned by the DB and serves
+// as the stable PK + insertion-order key in both modes.
 func (s *eventBufferStore) Append(ctx context.Context, req events.AppendEventRequest) (events.AppendEventResponse, error) {
 	payload, err := json.Marshal(req.Event)
 	if err != nil {
@@ -98,6 +124,14 @@ func (s *eventBufferStore) Append(ctx context.Context, req events.AppendEventReq
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 		return events.AppendEventResponse{}, err
 	}
+	// Store-minted cursor (issue 833): when this store provides cursors
+	// and the caller left Cursor nil, the DB-assigned sequence_no (now
+	// populated on row by GORM's RETURNING / LastInsertId — same round
+	// trip) IS the cursor. The verbatim cursor column stays empty for
+	// these rows; Poll/Latest/Recent project sequence_no as the cursor.
+	if s.provideCursors && req.Event.Cursor == nil {
+		return events.AppendEventResponse{Cursor: strconv.FormatInt(row.SequenceNo, 10)}, nil
+	}
 	return events.AppendEventResponse{}, nil
 }
 
@@ -117,31 +151,31 @@ func (s *eventBufferStore) Poll(ctx context.Context, req events.PollEventsReques
 	}
 	c, _ := strconv.ParseInt(req.Cursor, 10, 64)
 
+	// Effective cursor column: sequence_no when this store mints cursors
+	// (issue 833), else the numeric cast of the verbatim cursor column.
+	// Both are monotone in insert order, so filter-by-cursor stays
+	// consistent with order-by-sequence_no in either mode.
+	cursorExpr := "CAST(cursor AS INTEGER)"
+	if s.provideCursors {
+		cursorExpr = "sequence_no"
+	}
+
 	// Truncated check: requested cursor < oldest surviving cursor for
-	// this source. We use MIN over the cursor column (numerically) —
-	// not sequence_no — so the floor reflects what's wire-visible.
+	// this source, so the floor reflects what's wire-visible.
 	var oldest sql_NullInt64
 	if c > 0 {
 		if err := s.db.WithContext(ctx).
 			Model(&eventBufferRow{}).
 			Where("source_name = ?", req.SourceName).
-			Select("MIN(CAST(cursor AS BIGINT)) as v").
+			Select("MIN(" + cursorExpr + ") as v").
 			Scan(&oldest).Error; err != nil {
-			// SQLite doesn't have BIGINT; fall back to INTEGER.
-			if err := s.db.WithContext(ctx).
-				Model(&eventBufferRow{}).
-				Where("source_name = ?", req.SourceName).
-				Select("MIN(CAST(cursor AS INTEGER)) as v").
-				Scan(&oldest).Error; err != nil {
-				return events.PollEventsResponse{}, err
-			}
+			return events.PollEventsResponse{}, err
 		}
 	}
 
 	var rows []eventBufferRow
-	// CAST in the WHERE so the comparison is numeric.
 	if err := s.db.WithContext(ctx).
-		Where("source_name = ? AND CAST(cursor AS INTEGER) > ?", req.SourceName, c).
+		Where("source_name = ? AND "+cursorExpr+" > ?", req.SourceName, c).
 		Order("sequence_no ASC").
 		Limit(limit).
 		Find(&rows).Error; err != nil {
@@ -154,8 +188,14 @@ func (s *eventBufferStore) Poll(ctx context.Context, req events.PollEventsReques
 		if err := json.Unmarshal(r.Payload, &ev); err != nil {
 			return events.PollEventsResponse{}, err
 		}
+		eff := s.effectiveCursor(r)
+		// Store-minted events were persisted with a nil cursor; stamp the
+		// projected sequence_no cursor onto the wire event.
+		if ev.Cursor == nil || s.provideCursors {
+			ev.Cursor = &eff
+		}
 		out.Events = append(out.Events, ev)
-		out.NextCursor = r.Cursor
+		out.NextCursor = eff
 	}
 
 	// No events matched but the source has some — NextCursor = Latest.
@@ -177,6 +217,16 @@ func (s *eventBufferStore) Poll(ctx context.Context, req events.PollEventsReques
 	return out, nil
 }
 
+// effectiveCursor is the cursor a row projects on the wire: sequence_no
+// when this store mints cursors (issue 833), else the verbatim cursor
+// column.
+func (s *eventBufferStore) effectiveCursor(r eventBufferRow) string {
+	if s.provideCursors {
+		return strconv.FormatInt(r.SequenceNo, 10)
+	}
+	return r.Cursor
+}
+
 // Latest returns the source's most recent cursor. Empty when source
 // has no rows.
 func (s *eventBufferStore) Latest(ctx context.Context, req events.LatestCursorRequest) (events.LatestCursorResponse, error) {
@@ -192,7 +242,7 @@ func (s *eventBufferStore) Latest(ctx context.Context, req events.LatestCursorRe
 	if err != nil {
 		return events.LatestCursorResponse{}, err
 	}
-	return events.LatestCursorResponse{Cursor: row.Cursor}, nil
+	return events.LatestCursorResponse{Cursor: s.effectiveCursor(row)}, nil
 }
 
 // Recent returns the most recent N events for the source, oldest-first
@@ -216,6 +266,9 @@ func (s *eventBufferStore) Recent(ctx context.Context, req events.RecentEventsRe
 		if err := json.Unmarshal(r.Payload, &ev); err != nil {
 			return events.RecentEventsResponse{}, err
 		}
+		if eff := s.effectiveCursor(r); ev.Cursor == nil || s.provideCursors {
+			ev.Cursor = &eff
+		}
 		out[len(rows)-1-i] = ev
 	}
 	return events.RecentEventsResponse{Events: out}, nil
@@ -231,7 +284,13 @@ func (s *eventBufferStore) Truncate(ctx context.Context, req events.TruncateEven
 		if err != nil {
 			return events.TruncateEventsResponse{}, err
 		}
-		q = q.Where("CAST(cursor AS INTEGER) <= ?", c)
+		// Filter on the effective cursor column: sequence_no when the
+		// store mints cursors (issue 833), else the verbatim cursor.
+		if s.provideCursors {
+			q = q.Where("sequence_no <= ?", c)
+		} else {
+			q = q.Where("CAST(cursor AS INTEGER) <= ?", c)
+		}
 	}
 	result := q.Delete(&eventBufferRow{})
 	if result.Error != nil {

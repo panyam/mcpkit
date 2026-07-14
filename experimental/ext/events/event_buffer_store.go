@@ -2,7 +2,9 @@ package events
 
 import (
 	"context"
+	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 // EventBufferStore is the storage seam behind YieldingSource's poll
@@ -79,9 +81,18 @@ type AppendEventRequest struct {
 	Event      Event
 }
 
-// AppendEventResponse is empty today; reserved for future fields
-// like SequenceNo or AppendedAt that backends may want to surface.
-type AppendEventResponse struct{}
+// AppendEventResponse carries the cursor the store assigned to the event,
+// when the store mints cursors on write (see CursorProvidingStore, issue
+// 833). It is empty for stores that store the caller's cursor verbatim —
+// the historical behavior — so existing implementations that return
+// AppendEventResponse{} are unaffected.
+type AppendEventResponse struct {
+	// Cursor is the store-assigned cursor for the just-appended event.
+	// Populated only when the store minted it (the caller passed a nil
+	// Event.Cursor and the store provides cursors for the source);
+	// empty when the caller supplied the cursor.
+	Cursor string
+}
 
 // PollEventsRequest carries the (source, cursor, limit) tuple.
 // Cursor=="" means "start from now". Limit<=0 is treated as 1 to
@@ -153,6 +164,15 @@ type InMemoryEventBufferStore struct {
 	mu      sync.RWMutex
 	buffers map[string]*ringBuffer
 	maxSize int
+
+	// mintCursors opts the store into assigning cursors on write for a
+	// nil Event.Cursor (CursorProvidingStore, issue 833). Off by default
+	// so the store's historical verbatim-cursor behavior is unchanged.
+	// When on, seq is the global monotone allocator; a source-partitioned
+	// subset of a global monotone sequence is itself monotone, so
+	// per-source poll-resume stays gap-free.
+	mintCursors bool
+	seq         atomic.Int64
 }
 
 type ringBuffer struct {
@@ -163,11 +183,32 @@ type ringBuffer struct {
 
 // NewInMemoryEventBufferStore returns an in-memory store with the
 // given per-source max size. Max<=0 means "unbounded" — never evict.
+// Cursors are stored verbatim (the caller's CursorProvider mints them).
 func NewInMemoryEventBufferStore(maxSize int) *InMemoryEventBufferStore {
 	return &InMemoryEventBufferStore{
 		buffers: make(map[string]*ringBuffer),
 		maxSize: maxSize,
 	}
+}
+
+// NewCursorMintingInMemoryStore returns an in-memory store that assigns
+// cursors on write from a shared global counter (CursorProvidingStore,
+// issue 833). N YieldingSources for the same source that share one such
+// store get globally-unique, monotone cursors — the multi-writer topology
+// a shared Postgres buffer store provides in production, in a single
+// process for tests and single-node fan-in deployments.
+func NewCursorMintingInMemoryStore(maxSize int) *InMemoryEventBufferStore {
+	s := NewInMemoryEventBufferStore(maxSize)
+	s.mintCursors = true
+	return s
+}
+
+// ProvidesCursor reports whether this store mints cursors on write. It is
+// the CursorProvidingStore capability (issue 833); true only for a store
+// built with NewCursorMintingInMemoryStore. The in-memory store either
+// mints for every source or none, so source is ignored.
+func (s *InMemoryEventBufferStore) ProvidesCursor(string) bool {
+	return s.mintCursors
 }
 
 func (s *InMemoryEventBufferStore) ringFor(source string) *ringBuffer {
@@ -185,8 +226,17 @@ func (s *InMemoryEventBufferStore) ringFor(source string) *ringBuffer {
 func (s *InMemoryEventBufferStore) Append(_ context.Context, req AppendEventRequest) (AppendEventResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ev := req.Event
+	var assigned string
+	if s.mintCursors && ev.Cursor == nil {
+		// Assign from the shared global counter. A copy of the string is
+		// taken so the stored event's Cursor pointer is independent.
+		assigned = strconv.FormatInt(s.seq.Add(1), 10)
+		c := assigned
+		ev.Cursor = &c
+	}
 	r := s.ringFor(req.SourceName)
-	r.events = append(r.events, req.Event)
+	r.events = append(r.events, ev)
 	if s.maxSize > 0 && len(r.events) > s.maxSize {
 		dropped := r.events[0]
 		r.events = r.events[1:]
@@ -195,7 +245,7 @@ func (s *InMemoryEventBufferStore) Append(_ context.Context, req AppendEventRequ
 			r.hasMinSeen = true
 		}
 	}
-	return AppendEventResponse{}, nil
+	return AppendEventResponse{Cursor: assigned}, nil
 }
 
 // Poll returns the slice of events whose cursor is strictly greater
@@ -343,5 +393,8 @@ func parseCursor(s string) (int64, bool) {
 	return n, true
 }
 
-// Compile-time check.
-var _ EventBufferStore = (*InMemoryEventBufferStore)(nil)
+// Compile-time checks.
+var (
+	_ EventBufferStore     = (*InMemoryEventBufferStore)(nil)
+	_ CursorProvidingStore = (*InMemoryEventBufferStore)(nil)
+)
