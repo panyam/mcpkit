@@ -118,6 +118,16 @@ func configurePostgresBackend() *postgresBackend {
 			bufferOpts = append(bufferOpts, gormstore.WithBufferTTL(ttl))
 		}
 	}
+	// Store-minted cursors (issue 833): the demo round-robins `make inject`
+	// across N event-server replicas writing the SAME source, so the
+	// per-replica InProcess cursor counters would each start at 1 and
+	// collide — cross-replica poll-resume would see duplicates/gaps. Let
+	// the shared Postgres buffer store assign globally-monotone cursors on
+	// write instead. On by default (the demo's whole point); set
+	// EVENTS_STORE_MINT_CURSORS=false to observe the per-replica collision.
+	if strings.ToLower(strings.TrimSpace(os.Getenv("EVENTS_STORE_MINT_CURSORS"))) != "false" {
+		bufferOpts = append(bufferOpts, gormstore.WithProvideCursors())
+	}
 	bufferStore, err := gormstore.NewEventBufferStore(db, bufferOpts...)
 	if err != nil {
 		log.Fatalf("gormstore.NewEventBufferStore: %v", err)
