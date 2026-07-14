@@ -10,7 +10,7 @@ Production-grade MCP (Model Context Protocol) server and client library for Go.
 [![License](https://img.shields.io/github/license/panyam/mcpkit)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/panyam/mcpkit?style=social)](https://github.com/panyam/mcpkit/stargazers)
 
-**[Docs site](https://panyam.github.io/mcpkit/)** · **[Conformance report](https://panyam.github.io/mcpkit/conformance/)** · **[Capabilities](https://panyam.github.io/mcpkit/capabilities/)** · **[Changelog](CHANGELOG.md)** · **[Quick Start](#quick-start)**
+**[Docs site](https://panyam.github.io/mcpkit/)** · **[Examples](https://panyam.github.io/mcpkit/examples/)** · **[Conformance report](https://panyam.github.io/mcpkit/conformance/)** · **[Capabilities](https://panyam.github.io/mcpkit/capabilities/)** · **[Changelog](CHANGELOG.md)** · **[Quick Start](#quick-start)**
 
 ## Quick Start
 
@@ -95,6 +95,7 @@ make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 
 | Doc | What |
 |-----|------|
+| [Examples gallery](https://panyam.github.io/mcpkit/examples/) | Runnable, batteries-included examples (auth, tasks, apps, tracing, events, skills) — each a guided two-terminal walkthrough. Source under [`examples/`](examples/) |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes (Keep a Changelog / SemVer); fuller write-ups in [`docs/releases/`](docs/releases/) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to build, test, and contribute |
 | [CLAUDE.md](CLAUDE.md) | Quick reference: commands, package structure, gotchas |
