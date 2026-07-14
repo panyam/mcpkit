@@ -8,6 +8,7 @@ type Option func(*config)
 type config struct {
 	skipAutoMigrate bool
 	bufferTTL       time.Duration
+	provideCursors  bool
 }
 
 // defaultBufferTTL is the per-event retention window for
@@ -43,4 +44,25 @@ func WithBufferTTL(ttl time.Duration) Option {
 			c.bufferTTL = ttl
 		}
 	}
+}
+
+// WithProvideCursors makes the store assign cursors on write from its
+// database sequence (the sequence_no autoincrement), advertising the
+// CursorProvidingStore capability (issue 833). A YieldingSource wired to
+// this store then leaves Event.Cursor nil and the store stamps a
+// globally-monotone cursor on Append — so N replicas writing the same
+// source get gap-free, collision-free cursors without a shared in-process
+// counter or Redis.
+//
+// Off by default: without it, the store persists the caller's cursor
+// verbatim (the historical behavior), and cursor minting stays with the
+// YieldingSource's CursorProvider. Turning it on is a cursor-provenance
+// change — existing cursor values are per-replica, new ones are the DB
+// sequence — so enable it on a fresh deployment or accept that in-flight
+// clients re-subscribe (which the Truncated signal already handles).
+//
+// The store mints for every source it backs (one table, one sequence),
+// so the per-source ProvidesCursor argument is ignored here.
+func WithProvideCursors() Option {
+	return func(c *config) { c.provideCursors = true }
 }
