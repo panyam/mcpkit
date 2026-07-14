@@ -486,3 +486,46 @@ func (c *countingFS) Stat(name string) (fs.FileInfo, error) {
 	atomic.AddInt32(&c.statCount, 1)
 	return fs.Stat(c.FS, name)
 }
+
+// TestIndexer_WithMtimeChecksDisabled_SkipsStatOnCacheHit is the issue-576
+// acceptance: with WithMtimeChecks(false) and a positive TTL, a cache hit
+// does not fs.Stat the cataloged skills — the point of the option for a
+// backing where stat is expensive.
+func TestIndexer_WithMtimeChecksDisabled_SkipsStatOnCacheHit(t *testing.T) {
+	cfs := &countingFS{FS: singleSkillMapFS(t, time.Unix(1_700_000_000, 0))}
+	p := mustProviderFromFS(t, cfs)
+
+	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(time.Hour), skills.WithMtimeChecks(false))
+	if _, err := idx.Index(); err != nil {
+		t.Fatalf("Index #1: %v", err)
+	}
+	stats1 := atomic.LoadInt32(&cfs.statCount)
+
+	if _, err := idx.Index(); err != nil {
+		t.Fatalf("Index #2 (within TTL): %v", err)
+	}
+	if stats2 := atomic.LoadInt32(&cfs.statCount); stats2 != stats1 {
+		t.Errorf("WithMtimeChecks(false) cache hit still called fs.Stat: statCount %d -> %d", stats1, stats2)
+	}
+}
+
+// TestIndexer_MtimeChecksDefaultOn_StatsOnCacheHit pins the default: with
+// mtime checks on (the default), a cache hit does stat each skill to detect
+// in-place edits. Contrast with the disabled case above.
+func TestIndexer_MtimeChecksDefaultOn_StatsOnCacheHit(t *testing.T) {
+	cfs := &countingFS{FS: singleSkillMapFS(t, time.Unix(1_700_000_000, 0))}
+	p := mustProviderFromFS(t, cfs)
+
+	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(time.Hour)) // mtime checks default on
+	if _, err := idx.Index(); err != nil {
+		t.Fatalf("Index #1: %v", err)
+	}
+	stats1 := atomic.LoadInt32(&cfs.statCount)
+
+	if _, err := idx.Index(); err != nil {
+		t.Fatalf("Index #2 (within TTL): %v", err)
+	}
+	if stats2 := atomic.LoadInt32(&cfs.statCount); stats2 == stats1 {
+		t.Errorf("default mtime checks: cache hit did not fs.Stat (expected mtime comparison), statCount stayed %d", stats1)
+	}
+}
