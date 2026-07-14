@@ -2,11 +2,11 @@
 
 [SEP-2577](https://github.com/modelcontextprotocol/specification/pull/2577) lands in the MCP 2026-07-28 RC (locked 2026-05-21). It puts three protocol features on a deprecation path: **Roots**, **Sampling**, and **Logging**. mcpkit is on the 12-month annotation-only path — every existing call still works at runtime; godoc `// Deprecated:` blocks fire `staticcheck SA1019` (and any IDE that consumes it) at call sites so consumers see the warning the moment they upgrade.
 
-**Removal target:** mcpkit v0.4. v0.3.x (the 2026-07-28 RC line) keeps the surfaces fully functional alongside the deprecation comments. Until v0.4 cuts, *no behavior changes*.
+**Removal target:** a future major release, no earlier than the spec window below (~2027). Removal was **deferred out of 0.4** (tracked in issue 850): 0.4 keeps the surfaces fully functional alongside the deprecation comments, so *no behavior changes* at the 0.4 cut. Removing them at 0.4 would break mcpkit's own 12-month annotation window (closes ~2027-05-21) and drop it below 100% conformance / Tier-1 while the features remain in the targeted spec version.
 
 ## TL;DR
 
-| Feature | mcpkit surface | Status in v0.3.x | What to do |
+| Feature | mcpkit surface | Status in 0.4.x | What to do |
 |---|---|---|---|
 | Roots | `WithAllowedRoots`, `IsPathAllowed`, `RootsListResult`, `WithRootsHandler`, `NotifyRootsChanged` | works, deprecated | move root-list semantics into application-level resource conventions; see [Roots replacement](#roots) |
 | Sampling | `Sample`, `CreateMessageRequest`, `SamplingMessage`, `ModelPreferences`, `WithSamplingHandler`, `TaskSample` | works, deprecated | bring your own LLM client; see [Sampling replacement](#sampling) |
@@ -24,9 +24,9 @@ The MCP working group's framing (paraphrased from SEP-2577 discussion): **Roots*
 | 2026-05-31 | mcpkit annotation pass lands (this doc + `Deprecated:` blocks) |
 | 2026-07-28 | MCP 2026-07-28 GA — features remain in the spec but flagged deprecated |
 | 2027-05-21 | 12-month annotation window minimum closes |
-| mcpkit v0.4 | mcpkit removes the deprecated symbols (no earlier than the spec window above) |
+| a future major release (≥ 2027) | mcpkit removes the deprecated symbols — no earlier than the spec window above. Deferred out of 0.4 (issue 850). |
 
-If the spec window extends, mcpkit's v0.4 cut follows it — the deprecation doc is the source of truth, not a calendar date.
+Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removing them earlier would break the annotation window above and drop mcpkit below Tier-1 while the features are still in the targeted spec version. If the spec window extends, mcpkit's removal follows it — the deprecation doc is the source of truth, not a calendar date.
 
 ## Affected symbols
 
@@ -40,7 +40,7 @@ If the spec window extends, mcpkit's v0.4 cut follows it — the deprecation doc
 | `core.BaseContext.IsPathAllowed(path) bool` | Same. |
 | `core.RootsListResult` | No replacement — the `roots/list` server-to-client request is the thing being deprecated. |
 | `core.DecodeListRootsInputResponse` | MRTR helper for the deprecated `roots/list` flow; remove when the MRTR composition no longer needs roots input. |
-| `client.RootsHandler`, `client.WithRootsHandler(h)` | Host wires filesystem permissions itself; mcpkit's client no longer needs to negotiate them after v0.4. |
+| `client.RootsHandler`, `client.WithRootsHandler(h)` | Host wires filesystem permissions itself; mcpkit's client no longer needs to negotiate them after removal. |
 | `(*client.Client).NotifyRootsChanged()` | No replacement — `roots/list_changed` is part of the deprecated surface. |
 
 **Migration sketch:** Move from *"server asks client which paths are allowed"* (Roots) to *"application bakes in its own filesystem capability before construction."* For tools that legitimately need user-scoped file access, model that as a resource or as an explicit tool argument, not as a protocol-level negotiation.
@@ -54,7 +54,7 @@ If the spec window extends, mcpkit's v0.4 cut follows it — the deprecation doc
 | `core.CreateMessageRequest`, `core.SamplingMessage`, `core.ModelPreferences`, `core.CreateMessageResult` | No replacement at the protocol surface — these wire types disappear. Application-level model abstractions replace them. |
 | `core.NewSamplingInputRequest(req)`, `core.DecodeSamplingInputResponse` | MRTR helpers for the deprecated sampling-in-MRTR flow. |
 | `(*server.TaskContext).TaskSample(req) (CreateMessageResult, error)` | Same as `Sample()` — task continuations should hold their own LLM client. |
-| `client.SamplingHandler`, `client.WithSamplingHandler(h)` | After v0.4, the host's LLM client and the MCP client are separately wired — no protocol negotiation. |
+| `client.SamplingHandler`, `client.WithSamplingHandler(h)` | After removal, the host's LLM client and the MCP client are separately wired — no protocol negotiation. |
 
 **Migration sketch:** Most tools that previously did `ctx.Sample(...)` were really asking *"call the host's LLM with this prompt."* Pass that LLM client into the server constructor; tools call it directly. mcpkit's role narrows to tool dispatch + transport; sampling stops being a wire-level concept.
 
@@ -72,6 +72,6 @@ If the spec window extends, mcpkit's v0.4 cut follows it — the deprecation doc
 
 ## Notes for mcpkit contributors
 
-- `// Deprecated:` blocks are per Go convention: blank-line-separated paragraph starting with `Deprecated:`. `staticcheck -checks SA1019` enforces no internal call sites accidentally regress to *new* uses of the deprecated symbols — current call sites are grandfathered through v0.3.x but should be tracked so v0.4 removal is mechanical.
-- Examples (`examples/mrtr`, `examples/apps/*`, `examples/stateless`, `examples/tasks`) still demo the deprecated surfaces — they're working illustrations of how the API behaves in v0.3.x. Each affected example carries a README banner pointing here. After v0.4 cut, the examples migrate or get retired with the symbols they demo.
+- `// Deprecated:` blocks are per Go convention: blank-line-separated paragraph starting with `Deprecated:`. `staticcheck -checks SA1019` enforces no internal call sites accidentally regress to *new* uses of the deprecated symbols — current call sites are grandfathered through 0.4.x but should be tracked so the eventual removal is mechanical.
+- Examples (`examples/mrtr`, `examples/apps/*`, `examples/stateless`, `examples/tasks`) still demo the deprecated surfaces — they're working illustrations of how the API behaves in 0.4.x. Each affected example carries a README banner pointing here. After the removal cut, the examples migrate or get retired with the symbols they demo.
 - The deprecation surfaces are wire-level: this doc does **not** deprecate `slog` integration as a general pattern, only mcpkit's MCP-protocol bridge for it. Same with model-client wiring — only the protocol-mediated path is leaving.

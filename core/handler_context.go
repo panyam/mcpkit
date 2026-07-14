@@ -240,7 +240,7 @@ func (bc BaseContext) Baggage() Baggage {
 
 // EmitLog sends a log notification at the given severity level.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func (bc BaseContext) EmitLog(level LogLevel, logger string, data any) {
 	if bc.sc == nil || bc.sc.notify == nil || bc.sc.logLevel == nil {
 		return
@@ -280,7 +280,7 @@ func (bc BaseContext) SessionID() string {
 // The client retries the same tools/call; the handler reads the answer
 // via ctx.InputResponse("draft-summary") + core.DecodeSamplingInputResponse.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func (bc BaseContext) Sample(req CreateMessageRequest) (CreateMessageResult, error) {
 	if bc.sc == nil || bc.sc.request == nil {
 		return CreateMessageResult{}, ErrNoRequestFunc
@@ -470,14 +470,14 @@ func (bc BaseContext) NotifyResourceUpdated(uri string) {
 // IsPathAllowed reports whether the given file path falls within the
 // session's enforced roots.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func (bc BaseContext) IsPathAllowed(path string) bool {
 	return IsPathAllowed(bc.Context, path)
 }
 
 // AllowedRoots returns the current enforced roots for the session.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func (bc BaseContext) AllowedRoots() []string {
 	return AllowedRoots(bc.Context)
 }

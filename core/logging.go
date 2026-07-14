@@ -6,12 +6,12 @@ import "context"
 // Used with logging/setLevel to control the minimum level of log notifications
 // sent to the client, and with EmitLog to specify the severity of a message.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type LogLevel int
 
 // MCP log severity levels.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 const (
 	LogDebug     LogLevel = iota // debug: detailed debugging information
 	LogInfo                      // info: general informational messages
@@ -49,7 +49,7 @@ func (l LogLevel) String() string {
 // ParseLogLevel converts a string to a LogLevel.
 // Returns the level and true on success, or (LogDebug, false) for unknown strings.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func ParseLogLevel(s string) (LogLevel, bool) {
 	l, ok := logLevelNames[s]
 	return l, ok
@@ -57,7 +57,7 @@ func ParseLogLevel(s string) (LogLevel, bool) {
 
 // LogMessage is the params payload for a notifications/message notification.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type LogMessage struct {
 	Level  string `json:"level"`
 	Logger string `json:"logger,omitempty"`
@@ -78,7 +78,7 @@ type LogMessage struct {
 //	    return mcpkit.TextResult("done"), nil
 //	}
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func EmitLog(ctx context.Context, level LogLevel, logger string, data any) {
 	sc := sessionFromContext(ctx)
 	if sc == nil || sc.notify == nil || sc.logLevel == nil {
