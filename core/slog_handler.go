@@ -21,7 +21,7 @@ import (
 //	    ...
 //	}
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type MCPLogHandler struct {
 	sc     *sessionCtx
 	logger string       // MCP "logger" field in notifications/message
@@ -32,7 +32,7 @@ type MCPLogHandler struct {
 
 // MCPLogHandlerOptions configures NewMCPLogHandler.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 type MCPLogHandlerOptions struct {
 	// Logger is the MCP logger name sent in the "logger" field of
 	// notifications/message. Defaults to "" (empty).
@@ -51,7 +51,7 @@ type MCPLogHandlerOptions struct {
 // If ctx has no session (e.g., called outside a handler), the handler is
 // a safe no-op — Enabled() returns false for all levels.
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func NewMCPLogHandler(ctx context.Context, opts *MCPLogHandlerOptions) *MCPLogHandler {
 	h := &MCPLogHandler{sc: sessionFromContext(ctx)}
 	if opts != nil {
@@ -157,7 +157,7 @@ func (h *MCPLogHandler) buildData(record slog.Record) any {
 //	slog.LevelError  (8)  → LogError
 //	> slog.LevelError      → LogCritical
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func SlogToMCPLevel(level slog.Level) LogLevel {
 	switch {
 	case level < slog.LevelInfo:
@@ -181,7 +181,7 @@ func SlogToMCPLevel(level slog.Level) LogLevel {
 //	LogError            → slog.LevelError
 //	LogCritical+        → slog.LevelError + 4
 //
-// Deprecated: per SEP-2577, scheduled for removal in v0.4. See docs/SEP_2577_DEPRECATIONS.md.
+// Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func MCPToSlogLevel(level LogLevel) slog.Level {
 	switch level {
 	case LogDebug:
