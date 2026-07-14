@@ -337,7 +337,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		ClientID:                 clientID,
 		ClientSecret:             clientSecret,
 		Scopes:                   scopes,
-		Resource:                 s.ServerURL, // RFC 8707: bind token to this MCP server
+		Resource:                 s.ServerURL, // RFC 8707 §2: send the resource parameter to bind the token to this MCP server
 		OpenBrowser:              s.OpenBrowser,
 		OnCallback: func(_ context.Context, p client.CallbackParams) error {
 			return validateIss(p.Iss, expectedIssuer, asAdvertisedSupport)
@@ -494,6 +494,9 @@ func (s *OAuthTokenSource) Close() error {
 // the new AS. Without this, the client would silently present AS₁'s
 // client_id to AS₂, which the upstream `sep-2352-no-reuse-on-as-change`
 // check rejects as a security violation.
+// MCP-Auth §C6 — client registration priority: a pre-registered ClientID
+// wins over a CIMD ClientMetadataURL, which wins over Dynamic Client
+// Registration. resolveClientID walks the three in that fixed order.
 func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err error) {
 	// 1. Pre-registered
 	if s.ClientID != "" {

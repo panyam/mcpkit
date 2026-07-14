@@ -371,6 +371,25 @@ client := mcpkit.NewClient(serverURL, info,
 
 Source: https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
 
+### Inline spec-marker convention (issue 504)
+
+Every ext/auth site that implements a spec-mandated clause carries an inline
+comment citing the clause, in one of three forms:
+
+- `// RFC NNNN §X.Y — …` for a consumed RFC (7591 DCR, 8414 AS metadata,
+  8707 resource indicators, 9068 JWT access tokens, 9207 iss, 9728 PRM, …)
+- `// MCP-Auth §X.Y — …` for the MCP authorization spec (§C6-style checklist
+  letters allowed)
+- `// SEP-NNNN — …` for an MCP SEP
+
+The markers travel with the code, so `grep -rE "// (RFC|MCP-Auth|SEP-) [0-9]"
+ext/auth/` reconstructs the clause→site mapping that
+[`conformance/AUTH_SPEC_COVERAGE.md`](../../../conformance/AUTH_SPEC_COVERAGE.md)
+records by `file:line` (which drifts). `make check-auth-markers` asserts that
+every matrix row citing an ext/auth site has its inline marker — so the matrix
+stays honest as the code moves. When you add a matrix row, add the marker;
+when you touch a spec-mandated site, cite the clause inline.
+
 ### Server-side (MCP server as OAuth resource server)
 
 | # | Requirement | Status | Notes |

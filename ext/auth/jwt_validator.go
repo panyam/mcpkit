@@ -221,6 +221,10 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		return v.unauthorized("invalid claims")
 	}
 
+	// RFC 9068 §2.2 — JWT access-token validation: the issuer (iss) and
+	// audience (aud) registered claims MUST match the expected values. The
+	// exp and nbf claims (RFC 7519 §4.1.4 / §4.1.5) are enforced by jwt.Parse
+	// above, which rejects an expired or not-yet-valid token before this point.
 	// Verify issuer
 	if v.issuer != "" {
 		if iss, _ := mapClaims["iss"].(string); iss != v.issuer {

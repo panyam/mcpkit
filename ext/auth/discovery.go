@@ -88,10 +88,15 @@ func WithASMetadataStore(s client.ASMetadataStore) DiscoverOption {
 //  3. If no resource_metadata in header, try well-known URIs
 //  4. Fetch PRM document
 //  5. Extract authorization_servers and scopes_supported
-//  6. Discover AS metadata via oneauth DiscoverAS (RFC 8414 + OIDC fallback)
+//  6. Discover AS metadata via oneauth DiscoverAS (RFC 8414 §3 well-known
+//     AS-metadata URL + OIDC fallback)
 //
 // Per MCP spec (2025-11-25): clients MUST support both WWW-Authenticate and
 // well-known URI discovery. Must use resource_metadata from header when present.
+//
+// MCP-Auth §2.3 — the client MUST try the WWW-Authenticate resource_metadata
+// link first and fall back to the well-known URI (steps 2-3); scope selection
+// prefers WWW-Authenticate over PRM scopes_supported.
 func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, error) {
 	cfg := &discoverConfig{}
 	for _, opt := range opts {
@@ -133,7 +138,7 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 	}
 
 	// Step 3: If no resource_metadata from header, try well-known URIs.
-	// Per RFC 9728: the well-known path is /.well-known/oauth-protected-resource
+	// RFC 9728 §3.1 — the PRM well-known path is /.well-known/oauth-protected-resource
 	// with the resource's path appended. E.g., for http://host/mcp:
 	//   path-based: http://host/.well-known/oauth-protected-resource/mcp
 	//   root:       http://host/.well-known/oauth-protected-resource
@@ -195,7 +200,8 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 		return nil, err
 	}
 
-	// Step 4: Extract authorization_servers from PRM
+	// Step 4: Extract authorization_servers from PRM (RFC 9728 §3.2 — the PRM
+	// document's authorization_servers array; at least one AS is required).
 	info.AuthorizationServers = info.PRM.AuthorizationServers
 	if len(info.AuthorizationServers) == 0 {
 		return nil, fmt.Errorf("PRM has no authorization_servers")
