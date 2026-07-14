@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -186,16 +187,57 @@ func (i *Indexer) isFresh() bool {
 }
 
 // skillMtime returns the mtime the cache uses to drive invalidation for
-// the given skill. In file mode the cache invalidates on changes to
-// SKILL.md only because the entry digest is over SKILL.md bytes alone.
-// In archive mode the digest is over the packed archive, so any file
-// in the skill's subtree contributes; the max mtime across the subtree
-// is what we track.
+// the given skill. In file mode the cache tracks SKILL.md's mtime; in
+// archive mode it tracks the subtree max mtime because the digest is over
+// the packed archive.
+//
+// Note (issue 866): file mode now also pins supporting-file digests in
+// the entry's supporting-file pins, which the SKILL.md mtime does not cover. A supporting
+// file that changes without a SKILL.md touch is therefore refreshed on
+// the TTL boundary (or via the push-based NotifyChanged path, issue 795),
+// not the instant its mtime moves — the same best-effort staleness window
+// SKILL.md content already had. Walking the whole subtree on every cache
+// hit to close that window would defeat the cache; it is intentionally
+// out of scope here.
 func (i *Indexer) skillMtime(skill *skillEntry) (time.Time, error) {
 	if i.provider.cfg.archiveMode != ArchiveFormatUnknown {
 		return subtreeMaxMtime(i.provider.cfg.fsys, skill.dirPath)
 	}
 	return mtimeOf(i.provider.cfg.fsys, manifestPath(skill.dirPath))
+}
+
+// supportingFileDigests walks a skill-md skill's directory and returns a
+// sorted, per-file SHA-256 pin for every regular file except SKILL.md.
+// Paths are relative to the skill directory (forward-slash), matching the
+// relative references Client.ReadSkillFile resolves against the manifest
+// root. Non-regular entries (symlinks, devices) are skipped — a skill is
+// data delivered over resource primitives, and only regular file bytes
+// are servable and pinnable.
+func (i *Indexer) supportingFileDigests(skillDir string) ([]FileDigest, error) {
+	var files []FileDigest
+	err := fs.WalkDir(i.provider.cfg.fsys, skillDir, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !d.Type().IsRegular() {
+			return nil
+		}
+		rel := strings.TrimPrefix(p, skillDir+"/")
+		if rel == ManifestFilename {
+			return nil // pinned by the entry's own Digest
+		}
+		raw, err := fs.ReadFile(i.provider.cfg.fsys, p)
+		if err != nil {
+			return fmt.Errorf("skills: read %s for digest: %w", p, err)
+		}
+		files = append(files, FileDigest{Path: rel, Digest: digestOf(raw)})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(files, func(a, b int) bool { return files[a].Path < files[b].Path })
+	return files, nil
 }
 
 func subtreeMaxMtime(fsys fs.FS, root string) (time.Time, error) {
@@ -230,6 +272,7 @@ func (i *Indexer) build() (Index, map[string]time.Time, bool, error) {
 			entryType   SkillType
 			entryURL    string
 			digestBytes []byte
+			files       []FileDigest
 		)
 
 		if i.provider.cfg.archiveMode != ArchiveFormatUnknown {
@@ -249,15 +292,33 @@ func (i *Indexer) build() (Index, map[string]time.Time, bool, error) {
 			entryType = SkillTypeSkillMD
 			entryURL = skillManifestURI(skill.uriSegs)
 			digestBytes = raw
+			// Pin every supporting file so a re-verifying host can detect a
+			// swap on a resources/read fetch (issue 866), unless the operator
+			// selected SupportingDigestsOff for strict spec-only output.
+			// Archive entries skip this: the archive is integrity-checked as
+			// a unit.
+			if i.provider.cfg.supportingDigests == SupportingDigestsPerFile {
+				files, err = i.supportingFileDigests(skill.dirPath)
+				if err != nil {
+					return Index{}, nil, false, err
+				}
+			}
 		}
 
-		entries = append(entries, IndexEntry{
+		entry := IndexEntry{
 			Type:        entryType,
 			Name:        skill.fm.Name,
 			Description: skill.fm.Description,
 			URL:         entryURL,
 			Digest:      digestOf(digestBytes),
-		})
+		}
+		// Carry supporting-file pins under a reverse-domain _meta key so they
+		// cannot collide with a top-level field the SEP may later define
+		// (issues 780 / 839).
+		if len(files) > 0 {
+			entry.Meta = map[string]any{MetaKeyFileDigests: files}
+		}
+		entries = append(entries, entry)
 
 		mtime, err := i.skillMtime(skill)
 		if err != nil {

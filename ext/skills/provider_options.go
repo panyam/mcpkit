@@ -25,6 +25,41 @@ type providerConfig struct {
 	fsWatcherEnabled     bool
 	fsWatcherIgnore      []string
 	fsWatcherErrHandler  func(error)
+	supportingDigests    SupportingDigestMode
+}
+
+// SupportingDigestMode selects how a Provider pins the integrity of a
+// skill's supporting files (every regular file under the skill directory
+// except SKILL.md) in its index. The supporting-file digest shape is
+// still undecided in the SEP (issues 780 / 839), so mcpkit makes the
+// strategy selectable rather than committing to one on the wire.
+type SupportingDigestMode int
+
+const (
+	// SupportingDigestsPerFile pins each supporting file with its own
+	// SHA-256, carried under MetaKeyFileDigests in the entry's _meta. A
+	// host verifies a single file on read via Client.ReadSkillFileVerified
+	// without fetching the whole skill. This is the default and closes WG
+	// threat B1 (issue 866).
+	SupportingDigestsPerFile SupportingDigestMode = iota
+
+	// SupportingDigestsOff pins SKILL.md only (via IndexEntry.Digest),
+	// matching today's spec text exactly. Supporting files carry no pin, so
+	// ReadSkillFileVerified returns ErrSupportingFileUnpinned for them. Use
+	// this for strict spec-only index output until the SEP clarifies.
+	SupportingDigestsOff
+)
+
+// WithSupportingFileDigests selects the supporting-file integrity strategy
+// (see SupportingDigestMode). Default is SupportingDigestsPerFile.
+//
+// The pins live under a reverse-domain _meta key, so they never collide
+// with a top-level field the SEP may later define; when the SEP settles on
+// a shape mcpkit maps to it (issue 780). Until then this option lets an
+// operator emit strict spec-only output (SupportingDigestsOff) or keep the
+// per-file hardening (the default).
+func WithSupportingFileDigests(mode SupportingDigestMode) ProviderOption {
+	return func(c *providerConfig) { c.supportingDigests = mode }
 }
 
 // WithFS supplies the io/fs.FS that the Provider walks for skills. The

@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -52,6 +53,75 @@ type IndexEntry struct {
 	Description string    `json:"description"`
 	URL         string    `json:"url"`
 	Digest      string    `json:"digest,omitempty"`
+
+	// Meta carries opt-in, reverse-domain-namespaced extension metadata per
+	// the MCP _meta convention. mcpkit uses MetaKeyFileDigests to pin
+	// supporting-file integrity (issue 866). Placing the pins under _meta,
+	// rather than a top-level field, keeps them from colliding with any
+	// field a future SEP revision may add to the entry — the supporting-
+	// file digest shape is still spec-undecided (issues 780 / 839). When
+	// the SEP settles, mcpkit maps to whatever shape it defines. Read the
+	// pins with FileDigests / FileDigest.
+	Meta map[string]any `json:"_meta,omitempty"`
+}
+
+// MetaKeyFileDigests is the reverse-domain _meta key under an IndexEntry
+// that carries the entry's supporting-file integrity pins as a
+// []FileDigest (issue 866). Namespaced so it cannot collide with a
+// top-level field a future SEP revision may define for the same purpose.
+const MetaKeyFileDigests = MetaPrefix + "file-digests"
+
+// FileDigest pins one supporting file within a skill-md skill to a
+// SHA-256 digest (issue 866). Path is the file's path relative to the
+// skill directory, forward-slash separated — the same relative reference
+// Client.ReadSkillFile resolves against the manifest root (e.g.
+// "references/GUIDE.md"). SKILL.md is pinned by IndexEntry.Digest and is
+// never repeated here.
+type FileDigest struct {
+	Path   string `json:"path"`
+	Digest string `json:"digest"`
+}
+
+// FileDigests returns the supporting-file pins carried under
+// MetaKeyFileDigests in the entry's _meta, or nil when none are present
+// (the server pinned SKILL.md only, or ran with WithSupportingFileDigests
+// set to SupportingDigestsOff). It handles both a freshly-built entry
+// (typed []FileDigest value) and a JSON-decoded one (generic []any), so
+// it works on both the serving and consuming sides.
+func (e IndexEntry) FileDigests() []FileDigest {
+	if e.Meta == nil {
+		return nil
+	}
+	raw, ok := e.Meta[MetaKeyFileDigests]
+	if !ok {
+		return nil
+	}
+	if fds, ok := raw.([]FileDigest); ok {
+		return fds
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var fds []FileDigest
+	if err := json.Unmarshal(b, &fds); err != nil {
+		return nil
+	}
+	return fds
+}
+
+// FileDigest returns the pinned SHA-256 for the supporting file at the
+// given skill-directory-relative path, and whether a pin exists. The
+// path is matched exactly against the canonical shape the Indexer writes
+// (clean, forward-slash, relative to the skill root — the same shape
+// ResolveRelative produces from a manifest URI + relative reference).
+func (e IndexEntry) FileDigest(relPath string) (string, bool) {
+	for _, f := range e.FileDigests() {
+		if f.Path == relPath {
+			return f.Digest, true
+		}
+	}
+	return "", false
 }
 
 // Validate checks the per-type field requirements from SEP-2640's index
