@@ -31,8 +31,9 @@
   },
   {
     "name": "Concepts",
-    "url": "concepts/bringup/",
+    "url": "concepts/",
     "children": [
+      { "name": "Overview",              "url": "concepts/" },
       { "name": "Bring-up",              "url": "concepts/bringup/" },
       { "name": "Transport mechanics",   "url": "concepts/transport-mechanics/" },
       { "name": "Notifications",         "url": "concepts/notifications/" },
