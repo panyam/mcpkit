@@ -1048,6 +1048,37 @@ func TestQueueCleanupOnCancel(t *testing.T) {
 // 2. tasks/result handler proxies elicitation to client
 // 3. Client's elicitation handler responds
 // 4. Tool receives the response and completes
+// getTaskPayloadOrTimeout runs GetTaskPayloadV1 under a hard deadline.
+// GetTaskPayloadV1 long-polls tasks/result while the server proxies a
+// sampling/elicitation round-trip over the side channel; if that push is
+// never delivered (issue 390 — intermittent under make testall's parallel
+// load), the underlying call otherwise rides a ~2-minute HTTP deadline and
+// trips the unit+coverage stage's panic timeout on unrelated PRs. Bounding
+// it here turns that into a fast, clearly-labelled failure without changing
+// the coverage. The spawned goroutine is buffered so it cannot leak-block
+// after a timeout — it drains when the slow call eventually returns.
+func getTaskPayloadOrTimeout(t *testing.T, c *client.Client, taskID string, timeout time.Duration) (*core.ToolResult, string, error) {
+	t.Helper()
+	type payload struct {
+		result    *core.ToolResult
+		relatedID string
+		err       error
+	}
+	ch := make(chan payload, 1)
+	go func() {
+		r, id, err := client.GetTaskPayloadV1(c, taskID)
+		ch <- payload{r, id, err}
+	}()
+	select {
+	case p := <-ch:
+		return p.result, p.relatedID, p.err
+	case <-time.After(timeout):
+		t.Fatalf("GetTaskPayloadV1(%s) did not return within %s — task side-channel "+
+			"push likely never arrived (issue 390)", taskID, timeout)
+		return nil, "", nil // unreachable; t.Fatalf ends the test goroutine
+	}
+}
+
 func TestTaskElicitE2E(t *testing.T) {
 	srv := NewServer(core.ServerInfo{Name: "elicit-e2e", Version: "0.0.1"})
 
@@ -1114,8 +1145,9 @@ func TestTaskElicitE2E(t *testing.T) {
 
 	// GetTaskPayload blocks on tasks/result. During the long-poll, the handler
 	// proxies the elicitation to the client, the client responds, the tool
-	// completes, and we get the result.
-	result, relatedID, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
+	// completes, and we get the result. Bounded so a stuck side channel fails
+	// fast instead of riding the 2-minute panic timeout (issue 390).
+	result, relatedID, err := getTaskPayloadOrTimeout(t, c, created.Task.TaskID, 20*time.Second)
 	if err != nil {
 		t.Fatalf("GetTaskPayload: %v", err)
 	}
@@ -1192,7 +1224,7 @@ func TestTaskSampleE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, _, err := client.GetTaskPayloadV1(c, created.Task.TaskID)
+	result, _, err := getTaskPayloadOrTimeout(t, c, created.Task.TaskID, 20*time.Second)
 	if err != nil {
 		t.Fatalf("GetTaskPayload: %v", err)
 	}
