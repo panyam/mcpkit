@@ -36,7 +36,12 @@ var ErrIssMismatch = errors.New("RFC 9207 iss does not match authorization serve
 var ErrIssMissing = errors.New("RFC 9207 iss missing despite authorization server advertising support")
 
 // validateIss applies the RFC 9207 §2.4 client-side validation rule
-// against an `iss` query parameter received on an OAuth callback.
+// against an `iss` query parameter received on an OAuth callback. This is
+// the mcpkit-side implementation of SEP-2468 (client iss comparison): the
+// four rules below map one-to-one onto the SEP-2468 conformance scenarios
+// (compare-iss-supported, reject-missing-iss, compare-iss-unadvertised,
+// proceed-no-iss), and the comparison is exact-string with no normalization
+// (sep-2468-client-no-normalization).
 // Wired into OAuthTokenSource via the oneauth BrowserLoginRequest
 // OnCallback hook (since oneauth#235 surfaces but does not enforce);
 // kept package-private because the only consumer today is the token
