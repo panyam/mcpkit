@@ -19,7 +19,8 @@ import (
 // same source mint colliding cursors (issue 833). Swap in a provider that
 // is monotone across writers when a source has more than one:
 //
-//   - RedisCursors — a shared INCR counter (cross-replica, restart-safe).
+//   - Int64IncrCursors — a shared atomic-increment counter, e.g. a Redis
+//     INCR (cross-replica, restart-safe).
 //   - a cursor-providing EventBufferStore — see CursorProvidingStore,
 //     where the store assigns the cursor from its own global sequence on
 //     write, so mcpkit mints nothing.
@@ -41,8 +42,9 @@ type CursorProvider interface {
 //
 // It is correct only for a single writer per source: the counter lives in
 // one process and resets to 1 on restart, so two replicas writing the
-// same source mint colliding cursors. Use RedisCursors or a
-// cursor-providing store for multi-writer sources (issue 833).
+// same source mint colliding cursors. Use Int64IncrCursors (a shared
+// counter) or a cursor-providing store for multi-writer sources (issue
+// 833).
 type InProcessCursors struct {
 	mu       sync.Mutex
 	counters map[string]*atomic.Int64
@@ -68,40 +70,44 @@ func (p *InProcessCursors) Next(_ context.Context, source string) (string, error
 	return strconv.FormatInt(c.Add(1), 10), nil
 }
 
-// RedisIncr is the minimal contract RedisCursors needs from a Redis
-// client: an atomic INCR that returns the new value. go-redis's
-// (*redis.Client).Incr satisfies it through a one-line adapter, so core
-// events takes no dependency on any Redis client.
-type RedisIncr interface {
+// Incrementer is the minimal contract Int64IncrCursors needs from a
+// shared counter backend: an atomic increment of a named key that returns
+// the new value. It is deliberately backend-neutral — a Redis INCR, a SQL
+// sequence, an etcd counter, or any store with atomic increment satisfies
+// it — so core events takes no dependency on any particular client.
+// go-redis's (*redis.Client).Incr adapts to it in one line; a ready-made
+// Redis adapter can live in stores/redis.
+type Incrementer interface {
 	Incr(ctx context.Context, key string) (int64, error)
 }
 
-// RedisCursors is a CursorProvider backed by a shared Redis INCR counter,
-// one key per source. It is monotone and unique across every replica
-// sharing the Redis instance, and survives process restarts, so it fixes
-// the multi-writer / restart collision InProcessCursors has (issue 833)
+// Int64IncrCursors is a CursorProvider backed by a shared atomic-increment
+// counter (an Incrementer), one key per source. When the backing counter
+// is shared across replicas (e.g. a Redis INCR), it is monotone and unique
+// across every writer and survives process restarts — fixing the
+// multi-writer / restart collision InProcessCursors has (issue 833)
 // without requiring a cursor-providing store.
-type RedisCursors struct {
-	incr   RedisIncr
+type Int64IncrCursors struct {
+	incr   Incrementer
 	prefix string
 }
 
-// DefaultRedisCursorPrefix is the key prefix RedisCursors uses when none
+// DefaultCursorKeyPrefix is the key prefix Int64IncrCursors uses when none
 // is supplied. The per-source key is prefix + source.
-const DefaultRedisCursorPrefix = "events:cursor:"
+const DefaultCursorKeyPrefix = "events:cursor:"
 
-// NewRedisCursors returns a Redis-backed CursorProvider. keyPrefix is
-// prepended to the source name to form the counter key; empty uses
-// DefaultRedisCursorPrefix.
-func NewRedisCursors(incr RedisIncr, keyPrefix string) *RedisCursors {
+// NewInt64IncrCursors returns a CursorProvider that mints cursors from the
+// given Incrementer. keyPrefix is prepended to the source name to form the
+// counter key; empty uses DefaultCursorKeyPrefix.
+func NewInt64IncrCursors(incr Incrementer, keyPrefix string) *Int64IncrCursors {
 	if keyPrefix == "" {
-		keyPrefix = DefaultRedisCursorPrefix
+		keyPrefix = DefaultCursorKeyPrefix
 	}
-	return &RedisCursors{incr: incr, prefix: keyPrefix}
+	return &Int64IncrCursors{incr: incr, prefix: keyPrefix}
 }
 
-// Next returns INCR(prefix+source) as a base-10 string.
-func (p *RedisCursors) Next(ctx context.Context, source string) (string, error) {
+// Next returns Incr(prefix+source) as a base-10 string.
+func (p *Int64IncrCursors) Next(ctx context.Context, source string) (string, error) {
 	n, err := p.incr.Incr(ctx, p.prefix+source)
 	if err != nil {
 		return "", err

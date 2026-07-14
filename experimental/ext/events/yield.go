@@ -188,8 +188,8 @@ func WithEventBufferStore(s EventBufferStore) YieldingOption {
 // WithCursorProvider sets the CursorProvider that mints this source's
 // cursors (issue 833). The default is a fresh InProcessCursors — a
 // per-source in-memory counter, correct for a single writer. Pass
-// RedisCursors (shared INCR) or any CursorProvider for a source written
-// by multiple replicas.
+// Int64IncrCursors (a shared counter, e.g. Redis INCR) or any
+// CursorProvider for a source written by multiple replicas.
 //
 // Precedence: an explicit provider set here always wins. Without it, a
 // cursor-providing bufferStore (CursorProvidingStore) mints on write;

@@ -24,7 +24,8 @@ func TestInProcessCursors_PerSourceMonotone(t *testing.T) {
 	}
 }
 
-// fakeIncr is a minimal in-memory RedisIncr for RedisCursors.
+// fakeIncr is a minimal in-memory Incrementer (models a shared counter
+// such as a Redis INCR).
 type fakeIncr struct {
 	mu   sync.Mutex
 	vals map[string]int64
@@ -42,9 +43,9 @@ func (f *fakeIncr) Incr(_ context.Context, key string) (int64, error) {
 	return f.vals[key], nil
 }
 
-func TestRedisCursors_UsesPrefixedKeyAndIsMonotone(t *testing.T) {
+func TestInt64IncrCursors_UsesPrefixedKeyAndIsMonotone(t *testing.T) {
 	incr := &fakeIncr{}
-	p := NewRedisCursors(incr, "")
+	p := NewInt64IncrCursors(incr, "")
 	ctx := context.Background()
 	c1, err := p.Next(ctx, "chat.message")
 	require.NoError(t, err)
@@ -52,7 +53,7 @@ func TestRedisCursors_UsesPrefixedKeyAndIsMonotone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "1", c1)
 	assert.Equal(t, "2", c2)
-	assert.Equal(t, DefaultRedisCursorPrefix+"chat.message", incr.keys[0])
+	assert.Equal(t, DefaultCursorKeyPrefix+"chat.message", incr.keys[0])
 }
 
 // TestCursorMintingStore_MultiWriterGapFree is the #833 fix: N YieldingSources
