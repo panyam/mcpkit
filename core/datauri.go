@@ -16,6 +16,12 @@ import (
 // The plain (non-base64) data-URI form defined by RFC 2397 is intentionally
 // unsupported: the spec mandates base64 because file payloads are binary
 // and binary in URL-encoded form is wasteful and ambiguous.
+//
+// Durable across the SEP-2356 ↔ SEP-2631 reconciliation: this codec is
+// wire-shape-agnostic. In SEP-2356 the data URI is a plain string property;
+// in SEP-2631 the same encoding becomes the `inlineBase64` payload variant of
+// FileValue. The codec stays load-bearing regardless of which way the two
+// SEPs land, so it is not on a deprecation path (issue 365).
 
 // DataURIPrefix is the literal prefix that all data URIs share.
 const DataURIPrefix = "data:"
@@ -39,7 +45,8 @@ func IsDataURI(s string) bool {
 }
 
 // EncodeDataURI builds an RFC 2397 base64 data URI suitable for SEP-2356
-// file inputs. mediaType is embedded verbatim (e.g. "image/png"); pass an
+// file inputs — and, unchanged, for the SEP-2631 FileValue.inlineBase64
+// payload variant. mediaType is embedded verbatim (e.g. "image/png"); pass an
 // empty string to omit it (the consumer will assume text/plain;charset=US-ASCII
 // per RFC 2397). filename is optional; if non-empty it is percent-encoded
 // and emitted as a `name=` parameter.
@@ -57,9 +64,10 @@ func EncodeDataURI(data []byte, mediaType, filename string) string {
 }
 
 // DecodeDataURI parses an RFC 2397 base64 data URI as produced by
-// EncodeDataURI. Returns the decoded payload, the media type (with the
-// default substituted when omitted), and the decoded filename from any
-// `name=` parameter (empty when absent).
+// EncodeDataURI — covering both the SEP-2356 string form and the SEP-2631
+// FileValue.inlineBase64 payload. Returns the decoded payload, the media type
+// (with the default substituted when omitted), and the decoded filename from
+// any `name=` parameter (empty when absent).
 //
 // Non-base64 data URIs are rejected with ErrNonBase64DataURI; SEP-2356
 // requires the base64 form because payloads are binary.
