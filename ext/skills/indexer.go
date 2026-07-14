@@ -33,6 +33,11 @@ import (
 // mtime invalidation cannot run for that build and the cache reverts to
 // TTL-only freshness. With TTL also unset (zero), every Index() call
 // recomputes.
+//
+// WithMtimeChecks(false) disables the per-skill mtime comparison for a
+// backing where fs.Stat is expensive (an S3/HTTP-rooted fs.FS): the cache
+// then invalidates on TTL and explicit Provider.NotifyChanged only. See that
+// option for the tradeoff.
 type Indexer struct {
 	provider *Provider
 	cfg      indexerConfig
@@ -43,6 +48,10 @@ type Indexer struct {
 
 type indexerConfig struct {
 	ttl time.Duration
+	// mtimeChecks enables the per-skill fs.Stat mtime-comparison branch of
+	// isFresh. Default true; WithMtimeChecks(false) disables it for
+	// backings where fs.Stat is expensive (issue 576).
+	mtimeChecks bool
 }
 
 type cacheEntry struct {
@@ -69,13 +78,31 @@ func WithIndexerCacheTTL(d time.Duration) IndexerOption {
 	}
 }
 
+// WithMtimeChecks toggles the per-skill mtime-comparison branch of cache
+// invalidation. Default true: on every cache hit the Indexer fs.Stat's each
+// cataloged skill and recomputes when any mtime moved — cheap on local disk,
+// correct for edit-in-place workflows.
+//
+// Pass false for a backing where fs.Stat is expensive (an S3/HTTP-rooted
+// fs.FS, etc.), where the per-skill stat round-trip dominates the cache-hit
+// cost and defeats the point of caching. The cache then invalidates on TTL
+// (WithIndexerCacheTTL) and explicit Provider.NotifyChanged only. With mtime
+// checks off AND a zero TTL there is nothing to drive invalidation, so
+// Index() recomputes every call (the same fallback as a zero-ModTime fs.FS) —
+// pair WithMtimeChecks(false) with a non-zero TTL.
+func WithMtimeChecks(enabled bool) IndexerOption {
+	return func(c *indexerConfig) {
+		c.mtimeChecks = enabled
+	}
+}
+
 // NewIndexer constructs an Indexer that draws skills from provider.
 // The provider must already be populated (NewProvider returned without
 // error); subsequent changes to the provider's catalog are not picked
 // up here. Live mutation is the concern of ext/skills issue 564
 // (hot-reload).
 func NewIndexer(provider *Provider, opts ...IndexerOption) *Indexer {
-	idx := &Indexer{provider: provider}
+	idx := &Indexer{provider: provider, cfg: indexerConfig{mtimeChecks: true}}
 	for _, opt := range opts {
 		opt(&idx.cfg)
 	}
@@ -161,14 +188,12 @@ func (i *Indexer) isFresh() bool {
 	if i.cfg.ttl > 0 && time.Since(i.cached.builtAt) > i.cfg.ttl {
 		return false
 	}
-	if i.cfg.ttl == 0 && i.cached.noMtime {
-		// Zero TTL plus no mtime signal means we have nothing to drive
-		// invalidation off; recompute every call to avoid serving a
-		// permanently stale index.
-		return false
-	}
-	if i.cached.noMtime {
-		return true
+	// Mtime comparison is skipped when disabled by option (issue 576) or when
+	// the backing fs.FS reported no ModTime at build time. Either way the
+	// cache is TTL-only: fresh until the TTL elapses, or — with a zero TTL —
+	// recomputed every call, since nothing else drives invalidation.
+	if !i.cfg.mtimeChecks || i.cached.noMtime {
+		return i.cfg.ttl > 0
 	}
 	for _, skill := range i.provider.skills {
 		want, ok := i.cached.mtimes[skill.dirPath]
