@@ -323,6 +323,59 @@ func (c *Client) ReadSkillFile(ctx context.Context, manifest *SkillManifest, rel
 	return c.ReadSkillURI(ctx, resolved.String())
 }
 
+// ReadSkillFileVerified resolves relPath against the manifest's skill
+// root, reads it, and verifies the served bytes against the per-file
+// digest pinned in the entry's supporting-file pins (issue 866). It is the integrity-checked
+// counterpart to ReadSkillFile: use it for supporting files a re-
+// verifying host must not trust unverified (scripts, templates,
+// referenced docs), so a swapped file is rejected on read.
+//
+// entry is the IndexEntry for the skill (from ListSkills + Index.Lookup),
+// which carries the supporting-file pins mcpkit's Indexer writes under
+// MetaKeyFileDigests (read via entry.FileDigest). The lookup key is the
+// file's path relative to the skill root, derived from the resolved URI
+// so that "./x", "a/../b", and percent-encoded forms all match the
+// canonical pin.
+//
+// Errors:
+//   - ErrSupportingFileUnpinned when the entry carries no pin for the
+//     resolved path (secure default — no silent unverified fallback).
+//   - ErrDigestMismatch when the served bytes do not match the pin; per
+//     SEP-2640 the host MUST NOT use the bytes.
+//
+// On success returns a ReadResult with DigestVerified=true.
+func (c *Client) ReadSkillFileVerified(ctx context.Context, entry IndexEntry, manifest *SkillManifest, relPath string) (*ReadResult, error) {
+	if manifest == nil {
+		return nil, fmt.Errorf("skills: ReadSkillFileVerified: nil manifest")
+	}
+	root, err := ParseURI(manifest.URI)
+	if err != nil {
+		return nil, fmt.Errorf("skills: ReadSkillFileVerified: re-parse manifest URI: %w", err)
+	}
+	resolved, err := ResolveRelative(root, relPath)
+	if err != nil {
+		return nil, fmt.Errorf("skills: resolve %q against %s: %w", relPath, manifest.URI, err)
+	}
+	key := skillRelPath(root, resolved)
+	digest, ok := entry.FileDigest(key)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrSupportingFileUnpinned, key)
+	}
+	return c.ReadAndVerify(ctx, resolved.String(), digest)
+}
+
+// skillRelPath returns the resolved file's path relative to the skill
+// root — the canonical key the supporting-file pins use. ResolveRelative
+// guarantees resolved.AllSegments is prefixed by root.SkillPath and lands
+// strictly below the skill directory, so the suffix is the in-skill
+// relative path.
+func skillRelPath(root, resolved URIParts) string {
+	if len(resolved.AllSegments) <= len(root.SkillPath) {
+		return ""
+	}
+	return strings.Join(resolved.AllSegments[len(root.SkillPath):], "/")
+}
+
 // ReadResult is the typed return from ReadAndVerify. Bytes carries the
 // served content; DigestVerified is true when the SHA-256 over Bytes
 // equals the expected digest the caller supplied.
