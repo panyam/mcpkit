@@ -105,7 +105,54 @@ func renderMarkdownFile(relPath string) template.HTML {
 		return ""
 	}
 	srcDir := path.Dir(filepath.ToSlash(filepath.Clean(relPath)))
-	return template.HTML(rewriteRepoLinks(buf.String(), srcDir))
+	out := rewriteRepoLinks(buf.String(), srcDir)
+	out = linkifyRepoPaths(out)
+	return template.HTML(out)
+}
+
+// inlineCodeSpan matches an inline <code>…</code>, capturing any immediately
+// preceding <a …> so code that is already a link (markdown link with code
+// text) is left alone. goldmark renders block code as <pre><code class=…>
+// with nested highlight spans, so [^<]+ (no nested tags) only ever matches
+// inline spans, never a code block.
+var inlineCodeSpan = regexp.MustCompile(`(<a\b[^>]*>)?<code>([^<]+)</code>`)
+
+// repoPathChars restricts auto-linkify candidates to path-shaped tokens.
+var repoPathChars = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+
+// linkifyRepoPaths turns inline code that names a real repository file
+// (e.g. `server/server.go` or `core/tool.go:445`) into a link to its source
+// on GitHub — the shape gitfile produces, discovered automatically in
+// rendered prose. False positives are guarded by requiring both a directory
+// separator AND that the path resolves to an actual file in the checkout, so
+// ordinary inline code (`context.Background()`, `--flag`, a bare `Makefile`)
+// is never touched. Directories are skipped (too easily confused with prose
+// like "the auth/ layer"); already-linked code is skipped.
+func linkifyRepoPaths(htmlStr string) string {
+	return inlineCodeSpan.ReplaceAllStringFunc(htmlStr, func(match string) string {
+		m := inlineCodeSpan.FindStringSubmatch(match)
+		if m[1] != "" {
+			return match // already inside an <a>
+		}
+		raw := m[2]
+		p, line := raw, ""
+		if lm := gitLineSuffix.FindStringSubmatch(raw); lm != nil {
+			p, line = lm[1], lm[2]
+		}
+		if !strings.Contains(p, "/") || !repoPathChars.MatchString(p) {
+			return match
+		}
+		info, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(p)))
+		if err != nil || info.IsDir() {
+			return match // only link real files
+		}
+		target, display := p, p
+		if line != "" {
+			target, display = p+"#L"+line, p+":"+line
+		}
+		return fmt.Sprintf(`<a href="%s"><code>%s</code></a>`,
+			template.HTMLEscapeString(repoBlobBase+target), template.HTMLEscapeString(display))
+	})
 }
 
 // The source-of-truth markdown carries repo-relative links (./other.md,

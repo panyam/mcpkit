@@ -147,6 +147,10 @@ jobs:
           MCPCONFORMANCE_BASE_PATH: ${{ github.workspace }}/conf-upstream-main
         run: make check-conformance-stale
 
+      - name: Check Get Started snippets match the example
+        working-directory: mcpkit
+        run: make check-snippets
+
   apps-compat-report:
     # Mirrors conformance-report: regenerates conformance/apps/COMPAT.md
     # from umbrella tracking issue panyam/mcpkit#533 and fails if the
