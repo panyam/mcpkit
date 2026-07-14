@@ -33,7 +33,7 @@ A cursored event's `cursor` orders it within its source; `events/poll` returns e
 | Provenance | Wire it with | Use when |
 |---|---|---|
 | **In-process** (default) | nothing — `InProcessCursors` per source | single writer per source. Zero deps, but each process counts from 1 and resets on restart, so N replicas writing one source **collide**. |
-| **Shared counter** | `WithCursorProvider(events.NewRedisCursors(incr, ""))` | multiple replicas write one source and you have Redis. A shared `INCR` per source — cross-replica, restart-safe. |
+| **Shared counter** | `WithCursorProvider(events.NewInt64IncrCursors(incr, ""))` | multiple replicas write one source. `incr` is any `Incrementer` (a Redis `INCR`, a SQL sequence, etc.); shared across replicas it is cross-replica + restart-safe. A ready-made Redis adapter can live in `stores/redis`. |
 | **Store-minted** | a buffer store that implements `CursorProvidingStore` (e.g. `gormstore.NewEventBufferStore(db, gormstore.WithProvideCursors())`) | you already share a durable buffer store. The store assigns the cursor from its own write sequence on `Append` — mcpkit mints nothing, one round trip. |
 
 Precedence per source: an explicit `WithCursorProvider` wins; otherwise a cursor-providing store mints on write; otherwise `InProcessCursors`. Bring your own by implementing `events.CursorProvider` (`Next(ctx, source) (string, error)` — must return a monotone base-10 integer).
