@@ -331,3 +331,29 @@ func TestAccumulatorEmptyArgsBecomeEmptyObject(t *testing.T) {
 		t.Fatalf("args must always unmarshal: %v", err)
 	}
 }
+
+func TestOpenAIStreamSpecConformantSSE(t *testing.T) {
+	// Comment lines, a multi-line data event (spec joins with \n, legal
+	// JSON whitespace), and a keepalive blank event must all parse; the
+	// pre-servicekit line scanner mishandled the multi-line case.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl := w.(http.Flusher)
+		io.WriteString(w, ": keepalive comment\n\n")
+		io.WriteString(w, "data: {\"choices\":[{\"delta\":\ndata: {\"content\":\"joined\"}}]}\n\n")
+		io.WriteString(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		io.WriteString(w, "data: [DONE]\n\n")
+		fl.Flush()
+	}))
+	defer ts.Close()
+
+	s, err := newTestProvider(t, ts.URL).Stream(context.Background(), ProviderRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	res := drain(t, s)
+	if res.Text != "joined" || res.FinishReason != "stop" {
+		t.Fatalf("res = %+v", res)
+	}
+}
