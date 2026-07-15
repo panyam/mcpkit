@@ -1,14 +1,16 @@
 package agent
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+
+	ssehttp "github.com/panyam/servicekit/http"
 )
 
 // OpenAIConfig configures an OpenAI-compatible chat-completions endpoint
@@ -32,8 +34,8 @@ type OpenAIConfig struct {
 }
 
 // OpenAIProvider implements Provider over the OpenAI-compatible
-// chat-completions wire using only the standard library. Safe for concurrent
-// use.
+// chat-completions wire with no SDK dependency (net/http plus servicekit's
+// WHATWG-conformant SSE reader). Safe for concurrent use.
 type OpenAIProvider struct {
 	cfg  OpenAIConfig
 	http *http.Client
@@ -74,7 +76,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ProviderRequest) (Strea
 	if err != nil {
 		return nil, err
 	}
-	return &openaiStream{ctx: ctx, body: resp.Body, scanner: newSSEScanner(resp.Body)}, nil
+	return &openaiStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body)}, nil
 }
 
 // Generate implements Provider with a non-streaming request. When
@@ -256,12 +258,14 @@ type oaChunk struct {
 	Usage *oaUsage `json:"usage"`
 }
 
-// openaiStream adapts the SSE body to the Stream interface. Recv keeps a
-// small queue because one SSE chunk can expand to several Deltas.
+// openaiStream adapts the SSE body to the Stream interface via servicekit's
+// WHATWG-conformant SSEEventReader (multi-line data joining, BOM stripping,
+// comment skipping). Recv keeps a small queue because one SSE event can
+// expand to several Deltas.
 type openaiStream struct {
 	ctx     context.Context
 	body    io.ReadCloser
-	scanner *bufio.Scanner
+	events  *ssehttp.SSEEventReader
 	queue   []Delta
 	started map[int]bool
 	done    bool
@@ -281,20 +285,22 @@ func (s *openaiStream) Recv() (Delta, error) {
 		if err := s.ctx.Err(); err != nil {
 			return Delta{}, err
 		}
-		if !s.scanner.Scan() {
-			if err := s.ctx.Err(); err != nil {
+		ev, err := s.events.ReadEvent()
+		if err != nil {
+			if ctxErr := s.ctx.Err(); ctxErr != nil {
+				return Delta{}, ctxErr
+			}
+			// A partial event can ride along with io.EOF; process it
+			// before surfacing EOF on the next call.
+			if !errors.Is(err, io.EOF) || ev.Data == "" {
 				return Delta{}, err
 			}
-			if err := s.scanner.Err(); err != nil {
-				return Delta{}, err
-			}
-			return Delta{}, io.EOF
+			s.done = true
 		}
-		line := strings.TrimSpace(s.scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
+		payload := strings.TrimSpace(ev.Data)
+		if payload == "" {
 			continue
 		}
-		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if payload == "[DONE]" {
 			s.done = true
 			continue
@@ -351,10 +357,4 @@ func (s *openaiStream) enqueue(chunk oaChunk) {
 // Close implements Stream.
 func (s *openaiStream) Close() error {
 	return s.body.Close()
-}
-
-func newSSEScanner(r io.Reader) *bufio.Scanner {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	return sc
 }
