@@ -6,6 +6,7 @@ Go library for building production-grade MCP servers and clients.
 
 ```bash
 make test              # Core tests (core/server/client/testutil)
+make test-agent        # agent/ sub-module (host layer)
 make test-auth         # ext/auth sub-module
 make test-ui           # ext/ui sub-module
 make test-e2e          # E2E tests (auth + apps)
@@ -36,6 +37,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; 
 | `core/` — Protocol types, typed contexts, session APIs | `core/README.md`, `core/CONSTRAINTS.md` |
 | `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md` |
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
+| `agent/` — Host layer: Provider, Runner loop, ToolSource, policy seams (separate go.mod) | `docs/AGENT_DESIGN.md`, `agent/CONSTRAINTS.md` |
 | `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/tasks/` — SEP-2663 v2 tasks extension (separate go.mod) | `ext/tasks/README.md` |
 | `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry (separate go.mod) | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
@@ -48,7 +50,7 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; 
 
 ## Sub-Modules
 
-`ext/auth/`, `ext/tasks/`, `ext/ui/`, `ext/otel/`, `experimental/ext/protogen/`, `docs/site/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
+`agent/`, `ext/auth/`, `ext/tasks/`, `ext/ui/`, `ext/otel/`, `experimental/ext/protogen/`, `docs/site/` have separate `go.mod` — `make test` does NOT cover them. Run `make tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
 
 ## Constraints
 
