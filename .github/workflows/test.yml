@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, agent]
   pull_request:
-    branches: [main]
+    branches: [main, agent]
 
 jobs:
   test:
@@ -40,6 +40,18 @@ jobs:
 
       - name: Run conformance suite
         run: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
+
+  test-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run agent sub-module tests
+        run: cd agent && go test ./... -v
 
   test-auth:
     runs-on: ubuntu-latest
