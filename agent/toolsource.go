@@ -2,9 +2,16 @@ package agent
 
 import (
 	"context"
+	"errors"
 
 	"github.com/panyam/mcpkit/core"
 )
+
+// ErrUnknownTool is wrapped by ToolSource implementations when a Call names
+// a tool the source does not have. Aggregators use it to distinguish a
+// stale-index miss (worth one refresh) from a definitive dispatch failure;
+// the Runner uses it to feed a not-found back to the model.
+var ErrUnknownTool = errors.New("agent: unknown tool")
 
 // ToolSource is the Runner's view of callable tools, whatever their origin:
 // a connected MCP server, a host-local function, or an aggregation of other
@@ -13,7 +20,10 @@ import (
 type ToolSource interface {
 	// Tools returns the definitions the model should see. The returned
 	// slice is a snapshot; implementations decide their own caching and
-	// refresh policy. Every returned name must be callable via Call.
+	// refresh policy. Every returned name must be callable via Call, and
+	// names within one source must be unique (aggregators treat a
+	// repeated name from the same source as one claim, first definition
+	// wins; only cross-source collisions get disambiguation).
 	Tools(ctx context.Context) ([]core.ToolDef, error)
 
 	// Call dispatches one tool invocation by name. A non-nil error means

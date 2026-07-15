@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -42,6 +43,11 @@ type MultiSource struct {
 	sources     map[string]ToolSource
 	resolver    Resolver
 	onCollision func(name string, sourceIDs []string)
+
+	// index memoizes the gathered claims. Invalidated by Add, Remove, and
+	// Invalidate; refreshed lazily by Tools and by Call on a name miss.
+	index      map[string][]ToolOwner
+	indexOrder []string
 }
 
 // MultiOption configures a MultiSource.
@@ -83,7 +89,17 @@ func (m *MultiSource) Add(id string, src ToolSource) error {
 	}
 	m.sources[id] = src
 	m.order = append(m.order, id)
+	m.index = nil
 	return nil
+}
+
+// Invalidate drops the memoized tool index; the next Tools or Call gathers
+// fresh lists from every source. Wire this to tools/list_changed
+// notifications when the embedding host tracks them.
+func (m *MultiSource) Invalidate() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.index = nil
 }
 
 // Remove drops a source. Unknown ids are a no-op.
@@ -100,16 +116,17 @@ func (m *MultiSource) Remove(id string) {
 			break
 		}
 	}
+	m.index = nil
 }
 
 // Tools returns the merged, deduplicated model-facing list: unique names
 // as-is (source order preserved), collisions replaced by qualified names for
 // every claimant.
 func (m *MultiSource) Tools(ctx context.Context) ([]core.ToolDef, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	claims, orderNames, err := m.gatherLocked(ctx)
+	claims, orderNames, err := m.indexLocked(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -139,19 +156,41 @@ func (m *MultiSource) Tools(ctx context.Context) ([]core.ToolDef, error) {
 
 // Call dispatches by bare or qualified name. Resolution order: exact unique
 // bare name; qualified "sourceID_name"; ambiguous bare name via Resolver.
+// A name miss against the memoized index triggers exactly one fresh gather
+// before failing, so tools registered after the last listing stay reachable.
 func (m *MultiSource) Call(ctx context.Context, name string, args map[string]any) (*core.ToolResult, error) {
-	m.mu.RLock()
-	claims, _, err := m.gatherLocked(ctx)
+	m.mu.Lock()
+	claims, _, err := m.indexLocked(ctx)
 	if err != nil {
-		m.mu.RUnlock()
+		m.mu.Unlock()
 		return nil, err
 	}
 	src, bare, resolveErr := m.resolveLocked(claims, name, args)
-	m.mu.RUnlock()
+	if errors.Is(resolveErr, ErrUnknownTool) {
+		m.index = nil
+		if claims, _, err = m.indexLocked(ctx); err == nil {
+			src, bare, resolveErr = m.resolveLocked(claims, name, args)
+		}
+	}
+	m.mu.Unlock()
 	if resolveErr != nil {
 		return nil, resolveErr
 	}
 	return src.Call(ctx, bare, args)
+}
+
+// indexLocked returns the memoized claims index, gathering it if absent.
+// Caller must hold the write lock.
+func (m *MultiSource) indexLocked(ctx context.Context) (map[string][]ToolOwner, []string, error) {
+	if m.index != nil {
+		return m.index, m.indexOrder, nil
+	}
+	claims, orderNames, err := m.gatherLocked(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	m.index, m.indexOrder = claims, orderNames
+	return claims, orderNames, nil
 }
 
 func (m *MultiSource) resolveLocked(claims map[string][]ToolOwner, name string, args map[string]any) (ToolSource, string, error) {
@@ -185,7 +224,7 @@ func (m *MultiSource) resolveLocked(claims map[string][]ToolOwner, name string, 
 			}
 		}
 	}
-	return nil, "", fmt.Errorf("agent: unknown tool %q", name)
+	return nil, "", fmt.Errorf("%w: %q", ErrUnknownTool, name)
 }
 
 func (m *MultiSource) gatherLocked(ctx context.Context) (map[string][]ToolOwner, []string, error) {
@@ -196,7 +235,15 @@ func (m *MultiSource) gatherLocked(ctx context.Context) (map[string][]ToolOwner,
 		if err != nil {
 			return nil, nil, fmt.Errorf("agent: listing tools from source %q: %w", id, err)
 		}
+	defs:
 		for _, def := range defs {
+			// A source repeating a name is a source bug; keep the first
+			// definition so qualification never emits duplicate names.
+			for _, o := range claims[def.Name] {
+				if o.SourceID == id {
+					continue defs
+				}
+			}
 			if _, seen := claims[def.Name]; !seen {
 				orderNames = append(orderNames, def.Name)
 			}
