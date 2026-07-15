@@ -27,24 +27,32 @@ Dependency rule: `agent/` depends on `core/` and `client/` (and may depend on ot
 ### Provider
 
 ```go
-// Sketch, finalized in the provider ticket (issue 884).
+// As built (issue 884).
 type Provider interface {
-    // Stream runs one model call. Deltas arrive on the returned stream:
-    // text, reasoning, tool-call start/args/end, finish, usage.
-    Stream(ctx context.Context, req Request) (Stream, error)
-    // Generate is the non-streaming call used for utility work
-    // (structured output, naming, summaries).
-    Generate(ctx context.Context, req Request) (Response, error)
+    // Stream runs one model call. Deltas: text, reasoning, tool-call
+    // start/args (no end marker; the Accumulator folds), finish, usage.
+    Stream(ctx context.Context, req ProviderRequest) (Stream, error)
+    // Generate is the non-streaming call used for utility work; with
+    // ProviderRequest.ResponseSchema set it requests structured output.
+    Generate(ctx context.Context, req ProviderRequest) (*ProviderResponse, error)
 }
 ```
 
-One production implementation ships first: OpenAI-compatible chat completions, which covers lmstudio, vllm, LiteLLM-style proxies, and gateways. A `StubProvider` plays back scripted turns for deterministic tests. Failover wraps Provider (a Provider that fronts a main and a backup) so the Runner never knows about it.
+One production implementation ships first: OpenAI-compatible chat completions, which covers lmstudio, vllm, LiteLLM-style proxies, and gateways (net/http plus servicekit's WHATWG-conformant SSE reader; no SDK dependency). A `StubProvider` plays back scripted turns for deterministic tests. Failover wraps Provider (a Provider that fronts a main and a backup) so the Runner never knows about it.
+
+**Why chat completions and not the Responses-style API**: chat completions is the lingua franca of the compat zoo (Responses support there is partial, experimental, or a translation layer), and its statelessness is architecturally load-bearing for us: the host owns conversation history (the module's whole premise), tools come from MCP rather than the model platform, and failover only works when any endpoint can accept a full request cold. The one known exception trendline is gpt-oss/harmony reasoning fidelity on vllm, where Responses is native; if that matters someday it becomes a second implementation behind the same interface.
 
 ### Runner
 
-The loop: given (instructions, Provider, ToolSource, history), call the model, dispatch tool calls (parallel where independent), append results, repeat until final text, bounded by a step cap and ctx cancellation. Tool handler errors become tool-result errors fed back to the model, not loop aborts.
+As built (issue 885):
 
-The Runner emits typed events (see Surfaces): turn-begin, thinking-begin/delta/end, text-delta, tool-begin/end/error, elicitation-request, turn-end, error.
+```go
+func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (*TurnResult, error)
+```
+
+The loop: stream the model, dispatch its tool calls in parallel goroutines (emission serialized, RoleTool messages appended in call order), feed results back, repeat until a no-tool-call response, bounded by MaxSteps (default 8) and ctx cancellation. Every tool failure shape (unknown tool, transport, bad args, IsError results) is fed back to the model as model-visible text, never a loop abort; only cancellation, provider failure, or the step cap end a turn early. `TurnResult.Messages` holds exactly the appended entries so callers thread history with one append.
+
+Event kinds: turn-begin, thinking-begin/-delta/-end, text-delta, tool-begin, tool-end (includes IsError results), tool-error (dispatch failures only), turn-end, error. Events carry no turn or session identity: in-process the emit closure is already turn-scoped, and wire layers wrap events in their own envelope (session id, turn id, sequence), keeping the module out of the ID-scheme business and the event stream deterministic. The elicitation-request kind joins the taxonomy with the milestone 2 elicitation seam (issue 887).
 
 ### ToolSource
 
