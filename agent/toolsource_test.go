@@ -339,3 +339,65 @@ func containsTool(defs []core.ToolDef, name string) bool {
 	}
 	return false
 }
+
+func TestMultiSourceSameSourceDuplicateNameKeepsFirst(t *testing.T) {
+	dup := &fakeSource{defs: []core.ToolDef{
+		{Name: "twin", Description: "first", InputSchema: map[string]any{"type": "object"}},
+		{Name: "twin", Description: "second", InputSchema: map[string]any{"type": "object"}},
+	}}
+	m := NewMultiSource()
+	m.Add("alpha", dup)
+	tools, err := m.Tools(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools) != 1 || tools[0].Name != "twin" || tools[0].Description != "first" {
+		t.Fatalf("same-source duplicate must collapse to first definition, got %v", tools)
+	}
+	if _, err := m.Call(context.Background(), "twin", nil); err != nil {
+		t.Fatalf("bare call after dedupe: %v", err)
+	}
+}
+
+func TestMultiSourceMemoizesAndRefreshesOnMiss(t *testing.T) {
+	src := &countingSource{fakeSource: fakeSource{defs: defsNamed("one")}}
+	m := NewMultiSource()
+	m.Add("alpha", src)
+
+	m.Tools(context.Background())
+	m.Tools(context.Background())
+	if _, err := m.Call(context.Background(), "one", nil); err != nil {
+		t.Fatal(err)
+	}
+	if src.listCount != 1 {
+		t.Fatalf("index must be memoized across Tools+Call, listed %d times", src.listCount)
+	}
+
+	src.defs = defsNamed("one", "late")
+	if _, err := m.Call(context.Background(), "late", nil); err != nil {
+		t.Fatalf("miss must trigger one refresh: %v", err)
+	}
+	if src.listCount != 2 {
+		t.Fatalf("want exactly one refresh gather, listed %d times", src.listCount)
+	}
+
+	if _, err := m.Call(context.Background(), "nope", nil); !errors.Is(err, ErrUnknownTool) {
+		t.Fatalf("want ErrUnknownTool after refresh, got %v", err)
+	}
+
+	m.Invalidate()
+	m.Tools(context.Background())
+	if src.listCount != 4 {
+		t.Fatalf("Invalidate must force re-gather (plus the nope-miss refresh), listed %d times", src.listCount)
+	}
+}
+
+type countingSource struct {
+	fakeSource
+	listCount int
+}
+
+func (c *countingSource) Tools(ctx context.Context) ([]core.ToolDef, error) {
+	c.listCount++
+	return c.fakeSource.Tools(ctx)
+}

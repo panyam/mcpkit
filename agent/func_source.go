@@ -85,7 +85,7 @@ func (s *FuncSource) Call(ctx context.Context, name string, args map[string]any)
 	fn, ok := s.handlers[name]
 	s.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("agent: unknown tool %q", name)
+		return nil, fmt.Errorf("%w: %q", ErrUnknownTool, name)
 	}
 	return fn(ctx, args)
 }
