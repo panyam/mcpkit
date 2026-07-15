@@ -56,7 +56,7 @@ type ToolSource interface {
 }
 ```
 
-Adapters: a single `client.Client`; a multi-server aggregator; `FuncTool` for host-local functions. The aggregator reuses the collision-handling shape of `ext/ui`'s ServerRegistry. Whether it depends on `ext/ui` directly or lifts the registry pattern into `agent/` is decided in the tool-source ticket; the default position is to depend on `ext/ui` first and lift only if the dependency proves awkward, because the registry already handles bridge-connected servers and per-server auth.
+Adapters: `ClientSource` (a single `client.Client`, MRTR-aware calls with a pluggable InputHandler), `FuncSource` (host-local typed functions via `core.GenerateSchema`), and `MultiSource` (aggregation). **Decision (issue 886): lift the registry pattern, do not depend on `ext/ui`.** ServerRegistry's value is client lifecycle plus apps-bridge management; ToolSource only needs the index shape, and aggregating ToolSources is strictly more general (it composes Func, Client, and any future registry adapter). Collision semantics mirror the registry: all claimants kept, a resolver callback for ambiguous bare-name calls, and the model-facing list exposes collisions only in qualified `sourceID_name` form so every tool stays reachable without duplicate names. A thin `RegistrySource` adapter over `ext/ui` lands with the apps integration, where the dependency belongs.
 
 ### Policy hooks
 
