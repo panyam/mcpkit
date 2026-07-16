@@ -67,7 +67,7 @@ func (t StubTurn) deltas() []Delta {
 		out = append(out, Delta{Kind: DeltaText, Text: t.Text})
 	}
 	for i, tc := range t.ToolCalls {
-		out = append(out, Delta{Kind: DeltaToolCallStart, Index: i, ToolCallID: tc.ID, ToolName: tc.Name, Text: string(tc.Args)})
+		out = append(out, Delta{Kind: DeltaToolCallStart, Index: i, ToolCallID: tc.ID, ToolName: tc.Name, Text: string(tc.Args.Raw())})
 	}
 	reason := t.FinishReason
 	if reason == "" {

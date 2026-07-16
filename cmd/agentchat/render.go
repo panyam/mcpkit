@@ -101,10 +101,10 @@ func (r *renderer) history(msgs []agent.Message) {
 	}
 }
 
-func compactJSON(raw json.RawMessage) string {
+func compactJSON(raw core.RawJSON) string {
 	var buf bytes.Buffer
-	if err := json.Compact(&buf, raw); err != nil {
-		return string(raw)
+	if err := json.Compact(&buf, raw.Raw()); err != nil {
+		return string(raw.Raw())
 	}
 	return snippet(buf.String(), 80)
 }
