@@ -116,3 +116,5 @@ examples/apps/compat/wiki-explorer/wiki-explorer
 # other example `go build .` outputs
 examples/mcpskills-walkthrough/mcpskills-walkthrough
 examples/otel/stdout/stdout
+cmd/agentchat/agentchat
+cmd/agentchat/bin/

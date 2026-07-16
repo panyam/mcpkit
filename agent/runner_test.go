@@ -70,7 +70,7 @@ func TestRunnerMultiStepToolLoopThreadsHistory(t *testing.T) {
 	})
 
 	stub := NewStubProvider(
-		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "lookup", Args: json.RawMessage(`{"key":"x"}`)}}},
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "lookup", Args: core.NewRawJSON(json.RawMessage(`{"key":"x"}`))}}},
 		StubTurn{Text: "The value is value-for-x."},
 	)
 	emit, events := collectEvents()
@@ -132,8 +132,8 @@ func TestRunnerParallelToolCallsRendezvous(t *testing.T) {
 
 	stub := NewStubProvider(
 		StubTurn{ToolCalls: []ToolCall{
-			{ID: "c1", Name: "a", Args: json.RawMessage(`{}`)},
-			{ID: "c2", Name: "b", Args: json.RawMessage(`{}`)},
+			{ID: "c1", Name: "a", Args: core.NewRawJSON(json.RawMessage(`{}`))},
+			{ID: "c2", Name: "b", Args: core.NewRawJSON(json.RawMessage(`{}`))},
 		}},
 		StubTurn{Text: "both done"},
 	)
@@ -153,7 +153,7 @@ func TestRunnerParallelToolCallsRendezvous(t *testing.T) {
 
 func TestRunnerDispatchErrorFedToModel(t *testing.T) {
 	stub := NewStubProvider(
-		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "no_such_tool", Args: json.RawMessage(`{}`)}}},
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "no_such_tool", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
 		StubTurn{Text: "recovered"},
 	)
 	emit, events := collectEvents()
@@ -189,7 +189,7 @@ func TestRunnerIsErrorResultIsToolEndNotToolError(t *testing.T) {
 		return "", errors.New("kaput")
 	})
 	stub := NewStubProvider(
-		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "flaky", Args: json.RawMessage(`{}`)}}},
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "flaky", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
 		StubTurn{Text: "noted"},
 	)
 	emit, events := collectEvents()
@@ -219,7 +219,7 @@ func TestRunnerIsErrorResultIsToolEndNotToolError(t *testing.T) {
 }
 
 func TestRunnerStepCap(t *testing.T) {
-	loop := StubTurn{ToolCalls: []ToolCall{{ID: "c", Name: "spin", Args: json.RawMessage(`{}`)}}}
+	loop := StubTurn{ToolCalls: []ToolCall{{ID: "c", Name: "spin", Args: core.NewRawJSON(json.RawMessage(`{}`))}}}
 	stub := NewStubProvider(loop, loop, loop)
 	src := NewFuncSource()
 	AddFunc(src, "spin", "", func(ctx context.Context, _ struct{}) (string, error) { return "again", nil })
@@ -321,9 +321,9 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 		{Kind: EventThinkingDelta, Step: 1, Text: "hmm"},
 		{Kind: EventThinkingEnd, Step: 1},
 		{Kind: EventTextDelta, Step: 1, Text: "hi"},
-		{Kind: EventToolBegin, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: json.RawMessage(`{}`)}},
-		{Kind: EventToolEnd, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: json.RawMessage(`{}`)}, ToolResult: &core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}},
-		{Kind: EventToolError, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: json.RawMessage(`{}`)}, Error: "boom"},
+		{Kind: EventToolBegin, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}},
+		{Kind: EventToolEnd, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, ToolResult: &core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}},
+		{Kind: EventToolError, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Error: "boom"},
 		{Kind: EventTurnEnd, Result: &TurnResult{Text: "done", Steps: 1, Usage: Usage{InputTokens: 1, OutputTokens: 2}}},
 		{Kind: EventError, Error: "fatal"},
 	}

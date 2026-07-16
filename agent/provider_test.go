@@ -63,7 +63,7 @@ func TestOpenAIRequestWireShape(t *testing.T) {
 		Instructions: "be brief",
 		Messages: []Message{
 			{Role: RoleUser, Text: "hi"},
-			{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "echo", Args: json.RawMessage(`{"message":"x"}`)}}},
+			{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "echo", Args: core.NewRawJSON(json.RawMessage(`{"message":"x"}`))}}},
 			{Role: RoleTool, ToolCallID: "c1", Text: "echo: x"},
 		},
 		Tools:       []core.ToolDef{{Name: "echo", Description: "echoes", InputSchema: map[string]any{"type": "object"}}},
@@ -126,10 +126,10 @@ func TestOpenAIStreamChunkedParallelToolCalls(t *testing.T) {
 	if len(res.ToolCalls) != 2 {
 		t.Fatalf("tool calls = %+v", res.ToolCalls)
 	}
-	if res.ToolCalls[0].ID != "a1" || res.ToolCalls[0].Name != "search" || string(res.ToolCalls[0].Args) != `{"q":"cats"}` {
-		t.Fatalf("call 0 assembly = %+v args=%s", res.ToolCalls[0], res.ToolCalls[0].Args)
+	if res.ToolCalls[0].ID != "a1" || res.ToolCalls[0].Name != "search" || string(res.ToolCalls[0].Args.Raw()) != `{"q":"cats"}` {
+		t.Fatalf("call 0 assembly = %+v args=%s", res.ToolCalls[0], res.ToolCalls[0].Args.Raw())
 	}
-	if res.ToolCalls[1].ID != "b2" || string(res.ToolCalls[1].Args) != `{}` {
+	if res.ToolCalls[1].ID != "b2" || string(res.ToolCalls[1].Args.Raw()) != `{}` {
 		t.Fatalf("call 1 = %+v", res.ToolCalls[1])
 	}
 	if res.FinishReason != "tool_calls" {
@@ -209,7 +209,7 @@ func TestOpenAIGenerateStructured(t *testing.T) {
 
 	res, err := newTestProvider(t, ts.URL).Generate(context.Background(), ProviderRequest{
 		Messages:       []Message{{Role: RoleUser, Text: "name it"}},
-		ResponseSchema: json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}}}`),
+		ResponseSchema: core.NewRawJSON(json.RawMessage(`{"type":"object","properties":{"name":{"type":"string"}}}`)),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -237,15 +237,15 @@ func TestOpenAIGenerateToolCalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.ToolCalls) != 1 || res.ToolCalls[0].Name != "go" || string(res.ToolCalls[0].Args) != `{"x":1}` {
+	if len(res.ToolCalls) != 1 || res.ToolCalls[0].Name != "go" || string(res.ToolCalls[0].Args.Raw()) != `{"x":1}` {
 		t.Fatalf("res = %+v", res)
 	}
 }
 
 func TestStubProviderScriptedThreeStepTurn(t *testing.T) {
 	stub := NewStubProvider(
-		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "get_cart", Args: json.RawMessage(`{}`)}}},
-		StubTurn{ToolCalls: []ToolCall{{ID: "c2", Name: "add_to_cart", Args: json.RawMessage(`{"item":"milk"}`)}}},
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "get_cart", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
+		StubTurn{ToolCalls: []ToolCall{{ID: "c2", Name: "add_to_cart", Args: core.NewRawJSON(json.RawMessage(`{"item":"milk"}`))}}},
 		StubTurn{Text: "Added milk to your cart."},
 	)
 
@@ -323,11 +323,11 @@ func TestAccumulatorEmptyArgsBecomeEmptyObject(t *testing.T) {
 	acc.Add(Delta{Kind: DeltaToolCallStart, Index: 0, ToolCallID: "x", ToolName: "noargs"})
 	acc.Add(Delta{Kind: DeltaFinish, FinishReason: "tool_calls"})
 	res := acc.Result()
-	if string(res.ToolCalls[0].Args) != "{}" {
-		t.Fatalf("args = %q", res.ToolCalls[0].Args)
+	if string(res.ToolCalls[0].Args.Raw()) != "{}" {
+		t.Fatalf("args = %q", res.ToolCalls[0].Args.Raw())
 	}
 	var m map[string]any
-	if err := json.Unmarshal(res.ToolCalls[0].Args, &m); err != nil {
+	if err := json.Unmarshal(res.ToolCalls[0].Args.Raw(), &m); err != nil {
 		t.Fatalf("args must always unmarshal: %v", err)
 	}
 }

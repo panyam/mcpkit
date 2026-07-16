@@ -64,6 +64,10 @@ the model nor callable.
   config rejects it with a pointer at the tracking issue. Interactive CLI
   login is the natural fit for agentchat and lands with that ticket.
 
+Every flag is env-overridable with the `AGENTCHAT_` prefix (dashes become
+underscores: `--base-url` is `AGENTCHAT_BASE_URL`); an explicit flag beats
+the env var.
+
 In the REPL: `/tools` lists the merged tool index, `/history` the
 conversation, `/quit` exits; Ctrl-C cancels the in-flight turn. During an
 elicitation, `/d` declines and `/c` cancels.

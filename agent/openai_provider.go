@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/panyam/mcpkit/core"
 	ssehttp "github.com/panyam/servicekit/http"
 )
 
@@ -118,7 +119,7 @@ func (p *OpenAIProvider) Generate(ctx context.Context, req ProviderRequest) (*Pr
 		if args == "" {
 			args = "{}"
 		}
-		out.ToolCalls = append(out.ToolCalls, ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: json.RawMessage(args)})
+		out.ToolCalls = append(out.ToolCalls, ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: core.NewRawJSON(json.RawMessage(args))})
 	}
 	if full.Usage != nil {
 		out.Usage = &Usage{InputTokens: full.Usage.PromptTokens, OutputTokens: full.Usage.CompletionTokens}
@@ -177,7 +178,7 @@ func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]
 						"type": "function",
 						"function": map[string]any{
 							"name":      tc.Name,
-							"arguments": string(tc.Args),
+							"arguments": string(tc.Args.Raw()),
 						},
 					}
 				}
@@ -216,9 +217,9 @@ func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]
 	if stream {
 		body["stream"] = true
 		body["stream_options"] = map[string]any{"include_usage": true}
-	} else if len(req.ResponseSchema) > 0 {
+	} else if req.ResponseSchema.Len() > 0 {
 		var schema any
-		if json.Unmarshal(req.ResponseSchema, &schema) == nil {
+		if req.ResponseSchema.Bind(&schema) == nil {
 			body["response_format"] = map[string]any{
 				"type": "json_schema",
 				"json_schema": map[string]any{
