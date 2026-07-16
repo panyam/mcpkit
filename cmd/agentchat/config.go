@@ -31,6 +31,11 @@ type Config struct {
 	// streams.
 	Triggers []TriggerConfig `json:"triggers,omitempty"`
 
+	// MetaTools exposes the async control-plane tools to the model
+	// (subscribe_events, create_trigger, list_tasks, cancel_task, ...).
+	// Auto-implied when any server has events or triggers configured.
+	MetaTools bool `json:"metaTools,omitempty"`
+
 	// TaskGraceSec is how long a task-backed tool call stays inline before
 	// detaching to the background (completion arrives as injected context
 	// and a transcript line; /tasks manages running tasks). Zero uses the
