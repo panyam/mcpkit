@@ -35,6 +35,9 @@ type App struct {
 	streams   []*eventsclient.StreamCall
 	tasksMu   sync.Mutex
 	bgTasks   map[string]*client.BackgroundTask
+	subsMu    sync.Mutex
+	subs      map[string]*subscription
+	metaTools bool
 	turnMu    sync.Mutex
 	eventStop context.CancelFunc
 }
@@ -96,7 +99,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	coord := agent.NewElicitationCoordinator(ui)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}}
+	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}}
 
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
@@ -197,6 +200,17 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		Logger:   o.logger,
 	})
 
+	app.metaTools = cfg.MetaTools || len(cfg.Triggers) > 0
+	for _, sc := range cfg.Servers {
+		app.metaTools = app.metaTools || len(sc.Events) > 0
+	}
+	if app.metaTools {
+		if err := app.registerMetaTools(multi); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
 	runner, err := agent.NewRunner(agent.RunnerConfig{
 		Provider:       provider,
 		Tools:          multi,
@@ -210,11 +224,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	app.runner = runner
 
-	hasEvents := false
-	for _, sc := range cfg.Servers {
-		hasEvents = hasEvents || len(sc.Events) > 0
-	}
-	if hasEvents {
+	if app.metaTools {
 		evCtx, cancel := context.WithCancel(context.Background())
 		app.eventStop = cancel
 		app.fanIn = gocurrent.NewFanIn[agent.IncomingEvent]()
@@ -235,6 +245,9 @@ func (a *App) Close() {
 	}
 	for _, s := range a.streams {
 		s.Stop()
+	}
+	for _, s := range a.listSubscriptions() {
+		s.call.Stop()
 	}
 	if a.fanIn != nil {
 		a.fanIn.Stop()

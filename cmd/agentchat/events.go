@@ -10,7 +10,6 @@ import (
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
-	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
 // startEventStreams opens one events/stream per configured event. Each
@@ -21,29 +20,11 @@ import (
 // backpressure: one noisy stream drops its own events (warned), never a
 // sibling's.
 func (a *App) startEventStreams(ctx context.Context) error {
-	for i, sc := range a.cfg.Servers {
+	for _, sc := range a.cfg.Servers {
 		for _, ec := range sc.Events {
-			serverID := sc.ID
-			eventName := ec.Name
-			ch, call, err := eventsclient.StreamChan(ctx, a.clients[i], eventsclient.ChanStreamOptions{
-				EventName: eventName,
-				OnDrop: func(events.Event) {
-					a.renderer.eventDropped(serverID, eventName)
-				},
-			})
-			if err != nil {
-				return fmt.Errorf("agentchat: events/stream %s on %s: %w", eventName, serverID, err)
+			if _, err := a.openSubscription(ctx, sc.ID, ec.Name); err != nil {
+				return fmt.Errorf("agentchat: events/stream %s on %s: %w", ec.Name, sc.ID, err)
 			}
-			a.streams = append(a.streams, call)
-
-			adapted := make(chan agent.IncomingEvent, 16)
-			go func() {
-				defer close(adapted)
-				for ev := range ch {
-					adapted <- adaptEvent(serverID, ev)
-				}
-			}()
-			a.fanIn.Add(adapted)
 		}
 	}
 	return nil
