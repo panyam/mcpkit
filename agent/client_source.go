@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/panyam/mcpkit/client"
@@ -29,8 +28,8 @@ type ClientSource struct {
 	onTaskStatus func(*core.DetailedTask)
 
 	taskGrace  time.Duration
-	onDetach   func(*BackgroundTask)
-	onComplete func(*BackgroundTask)
+	onDetach   func(*client.BackgroundTask)
+	onComplete func(*client.BackgroundTask)
 }
 
 // ClientSourceOption configures a ClientSource.
@@ -52,25 +51,28 @@ func WithTaskStatusHook(fn func(*core.DetailedTask)) ClientSourceOption {
 
 // WithTaskGrace opts task-backed calls into background detach: a call still
 // working when the window expires returns immediately with a model-visible
-// "running in the background" result while polling continues on a detached
-// goroutine. The window holds while an input pause is active, so
+// "running in the background" result while the client's poll continues on a
+// detached goroutine. The window holds while an input pause is active, so
 // interactive tasks that park in input_required within the grace stay
 // inline. Zero or unset keeps the synchronous wait-to-terminal contract.
+// The detach mechanism itself lives in client.WaitForTaskOrBackground.
 func WithTaskGrace(d time.Duration) ClientSourceOption {
 	return func(s *ClientSource) { s.taskGrace = d }
 }
 
-// WithTaskDetachHook observes each detach, delivering the BackgroundTask
-// handle (registries, transcript lines, cancellation surfaces hang off it).
-func WithTaskDetachHook(fn func(*BackgroundTask)) ClientSourceOption {
+// WithTaskDetachHook observes each detach, delivering the
+// client.BackgroundTask handle (registries, transcript lines, cancellation
+// surfaces hang off it).
+func WithTaskDetachHook(fn func(*client.BackgroundTask)) ClientSourceOption {
 	return func(s *ClientSource) { s.onDetach = fn }
 }
 
 // WithTaskCompletionHook fires when a DETACHED task reaches its terminal
-// state (inline completions return through Call as usual). Runs on the
-// background poll goroutine; hosts turning completions into events or
-// proactive turns do it here.
-func WithTaskCompletionHook(fn func(*BackgroundTask)) ClientSourceOption {
+// state (inline completions return through Call as usual). The agent
+// watches the handle's Done channel and invokes this from a watcher
+// goroutine; hosts turning completions into events or proactive turns do
+// it here.
+func WithTaskCompletionHook(fn func(*client.BackgroundTask)) ClientSourceOption {
 	return func(s *ClientSource) { s.onComplete = fn }
 }
 
@@ -118,75 +120,28 @@ func (s *ClientSource) Call(ctx context.Context, name string, args map[string]an
 }
 
 func (s *ClientSource) waitTask(ctx context.Context, name, taskID string) (*core.ToolResult, error) {
-	if s.taskGrace > 0 {
-		return s.waitTaskWithGrace(ctx, name, taskID)
-	}
-	dt, err := client.WaitForTaskWithInput(ctx, s.c, taskID, s.handler,
+	dt, bt, err := client.WaitForTaskOrBackground(ctx, s.c, taskID, name, s.handler, s.taskGrace,
 		client.WaitOptions{OnStatus: s.onTaskStatus})
 	if err != nil {
 		return nil, err
 	}
+	if bt != nil {
+		// Detached: hand the client-owned handle to the host, watch its
+		// Done for the completion hook (naturally only for detached
+		// tasks), and give the model a result so the turn finishes.
+		if s.onDetach != nil {
+			s.onDetach(bt)
+		}
+		if s.onComplete != nil {
+			go func() {
+				<-bt.Done()
+				s.onComplete(bt)
+			}()
+		}
+		return &core.ToolResult{Content: []core.Content{{Type: "text", Text: "task " + taskID + " (" + name +
+			") is still running and has moved to the background; the user can keep working and will be told when it finishes."}}}, nil
+	}
 	return mapTerminalTask(dt, name, taskID)
-}
-
-// waitTaskWithGrace races the task against the grace window. The poll runs
-// on its own goroutine with a detached context from the start, so a detach
-// is a handoff, not a restart; an inline finish simply consumes the same
-// outcome before the timer wins.
-func (s *ClientSource) waitTaskWithGrace(ctx context.Context, name, taskID string) (*core.ToolResult, error) {
-	pollCtx, cancelPoll := context.WithCancel(context.WithoutCancel(ctx))
-	bt := &BackgroundTask{
-		TaskID: taskID, Tool: name, StartedAt: time.Now(),
-		c: s.c, cancelPoll: cancelPoll, done: make(chan struct{}),
-	}
-
-	var detached atomic.Bool
-	onStatus := func(dt *core.DetailedTask) {
-		bt.setStatus(dt.Status)
-		if s.onTaskStatus != nil {
-			s.onTaskStatus(dt)
-		}
-	}
-	go func() {
-		dt, err := client.WaitForTaskWithInput(pollCtx, s.c, taskID, s.handler,
-			client.WaitOptions{OnStatus: onStatus})
-		if err != nil {
-			bt.finish(nil, err)
-		} else {
-			res, mapErr := mapTerminalTask(dt, name, taskID)
-			bt.finish(res, mapErr)
-		}
-		if detached.Load() && s.onComplete != nil {
-			s.onComplete(bt)
-		}
-	}()
-
-	timer := time.NewTimer(s.taskGrace)
-	defer timer.Stop()
-	for {
-		select {
-		case <-bt.done:
-			return bt.Result()
-		case <-ctx.Done():
-			// Turn cancelled while still inline: abort the poll too.
-			cancelPoll()
-			<-bt.done
-			return nil, ctx.Err()
-		case <-timer.C:
-			if bt.Status() == core.TaskInputRequired {
-				// An active input pause is an interactive moment; hold
-				// the grace and re-check after another window.
-				timer.Reset(s.taskGrace)
-				continue
-			}
-			detached.Store(true)
-			if s.onDetach != nil {
-				s.onDetach(bt)
-			}
-			return &core.ToolResult{Content: []core.Content{{Type: "text", Text: "task " + taskID + " (" + name +
-				") is still running and has moved to the background; the user can keep working and will be told when it finishes."}}}, nil
-		}
-	}
 }
 
 func mapTerminalTask(dt *core.DetailedTask, name, taskID string) (*core.ToolResult, error) {

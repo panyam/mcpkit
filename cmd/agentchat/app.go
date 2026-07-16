@@ -34,7 +34,7 @@ type App struct {
 	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
 	streams   []*eventsclient.StreamCall
 	tasksMu   sync.Mutex
-	bgTasks   map[string]*agent.BackgroundTask
+	bgTasks   map[string]*client.BackgroundTask
 	turnMu    sync.Mutex
 	eventStop context.CancelFunc
 }
@@ -96,7 +96,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	coord := agent.NewElicitationCoordinator(ui)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*agent.BackgroundTask{}}
+	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}}
 
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
@@ -126,7 +126,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { rend.taskStatus(dt) }),
 			agent.WithTaskGrace(cfg.taskGrace()),
 			agent.WithTaskDetachHook(app.onTaskDetach),
-			agent.WithTaskCompletionHook(func(bt *agent.BackgroundTask) { app.onTaskComplete(sc.ID, bt) }))
+			agent.WithTaskCompletionHook(func(bt *client.BackgroundTask) { app.onTaskComplete(sc.ID, bt) }))
 		if len(sc.Allow) > 0 {
 			allowed := make(map[string]bool, len(sc.Allow))
 			for _, name := range sc.Allow {

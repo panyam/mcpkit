@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/client"
 )
 
 // Config is agentchat's JSON configuration. Secrets are never inlined:
@@ -43,7 +44,7 @@ func (c *Config) taskGrace() time.Duration {
 	case c.TaskGraceSec < 0:
 		return 0
 	case c.TaskGraceSec == 0:
-		return agent.DefaultTaskGrace
+		return client.DefaultTaskGrace
 	default:
 		return time.Duration(c.TaskGraceSec) * time.Second
 	}
