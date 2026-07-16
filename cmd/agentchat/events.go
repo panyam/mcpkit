@@ -13,40 +13,41 @@ import (
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-// startEventStreams opens one events/stream per configured event and feeds
-// occurrences into the app's event channel. Stream callbacks must not block
-// (they run on the per-call SSE reader), so they only convert and enqueue;
-// the app's consumer goroutine runs the policies. A full channel drops the
-// event with a transcript warning: backpressure must never stall the SSE
-// reader, and the injection policy's windows make individual losses benign.
+// startEventStreams opens one events/stream per configured event. Each
+// stream delivers on its own buffered channel (eventsclient.StreamChan, the
+// mechanism half living in the client SDK), gets a per-stream adapter
+// goroutine tagging occurrences with the server id, and merges into one
+// consumer feed via gocurrent's FanIn. Per-stream buffers isolate
+// backpressure: one noisy stream drops its own events (warned), never a
+// sibling's.
 func (a *App) startEventStreams(ctx context.Context) error {
 	for i, sc := range a.cfg.Servers {
 		for _, ec := range sc.Events {
 			serverID := sc.ID
-			opts := eventsclient.StreamOptions{
-				EventName: ec.Name,
-				OnEvent: func(ev eventsclientEvent) {
-					in := adaptEvent(serverID, ev)
-					select {
-					case a.events <- in:
-					default:
-						a.renderer.eventDropped(serverID, in.Name)
-					}
+			eventName := ec.Name
+			ch, call, err := eventsclient.StreamChan(ctx, a.clients[i], eventsclient.ChanStreamOptions{
+				EventName: eventName,
+				OnDrop: func(events.Event) {
+					a.renderer.eventDropped(serverID, eventName)
 				},
-			}
-			call, err := eventsclient.Stream(ctx, a.clients[i], opts)
+			})
 			if err != nil {
-				return fmt.Errorf("agentchat: events/stream %s on %s: %w", ec.Name, serverID, err)
+				return fmt.Errorf("agentchat: events/stream %s on %s: %w", eventName, serverID, err)
 			}
 			a.streams = append(a.streams, call)
+
+			adapted := make(chan agent.IncomingEvent, 16)
+			go func() {
+				defer close(adapted)
+				for ev := range ch {
+					adapted <- adaptEvent(serverID, ev)
+				}
+			}()
+			a.fanIn.Add(adapted)
 		}
 	}
 	return nil
 }
-
-// eventsclientEvent aliases the wire event type so adaptEvent's signature
-// stays readable.
-type eventsclientEvent = events.Event
 
 // consumeEvents is the single goroutine that owns the policy pipeline:
 // ingest into injection, evaluate triggers, and run approved proactive
@@ -57,7 +58,7 @@ func (a *App) consumeEvents(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case ev, ok := <-a.events:
+		case ev, ok := <-a.fanIn.OutputChan():
 			if !ok {
 				return
 			}
@@ -139,7 +140,7 @@ func hintOverrides(cfg *Config) map[string]agent.ContextHint {
 	return out
 }
 
-func adaptEvent(serverID string, ev eventsclientEvent) agent.IncomingEvent {
+func adaptEvent(serverID string, ev events.Event) agent.IncomingEvent {
 	return agent.IncomingEvent{
 		Server: serverID,
 		Name:   ev.Name,

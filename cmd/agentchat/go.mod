@@ -3,6 +3,7 @@ module github.com/panyam/mcpkit/cmd/agentchat
 go 1.26.4
 
 require (
+	github.com/panyam/gocurrent v0.1.1
 	github.com/panyam/mcpkit v0.4.0-b2
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
@@ -41,7 +42,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/oneauth v0.1.31 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect

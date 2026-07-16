@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	gocurrent "github.com/panyam/gocurrent"
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -30,7 +31,7 @@ type App struct {
 
 	injection *agent.InjectionPolicy
 	triggers  *agent.TriggerPolicy
-	events    chan agent.IncomingEvent
+	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
 	streams   []*eventsclient.StreamCall
 	turnMu    sync.Mutex
 	eventStop context.CancelFunc
@@ -188,7 +189,6 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		Bindings: buildTriggerBindings(cfg.Triggers),
 		Logger:   o.logger,
 	})
-	app.events = make(chan agent.IncomingEvent, 256)
 
 	runner, err := agent.NewRunner(agent.RunnerConfig{
 		Provider:       provider,
@@ -210,6 +210,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	if hasEvents {
 		evCtx, cancel := context.WithCancel(context.Background())
 		app.eventStop = cancel
+		app.fanIn = gocurrent.NewFanIn[agent.IncomingEvent]()
 		if err := app.startEventStreams(evCtx); err != nil {
 			cancel()
 			app.Close()
@@ -227,6 +228,9 @@ func (a *App) Close() {
 	}
 	for _, s := range a.streams {
 		s.Stop()
+	}
+	if a.fanIn != nil {
+		a.fanIn.Stop()
 	}
 	for _, c := range a.clients {
 		c.Close()
