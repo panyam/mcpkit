@@ -79,6 +79,15 @@ The purity rule that keeps the lifecycle single-sourced: selectors are pure func
 
 The generic stages (Stage[E], Filter, Transform, Window) are deliberately synchronous, caller-driven, and clock-injected: the policies drain at turn boundaries under the host's own locking, and every windowing test runs on a fake clock. gocurrent already ships the asynchronous complement (Pipeline[T] channel components, Mapper, Broadcast filters, Reducer with FlushPeriod), and the two compose without adaptation: async pre-processing can feed InjectionPolicy.Ingest from a gocurrent component's output channel. The pushdown position, settled 2026-07-16: when a second consumer of the synchronous stages appears, they graduate INTO gocurrent as a new surface (renamed; gocurrent.Pipeline already means the channel component), never replace it, and the agent module re-imports. Until then they live here to avoid cross-repo release ordering for a single consumer.
 
+### Async control plane
+
+Two primitives let the model steer asynchronous operations (events and tasks) through conversation rather than only config:
+
+- `ProviderRequest.ToolChoice` biases tool calling for a request (auto / required / none / a forced tool). Paired with `RunnerConfig.Selector` (narrow the offered set), a proactive or injected turn can be steered toward *acting* — e.g. a trigger firing "send an email" can offer only the email tool and force a call. Renders to the OpenAI-compatible `tool_choice`; a server that ignores it degrades to auto.
+- `TriggerPolicy.Add` / `Remove` / `Bindings` mutate bindings at runtime. This is the seam a `create_trigger` host meta-tool uses so the model can install a standing behavior ("when users are created, send an email") mid-conversation. Because task completions are already `task.completed` events (see background tasks), the same runtime binding serves "notify on build done" and "email on user_created" alike.
+
+The host meta-tools that expose these to the model (`subscribe_events`, `create_trigger`, `list_tasks`, `cancel_task`, ...) are surface-level `FuncSource` registrations, not agent API — the model's control plane is host-local tools over the client mechanisms and these agent policies.
+
 ### Policy hooks
 
 Two seams, both no-op by default:
