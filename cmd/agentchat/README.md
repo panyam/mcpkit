@@ -66,6 +66,35 @@ the primary retries the backup once, the primary is benched for a cooldown,
 and transitions are logged. A stream that already produced output is never
 silently replayed. `/health` shows the current snapshot.
 
+## Events, injected context, and triggers
+
+Configure event streams per server and the host consumes them through two
+policies (both live in the agent module and are fully pluggable for
+embedders):
+
+```json
+"servers": [{ "id": "grocery", "url": "...",
+  "events": [{ "name": "cart.changed",
+    "hint": { "priority": "high",
+              "aggregate": { "windowMs": 2000, "strategy": "merge" },
+              "template": "the cart now holds {{count}} items" } }] }],
+"triggers": [{ "event": "cart.changed",
+  "filter": { "count": "2" },
+  "instructions": "The cart changed. Offer one recipe suggestion.",
+  "label": "recipe-pitch", "cooldownSec": 300 }]
+```
+
+Injection: occurrences buffer per hint (merge, last-wins, or debounce
+windows), render via the template, and join the conversation as system
+messages at the next turn, priority-ordered under a budget; sensitive events
+gate on consent. Host config hints override server-advertised ones (the
+vendor context-hint on events/list).
+
+Triggers: a matching event starts a proactive turn (marked with its label),
+mediated by the anti-nag policy: one firing per binding until the user
+engages AND the cooldown passes, with a session budget on top. Servers can
+suggest triggers; the host decides.
+
 ## Auth modes
 
 `auth.type` selects among the client auth modes MCP supports:
