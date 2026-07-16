@@ -21,6 +21,12 @@ type taskFixture struct {
 	polls     int
 	responses core.InputResponses
 	failMode  bool
+
+	// holdUntil, when non-nil, keeps the task in working until the channel
+	// closes, then completes with a fixed result (no input flow). For
+	// grace/detach tests.
+	holdUntil chan struct{}
+	cancelled bool
 }
 
 func (f *taskFixture) server(t *testing.T) *server.Server {
@@ -48,6 +54,16 @@ func (f *taskFixture) server(t *testing.T) *server.Server {
 			TTLMs: core.IntPtr(60000), PollIntervalMs: core.IntPtr(1),
 		}}
 		switch {
+		case f.cancelled:
+			dt.Status = core.TaskCancelled
+		case f.holdUntil != nil:
+			select {
+			case <-f.holdUntil:
+				dt.Status = core.TaskCompleted
+				dt.Result = &core.ToolResult{Content: []core.Content{{Type: "text", Text: "held job done"}}}
+			default:
+				dt.Status = core.TaskWorking
+			}
 		case f.failMode && f.polls >= 2:
 			dt.Status = core.TaskFailed
 			dt.Error = &core.TaskError{Code: -32000, Message: "disk full"}
@@ -67,6 +83,12 @@ func (f *taskFixture) server(t *testing.T) *server.Server {
 			dt.Status = core.TaskWorking
 		}
 		return methodResult(id, dt)
+	})
+	srv.HandleMethod("tasks/cancel", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+		f.mu.Lock()
+		f.cancelled = true
+		f.mu.Unlock()
+		return methodResult(id, map[string]any{})
 	})
 	srv.HandleMethod("tasks/update", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req core.UpdateTaskRequest

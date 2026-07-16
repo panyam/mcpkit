@@ -66,6 +66,18 @@ the primary retries the backup once, the primary is benched for a cooldown,
 and transitions are logged. A stream that already produced output is never
 silently replayed. `/health` shows the current snapshot.
 
+## Background tasks
+
+A task-backed tool call stays inline for a grace window (`taskGraceSec`,
+default 10s); if it is still running when the window expires it detaches:
+the model gets a "moved to background" result and finishes its turn, you keep
+chatting, and the task keeps running (input pauses still prompt you). On
+completion the outcome prints a `· task <id> completed: ...` line and injects
+as `task.completed` context on your next turn, so the model can react to it.
+Bind a trigger on `task.completed` to have the agent proactively tell you the
+moment a job finishes. `/tasks` lists running tasks; `/tasks cancel <id>`
+stops one. Set `taskGraceSec` negative to wait inline forever.
+
 ## Events, injected context, and triggers
 
 Configure event streams per server and the host consumes them through two

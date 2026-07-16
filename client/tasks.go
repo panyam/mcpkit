@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
@@ -335,4 +336,133 @@ func nextPollWait(override time.Duration, serverHintMs *int) time.Duration {
 		return hint
 	}
 	return defaultPollInterval
+}
+
+// DefaultTaskGrace is the recommended grace window for callers that opt into
+// background detach via WaitForTaskOrBackground.
+const DefaultTaskGrace = 10 * time.Second
+
+// BackgroundTask is a handle to a task poll that outlived its grace window
+// and detached (see WaitForTaskOrBackground). The poll keeps running on a
+// context independent of the caller's, so later input_required pauses still
+// reach the same InputHandler; the terminal outcome is retained and Done
+// signals its arrival.
+//
+// Safe for concurrent use.
+type BackgroundTask struct {
+	// TaskID and Tool identify the task for surfaces (task listings); Tool
+	// is caller-supplied (the tool name that created it) and may be empty.
+	TaskID string
+	Tool   string
+	// StartedAt is when the originating call began.
+	StartedAt time.Time
+
+	c          *Client
+	cancelPoll context.CancelFunc
+
+	mu     sync.Mutex
+	status core.TaskStatus
+	result *core.DetailedTask
+	err    error
+
+	done chan struct{}
+}
+
+// Status returns the most recent polled status.
+func (bt *BackgroundTask) Status() core.TaskStatus {
+	bt.mu.Lock()
+	defer bt.mu.Unlock()
+	return bt.status
+}
+
+// Done closes when the task reaches a terminal state or the poll aborts.
+func (bt *BackgroundTask) Done() <-chan struct{} { return bt.done }
+
+// Result returns the terminal DetailedTask (valid after Done). The error
+// covers a poll abort or transport failure; task-level failed/cancelled
+// status rides the DetailedTask.
+func (bt *BackgroundTask) Result() (*core.DetailedTask, error) {
+	bt.mu.Lock()
+	defer bt.mu.Unlock()
+	return bt.result, bt.err
+}
+
+// Cancel requests server-side cancellation (tasks/cancel) and stops the
+// poll. Done still closes with the resulting (cancelled) outcome, so
+// observers see one lifecycle regardless of how it ended.
+func (bt *BackgroundTask) Cancel() error {
+	err := CancelTask(bt.c, bt.TaskID)
+	bt.cancelPoll()
+	return err
+}
+
+// WaitForTaskOrBackground races a task against a grace window. It polls (and
+// services input_required through handler) like WaitForTaskWithInput, but
+// returns as soon as EITHER the task reaches a terminal state within the
+// grace (non-nil *core.DetailedTask, nil handle) OR the grace expires with
+// the task still running (nil DetailedTask, non-nil *BackgroundTask whose
+// poll continues in the background).
+//
+// The grace HOLDS while the task is actively in input_required: an
+// interactive pause is not a reason to detach, so a task that parks for
+// input within the window stays inline until it is answered. A grace <= 0
+// is equivalent to WaitForTaskWithInput (never detaches).
+//
+// The tool argument is stored on the returned handle for display only.
+func WaitForTaskOrBackground(ctx context.Context, c *Client, taskID, tool string, handler InputHandler, grace time.Duration, opts ...WaitOptions) (*core.DetailedTask, *BackgroundTask, error) {
+	if handler == nil {
+		return nil, nil, errors.New("WaitForTaskOrBackground: handler is required")
+	}
+	if grace <= 0 {
+		dt, err := WaitForTaskWithInput(ctx, c, taskID, handler, opts...)
+		return dt, nil, err
+	}
+
+	var userOpts WaitOptions
+	if len(opts) > 0 {
+		userOpts = opts[0]
+	}
+	// Poll on a context detached from the caller so a detach is a handoff,
+	// not a restart. An inline turn cancel still aborts it via cancelPoll.
+	pollCtx, cancelPoll := context.WithCancel(context.WithoutCancel(ctx))
+	bt := &BackgroundTask{
+		TaskID: taskID, Tool: tool, StartedAt: time.Now(),
+		c: c, cancelPoll: cancelPoll, done: make(chan struct{}),
+	}
+	onStatus := func(dt *core.DetailedTask) {
+		bt.mu.Lock()
+		bt.status = dt.Status
+		bt.mu.Unlock()
+		if userOpts.OnStatus != nil {
+			userOpts.OnStatus(dt)
+		}
+	}
+	go func() {
+		dt, err := WaitForTaskWithInput(pollCtx, c, taskID, handler,
+			WaitOptions{PollInterval: userOpts.PollInterval, OnStatus: onStatus})
+		bt.mu.Lock()
+		bt.result, bt.err = dt, err
+		bt.mu.Unlock()
+		close(bt.done)
+	}()
+
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	for {
+		select {
+		case <-bt.done:
+			dt, err := bt.Result()
+			return dt, nil, err
+		case <-ctx.Done():
+			cancelPoll()
+			<-bt.done
+			return nil, nil, ctx.Err()
+		case <-timer.C:
+			if bt.Status() == core.TaskInputRequired {
+				timer.Reset(grace)
+				continue
+			}
+			return nil, bt, nil
+		}
+	}
 }
