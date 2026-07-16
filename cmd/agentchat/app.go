@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/panyam/mcpkit/agent"
@@ -22,6 +24,7 @@ type App struct {
 	clients  []*client.Client
 	history  []agent.Message
 	renderer *renderer
+	failover *agent.FailoverProvider
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -31,6 +34,8 @@ type AppOption func(*appOptions)
 type appOptions struct {
 	provider agent.Provider
 	ui       agent.ElicitationUI
+	tp       core.TracerProvider
+	logger   *slog.Logger
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -43,12 +48,32 @@ func WithElicitationUI(ui agent.ElicitationUI) AppOption {
 	return func(o *appOptions) { o.ui = ui }
 }
 
+// WithTracerProvider opts every layer into SEP 414 spans: agent turn/step/
+// tool spans, client dispatch spans (stitched as children), and skills
+// activation spans. Nil means noop.
+func WithTracerProvider(tp core.TracerProvider) AppOption {
+	return func(o *appOptions) { o.tp = tp }
+}
+
+// WithLogger sets the operational slog logger (failover transitions, future
+// policy events). The transcript renderer is UI, not logging, and never
+// routes here. Nil discards.
+func WithLogger(l *slog.Logger) AppOption {
+	return func(o *appOptions) { o.logger = l }
+}
+
 // NewApp connects every configured server and assembles the agent. The
 // returned App owns the client connections; call Close when done.
 func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, error) {
 	var o appOptions
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.tp == nil {
+		o.tp = core.NoopTracerProvider{}
+	}
+	if o.logger == nil {
+		o.logger = slog.New(slog.DiscardHandler)
 	}
 
 	rend := newRenderer(out)
@@ -66,6 +91,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			client.WithGetSSEStream(),
 			client.WithElicitationHandler(coord.Handler()),
 			client.WithToolsListChangedHandler(multi.Invalidate),
+			client.WithTracerProvider(o.tp),
 		}
 		authOpt, err := authOption(sc)
 		if err != nil {
@@ -102,7 +128,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		if sc.Skills != nil && !*sc.Skills {
 			continue
 		}
-		block, err := loadSkillsBlock(app.clients[i], sc.ID, rend)
+		block, err := loadSkillsBlock(app.clients[i], sc.ID, rend, o.tp)
 		if err != nil {
 			app.Close()
 			return nil, err
@@ -125,12 +151,35 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			return nil, err
 		}
 	}
+	if b := cfg.Model.Backup; b != nil {
+		backup, err := agent.NewOpenAIProvider(agent.OpenAIConfig{
+			BaseURL: b.BaseURL,
+			Model:   b.Model,
+			APIKey:  os.Getenv(b.APIKeyEnv),
+		})
+		if err != nil {
+			app.Close()
+			return nil, fmt.Errorf("agentchat: backup model: %w", err)
+		}
+		fo, err := agent.NewFailoverProvider(agent.FailoverConfig{
+			Primary: provider,
+			Backup:  backup,
+			Logger:  o.logger,
+		})
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		provider = fo
+		app.failover = fo
+	}
 
 	runner, err := agent.NewRunner(agent.RunnerConfig{
-		Provider:     provider,
-		Tools:        multi,
-		Instructions: instructions,
-		MaxSteps:     cfg.MaxSteps,
+		Provider:       provider,
+		Tools:          multi,
+		Instructions:   instructions,
+		MaxSteps:       cfg.MaxSteps,
+		TracerProvider: o.tp,
 	})
 	if err != nil {
 		app.Close()
@@ -194,6 +243,8 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			}
 		case line == "/history":
 			a.renderer.history(a.history)
+		case line == "/health":
+			a.renderer.health(a.failover)
 		default:
 			tctx, cancel := turnCtx()
 			a.RunTurn(tctx, line)

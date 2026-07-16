@@ -31,6 +31,19 @@ type ModelConfig struct {
 	// APIKeyEnv names the environment variable holding the bearer key.
 	// Empty means unauthenticated (local servers).
 	APIKeyEnv string `json:"apiKeyEnv,omitempty"`
+
+	// Backup, when set, wraps the model in a FailoverProvider: a call
+	// that fails cleanly on the primary retries here once, and the
+	// primary is benched for a cooldown. See /health in the REPL.
+	Backup *BackupModelConfig `json:"backup,omitempty"`
+}
+
+// BackupModelConfig is the failover endpoint (same shape as the primary,
+// minus further nesting).
+type BackupModelConfig struct {
+	BaseURL   string `json:"baseUrl"`
+	Model     string `json:"model"`
+	APIKeyEnv string `json:"apiKeyEnv,omitempty"`
 }
 
 // ServerConfig is one MCP server connection.

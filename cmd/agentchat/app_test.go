@@ -2,8 +2,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -329,5 +333,62 @@ func TestAppSkillLessServerIsSilent(t *testing.T) {
 	app.RunTurn(context.Background(), "hello")
 	if strings.Contains(out.String(), "skills:") {
 		t.Fatalf("no-skills server must stay silent:\n%s", out.String())
+	}
+}
+
+func TestAppFailoverToBackupEndToEnd(t *testing.T) {
+	backupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl := w.(http.Flusher)
+		io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"backup says hi\"}}]}\n\n")
+		io.WriteString(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		io.WriteString(w, "data: [DONE]\n\n")
+		fl.Flush()
+	}))
+	t.Cleanup(backupSrv.Close)
+
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Model.Backup = &BackupModelConfig{BaseURL: backupSrv.URL, Model: "backup-model"}
+
+	var logBuf bytes.Buffer
+	exhausted := agent.NewStubProvider() // errors on first call: a clean primary failure
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""),
+		WithProvider(exhausted),
+		WithLogger(slog.New(slog.NewTextHandler(&logBuf, nil))),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "hello"); err != nil {
+		t.Fatalf("turn must succeed via backup: %v", err)
+	}
+	if !strings.Contains(out.String(), "backup says hi") {
+		t.Fatalf("transcript missing backup output:\n%s", out.String())
+	}
+	if !strings.Contains(logBuf.String(), "routing to backup") {
+		t.Fatalf("failover must be logged via slog:\n%s", logBuf.String())
+	}
+
+	app.renderer.health(app.failover)
+	if !strings.Contains(out.String(), "active=backup") {
+		t.Fatalf("/health must reflect the bench:\n%s", out.String())
+	}
+}
+
+func TestAppHealthWithoutFailover(t *testing.T) {
+	ts := startTestServer(t)
+	var out strings.Builder
+	app, err := NewApp(testConfig(ts.URL), &out, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "x"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	app.renderer.health(app.failover)
+	if !strings.Contains(out.String(), "no failover configured") {
+		t.Fatalf("health line missing:\n%s", out.String())
 	}
 }

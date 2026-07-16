@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
 	skills "github.com/panyam/mcpkit/ext/skills"
 )
 
@@ -15,8 +16,8 @@ import (
 // that cannot be fetched at all is a startup error: the server advertised
 // skills and the host could not honor them, which the user should see before
 // conversing, not during.
-func loadSkillsBlock(c *client.Client, serverID string, rend *renderer) (string, error) {
-	sc := skills.NewClient(c)
+func loadSkillsBlock(c *client.Client, serverID string, rend *renderer, tp core.TracerProvider) (string, error) {
+	sc := skills.NewClient(c, skills.WithTracerProvider(tp))
 	if !sc.SupportsSkills() {
 		return "", nil
 	}
