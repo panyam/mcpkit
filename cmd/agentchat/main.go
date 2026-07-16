@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/panyam/mcpkit/agent/host"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -88,9 +90,9 @@ func runChat(v *viper.Viper) error {
 	}
 	defer logShutdown(context.Background())
 
-	app, err := NewApp(cfg, os.Stdout, os.Stdin,
-		WithTracerProvider(tp),
-		WithLogger(logger),
+	app, err := host.NewApp(cfg, os.Stdout, os.Stdin,
+		host.WithTracerProvider(tp),
+		host.WithLogger(logger),
 	)
 	if err != nil {
 		return err
@@ -126,20 +128,20 @@ func main() {
 
 // buildConfig merges the config file with quick-start settings: a config
 // file wins for everything it specifies; url/model cover the no-file case.
-func buildConfig(path string, urls []string, baseURL, model, apiKeyEnv, instructions string, maxSteps int) (*Config, error) {
+func buildConfig(path string, urls []string, baseURL, model, apiKeyEnv, instructions string, maxSteps int) (*host.Config, error) {
 	if path != "" {
-		return LoadConfig(path)
+		return host.LoadConfig(path)
 	}
 	if len(urls) == 0 || model == "" {
 		return nil, fmt.Errorf("agentchat: need --config, or --model plus at least one --url")
 	}
-	cfg := &Config{
-		Model:        ModelConfig{BaseURL: baseURL, Model: model, APIKeyEnv: apiKeyEnv},
+	cfg := &host.Config{
+		Model:        host.ModelConfig{BaseURL: baseURL, Model: model, APIKeyEnv: apiKeyEnv},
 		Instructions: instructions,
 		MaxSteps:     maxSteps,
 	}
 	for i, u := range urls {
-		cfg.Servers = append(cfg.Servers, ServerConfig{ID: fmt.Sprintf("srv%d", i+1), URL: u})
+		cfg.Servers = append(cfg.Servers, host.ServerConfig{ID: fmt.Sprintf("srv%d", i+1), URL: u})
 	}
 	return cfg, cfg.Validate()
 }
