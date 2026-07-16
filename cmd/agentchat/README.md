@@ -96,11 +96,12 @@ booleans y/n, required fields re-prompt):
 Each assumes a local OpenAI-compatible model on `localhost:1234`.
 
 **Skills server** (`examples/skills`, port 18099 per its README): start the
-fixture, then `go run . --model <m> --url http://localhost:18099/mcp`. The
-skills *tools* surface works today; automatic skill discovery and prompt
-injection (fetching `skill://index.json` and honoring SKILL.md) lands with
-the skills-consumption ticket in the agent epic and will change what the
-model knows, not what it can call.
+fixture, then `go run . --model <m> --url http://localhost:18099/mcp`.
+Skills are discovered and injected automatically: the index is fetched,
+every SKILL.md is digest-verified (mismatches are warned and never
+injected), and verified instructions join the system prompt. The startup
+line `skills: N loaded from <id>` confirms it; set `"skills": false` on a
+server to opt out.
 
 **Auth example** (`examples/auth`): start its server, export the token it
 mints, and connect with `authTokenEnv`. The bearer flows through

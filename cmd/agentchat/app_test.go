@@ -12,6 +12,7 @@ import (
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/core"
+	skills "github.com/panyam/mcpkit/ext/skills"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/mcpkit/testutil"
 )
@@ -254,5 +255,79 @@ func TestTerminalElicitationDeclineAndForm(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "(required)") {
 		t.Fatalf("required re-prompt missing:\n%s", out.String())
+	}
+}
+
+func startSkillsServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := testutil.NewTestServer()
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/skills"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.RegisterWith(srv)
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestAppInjectsVerifiedSkills(t *testing.T) {
+	ts := startSkillsServer(t)
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "ok"})
+	var out strings.Builder
+	cfg := testConfig(ts.URL)
+	cfg.Instructions = "base prompt"
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "hello"); err != nil {
+		t.Fatal(err)
+	}
+	instr := stub.Requests()[0].Instructions
+	for _, want := range []string{"base prompt", "## Skills", "### Skill: brevity", "exactly one short sentence"} {
+		if !strings.Contains(instr, want) {
+			t.Fatalf("instructions missing %q:\n%s", want, instr)
+		}
+	}
+	if !strings.Contains(out.String(), "skills: 1 loaded from test") {
+		t.Fatalf("transcript missing skills line:\n%s", out.String())
+	}
+}
+
+func TestAppSkillsOptOut(t *testing.T) {
+	ts := startSkillsServer(t)
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "ok"})
+	var out strings.Builder
+	off := false
+	cfg := testConfig(ts.URL)
+	cfg.Instructions = "base prompt"
+	cfg.Servers[0].Skills = &off
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	app.RunTurn(context.Background(), "hello")
+	if strings.Contains(stub.Requests()[0].Instructions, "## Skills") {
+		t.Fatalf("opt-out must suppress injection:\n%s", stub.Requests()[0].Instructions)
+	}
+}
+
+func TestAppSkillLessServerIsSilent(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "ok"})
+	var out strings.Builder
+	app, err := NewApp(testConfig(ts.URL), &out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	app.RunTurn(context.Background(), "hello")
+	if strings.Contains(out.String(), "skills:") {
+		t.Fatalf("no-skills server must stay silent:\n%s", out.String())
 	}
 }

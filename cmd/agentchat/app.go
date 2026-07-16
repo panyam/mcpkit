@@ -97,6 +97,21 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		}
 	}
 
+	instructions := cfg.Instructions
+	for i, sc := range cfg.Servers {
+		if sc.Skills != nil && !*sc.Skills {
+			continue
+		}
+		block, err := loadSkillsBlock(app.clients[i], sc.ID, rend)
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		if block != "" {
+			instructions += "\n\n" + block
+		}
+	}
+
 	provider := o.provider
 	if provider == nil {
 		var err error
@@ -114,7 +129,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	runner, err := agent.NewRunner(agent.RunnerConfig{
 		Provider:     provider,
 		Tools:        multi,
-		Instructions: cfg.Instructions,
+		Instructions: instructions,
 		MaxSteps:     cfg.MaxSteps,
 	})
 	if err != nil {

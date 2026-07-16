@@ -49,6 +49,11 @@ type ServerConfig struct {
 	// Allow, when non-empty, restricts this server to the named tools
 	// (a FilterSource capability boundary, not a display preference).
 	Allow []string `json:"allow,omitempty"`
+
+	// Skills controls SEP-2640 skill loading for this server. Nil or true
+	// auto-detects (servers without the capability are skipped silently);
+	// false opts out even when the server advertises skills.
+	Skills *bool `json:"skills,omitempty"`
 }
 
 // AuthConfig selects one of the client auth modes MCP supports. Secrets are

@@ -6,6 +6,7 @@ require (
 	github.com/panyam/mcpkit v0.4.0-b2
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
+	github.com/panyam/mcpkit/ext/skills v0.0.0
 )
 
 require (
@@ -13,6 +14,7 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
@@ -42,3 +44,5 @@ replace github.com/panyam/mcpkit => ../../
 replace github.com/panyam/mcpkit/agent => ../../agent
 
 replace github.com/panyam/mcpkit/ext/auth => ../../ext/auth
+
+replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills

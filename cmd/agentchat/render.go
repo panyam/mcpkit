@@ -129,3 +129,15 @@ func snippet(s string, n int) string {
 	}
 	return s[:n] + "…"
 }
+
+func (r *renderer) skillsLoaded(serverID string, ok, skipped int) {
+	line := fmt.Sprintf("skills: %d loaded from %s", ok, serverID)
+	if skipped > 0 {
+		line += fmt.Sprintf(", %d skipped", skipped)
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}
+
+func (r *renderer) skillSkipped(serverID, uri string, err error) {
+	fmt.Fprintf(r.out, "warning: skill %s from %s not injected: %v\n", uri, serverID, err)
+}
