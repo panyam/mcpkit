@@ -96,3 +96,56 @@ func errorToolResult(msg string) *core.ToolResult {
 		Content: []core.Content{{Type: "text", Text: msg}},
 	}
 }
+
+// AsyncResult is what an AddAsyncFunc handler returns: an immediate
+// acknowledgment (shown to the model as the tool result now), plus an
+// optional completion whose event is injected when the background work
+// finishes.
+type AsyncResult struct {
+	// Ack is the model-facing text returned immediately (e.g. "job started").
+	Ack string
+	// Await, when non-nil, runs in a goroutine; its returned event is
+	// handed to onComplete when it finishes. Nil means fire-and-forget.
+	Await func(ctx context.Context) (IncomingEvent, error)
+}
+
+// AddAsyncFunc registers a host-local tool that does background work without
+// a server-side task: the handler returns an ack immediately (satisfying the
+// tool-call contract — every call needs one response), and if it supplies an
+// Await, that runs on a goroutine and its completion event is delivered to
+// onComplete (a host wires onComplete to its injection policy, so the result
+// reaches the model on a later turn — the same shape as a task.completed
+// event, without a task runtime). For model-visible poll/cancel on local
+// work, use a real server-side task instead.
+func AddAsyncFunc[In any](s *FuncSource, name, description string,
+	fn func(ctx context.Context, in In) (AsyncResult, error),
+	onComplete func(IncomingEvent, error)) error {
+	var schema any
+	if err := json.Unmarshal(core.GenerateSchema[In](), &schema); err != nil {
+		return fmt.Errorf("agent: schema generation for %q: %w", name, err)
+	}
+	return s.AddToolFunc(core.ToolDef{Name: name, Description: description, InputSchema: schema},
+		func(ctx context.Context, args map[string]any) (*core.ToolResult, error) {
+			var in In
+			raw, err := json.Marshal(args)
+			if err != nil {
+				return nil, fmt.Errorf("agent: encode args for %q: %w", name, err)
+			}
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return errorToolResult(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+			res, err := fn(ctx, in)
+			if err != nil {
+				return errorToolResult(err.Error()), nil
+			}
+			if res.Await != nil {
+				go func() {
+					ev, err := res.Await(context.WithoutCancel(ctx))
+					if onComplete != nil {
+						onComplete(ev, err)
+					}
+				}()
+			}
+			return &core.ToolResult{Content: []core.Content{{Type: "text", Text: res.Ack}}}, nil
+		})
+}
