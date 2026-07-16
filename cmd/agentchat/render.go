@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
 
@@ -171,21 +172,25 @@ func (r *renderer) taskStatus(dt *core.DetailedTask) {
 	fmt.Fprintf(r.out, "%s\n", r.dim("  · task "+dt.TaskID+": "+string(dt.Status)))
 }
 
-func (r *renderer) taskDetached(bt *agent.BackgroundTask) {
+func (r *renderer) taskDetached(bt *client.BackgroundTask) {
 	fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") moved to background; /tasks to manage"))
 }
 
-func (r *renderer) taskCompleted(bt *agent.BackgroundTask) {
-	res, err := bt.Result()
+func (r *renderer) taskCompleted(bt *client.BackgroundTask) {
+	dt, err := bt.Result()
 	switch {
 	case err != nil:
 		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") ended: "+snippet(err.Error(), 80)))
+	case dt != nil && dt.Status == core.TaskFailed && dt.Error != nil:
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") failed: "+snippet(dt.Error.Message, 80)))
+	case dt != nil && dt.Result != nil:
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") completed: "+snippet(resultText(dt.Result), 80)))
 	default:
-		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") completed: "+snippet(resultText(res), 80)))
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") "+string(dt.Status)))
 	}
 }
 
-func (r *renderer) taskList(tasks []*agent.BackgroundTask) {
+func (r *renderer) taskList(tasks []*client.BackgroundTask) {
 	if len(tasks) == 0 {
 		fmt.Fprintf(r.out, "%s\n", r.dim("no background tasks"))
 		return

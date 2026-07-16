@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
 
@@ -46,8 +47,8 @@ func connectGraceSource(t *testing.T, f *taskFixture, grace time.Duration, ui El
 	src, _ := connectTaskSource(t, f, ui)
 	log := &hookLog{}
 	src.taskGrace = grace
-	src.onDetach = func(bt *BackgroundTask) { log.add("detach:" + bt.TaskID) }
-	src.onComplete = func(bt *BackgroundTask) { log.add("complete:" + bt.TaskID) }
+	src.onDetach = func(bt *client.BackgroundTask) { log.add("detach:" + bt.TaskID) }
+	src.onComplete = func(bt *client.BackgroundTask) { log.add("complete:" + bt.TaskID) }
 	return src, log
 }
 
@@ -60,8 +61,8 @@ func TestGraceDetachAndBackgroundCompletion(t *testing.T) {
 	src, events := connectGraceSource(t, f, 60*time.Millisecond, acceptAda)
 
 	var btMu sync.Mutex
-	var detachedBT *BackgroundTask
-	src.onDetach = func(bt *BackgroundTask) {
+	var detachedBT *client.BackgroundTask
+	src.onDetach = func(bt *client.BackgroundTask) {
 		btMu.Lock()
 		detachedBT = bt
 		btMu.Unlock()
@@ -91,7 +92,7 @@ func TestGraceDetachAndBackgroundCompletion(t *testing.T) {
 		t.Fatal("background completion never arrived")
 	}
 	bres, berr := detachedBT.Result()
-	if berr != nil || bres.Content[0].Text != "held job done" {
+	if berr != nil || bres.Status != core.TaskCompleted || bres.Result.Content[0].Text != "held job done" {
 		t.Fatalf("background result = %+v %v", bres, berr)
 	}
 	events.waitFor(t, "complete:")
@@ -141,13 +142,13 @@ func TestGraceHoldsDuringInputPause(t *testing.T) {
 func TestBackgroundCancel(t *testing.T) {
 	f := &taskFixture{holdUntil: make(chan struct{})}
 	src, _ := connectGraceSource(t, f, 40*time.Millisecond, acceptAda)
-	btCh := make(chan *BackgroundTask, 1)
-	src.onDetach = func(b *BackgroundTask) { btCh <- b }
+	btCh := make(chan *client.BackgroundTask, 1)
+	src.onDetach = func(b *client.BackgroundTask) { btCh <- b }
 
 	if _, err := src.Call(context.Background(), "long_job", map[string]any{}); err != nil {
 		t.Fatal(err)
 	}
-	var bt *BackgroundTask
+	var bt *client.BackgroundTask
 	select {
 	case bt = <-btCh:
 	case <-time.After(2 * time.Second):
