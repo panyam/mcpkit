@@ -301,3 +301,38 @@ func TestSystemRoleReachesProviderWire(t *testing.T) {
 		t.Fatalf("system role wire shape:\n got %s\nwant %s", raw, want)
 	}
 }
+
+func TestTriggerRuntimeAddRemove(t *testing.T) {
+	clock := newClock()
+	tp := NewTriggerPolicy(TriggerPolicyConfig{now: clock.now})
+
+	// Nothing bound yet: no firing.
+	if tp.OnEvent(evt("s", "user.created", `{}`)) != nil {
+		t.Fatal("no binding should fire before Add")
+	}
+
+	tp.Add(TriggerBinding{Event: "user.created", Instructions: "send an email", Label: "emailer", Cooldown: time.Minute})
+	f := tp.OnEvent(evt("s", "user.created", `{}`))
+	if f == nil || f.Binding.Instructions != "send an email" {
+		t.Fatalf("runtime-added binding must fire: %+v", f)
+	}
+	if len(tp.Bindings()) != 1 {
+		t.Fatalf("bindings snapshot = %d", len(tp.Bindings()))
+	}
+
+	// Re-Add resets the spent slot (re-arm).
+	tp.Add(TriggerBinding{Event: "user.created", Instructions: "send an email", Label: "emailer"})
+	if tp.OnEvent(evt("s", "user.created", `{}`)) == nil {
+		t.Fatal("re-Add must reset the slot so it fires again")
+	}
+
+	if !tp.Remove("", "user.created", "emailer") {
+		t.Fatal("Remove must report success")
+	}
+	if tp.OnEvent(evt("s", "user.created", `{}`)) != nil {
+		t.Fatal("removed binding must not fire")
+	}
+	if tp.Remove("", "user.created", "emailer") {
+		t.Fatal("removing an absent binding must report false")
+	}
+}

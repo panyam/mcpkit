@@ -73,9 +73,61 @@ type ProviderRequest struct {
 	// MaxTokens caps the completion length when positive.
 	MaxTokens int `json:"maxTokens,omitempty"`
 
+	// ToolChoice biases tool calling for this request. Empty is the
+	// provider default ("auto"). Use ToolChoiceRequired to force some
+	// tool call, ToolChoiceNone to forbid, or ToolChoiceFunc(name) to
+	// force a specific tool. Pairs with RunnerConfig.Selector (narrow the
+	// set) to steer a proactive or injected turn toward acting rather than
+	// only replying. Support varies across OpenAI-compatible servers; a
+	// server that ignores it degrades to "auto".
+	ToolChoice ToolChoice `json:"toolChoice,omitempty"`
+
 	// ResponseSchema, when set, asks Generate for structured output
 	// conforming to this JSON Schema. Ignored by Stream.
 	ResponseSchema core.RawJSON `json:"responseSchema,omitempty"`
+}
+
+// ToolChoice is the request-level tool-calling bias. The zero value ("")
+// means the provider default (auto). It marshals to the OpenAI-compatible
+// wire form: the bare strings "auto"/"required"/"none", or the
+// {type:function, function:{name}} object for a forced tool.
+type ToolChoice struct {
+	// Mode is "", "auto", "required", "none", or "function".
+	Mode string `json:"mode,omitempty"`
+	// Name is the forced tool for Mode == "function".
+	Name string `json:"name,omitempty"`
+}
+
+// ToolChoiceAuto lets the model decide (the default; same as the zero value).
+var ToolChoiceAuto = ToolChoice{Mode: "auto"}
+
+// ToolChoiceRequired forces the model to call some tool.
+var ToolChoiceRequired = ToolChoice{Mode: "required"}
+
+// ToolChoiceNone forbids tool calls for this request.
+var ToolChoiceNone = ToolChoice{Mode: "none"}
+
+// ToolChoiceFunc forces the model to call the named tool.
+func ToolChoiceFunc(name string) ToolChoice { return ToolChoice{Mode: "function", Name: name} }
+
+// IsZero reports whether no choice was set (provider default applies).
+func (tc ToolChoice) IsZero() bool { return tc.Mode == "" }
+
+// wire renders the OpenAI-compatible tool_choice value, or nil when unset.
+func (tc ToolChoice) wire() any {
+	switch tc.Mode {
+	case "", "auto":
+		if tc.Mode == "" {
+			return nil
+		}
+		return "auto"
+	case "required", "none":
+		return tc.Mode
+	case "function":
+		return map[string]any{"type": "function", "function": map[string]any{"name": tc.Name}}
+	default:
+		return nil
+	}
 }
 
 // Usage reports token consumption for one model call.

@@ -214,6 +214,11 @@ func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]
 	if req.MaxTokens > 0 {
 		body["max_tokens"] = req.MaxTokens
 	}
+	if len(req.Tools) > 0 && !req.ToolChoice.IsZero() {
+		if tc := req.ToolChoice.wire(); tc != nil {
+			body["tool_choice"] = tc
+		}
+	}
 	if stream {
 		body["stream"] = true
 		body["stream_options"] = map[string]any{"include_usage": true}
