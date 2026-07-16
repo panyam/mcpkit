@@ -52,7 +52,7 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 
 The loop: stream the model, dispatch its tool calls in parallel goroutines (emission serialized, RoleTool messages appended in call order), feed results back, repeat until a no-tool-call response, bounded by MaxSteps (default 8) and ctx cancellation. Every tool failure shape (unknown tool, transport, bad args, IsError results) is fed back to the model as model-visible text, never a loop abort; only cancellation, provider failure, or the step cap end a turn early. `TurnResult.Messages` holds exactly the appended entries so callers thread history with one append.
 
-Event kinds: turn-begin, thinking-begin/-delta/-end, text-delta, tool-begin, tool-end (includes IsError results), tool-error (dispatch failures only), turn-end, error. Events carry no turn or session identity: in-process the emit closure is already turn-scoped, and wire layers wrap events in their own envelope (session id, turn id, sequence), keeping the module out of the ID-scheme business and the event stream deterministic. The elicitation-request kind joins the taxonomy with the milestone 2 elicitation seam (issue 887).
+Event kinds: turn-begin, thinking-begin/-delta/-end, text-delta, tool-begin, tool-end (includes IsError results), tool-error (dispatch failures only), turn-end, error. Events carry no turn or session identity: in-process the emit closure is already turn-scoped, and wire layers wrap events in their own envelope (session id, turn id, sequence), keeping the module out of the ID-scheme business and the event stream deterministic. Elicitation deliberately does NOT appear in the taxonomy: the event stream is one-way, and elicitation is request/response. It rides the ElicitationUI callback seam (see Elicitation below); wire surfaces project that seam with their own request/response framing rather than faking it over events plus correlation IDs.
 
 ### ToolSource
 
@@ -89,6 +89,18 @@ Two rules keep that projection one-to-one:
 
 1. **Every Runner event type is wire-serializable from day one.** JSON tags, a stable `kind` discriminator, no Go-only payloads (channels, funcs, interfaces without concrete marshaling) in event fields. Enforced by a round-trip test (see `agent/CONSTRAINTS.md`).
 2. **The wire layer stays out of the module until it has two consumers.** The first web host builds the WebSocket mapping in its own package; when a second application needs it, the mapping is promoted into `agent/` (or a sibling package) as-is. This mirrors how the fire-and-forget-then-subscribe chat shape should work: submit returns an id immediately, the event stream carries the turn.
+
+## Elicitation: one UI seam, two protocol inlets
+
+A surface implements exactly one callback:
+
+```go
+type ElicitationUI func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error)
+```
+
+`ElicitationCoordinator` wraps it with strict-FIFO serialization (one request presented at a time per user session, so parallel tool calls and multiple servers never stack dialogs; a waiter whose ctx ends leaves the queue cleanly). Registration is a single point because the client already unifies the wires: `client.WithElicitationHandler(coord.Handler())` covers legacy-wire server-initiated elicitation, and `client.DefaultInputHandler(c)` (as the ClientSource input handler) routes stateless-wire and task input_required rounds through the same registered handler.
+
+Consequence: **the agent does not care whether a server is stateful, stateless, or legacy.** Wire differences are absorbed at the client layer; per-server wire mode (client.WithClientMode) is host configuration, not agent code. Decline and cancel are results, not errors. URL-mode requests pass through the same UI when the client opts in via WithElicitationURLSupport.
 
 ## Vendor `_meta` prefix
 
