@@ -34,7 +34,7 @@ func testConfig(url string) *Config {
 func TestAppTranscriptEndToEnd(t *testing.T) {
 	ts := startTestServer(t)
 	stub := agent.NewStubProvider(
-		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "echo", Args: json.RawMessage(`{"message":"hi"}`)}}},
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "echo", Args: core.NewRawJSON(json.RawMessage(`{"message":"hi"}`))}}},
 		agent.StubTurn{Text: "The server said: echo: hi"},
 	)
 
@@ -121,7 +121,7 @@ func TestAppElicitationThroughScriptedStdin(t *testing.T) {
 	t.Cleanup(hts.Close)
 
 	stub := agent.NewStubProvider(
-		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "ask", Args: json.RawMessage(`{}`)}}},
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "ask", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
 		agent.StubTurn{Text: "you picked green"},
 	)
 

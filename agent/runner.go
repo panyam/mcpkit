@@ -242,8 +242,8 @@ func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit fun
 		return failed(fmt.Errorf("%w: %q (no tools offered)", ErrUnknownTool, call.Name))
 	}
 	args := map[string]any{}
-	if len(call.Args) > 0 {
-		if err := json.Unmarshal(call.Args, &args); err != nil {
+	if call.Args.Len() > 0 {
+		if err := call.Args.Bind(&args); err != nil {
 			return failed(fmt.Errorf("agent: tool %q arguments are not a JSON object: %w", call.Name, err))
 		}
 	}

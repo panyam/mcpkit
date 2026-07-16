@@ -72,7 +72,7 @@ func TestSelectorSeesFreshListEachStep(t *testing.T) {
 	})
 	var perStep [][]string
 	stub := NewStubProvider(
-		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "t1", Args: json.RawMessage(`{}`)}}},
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "t1", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
 		StubTurn{Text: "done"},
 	)
 	r, _ := NewRunner(RunnerConfig{

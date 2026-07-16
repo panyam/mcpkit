@@ -25,3 +25,9 @@ All vendor-namespaced `_meta` keys this module reads or writes use `io.github.pa
 The Runner exposes callbacks and event streams; it never prints, prompts, or renders. Anything user-facing lives in surfaces (agentchat, web hosts) built on the module.
 
 **Verify:** `grep -rn "fmt.Print\|os.Stdout\|os.Stdin" agent/ --include='*.go' | grep -v _test.go` returns nothing.
+
+## A5: core.RawJSON for JSON-valued public fields
+
+JSON-valued fields in this module's public types use `core.RawJSON` (wire-transparent, parse-once, typed Bind), never bare `json.RawMessage`. JSON-fragment fields (streamed argument pieces in Deltas) stay strings; the Accumulator's fold is the promotion boundary where fragments become a RawJSON value.
+
+**Verify:** `grep -n "json.RawMessage" agent/*.go | grep -v _test | grep -v NewRawJSON` shows only conversion sites, no struct fields.
