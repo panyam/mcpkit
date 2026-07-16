@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -162,7 +163,12 @@ func TestBackgroundCancel(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("cancel must finish the handle")
 	}
-	if _, err := bt.Result(); err == nil {
-		t.Fatal("cancelled task must surface an error outcome")
+	// Cancel reaches Done two ways, both valid: the poll context cancels
+	// (context.Canceled) or the next tasks/get returns cancelled status
+	// (nil error, cancelled DetailedTask). Accept either.
+	dt, err := bt.Result()
+	cancelled := errors.Is(err, context.Canceled) || (dt != nil && dt.Status == core.TaskCancelled)
+	if !cancelled {
+		t.Fatalf("cancel must surface a cancellation outcome: dt=%+v err=%v", dt, err)
 	}
 }
