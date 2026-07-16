@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"sync/atomic"
@@ -91,5 +92,11 @@ func TestWithoutToolsListChangedHandler_NoFire(t *testing.T) {
 	}
 	if generic.Load() == 0 {
 		t.Fatal(fmt.Sprint("generic callback should observe the broadcast; got none"))
+	}
+}
+
+func TestWaitForTaskWithInputRequiresHandler(t *testing.T) {
+	if _, err := client.WaitForTaskWithInput(context.Background(), nil, "t-1", nil); err == nil {
+		t.Fatal("nil handler must be rejected before any network use")
 	}
 }
