@@ -162,3 +162,10 @@ func (r *renderer) triggerFired(label string) {
 func (r *renderer) eventDropped(serverID, name string) {
 	fmt.Fprintf(r.out, "%s\n", r.dim("warning: event buffer full, dropped "+name+" from "+serverID))
 }
+
+func (r *renderer) taskStatus(dt *core.DetailedTask) {
+	if dt.Status == core.TaskWorking {
+		return // polling noise; begin/end and pauses are the signal
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim("  · task "+dt.TaskID+": "+string(dt.Status)))
+}

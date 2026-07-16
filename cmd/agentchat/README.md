@@ -155,11 +155,13 @@ mints, and connect with `authTokenEnv`. The bearer flows through
 `client.WithClientBearerToken`; OAuth token sources are wired the same way in
 config once a flow needs them.
 
-**Tasks v2** (`examples/tasks-v2`): connects and lists tools, but calling a
-task-returning tool currently fails fast with a task-not-supported dispatch
-error fed back to the model. Task-aware dispatch (poll/resume, input pauses
-through the same elicitation prompts) is the next agent-epic ticket; this
-note is the honest boundary of what agentchat does today.
+**Tasks v2** (`examples/tasks-v2`): task-returning tools work end to end.
+agentchat negotiates the tasks extension, polls task-backed calls to a
+terminal state (honoring server poll hints), renders status transitions as
+dim `· task <id>: <status>` lines, and routes input_required pauses through
+the same terminal elicitation prompts as everything else — one InputHandler
+covers ephemeral MRTR and task-backed pauses alike. Try `confirm_delete` or
+`multi_input` from the example.
 
 ## Testing
 
