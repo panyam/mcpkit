@@ -1,0 +1,264 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"slices"
+	"sync"
+
+	"github.com/panyam/mcpkit/core"
+)
+
+// DefaultMaxSteps bounds a turn when RunnerConfig.MaxSteps is zero. Eight
+// model calls is generous for real workflows; hitting it usually means the
+// model is looping on a failing tool.
+const DefaultMaxSteps = 8
+
+// ErrMaxSteps is returned (wrapped) by Run when the model keeps requesting
+// tool calls past the step cap. Check with errors.Is.
+var ErrMaxSteps = errors.New("agent: max steps exceeded")
+
+// RunnerConfig assembles a Runner.
+type RunnerConfig struct {
+	// Provider is the LLM. Required.
+	Provider Provider
+
+	// Tools is the tool surface offered to the model. Optional: nil means
+	// the model is offered no tools and any hallucinated call fails back
+	// into the conversation.
+	Tools ToolSource
+
+	// Instructions is the system prompt sent on every step.
+	Instructions string
+
+	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
+	MaxSteps int
+}
+
+// Runner executes turns: the multi-step loop that streams the model,
+// dispatches its tool calls, feeds results back, and repeats until the model
+// answers in text. Safe for concurrent use; each Run call is an independent
+// turn.
+type Runner struct {
+	cfg RunnerConfig
+}
+
+// NewRunner validates cfg and returns a Runner.
+func NewRunner(cfg RunnerConfig) (*Runner, error) {
+	if cfg.Provider == nil {
+		return nil, fmt.Errorf("agent: RunnerConfig requires a Provider")
+	}
+	if cfg.MaxSteps <= 0 {
+		cfg.MaxSteps = DefaultMaxSteps
+	}
+	return &Runner{cfg: cfg}, nil
+}
+
+// TurnResult is the completed turn. Messages holds exactly the entries the
+// turn appended (assistant messages and tool results, in order), so callers
+// thread history as append(history, result.Messages...).
+type TurnResult struct {
+	Text         string    `json:"text,omitempty"`
+	Messages     []Message `json:"messages"`
+	Usage        Usage     `json:"usage"`
+	Steps        int       `json:"steps"`
+	FinishReason string    `json:"finishReason,omitempty"`
+}
+
+// Run executes one turn against history. Events stream to emit (nil is
+// allowed); emit is never called concurrently. Tool failures of every kind
+// (unknown tool, transport, bad args) are fed back to the model as
+// error-marked tool results and the loop continues; only ctx cancellation,
+// provider failure, or the step cap abort the turn. The returned error wraps
+// ErrMaxSteps when the cap was hit.
+func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (*TurnResult, error) {
+	if emit == nil {
+		emit = func(Event) {}
+	}
+	emit(Event{Kind: EventTurnBegin})
+
+	msgs := slices.Clone(history)
+	var added []Message
+	var usage Usage
+
+	for step := 1; step <= r.cfg.MaxSteps; step++ {
+		var tools []core.ToolDef
+		if r.cfg.Tools != nil {
+			var err error
+			if tools, err = r.cfg.Tools.Tools(ctx); err != nil {
+				return nil, r.fail(emit, fmt.Errorf("agent: listing tools: %w", err))
+			}
+		}
+
+		stream, err := r.cfg.Provider.Stream(ctx, ProviderRequest{
+			Instructions: r.cfg.Instructions,
+			Messages:     msgs,
+			Tools:        tools,
+		})
+		if err != nil {
+			return nil, r.fail(emit, err)
+		}
+		resp, err := consumeStream(stream, step, emit)
+		stream.Close()
+		if err != nil {
+			return nil, r.fail(emit, err)
+		}
+		if resp.Usage != nil {
+			usage.InputTokens += resp.Usage.InputTokens
+			usage.OutputTokens += resp.Usage.OutputTokens
+		}
+
+		assistant := Message{Role: RoleAssistant, Text: resp.Text, ToolCalls: resp.ToolCalls}
+		msgs = append(msgs, assistant)
+		added = append(added, assistant)
+
+		if len(resp.ToolCalls) == 0 {
+			result := &TurnResult{
+				Text:         resp.Text,
+				Messages:     added,
+				Usage:        usage,
+				Steps:        step,
+				FinishReason: resp.FinishReason,
+			}
+			emit(Event{Kind: EventTurnEnd, Result: result})
+			return result, nil
+		}
+
+		toolMsgs := r.dispatch(ctx, step, resp.ToolCalls, emit)
+		if err := ctx.Err(); err != nil {
+			return nil, r.fail(emit, err)
+		}
+		msgs = append(msgs, toolMsgs...)
+		added = append(added, toolMsgs...)
+	}
+
+	return nil, r.fail(emit, fmt.Errorf("%w (%d steps)", ErrMaxSteps, r.cfg.MaxSteps))
+}
+
+func (r *Runner) fail(emit func(Event), err error) error {
+	emit(Event{Kind: EventError, Error: err.Error()})
+	return err
+}
+
+// consumeStream folds one model call, emitting deltas as they arrive.
+// Thinking markers wrap contiguous reasoning: begin before the first
+// reasoning delta, end when the step moves on to text, tool calls, or
+// completes.
+func consumeStream(stream Stream, step int, emit func(Event)) (*ProviderResponse, error) {
+	var acc Accumulator
+	thinking := false
+	endThinking := func() {
+		if thinking {
+			emit(Event{Kind: EventThinkingEnd, Step: step})
+			thinking = false
+		}
+	}
+	for {
+		d, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		acc.Add(d)
+		switch d.Kind {
+		case DeltaReasoning:
+			if !thinking {
+				emit(Event{Kind: EventThinkingBegin, Step: step})
+				thinking = true
+			}
+			emit(Event{Kind: EventThinkingDelta, Step: step, Text: d.Text})
+		case DeltaText:
+			endThinking()
+			emit(Event{Kind: EventTextDelta, Step: step, Text: d.Text})
+		case DeltaToolCallStart:
+			endThinking()
+		}
+	}
+	endThinking()
+	return acc.Result(), nil
+}
+
+// dispatch runs the step's tool calls concurrently, serializes event
+// emission, and returns RoleTool messages in call order regardless of
+// completion order.
+func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit func(Event)) []Message {
+	results := make([]Message, len(calls))
+	var emitMu sync.Mutex
+	locked := func(ev Event) {
+		emitMu.Lock()
+		emit(ev)
+		emitMu.Unlock()
+	}
+
+	var wg sync.WaitGroup
+	for i, call := range calls {
+		wg.Add(1)
+		go func(i int, call ToolCall) {
+			defer wg.Done()
+			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
+			text := r.callTool(ctx, step, call, locked)
+			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
+		}(i, call)
+	}
+	wg.Wait()
+	return results
+}
+
+// callTool executes one call and renders the text fed back to the model.
+// Every failure shape becomes model-visible text rather than a turn abort.
+func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit func(Event)) string {
+	failed := func(err error) string {
+		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
+		return fmt.Sprintf("tool call failed: %v", err)
+	}
+
+	if r.cfg.Tools == nil {
+		return failed(fmt.Errorf("%w: %q (no tools offered)", ErrUnknownTool, call.Name))
+	}
+	args := map[string]any{}
+	if len(call.Args) > 0 {
+		if err := json.Unmarshal(call.Args, &args); err != nil {
+			return failed(fmt.Errorf("agent: tool %q arguments are not a JSON object: %w", call.Name, err))
+		}
+	}
+	res, err := r.cfg.Tools.Call(ctx, call.Name, args)
+	if err != nil {
+		return failed(err)
+	}
+	emit(Event{Kind: EventToolEnd, Step: step, ToolCall: &call, ToolResult: res})
+	text := toolResultText(res)
+	if res.IsError {
+		return "tool reported an error: " + text
+	}
+	return text
+}
+
+// toolResultText flattens a tool result for the model: text content items
+// joined by newlines, falling back to marshaled structured content, then to
+// a neutral placeholder so the model always receives something parseable.
+func toolResultText(res *core.ToolResult) string {
+	var parts []string
+	for _, c := range res.Content {
+		if c.Type == "text" && c.Text != "" {
+			parts = append(parts, c.Text)
+		}
+	}
+	if len(parts) > 0 {
+		out := parts[0]
+		for _, p := range parts[1:] {
+			out += "\n" + p
+		}
+		return out
+	}
+	if res.StructuredContent != nil {
+		if raw, err := json.Marshal(res.StructuredContent); err == nil {
+			return string(raw)
+		}
+	}
+	return "(empty result)"
+}
