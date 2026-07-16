@@ -66,6 +66,28 @@ the primary retries the backup once, the primary is benched for a cooldown,
 and transitions are logged. A stream that already produced output is never
 silently replayed. `/health` shows the current snapshot.
 
+## Agent-managed events and tasks (meta-tools)
+
+With `metaTools` enabled (implied whenever events or triggers are configured),
+the model gets host-local tools to manage its own async: `subscribe_events` /
+`unsubscribe` / `list_subscriptions`, `create_trigger` / `remove_trigger` /
+`list_triggers`, and `list_tasks` / `cancel_task`. So a conversation can set up
+standing behavior:
+
+```
+> email me whenever a user is created
+⚙ subscribe_events({"server":"crm","name":"user.created"})
+⚙ create_trigger({"event":"user.created","instructions":"send a welcome email","label":"welcome"})
+Done — I'll email new users.
+  (later, a user is created)
+· trigger: welcome
+⚙ send_email({"to":"ada@example.com"})
+Sent a welcome email to ada@example.com.
+```
+
+`create_trigger` works for task completions too (they're `task.completed`
+events), so "notify me when the build finishes" is the same tool.
+
 ## Background tasks
 
 A task-backed tool call stays inline for a grace window (`taskGraceSec`,

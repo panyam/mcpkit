@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -400,4 +401,49 @@ type countingSource struct {
 func (c *countingSource) Tools(ctx context.Context) ([]core.ToolDef, error) {
 	c.listCount++
 	return c.fakeSource.Tools(ctx)
+}
+
+func TestAddAsyncFuncAckThenComplete(t *testing.T) {
+	release := make(chan struct{})
+	completed := make(chan IncomingEvent, 1)
+	s := NewFuncSource()
+	err := AddAsyncFunc(s, "build", "starts a build",
+		func(ctx context.Context, in struct {
+			Target string `json:"target"`
+		}) (AsyncResult, error) {
+			return AsyncResult{
+				Ack: "build started for " + in.Target,
+				Await: func(ctx context.Context) (IncomingEvent, error) {
+					<-release
+					return IncomingEvent{Name: "build.done", Server: "local",
+						Data: core.NewRawJSON([]byte(`{"target":"` + in.Target + `","ok":true}`))}, nil
+				},
+			}, nil
+		},
+		func(ev IncomingEvent, err error) { completed <- ev })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.Call(context.Background(), "build", map[string]any{"target": "prod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError || res.Content[0].Text != "build started for prod" {
+		t.Fatalf("ack must return immediately: %+v", res)
+	}
+	select {
+	case <-completed:
+		t.Fatal("completion must NOT fire before the work finishes")
+	case <-time.After(30 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case ev := <-completed:
+		if ev.Name != "build.done" {
+			t.Fatalf("completion event = %+v", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("completion event never delivered")
+	}
 }
