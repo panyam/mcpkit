@@ -75,6 +75,10 @@ Two narrowing mechanisms with distinct roles (issues 901/902):
 
 The purity rule that keeps the lifecycle single-sourced: selectors are pure functions of (history, freshly listed tools). Invalidation has exactly one channel: notifications/tools/list_changed -> client.WithToolsListChangedHandler -> MultiSource.Invalidate, after which per-step re-listing picks up the change. A caching selector keys on tool-list content, never on time or notifications. Searchable/deferred tools (a search_tools meta-tool exposing schemas on demand) remain future work.
 
+### Event pipeline primitives and gocurrent
+
+The generic stages (Stage[E], Filter, Transform, Window) are deliberately synchronous, caller-driven, and clock-injected: the policies drain at turn boundaries under the host's own locking, and every windowing test runs on a fake clock. gocurrent already ships the asynchronous complement (Pipeline[T] channel components, Mapper, Broadcast filters, Reducer with FlushPeriod), and the two compose without adaptation: async pre-processing can feed InjectionPolicy.Ingest from a gocurrent component's output channel. The pushdown position, settled 2026-07-16: when a second consumer of the synchronous stages appears, they graduate INTO gocurrent as a new surface (renamed; gocurrent.Pipeline already means the channel component), never replace it, and the agent module re-imports. Until then they live here to avoid cross-repo release ordering for a single consumer.
+
 ### Policy hooks
 
 Two seams, both no-op by default:
