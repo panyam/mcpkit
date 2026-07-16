@@ -18,6 +18,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,6 +33,13 @@ type WaitOptions struct {
 	// 0 (the default) means: respect whatever the server returned, with a
 	// 1-second floor and a 30-second cap if the server didn't say.
 	PollInterval time.Duration
+
+	// OnStatus observes every polled snapshot (WaitForTask and
+	// WaitForTaskWithInput), including the input_required snapshot before
+	// any handler runs. Progress display, logging, and metrics hang off
+	// this; returning is the only control (observation, not steering).
+	// Nil skips.
+	OnStatus func(*core.DetailedTask)
 }
 
 // ToolCallResult is the discriminated union returned by ToolCall. Exactly
@@ -237,8 +245,71 @@ func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOpti
 		if err != nil {
 			return nil, err
 		}
+		if len(opts) > 0 && opts[0].OnStatus != nil {
+			opts[0].OnStatus(dt)
+		}
 		if dt.Status.IsTerminal() {
 			return dt, nil
+		}
+
+		wait := nextPollWait(override, dt.PollIntervalMs)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+}
+
+// WaitForTaskWithInput polls like WaitForTask but also services
+// input_required pauses: the pending inputRequests are resolved through
+// handler (the same InputHandler shape CallToolWithInputs uses for
+// ephemeral MRTR, so one handler covers mid-call input on both the
+// ephemeral and task-backed paths), delivered via tasks/update, and polling
+// continues to a terminal state. A handler error aborts the wait; the task
+// keeps running server-side and can be resumed by a later call or
+// cancelled explicitly.
+//
+// This is the "tighter loop" WaitForTask's doc alludes to: WaitForTask
+// deliberately never answers input (its callers poll fire-and-forget
+// workloads), so its behavior is unchanged.
+func WaitForTaskWithInput(ctx context.Context, c *Client, taskID string, handler InputHandler, opts ...WaitOptions) (*core.DetailedTask, error) {
+	if handler == nil {
+		return nil, errors.New("WaitForTaskWithInput: handler is required")
+	}
+	var override time.Duration
+	var onStatus func(*core.DetailedTask)
+	if len(opts) > 0 {
+		override = opts[0].PollInterval
+		onStatus = opts[0].OnStatus
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		dt, err := GetTask(c, taskID)
+		if err != nil {
+			return nil, err
+		}
+		if onStatus != nil {
+			onStatus(dt)
+		}
+		if dt.Status.IsTerminal() {
+			return dt, nil
+		}
+		if dt.Status == core.TaskInputRequired && len(dt.InputRequests) > 0 {
+			responses, err := handler(ctx, dt.InputRequests)
+			if err != nil {
+				return nil, fmt.Errorf("task %s input: %w", taskID, err)
+			}
+			if err := UpdateTask(c, core.UpdateTaskRequest{TaskID: taskID, InputResponses: responses}); err != nil {
+				return nil, err
+			}
+			continue
 		}
 
 		wait := nextPollWait(override, dt.PollIntervalMs)

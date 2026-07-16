@@ -99,6 +99,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
 			client.WithGetSSEStream(),
+			client.WithTasksExtension(),
 			client.WithElicitationHandler(coord.Handler()),
 			client.WithToolsListChangedHandler(multi.Invalidate),
 			client.WithTracerProvider(o.tp),
@@ -119,7 +120,8 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		app.clients = append(app.clients, c)
 
 		var src agent.ToolSource = agent.NewClientSource(c,
-			agent.WithInputHandler(client.DefaultInputHandler(c)))
+			agent.WithInputHandler(client.DefaultInputHandler(c)),
+			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { rend.taskStatus(dt) }))
 		if len(sc.Allow) > 0 {
 			allowed := make(map[string]bool, len(sc.Allow))
 			for _, name := range sc.Allow {
