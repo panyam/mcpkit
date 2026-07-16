@@ -51,6 +51,21 @@ startup when a named variable is unset. A per-server `allow` list is a
 capability boundary (a FilterSource): tools outside it are neither offered to
 the model nor callable.
 
+## Telemetry and failover
+
+`--exporter` selects telemetry (`stdout`, `otlp`, `auto`; empty = off, zero
+overhead) and `--otlp-endpoint` points at a collector (default
+localhost:4317), the same contract the repo's examples use. With an exporter
+on, every turn emits `agent.turn` / `agent.step` / `agent.tool` spans
+stitched to client dispatch and server spans (one trace end to end), and
+operational logs flow through slog to the same collector. The transcript is
+UI, not logging: it always renders to the terminal regardless of exporter.
+
+`model.backup` in the config enables failover: a call that fails cleanly on
+the primary retries the backup once, the primary is benched for a cooldown,
+and transitions are logged. A stream that already produced output is never
+silently replayed. `/health` shows the current snapshot.
+
 ## Auth modes
 
 `auth.type` selects among the client auth modes MCP supports:
@@ -69,7 +84,7 @@ underscores: `--base-url` is `AGENTCHAT_BASE_URL`); an explicit flag beats
 the env var.
 
 In the REPL: `/tools` lists the merged tool index, `/history` the
-conversation, `/quit` exits; Ctrl-C cancels the in-flight turn. During an
+conversation, `/health` the failover snapshot, `/quit` exits; Ctrl-C cancels the in-flight turn. During an
 elicitation, `/d` declines and `/c` cancels.
 
 ## What a session looks like

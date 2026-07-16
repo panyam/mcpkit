@@ -20,11 +20,11 @@ All vendor-namespaced `_meta` keys this module reads or writes use `io.github.pa
 
 **Verify:** `grep -rn '_meta\|Meta\[' agent/ --include='*.go' | grep -i 'io\.github\|dev\.\|com\.'` shows only the pinned prefix.
 
-## A4: The loop never owns the user interface
+## A4: The loop never owns the user interface or process-global output
 
-The Runner exposes callbacks and event streams; it never prints, prompts, or renders. Anything user-facing lives in surfaces (agentchat, web hosts) built on the module.
+The Runner exposes callbacks and event streams; it never prints, prompts, or renders. Logging is the same: agent code logs only through an injected *slog.Logger (nil discards), never fmt, os.Stdout/Stderr, log, or slog.Default. Anything user-facing lives in surfaces (agentchat, web hosts) built on the module.
 
-**Verify:** `grep -rn "fmt.Print\|os.Stdout\|os.Stdin" agent/ --include='*.go' | grep -v _test.go` returns nothing.
+**Verify:** `grep -rn "fmt.Print\|os.Stdout\|os.Stdin\|slog.Default\|log.Print" agent/ --include='*.go' | grep -v _test.go` returns nothing.
 
 ## A5: core.RawJSON for JSON-valued public fields
 

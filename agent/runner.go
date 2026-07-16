@@ -37,6 +37,13 @@ type RunnerConfig struct {
 	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
 	MaxSteps int
 
+	// TracerProvider opts the Runner into SEP 414 span emission:
+	// agent.turn per Run, agent.step per model call, agent.tool per
+	// dispatch, with ctx threading so client-side dispatch spans (and
+	// through them server spans) stitch as children. Nil or
+	// core.NoopTracerProvider means zero overhead, the repo-wide pattern.
+	TracerProvider core.TracerProvider
+
 	// Selector, when non-nil, narrows the tools offered to the model each
 	// step. It runs on the freshly listed set with the full history, so
 	// context-aware routing (keyword, embedding, scored) plugs in here.
@@ -70,6 +77,9 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 	if cfg.MaxSteps <= 0 {
 		cfg.MaxSteps = DefaultMaxSteps
 	}
+	if cfg.TracerProvider == nil {
+		cfg.TracerProvider = core.NoopTracerProvider{}
+	}
 	return &Runner{cfg: cfg}, nil
 }
 
@@ -94,6 +104,8 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 	if emit == nil {
 		emit = func(Event) {}
 	}
+	ctx, turnSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.turn")
+	defer turnSpan.End()
 	emit(Event{Kind: EventTurnBegin})
 
 	msgs := slices.Clone(history)
@@ -101,31 +113,43 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 	var usage Usage
 
 	for step := 1; step <= r.cfg.MaxSteps; step++ {
+		stepCtx, stepSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.step",
+			core.Attribute{Key: "agent.step", Value: fmt.Sprint(step)})
+
 		var tools []core.ToolDef
 		if r.cfg.Tools != nil {
 			var err error
-			if tools, err = r.cfg.Tools.Tools(ctx); err != nil {
-				return nil, r.fail(emit, fmt.Errorf("agent: listing tools: %w", err))
+			if tools, err = r.cfg.Tools.Tools(stepCtx); err != nil {
+				stepSpan.RecordError(err)
+				stepSpan.End()
+				return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: listing tools: %w", err))
 			}
 			if r.cfg.Selector != nil {
-				if tools, err = r.cfg.Selector(ctx, msgs, tools); err != nil {
-					return nil, r.fail(emit, fmt.Errorf("agent: tool selector: %w", err))
+				if tools, err = r.cfg.Selector(stepCtx, msgs, tools); err != nil {
+					stepSpan.RecordError(err)
+					stepSpan.End()
+					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: tool selector: %w", err))
 				}
 			}
 		}
+		stepSpan.SetAttribute("agent.tools.offered", fmt.Sprint(len(tools)))
 
-		stream, err := r.cfg.Provider.Stream(ctx, ProviderRequest{
+		stream, err := r.cfg.Provider.Stream(stepCtx, ProviderRequest{
 			Instructions: r.cfg.Instructions,
 			Messages:     msgs,
 			Tools:        tools,
 		})
 		if err != nil {
-			return nil, r.fail(emit, err)
+			stepSpan.RecordError(err)
+			stepSpan.End()
+			return nil, r.failSpan(emit, turnSpan, err)
 		}
 		resp, err := consumeStream(stream, step, emit)
 		stream.Close()
 		if err != nil {
-			return nil, r.fail(emit, err)
+			stepSpan.RecordError(err)
+			stepSpan.End()
+			return nil, r.failSpan(emit, turnSpan, err)
 		}
 		if resp.Usage != nil {
 			usage.InputTokens += resp.Usage.InputTokens
@@ -137,6 +161,7 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 		added = append(added, assistant)
 
 		if len(resp.ToolCalls) == 0 {
+			stepSpan.End()
 			result := &TurnResult{
 				Text:         resp.Text,
 				Messages:     added,
@@ -144,22 +169,28 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 				Steps:        step,
 				FinishReason: resp.FinishReason,
 			}
+			turnSpan.SetAttribute("agent.steps", fmt.Sprint(step))
+			turnSpan.SetAttribute("agent.finish_reason", resp.FinishReason)
+			turnSpan.SetAttribute("agent.tokens.input", fmt.Sprint(usage.InputTokens))
+			turnSpan.SetAttribute("agent.tokens.output", fmt.Sprint(usage.OutputTokens))
 			emit(Event{Kind: EventTurnEnd, Result: result})
 			return result, nil
 		}
 
-		toolMsgs := r.dispatch(ctx, step, resp.ToolCalls, emit)
+		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, emit)
+		stepSpan.End()
 		if err := ctx.Err(); err != nil {
-			return nil, r.fail(emit, err)
+			return nil, r.failSpan(emit, turnSpan, err)
 		}
 		msgs = append(msgs, toolMsgs...)
 		added = append(added, toolMsgs...)
 	}
 
-	return nil, r.fail(emit, fmt.Errorf("%w (%d steps)", ErrMaxSteps, r.cfg.MaxSteps))
+	return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w (%d steps)", ErrMaxSteps, r.cfg.MaxSteps))
 }
 
-func (r *Runner) fail(emit func(Event), err error) error {
+func (r *Runner) failSpan(emit func(Event), span core.Span, err error) error {
+	span.RecordError(err)
 	emit(Event{Kind: EventError, Error: err.Error()})
 	return err
 }
@@ -221,8 +252,11 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit 
 		wg.Add(1)
 		go func(i int, call ToolCall) {
 			defer wg.Done()
+			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.tool",
+				core.Attribute{Key: "agent.tool.name", Value: call.Name})
 			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
-			text := r.callTool(ctx, step, call, locked)
+			text := r.callTool(toolCtx, step, call, locked, toolSpan)
+			toolSpan.End()
 			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
 		}(i, call)
 	}
@@ -232,8 +266,9 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit 
 
 // callTool executes one call and renders the text fed back to the model.
 // Every failure shape becomes model-visible text rather than a turn abort.
-func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit func(Event)) string {
+func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit func(Event), span core.Span) string {
 	failed := func(err error) string {
+		span.RecordError(err)
 		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
 		return fmt.Sprintf("tool call failed: %v", err)
 	}
@@ -251,6 +286,7 @@ func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit fun
 	if err != nil {
 		return failed(err)
 	}
+	span.SetAttribute("agent.tool.is_error", fmt.Sprint(res.IsError))
 	emit(Event{Kind: EventToolEnd, Step: step, ToolCall: &call, ToolResult: res})
 	text := toolResultText(res)
 	if res.IsError {
