@@ -141,6 +141,17 @@ func WithNotificationCallback(fn func(method string, params any)) ClientOption {
 	return func(c *Client) { c.onNotify = fn }
 }
 
+// WithToolsListChangedHandler sets a dedicated callback for
+// notifications/tools/list_changed. Exists so cache-invalidation plumbing
+// (e.g. dropping a memoized tool index when the server registers or removes
+// tools at runtime) composes with, rather than consumes, the single generic
+// WithNotificationCallback: the notification is still delivered to the
+// generic callback afterward. The callback carries no payload because the
+// notification has none; re-list to observe the change.
+func WithToolsListChangedHandler(fn func()) ClientOption {
+	return func(c *Client) { c.toolsListChangedHandler = fn }
+}
+
 // WithGetSSEStream enables a background GET SSE stream on the Streamable HTTP
 // endpoint after Connect(). The stream receives server-initiated notifications
 // (list-changed, log messages, resource updates) that arrive outside POST
@@ -428,6 +439,10 @@ type Client struct {
 
 	// onContentChunk is an optional callback for streaming tool content chunks.
 	onContentChunk func(chunk core.ContentChunk)
+
+	// toolsListChangedHandler is an optional dedicated callback for
+	// notifications/tools/list_changed (see WithToolsListChangedHandler).
+	toolsListChangedHandler func()
 
 	// lastEventID tracks the most recent SSE event ID received from the server.
 	// Used to send Last-Event-ID header on reconnection for stream resumption.
@@ -840,7 +855,7 @@ func (c *Client) unwrapStreamableTransport() *streamableClientTransport {
 
 // needsNotifyAdapter returns true if any notification-intercepting handler is set.
 func (c *Client) needsNotifyAdapter() bool {
-	return c.onNotify != nil || c.onContentChunk != nil || c.elicitationCompleteHandler != nil
+	return c.onNotify != nil || c.onContentChunk != nil || c.elicitationCompleteHandler != nil || c.toolsListChangedHandler != nil
 }
 
 // makeNotifyAdapter creates a transport-level notification handler that
@@ -856,6 +871,11 @@ func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 				c.onContentChunk(chunk)
 				return // Don't also deliver to generic onNotify
 			}
+		}
+		// Intercept tools/list_changed for the dedicated handler.
+		if c.toolsListChangedHandler != nil && method == "notifications/tools/list_changed" {
+			c.toolsListChangedHandler()
+			// Still deliver to generic onNotify below.
 		}
 		// Intercept elicitation complete notifications (SEP-1036).
 		if c.elicitationCompleteHandler != nil && method == "notifications/elicitation/complete" {

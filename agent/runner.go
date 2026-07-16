@@ -36,7 +36,23 @@ type RunnerConfig struct {
 
 	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
 	MaxSteps int
+
+	// Selector, when non-nil, narrows the tools offered to the model each
+	// step. It runs on the freshly listed set with the full history, so
+	// context-aware routing (keyword, embedding, scored) plugs in here.
+	// Selectors must stay pure functions of (history, tools): any cache a
+	// selector keeps should key on tool-list content, never on time or
+	// notifications, so list-changed invalidation has exactly one source
+	// (the ToolSource layer). A selector error aborts the turn: it is a
+	// host configuration bug, not something the model can recover from.
+	Selector ToolSelector
 }
+
+// ToolSelector narrows the model-facing tool set for one step. Returning the
+// input slice unchanged (or nil selector) offers everything; returning an
+// empty slice offers no tools for that step. Names must be preserved
+// verbatim: Call routing still resolves against the underlying ToolSource.
+type ToolSelector func(ctx context.Context, history []Message, tools []core.ToolDef) ([]core.ToolDef, error)
 
 // Runner executes turns: the multi-step loop that streams the model,
 // dispatches its tool calls, feeds results back, and repeats until the model
@@ -90,6 +106,11 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 			var err error
 			if tools, err = r.cfg.Tools.Tools(ctx); err != nil {
 				return nil, r.fail(emit, fmt.Errorf("agent: listing tools: %w", err))
+			}
+			if r.cfg.Selector != nil {
+				if tools, err = r.cfg.Selector(ctx, msgs, tools); err != nil {
+					return nil, r.fail(emit, fmt.Errorf("agent: tool selector: %w", err))
+				}
 			}
 		}
 
