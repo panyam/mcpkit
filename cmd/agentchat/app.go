@@ -33,6 +33,8 @@ type App struct {
 	triggers  *agent.TriggerPolicy
 	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
 	streams   []*eventsclient.StreamCall
+	tasksMu   sync.Mutex
+	bgTasks   map[string]*client.BackgroundTask
 	turnMu    sync.Mutex
 	eventStop context.CancelFunc
 }
@@ -94,7 +96,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	coord := agent.NewElicitationCoordinator(ui)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, renderer: rend}
+	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}}
 
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
@@ -121,7 +123,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 		var src agent.ToolSource = agent.NewClientSource(c,
 			agent.WithInputHandler(client.DefaultInputHandler(c)),
-			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { rend.taskStatus(dt) }))
+			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { rend.taskStatus(dt) }),
+			agent.WithTaskGrace(cfg.taskGrace()),
+			agent.WithTaskDetachHook(app.onTaskDetach),
+			agent.WithTaskCompletionHook(func(bt *client.BackgroundTask) { app.onTaskComplete(sc.ID, bt) }))
 		if len(sc.Allow) > 0 {
 			allowed := make(map[string]bool, len(sc.Allow))
 			for _, name := range sc.Allow {
@@ -234,6 +239,11 @@ func (a *App) Close() {
 	if a.fanIn != nil {
 		a.fanIn.Stop()
 	}
+	a.tasksMu.Lock()
+	for _, bt := range a.bgTasks {
+		bt.Cancel()
+	}
+	a.tasksMu.Unlock()
 	for _, c := range a.clients {
 		c.Close()
 	}
@@ -292,6 +302,10 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			a.renderer.history(a.history)
 		case line == "/health":
 			a.renderer.health(a.failover)
+		case line == "/tasks":
+			a.renderer.taskList(a.snapshotTasks())
+		case strings.HasPrefix(line, "/tasks cancel "):
+			a.cancelTask(strings.TrimPrefix(line, "/tasks cancel "))
 		default:
 			tctx, cancel := turnCtx()
 			a.RunTurn(tctx, line)
