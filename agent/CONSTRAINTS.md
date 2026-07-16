@@ -31,3 +31,9 @@ The Runner exposes callbacks and event streams; it never prints, prompts, or ren
 JSON-valued fields in this module's public types use `core.RawJSON` (wire-transparent, parse-once, typed Bind), never bare `json.RawMessage`. JSON-fragment fields (streamed argument pieces in Deltas) stay strings; the Accumulator's fold is the promotion boundary where fragments become a RawJSON value.
 
 **Verify:** `grep -n "json.RawMessage" agent/*.go | grep -v _test | grep -v NewRawJSON` shows only conversion sites, no struct fields.
+
+## A6: Mechanisms in the client, policy in the agent
+
+A primitive belongs in `client/` (or an events/skills SDK) if any non-agent consumer would want it (a script, a service, a poller, `cmd/testclient`); it belongs in `agent/` only if it requires a model and a turn to make sense. The decidable tell is the natural return type: functions returning protocol objects (`core.DetailedTask`, `events.Event`, `core.InputResponses`) are client-layer; functions returning model-facing objects (`core.ToolResult`, injected context, a proactive turn) are agent-layer. When adding a helper to agent code, check this first — task polling, `BackgroundTask`, and event stream consumption were all initially over-kept in the agent and moved to `client/`.
+
+**Verify:** no `agent/` exported type or function returns a value that a non-agent caller could use standalone without also depending on the Runner/policies; conversely, agent public API that returns `core.ToolResult` / injected context stays here.
