@@ -66,6 +66,15 @@ type ToolSource interface {
 
 Adapters: `ClientSource` (a single `client.Client`, MRTR-aware calls with a pluggable InputHandler), `FuncSource` (host-local typed functions via `core.GenerateSchema`), and `MultiSource` (aggregation). **Decision (issue 886): lift the registry pattern, do not depend on `ext/ui`.** ServerRegistry's value is client lifecycle plus apps-bridge management; ToolSource only needs the index shape, and aggregating ToolSources is strictly more general (it composes Func, Client, and any future registry adapter). Collision semantics mirror the registry: all claimants kept, a resolver callback for ambiguous bare-name calls, and the model-facing list exposes collisions only in qualified `sourceID_name` form so every tool stays reachable without duplicate names. A thin `RegistrySource` adapter over `ext/ui` lands with the apps integration, where the dependency belongs.
 
+### Tool routing
+
+Two narrowing mechanisms with distinct roles (issues 901/902):
+
+- `FilterSource` wraps any ToolSource with a static predicate: the per-profile allowlist shape, and a real capability boundary (filtered tools are neither listed nor callable).
+- `RunnerConfig.Selector` narrows per step with full history in hand: the context-aware routing seam (keyword, embedding, scored selection plug in here). Selection is presentation to the model, not a security boundary; the underlying source still routes calls.
+
+The purity rule that keeps the lifecycle single-sourced: selectors are pure functions of (history, freshly listed tools). Invalidation has exactly one channel: notifications/tools/list_changed -> client.WithToolsListChangedHandler -> MultiSource.Invalidate, after which per-step re-listing picks up the change. A caching selector keys on tool-list content, never on time or notifications. Searchable/deferred tools (a search_tools meta-tool exposing schemas on demand) remain future work.
+
 ### Policy hooks
 
 Two seams, both no-op by default:
