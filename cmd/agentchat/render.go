@@ -141,3 +141,16 @@ func (r *renderer) skillsLoaded(serverID string, ok, skipped int) {
 func (r *renderer) skillSkipped(serverID, uri string, err error) {
 	fmt.Fprintf(r.out, "warning: skill %s from %s not injected: %v\n", uri, serverID, err)
 }
+
+func (r *renderer) health(f *agent.FailoverProvider) {
+	if f == nil {
+		fmt.Fprintf(r.out, "%s\n", r.dim("health: single provider, no failover configured"))
+		return
+	}
+	h := f.Health()
+	line := fmt.Sprintf("health: active=%s consecutive_failures=%d", h.Active, h.ConsecutiveFailures)
+	if h.LastError != "" {
+		line += " last_error=" + snippet(h.LastError, 80)
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}

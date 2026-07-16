@@ -46,6 +46,8 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("api-key-env", "", "env var holding the model API key")
 	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
+	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
+	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
 		panic(err)
 	}
@@ -66,7 +68,30 @@ func runChat(v *viper.Viper) error {
 		return err
 	}
 
-	app, err := NewApp(cfg, os.Stdout, os.Stdin)
+	ctx := context.Background()
+	tp, tpShutdown, err := SetupTelemetry(ctx,
+		WithServiceName("agentchat"),
+		WithExporter(v.GetString("exporter")),
+		WithOTLPEndpoint(v.GetString("otlp-endpoint")),
+	)
+	if err != nil {
+		return err
+	}
+	defer tpShutdown(context.Background())
+	logger, logShutdown, err := SetupLogs(ctx,
+		WithServiceName("agentchat"),
+		WithExporter(v.GetString("exporter")),
+		WithOTLPEndpoint(v.GetString("otlp-endpoint")),
+	)
+	if err != nil {
+		return err
+	}
+	defer logShutdown(context.Background())
+
+	app, err := NewApp(cfg, os.Stdout, os.Stdin,
+		WithTracerProvider(tp),
+		WithLogger(logger),
+	)
 	if err != nil {
 		return err
 	}
