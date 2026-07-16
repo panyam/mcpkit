@@ -12,7 +12,7 @@ SUB_MODS_TO_TAG := \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
-	cmd/testclient cmd/common cmd/mcpskills \
+	cmd/testclient cmd/common cmd/mcpskills cmd/agentchat \
 	examples/mcpskills-walkthrough \
 	tests/e2e tests/keycloak
 
@@ -135,6 +135,7 @@ check-apps-compat-stale: refresh-apps-compat-report ## Fail if conformance/apps/
 
 test-agent: ## Run agent sub-module tests
 	cd agent && go test ./... -count=1 -timeout 30s
+	cd cmd/agentchat && go test ./... -count=1 -timeout 60s
 
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
