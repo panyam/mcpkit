@@ -11,6 +11,7 @@ require (
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.3.1
 	github.com/panyam/mcpkit/ext/skills v0.0.0
+	github.com/panyam/mcpkit/ext/tasks v0.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
@@ -89,3 +90,5 @@ replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 replace github.com/panyam/mcpkit/experimental/ext/events => ../../experimental/ext/events
 
 replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../experimental/ext/events/clients/go
+
+replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
