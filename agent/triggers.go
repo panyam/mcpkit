@@ -78,9 +78,10 @@ type TriggerPolicyConfig struct {
 type TriggerPolicy struct {
 	cfg TriggerPolicyConfig
 
-	mu      sync.Mutex
-	slots   map[string]*triggerSlot
-	firings int
+	mu       sync.Mutex
+	bindings []TriggerBinding
+	slots    map[string]*triggerSlot
+	firings  int
 }
 
 type triggerSlot struct {
@@ -101,10 +102,60 @@ func NewTriggerPolicy(cfg TriggerPolicyConfig) *TriggerPolicy {
 		cfg.now = time.Now
 	}
 	slots := make(map[string]*triggerSlot, len(cfg.Bindings))
+	bindings := make([]TriggerBinding, 0, len(cfg.Bindings))
 	for _, b := range cfg.Bindings {
 		slots[slotKey(b)] = &triggerSlot{}
+		bindings = append(bindings, b)
 	}
-	return &TriggerPolicy{cfg: cfg, slots: slots}
+	return &TriggerPolicy{cfg: cfg, bindings: bindings, slots: slots}
+}
+
+// Add installs a binding at runtime — the seam a create_trigger meta-tool
+// uses so the model can set up a standing behavior through conversation.
+// A binding whose slotKey already exists replaces it and resets its slot
+// (re-arming the behavior). Safe for concurrent use with OnEvent.
+func (t *TriggerPolicy) Add(b TriggerBinding) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	key := slotKey(b)
+	if _, exists := t.slots[key]; exists {
+		for i := range t.bindings {
+			if slotKey(t.bindings[i]) == key {
+				t.bindings[i] = b
+				break
+			}
+		}
+	} else {
+		t.bindings = append(t.bindings, b)
+	}
+	t.slots[key] = &triggerSlot{}
+}
+
+// Remove deletes the binding with the given server/event/label (the slotKey
+// components). Unknown bindings are a no-op. Returns whether one was removed.
+func (t *TriggerPolicy) Remove(server, event, label string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	key := slotKey(TriggerBinding{Server: server, Event: event, Label: label})
+	if _, exists := t.slots[key]; !exists {
+		return false
+	}
+	delete(t.slots, key)
+	for i := range t.bindings {
+		if slotKey(t.bindings[i]) == key {
+			t.bindings = append(t.bindings[:i], t.bindings[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
+// Bindings returns a snapshot of the installed bindings (for list_triggers
+// surfaces).
+func (t *TriggerPolicy) Bindings() []TriggerBinding {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]TriggerBinding(nil), t.bindings...)
 }
 
 func slotKey(b TriggerBinding) string { return b.Server + "/" + b.Event + "/" + b.Label }
@@ -118,7 +169,7 @@ func (t *TriggerPolicy) OnEvent(ev IncomingEvent) *TriggerFiring {
 	defer t.mu.Unlock()
 	now := t.cfg.now()
 
-	for _, b := range t.cfg.Bindings {
+	for _, b := range t.bindings {
 		if b.Event != ev.Name || (b.Server != "" && b.Server != ev.Server) {
 			continue
 		}
