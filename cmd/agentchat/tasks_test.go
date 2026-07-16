@@ -76,3 +76,86 @@ func TestAppTaskWithInputPauseEndToEnd(t *testing.T) {
 		}
 	}
 }
+
+// TestAppBackgroundTaskLifecycle is issue 914's acceptance: a long task
+// detaches after the grace window, the user keeps conversing while it runs,
+// and its completion surfaces as a transcript line plus injected context on
+// the next turn.
+func TestAppBackgroundTaskLifecycle(t *testing.T) {
+	release := make(chan struct{})
+	srv := server.NewServer(core.ServerInfo{Name: "bg-tasks-e2e", Version: "0.0.1"})
+	srv.Register(core.TypedTool[struct{}, core.ToolResponse]("long_report",
+		"builds a big report",
+		func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
+			if tasksext.GetTaskContext(ctx) == nil {
+				return core.GoAsyncResult{}, nil
+			}
+			<-release
+			return core.TextResult("report ready: 42 pages"), nil
+		},
+		core.WithToolExecution(&core.ToolExecution{TaskSupport: core.TaskSupportRequired}),
+	))
+	tasksext.Register(tasksext.Config{Server: srv})
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
+	t.Cleanup(ts.Close)
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "long_report", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
+		agent.StubTurn{Text: "Started your report; I'll let you know."},
+		agent.StubTurn{Text: "Doing fine, report still cooking."},
+		agent.StubTurn{Text: "Your report is done: 42 pages."},
+	)
+	out := &syncWriter{}
+	cfg := testConfig(ts.URL)
+	cfg.TaskGraceSec = 1
+	app, err := NewApp(cfg, out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "build me the big report"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "moved to background") {
+		t.Fatalf("detach line missing:\n%s", out.String())
+	}
+	if got := len(app.snapshotTasks()); got != 1 {
+		t.Fatalf("registry must hold the running task, got %d", got)
+	}
+
+	// The conversation continues while the task runs.
+	if err := app.RunTurn(context.Background(), "how are you?"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "report still cooking") {
+		t.Fatalf("second turn must run while task is in background:\n%s", out.String())
+	}
+
+	close(release)
+	waitFor(t, out, "completed: report ready: 42 pages")
+	if got := len(app.snapshotTasks()); got != 0 {
+		t.Fatalf("registry must drop completed tasks, got %d", got)
+	}
+
+	if err := app.RunTurn(context.Background(), "any news?"); err != nil {
+		t.Fatal(err)
+	}
+	final := stub.Requests()[3]
+	var injected bool
+	for _, m := range final.Messages {
+		if m.Role == agent.RoleSystem && strings.Contains(m.Text, "task.completed") && strings.Contains(m.Text, "report ready") {
+			injected = true
+		}
+	}
+	if !injected {
+		t.Fatalf("completion must inject as context on the next turn: %+v", final.Messages)
+	}
+}
