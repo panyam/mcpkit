@@ -101,10 +101,10 @@ func (r *renderer) history(msgs []agent.Message) {
 	}
 }
 
-func compactJSON(raw json.RawMessage) string {
+func compactJSON(raw core.RawJSON) string {
 	var buf bytes.Buffer
-	if err := json.Compact(&buf, raw); err != nil {
-		return string(raw)
+	if err := json.Compact(&buf, raw.Raw()); err != nil {
+		return string(raw.Raw())
 	}
 	return snippet(buf.String(), 80)
 }
@@ -128,4 +128,16 @@ func snippet(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+func (r *renderer) skillsLoaded(serverID string, ok, skipped int) {
+	line := fmt.Sprintf("skills: %d loaded from %s", ok, serverID)
+	if skipped > 0 {
+		line += fmt.Sprintf(", %d skipped", skipped)
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}
+
+func (r *renderer) skillSkipped(serverID, uri string, err error) {
+	fmt.Fprintf(r.out, "warning: skill %s from %s not injected: %v\n", uri, serverID, err)
 }

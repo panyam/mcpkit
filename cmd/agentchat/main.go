@@ -6,44 +6,74 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-func main() {
-	var (
-		configPath   = flag.String("config", "", "path to agentchat JSON config")
-		baseURL      = flag.String("base-url", "http://localhost:1234/v1", "OpenAI-compatible endpoint (when no config)")
-		model        = flag.String("model", "", "model identifier (when no config)")
-		apiKeyEnv    = flag.String("api-key-env", "", "env var holding the model API key")
-		instructions = flag.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
-		maxSteps     = flag.Int("max-steps", 0, "max model calls per turn (0 = default)")
-	)
-	var urls urlList
-	flag.Var(&urls, "url", "MCP server URL (repeatable; used when no config)")
-	flag.Parse()
+const version = "0.1.0"
 
-	cfg, err := buildConfig(*configPath, urls, *baseURL, *model, *apiKeyEnv, *instructions, *maxSteps)
+// newRoot builds the CLI. Every flag is env-overridable with the AGENTCHAT_
+// prefix (dashes become underscores: --base-url is AGENTCHAT_BASE_URL);
+// precedence is flag over env over default, per viper.
+func newRoot() (*cobra.Command, *viper.Viper) {
+	v := viper.New()
+	v.SetEnvPrefix("AGENTCHAT")
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	v.AutomaticEnv()
+
+	root := &cobra.Command{
+		Use:          "agentchat",
+		Short:        "terminal chat over any set of MCP servers",
+		Long:         "agentchat connects MCP servers and an OpenAI-compatible model into a terminal agent:\nlive tool calls, streamed output, schema-driven elicitation prompts, per-server allowlists.",
+		Version:      version,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runChat(v)
+		},
+	}
+
+	fl := root.Flags()
+	fl.String("config", "", "path to agentchat JSON config")
+	fl.StringSlice("url", nil, "MCP server URL (repeatable; used when no config)")
+	fl.String("base-url", "http://localhost:1234/v1", "OpenAI-compatible endpoint (when no config)")
+	fl.String("model", "", "model identifier (when no config)")
+	fl.String("api-key-env", "", "env var holding the model API key")
+	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
+	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
+	if err := v.BindPFlags(fl); err != nil {
+		panic(err)
+	}
+	return root, v
+}
+
+func runChat(v *viper.Viper) error {
+	cfg, err := buildConfig(
+		v.GetString("config"),
+		v.GetStringSlice("url"),
+		v.GetString("base-url"),
+		v.GetString("model"),
+		v.GetString("api-key-env"),
+		v.GetString("instructions"),
+		v.GetInt("max-steps"),
+	)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 
 	app, err := NewApp(cfg, os.Stdout, os.Stdin)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
 	defer app.Close()
 
 	fmt.Printf("agentchat: %d server(s), model %s. /tools /history /quit; Ctrl-C cancels a turn.\n", len(cfg.Servers), cfg.Model.Model)
 
-	// SIGINT cancels the in-flight turn; a second within an idle prompt
-	// exits via default handling once we stop catching.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
 	turnCtx := func() (context.Context, context.CancelFunc) {
@@ -58,19 +88,19 @@ func main() {
 		return ctx, cancel
 	}
 
-	if err := app.REPL(context.Background(), os.Stdin, turnCtx); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	return app.REPL(context.Background(), os.Stdin, turnCtx)
+}
+
+func main() {
+	root, _ := newRoot()
+	if err := root.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "agentchat:", err)
 		os.Exit(1)
 	}
 }
 
-type urlList []string
-
-func (u *urlList) String() string     { return strings.Join(*u, ",") }
-func (u *urlList) Set(s string) error { *u = append(*u, s); return nil }
-
-// buildConfig merges the config file with quick-start flags: a config file
-// wins for everything it specifies; --url/--model cover the no-file case.
+// buildConfig merges the config file with quick-start settings: a config
+// file wins for everything it specifies; url/model cover the no-file case.
 func buildConfig(path string, urls []string, baseURL, model, apiKeyEnv, instructions string, maxSteps int) (*Config, error) {
 	if path != "" {
 		return LoadConfig(path)

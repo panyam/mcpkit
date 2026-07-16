@@ -43,8 +43,10 @@ type ToolCall struct {
 	ID string `json:"id"`
 	// Name is the tool name as listed to the model.
 	Name string `json:"name"`
-	// Args is the raw JSON arguments object.
-	Args json.RawMessage `json:"args"`
+	// Args is the JSON arguments object. core.RawJSON so readers share
+	// one parse (Bind for typed decode, Raw for display); wire shape is
+	// identical to a raw message.
+	Args core.RawJSON `json:"args"`
 }
 
 // ProviderRequest is one model call in provider-neutral form.
@@ -67,7 +69,7 @@ type ProviderRequest struct {
 
 	// ResponseSchema, when set, asks Generate for structured output
 	// conforming to this JSON Schema. Ignored by Stream.
-	ResponseSchema json.RawMessage `json:"responseSchema,omitempty"`
+	ResponseSchema core.RawJSON `json:"responseSchema,omitempty"`
 }
 
 // Usage reports token consumption for one model call.
@@ -201,7 +203,7 @@ func (a *Accumulator) Result() *ProviderResponse {
 		if args == "" {
 			args = "{}"
 		}
-		call.Args = json.RawMessage(args)
+		call.Args = core.NewRawJSON(json.RawMessage(args))
 		out.ToolCalls = append(out.ToolCalls, call)
 	}
 	return &out
