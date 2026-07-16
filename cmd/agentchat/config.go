@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/panyam/mcpkit/agent"
 )
@@ -28,6 +29,24 @@ type Config struct {
 	// Triggers lists proactive-turn bindings over the configured event
 	// streams.
 	Triggers []TriggerConfig `json:"triggers,omitempty"`
+
+	// TaskGraceSec is how long a task-backed tool call stays inline before
+	// detaching to the background (completion arrives as injected context
+	// and a transcript line; /tasks manages running tasks). Zero uses the
+	// 10s default; negative disables detaching (wait inline forever).
+	TaskGraceSec int `json:"taskGraceSec,omitempty"`
+}
+
+// taskGrace resolves the configured grace window.
+func (c *Config) taskGrace() time.Duration {
+	switch {
+	case c.TaskGraceSec < 0:
+		return 0
+	case c.TaskGraceSec == 0:
+		return agent.DefaultTaskGrace
+	default:
+		return time.Duration(c.TaskGraceSec) * time.Second
+	}
 }
 
 // ModelConfig points at an OpenAI-compatible chat-completions endpoint.
