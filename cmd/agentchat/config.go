@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/panyam/mcpkit/agent"
 )
 
 // Config is agentchat's JSON configuration. Secrets are never inlined:
@@ -22,6 +24,10 @@ type Config struct {
 
 	// Servers lists the MCP servers to connect.
 	Servers []ServerConfig `json:"servers"`
+
+	// Triggers lists proactive-turn bindings over the configured event
+	// streams.
+	Triggers []TriggerConfig `json:"triggers,omitempty"`
 }
 
 // ModelConfig points at an OpenAI-compatible chat-completions endpoint.
@@ -67,6 +73,44 @@ type ServerConfig struct {
 	// auto-detects (servers without the capability are skipped silently);
 	// false opts out even when the server advertises skills.
 	Skills *bool `json:"skills,omitempty"`
+
+	// Events lists the event streams to open on this server. Each event
+	// feeds the injection policy (and any trigger bindings that match).
+	Events []EventConfig `json:"events,omitempty"`
+}
+
+// EventConfig subscribes one event name and optionally overrides its
+// context hint (host config wins over the server-advertised _meta hint).
+type EventConfig struct {
+	Name string `json:"name"`
+
+	// Hint overrides how occurrences reach the model (priority,
+	// aggregation window, template, retention, sensitivity).
+	Hint *agent.ContextHint `json:"hint,omitempty"`
+}
+
+// TriggerConfig declares one proactive-turn binding, mediated by the
+// anti-nag policy (one firing per binding until user engagement plus the
+// cooldown, session budget on top).
+type TriggerConfig struct {
+	// Server and Event select the stream; Server empty matches any.
+	Server string `json:"server,omitempty"`
+	Event  string `json:"event"`
+
+	// Filter is a set of top-level payload field equality checks (all
+	// must match). The config-file rendition of the code-level filter
+	// hook; embedders wanting richer predicates use the agent package
+	// directly.
+	Filter map[string]string `json:"filter,omitempty"`
+
+	// Instructions seed the proactive turn.
+	Instructions string `json:"instructions"`
+
+	// Label names the binding in transcripts and logs.
+	Label string `json:"label"`
+
+	// CooldownSec is the re-arm floor in seconds (0 = default 300).
+	CooldownSec int `json:"cooldownSec,omitempty"`
 }
 
 // AuthConfig selects one of the client auth modes MCP supports. Secrets are

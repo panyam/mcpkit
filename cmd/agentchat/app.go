@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
 // App is agentchat's testable core: everything the binary does minus flag
@@ -25,6 +27,13 @@ type App struct {
 	history  []agent.Message
 	renderer *renderer
 	failover *agent.FailoverProvider
+
+	injection *agent.InjectionPolicy
+	triggers  *agent.TriggerPolicy
+	events    chan agent.IncomingEvent
+	streams   []*eventsclient.StreamCall
+	turnMu    sync.Mutex
+	eventStop context.CancelFunc
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -174,6 +183,13 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		app.failover = fo
 	}
 
+	app.injection = agent.NewInjectionPolicy(agent.InjectionConfig{Hints: hintOverrides(cfg)})
+	app.triggers = agent.NewTriggerPolicy(agent.TriggerPolicyConfig{
+		Bindings: buildTriggerBindings(cfg.Triggers),
+		Logger:   o.logger,
+	})
+	app.events = make(chan agent.IncomingEvent, 256)
+
 	runner, err := agent.NewRunner(agent.RunnerConfig{
 		Provider:       provider,
 		Tools:          multi,
@@ -186,11 +202,32 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		return nil, err
 	}
 	app.runner = runner
+
+	hasEvents := false
+	for _, sc := range cfg.Servers {
+		hasEvents = hasEvents || len(sc.Events) > 0
+	}
+	if hasEvents {
+		evCtx, cancel := context.WithCancel(context.Background())
+		app.eventStop = cancel
+		if err := app.startEventStreams(evCtx); err != nil {
+			cancel()
+			app.Close()
+			return nil, err
+		}
+		go app.consumeEvents(evCtx)
+	}
 	return app, nil
 }
 
-// Close disconnects every server.
+// Close stops event streams and disconnects every server.
 func (a *App) Close() {
+	if a.eventStop != nil {
+		a.eventStop()
+	}
+	for _, s := range a.streams {
+		s.Stop()
+	}
 	for _, c := range a.clients {
 		c.Close()
 	}
@@ -200,6 +237,10 @@ func (a *App) Close() {
 // threads across turns; a cancelled or failed turn leaves history at its
 // pre-turn state so the next attempt is clean.
 func (a *App) RunTurn(ctx context.Context, input string) error {
+	a.turnMu.Lock()
+	defer a.turnMu.Unlock()
+	a.triggers.NotifyEngagement()
+	a.drainInjectionLocked()
 	a.history = append(a.history, agent.Message{Role: agent.RoleUser, Text: input})
 	result, err := a.runner.Run(ctx, a.history, a.renderer.handle)
 	if err != nil {
