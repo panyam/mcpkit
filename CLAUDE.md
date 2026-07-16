@@ -38,7 +38,8 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; 
 | `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md` |
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
 | `agent/` — Host layer: Provider, Runner loop, ToolSource, elicitation, injection/trigger policies, generic event stages (separate go.mod) | `docs/AGENT_DESIGN.md`, `agent/CONSTRAINTS.md` |
-| `cmd/agentchat/` — Reference in-process surface: terminal chat over any MCP servers (cobra/viper; separate go.mod) | `cmd/agentchat/README.md` |
+| `agent/host/` — Reusable host application core: config loading (providers/servers/policies/skills), meta-tools, App/REPL wiring. Surface-agnostic (a CLI or a web-chat both build on it). Nested go.mod under `agent/` | `agent/host/README.md` |
+| `cmd/agentchat/` — Thin terminal CLI over `agent/host` (cobra/viper; separate go.mod) | `cmd/agentchat/README.md` |
 | `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
 | `ext/tasks/` — SEP-2663 v2 tasks extension (separate go.mod) | `ext/tasks/README.md` |
 | `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry (separate go.mod) | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
@@ -59,7 +60,7 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
 
 ## Gotchas
 
-- **`agent/` lives on the `agent` integration branch, not `main` (yet)**: the whole host-layer module (Provider/Runner/ToolSource/elicitation/policies) plus `cmd/agentchat` was built as stacked per-issue PRs into the `agent` branch (epic issue 895, closed; PRs 896–915). It removes NO protocol capability and adds two additive root-module riders already on the branch (client `DefaultInputHandler` sorted dispatch; `WithToolsListChangedHandler`). Promote to main as one unit. `make test-agent` covers both `agent/` and `cmd/agentchat/`.
+- **`agent/` host layer is on `main`**: the whole host-layer module (Provider/Runner/ToolSource/elicitation/policies) plus `cmd/agentchat` was built as stacked per-issue PRs (epic issue 895, closed; PRs 896–920) and merged to main. It removes NO protocol capability and added two additive root-module riders (client `DefaultInputHandler` sorted dispatch; `WithToolsListChangedHandler`). The now-merged `agent` integration branch may still exist on the remote; `main` is authoritative. `make test-agent` covers `agent/`, `agent/host/`, `cmd/agentchat/`, and `examples/agent-async`. The reusable host application core (config loading, provider/server/policy wiring, meta-tools, App/REPL) lives in `agent/host/` (nested go.mod); `cmd/agentchat` is the thin CLI over it, and a future web-chat surface would reuse `agent/host` and swap stdin/stdout for a socket.
 - **agent vs client layering rule**: put a primitive in `client/` (or an events/skills SDK) if any NON-agent consumer would want it (a script, a service, a dashboard poller, `cmd/testclient`); put it in `agent/` only if it needs a model + a turn to make sense. Tell: the natural return type — a protocol object (`core.DetailedTask`, `events.Event`, `InputResponses`) is client-layer; a model-facing object (`core.ToolResult`, injected context, a proactive turn) is agent-layer. Enforced by `agent/CONSTRAINTS.md` A6. This is why task polling / `BackgroundTask` / `StreamChan` live in `client/` while `InjectionPolicy` / `TriggerPolicy` / the Runner live in `agent/`.
 - **`GH_TOKEN="$GH_PERSONAL_TOKEN"`**: EMU account can't access personal repos
 - **Sub-module go.sum drift**: New `core/` imports break sub-modules until `make tidy-all`

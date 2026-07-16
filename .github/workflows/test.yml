@@ -53,8 +53,14 @@ jobs:
       - name: Run agent sub-module tests
         run: cd agent && go test ./... -v
 
+      - name: Run agent/host tests
+        run: cd agent/host && go test ./... -v
+
       - name: Run agentchat tests
         run: cd cmd/agentchat && go test ./... -v
+
+      - name: Run agent-async example test
+        run: cd examples/agent-async && go test ./... -v
 
   test-auth:
     runs-on: ubuntu-latest
