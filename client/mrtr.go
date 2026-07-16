@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -168,8 +169,18 @@ func CallToolWithInputs(ctx context.Context, c *Client, name string, args any, h
 // in tests).
 func DefaultInputHandler(c *Client) InputHandler {
 	return func(ctx context.Context, reqs core.InputRequests) (core.InputResponses, error) {
+		// The SEP-2322 wire carries inputRequests as an unordered map, so
+		// there is no server-defined sequence to honor. Dispatch in sorted
+		// key order so multi-entry rounds present to the user (and to
+		// tests) deterministically instead of in Go map-iteration order.
+		keys := make([]string, 0, len(reqs))
+		for key := range reqs {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
 		out := make(core.InputResponses, len(reqs))
-		for key, req := range reqs {
+		for _, key := range keys {
+			req := reqs[key]
 			payload, err := dispatchMRTRInputRequest(ctx, c, req)
 			if err != nil {
 				return nil, fmt.Errorf("inputRequest %q (%s): %w", key, req.Method, err)
