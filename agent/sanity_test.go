@@ -9,8 +9,8 @@ import (
 
 // TestModuleWiring guards the sub-module seam itself: it fails if the replace
 // directive or go.sum drifts out of sync with the root module (the documented
-// failure mode for mcpkit sub-modules). The JSON round-trip also anchors
-// constraint A2 until the Runner event taxonomy lands and carries it properly.
+// failure mode for mcpkit sub-modules). Constraint A2 is carried by the event
+// and delta round-trip tests in runner_test.go and provider_test.go.
 func TestModuleWiring(t *testing.T) {
 	res := core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}
 
