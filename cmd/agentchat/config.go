@@ -42,13 +42,69 @@ type ServerConfig struct {
 	// URL is the MCP endpoint (streamable HTTP).
 	URL string `json:"url"`
 
-	// AuthTokenEnv names the environment variable holding a static bearer
-	// token for this server. Empty means unauthenticated.
-	AuthTokenEnv string `json:"authTokenEnv,omitempty"`
+	// Auth configures how to authenticate to this server. Nil means
+	// unauthenticated.
+	Auth *AuthConfig `json:"auth,omitempty"`
 
 	// Allow, when non-empty, restricts this server to the named tools
 	// (a FilterSource capability boundary, not a display preference).
 	Allow []string `json:"allow,omitempty"`
+}
+
+// AuthConfig selects one of the client auth modes MCP supports. Secrets are
+// env-indirected like everything else in this config.
+type AuthConfig struct {
+	// Type is "bearer" (static token), "client-credentials" (OAuth
+	// machine-to-machine via PRM/AS discovery), or "oauth"
+	// (authorization-code browser flow; not implemented yet, tracked in
+	// the agent epic).
+	Type string `json:"type"`
+
+	// TokenEnv names the env var holding the static bearer token.
+	// Required for type "bearer".
+	TokenEnv string `json:"tokenEnv,omitempty"`
+
+	// ClientIDEnv / ClientSecretEnv name the env vars holding the OAuth
+	// client credentials. Required for type "client-credentials".
+	ClientIDEnv     string `json:"clientIdEnv,omitempty"`
+	ClientSecretEnv string `json:"clientSecretEnv,omitempty"`
+
+	// Scopes to request for OAuth types. Empty inherits the server's PRM
+	// scopes_supported.
+	Scopes []string `json:"scopes,omitempty"`
+
+	// AllowInsecure permits an http:// authorization server (dev/test
+	// only; production AS endpoints must be https).
+	AllowInsecure bool `json:"allowInsecure,omitempty"`
+}
+
+// Validate checks mode-specific requirements and that named env vars are
+// actually set, so misconfiguration fails at startup rather than as a
+// mid-conversation 401.
+func (a *AuthConfig) Validate() error {
+	switch a.Type {
+	case "bearer":
+		if a.TokenEnv == "" {
+			return fmt.Errorf("auth type bearer requires tokenEnv")
+		}
+		if os.Getenv(a.TokenEnv) == "" {
+			return fmt.Errorf("auth env %s is not set", a.TokenEnv)
+		}
+	case "client-credentials":
+		if a.ClientIDEnv == "" || a.ClientSecretEnv == "" {
+			return fmt.Errorf("auth type client-credentials requires clientIdEnv and clientSecretEnv")
+		}
+		for _, env := range []string{a.ClientIDEnv, a.ClientSecretEnv} {
+			if os.Getenv(env) == "" {
+				return fmt.Errorf("auth env %s is not set", env)
+			}
+		}
+	case "oauth":
+		return fmt.Errorf("auth type oauth (authorization-code browser flow) is not implemented yet (tracked as mcpkit issue 907); use bearer or client-credentials")
+	default:
+		return fmt.Errorf("unknown auth type %q (want bearer or client-credentials)", a.Type)
+	}
+	return nil
 }
 
 // LoadConfig reads and validates a config file.
@@ -81,6 +137,11 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("servers[%d]: duplicate id %q", i, s.ID)
 		}
 		seen[s.ID] = true
+		if s.Auth != nil {
+			if err := s.Auth.Validate(); err != nil {
+				return fmt.Errorf("servers[%d] (%s): %w", i, s.ID, err)
+			}
+		}
 	}
 	return nil
 }

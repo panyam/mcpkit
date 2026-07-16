@@ -34,14 +34,35 @@ go run . --config agentchat.json
   "servers": [
     { "id": "skills", "url": "http://localhost:18099/mcp" },
     { "id": "internal", "url": "https://tools.example.com/mcp",
-      "authTokenEnv": "INTERNAL_MCP_TOKEN", "allow": ["search", "lookup"] }
+      "auth": { "type": "bearer", "tokenEnv": "INTERNAL_MCP_TOKEN" },
+      "allow": ["search", "lookup"] },
+    { "id": "svc", "url": "https://svc.example.com/mcp",
+      "auth": { "type": "client-credentials",
+                "clientIdEnv": "SVC_CLIENT_ID",
+                "clientSecretEnv": "SVC_CLIENT_SECRET",
+                "scopes": ["mcp:basic"] } }
   ]
 }
 ```
 
-Secrets are env-indirected (`apiKeyEnv`, `authTokenEnv` name variables, never
-values). A per-server `allow` list is a capability boundary (a FilterSource):
-tools outside it are neither offered to the model nor callable.
+Secrets are env-indirected (`apiKeyEnv`, `tokenEnv`, `clientIdEnv`,
+`clientSecretEnv` name variables, never values), and validation fails at
+startup when a named variable is unset. A per-server `allow` list is a
+capability boundary (a FilterSource): tools outside it are neither offered to
+the model nor callable.
+
+## Auth modes
+
+`auth.type` selects among the client auth modes MCP supports:
+
+- **`bearer`**: static token from `tokenEnv`.
+- **`client-credentials`**: OAuth machine-to-machine via ext/auth. PRM and AS
+  discovery, token caching, and refresh are automatic; `scopes` is optional
+  (empty inherits the server's PRM scopes_supported); `allowInsecure: true`
+  permits an http:// AS for dev setups.
+- **`oauth`** (authorization-code browser flow): not implemented yet; the
+  config rejects it with a pointer at the tracking issue. Interactive CLI
+  login is the natural fit for agentchat and lands with that ticket.
 
 In the REPL: `/tools` lists the merged tool index, `/history` the
 conversation, `/quit` exits; Ctrl-C cancels the in-flight turn. During an

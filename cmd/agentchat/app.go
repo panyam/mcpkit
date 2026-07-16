@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/panyam/mcpkit/agent"
@@ -68,10 +67,13 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			client.WithElicitationHandler(coord.Handler()),
 			client.WithToolsListChangedHandler(multi.Invalidate),
 		}
-		if sc.AuthTokenEnv != "" {
-			if tok := os.Getenv(sc.AuthTokenEnv); tok != "" {
-				copts = append(copts, client.WithClientBearerToken(tok))
-			}
+		authOpt, err := authOption(sc)
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		if authOpt != nil {
+			copts = append(copts, authOpt)
 		}
 		c := client.NewClient(sc.URL, core.ClientInfo{Name: "agentchat", Version: "0.1"}, copts...)
 		if err := c.Connect(); err != nil {
