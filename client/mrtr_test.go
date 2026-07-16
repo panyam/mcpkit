@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -460,4 +461,34 @@ func configureMiddleware(srv *server.Server, mw server.Middleware) *server.Serve
 	// post-construction. Verify that API exists.
 	srv.UseMiddleware(mw)
 	return srv
+}
+
+// TestDefaultInputHandler_DeterministicOrder pins sorted-key dispatch: the
+// SEP-2322 wire is an unordered map, so without an explicit sort a
+// multi-entry round presents in Go map-iteration order (different every run).
+func TestDefaultInputHandler_DeterministicOrder(t *testing.T) {
+	var presented []string
+	c, _ := connectMRTRClient(t, mrtrTestServer(t),
+		client.WithElicitationHandler(func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
+			presented = append(presented, req.Message)
+			return core.ElicitationResult{Action: "accept", Content: map[string]any{"name": "x"}}, nil
+		}),
+	)
+
+	reqs := core.InputRequests{}
+	keys := []string{"h", "c", "f", "a", "e", "b", "g", "d"}
+	for _, k := range keys {
+		reqs[k] = core.InputRequest{
+			Method: "elicitation/create",
+			Params: json.RawMessage(`{"message":"` + k + `"}`),
+		}
+	}
+
+	if _, err := client.DefaultInputHandler(c)(context.Background(), reqs); err != nil {
+		t.Fatal(err)
+	}
+	want := "[a b c d e f g h]"
+	if got := fmt.Sprint(presented); got != want {
+		t.Fatalf("dispatch order = %v, want %v", got, want)
+	}
 }
