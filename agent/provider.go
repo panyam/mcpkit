@@ -17,6 +17,12 @@ const (
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
 	RoleTool      Role = "tool"
+	// RoleSystem carries injected context (events, trigger instructions)
+	// into the conversation; providers map it to their native system
+	// slot. Distinct from ProviderRequest.Instructions, which is the
+	// static prompt: RoleSystem messages live in history and thread
+	// across turns like any other message.
+	RoleSystem Role = "system"
 )
 
 // Message is one conversation entry in provider-neutral form. All fields are

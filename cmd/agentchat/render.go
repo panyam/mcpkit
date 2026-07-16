@@ -154,3 +154,11 @@ func (r *renderer) health(f *agent.FailoverProvider) {
 	}
 	fmt.Fprintf(r.out, "%s\n", r.dim(line))
 }
+
+func (r *renderer) triggerFired(label string) {
+	fmt.Fprintf(r.out, "\n%s\n", r.dim("· trigger: "+label))
+}
+
+func (r *renderer) eventDropped(serverID, name string) {
+	fmt.Fprintf(r.out, "%s\n", r.dim("warning: event buffer full, dropped "+name+" from "+serverID))
+}
