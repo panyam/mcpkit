@@ -58,17 +58,17 @@ func (a *App) consumeEvents(ctx context.Context) {
 func (a *App) runProactiveTurn(ctx context.Context, firing *agent.TriggerFiring) {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
-	a.renderer.triggerFired(firing.Binding.Label)
+	a.emit(HostEvent{Kind: HostTriggerFired, Label: firing.Binding.Label})
 	a.history = append(a.history, agent.Message{Role: agent.RoleSystem, Text: firing.Binding.Instructions})
 	a.drainInjectionLocked()
-	result, err := a.runner.Run(ctx, a.history, a.renderer.handle)
+	result, err := a.runner.Run(ctx, a.history, func(e agent.Event) { a.emit(HostEvent{Kind: HostRunnerEvent, RunnerEvent: e}) })
 	if err != nil {
-		a.renderer.turnFailed(err)
+		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 		return
 	}
 	a.history = append(a.history, result.Messages...)
-	a.renderer.turnDone(result)
-	a.renderer.prompt()
+	a.emit(HostEvent{Kind: HostTurnDone, Result: result})
+	a.promptREPL()
 }
 
 // drainInjectionLocked moves pending injected context into history as

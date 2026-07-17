@@ -27,7 +27,8 @@ type App struct {
 	sources  *agent.MultiSource
 	clients  []*client.Client
 	history  []agent.Message
-	renderer *renderer
+	observers []Observer
+	replOut  io.Writer // terminal REPL draws its own prompt here
 	failover *agent.FailoverProvider
 
 	injection *agent.InjectionPolicy
@@ -76,6 +77,7 @@ type appOptions struct {
 	store           agent.RunStore
 	toolResultStore agent.ToolResultStore
 	providerBuilder ProviderBuilder
+	observers       []Observer
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -116,15 +118,18 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		o.logger = slog.New(slog.DiscardHandler)
 	}
 
-	rend := newRenderer(out)
-	ui := o.ui
-	if ui == nil {
-		ui = terminalElicitationUI(bufio.NewReader(in), out)
+	observers := o.observers
+	if len(observers) == 0 {
+		observers = []Observer{newRenderer(out)}
 	}
-	coord := agent.NewElicitationCoordinator(ui)
+	elicUI := o.ui
+	if elicUI == nil {
+		elicUI = terminalElicitationUI(bufio.NewReader(in), out)
+	}
+	coord := agent.NewElicitationCoordinator(elicUI)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
+	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
 	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
 	// gated tool call never stacks a dialog against a concurrent elicitation.
 	ask := func(ctx context.Context, req agent.ApprovalRequest) (bool, error) {
@@ -157,7 +162,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 		var src agent.ToolSource = agent.NewClientSource(c,
 			agent.WithInputHandler(client.DefaultInputHandler(c)),
-			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { rend.taskStatus(dt) }),
+			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { app.emit(HostEvent{Kind: HostTaskStatus, TaskStatus: dt}) }),
 			agent.WithTaskGrace(cfg.taskGrace()),
 			agent.WithTaskDetachHook(app.onTaskDetach),
 			agent.WithTaskCompletionHook(func(bt *client.BackgroundTask) { app.onTaskComplete(sc.ID, bt) }))
@@ -179,7 +184,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		if sc.Skills != nil && !*sc.Skills {
 			continue
 		}
-		block, err := loadSkillsBlock(app.clients[i], sc.ID, rend, o.tp)
+		block, err := loadSkillsBlock(app.clients[i], sc.ID, app.emit, o.tp)
 		if err != nil {
 			app.Close()
 			return nil, err
@@ -340,12 +345,12 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
 	a.history = append(a.history, userMsg)
 
-	emit := a.renderer.handle
+	emit := func(e agent.Event) { a.emit(HostEvent{Kind: HostRunnerEvent, RunnerEvent: e}) }
 	var pe *PersistingEmit
 	if a.store != nil {
 		if err := a.ensureRunLocked(ctx); err != nil {
 			a.history = a.history[:len(a.history)-1]
-			a.renderer.turnFailed(err)
+			a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 			return err
 		}
 		pe = NewPersistingEmit(a.store, a.runID, emit)
@@ -355,14 +360,14 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	result, err := a.runner.Run(ctx, a.history, emit)
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
-		a.renderer.turnFailed(err)
+		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 		return err
 	}
 	a.history = append(a.history, result.Messages...)
 	if pe != nil {
 		a.persistTurnLocked(ctx, append([]agent.Message{userMsg}, result.Messages...), pe)
 	}
-	a.renderer.turnDone(result)
+	a.emit(HostEvent{Kind: HostTurnDone, Result: result})
 	return nil
 }
 
@@ -372,7 +377,7 @@ func (a *App) Tools(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	a.renderer.toolList(defs)
+	a.emit(HostEvent{Kind: HostCommandResult, Command: CmdResult{Kind: CmdTools, Tools: defs}})
 	return nil
 }
 
@@ -403,6 +408,23 @@ func (a *App) SwitchProvider(name string) error {
 	return nil
 }
 
+// emit fans a host event out to every registered observer. Fire-and-forget:
+// observers render, trace, or push it; none reply.
+func (a *App) emit(ev HostEvent) {
+	for _, o := range a.observers {
+		o.On(ev)
+	}
+}
+
+// promptREPL draws the terminal REPL's input marker. The prompt is
+// surface chrome, not a host event — the REPL owns it because the REPL is
+// the terminal surface's own loop.
+func (a *App) promptREPL() {
+	if a.replOut != nil {
+		fmt.Fprint(a.replOut, "> ")
+	}
+}
+
 // REPL runs the interactive loop until EOF or /quit. turnCtx wraps each
 // turn so the caller's signal handling can cancel the in-flight turn
 // without killing the loop.
@@ -411,7 +433,7 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 		turnCtx = func() (context.Context, context.CancelFunc) { return context.WithCancel(ctx) }
 	}
 	scanner := bufio.NewScanner(in)
-	a.renderer.prompt()
+	a.promptREPL()
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		switch {
@@ -419,11 +441,11 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 		case strings.HasPrefix(line, "/"):
 			res, err := a.Dispatch(ctx, line)
 			if errors.Is(err, ErrUnknownCommand) {
-				a.renderer.turnFailed(fmt.Errorf("unknown command %q (try /tools, /provider, /session, /quit)", line))
+				a.emit(HostEvent{Kind: HostTurnFailed, Err: fmt.Sprintf("unknown command %q (try /tools, /provider, /session, /quit)", line)})
 			} else if err != nil {
-				a.renderer.turnFailed(err)
+				a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 			} else {
-				a.renderer.command(res)
+				a.emit(HostEvent{Kind: HostCommandResult, Command: res})
 				if res.Quit {
 					return nil
 				}
@@ -433,7 +455,7 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			a.RunTurn(tctx, line)
 			cancel()
 		}
-		a.renderer.prompt()
+		a.promptREPL()
 	}
 	return scanner.Err()
 }
