@@ -17,7 +17,7 @@ func (a *App) onTaskDetach(bt *client.BackgroundTask) {
 	a.tasksMu.Lock()
 	a.bgTasks[bt.TaskID] = bt
 	a.tasksMu.Unlock()
-	a.ui.Emit(UIEvent{Kind: UITaskDetached, Task: bt})
+	a.emit(HostEvent{Kind: HostTaskDetached, Task: bt})
 }
 
 // onTaskComplete runs on the background poll goroutine: it surfaces the
@@ -30,7 +30,7 @@ func (a *App) onTaskComplete(serverID string, bt *client.BackgroundTask) {
 	a.tasksMu.Lock()
 	delete(a.bgTasks, bt.TaskID)
 	a.tasksMu.Unlock()
-	a.ui.Emit(UIEvent{Kind: UITaskCompleted, Task: bt})
+	a.emit(HostEvent{Kind: HostTaskCompleted, Task: bt})
 
 	dt, err := bt.Result()
 	payload := map[string]any{"taskId": bt.TaskID, "tool": bt.Tool}
@@ -74,10 +74,10 @@ func (a *App) cancelTask(id string) {
 	bt := a.bgTasks[id]
 	a.tasksMu.Unlock()
 	if bt == nil {
-		a.ui.Emit(UIEvent{Kind: UIMessage, Message: fmt.Sprintf("no running task %q (see /tasks)", id)})
+		a.emit(HostEvent{Kind: HostMessage, Message: fmt.Sprintf("no running task %q (see /tasks)", id)})
 		return
 	}
 	if err := bt.Cancel(); err != nil {
-		a.ui.Emit(UIEvent{Kind: UITurnFailed, Err: err.Error()})
+		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 	}
 }
