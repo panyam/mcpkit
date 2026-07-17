@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -40,6 +41,14 @@ type Message struct {
 	// ToolCallID links a RoleTool message to the assistant ToolCall it
 	// answers.
 	ToolCallID string `json:"toolCallId,omitempty"`
+
+	// Timestamp records when the message was said. Zero means unstamped;
+	// RunStore implementations stamp zero-Timestamp messages with their
+	// own clock on AppendMessages, and a caller-set non-zero value wins
+	// (a surface can stamp the user message at keypress). Providers
+	// never map this field into request bodies — it is session metadata,
+	// not model input.
+	Timestamp time.Time `json:"timestamp,omitzero"`
 }
 
 // ToolCall is one model-requested tool invocation.

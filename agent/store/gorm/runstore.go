@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"gorm.io/gorm"
@@ -151,12 +152,21 @@ func appendRows[T any](tx *gorm.DB, runID string, values []T, insert func(tx *go
 	return true, insert(tx, runID, bodies)
 }
 
-// AppendMessages implements agent.RunStore.
+// AppendMessages implements agent.RunStore, stamping zero Timestamps
+// per the agent.AppendMessagesRequest rule before encoding, so the
+// stamp lives inside the stored JSON body and forks copy it for free.
 func (s *RunStore) AppendMessages(ctx context.Context, req agent.AppendMessagesRequest) (agent.AppendMessagesResponse, error) {
+	msgs := slices.Clone(req.Messages)
+	now := time.Now().UTC()
+	for i := range msgs {
+		if msgs[i].Timestamp.IsZero() {
+			msgs[i].Timestamp = now
+		}
+	}
 	var found bool
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var err error
-		found, err = appendRows(tx, req.RunID, req.Messages, func(tx *gorm.DB, runID string, bodies []string) error {
+		found, err = appendRows(tx, req.RunID, msgs, func(tx *gorm.DB, runID string, bodies []string) error {
 			rows := make([]runMessageRow, len(bodies))
 			for i, b := range bodies {
 				rows[i] = runMessageRow{RunID: runID, Body: b}

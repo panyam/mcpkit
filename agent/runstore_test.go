@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 )
 
 func mustCreate(t *testing.T, s RunStore, id string) string {
@@ -62,7 +65,7 @@ func TestInMemoryRunStore_CreateAppendLoad(t *testing.T) {
 
 	run := mustLoad(t, s, id)
 	want := append(append([]Message{}, turn1...), turn2...)
-	if !reflect.DeepEqual(run.Messages, want) {
+	if !reflect.DeepEqual(stripStamps(t, run.Messages), want) {
 		t.Fatalf("loaded messages mismatch:\n got %+v\nwant %+v", run.Messages, want)
 	}
 	if run.ID != id {
@@ -157,7 +160,7 @@ func TestInMemoryRunStore_ForkDiverges(t *testing.T) {
 	}
 
 	forked := mustLoad(t, s, fork.RunID)
-	if !reflect.DeepEqual(forked.Messages, base) {
+	if !reflect.DeepEqual(stripStamps(t, forked.Messages), base) {
 		t.Fatalf("fork did not copy the log: %+v", forked.Messages)
 	}
 	if forked.ParentID != id {
@@ -252,4 +255,59 @@ func TestRun_JSONRoundTrip(t *testing.T) {
 	if string(data) != string(data2) {
 		t.Fatalf("round-trip drift:\n got %s\nwant %s", data2, data)
 	}
+}
+
+func TestInMemoryRunStore_StampsTimestamps(t *testing.T) {
+	ctx := context.Background()
+	s := NewInMemoryRunStore()
+	id := mustCreate(t, s, "")
+
+	pre := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	if _, err := s.AppendMessages(ctx, AppendMessagesRequest{RunID: id, Messages: []Message{
+		{Role: RoleUser, Text: "unstamped"},
+		{Role: RoleAssistant, Text: "pre-stamped", Timestamp: pre},
+	}}); err != nil {
+		t.Fatalf("AppendMessages: %v", err)
+	}
+
+	run := mustLoad(t, s, id)
+	if run.Messages[0].Timestamp.IsZero() {
+		t.Fatal("store did not stamp the unstamped message")
+	}
+	if !run.Messages[1].Timestamp.Equal(pre) {
+		t.Fatalf("caller-set timestamp clobbered: %v, want %v", run.Messages[1].Timestamp, pre)
+	}
+}
+
+// TestMessageTimestampOmittedWhenZero pins wire cleanliness: unstamped
+// messages (the shape providers see mid-turn) carry no timestamp key.
+func TestMessageTimestampOmittedWhenZero(t *testing.T) {
+	raw, err := json.Marshal(Message{Role: RoleUser, Text: "hi"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "timestamp") {
+		t.Fatalf("zero Timestamp leaked onto the wire: %s", raw)
+	}
+	stamped, err := json.Marshal(Message{Role: RoleUser, Text: "hi", Timestamp: time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stamped), `"timestamp":"2026-07-01T12:00:00Z"`) {
+		t.Fatalf("stamped Timestamp missing from wire form: %s", stamped)
+	}
+}
+
+// stripStamps asserts every message got stamped, then zeroes the field
+// so structural comparisons stay exact on everything else.
+func stripStamps(t *testing.T, msgs []Message) []Message {
+	t.Helper()
+	out := slices.Clone(msgs)
+	for i := range out {
+		if out[i].Timestamp.IsZero() {
+			t.Fatalf("message %d not stamped: %+v", i, out[i])
+		}
+		out[i].Timestamp = time.Time{}
+	}
+	return out
 }
