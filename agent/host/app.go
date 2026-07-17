@@ -382,7 +382,7 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			}
 		case line == "/fork" || strings.HasPrefix(line, "/fork "):
 			id := strings.TrimSpace(strings.TrimPrefix(line, "/fork"))
-			forkID, err := a.Fork(ctx, id)
+			forkID, err := a.Fork(ctx, id, 0)
 			if err != nil {
 				a.renderer.turnFailed(err)
 			} else {
