@@ -117,15 +117,78 @@ type TurnResult struct {
 	Structured core.RawJSON `json:"structured,omitempty"`
 }
 
+// Control steers a turn while it runs. Surfaces send Controls on
+// TurnRequest.Control; today the only steering is per-call cancellation
+// (the coding-agent "Esc cancels the call, not the session" behavior).
+type Control struct {
+	// CallID names the in-flight tool call to cancel — the ToolCall.ID
+	// surfaces saw on that call's tool-begin event. Empty cancels every
+	// call currently in flight. An ID that is not in flight (already
+	// finished, or never dispatched) is a no-op, so racing a call's
+	// natural completion is safe.
+	CallID string
+}
+
+// TurnRequest consolidates RunTurn's inputs so the turn surface can grow
+// without breaking signatures (the same C2 shape RunnerConfig uses).
+type TurnRequest struct {
+	// History is the conversation so far; RunTurn clones it and returns
+	// only appended messages, exactly like Run.
+	History []Message
+
+	// Emit receives the turn's event stream. Nil is allowed; emit is
+	// never called concurrently.
+	Emit func(Event)
+
+	// Control, when non-nil, is drained for the whole turn. A Control
+	// cancels the targeted call's own context: the call fails fast
+	// (ClientSource.Call threads ctx to the wire, so MCP servers see a
+	// real cancellation), its result is fed back to the model as
+	// "cancelled by user", and the turn continues — unlike cancelling
+	// RunTurn's ctx, which aborts the whole turn. Send only while a
+	// turn is running: between turns nothing drains the channel, and a
+	// buffered cancel-all would hit the next turn's first dispatch.
+	Control <-chan Control
+}
+
 // Run executes one turn against history. Events stream to emit (nil is
 // allowed); emit is never called concurrently. Tool failures of every kind
 // (unknown tool, transport, bad args) are fed back to the model as
 // error-marked tool results and the loop continues; only ctx cancellation,
 // provider failure, or the step cap abort the turn. The returned error wraps
-// ErrMaxSteps when the cap was hit.
+// ErrMaxSteps when the cap was hit. Run is shorthand for RunTurn without
+// mid-turn controls.
 func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (*TurnResult, error) {
+	return r.RunTurn(ctx, TurnRequest{History: history, Emit: emit})
+}
+
+// RunTurn executes one turn with the full request surface: Run's
+// contract plus mid-turn Controls (per-call cancellation). See
+// TurnRequest for the semantics of each field.
+func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, error) {
+	history, emit := req.History, req.Emit
 	if emit == nil {
 		emit = func(Event) {}
+	}
+
+	var reg *callCancels
+	if req.Control != nil {
+		reg = &callCancels{cancels: map[string]context.CancelFunc{}}
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() {
+			for {
+				select {
+				case c, ok := <-req.Control:
+					if !ok {
+						return
+					}
+					reg.cancel(c.CallID)
+				case <-stop:
+					return
+				}
+			}
+		}()
 	}
 	ctx, turnSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.turn")
 	defer turnSpan.End()
@@ -209,7 +272,7 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 			return result, nil
 		}
 
-		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit)
+		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit, reg)
 		stepSpan.End()
 		if err := ctx.Err(); err != nil {
 			return nil, r.failSpan(emit, turnSpan, err)
@@ -302,10 +365,48 @@ func (r *Runner) finalizeStructured(ctx context.Context, msgs []Message, usage *
 	return core.NewRawJSON(json.RawMessage(last)), nil
 }
 
+// callCancels tracks the in-flight tool calls of one turn so the
+// control listener can cancel a specific call's context. Entries live
+// from just before a call's tool-begin to just after it returns.
+type callCancels struct {
+	mu      sync.Mutex
+	cancels map[string]context.CancelFunc
+}
+
+func (g *callCancels) add(id string, cancel context.CancelFunc) {
+	g.mu.Lock()
+	g.cancels[id] = cancel
+	g.mu.Unlock()
+}
+
+func (g *callCancels) remove(id string) {
+	g.mu.Lock()
+	delete(g.cancels, id)
+	g.mu.Unlock()
+}
+
+// cancel fires the named call's cancel func, or every in-flight one when
+// id is empty. Unknown ids are a no-op.
+func (g *callCancels) cancel(id string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if id == "" {
+		for _, c := range g.cancels {
+			c()
+		}
+		return
+	}
+	if c, ok := g.cancels[id]; ok {
+		c()
+	}
+}
+
 // dispatch runs the step's tool calls concurrently, serializes event
 // emission, and returns RoleTool messages in call order regardless of
-// completion order.
-func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event)) []Message {
+// completion order. When reg is non-nil each call runs under its own
+// child context registered by call ID, so a Control can cancel one call
+// without touching its siblings or the turn.
+func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) []Message {
 	results := make([]Message, len(calls))
 	var emitMu sync.Mutex
 	locked := func(ev Event) {
@@ -319,10 +420,20 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 		wg.Add(1)
 		go func(i int, call ToolCall) {
 			defer wg.Done()
-			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.tool",
+			callCtx := ctx
+			if reg != nil {
+				var cancel context.CancelFunc
+				callCtx, cancel = context.WithCancel(ctx)
+				reg.add(call.ID, cancel)
+				defer func() {
+					reg.remove(call.ID)
+					cancel()
+				}()
+			}
+			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(callCtx, "agent.tool",
 				core.Attribute{Key: "agent.tool.name", Value: call.Name})
 			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
-			text := r.callTool(toolCtx, step, call, tools, locked, toolSpan)
+			text := r.callTool(toolCtx, ctx, step, call, tools, locked, toolSpan)
 			toolSpan.End()
 			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
 		}(i, call)
@@ -348,8 +459,26 @@ func toolReadOnly(tools []core.ToolDef, name string) bool {
 
 // callTool executes one call and renders the text fed back to the model.
 // Every failure shape becomes model-visible text rather than a turn abort.
-func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, tools []core.ToolDef, emit func(Event), span core.Span) string {
+// ctx is the call's own (possibly Control-cancellable) context; parent is
+// the step's. The two diverging — ctx cancelled while parent is live —
+// identifies a per-call cancellation, which feeds back as "cancelled by
+// user" so the model knows the user, not the tool, stopped the call.
+func (r *Runner) callTool(ctx context.Context, parent context.Context, step int, call ToolCall, tools []core.ToolDef, emit func(Event), span core.Span) string {
+	// cancelled identifies a per-call cancellation: this call's ctx is
+	// done while the step's is live. Checked on every outcome shape —
+	// a transport surfaces a cancelled call as an error, an in-process
+	// source as an IsError result, and a tool racing the cancel may
+	// even return success; the user's cancel wins over all three.
+	cancelled := func() bool { return ctx.Err() != nil && parent.Err() == nil }
+	cancelledText := func() string {
+		span.SetAttribute("agent.tool.cancelled", "true")
+		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: "cancelled by user"})
+		return "cancelled by user"
+	}
 	failed := func(err error) string {
+		if cancelled() {
+			return cancelledText()
+		}
 		span.RecordError(err)
 		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
 		return fmt.Sprintf("tool call failed: %v", err)
@@ -388,6 +517,9 @@ func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, tools []
 	res, err := r.cfg.Tools.Call(ctx, call.Name, args)
 	if err != nil {
 		return failed(err)
+	}
+	if cancelled() {
+		return cancelledText()
 	}
 	span.SetAttribute("agent.tool.is_error", fmt.Sprint(res.IsError))
 	emit(Event{Kind: EventToolEnd, Step: step, ToolCall: &call, ToolResult: res})
