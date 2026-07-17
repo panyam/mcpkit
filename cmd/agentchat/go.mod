@@ -3,15 +3,9 @@ module github.com/panyam/mcpkit/cmd/agentchat
 go 1.26.4
 
 require (
-	github.com/panyam/gocurrent v0.1.1
 	github.com/panyam/mcpkit v0.4.0-b2
-	github.com/panyam/mcpkit/agent v0.0.0
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
-	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0
-	github.com/panyam/mcpkit/ext/auth v0.0.0
+	github.com/panyam/mcpkit/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.3.1
-	github.com/panyam/mcpkit/ext/skills v0.0.0
-	github.com/panyam/mcpkit/ext/tasks v0.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
@@ -43,7 +37,13 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
+	github.com/panyam/mcpkit/agent v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
+	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
+	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect
 	github.com/panyam/oneauth v0.1.31 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
@@ -92,3 +92,5 @@ replace github.com/panyam/mcpkit/experimental/ext/events => ../../experimental/e
 replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../experimental/ext/events/clients/go
 
 replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
+
+replace github.com/panyam/mcpkit/agent/host => ../../agent/host

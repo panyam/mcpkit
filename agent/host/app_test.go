@@ -1,4 +1,4 @@
-package main
+package host
 
 import (
 	"bufio"
@@ -219,9 +219,6 @@ func TestConfigLoadingAndValidation(t *testing.T) {
 	bad := &Config{Model: ModelConfig{BaseURL: "x", Model: "m"}, Servers: []ServerConfig{{ID: "dup", URL: "u"}, {ID: "dup", URL: "v"}}}
 	if err := bad.Validate(); err == nil {
 		t.Fatal("want duplicate-id validation error")
-	}
-	if _, err := buildConfig("", nil, "b", "", "", "", 0); err == nil {
-		t.Fatal("want error when neither config nor url/model given")
 	}
 }
 
