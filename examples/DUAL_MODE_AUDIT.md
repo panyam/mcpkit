@@ -8,7 +8,7 @@ just compile?
 
 ## How this is verified
 
-- **Auto-drivable examples** run in `make verify-dual` (`scripts/verify-dual.sh`):
+- **Auto-drivable examples** run in `just verify-dual` (`scripts/verify-dual.sh`):
   each walkthrough runs non-interactively against a server on the legacy wire
   AND the stateless wire (`--wire=legacy` / `--wire=stateless`, from issue 824),
   and must produce no failure markers on either. demokit's non-interactive

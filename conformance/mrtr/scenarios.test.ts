@@ -5,7 +5,7 @@
  * (panyam/mcpconformance, branch feat/tasks-mrtr-extension; eventually
  * upstreamed to modelcontextprotocol/conformance). Run it via:
  *
- *     make testconf-mrtr
+ *     just testconf-mrtr
  *
  * which delegates to vitest in the fork.
  *

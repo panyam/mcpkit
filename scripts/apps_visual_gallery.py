@@ -16,8 +16,8 @@ For each fixture in `_apps_common.FIXTURES`:
   - Emits annotated PNGs into docs/site/static/conformance/apps/visual-gallery/
     and an index.html into docs/site/content/conformance/apps/visual-gallery/.
 
-The gallery is a release-time docs page — author runs `make refresh-visual-gallery`
-manually after a clean `make test-apps-playwright-docker-all`, commits the
+The gallery is a release-time docs page — author runs `just refresh-visual-gallery`
+manually after a clean `just test-apps-playwright-docker-all`, commits the
 regenerated artifacts. docs-site-build picks them up via the normal content tree.
 
 Usage:
@@ -49,7 +49,7 @@ GALLERY_STATIC = Path("docs/site/static/conformance/apps/visual-gallery")
 #
 # These are conservative on purpose: the gallery is for release-time
 # review, not the per-pixel CI gate. The Playwright snapshot test (in
-# `make test-apps-playwright-docker`) is the strict pixel-perfect gate.
+# `just test-apps-playwright-docker`) is the strict pixel-perfect gate.
 # Boxes here surface drift that's visible at a glance — full-region
 # color changes, missing UI elements, shifted layouts — without firing
 # on every sub-pixel font-rendering shimmer.

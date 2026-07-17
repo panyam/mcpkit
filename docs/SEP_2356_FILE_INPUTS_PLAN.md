@@ -101,7 +101,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 
 **Files:** `examples/file-inputs/` (shipped: `main.go`, `walkthrough.go`, `Makefile`, `README.md`, `WALKTHROUGH.md`, `testdata/{pixel.png,contract.pdf,appendix.pdf,README.txt}`)
 
-- [x] Demokit walkthrough running against a real `make serve` MCP server.
+- [x] Demokit walkthrough running against a real `just serve` MCP server.
 - [x] Three demo tools: `upload_image` (image/* + 5 MB cap), `analyze_documents` (array of PDFs), `process_any_file` (no filter).
 - [x] Embedded fixtures via `//go:embed testdata/...` so `make demo` is hermetic; readers can inspect / replace real files on disk.
 - [x] Optional `--file <path>` step exercises the on-disk → data URI path.
@@ -128,7 +128,7 @@ Conformance-style tests:
 - [x] Multi-file array input works
 - [x] Filename with special chars round-trips through percent-encoding
 
-**`make testconf-file-inputs` — 7/7 passing.** Phase 1 of SEP-2356 fully implemented mcpkit-side. Suite is now the WG-facing acceptance bar — any reference impl can be pointed at it.
+**`just testconf-file-inputs` — 7/7 passing.** Phase 1 of SEP-2356 fully implemented mcpkit-side. Suite is now the WG-facing acceptance bar — any reference impl can be pointed at it.
 
 ## Phase 2: MCP Apps bridge integration
 

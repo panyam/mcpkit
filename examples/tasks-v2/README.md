@@ -82,7 +82,7 @@ demo deterministic.
 
 ## Conformance
 
-- Scenarios live in the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork (branch `feat/tasks-mrtr-extension`, upstream Draft PR modelcontextprotocol/conformance#262). Run via `make testconf-tasks-v2` from the repo root — points the fork's vitest run at this binary.
+- Scenarios live in the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork (branch `feat/tasks-mrtr-extension`, upstream Draft PR modelcontextprotocol/conformance#262). Run via `just testconf-tasks-v2` from the repo root — points the fork's vitest run at this binary.
 - Migration guide: [`docs/TASKS_V2_MIGRATION.md`](../../docs/TASKS_V2_MIGRATION.md)
 - Spec: [SEP-2663](https://github.com/modelcontextprotocol/specification/pull/2663)
 

@@ -74,7 +74,7 @@ func runDemo() {{
 \t\tDescription("TODO: describe what this walkthrough demonstrates.").
 \t\tActors(
 \t\t\tdemokit.Actor("Host", "MCP Host (this client)"),
-\t\t\tdemokit.Actor("Server", "mcpkit-Go fixture (make serve)"),
+\t\t\tdemokit.Actor("Server", "mcpkit-Go fixture (just serve)"),
 \t\t)
 
 \tvar c *client.Client
@@ -88,7 +88,7 @@ func runDemo() {{
 \t\t\t\tcore.ClientInfo{{Name: "{fixture}-host", Version: "1.0"}},
 \t\t\t)
 \t\t\tif err := c.Connect(); err != nil {{
-\t\t\t\tfmt.Printf("    ERROR: %v\\n    Start the server with: make serve\\n", err)
+\t\t\t\tfmt.Printf("    ERROR: %v\\n    Start the server with: just serve\\n", err)
 \t\t\t\treturn nil
 \t\t\t}}
 \t\t\tfmt.Printf("    connected to %s %s\\n", c.ServerInfo.Name, c.ServerInfo.Version)

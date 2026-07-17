@@ -58,4 +58,4 @@ When the env var is unset, the step prints a one-line skip note and the walkthro
 
 ## CI integration
 
-`make test-mcpskills-walkthrough` at the repo root runs this same walkthrough with `--non-interactive` and asserts exit 0. Use it as the per-commit gate for the CLI's behavioral surface (verify lints, serve listens, inspect verifies, pack round-trips through unpack).
+`just test-mcpskills-walkthrough` at the repo root runs this same walkthrough with `--non-interactive` and asserts exit 0. Use it as the per-commit gate for the CLI's behavioral surface (verify lints, serve listens, inspect verifies, pack round-trips through unpack).

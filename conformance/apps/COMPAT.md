@@ -93,7 +93,7 @@ unchanged umbrella body produces a byte-identical file.
 To refresh:
 
 ```sh
-make refresh-apps-compat-report
+just refresh-apps-compat-report
 ```
 
 The CI `check-apps-compat-stale` gate enforces that PRs touching
