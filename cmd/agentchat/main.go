@@ -202,10 +202,10 @@ func runChat(v *viper.Viper) error {
 		host.WithLogger(logger),
 	}
 	tuiMode := wantTUI(v.GetString("ui"))
-	var surface *tuiSurface
+	var surface *tuiObserver
 	if tuiMode {
-		surface = newTUISurface()
-		appOpts = append(appOpts, host.WithSurface(surface))
+		surface = newTUIObserver()
+		appOpts = append(appOpts, host.WithObserver(surface))
 	}
 	sessionStore := v.GetString("session-store")
 	store, err := buildRunStore(sessionStore)
