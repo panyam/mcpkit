@@ -16,7 +16,7 @@ import (
 // that cannot be fetched at all is a startup error: the server advertised
 // skills and the host could not honor them, which the user should see before
 // conversing, not during.
-func loadSkillsBlock(c *client.Client, serverID string, rend *renderer, tp core.TracerProvider) (string, error) {
+func loadSkillsBlock(c *client.Client, serverID string, emit func(HostEvent), tp core.TracerProvider) (string, error) {
 	sc := skills.NewClient(c, skills.WithTracerProvider(tp))
 	if !sc.SupportsSkills() {
 		return "", nil
@@ -28,13 +28,13 @@ func loadSkillsBlock(c *client.Client, serverID string, rend *renderer, tp core.
 	var ok int
 	for _, ls := range loaded {
 		if ls.Err != nil {
-			rend.skillSkipped(serverID, ls.Entry.URL, ls.Err)
+			emit(HostEvent{Kind: HostSkillSkipped, ServerID: serverID, URI: ls.Entry.URL, Err: ls.Err.Error()})
 			continue
 		}
 		ok++
 	}
 	if ok > 0 || len(loaded) > 0 {
-		rend.skillsLoaded(serverID, ok, len(loaded)-ok)
+		emit(HostEvent{Kind: HostSkillsLoaded, ServerID: serverID, Loaded: ok, Skipped: len(loaded) - ok})
 	}
 	return skills.InstructionsBlock(loaded), nil
 }

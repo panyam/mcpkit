@@ -135,7 +135,7 @@ func (a *App) ensureRunLocked(ctx context.Context) error {
 		return fmt.Errorf("host: creating run: %w", err)
 	}
 	a.runID = resp.RunID
-	a.renderer.session(resp.RunID)
+	a.emit(HostEvent{Kind: HostSessionChanged, RunID: resp.RunID})
 	return nil
 }
 
@@ -147,12 +147,12 @@ func (a *App) ensureRunLocked(ctx context.Context) error {
 func (a *App) persistTurnLocked(ctx context.Context, msgs []agent.Message, pe *PersistingEmit) {
 	resp, err := a.store.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: a.runID, Messages: msgs})
 	if err != nil {
-		a.renderer.sessionWarn(err)
+		a.emit(HostEvent{Kind: HostSessionWarn, Err: err.Error()})
 	} else if !resp.Found {
-		a.renderer.sessionWarn(fmt.Errorf("run %q disappeared from the store", a.runID))
+		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("run %q disappeared from the store", a.runID)})
 	}
 	if err := pe.Flush(ctx); err != nil {
-		a.renderer.sessionWarn(err)
+		a.emit(HostEvent{Kind: HostSessionWarn, Err: err.Error()})
 	}
 }
 

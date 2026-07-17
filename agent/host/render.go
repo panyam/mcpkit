@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -263,5 +264,42 @@ func (r *renderer) command(res CmdResult) {
 		r.approvalMode(res.Approval)
 	case CmdQuit:
 		// nothing to render; the loop exits
+	}
+}
+
+// On implements Observer: the terminal rendering of the host's HostEvent
+// stream. It dispatches each kind to the shape-specific formatter; the
+// formatters are unchanged, so behavior is identical to the pre-seam
+// direct calls.
+func (r *renderer) On(ev HostEvent) {
+	switch ev.Kind {
+	case HostRunnerEvent:
+		r.handle(ev.RunnerEvent)
+	case HostCommandResult:
+		r.command(ev.Command)
+	case HostTurnDone:
+		r.turnDone(ev.Result)
+	case HostTurnFailed:
+		r.turnFailed(errors.New(ev.Err))
+	case HostSessionChanged:
+		r.session(ev.RunID)
+	case HostSessionWarn:
+		r.sessionWarn(errors.New(ev.Err))
+	case HostTriggerFired:
+		r.triggerFired(ev.Label)
+	case HostSkillsLoaded:
+		r.skillsLoaded(ev.ServerID, ev.Loaded, ev.Skipped)
+	case HostSkillSkipped:
+		r.skillSkipped(ev.ServerID, ev.URI, errors.New(ev.Err))
+	case HostEventDropped:
+		r.eventDropped(ev.ServerID, ev.EventName)
+	case HostTaskStatus:
+		r.taskStatus(ev.TaskStatus)
+	case HostTaskDetached:
+		r.taskDetached(ev.Task)
+	case HostTaskCompleted:
+		r.taskCompleted(ev.Task)
+	case HostMessage:
+		fmt.Fprintf(r.out, "%s\n", r.dim(ev.Message))
 	}
 }

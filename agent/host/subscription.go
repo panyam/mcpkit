@@ -40,7 +40,7 @@ func (a *App) openSubscription(ctx context.Context, serverID, name string) (stri
 
 	ch, call, err := eventsclient.StreamChan(ctx, c, eventsclient.ChanStreamOptions{
 		EventName: name,
-		OnDrop:    func(ev events.Event) { a.renderer.eventDropped(serverID, name) },
+		OnDrop:    func(ev events.Event) { a.emit(HostEvent{Kind: HostEventDropped, ServerID: serverID, EventName: name}) },
 	})
 	if err != nil {
 		return "", err
