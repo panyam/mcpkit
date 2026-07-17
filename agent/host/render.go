@@ -239,3 +239,29 @@ func (r *renderer) providers(names []string, active string) {
 		fmt.Fprintf(r.out, "%s\n", r.dim(marker+n))
 	}
 }
+
+// command renders a CmdResult by dispatching to the shape-specific
+// renderer for its Kind — the terminal implementation of the structured
+// command output (a web surface would serialize the CmdResult instead).
+func (r *renderer) command(res CmdResult) {
+	switch res.Kind {
+	case CmdMessage:
+		fmt.Fprintf(r.out, "%s\n", r.dim(res.Message))
+	case CmdProviders:
+		r.providers(res.Providers, res.ActiveProvider)
+	case CmdSession:
+		r.session(res.RunID)
+	case CmdTools:
+		r.toolList(res.Tools)
+	case CmdHistory:
+		r.history(res.Messages)
+	case CmdHealth:
+		r.health(res.Failover)
+	case CmdTasks:
+		r.taskList(res.Tasks)
+	case CmdApproval:
+		r.approvalMode(res.Approval)
+	case CmdQuit:
+		// nothing to render; the loop exits
+	}
+}

@@ -273,7 +273,11 @@ func TestAppApprovalRuntimeToggle(t *testing.T) {
 	}
 	defer app.Close()
 
-	app.setApprovalMode("allow")
+	if res, err := app.Dispatch(context.Background(), "/approve allow"); err != nil {
+		t.Fatal(err)
+	} else {
+		app.renderer.command(res)
+	}
 	if app.approval.DefaultMode() != agent.ModeAlwaysAllow {
 		t.Fatalf("runtime toggle did not take: %v", app.approval.DefaultMode())
 	}
@@ -288,7 +292,11 @@ func TestAppApprovalRuntimeToggle(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer app2.Close()
-	app2.setApprovalMode("allow")
+	if res, err := app2.Dispatch(context.Background(), "/approve allow"); err != nil {
+		t.Fatal(err)
+	} else {
+		app2.renderer.command(res)
+	}
 	if !strings.Contains(out2.String(), "approval: off") {
 		t.Fatalf("no-policy toggle should say off:\n%s", out2.String())
 	}

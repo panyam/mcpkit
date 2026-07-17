@@ -3,6 +3,7 @@ package host
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -57,6 +58,10 @@ type App struct {
 	// its underlying. Both nil when Connections is not configured.
 	connections    *ConnectionRegistry
 	providerSwitch *providerSwitch
+
+	// commands is the slash-command registry every surface dispatches
+	// through (Dispatch / Commands). Built in NewApp.
+	commands *CommandRegistry
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -284,6 +289,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		return nil, err
 	}
 	app.runner = runner
+	app.registerBuiltinCommands()
 
 	if app.metaTools {
 		evCtx, cancel := context.WithCancel(context.Background())
@@ -370,16 +376,6 @@ func (a *App) Tools(ctx context.Context) error {
 	return nil
 }
 
-// setApprovalMode handles "/approve <mode>": it flips the live policy's
-// default disposition. A no-op with a note when approval is not configured.
-func (a *App) setApprovalMode(arg string) {
-	if a.approval == nil {
-		a.renderer.approvalMode(nil)
-		return
-	}
-	a.approval.SetDefaultMode(parseApprovalMode(arg))
-	a.renderer.approvalMode(a.approval)
-}
 
 // Providers returns the configured connection names and the active one,
 // or (nil, "") when no connection registry is configured. Structured so a
@@ -420,49 +416,17 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 		line := strings.TrimSpace(scanner.Text())
 		switch {
 		case line == "":
-		case line == "/quit" || line == "/exit":
-			return nil
-		case line == "/tools":
-			if err := a.Tools(ctx); err != nil {
-				a.renderer.turnFailed(err)
-			}
-		case line == "/history":
-			a.renderer.history(a.history)
-		case line == "/health":
-			a.renderer.health(a.failover)
-		case line == "/tasks":
-			a.renderer.taskList(a.snapshotTasks())
-		case strings.HasPrefix(line, "/tasks cancel "):
-			a.cancelTask(strings.TrimPrefix(line, "/tasks cancel "))
-		case line == "/approve":
-			a.renderer.approvalMode(a.approval)
-		case strings.HasPrefix(line, "/approve "):
-			a.setApprovalMode(strings.TrimPrefix(line, "/approve "))
-		case line == "/provider":
-			a.renderer.providers(a.Providers())
-		case strings.HasPrefix(line, "/provider "):
-			name := strings.TrimSpace(strings.TrimPrefix(line, "/provider "))
-			if err := a.SwitchProvider(name); err != nil {
+		case strings.HasPrefix(line, "/"):
+			res, err := a.Dispatch(ctx, line)
+			if errors.Is(err, ErrUnknownCommand) {
+				a.renderer.turnFailed(fmt.Errorf("unknown command %q (try /tools, /provider, /session, /quit)", line))
+			} else if err != nil {
 				a.renderer.turnFailed(err)
 			} else {
-				a.renderer.providers(a.Providers())
-			}
-		case line == "/session":
-			a.renderer.session(a.RunID())
-		case strings.HasPrefix(line, "/resume "):
-			id := strings.TrimSpace(strings.TrimPrefix(line, "/resume "))
-			if err := a.Resume(ctx, id); err != nil {
-				a.renderer.turnFailed(err)
-			} else {
-				a.renderer.session(id)
-			}
-		case line == "/fork" || strings.HasPrefix(line, "/fork "):
-			id := strings.TrimSpace(strings.TrimPrefix(line, "/fork"))
-			forkID, err := a.Fork(ctx, id, 0)
-			if err != nil {
-				a.renderer.turnFailed(err)
-			} else {
-				a.renderer.session(forkID)
+				a.renderer.command(res)
+				if res.Quit {
+					return nil
+				}
 			}
 		default:
 			tctx, cancel := turnCtx()
