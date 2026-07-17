@@ -53,6 +53,13 @@ type RunnerConfig struct {
 	// (the ToolSource layer). A selector error aborts the turn: it is a
 	// host configuration bug, not something the model can recover from.
 	Selector ToolSelector
+
+	// Approval, when non-nil, gates each tool call before it runs: the
+	// Runner asks the policy in callTool, after argument binding and before
+	// ToolSource.Call. A refusal is fed back to the model as a tool result
+	// (a tool-denied event, then the turn continues), never a turn abort.
+	// Nil means every call runs, the pre-approval behavior.
+	Approval ApprovalPolicy
 }
 
 // ToolSelector narrows the model-facing tool set for one step. Returning the
@@ -177,7 +184,7 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 			return result, nil
 		}
 
-		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, emit)
+		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit)
 		stepSpan.End()
 		if err := ctx.Err(); err != nil {
 			return nil, r.failSpan(emit, turnSpan, err)
@@ -238,7 +245,7 @@ func consumeStream(stream Stream, step int, emit func(Event)) (*ProviderResponse
 // dispatch runs the step's tool calls concurrently, serializes event
 // emission, and returns RoleTool messages in call order regardless of
 // completion order.
-func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit func(Event)) []Message {
+func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event)) []Message {
 	results := make([]Message, len(calls))
 	var emitMu sync.Mutex
 	locked := func(ev Event) {
@@ -255,7 +262,7 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit 
 			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.tool",
 				core.Attribute{Key: "agent.tool.name", Value: call.Name})
 			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
-			text := r.callTool(toolCtx, step, call, locked, toolSpan)
+			text := r.callTool(toolCtx, step, call, tools, locked, toolSpan)
 			toolSpan.End()
 			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
 		}(i, call)
@@ -264,9 +271,24 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit 
 	return results
 }
 
+// toolReadOnly reports whether the named tool declares the readOnlyHint
+// annotation in the step's offered set. It is the signal the read-only-auto
+// approval tier keys on; an unknown tool or an absent hint is treated as
+// not read-only (fail-safe: a tool that does not promise read-only gets the
+// stricter path).
+func toolReadOnly(tools []core.ToolDef, name string) bool {
+	for _, t := range tools {
+		if t.Name == name {
+			ro, _ := t.Annotations["readOnlyHint"].(bool)
+			return ro
+		}
+	}
+	return false
+}
+
 // callTool executes one call and renders the text fed back to the model.
 // Every failure shape becomes model-visible text rather than a turn abort.
-func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit func(Event), span core.Span) string {
+func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, tools []core.ToolDef, emit func(Event), span core.Span) string {
 	failed := func(err error) string {
 		span.RecordError(err)
 		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
@@ -276,6 +298,27 @@ func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit fun
 	if r.cfg.Tools == nil {
 		return failed(fmt.Errorf("%w: %q (no tools offered)", ErrUnknownTool, call.Name))
 	}
+
+	if r.cfg.Approval != nil {
+		dec, err := r.cfg.Approval.Approve(ctx, ApprovalRequest{
+			ToolName: call.Name,
+			Args:     call.Args,
+			ReadOnly: toolReadOnly(tools, call.Name),
+		})
+		if err != nil {
+			return failed(fmt.Errorf("agent: approval policy for %q: %w", call.Name, err))
+		}
+		if !dec.Allowed {
+			reason := dec.Reason
+			if reason == "" {
+				reason = "denied by approval policy"
+			}
+			span.SetAttribute("agent.tool.denied", "true")
+			emit(Event{Kind: EventToolDenied, Step: step, ToolCall: &call, Reason: reason})
+			return "tool call not permitted: " + reason
+		}
+	}
+
 	args := map[string]any{}
 	if call.Args.Len() > 0 {
 		if err := call.Args.Bind(&args); err != nil {

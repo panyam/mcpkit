@@ -12,7 +12,7 @@ type EventKind string
 // Event kinds, in the order a typical turn emits them. Thinking markers wrap
 // contiguous reasoning deltas within one step; tool events may interleave
 // across parallel calls of the same step, but tool-begin always precedes its
-// call's tool-end or tool-error.
+// call's tool-end, tool-error, or tool-denied.
 const (
 	EventTurnBegin     EventKind = "turn-begin"
 	EventThinkingBegin EventKind = "thinking-begin"
@@ -22,6 +22,7 @@ const (
 	EventToolBegin     EventKind = "tool-begin"
 	EventToolEnd       EventKind = "tool-end"
 	EventToolError     EventKind = "tool-error"
+	EventToolDenied    EventKind = "tool-denied"
 	EventTurnEnd       EventKind = "turn-end"
 	EventError         EventKind = "error"
 )
@@ -53,6 +54,12 @@ type Event struct {
 	// Error is the failure description on tool-error and error. A string,
 	// not an error value, so the event crosses wires unchanged.
 	Error string `json:"error,omitempty"`
+
+	// Reason is the human-readable justification on tool-denied: why the
+	// approval policy refused the call. Distinct from Error because a
+	// denial is a policy outcome, not a dispatch failure; the call never
+	// ran, so there is no ToolResult.
+	Reason string `json:"reason,omitempty"`
 
 	// Result is the completed turn on turn-end.
 	Result *TurnResult `json:"result,omitempty"`

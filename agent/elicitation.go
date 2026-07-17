@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	"github.com/panyam/mcpkit/client"
@@ -51,6 +52,28 @@ func NewElicitationCoordinator(ui ElicitationUI) *ElicitationCoordinator {
 // it on every client whose servers may elicit.
 func (c *ElicitationCoordinator) Handler() client.ElicitationHandler {
 	return c.present
+}
+
+// Confirm presents a yes/no prompt through the same FIFO seam as elicitation
+// and reports the user's choice. It is the general "ask the user to confirm"
+// primitive; the approval ladder wires it as its AskFunc (WithAsk(coord.Confirm))
+// so an approval prompt inherits the one-at-a-time serialization and never
+// stacks against a concurrent elicitation. Only an explicit accept with
+// confirm=true returns true; decline, cancel, or a missing/false field return
+// false. A non-nil error means the surface failed to present the prompt.
+func (c *ElicitationCoordinator) Confirm(ctx context.Context, message string) (bool, error) {
+	res, err := c.present(ctx, core.ElicitationRequest{
+		Message:         message,
+		RequestedSchema: json.RawMessage(`{"type":"object","properties":{"confirm":{"type":"boolean"}},"required":["confirm"]}`),
+	})
+	if err != nil {
+		return false, err
+	}
+	if res.Action != "accept" {
+		return false, nil
+	}
+	confirmed, _ := res.Content["confirm"].(bool)
+	return confirmed, nil
 }
 
 func (c *ElicitationCoordinator) present(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
