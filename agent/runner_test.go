@@ -436,6 +436,96 @@ func TestRunnerApprovalAllowedRunsTool(t *testing.T) {
 	}
 }
 
+func TestRunnerStructuredFinalizesAfterTerminalText(t *testing.T) {
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object","properties":{"answer":{"type":"integer"}},"required":["answer"]}`))
+	stub := NewStubProvider(
+		StubTurn{Text: "The answer is 42."}, // terminal text (Stream)
+		StubTurn{Text: `{"answer":42}`},     // finalizing coercion (Generate)
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "what is the answer"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Text != "The answer is 42." {
+		t.Fatalf("text answer should be unchanged: %q", res.Text)
+	}
+	var got struct {
+		Answer int `json:"answer"`
+	}
+	if err := res.Structured.Bind(&got); err != nil || got.Answer != 42 {
+		t.Fatalf("structured = %s (bind err %v)", res.Structured.Raw(), err)
+	}
+	// The finalizing Generate consumed a second turn.
+	if len(stub.Requests()) != 2 {
+		t.Fatalf("want 2 provider calls (stream + finalize), got %d", len(stub.Requests()))
+	}
+	// The finalizing request carries the schema and offers no tools.
+	fin := stub.Requests()[1]
+	if fin.ResponseSchema.Len() == 0 || len(fin.Tools) != 0 {
+		t.Fatalf("finalize request should set schema and no tools: %+v", fin)
+	}
+}
+
+func TestRunnerNoSchemaSkipsFinalize(t *testing.T) {
+	stub := NewStubProvider(StubTurn{Text: "plain answer"})
+	r, err := NewRunner(RunnerConfig{Provider: stub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "hi"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Structured.Len() != 0 {
+		t.Fatalf("no schema means no structured output: %s", res.Structured.Raw())
+	}
+	if len(stub.Requests()) != 1 {
+		t.Fatalf("no schema means no finalize call, got %d calls", len(stub.Requests()))
+	}
+}
+
+func TestRunnerStructuredRetriesInvalidJSON(t *testing.T) {
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object"}`))
+	stub := NewStubProvider(
+		StubTurn{Text: "done"},            // terminal text
+		StubTurn{Text: "not json at all"}, // first finalize: invalid
+		StubTurn{Text: `{"ok":true}`},     // retry: valid
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "go"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Structured.Raw()) != `{"ok":true}` {
+		t.Fatalf("retry should have produced valid JSON, got %s", res.Structured.Raw())
+	}
+	if len(stub.Requests()) != 3 {
+		t.Fatalf("want stream + 2 finalize attempts = 3 calls, got %d", len(stub.Requests()))
+	}
+}
+
+func TestRunnerStructuredProviderErrorAbortsTurn(t *testing.T) {
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object"}`))
+	stub := NewStubProvider(
+		StubTurn{Text: "done"},                    // terminal text
+		StubTurn{Err: errors.New("upstream 500")}, // finalize fails
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "go"}}, nil); err == nil {
+		t.Fatal("a failed structured finalize must abort the turn")
+	}
+}
+
 func TestRunnerRequiresProvider(t *testing.T) {
 	if _, err := NewRunner(RunnerConfig{}); err == nil {
 		t.Fatal("want error for missing provider")
