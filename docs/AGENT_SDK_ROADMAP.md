@@ -261,9 +261,12 @@ I (finer interrupt) ── Runner change, independent of D
 Each **phase = an epic** merging stacked per-issue PRs into an integration branch (the epic-895
 pattern that built `agent/` itself); each bullet = one PR.
 
-**Phase 0 — "feels like a real SDK" (parallel, no deps):**
-`ApprovalPolicy` gate + `TieredApproval` (E) · Anthropic provider (G) · structured final output (F) ·
-`agent/eval` deterministic scorers + LLM-judge (H).
+**Phase 0 — "feels like a real SDK" (parallel, no deps): ✅ SHIPPED.**
+`ApprovalPolicy` gate + `TieredApproval` (E, issue 929) · Anthropic provider (G, issue 930) ·
+structured final output (F, issue 931) · `agent/eval` deterministic scorers + LLM-judge (H, issue 932).
+All merged. Deferred riders: extract the shared provider SSE loop (issue 952); Anthropic prompt
+caching / extended thinking (issue 953, best sequenced with P2 compaction — the cache breakpoint is
+the compactor's stable-head boundary).
 
 **Phase 1 — durability & control:**
 `RunStore` interface + in-memory + redis sibling (D) · `agent/host` persist/resume/fork (D + I session
