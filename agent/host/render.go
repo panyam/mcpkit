@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -263,5 +264,44 @@ func (r *renderer) command(res CmdResult) {
 		r.approvalMode(res.Approval)
 	case CmdQuit:
 		// nothing to render; the loop exits
+	}
+}
+
+// Emit implements Surface: the terminal rendering of the host's UIEvent
+// stream. It dispatches each kind to the shape-specific formatter; the
+// formatters are unchanged, so behavior is identical to the pre-seam
+// direct calls.
+func (r *renderer) Emit(ev UIEvent) {
+	switch ev.Kind {
+	case UIRunnerEvent:
+		r.handle(ev.RunnerEvent)
+	case UICommand:
+		r.command(ev.Command)
+	case UITurnDone:
+		r.turnDone(ev.Result)
+	case UITurnFailed:
+		r.turnFailed(errors.New(ev.Err))
+	case UISession:
+		r.session(ev.RunID)
+	case UISessionWarn:
+		r.sessionWarn(errors.New(ev.Err))
+	case UITriggerFired:
+		r.triggerFired(ev.Label)
+	case UISkillsLoaded:
+		r.skillsLoaded(ev.ServerID, ev.Loaded, ev.Skipped)
+	case UISkillSkipped:
+		r.skillSkipped(ev.ServerID, ev.URI, errors.New(ev.Err))
+	case UIEventDropped:
+		r.eventDropped(ev.ServerID, ev.EventName)
+	case UITaskStatus:
+		r.taskStatus(ev.TaskStatus)
+	case UITaskDetached:
+		r.taskDetached(ev.Task)
+	case UITaskCompleted:
+		r.taskCompleted(ev.Task)
+	case UIPrompt:
+		r.prompt()
+	case UIMessage:
+		fmt.Fprintf(r.out, "%s\n", r.dim(ev.Message))
 	}
 }
