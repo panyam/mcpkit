@@ -449,3 +449,42 @@ func TestGormRunStore_ForkAtPoint(t *testing.T) {
 		}
 	})
 }
+
+func TestGormRunStore_ListRuns(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, s *RunStore) {
+		ctx := context.Background()
+		for i, id := range []string{"a", "b", "c"} {
+			mustCreate(t, s, id)
+			msgs := make([]agent.Message, i+1)
+			for j := range msgs {
+				msgs[j] = agent.Message{Role: agent.RoleUser, Text: "m"}
+			}
+			if _, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: id, Messages: msgs}); err != nil {
+				t.Fatalf("AppendMessages: %v", err)
+			}
+		}
+		resp, err := s.ListRuns(ctx, agent.ListRunsRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Runs) != 3 {
+			t.Fatalf("ListRuns = %d runs", len(resp.Runs))
+		}
+		byID := map[string]int{}
+		for _, r := range resp.Runs {
+			byID[r.ID] = r.MessageCount
+		}
+		if byID["a"] != 1 || byID["b"] != 2 || byID["c"] != 3 {
+			t.Fatalf("message counts wrong: %+v", byID)
+		}
+		// paging
+		p1, _ := s.ListRuns(ctx, agent.ListRunsRequest{Limit: 2})
+		if len(p1.Runs) != 2 || p1.NextCursor == "" {
+			t.Fatalf("page1 = %d runs cursor %q", len(p1.Runs), p1.NextCursor)
+		}
+		p2, _ := s.ListRuns(ctx, agent.ListRunsRequest{Limit: 2, Cursor: p1.NextCursor})
+		if len(p2.Runs) != 1 || p2.NextCursor != "" {
+			t.Fatalf("page2 = %d runs cursor %q", len(p2.Runs), p2.NextCursor)
+		}
+	})
+}

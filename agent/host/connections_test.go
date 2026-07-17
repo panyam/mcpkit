@@ -31,7 +31,11 @@ func stubBuilder(t *testing.T) ProviderBuilder {
 	byModel := map[string]string{"qwen": "local", "gpt-5": "cloud"}
 	return func(c ConnectionConfig) (agent.Provider, error) {
 		name := byModel[c.Model]
-		return &namedStub{StubProvider: agent.NewStubProvider(agent.StubTurn{Text: "reply from " + name}), name: name}, nil
+		turns := make([]agent.StubTurn, 8)
+		for i := range turns {
+			turns[i] = agent.StubTurn{Text: "reply from " + name}
+		}
+		return &namedStub{StubProvider: agent.NewStubProvider(turns...), name: name}, nil
 	}
 }
 

@@ -26,6 +26,8 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -277,6 +279,57 @@ const (
 	forkTargetClaimed = 1
 	forkCommitted     = 2
 )
+
+// ListRuns implements agent.RunStore by scanning the meta keys. Scan
+// order is unordered (Redis SCAN gives no ordering guarantee), so the
+// listing is not newest-first — the cursor is the raw SCAN cursor. A
+// session picker that needs ordering sorts client-side or uses the gorm
+// backend. MessageCount is an LLEN per run.
+func (s *RunStore) ListRuns(ctx context.Context, req agent.ListRunsRequest) (agent.ListRunsResponse, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = agent.DefaultListRunsLimit
+	}
+	var cursor uint64
+	if req.Cursor != "" {
+		if c, err := strconv.ParseUint(req.Cursor, 10, 64); err == nil {
+			cursor = c
+		}
+	}
+	match := s.prefix + ":*:meta"
+	keys, next, err := s.client.Scan(ctx, cursor, match, int64(limit)).Result()
+	if err != nil {
+		return agent.ListRunsResponse{}, err
+	}
+	infos := make([]agent.RunInfo, 0, len(keys))
+	for _, key := range keys {
+		id := strings.TrimSuffix(strings.TrimPrefix(key, s.prefix+":"), ":meta")
+		body, err := s.client.Get(ctx, key).Result()
+		if errors.Is(err, redis.Nil) {
+			continue // evicted between scan and get
+		}
+		if err != nil {
+			return agent.ListRunsResponse{}, err
+		}
+		var meta runMeta
+		if err := json.Unmarshal([]byte(body), &meta); err != nil {
+			return agent.ListRunsResponse{}, fmt.Errorf("redisstore: corrupt meta for run %q: %w", id, err)
+		}
+		n, err := s.client.LLen(ctx, s.key(id, "messages")).Result()
+		if err != nil {
+			return agent.ListRunsResponse{}, err
+		}
+		infos = append(infos, agent.RunInfo{
+			ID: id, ParentID: meta.ParentID, ForkPoint: meta.ForkPoint,
+			CreatedAt: meta.CreatedAt, MessageCount: int(n),
+		})
+	}
+	var nextCursor string
+	if next != 0 {
+		nextCursor = strconv.FormatUint(next, 10)
+	}
+	return agent.ListRunsResponse{Runs: infos, NextCursor: nextCursor}, nil
+}
 
 // ForkRun implements agent.RunStore. The fork is all-or-nothing (one
 // Lua script; see forkScript): on error no run exists at the new ID,
