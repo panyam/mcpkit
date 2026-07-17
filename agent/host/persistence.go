@@ -24,6 +24,14 @@ func WithToolResultStore(store agent.ToolResultStore) AppOption {
 	return func(o *appOptions) { o.toolResultStore = store }
 }
 
+// WithProviderBuilder overrides how Config.Connections entries are turned
+// into providers. Tests inject a builder returning StubProviders;
+// production uses DefaultProviderBuilder (OpenAI-compatible). Ignored when
+// Connections is nil or WithProvider is set.
+func WithProviderBuilder(b ProviderBuilder) AppOption {
+	return func(o *appOptions) { o.providerBuilder = b }
+}
+
 // RunID returns the active persisted run, or "" when persistence is off
 // or no run has been attached or created yet (the first turn creates
 // one lazily).

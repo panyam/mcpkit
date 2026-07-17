@@ -51,6 +51,12 @@ type App struct {
 	// toolResultStore backs tool-result offloading when Config.Offload
 	// is set; nil when offloading is off.
 	toolResultStore agent.ToolResultStore
+
+	// connections + providerSwitch are the runtime provider-switch seam
+	// (Config.Connections): the Runner holds the switch, /provider swaps
+	// its underlying. Both nil when Connections is not configured.
+	connections    *ConnectionRegistry
+	providerSwitch *providerSwitch
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -64,6 +70,7 @@ type appOptions struct {
 	logger          *slog.Logger
 	store           agent.RunStore
 	toolResultStore agent.ToolResultStore
+	providerBuilder ProviderBuilder
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -178,6 +185,21 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 
 	provider := o.provider
+	if provider == nil && cfg.Connections != nil {
+		reg, err := NewConnectionRegistry(cfg.Connections, o.providerBuilder)
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		active, err := reg.ActiveProvider()
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		app.connections = reg
+		app.providerSwitch = newProviderSwitch(active)
+		provider = app.providerSwitch
+	}
 	if provider == nil {
 		var err error
 		provider, err = agent.NewOpenAIProvider(agent.OpenAIConfig{
@@ -359,6 +381,32 @@ func (a *App) setApprovalMode(arg string) {
 	a.renderer.approvalMode(a.approval)
 }
 
+// Providers returns the configured connection names and the active one,
+// or (nil, "") when no connection registry is configured. Structured so a
+// surface (REPL, TUI, web) renders it however it likes.
+func (a *App) Providers() (names []string, active string) {
+	if a.connections == nil {
+		return nil, ""
+	}
+	return a.connections.Names(), a.connections.Active()
+}
+
+// SwitchProvider makes name the active chat provider for subsequent
+// turns. An unknown name or a build failure leaves the current provider
+// in place (the error says which). The swap takes effect on the next
+// model call; a turn already streaming finishes on its original provider.
+func (a *App) SwitchProvider(name string) error {
+	if a.connections == nil {
+		return fmt.Errorf("host: no connections configured")
+	}
+	p, err := a.connections.SetActive(name)
+	if err != nil {
+		return err
+	}
+	a.providerSwitch.set(p)
+	return nil
+}
+
 // REPL runs the interactive loop until EOF or /quit. turnCtx wraps each
 // turn so the caller's signal handling can cancel the in-flight turn
 // without killing the loop.
@@ -390,6 +438,15 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			a.renderer.approvalMode(a.approval)
 		case strings.HasPrefix(line, "/approve "):
 			a.setApprovalMode(strings.TrimPrefix(line, "/approve "))
+		case line == "/provider":
+			a.renderer.providers(a.Providers())
+		case strings.HasPrefix(line, "/provider "):
+			name := strings.TrimSpace(strings.TrimPrefix(line, "/provider "))
+			if err := a.SwitchProvider(name); err != nil {
+				a.renderer.turnFailed(err)
+			} else {
+				a.renderer.providers(a.Providers())
+			}
 		case line == "/session":
 			a.renderer.session(a.RunID())
 		case strings.HasPrefix(line, "/resume "):
