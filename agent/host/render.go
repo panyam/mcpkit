@@ -211,3 +211,15 @@ func (r *renderer) taskList(tasks []*client.BackgroundTask) {
 		fmt.Fprintf(r.out, "  %-12s %-20s %-16s %s\n", bt.TaskID, bt.Tool, bt.Status(), time.Since(bt.StartedAt).Round(time.Second))
 	}
 }
+
+func (r *renderer) session(runID string) {
+	if runID == "" {
+		fmt.Fprintf(r.out, "%s\n", r.dim("session: persistence off (no RunStore configured or no turn yet)"))
+		return
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim("session: "+runID))
+}
+
+func (r *renderer) sessionWarn(err error) {
+	fmt.Fprintf(r.out, "%s\n", r.dim("session: persistence degraded: "+err.Error()))
+}
