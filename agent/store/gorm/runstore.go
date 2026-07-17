@@ -254,6 +254,24 @@ func (s *RunStore) LoadRun(ctx context.Context, req agent.LoadRunRequest) (agent
 // transaction, so the fork is an exact cut of the source at commit
 // time. See agent.ForkRunRequest for the AtMessage and event-log
 // semantics.
+//
+// The transaction is for crash atomicity, NOT locking: nothing here
+// takes row locks on the source (no FOR UPDATE; INSERT ... SELECT's
+// read side is AccessShare), so appends to the source never wait on a
+// fork. Races don't need the transaction either — a racing append gets
+// a seq above every existing row, and the seq-ordered LIMIT copies a
+// deterministic prefix, so it lands cleanly after the cut. What the
+// transaction buys is the RunStore all-or-nothing contract: a crash
+// mid-fork rolls back to nothing (no claim row over a partial copy for
+// a retry to trust), and two replicas retrying the same NewRunID
+// resolve to one complete fork plus one clean Created=false. The
+// lock-free alternative (copy first, claim last, DELETE stale rows on
+// retry) can satisfy the crash case but costs an extra statement,
+// makes statement ORDER a correctness invariant, and leaves concurrent
+// same-ID retries able to interleave each other's half-written copies
+// — the transaction closes all three for free, so we use the
+// database's native atomicity primitive, mirroring the Redis backend's
+// choice of its native primitive (the atomic Lua script).
 func (s *RunStore) ForkRun(ctx context.Context, req agent.ForkRunRequest) (agent.ForkRunResponse, error) {
 	var resp agent.ForkRunResponse
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
