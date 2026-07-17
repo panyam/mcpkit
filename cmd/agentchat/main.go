@@ -12,11 +12,35 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/redis/go-redis/v9"
+
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
+	redisstore "github.com/panyam/mcpkit/agent/store/redis"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+// buildRunStore maps --session-store to a backend: "" is persistence
+// off, "memory" gives in-process resume/fork (dies with the process),
+// "redis://host:port" gives restart-surviving sessions.
+func buildRunStore(spec string) (agent.RunStore, error) {
+	switch {
+	case spec == "":
+		return nil, nil
+	case spec == "memory":
+		return agent.NewInMemoryRunStore(), nil
+	case strings.HasPrefix(spec, "redis://"):
+		addr := strings.TrimPrefix(spec, "redis://")
+		if addr == "" {
+			return nil, fmt.Errorf("agentchat: --session-store redis:// needs host:port")
+		}
+		return redisstore.New(redis.NewClient(&redis.Options{Addr: addr})), nil
+	default:
+		return nil, fmt.Errorf("agentchat: unknown --session-store %q (want memory or redis://host:port)", spec)
+	}
+}
 
 const version = "0.1.0"
 
@@ -48,6 +72,8 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("api-key-env", "", "env var holding the model API key")
 	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
+	fl.String("session-store", "", "session persistence backend: memory | redis://host:port (empty = off)")
+	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -90,14 +116,33 @@ func runChat(v *viper.Viper) error {
 	}
 	defer logShutdown(context.Background())
 
-	app, err := host.NewApp(cfg, os.Stdout, os.Stdin,
+	appOpts := []host.AppOption{
 		host.WithTracerProvider(tp),
 		host.WithLogger(logger),
-	)
+	}
+	store, err := buildRunStore(v.GetString("session-store"))
+	if err != nil {
+		return err
+	}
+	if store != nil {
+		appOpts = append(appOpts, host.WithRunStore(store))
+	}
+
+	app, err := host.NewApp(cfg, os.Stdout, os.Stdin, appOpts...)
 	if err != nil {
 		return err
 	}
 	defer app.Close()
+
+	if session := v.GetString("session"); session != "" {
+		if store == nil {
+			return fmt.Errorf("agentchat: --session needs --session-store")
+		}
+		if err := app.AttachRun(ctx, session); err != nil {
+			return err
+		}
+		fmt.Printf("agentchat: session %s\n", session)
+	}
 
 	fmt.Printf("agentchat: %d server(s), model %s. /tools /history /quit; Ctrl-C cancels a turn.\n", len(cfg.Servers), cfg.Model.Model)
 
