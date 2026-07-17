@@ -21,6 +21,8 @@ const (
 	CmdProviders CmdKind = "providers"
 	// CmdSession reports the active run id (RunID; empty = persistence off).
 	CmdSession CmdKind = "session"
+	// CmdSessions lists persisted sessions (Sessions + RunID = active).
+	CmdSessions CmdKind = "sessions"
 	// CmdTools lists the merged tool set (Tools).
 	CmdTools CmdKind = "tools"
 	// CmdHistory dumps the conversation so far (Messages).
@@ -53,6 +55,7 @@ type CmdResult struct {
 	Failover       *agent.FailoverProvider
 	Tasks          []*client.BackgroundTask
 	Approval       *agent.TieredApproval
+	Sessions       []agent.RunInfo
 	Quit           bool
 }
 
@@ -196,6 +199,34 @@ func (a *App) registerBuiltinCommands() {
 	r.Register(&Command{Name: "session", Help: "show the active session id",
 		Run: func(context.Context, string) (CmdResult, error) {
 			return CmdResult{Kind: CmdSession, RunID: a.RunID()}, nil
+		}})
+
+	r.Register(&Command{Name: "sessions", Help: "list persisted sessions; /sessions <id> switches",
+		Run: func(ctx context.Context, args string) (CmdResult, error) {
+			if args != "" {
+				if err := a.Resume(ctx, args); err != nil {
+					return CmdResult{}, err
+				}
+				return CmdResult{Kind: CmdSession, RunID: args}, nil
+			}
+			infos, err := a.Sessions(ctx)
+			if err != nil {
+				return CmdResult{}, err
+			}
+			return CmdResult{Kind: CmdSessions, Sessions: infos, RunID: a.RunID()}, nil
+		},
+		Complete: func(prefix string) []string {
+			infos, err := a.Sessions(context.Background())
+			if err != nil {
+				return nil
+			}
+			var out []string
+			for _, r := range infos {
+				if strings.HasPrefix(r.ID, prefix) {
+					out = append(out, r.ID)
+				}
+			}
+			return out
 		}})
 
 	r.Register(&Command{Name: "resume", Help: "switch to an existing session: /resume <id>",

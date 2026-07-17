@@ -370,3 +370,50 @@ func TestInMemoryRunStore_ForkAtPoint(t *testing.T) {
 		t.Fatalf("full fork dropped events: %+v", run.Events)
 	}
 }
+
+func TestInMemoryRunStore_ListRuns(t *testing.T) {
+	ctx := context.Background()
+	s := NewInMemoryRunStore()
+	// three runs; give each a distinct message count
+	for i, id := range []string{"a", "b", "c"} {
+		mustCreate(t, s, id)
+		msgs := make([]Message, i+1)
+		for j := range msgs {
+			msgs[j] = Message{Role: RoleUser, Text: "m"}
+		}
+		if _, err := s.AppendMessages(ctx, AppendMessagesRequest{RunID: id, Messages: msgs}); err != nil {
+			t.Fatalf("AppendMessages: %v", err)
+		}
+	}
+	resp, err := s.ListRuns(ctx, ListRunsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Runs) != 3 || resp.NextCursor != "" {
+		t.Fatalf("ListRuns = %d runs, cursor %q", len(resp.Runs), resp.NextCursor)
+	}
+	// counts present and correct (by id)
+	byID := map[string]int{}
+	for _, r := range resp.Runs {
+		byID[r.ID] = r.MessageCount
+	}
+	if byID["a"] != 1 || byID["b"] != 2 || byID["c"] != 3 {
+		t.Fatalf("message counts wrong: %+v", byID)
+	}
+
+	// paging
+	page, err := s.ListRuns(ctx, ListRunsRequest{Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Runs) != 2 || page.NextCursor == "" {
+		t.Fatalf("first page = %d runs, cursor %q", len(page.Runs), page.NextCursor)
+	}
+	page2, err := s.ListRuns(ctx, ListRunsRequest{Limit: 2, Cursor: page.NextCursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page2.Runs) != 1 || page2.NextCursor != "" {
+		t.Fatalf("second page = %d runs, cursor %q", len(page2.Runs), page2.NextCursor)
+	}
+}

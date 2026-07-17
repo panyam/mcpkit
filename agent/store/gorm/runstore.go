@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -247,6 +248,57 @@ func (s *RunStore) LoadRun(ctx context.Context, req agent.LoadRunRequest) (agent
 		},
 		Found: true,
 	}, nil
+}
+
+// ListRuns implements agent.RunStore, newest-first, with the message
+// count computed by a correlated subquery so one query returns the whole
+// page. The cursor is a decimal offset (keyset paging is overkill for a
+// session picker; a run set is small).
+func (s *RunStore) ListRuns(ctx context.Context, req agent.ListRunsRequest) (agent.ListRunsResponse, error) {
+	limit := req.Limit
+	if limit <= 0 {
+		limit = agent.DefaultListRunsLimit
+	}
+	offset := 0
+	if req.Cursor != "" {
+		if n, err := strconv.Atoi(req.Cursor); err == nil && n > 0 {
+			offset = n
+		}
+	}
+
+	type row struct {
+		ID           string
+		ParentID     string
+		ForkPoint    int
+		CreatedAt    time.Time
+		MessageCount int
+	}
+	var rows []row
+	// fetch limit+1 to know whether a next page exists
+	err := s.db.WithContext(ctx).
+		Table("agent_runs AS r").
+		Select("r.id, r.parent_id, r.fork_point, r.created_at, "+
+			"(SELECT COUNT(*) FROM agent_run_messages m WHERE m.run_id = r.id) AS message_count").
+		Order("r.created_at DESC, r.id ASC").
+		Limit(limit + 1).Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return agent.ListRunsResponse{}, err
+	}
+
+	var next string
+	if len(rows) > limit {
+		rows = rows[:limit]
+		next = strconv.Itoa(offset + limit)
+	}
+	infos := make([]agent.RunInfo, len(rows))
+	for i, r := range rows {
+		infos[i] = agent.RunInfo{
+			ID: r.ID, ParentID: r.ParentID, ForkPoint: r.ForkPoint,
+			CreatedAt: r.CreatedAt, MessageCount: r.MessageCount,
+		}
+	}
+	return agent.ListRunsResponse{Runs: infos, NextCursor: next}, nil
 }
 
 // ForkRun implements agent.RunStore. The whole fork — source check,

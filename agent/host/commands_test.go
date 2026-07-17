@@ -149,3 +149,52 @@ func TestApp_REPLDispatchesCommands(t *testing.T) {
 		t.Fatalf("REPL did not render provider list/switch:\n%s", s)
 	}
 }
+
+func TestApp_DispatchSessionsListAndSwitch(t *testing.T) {
+	ctx := context.Background()
+	app, _ := newCmdApp(t)
+
+	// two turns then a fork => three persisted runs
+	if err := app.RunTurn(ctx, "one"); err != nil {
+		t.Fatal(err)
+	}
+	first := app.RunID()
+	forkRes, err := app.Dispatch(ctx, "/fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunTurn(ctx, "two"); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := app.Dispatch(ctx, "/sessions")
+	if err != nil || list.Kind != CmdSessions {
+		t.Fatalf("/sessions = (%+v, %v)", list, err)
+	}
+	if len(list.Sessions) != 2 {
+		t.Fatalf("/sessions listed %d runs, want 2", len(list.Sessions))
+	}
+	if list.RunID != forkRes.RunID {
+		t.Fatalf("/sessions active = %q, want the fork %q", list.RunID, forkRes.RunID)
+	}
+	// switch back to the first via /sessions <id>
+	if _, err := app.Dispatch(ctx, "/sessions "+first); err != nil {
+		t.Fatalf("/sessions switch: %v", err)
+	}
+	if app.RunID() != first {
+		t.Fatalf("switch left run at %q, want %q", app.RunID(), first)
+	}
+}
+
+func TestApp_SessionsNoStoreErrors(t *testing.T) {
+	ts := startTestServer(t)
+	var out strings.Builder
+	app, err := NewApp(testConfig(ts.URL), &out, strings.NewReader(""), WithProvider(agent.NewStubProvider()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	if _, err := app.Sessions(context.Background()); err == nil {
+		t.Fatal("Sessions without a store should error")
+	}
+}

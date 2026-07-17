@@ -439,3 +439,35 @@ func TestRedisRunStore_ForkAtPoint(t *testing.T) {
 		t.Fatalf("clamped fork = %d messages / %d events, want full copy", len(run.Messages), len(run.Events))
 	}
 }
+
+func TestRedisRunStore_ListRuns(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	for _, id := range []string{"a", "b", "c"} {
+		mustCreate(t, s, id)
+		if _, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{
+			RunID: id, Messages: []agent.Message{{Role: agent.RoleUser, Text: "m"}},
+		}); err != nil {
+			t.Fatalf("AppendMessages: %v", err)
+		}
+	}
+	// gather across scan pages (scan order is unordered)
+	seen := map[string]int{}
+	cursor := ""
+	for {
+		resp, err := s.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor, Limit: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range resp.Runs {
+			seen[r.ID] = r.MessageCount
+		}
+		if resp.NextCursor == "" {
+			break
+		}
+		cursor = resp.NextCursor
+	}
+	if len(seen) != 3 || seen["a"] != 1 || seen["b"] != 1 || seen["c"] != 1 {
+		t.Fatalf("ListRuns saw %+v, want a/b/c each count 1", seen)
+	}
+}
