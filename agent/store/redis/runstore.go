@@ -45,10 +45,9 @@ const DefaultKeyPrefix = "mcpkit.agent.run"
 //   - AppendMessages / AppendEvents check existence then push without a
 //     transaction: there is no delete API, so the window cannot orphan
 //     data.
-//   - ForkRun snapshots the source lists, then writes the copy. Appends
-//     to the source that race the fork may or may not be included;
-//     callers wanting an exact cut point should quiesce the source
-//     first.
+//   - ForkRun is atomic: the whole fork runs as one Lua script with the
+//     meta write as its last effect, so it is an exact cut of the
+//     source and a failed fork leaves no observable run (see ForkRun).
 type RunStore struct {
 	client *redis.Client
 	prefix string
@@ -235,58 +234,92 @@ func (s *RunStore) LoadRun(ctx context.Context, req agent.LoadRunRequest) (agent
 	}, nil
 }
 
-// ForkRun implements agent.RunStore. See the RunStore doc for the
-// snapshot-then-copy race window.
+// forkScript performs the whole fork — source check, target-claim
+// check, stale-garbage cleanup, both log copies, and the meta write
+// that commits the run into existence — as one atomic Lua execution.
+// Redis runs a script single-threaded, so no partially-forked run is
+// ever observable: the meta write is the commit point and it is the
+// script's last effect. The DEL first means list entries left at an
+// unclaimed target (a crashed pre-atomicity fork, or ad-hoc writes)
+// can never merge into the fork.
+//
+// KEYS: 1 srcMeta, 2 srcMessages, 3 srcEvents,
+//
+//	4 dstMeta, 5 dstMessages, 6 dstEvents
+//
+// ARGV: 1 dst meta JSON. Returns 0 = source missing, 1 = target
+// already claimed, 2 = committed.
+const forkScript = `
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+if redis.call('EXISTS', KEYS[4]) == 1 then return 1 end
+redis.call('DEL', KEYS[5], KEYS[6])
+local msgs = redis.call('LRANGE', KEYS[2], 0, -1)
+for i = 1, #msgs do redis.call('RPUSH', KEYS[5], msgs[i]) end
+local evts = redis.call('LRANGE', KEYS[3], 0, -1)
+for i = 1, #evts do redis.call('RPUSH', KEYS[6], evts[i]) end
+redis.call('SET', KEYS[4], ARGV[1])
+return 2
+`
+
+// Script outcomes, matching forkScript's return values.
+const (
+	forkSourceMissing = 0
+	forkTargetClaimed = 1
+	forkCommitted     = 2
+)
+
+// ForkRun implements agent.RunStore. The fork is all-or-nothing (one
+// Lua script; see forkScript): on error no run exists at the new ID,
+// so NewRunID doubles as an idempotency key — retry a failed fork with
+// the same deterministic ID and it starts clean; retry one that
+// actually committed and Created=false reports the existing, complete
+// fork (confirm lineage via LoadRun ParentID).
+//
+// Cluster caveat: the script touches both runs' keys, which a Redis
+// Cluster may place in different slots. A session store is assumed to
+// run against a single node or replicated setup; cluster deployments
+// need hash-tagged prefixes to co-locate keys.
 func (s *RunStore) ForkRun(ctx context.Context, req agent.ForkRunRequest) (agent.ForkRunResponse, error) {
-	ok, err := s.exists(ctx, req.RunID)
+	body, err := json.Marshal(runMeta{ParentID: req.RunID, CreatedAt: time.Now().UTC()})
 	if err != nil {
-		return agent.ForkRunResponse{}, err
-	}
-	if !ok {
-		return agent.ForkRunResponse{}, nil
+		return agent.ForkRunResponse{}, fmt.Errorf("redisstore: encoding run meta: %w", err)
 	}
 
-	meta := runMeta{ParentID: req.RunID, CreatedAt: time.Now().UTC()}
+	fork := func(id string) (int64, error) {
+		keys := []string{
+			s.key(req.RunID, "meta"), s.key(req.RunID, "messages"), s.key(req.RunID, "events"),
+			s.key(id, "meta"), s.key(id, "messages"), s.key(id, "events"),
+		}
+		return s.client.Eval(ctx, forkScript, keys, string(body)).Int64()
+	}
+
 	id := req.NewRunID
 	if id != "" {
-		won, err := s.claimMeta(ctx, id, meta)
+		outcome, err := fork(id)
 		if err != nil {
 			return agent.ForkRunResponse{}, err
 		}
-		if !won {
+		switch outcome {
+		case forkSourceMissing:
+			return agent.ForkRunResponse{}, nil
+		case forkTargetClaimed:
 			return agent.ForkRunResponse{RunID: id, Found: true, Created: false}, nil
 		}
-	} else {
-		for {
-			id, err = newRunID()
-			if err != nil {
-				return agent.ForkRunResponse{}, err
-			}
-			won, err := s.claimMeta(ctx, id, meta)
-			if err != nil {
-				return agent.ForkRunResponse{}, err
-			}
-			if won {
-				break
-			}
-		}
+		return agent.ForkRunResponse{RunID: id, Found: true, Created: true}, nil
 	}
-
-	for _, part := range []string{"messages", "events"} {
-		raw, err := s.client.LRange(ctx, s.key(req.RunID, part), 0, -1).Result()
+	for {
+		if id, err = newRunID(); err != nil {
+			return agent.ForkRunResponse{}, err
+		}
+		outcome, err := fork(id)
 		if err != nil {
 			return agent.ForkRunResponse{}, err
 		}
-		if len(raw) == 0 {
-			continue
-		}
-		entries := make([]any, len(raw))
-		for i, b := range raw {
-			entries[i] = b
-		}
-		if err := s.client.RPush(ctx, s.key(id, part), entries...).Err(); err != nil {
-			return agent.ForkRunResponse{}, err
+		switch outcome {
+		case forkSourceMissing:
+			return agent.ForkRunResponse{}, nil
+		case forkCommitted:
+			return agent.ForkRunResponse{RunID: id, Found: true, Created: true}, nil
 		}
 	}
-	return agent.ForkRunResponse{RunID: id, Found: true, Created: true}, nil
 }
