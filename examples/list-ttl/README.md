@@ -82,7 +82,9 @@ The same binary is reused as the fixture for the SEP-2549 conformance
 suite on the [panyam/mcpconformance `pending` branch](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl).
 The runner spawns three independent processes (one per `ttlMs` state) in
 parallel so all the wire shapes flow through a real dispatcher in a single
-test run. Drive it via `make testconf-list-ttl` from the repo root.
+test run. The dedicated `testconf-list-ttl` target was retired when SEP-2549
+coverage moved to upstream's `CachingScenario` — it now runs as part of the
+default `just testconf` suite.
 
 ## Where to look in the code
 
@@ -92,7 +94,7 @@ test run. Drive it via `make testconf-list-ttl` from the repo root.
 | Wire types | [`core.ToolsListResult`](../../core/tool.go), `PromptsListResult` ([`core/prompt.go`](../../core/prompt.go)), `ResourcesListResult` / `ResourceTemplatesListResult` / `ResourceResult` ([`core/resource.go`](../../core/resource.go)), `CacheScope*` constants ([`core/cache.go`](../../core/cache.go)) |
 | Client helpers | [`client.ListToolsPage`](../../client/iterators.go) and siblings, [`client.ReadResourceFull`](../../client/client.go) |
 | Migration guide | [`docs/LIST_TTL_MIGRATION.md`](../../docs/LIST_TTL_MIGRATION.md) |
-| Conformance | [SEP-2549 scenarios on panyam/mcpconformance `pending`](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl) — drive via `make testconf-list-ttl` |
+| Conformance | [SEP-2549 scenarios on panyam/mcpconformance `pending`](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl) — superseded by upstream's `CachingScenario`, covered by `just testconf` |
 | SEP | [SEP-2549 spec PR](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) |
 
 ## Next steps

@@ -8,7 +8,7 @@ of `modelcontextprotocol/conformance`, on the
 branch. Run it from mcpkit via:
 
 ```bash
-make testconf-tasks-v2
+just testconf-tasks-v2
 ```
 
 The Makefile target invokes vitest in the fork (auto-spawning the
@@ -33,7 +33,7 @@ cd conformance && npm install
 npx vitest run tasks-v2/
 ```
 
-Once the test passes, the next `make testconf-tasks-v2` will pick it
+Once the test passes, the next `just testconf-tasks-v2` will pick it
 up automatically — the Makefile target chains the fork run with
 `vitest run tasks-v2/`.
 

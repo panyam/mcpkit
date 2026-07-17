@@ -22,8 +22,8 @@ Replaces the older `make demo-app` (server=upstream, renderer=basic-host) and
 `make inspect-app` (server=upstream, renderer=mcpjam). The split is now on
 the *server* axis, not the renderer:
 
-  make demo-app EXAMPLE=<name>        # default: server=go,       renderer=basic-host
-  make demo-upstream EXAMPLE=<name>   # default: server=upstream, renderer=basic-host
+  just demo-app <name>                # default: server=go,       renderer=basic-host
+  just demo-upstream <name>           # default: server=upstream, renderer=basic-host
 
 Either can be overridden with RENDERER=mcpjam.
 
@@ -199,7 +199,7 @@ def ensure_go_fixture(example: str) -> Fixture:
         info("")
         info(f"ERROR: no mcpkit-Go drop-in for '{example}'.")
         info("")
-        info(f"  Try `make demo-upstream EXAMPLE={example}` to browse the upstream TS reference instead.")
+        info(f"  Try `just demo-upstream {example}` to browse the upstream TS reference instead.")
         info("")
         info("Available Go fixtures (EXAMPLE name = directory basename):")
         for f in FIXTURES:
@@ -387,7 +387,7 @@ def _print_banner_basic_host(example: str, server: str, harness_url: str, server
     info("   the App actually do something.")
     info("")
     info(" Want the protocol surface instead of the rendered App?")
-    info(f"   `make demo-app EXAMPLE={example}` (or `RENDERER=mcpjam ...`) launches MCPJam.")
+    info(f"   `just demo-app {example}` (or `RENDERER=mcpjam ...`) launches MCPJam.")
     info("")
     info(" Logs:")
     info(f"   server:     {server_log}")
@@ -409,7 +409,7 @@ def _print_banner_mcpjam(example: str, server: str, server_url: str, server_log:
     info("")
     info(" Then browse tools/list, _meta.ui, the resource list, and tool-call")
     info(" payloads on the wire. To see the App *rendered* instead, re-run with")
-    info(f"   RENDERER=basic-host make demo-app EXAMPLE={example}")
+    info(f"   RENDERER=basic-host just demo-app {example}")
     info("")
     info(f" Server log:  {server_log}")
     info("")

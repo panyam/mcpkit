@@ -300,7 +300,7 @@ not the `ModeDual` fall-through `--wire=""` would give.
 
 Every new non-UI example MUST work on both wires — the legacy session wire
 and the SEP-2575 stateless wire — because servers default to `ModeDual`.
-`make verify-dual` enforces this for the auto-drivable examples;
+`just verify-dual` enforces this for the auto-drivable examples;
 `examples/DUAL_MODE_AUDIT.md` records the per-example verdict.
 
 Rules for a dual-safe example:

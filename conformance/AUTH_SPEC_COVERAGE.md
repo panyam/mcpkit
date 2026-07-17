@@ -10,8 +10,8 @@ Three artifacts describe mcpkit's conformance posture, at three granularities:
 
 | Doc | Generated? | Granularity | Answers |
 |---|---|---|---|
-| [`CONFORMANCE.md`](../CONFORMANCE.md) | Auto (#507; `make refresh-conformance`) | Per-SEP rollup (`tested / excluded / untested` counts) | "Does upstream have a check for this SEP?" |
-| [`conformance/UPSTREAM_AUDIT.md`](UPSTREAM_AUDIT.md) | Auto (`make testconf-upstream-audit`) | Per-scenario pass/fail | "Does mcpkit pass the scenarios upstream wrote?" |
+| [`CONFORMANCE.md`](../CONFORMANCE.md) | Auto (#507; `just refresh-conformance`) | Per-SEP rollup (`tested / excluded / untested` counts) | "Does upstream have a check for this SEP?" |
+| [`conformance/UPSTREAM_AUDIT.md`](UPSTREAM_AUDIT.md) | Auto (`just testconf-upstream-audit`) | Per-scenario pass/fail | "Does mcpkit pass the scenarios upstream wrote?" |
 | **This file** | Hand-curated | Per-clause (spec MUST → impl → test) | "Where does mcpkit implement this, and what test proves it?" |
 
 The three are **complementary**, not redundant. CONFORMANCE.md catches "upstream wrote a check and we failed it." This matrix catches "the spec said MUST but upstream didn't write a check" — and provides the lookup table for "where in the codebase do we do X?"

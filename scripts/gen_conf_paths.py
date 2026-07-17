@@ -10,7 +10,7 @@ the manifest and emits a make snippet:
     ...
 
 conformance/Makefile includes the result. The `?=` semantics preserve
-per-invocation overrides (MCPCONFORMANCE_*=... make testconf-*), so this
+per-invocation overrides (MCPCONFORMANCE_*=... just testconf-*), so this
 restructure doesn't change developer ergonomics — it just removes the
 duplication between YAML and Makefile.
 

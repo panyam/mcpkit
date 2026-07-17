@@ -17,7 +17,7 @@ exercises the **integrated** stateless draft wire (SEP-2575 + 2243 + 2106 + 2322
 simultaneously, by an independent third party) from the client side.
 
 The endpoint is an external, version-pinned, ephemeral deployment, so this is a
-**point-in-time snapshot**, not a CI gate. Regenerate via `make testconf-external-checker`.
+**point-in-time snapshot**, not a CI gate. Regenerate via `just testconf-external-checker`.
 
 ## Results
 

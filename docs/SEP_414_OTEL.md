@@ -123,9 +123,9 @@ Behavior:
 
 Verification:
 
-- `make test-otel` — adapter unit tests run against the real OTel SDK
+- `just test-otel` — adapter unit tests run against the real OTel SDK
   in-memory exporter; reads back `sdktrace.ReadOnlySpan` shapes.
-- `make test-otel-example` — smoke test for `examples/otel/stdout/`
+- `just test-otel-example` — smoke test for `examples/otel/stdout/`
   asserting the exporter actually prints the expected span set.
 - `go run examples/otel/stdout/...` — runnable demo, prints spans as
   JSON on stdout. No collector required.

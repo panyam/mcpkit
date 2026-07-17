@@ -2,7 +2,7 @@
 """Staleness gate for conformance/local-suites.yaml.
 
 Catches four mechanical drift cases against conformance/Makefile and the
-root Makefile's testall stage list:
+root justfile's testall stage list:
 
     A. Suite added to conformance/Makefile as a testconf-* target but not
        declared in local-suites.yaml. Docs site would silently omit it.
@@ -49,7 +49,7 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "conformance" / "local-suites.yaml"
 CONF_MAKEFILE = REPO_ROOT / "conformance" / "Makefile"
-ROOT_MAKEFILE = REPO_ROOT / "Makefile"
+ROOT_JUSTFILE = REPO_ROOT / "justfile"
 
 ALLOWLIST = {
     "testconf",  # umbrella
@@ -64,10 +64,12 @@ ALLOWLIST = {
 # Matches a testconf-* target definition at the start of a Makefile line.
 TARGET_RE = re.compile(r"^(testconf[-a-z0-9]*):", re.MULTILINE)
 
-# Matches a $(call run_stage*,X,9,name,testconf-*) line in the root Makefile
-# and captures (stage, target). Tolerates both run_stage and run_stage_info.
+# Matches a `run_stage X 9 name testconf-*` line in the root justfile's
+# testall recipe and captures (stage, target). Tolerates both run_stage
+# and run_stage_info.
 RUN_STAGE_RE = re.compile(
-    r"\$\(call\s+run_stage[a-z_]*\s*,\s*([0-9a-z]+)\s*,\s*\d+\s*,\s*[^,]+\s*,\s*(testconf[-a-z0-9]+)"
+    r"^\s*run_stage[a-z_]*\s+([0-9a-z]+)\s+\d+\s+\S+\s+(testconf[-a-z0-9]+)",
+    re.MULTILINE,
 )
 
 
@@ -81,8 +83,8 @@ def load_inputs():
         die(f"{MANIFEST} not found")
     if not CONF_MAKEFILE.exists():
         die(f"{CONF_MAKEFILE} not found")
-    if not ROOT_MAKEFILE.exists():
-        die(f"{ROOT_MAKEFILE} not found")
+    if not ROOT_JUSTFILE.exists():
+        die(f"{ROOT_JUSTFILE} not found")
 
     try:
         manifest = yaml.safe_load(MANIFEST.read_text())
@@ -98,7 +100,7 @@ def load_inputs():
 
     makefile_targets = set(TARGET_RE.findall(CONF_MAKEFILE.read_text()))
     stage_map = {}
-    for stage, target in RUN_STAGE_RE.findall(ROOT_MAKEFILE.read_text()):
+    for stage, target in RUN_STAGE_RE.findall(ROOT_JUSTFILE.read_text()):
         stage_map[target] = stage
 
     return suites, makefile_targets, stage_map
@@ -145,9 +147,9 @@ def main() -> int:
         sys.stderr.write("\n")
         sys.stderr.write(
             "check_local_suites: drift detected. Update conformance/local-suites.yaml,\n"
-            "                    conformance/Makefile, and/or the testall stage list\n"
-            "                    so the three sources agree. Then run:\n"
-            "                      make refresh-conformance && make check-conformance-stale\n"
+            "                    conformance/Makefile, and/or the justfile testall stage\n"
+            "                    list so the three sources agree. Then run:\n"
+            "                      just refresh-conformance && just check-conformance-stale\n"
         )
         return 1
 

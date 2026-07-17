@@ -29,15 +29,15 @@ entry.
 
 From a green `main`:
 
-1. **Gate.** `make test` (add `make audit` / `make testall` for a stable minor;
-   a `-bN` pre-release can use `make test` alone).
-2. **Bump sub-module requires.** `make bump-root V=<version>` — repoints every
+1. **Gate.** `just test` (add `just audit` / `just testall` for a stable minor;
+   a `-bN` pre-release can use `just test` alone).
+2. **Bump sub-module requires.** `just bump-root <version>` — repoints every
    sub-module's `require github.com/panyam/mcpkit` at `<version>`. Required
    because sub-modules call APIs added in the root; without it,
    `go get …/ext/tasks@<version>` would resolve an older root that lacks them.
    Accepts pre-release strings (`v0.4.0-b1`) fine. Commit the resulting go.mod
    changes to `main` and push.
-3. **Tag + push.** `make tag-push V=<version>` — creates and pushes the root
+3. **Tag + push.** `just tag-push <version>` — creates and pushes the root
    tag plus one per sub-module (`ext/tasks/<version>`, …). The `Makefile` just
    string-interpolates `V`, so hyphenated pre-release strings are valid git
    tags.
@@ -65,15 +65,15 @@ https://github.com/panyam/mcpkit/releases/new?tag=<tag>&title=<title>&body=<url-
 ```
 
 Build it by URL-encoding the note (Python `urllib.parse.urlencode`). Tags
-themselves push fine via `make tag-push`; only the Release object needs the
+themselves push fine via `just tag-push`; only the Release object needs the
 browser step.
 
 ## Full-minor checklist (e.g. tagging the final v0.4.0)
 
-- [ ] `make audit` green (govulncheck + gosec + gitleaks + race)
-- [ ] `make testall` green; `make testconf` green on a clean clone
+- [ ] `just audit` green (govulncheck + gosec + gitleaks + race)
+- [ ] `just testall` green; `just testconf` green on a clean clone
 - [ ] `CHANGELOG.md` `[X.Y.0]` finalized with real PR references + date;
       `docs/releases/vX.Y.0.md` written
-- [ ] `make bump-root V=vX.Y.0` + commit
-- [ ] `make tag-push V=vX.Y.0`; verify `go get …@vX.Y.0`
+- [ ] `just bump-root vX.Y.0` + commit
+- [ ] `just tag-push vX.Y.0`; verify `go get …@vX.Y.0`
 - [ ] GitHub Release published (browser, per the token note)

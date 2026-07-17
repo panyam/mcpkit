@@ -123,7 +123,7 @@ suite:
 
 ```bash
 # from repo root
-MCPCONFORMANCE_SKILLS_PATH=$HOME/newstack/mcpkit/conf-skills make testconf-skills
+MCPCONFORMANCE_SKILLS_PATH=$HOME/newstack/mcpkit/conf-skills just testconf-skills
 ```
 
 The Makefile target spawns this binary in `--serve` mode on `:18099`
