@@ -324,6 +324,7 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 		{Kind: EventToolBegin, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}},
 		{Kind: EventToolEnd, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, ToolResult: &core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}},
 		{Kind: EventToolError, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Error: "boom"},
+		{Kind: EventToolDenied, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Reason: "declined by user"},
 		{Kind: EventTurnEnd, Result: &TurnResult{Text: "done", Steps: 1, Usage: Usage{InputTokens: 1, OutputTokens: 2}}},
 		{Kind: EventError, Error: "fatal"},
 	}
@@ -343,6 +344,95 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 		if string(raw) != string(raw2) {
 			t.Fatalf("round-trip drift for %s: %s vs %s", e.Kind, raw, raw2)
 		}
+	}
+}
+
+// denyAll is an ApprovalPolicy that refuses every call with a fixed reason.
+type denyAll struct{ reason string }
+
+func (d denyAll) Approve(context.Context, ApprovalRequest) (ApprovalDecision, error) {
+	return ApprovalDecision{Reason: d.reason}, nil
+}
+
+func TestRunnerApprovalDeniedFeedsBackAndContinues(t *testing.T) {
+	called := false
+	src := NewFuncSource()
+	AddFunc(src, "send_email", "sends mail", func(ctx context.Context, in struct {
+		To string `json:"to"`
+	}) (string, error) {
+		called = true
+		return "sent", nil
+	})
+
+	stub := NewStubProvider(
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "send_email", Args: core.NewRawJSON(json.RawMessage(`{"to":"a@b.c"}`))}}},
+		StubTurn{Text: "I could not send it."},
+	)
+	emit, events := collectEvents()
+
+	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src, Approval: denyAll{reason: "declined by user"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "email a@b.c"}}, emit)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if called {
+		t.Fatal("denied tool must not execute")
+	}
+	if res.Steps != 2 || res.Text != "I could not send it." {
+		t.Fatalf("turn should continue past the denial: %+v", res)
+	}
+
+	// The denial surfaces as a distinct event and as model-visible tool text.
+	want := []EventKind{EventTurnBegin, EventToolBegin, EventToolDenied, EventTextDelta, EventTurnEnd}
+	if fmt.Sprint(kinds(*events)) != fmt.Sprint(want) {
+		t.Fatalf("events = %v, want %v", kinds(*events), want)
+	}
+	var denied *Event
+	for i := range *events {
+		if (*events)[i].Kind == EventToolDenied {
+			denied = &(*events)[i]
+		}
+	}
+	if denied == nil || denied.Reason != "declined by user" || denied.ToolCall.Name != "send_email" {
+		t.Fatalf("tool-denied event = %+v", denied)
+	}
+	toolMsg := stub.Requests()[1].Messages[2]
+	if toolMsg.Role != RoleTool || !strings.Contains(toolMsg.Text, "not permitted") || !strings.Contains(toolMsg.Text, "declined by user") {
+		t.Fatalf("model-visible denial text = %+v", toolMsg)
+	}
+}
+
+func TestRunnerApprovalAllowedRunsTool(t *testing.T) {
+	called := false
+	src := NewFuncSource()
+	AddFunc(src, "read_status", "reads status", func(ctx context.Context, _ struct{}) (string, error) {
+		called = true
+		return "green", nil
+	})
+	stub := NewStubProvider(
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "read_status", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
+		StubTurn{Text: "Status is green."},
+	)
+	emit, events := collectEvents()
+
+	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src,
+		Approval: NewTieredApproval(WithDefaultMode(ModeAlwaysAllow))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "status?"}}, emit); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("allowed tool should execute")
+	}
+	want := []EventKind{EventTurnBegin, EventToolBegin, EventToolEnd, EventTextDelta, EventTurnEnd}
+	if fmt.Sprint(kinds(*events)) != fmt.Sprint(want) {
+		t.Fatalf("allowed path should reach tool-end: %v", kinds(*events))
 	}
 }
 
