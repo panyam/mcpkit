@@ -170,10 +170,33 @@ func NewPersistingEmit(store agent.RunStore, runID string, next func(agent.Event
 	return &PersistingEmit{store: store, runID: runID, next: next}
 }
 
-// Emit buffers the event and forwards it to the wrapped handler.
+// Emit forwards the event to the wrapped handler verbatim and buffers a
+// persistence copy. The two differ only for turn-end: the buffered copy
+// drops TurnResult.Messages (see redactForPersist), so live consumers
+// (renderers) still see the whole event while the event log does not
+// duplicate what the message log already holds.
 func (p *PersistingEmit) Emit(e agent.Event) {
-	p.buf = append(p.buf, e)
+	p.buf = append(p.buf, redactForPersist(e))
 	p.next(e)
+}
+
+// redactForPersist strips TurnResult.Messages from a turn-end event
+// before it lands in the persisted event log. The RunStore message log
+// is the authoritative copy of those messages; re-storing them inside
+// the turn-end event doubles the payload (and, with large tool results,
+// the offloaded stubs). Everything else on the TurnResult — Text, Usage,
+// Steps, FinishReason, Structured — stays for replay and audit. Non
+// turn-end events pass through unchanged. The original event and its
+// TurnResult are never mutated: the copy is shallow with Messages
+// nilled, so the live handler's view is untouched.
+func redactForPersist(e agent.Event) agent.Event {
+	if e.Kind != agent.EventTurnEnd || e.Result == nil {
+		return e
+	}
+	trimmed := *e.Result
+	trimmed.Messages = nil
+	e.Result = &trimmed
+	return e
 }
 
 // Flush appends the buffered events to the run and clears the buffer.
