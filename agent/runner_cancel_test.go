@@ -48,7 +48,9 @@ func TestRunTurnControlCancelsOneCallTurnContinues(t *testing.T) {
 	)
 
 	control := make(chan Control, 1)
+	var events []Event
 	emit := func(e Event) {
+		events = append(events, e)
 		if e.Kind == EventToolBegin && e.ToolCall.ID == "c1" {
 			control <- Control{CallID: "c1"}
 		}
@@ -69,6 +71,25 @@ func TestRunTurnControlCancelsOneCallTurnContinues(t *testing.T) {
 	}
 	if got := toolMessage(t, res.Messages, "c2").Text; got != "fast done" {
 		t.Fatalf("sibling call was disturbed: %q", got)
+	}
+
+	cancelledEvents, errorEvents := 0, 0
+	for _, e := range events {
+		if e.ToolCall == nil || e.ToolCall.ID != "c1" {
+			continue
+		}
+		switch e.Kind {
+		case EventToolCancelled:
+			cancelledEvents++
+			if e.Reason != "cancelled by user" {
+				t.Fatalf("tool-cancelled Reason = %q", e.Reason)
+			}
+		case EventToolError, EventToolEnd:
+			errorEvents++
+		}
+	}
+	if cancelledEvents != 1 || errorEvents != 0 {
+		t.Fatalf("cancelled call emitted %d tool-cancelled and %d tool-error/tool-end events, want 1 and 0", cancelledEvents, errorEvents)
 	}
 }
 

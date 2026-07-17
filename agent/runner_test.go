@@ -325,6 +325,7 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 		{Kind: EventToolEnd, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, ToolResult: &core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}},
 		{Kind: EventToolError, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Error: "boom"},
 		{Kind: EventToolDenied, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Reason: "declined by user"},
+		{Kind: EventToolCancelled, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Reason: "cancelled by user"},
 		{Kind: EventTurnEnd, Result: &TurnResult{Text: "done", Steps: 1, Usage: Usage{InputTokens: 1, OutputTokens: 2}}},
 		{Kind: EventError, Error: "fatal"},
 	}
