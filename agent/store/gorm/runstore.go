@@ -21,6 +21,7 @@ import (
 type runRow struct {
 	ID        string    `gorm:"primaryKey"`
 	ParentID  string    `gorm:"index"`
+	ForkPoint int       `gorm:"not null;default:0"`
 	CreatedAt time.Time `gorm:"not null"`
 }
 
@@ -239,6 +240,7 @@ func (s *RunStore) LoadRun(ctx context.Context, req agent.LoadRunRequest) (agent
 		Run: agent.Run{
 			ID:        row.ID,
 			ParentID:  row.ParentID,
+			ForkPoint: row.ForkPoint,
 			CreatedAt: row.CreatedAt,
 			Messages:  messages,
 			Events:    events,
@@ -247,9 +249,11 @@ func (s *RunStore) LoadRun(ctx context.Context, req agent.LoadRunRequest) (agent
 	}, nil
 }
 
-// ForkRun implements agent.RunStore. The whole fork — source check, new
-// run claim, and both log copies — runs in one transaction, so the fork
-// is an exact cut of the source at commit time.
+// ForkRun implements agent.RunStore. The whole fork — source check,
+// cut-point resolution, new run claim, and the log copies — runs in one
+// transaction, so the fork is an exact cut of the source at commit
+// time. See agent.ForkRunRequest for the AtMessage and event-log
+// semantics.
 func (s *RunStore) ForkRun(ctx context.Context, req agent.ForkRunRequest) (agent.ForkRunResponse, error) {
 	var resp agent.ForkRunResponse
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -261,9 +265,18 @@ func (s *RunStore) ForkRun(ctx context.Context, req agent.ForkRunRequest) (agent
 			return nil
 		}
 
+		var srcLen int64
+		if err := tx.Table("agent_run_messages").Where("run_id = ?", req.RunID).Count(&srcLen).Error; err != nil {
+			return err
+		}
+		n := int(srcLen)
+		if req.AtMessage > 0 && req.AtMessage < n {
+			n = req.AtMessage
+		}
+
 		id := req.NewRunID
 		if id != "" {
-			won, err := claimRun(tx, runRow{ID: id, ParentID: req.RunID, CreatedAt: time.Now().UTC()})
+			won, err := claimRun(tx, runRow{ID: id, ParentID: req.RunID, ForkPoint: n, CreatedAt: time.Now().UTC()})
 			if err != nil {
 				return err
 			}
@@ -276,7 +289,7 @@ func (s *RunStore) ForkRun(ctx context.Context, req agent.ForkRunRequest) (agent
 				if id, err = newRunID(); err != nil {
 					return err
 				}
-				won, err := claimRun(tx, runRow{ID: id, ParentID: req.RunID, CreatedAt: time.Now().UTC()})
+				won, err := claimRun(tx, runRow{ID: id, ParentID: req.RunID, ForkPoint: n, CreatedAt: time.Now().UTC()})
 				if err != nil {
 					return err
 				}
@@ -286,15 +299,23 @@ func (s *RunStore) ForkRun(ctx context.Context, req agent.ForkRunRequest) (agent
 			}
 		}
 
-		for _, table := range []string{"agent_run_messages", "agent_run_events"} {
+		if n > 0 {
 			if err := tx.Exec(
-				fmt.Sprintf("INSERT INTO %s (run_id, body) SELECT ?, body FROM %s WHERE run_id = ? ORDER BY seq", table, table),
+				"INSERT INTO agent_run_messages (run_id, body) SELECT ?, body FROM agent_run_messages WHERE run_id = ? ORDER BY seq LIMIT ?",
+				id, req.RunID, n,
+			).Error; err != nil {
+				return err
+			}
+		}
+		if n == int(srcLen) {
+			if err := tx.Exec(
+				"INSERT INTO agent_run_events (run_id, body) SELECT ?, body FROM agent_run_events WHERE run_id = ? ORDER BY seq",
 				id, req.RunID,
 			).Error; err != nil {
 				return err
 			}
 		}
-		resp = agent.ForkRunResponse{RunID: id, Found: true, Created: true}
+		resp = agent.ForkRunResponse{RunID: id, Found: true, Created: true, ForkPoint: n}
 		return nil
 	})
 	return resp, err

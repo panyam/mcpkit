@@ -311,3 +311,62 @@ func stripStamps(t *testing.T, msgs []Message) []Message {
 	}
 	return out
 }
+
+func TestInMemoryRunStore_ForkAtPoint(t *testing.T) {
+	ctx := context.Background()
+	s := NewInMemoryRunStore()
+	id := mustCreate(t, s, "")
+	msgs := []Message{
+		{Role: RoleUser, Text: "m0"},
+		{Role: RoleAssistant, Text: "m1"},
+		{Role: RoleUser, Text: "m2"},
+		{Role: RoleAssistant, Text: "m3"},
+	}
+	if _, err := s.AppendMessages(ctx, AppendMessagesRequest{RunID: id, Messages: msgs}); err != nil {
+		t.Fatalf("AppendMessages: %v", err)
+	}
+	if _, err := s.AppendEvents(ctx, AppendEventsRequest{RunID: id, Events: []Event{{Kind: EventTurnBegin}}}); err != nil {
+		t.Fatalf("AppendEvents: %v", err)
+	}
+
+	partial, err := s.ForkRun(ctx, ForkRunRequest{RunID: id, AtMessage: 2})
+	if err != nil || !partial.Found || !partial.Created {
+		t.Fatalf("partial ForkRun = (%+v, %v)", partial, err)
+	}
+	if partial.ForkPoint != 2 {
+		t.Fatalf("partial ForkPoint = %d, want 2", partial.ForkPoint)
+	}
+	run := mustLoad(t, s, partial.RunID)
+	if len(run.Messages) != 2 || run.Messages[1].Text != "m1" {
+		t.Fatalf("partial fork messages = %+v, want first 2", run.Messages)
+	}
+	if run.ForkPoint != 2 || run.ParentID != id {
+		t.Fatalf("partial fork lineage = (parent %q, forkPoint %d)", run.ParentID, run.ForkPoint)
+	}
+	if len(run.Events) != 0 {
+		t.Fatalf("partial fork copied events: %+v", run.Events)
+	}
+
+	clamped, err := s.ForkRun(ctx, ForkRunRequest{RunID: id, AtMessage: 99})
+	if err != nil {
+		t.Fatalf("clamped ForkRun: %v", err)
+	}
+	if clamped.ForkPoint != 4 {
+		t.Fatalf("clamped ForkPoint = %d, want 4", clamped.ForkPoint)
+	}
+	run = mustLoad(t, s, clamped.RunID)
+	if len(run.Messages) != 4 || len(run.Events) != 1 {
+		t.Fatalf("clamped fork = %d messages / %d events, want full copy", len(run.Messages), len(run.Events))
+	}
+
+	full, err := s.ForkRun(ctx, ForkRunRequest{RunID: id})
+	if err != nil {
+		t.Fatalf("full ForkRun: %v", err)
+	}
+	if full.ForkPoint != 4 {
+		t.Fatalf("full ForkPoint = %d, want 4", full.ForkPoint)
+	}
+	if run = mustLoad(t, s, full.RunID); len(run.Events) != 1 {
+		t.Fatalf("full fork dropped events: %+v", run.Events)
+	}
+}
