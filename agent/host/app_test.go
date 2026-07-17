@@ -276,7 +276,7 @@ func TestAppApprovalRuntimeToggle(t *testing.T) {
 	if res, err := app.Dispatch(context.Background(), "/approve allow"); err != nil {
 		t.Fatal(err)
 	} else {
-		app.renderer.command(res)
+		app.ui.Emit(UIEvent{Kind: UICommand, Command: res})
 	}
 	if app.approval.DefaultMode() != agent.ModeAlwaysAllow {
 		t.Fatalf("runtime toggle did not take: %v", app.approval.DefaultMode())
@@ -295,7 +295,7 @@ func TestAppApprovalRuntimeToggle(t *testing.T) {
 	if res, err := app2.Dispatch(context.Background(), "/approve allow"); err != nil {
 		t.Fatal(err)
 	} else {
-		app2.renderer.command(res)
+		app2.ui.Emit(UIEvent{Kind: UICommand, Command: res})
 	}
 	if !strings.Contains(out2.String(), "approval: off") {
 		t.Fatalf("no-policy toggle should say off:\n%s", out2.String())
@@ -476,7 +476,7 @@ func TestAppFailoverToBackupEndToEnd(t *testing.T) {
 		t.Fatalf("failover must be logged via slog:\n%s", logBuf.String())
 	}
 
-	app.renderer.health(app.failover)
+	app.ui.Emit(UIEvent{Kind: UICommand, Command: CmdResult{Kind: CmdHealth, Failover: app.failover}})
 	if !strings.Contains(out.String(), "active=backup") {
 		t.Fatalf("/health must reflect the bench:\n%s", out.String())
 	}
@@ -490,7 +490,7 @@ func TestAppHealthWithoutFailover(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer app.Close()
-	app.renderer.health(app.failover)
+	app.ui.Emit(UIEvent{Kind: UICommand, Command: CmdResult{Kind: CmdHealth, Failover: app.failover}})
 	if !strings.Contains(out.String(), "no failover configured") {
 		t.Fatalf("health line missing:\n%s", out.String())
 	}

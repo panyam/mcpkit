@@ -27,7 +27,7 @@ type App struct {
 	sources  *agent.MultiSource
 	clients  []*client.Client
 	history  []agent.Message
-	renderer *renderer
+	ui       Surface
 	failover *agent.FailoverProvider
 
 	injection *agent.InjectionPolicy
@@ -76,6 +76,7 @@ type appOptions struct {
 	store           agent.RunStore
 	toolResultStore agent.ToolResultStore
 	providerBuilder ProviderBuilder
+	surface         Surface
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -116,15 +117,18 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		o.logger = slog.New(slog.DiscardHandler)
 	}
 
-	rend := newRenderer(out)
-	ui := o.ui
-	if ui == nil {
-		ui = terminalElicitationUI(bufio.NewReader(in), out)
+	var surface Surface = newRenderer(out)
+	if o.surface != nil {
+		surface = o.surface
 	}
-	coord := agent.NewElicitationCoordinator(ui)
+	elicUI := o.ui
+	if elicUI == nil {
+		elicUI = terminalElicitationUI(bufio.NewReader(in), out)
+	}
+	coord := agent.NewElicitationCoordinator(elicUI)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
+	app := &App{cfg: cfg, sources: multi, ui: surface, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
 	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
 	// gated tool call never stacks a dialog against a concurrent elicitation.
 	ask := func(ctx context.Context, req agent.ApprovalRequest) (bool, error) {
@@ -157,7 +161,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 		var src agent.ToolSource = agent.NewClientSource(c,
 			agent.WithInputHandler(client.DefaultInputHandler(c)),
-			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { rend.taskStatus(dt) }),
+			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { app.ui.Emit(UIEvent{Kind: UITaskStatus, TaskStatus: dt}) }),
 			agent.WithTaskGrace(cfg.taskGrace()),
 			agent.WithTaskDetachHook(app.onTaskDetach),
 			agent.WithTaskCompletionHook(func(bt *client.BackgroundTask) { app.onTaskComplete(sc.ID, bt) }))
@@ -179,7 +183,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		if sc.Skills != nil && !*sc.Skills {
 			continue
 		}
-		block, err := loadSkillsBlock(app.clients[i], sc.ID, rend, o.tp)
+		block, err := loadSkillsBlock(app.clients[i], sc.ID, surface, o.tp)
 		if err != nil {
 			app.Close()
 			return nil, err
@@ -340,12 +344,12 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
 	a.history = append(a.history, userMsg)
 
-	emit := a.renderer.handle
+	emit := func(e agent.Event) { a.ui.Emit(UIEvent{Kind: UIRunnerEvent, RunnerEvent: e}) }
 	var pe *PersistingEmit
 	if a.store != nil {
 		if err := a.ensureRunLocked(ctx); err != nil {
 			a.history = a.history[:len(a.history)-1]
-			a.renderer.turnFailed(err)
+			a.ui.Emit(UIEvent{Kind: UITurnFailed, Err: err.Error()})
 			return err
 		}
 		pe = NewPersistingEmit(a.store, a.runID, emit)
@@ -355,14 +359,14 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	result, err := a.runner.Run(ctx, a.history, emit)
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
-		a.renderer.turnFailed(err)
+		a.ui.Emit(UIEvent{Kind: UITurnFailed, Err: err.Error()})
 		return err
 	}
 	a.history = append(a.history, result.Messages...)
 	if pe != nil {
 		a.persistTurnLocked(ctx, append([]agent.Message{userMsg}, result.Messages...), pe)
 	}
-	a.renderer.turnDone(result)
+	a.ui.Emit(UIEvent{Kind: UITurnDone, Result: result})
 	return nil
 }
 
@@ -372,7 +376,7 @@ func (a *App) Tools(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	a.renderer.toolList(defs)
+	a.ui.Emit(UIEvent{Kind: UICommand, Command: CmdResult{Kind: CmdTools, Tools: defs}})
 	return nil
 }
 
@@ -411,7 +415,7 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 		turnCtx = func() (context.Context, context.CancelFunc) { return context.WithCancel(ctx) }
 	}
 	scanner := bufio.NewScanner(in)
-	a.renderer.prompt()
+	a.ui.Emit(UIEvent{Kind: UIPrompt})
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		switch {
@@ -419,11 +423,11 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 		case strings.HasPrefix(line, "/"):
 			res, err := a.Dispatch(ctx, line)
 			if errors.Is(err, ErrUnknownCommand) {
-				a.renderer.turnFailed(fmt.Errorf("unknown command %q (try /tools, /provider, /session, /quit)", line))
+				a.ui.Emit(UIEvent{Kind: UITurnFailed, Err: fmt.Sprintf("unknown command %q (try /tools, /provider, /session, /quit)", line)})
 			} else if err != nil {
-				a.renderer.turnFailed(err)
+				a.ui.Emit(UIEvent{Kind: UITurnFailed, Err: err.Error()})
 			} else {
-				a.renderer.command(res)
+				a.ui.Emit(UIEvent{Kind: UICommand, Command: res})
 				if res.Quit {
 					return nil
 				}
@@ -433,7 +437,7 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			a.RunTurn(tctx, line)
 			cancel()
 		}
-		a.renderer.prompt()
+		a.ui.Emit(UIEvent{Kind: UIPrompt})
 	}
 	return scanner.Err()
 }
