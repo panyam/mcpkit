@@ -48,6 +48,40 @@ type Config struct {
 	// behavior). Set it to gate calls behind a mode and per-tool rules,
 	// with "ask" prompts routed through the terminal elicitation UI.
 	Approval *ApprovalConfig `json:"approval,omitempty"`
+
+	// Offload configures tool-result offloading. Nil means off: tool
+	// results flow into the conversation verbatim. Set it to store
+	// over-threshold results out of band and hand the model a compact
+	// stub plus a read_tool_result tool. The backing ToolResultStore is
+	// supplied by the surface via WithToolResultStore (in-memory when
+	// omitted), the same split as WithRunStore.
+	Offload *OffloadConfig `json:"offload,omitempty"`
+}
+
+// OffloadConfig is the host's view of tool-result offloading; it maps to
+// an agent.OffloadConfig. Its presence enables offloading.
+type OffloadConfig struct {
+	// ThresholdBytes is the model-visible size at or above which a
+	// successful result is offloaded. Zero uses the agent default
+	// (4 KB).
+	ThresholdBytes int `json:"thresholdBytes,omitempty"`
+
+	// PreviewLen is how many leading characters the stub carries inline.
+	// Zero uses the agent default.
+	PreviewLen int `json:"previewLen,omitempty"`
+
+	// PerTool overrides ThresholdBytes for named tools; a value <= 0
+	// pins that tool to never offload (always inline).
+	PerTool map[string]int `json:"perTool,omitempty"`
+}
+
+// toAgent maps the host config onto the agent-layer OffloadConfig.
+func (c *OffloadConfig) toAgent() agent.OffloadConfig {
+	return agent.OffloadConfig{
+		Threshold:        c.ThresholdBytes,
+		PreviewLen:       c.PreviewLen,
+		PerToolThreshold: c.PerTool,
+	}
 }
 
 // ApprovalConfig is the host's view of the agent approval ladder. It maps to
