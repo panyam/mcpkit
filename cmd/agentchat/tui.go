@@ -24,29 +24,26 @@ type transcriptMsg string
 // finishes on its goroutine.
 type turnDoneMsg struct{}
 
-// tuiSurface is the host.Surface the App renders through in TUI mode. It
+// tuiObserver is the host.Observer the App renders through in TUI mode. It
 // forwards each UIEvent to the built-in terminal renderer (writing to a
 // buffer, so all formatting is reused) and pushes the accumulated
 // transcript into the bubbletea program. UIPrompt is dropped — the
 // textarea is the prompt.
-type tuiSurface struct {
+type tuiObserver struct {
 	mu   sync.Mutex
 	buf  *bytes.Buffer
-	term host.Surface
+	term host.Observer
 	prog *tea.Program
 }
 
-func newTUISurface() *tuiSurface {
+func newTUIObserver() *tuiObserver {
 	buf := &bytes.Buffer{}
-	return &tuiSurface{buf: buf, term: host.NewTerminalSurface(buf)}
+	return &tuiObserver{buf: buf, term: host.NewTerminalRenderer(buf)}
 }
 
-func (s *tuiSurface) Emit(ev host.UIEvent) {
-	if ev.Kind == host.UIPrompt {
-		return
-	}
+func (s *tuiObserver) On(ev host.HostEvent) {
 	s.mu.Lock()
-	s.term.Emit(ev)
+	s.term.On(ev)
 	content := s.buf.String()
 	prog := s.prog
 	s.mu.Unlock()
@@ -61,7 +58,7 @@ func (s *tuiSurface) Emit(ev host.UIEvent) {
 // (Dispatch / RunTurn); the model is pure presentation.
 type tuiModel struct {
 	app     *host.App
-	surface *tuiSurface
+	surface *tuiObserver
 	ta      textarea.Model
 	vp      viewport.Model
 	history []string
@@ -71,7 +68,7 @@ type tuiModel struct {
 	status  string
 }
 
-func newTUIModel(app *host.App, surface *tuiSurface) tuiModel {
+func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
 	ta := textarea.New()
 	ta.Placeholder = "message, or /command (Tab completes, ↑↓ history)"
 	ta.Prompt = "› "
@@ -168,11 +165,11 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 			res, err := app.Dispatch(ctx, line)
 			switch {
 			case errors.Is(err, host.ErrUnknownCommand):
-				surface.Emit(host.UIEvent{Kind: host.UITurnFailed, Err: "unknown command " + line})
+				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: "unknown command " + line})
 			case err != nil:
-				surface.Emit(host.UIEvent{Kind: host.UITurnFailed, Err: err.Error()})
+				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: err.Error()})
 			default:
-				surface.Emit(host.UIEvent{Kind: host.UICommand, Command: res})
+				surface.On(host.HostEvent{Kind: host.HostCommandResult, Command: res})
 				if res.Quit {
 					surface.prog.Quit()
 					return
@@ -259,7 +256,7 @@ func wantTUI(mode string) bool {
 // runTUI starts the bubbletea program: the alt-screen scrollback UI over
 // the App. The surface is wired to the program so host UIEvents stream in
 // as the model renders.
-func runTUI(app *host.App, surface *tuiSurface) error {
+func runTUI(app *host.App, surface *tuiObserver) error {
 	prog := tea.NewProgram(newTUIModel(app, surface), tea.WithAltScreen())
 	surface.prog = prog
 	_, err := prog.Run()
