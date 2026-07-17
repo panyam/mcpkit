@@ -6,7 +6,7 @@
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
 SUB_MODS_TO_TAG := \
-	agent \
+	agent agent/host \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
 	experimental/ext/events \
@@ -135,7 +135,9 @@ check-apps-compat-stale: refresh-apps-compat-report ## Fail if conformance/apps/
 
 test-agent: ## Run agent sub-module tests
 	cd agent && go test ./... -count=1 -timeout 30s
+	cd agent/host && go test ./... -count=1 -timeout 60s
 	cd cmd/agentchat && go test ./... -count=1 -timeout 60s
+	cd examples/agent-async && go test ./... -count=1 -timeout 60s
 
 test-auth: ## Run auth sub-module tests
 	cd ext/auth && go test ./... -count=1 -timeout 30s
