@@ -241,6 +241,24 @@ func (r *renderer) providers(names []string, active string) {
 	}
 }
 
+func (r *renderer) sessions(runs []agent.RunInfo, active string) {
+	if len(runs) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("no sessions yet"))
+		return
+	}
+	for _, s := range runs {
+		marker := "  "
+		if s.ID == active {
+			marker = "▸ "
+		}
+		line := fmt.Sprintf("%s%-20s %d msg", marker, s.ID, s.MessageCount)
+		if s.ParentID != "" {
+			line += fmt.Sprintf("  (forked from %s @%d)", s.ParentID, s.ForkPoint)
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim(line))
+	}
+}
+
 // command renders a CmdResult by dispatching to the shape-specific
 // renderer for its Kind — the terminal implementation of the structured
 // command output (a web surface would serialize the CmdResult instead).
@@ -252,6 +270,8 @@ func (r *renderer) command(res CmdResult) {
 		r.providers(res.Providers, res.ActiveProvider)
 	case CmdSession:
 		r.session(res.RunID)
+	case CmdSessions:
+		r.sessions(res.Sessions, res.RunID)
 	case CmdTools:
 		r.toolList(res.Tools)
 	case CmdHistory:
