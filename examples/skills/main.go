@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/panyam/demokit"
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"
@@ -49,12 +50,38 @@ import (
 
 func main() {
 	for _, arg := range os.Args[1:] {
-		if strings.TrimSpace(arg) == "--serve" {
+		switch strings.TrimSpace(arg) {
+		case "--serve":
 			serve()
+			return
+		case "--agent":
+			runAgent()
 			return
 		}
 	}
 	runDemo()
+}
+
+// runAgent plays the scripted agent scenario (or, with --model, a live model)
+// against an in-process skills server. See agent_scenario.go.
+func runAgent() {
+	model := flag.String("model", "", "OpenAI-compatible model for a live run (default: deterministic stub)")
+	baseURL := flag.String("base-url", "http://localhost:1234/v1", "model endpoint for --model")
+	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:], demokit.BoolFlag("--agent")))
+
+	out := &syncWriter{}
+	var provider agent.Provider
+	if *model != "" {
+		p, err := agent.NewOpenAIProvider(agent.OpenAIConfig{BaseURL: *baseURL, Model: *model})
+		if err != nil {
+			log.Fatalf("skills agent: %v", err)
+		}
+		provider = p
+	}
+	if err := runAgentScenario(out, provider); err != nil {
+		log.Fatalf("skills agent: %v", err)
+	}
+	fmt.Print(out.String())
 }
 
 func serve() {
