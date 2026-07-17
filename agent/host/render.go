@@ -225,3 +225,17 @@ func (r *renderer) session(runID string) {
 func (r *renderer) sessionWarn(err error) {
 	fmt.Fprintf(r.out, "%s\n", r.dim("session: persistence degraded: "+err.Error()))
 }
+
+func (r *renderer) providers(names []string, active string) {
+	if len(names) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("providers: none configured (using the single --model)"))
+		return
+	}
+	for _, n := range names {
+		marker := "  "
+		if n == active {
+			marker = "▸ "
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim(marker+n))
+	}
+}

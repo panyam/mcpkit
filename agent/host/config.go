@@ -49,6 +49,12 @@ type Config struct {
 	// with "ask" prompts routed through the terminal elicitation UI.
 	Approval *ApprovalConfig `json:"approval,omitempty"`
 
+	// Connections is a named registry of model connections with one
+	// active. When set it supersedes Model for the chat provider and
+	// enables runtime /provider switching; Model stays as the
+	// single-connection quick-start path. See ConnectionsConfig.
+	Connections *ConnectionsConfig `json:"connections,omitempty"`
+
 	// Offload configures tool-result offloading. Nil means off: tool
 	// results flow into the conversation verbatim. Set it to store
 	// over-threshold results out of band and hand the model a compact
