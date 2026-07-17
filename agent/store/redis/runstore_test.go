@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -90,7 +92,7 @@ func TestRedisRunStore_CreateAppendLoad(t *testing.T) {
 
 	run := mustLoad(t, s, id)
 	want := append(append([]agent.Message{}, turn1...), turn2...)
-	assertMessagesEqual(t, run.Messages, want)
+	assertMessagesEqual(t, stripStamps(t, run.Messages), want)
 	if run.ID != id || run.ParentID != "" {
 		t.Fatalf("Run identity = (%q, parent %q), want (%q, \"\")", run.ID, run.ParentID, id)
 	}
@@ -201,7 +203,7 @@ func TestRedisRunStore_ForkDiverges(t *testing.T) {
 	}
 
 	forked := mustLoad(t, s, fork.RunID)
-	assertMessagesEqual(t, forked.Messages, base)
+	assertMessagesEqual(t, stripStamps(t, forked.Messages), base)
 	if forked.ParentID != id {
 		t.Fatalf("fork ParentID = %q, want %q", forked.ParentID, id)
 	}
@@ -309,7 +311,7 @@ func TestRedisRunStore_ForkRetryConverges(t *testing.T) {
 	}
 
 	run := mustLoad(t, s, "retry-fork")
-	assertMessagesEqual(t, run.Messages, base)
+	assertMessagesEqual(t, stripStamps(t, run.Messages), base)
 	if run.ParentID != "src" {
 		t.Fatalf("fork ParentID = %q, want src (retry convergence check)", run.ParentID)
 	}
@@ -337,7 +339,7 @@ func TestRedisRunStore_ForkDoesNotInheritPlantedGarbage(t *testing.T) {
 		t.Fatalf("ForkRun = (%+v, %v)", fork, err)
 	}
 	run := mustLoad(t, s, "crashed-fork")
-	assertMessagesEqual(t, run.Messages, base)
+	assertMessagesEqual(t, stripStamps(t, run.Messages), base)
 }
 
 func TestRedisRunStore_ListKeysWithoutMetaAreInvisible(t *testing.T) {
@@ -358,4 +360,40 @@ func TestRedisRunStore_ListKeysWithoutMetaAreInvisible(t *testing.T) {
 	if resp, err := s.ForkRun(ctx, agent.ForkRunRequest{RunID: "ghost"}); err != nil || resp.Found {
 		t.Fatalf("ForkRun(ghost) = (%+v, %v), want invisible", resp, err)
 	}
+}
+
+func TestRedisRunStore_StampsTimestamps(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	id := mustCreate(t, s, "")
+
+	pre := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	if _, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: id, Messages: []agent.Message{
+		{Role: agent.RoleUser, Text: "unstamped"},
+		{Role: agent.RoleAssistant, Text: "pre-stamped", Timestamp: pre},
+	}}); err != nil {
+		t.Fatalf("AppendMessages: %v", err)
+	}
+
+	run := mustLoad(t, s, id)
+	if run.Messages[0].Timestamp.IsZero() {
+		t.Fatal("store did not stamp the unstamped message")
+	}
+	if !run.Messages[1].Timestamp.Equal(pre) {
+		t.Fatalf("caller-set timestamp clobbered: %v, want %v", run.Messages[1].Timestamp, pre)
+	}
+}
+
+// stripStamps asserts every message got stamped, then zeroes the field
+// so the wire-form comparisons stay exact on everything else.
+func stripStamps(t *testing.T, msgs []agent.Message) []agent.Message {
+	t.Helper()
+	out := slices.Clone(msgs)
+	for i := range out {
+		if out[i].Timestamp.IsZero() {
+			t.Fatalf("message %d not stamped: %+v", i, out[i])
+		}
+		out[i].Timestamp = time.Time{}
+	}
+	return out
 }

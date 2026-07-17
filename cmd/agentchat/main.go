@@ -13,9 +13,14 @@ import (
 	"syscall"
 
 	"github.com/redis/go-redis/v9"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
+	gormstore "github.com/panyam/mcpkit/agent/store/gorm"
 	redisstore "github.com/panyam/mcpkit/agent/store/redis"
 
 	"github.com/spf13/cobra"
@@ -24,7 +29,8 @@ import (
 
 // buildRunStore maps --session-store to a backend: "" is persistence
 // off, "memory" gives in-process resume/fork (dies with the process),
-// "redis://host:port" gives restart-surviving sessions.
+// and the rest give restart-surviving sessions — sqlite needs no server
+// at all (a local file), redis and postgres point at running ones.
 func buildRunStore(spec string) (agent.RunStore, error) {
 	switch {
 	case spec == "":
@@ -37,9 +43,29 @@ func buildRunStore(spec string) (agent.RunStore, error) {
 			return nil, fmt.Errorf("agentchat: --session-store redis:// needs host:port")
 		}
 		return redisstore.New(redis.NewClient(&redis.Options{Addr: addr})), nil
+	case strings.HasPrefix(spec, "sqlite://"):
+		path := strings.TrimPrefix(spec, "sqlite://")
+		if path == "" {
+			return nil, fmt.Errorf("agentchat: --session-store sqlite:// needs a file path")
+		}
+		return openGormStore(sqlite.Open(path + "?_busy_timeout=5000"))
+	case strings.HasPrefix(spec, "postgres://") || strings.HasPrefix(spec, "postgresql://"):
+		// gorm's postgres driver accepts the URL DSN verbatim.
+		return openGormStore(postgres.Open(spec))
 	default:
-		return nil, fmt.Errorf("agentchat: unknown --session-store %q (want memory or redis://host:port)", spec)
+		return nil, fmt.Errorf("agentchat: unknown --session-store %q (want memory, sqlite://path.db, redis://host:port, or postgres://user:pass@host:port/db)", spec)
 	}
+}
+
+// openGormStore opens the dialector with SQL logging silenced (the
+// transcript is the CLI's output; slow-query noise does not belong in
+// it) and wraps it in the RunStore.
+func openGormStore(dial gorm.Dialector) (agent.RunStore, error) {
+	db, err := gorm.Open(dial, &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
+		return nil, fmt.Errorf("agentchat: opening session store: %w", err)
+	}
+	return gormstore.New(db)
 }
 
 const version = "0.1.0"
@@ -72,7 +98,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("api-key-env", "", "env var holding the model API key")
 	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
-	fl.String("session-store", "", "session persistence backend: memory | redis://host:port (empty = off)")
+	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")

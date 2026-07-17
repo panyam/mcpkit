@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -158,9 +159,18 @@ func appendJSON[T any](ctx context.Context, s *RunStore, id, part string, values
 	return true, nil
 }
 
-// AppendMessages implements agent.RunStore.
+// AppendMessages implements agent.RunStore, stamping zero Timestamps
+// per the agent.AppendMessagesRequest rule before encoding, so the
+// stamp lives inside the stored JSON body and forks copy it for free.
 func (s *RunStore) AppendMessages(ctx context.Context, req agent.AppendMessagesRequest) (agent.AppendMessagesResponse, error) {
-	found, err := appendJSON(ctx, s, req.RunID, "messages", req.Messages)
+	msgs := slices.Clone(req.Messages)
+	now := time.Now().UTC()
+	for i := range msgs {
+		if msgs[i].Timestamp.IsZero() {
+			msgs[i].Timestamp = now
+		}
+	}
+	found, err := appendJSON(ctx, s, req.RunID, "messages", msgs)
 	return agent.AppendMessagesResponse{Found: found}, err
 }
 
@@ -234,6 +244,7 @@ func (s *RunStore) LoadRun(ctx context.Context, req agent.LoadRunRequest) (agent
 // can never merge into the fork.
 //
 // KEYS: 1 srcMeta, 2 srcMessages, 3 srcEvents,
+//
 //	4 dstMeta, 5 dstMessages, 6 dstEvents
 //
 // ARGV: 1 dst meta JSON. Returns 0 = source missing, 1 = target
