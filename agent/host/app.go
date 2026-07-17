@@ -41,6 +41,12 @@ type App struct {
 	metaTools bool
 	turnMu    sync.Mutex
 	eventStop context.CancelFunc
+
+	// store and runID are the persistence seam (WithRunStore): runID is
+	// the run turns append to, created lazily on the first persisted
+	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu.
+	store agent.RunStore
+	runID string
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -52,6 +58,7 @@ type appOptions struct {
 	ui       agent.ElicitationUI
 	tp       core.TracerProvider
 	logger   *slog.Logger
+	store    agent.RunStore
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -100,7 +107,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	coord := agent.NewElicitationCoordinator(ui)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}}
+	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
 	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
 	// gated tool call never stacks a dialog against a concurrent elicitation.
 	ask := func(ctx context.Context, req agent.ApprovalRequest) (bool, error) {
@@ -277,20 +284,37 @@ func (a *App) Close() {
 
 // RunTurn executes one user input, rendering events as they stream. History
 // threads across turns; a cancelled or failed turn leaves history at its
-// pre-turn state so the next attempt is clean.
+// pre-turn state (and persists nothing) so the next attempt is clean.
 func (a *App) RunTurn(ctx context.Context, input string) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 	a.triggers.NotifyEngagement()
 	a.drainInjectionLocked()
-	a.history = append(a.history, agent.Message{Role: agent.RoleUser, Text: input})
-	result, err := a.runner.Run(ctx, a.history, a.renderer.handle)
+	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
+	a.history = append(a.history, userMsg)
+
+	emit := a.renderer.handle
+	var pe *PersistingEmit
+	if a.store != nil {
+		if err := a.ensureRunLocked(ctx); err != nil {
+			a.history = a.history[:len(a.history)-1]
+			a.renderer.turnFailed(err)
+			return err
+		}
+		pe = NewPersistingEmit(a.store, a.runID, emit)
+		emit = pe.Emit
+	}
+
+	result, err := a.runner.Run(ctx, a.history, emit)
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
 		a.renderer.turnFailed(err)
 		return err
 	}
 	a.history = append(a.history, result.Messages...)
+	if pe != nil {
+		a.persistTurnLocked(ctx, append([]agent.Message{userMsg}, result.Messages...), pe)
+	}
 	a.renderer.turnDone(result)
 	return nil
 }
@@ -347,6 +371,23 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			a.renderer.approvalMode(a.approval)
 		case strings.HasPrefix(line, "/approve "):
 			a.setApprovalMode(strings.TrimPrefix(line, "/approve "))
+		case line == "/session":
+			a.renderer.session(a.RunID())
+		case strings.HasPrefix(line, "/resume "):
+			id := strings.TrimSpace(strings.TrimPrefix(line, "/resume "))
+			if err := a.Resume(ctx, id); err != nil {
+				a.renderer.turnFailed(err)
+			} else {
+				a.renderer.session(id)
+			}
+		case line == "/fork" || strings.HasPrefix(line, "/fork "):
+			id := strings.TrimSpace(strings.TrimPrefix(line, "/fork"))
+			forkID, err := a.Fork(ctx, id)
+			if err != nil {
+				a.renderer.turnFailed(err)
+			} else {
+				a.renderer.session(forkID)
+			}
 		default:
 			tctx, cancel := turnCtx()
 			a.RunTurn(tctx, line)
