@@ -129,19 +129,34 @@ func NewTieredApproval(opts ...TieredOption) *TieredApproval {
 	return t
 }
 
+// SetDefaultMode changes the default mode at runtime (the seam a host's
+// "/approve <mode>" or "/yolo" command uses). Concurrency-safe against calls
+// in flight; per-tool rules and the remember-cache are unaffected.
+func (t *TieredApproval) SetDefaultMode(m ApprovalMode) {
+	t.mu.Lock()
+	t.mode = m
+	t.mu.Unlock()
+}
+
+// DefaultMode reports the current default mode.
+func (t *TieredApproval) DefaultMode() ApprovalMode {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mode
+}
+
 // Approve applies, in order: a remembered approval, a per-tool rule, then the
 // default mode. An ask that the user accepts is remembered when the cache is
 // on. A refusal (rule Deny, an ask returning false, or an ask with no AskFunc
 // wired) yields Allowed:false with a Reason; the Runner feeds that back to the
 // model and continues the turn.
 func (t *TieredApproval) Approve(ctx context.Context, req ApprovalRequest) (ApprovalDecision, error) {
-	if t.remember {
-		t.mu.Lock()
-		ok := t.remembered[req.ToolName]
-		t.mu.Unlock()
-		if ok {
-			return ApprovalDecision{Allowed: true}, nil
-		}
+	t.mu.Lock()
+	mode := t.mode
+	remembered := t.remember && t.remembered[req.ToolName]
+	t.mu.Unlock()
+	if remembered {
+		return ApprovalDecision{Allowed: true}, nil
 	}
 
 	if rule, ok := t.rules[req.ToolName]; ok {
@@ -155,7 +170,7 @@ func (t *TieredApproval) Approve(ctx context.Context, req ApprovalRequest) (Appr
 		}
 	}
 
-	switch t.mode {
+	switch mode {
 	case ModeAlwaysAllow:
 		return ApprovalDecision{Allowed: true}, nil
 	case ModeReadOnlyAuto:

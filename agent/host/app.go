@@ -31,6 +31,7 @@ type App struct {
 
 	injection *agent.InjectionPolicy
 	triggers  *agent.TriggerPolicy
+	approval  *agent.TieredApproval
 	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
 	streams   []*eventsclient.StreamCall
 	tasksMu   sync.Mutex
@@ -100,6 +101,12 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, renderer: rend, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}}
+	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
+	// gated tool call never stacks a dialog against a concurrent elicitation.
+	ask := func(ctx context.Context, req agent.ApprovalRequest) (bool, error) {
+		return coord.Confirm(ctx, approvalPrompt(req))
+	}
+	app.approval = cfg.Approval.buildApproval(ask)
 
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
@@ -211,13 +218,19 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		}
 	}
 
-	runner, err := agent.NewRunner(agent.RunnerConfig{
+	runnerCfg := agent.RunnerConfig{
 		Provider:       provider,
 		Tools:          multi,
 		Instructions:   instructions,
 		MaxSteps:       cfg.MaxSteps,
 		TracerProvider: o.tp,
-	})
+	}
+	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
+	// the interface would read as non-nil and gate every call to a deny.
+	if app.approval != nil {
+		runnerCfg.Approval = app.approval
+	}
+	runner, err := agent.NewRunner(runnerCfg)
 	if err != nil {
 		app.Close()
 		return nil, err
@@ -292,6 +305,17 @@ func (a *App) Tools(ctx context.Context) error {
 	return nil
 }
 
+// setApprovalMode handles "/approve <mode>": it flips the live policy's
+// default disposition. A no-op with a note when approval is not configured.
+func (a *App) setApprovalMode(arg string) {
+	if a.approval == nil {
+		a.renderer.approvalMode(nil)
+		return
+	}
+	a.approval.SetDefaultMode(parseApprovalMode(arg))
+	a.renderer.approvalMode(a.approval)
+}
+
 // REPL runs the interactive loop until EOF or /quit. turnCtx wraps each
 // turn so the caller's signal handling can cancel the in-flight turn
 // without killing the loop.
@@ -319,6 +343,10 @@ func (a *App) REPL(ctx context.Context, in io.Reader, turnCtx func() (context.Co
 			a.renderer.taskList(a.snapshotTasks())
 		case strings.HasPrefix(line, "/tasks cancel "):
 			a.cancelTask(strings.TrimPrefix(line, "/tasks cancel "))
+		case line == "/approve":
+			a.renderer.approvalMode(a.approval)
+		case strings.HasPrefix(line, "/approve "):
+			a.setApprovalMode(strings.TrimPrefix(line, "/approve "))
 		default:
 			tctx, cancel := turnCtx()
 			a.RunTurn(tctx, line)
