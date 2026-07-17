@@ -37,7 +37,13 @@ stay out of the lean `agent/` module.
 - `WithRunStore(store)` — session persistence. Every completed turn's messages
   and event stream append to a run in the store (`agent.NewInMemoryRunStore`
   for in-process resume/fork; `agent/store/redis` or `agent/store/gorm` —
-  Postgres, or a serverless SQLite file — for restart-surviving sessions). `App.AttachRun` names or resumes a session at startup;
+  Postgres, or a serverless SQLite file — for restart-surviving sessions).
+- `WithToolResultStore(store)` — backing store for tool-result offloading
+  (`Config.Offload`). Over-threshold results are stored out of band and the
+  model gets a compact stub plus a `read_tool_result` tool; omit the option and
+  offloading uses an in-memory store, pass a durable one for blobs that survive
+  restarts. `Config.Offload` (nil = off) sets the byte threshold, preview
+  length, and per-tool overrides. `App.AttachRun` names or resumes a session at startup;
   `App.Resume` and `App.Fork` switch runs mid-session (`/resume <id>`,
   `/fork [id]`, `/session` in the REPL). A failed or cancelled turn persists
   nothing; persistence failures degrade to a rendered warning, never a turn

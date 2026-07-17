@@ -61,11 +61,59 @@ func buildRunStore(spec string) (agent.RunStore, error) {
 // transcript is the CLI's output; slow-query noise does not belong in
 // it) and wraps it in the RunStore.
 func openGormStore(dial gorm.Dialector) (agent.RunStore, error) {
-	db, err := gorm.Open(dial, &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	db, err := openGormDB(dial)
 	if err != nil {
-		return nil, fmt.Errorf("agentchat: opening session store: %w", err)
+		return nil, err
 	}
 	return gormstore.New(db)
+}
+
+// openGormDB opens a GORM handle with SQL logging silenced, shared by the
+// run store and the tool-result store so a single --session-store spec
+// backs both on one connection.
+func openGormDB(dial gorm.Dialector) (*gorm.DB, error) {
+	db, err := gorm.Open(dial, &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
+		return nil, fmt.Errorf("agentchat: opening store: %w", err)
+	}
+	return db, nil
+}
+
+// buildToolResultStore maps --session-store to a ToolResultStore backend,
+// so offloaded blobs share the run store's backend: "" / "memory" give
+// the in-memory store (blobs die with the process), sqlite / redis /
+// postgres give restart-surviving blobs. Offloading itself is gated by
+// --offload-threshold, not this; a nil return means "use the host's
+// in-memory default".
+func buildToolResultStore(spec string) (agent.ToolResultStore, error) {
+	switch {
+	case spec == "" || spec == "memory":
+		return nil, nil
+	case strings.HasPrefix(spec, "redis://"):
+		addr := strings.TrimPrefix(spec, "redis://")
+		if addr == "" {
+			return nil, fmt.Errorf("agentchat: --session-store redis:// needs host:port")
+		}
+		return redisstore.NewToolResultStore(redis.NewClient(&redis.Options{Addr: addr})), nil
+	case strings.HasPrefix(spec, "sqlite://"):
+		path := strings.TrimPrefix(spec, "sqlite://")
+		if path == "" {
+			return nil, fmt.Errorf("agentchat: --session-store sqlite:// needs a file path")
+		}
+		db, err := openGormDB(sqlite.Open(path + "?_busy_timeout=5000"))
+		if err != nil {
+			return nil, err
+		}
+		return gormstore.NewToolResultStore(db)
+	case strings.HasPrefix(spec, "postgres://") || strings.HasPrefix(spec, "postgresql://"):
+		db, err := openGormDB(postgres.Open(spec))
+		if err != nil {
+			return nil, err
+		}
+		return gormstore.NewToolResultStore(db)
+	default:
+		return nil, fmt.Errorf("agentchat: unknown --session-store %q", spec)
+	}
 }
 
 const version = "0.1.0"
@@ -100,6 +148,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
+	fl.Int("offload-threshold", 0, "offload tool results at/over N bytes to a store, feeding the model a stub + read_tool_result (0 = off; blobs use --session-store's backend)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -146,12 +195,24 @@ func runChat(v *viper.Viper) error {
 		host.WithTracerProvider(tp),
 		host.WithLogger(logger),
 	}
-	store, err := buildRunStore(v.GetString("session-store"))
+	sessionStore := v.GetString("session-store")
+	store, err := buildRunStore(sessionStore)
 	if err != nil {
 		return err
 	}
 	if store != nil {
 		appOpts = append(appOpts, host.WithRunStore(store))
+	}
+
+	if threshold := v.GetInt("offload-threshold"); threshold > 0 {
+		cfg.Offload = &host.OffloadConfig{ThresholdBytes: threshold}
+		trStore, err := buildToolResultStore(sessionStore)
+		if err != nil {
+			return err
+		}
+		if trStore != nil {
+			appOpts = append(appOpts, host.WithToolResultStore(trStore))
+		}
 	}
 
 	app, err := host.NewApp(cfg, os.Stdout, os.Stdin, appOpts...)

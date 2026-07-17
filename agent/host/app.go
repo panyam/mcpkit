@@ -47,6 +47,10 @@ type App struct {
 	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu.
 	store agent.RunStore
 	runID string
+
+	// toolResultStore backs tool-result offloading when Config.Offload
+	// is set; nil when offloading is off.
+	toolResultStore agent.ToolResultStore
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -54,11 +58,12 @@ type App struct {
 type AppOption func(*appOptions)
 
 type appOptions struct {
-	provider agent.Provider
-	ui       agent.ElicitationUI
-	tp       core.TracerProvider
-	logger   *slog.Logger
-	store    agent.RunStore
+	provider        agent.Provider
+	ui              agent.ElicitationUI
+	tp              core.TracerProvider
+	logger          *slog.Logger
+	store           agent.RunStore
+	toolResultStore agent.ToolResultStore
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -225,9 +230,23 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		}
 	}
 
+	// Offloading wraps the whole aggregate, so one read_tool_result and
+	// one store cover every server's tools. The stub it substitutes is a
+	// normal ToolResult, so the transcript and persisted log see exactly
+	// what the model saw.
+	var runnerTools agent.ToolSource = multi
+	if cfg.Offload != nil {
+		store := o.toolResultStore
+		if store == nil {
+			store = agent.NewInMemoryToolResultStore()
+		}
+		app.toolResultStore = store
+		runnerTools = agent.NewOffloadingSource(multi, store, cfg.Offload.toAgent())
+	}
+
 	runnerCfg := agent.RunnerConfig{
 		Provider:       provider,
-		Tools:          multi,
+		Tools:          runnerTools,
 		Instructions:   instructions,
 		MaxSteps:       cfg.MaxSteps,
 		TracerProvider: o.tp,
