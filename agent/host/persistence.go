@@ -16,6 +16,14 @@ func WithRunStore(store agent.RunStore) AppOption {
 	return func(o *appOptions) { o.store = store }
 }
 
+// WithToolResultStore supplies the backing store for tool-result
+// offloading (Config.Offload). Omitted, offloading uses an in-memory
+// store; pass a durable one (agent/store/redis, agent/store/gorm) so
+// offloaded blobs survive restarts. Ignored when Config.Offload is nil.
+func WithToolResultStore(store agent.ToolResultStore) AppOption {
+	return func(o *appOptions) { o.toolResultStore = store }
+}
+
 // RunID returns the active persisted run, or "" when persistence is off
 // or no run has been attached or created yet (the first turn creates
 // one lazily).
