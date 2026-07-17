@@ -268,9 +268,19 @@ All merged. Deferred riders: extract the shared provider SSE loop (issue 952); A
 caching / extended thinking (issue 953, best sequenced with P2 compaction — the cache breakpoint is
 the compactor's stable-head boundary).
 
-**Phase 1 — durability & control:**
-`RunStore` interface + in-memory + redis sibling (D) · `agent/host` persist/resume/fork (D + I session
-lifecycle) · per-tool-call cancellation via `TurnRequest`/`Control` (I) · `tool-cancelled` event (I).
+**Phase 1 — durability & control: ✅ SHIPPED.**
+`RunStore` interface + in-memory (D, issue 933) · Redis sibling `agent/store/redis` (issue 934) ·
+Postgres/SQLite sibling `agent/store/gorm` (issue 960) · `agent/host` persist/resume/fork + agentchat
+`--session-store` / `--session` (issue 935) · per-tool-call cancellation via `TurnRequest`/`Control`
+(I, issue 936) · `tool-cancelled` event (issue 937). All merged (PRs 955–959, 961, 965, 967, 968).
+Review-driven riders shipped in the same arc: ForkRun atomicity + idempotent-retry contract (issue
+963 — `NewRunID` is an idempotency key; each backend uses its database's native atomicity primitive,
+transaction vs Lua script, rationale doc'd on both ForkRuns), `Message.Timestamp` stamped at the
+store boundary (issue 964), and fork-at-point + `ForkPoint` lineage (issue 962 — the conversation
+half of checkpoint/rewind; `ForkPoint` is a message count, never a timestamp). Deferred with a full
+design: tool-result offloading (issue 966 — `OffloadingSource` + `ToolResultStore` +
+`read_tool_result`; lossless pay-on-demand beats lossy compaction for tool outputs, sequence with
+P2 memory).
 
 **Phase 2 — memory:**
 working memory + `MemorySource` (A) · `SummarizingCompactor` (A) · `Embedder` seam + `VectorStore` +
