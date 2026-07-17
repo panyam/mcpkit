@@ -13,13 +13,13 @@ The MCP server runs an in-process [oneauth](https://github.com/panyam/oneauth) A
 
 ```bash
 # Terminal 1 — start the MCP server + in-process AS
-make serve
+just serve
 
 # Terminal 2 — run the scripted walkthrough
-make demo
+just demo
 ```
 
-See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-step description (regenerate via `make readme`).
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-step description (regenerate via `just readme`).
 
 ## What it demonstrates
 

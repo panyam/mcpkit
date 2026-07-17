@@ -103,7 +103,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 
 - [x] Demokit walkthrough running against a real `just serve` MCP server.
 - [x] Three demo tools: `upload_image` (image/* + 5 MB cap), `analyze_documents` (array of PDFs), `process_any_file` (no filter).
-- [x] Embedded fixtures via `//go:embed testdata/...` so `make demo` is hermetic; readers can inspect / replace real files on disk.
+- [x] Embedded fixtures via `//go:embed testdata/...` so `just demo` is hermetic; readers can inspect / replace real files on disk.
 - [x] Optional `--file <path>` step exercises the on-disk → data URI path.
 - [x] VS Code MCP config in `examples/file-inputs/README.md`.
 - [ ] Conformance scenarios pending Phase 1.4–1.6 (oversized → `file_too_large`, wrong MIME → `file_type_not_accepted`, capability gating, multi-file arrays, percent-encoded filename round-trip).

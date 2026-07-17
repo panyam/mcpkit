@@ -1,0 +1,21 @@
+# Run the demokit walkthrough (interactive, TUI)
+demo:
+    go run . --tui
+
+# Run the walkthrough in notebook mode (Bubble Tea cells)
+note:
+    go run . --note
+
+# Start the MRTR demo server (default :8080)
+serve:
+    go run . --serve
+
+# Regenerate WALKTHROUGH.md from demo definitions
+readme:
+    go run . --doc md > WALKTHROUGH.md
+
+# Build the binary
+build:
+    go build -o mrtr-demo .
+
+default: demo

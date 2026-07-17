@@ -5,8 +5,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # starts the MCP server + in-process AS
-//	Terminal 2:  make run           # runs the demokit client (scripted MCP host)
+//	Terminal 1:  just serve         # starts the MCP server + in-process AS
+//	Terminal 2:  just run           # runs the demokit client (scripted MCP host)
 //
 // The MCP server runs an in-process oneauth AS (HTTPtest server in a goroutine)
 // because Keycloak does not support RFC 9396 RAR. Tokens are RS256-signed; the
@@ -86,7 +86,7 @@ func runDemo() {
 		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 			demokit.Actor("AS", "Auth Server (in-process oneauth)"),
 		)
 
@@ -100,8 +100,8 @@ func runDemo() {
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve        # MCP server + in-process AS on :8080",
-		"Terminal 2:  make run          # this demo",
+		"Terminal 1:  just serve        # MCP server + in-process AS on :8080",
+		"Terminal 2:  just run          # this demo",
 		"```",
 	)
 
@@ -155,7 +155,7 @@ json.NewDecoder(resp.Body).Decode(&bootstrap)
 			resp, err := http.Get(serverURL + "/demo/bootstrap")
 			if err != nil {
 				fmt.Printf("    ERROR: server not reachable at %s: %v\n", serverURL, err)
-				fmt.Printf("    Start it with: make serve\n")
+				fmt.Printf("    Start it with: just serve\n")
 				return
 			}
 			defer resp.Body.Close()

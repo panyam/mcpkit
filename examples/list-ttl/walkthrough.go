@@ -33,15 +33,15 @@ func runDemo() {
 		Description("Walks through SEP-2549, which adds two cache hints — `ttlMs` (integer milliseconds) and `cacheScope` (`public`/`private`) — to every paginated list response (tools/list, prompts/list, resources/list, resources/templates/list) and to resources/read. Clients use them to cache the registered surface between `notifications/list_changed` instead of re-fetching on every poll.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve, WithListTTLMs(60000))"),
+			demokit.Actor("Server", "MCP Server (just serve, WithListTTLMs(60000))"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # list-ttl server on :8080 with WithListTTLMs(60000)",
-		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
+		"Terminal 1:  just serve         # list-ttl server on :8080 with WithListTTLMs(60000)",
+		"Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)",
 		"```",
 	)
 
@@ -85,7 +85,7 @@ echo "SID=$SID"`).Default(),
 			demokit.MakeVariant("go", "go", `c := client.NewClient(serverURL+"/mcp",
     core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
 )
-if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
+if err := c.Connect(); err != nil { /* server not up — run: just serve */ }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			opts := []client.ClientOption{
@@ -99,7 +99,7 @@ if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 				opts...,
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
@@ -252,7 +252,7 @@ _ = rr.Contents`),
 		"- Wire types: `core.ToolsListResult` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult / ResourceResult — core/{tool,prompt,resource}.go; `core.CacheScopePublic` / `CacheScopePrivate` — core/cache.go",
 		"- Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage / ReadResource — client/iterators.go",
 		"- Migration guide: docs/LIST_TTL_MIGRATION.md",
-		"- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — drive via `make testconf-list-ttl`",
+		"- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — originally driven by a dedicated `testconf-list-ttl` suite, now folded into `just testconf`",
 		"- SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549",
 	)
 

@@ -1,6 +1,6 @@
 # Screenshots — threejs
 
-Capture by running `make demo-app EXAMPLE=threejs`.
+Capture by running `just demo-app EXAMPLE=threejs`.
 
 | File | What to capture |
 |---|---|

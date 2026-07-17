@@ -11,7 +11,7 @@ import (
 )
 
 // runDemo is the integration walkthrough. Acts as a scripted MCP host
-// against a server started by `make serve` in another terminal.
+// against a server started by `just serve` in another terminal.
 //
 // Walks five steps:
 //
@@ -31,21 +31,21 @@ func runDemo() {
 
 	demo := demokit.New("integration — get-time + ResourceLink download path").
 		Dir("integration").
-		Description("Walks the integration-server round trip end-to-end: one App tool (get-time, same shape as basic-vanillajs), one plain resource (sample-report.txt — a downloadable text resource demoing the host's ResourceLink + ui/download-file pathway), and the iframe HTML. The fixture mirrors upstream's integration-server: server-side time + downloadable resource, with three iframe-driven Playwright tests upstream ships (Send Message / Send Log / Open Link) all riding the App SDK bridge. Run `make serve` in another terminal first.").
+		Description("Walks the integration-server round trip end-to-end: one App tool (get-time, same shape as basic-vanillajs), one plain resource (sample-report.txt — a downloadable text resource demoing the host's ResourceLink + ui/download-file pathway), and the iframe HTML. The fixture mirrors upstream's integration-server: server-side time + downloadable resource, with three iframe-driven Playwright tests upstream ships (Send Message / Send Log / Open Link) all riding the App SDK bridge. Run `just serve` in another terminal first.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "mcpkit-Go fixture (make serve)"),
+			demokit.Actor("Server", "mcpkit-Go fixture (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # mcpkit-Go fixture on :3101",
-		"Terminal 2:  make demo          # this walkthrough (--tui for interactive TUI)",
+		"Terminal 1:  just serve         # mcpkit-Go fixture on :3101",
+		"Terminal 2:  just demo          # this walkthrough (--tui for interactive TUI)",
 		"```",
 		"",
-		"Any MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=integration` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
+		"Any MCP host can connect to the running server. The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `just demo-app EXAMPLE=integration` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
 	)
 
 	var c *client.Client
@@ -75,7 +75,7 @@ if err := c.Connect(); err != nil {
 			core.ClientInfo{Name: "integration-host", Version: "1.0"},
 		)
 		if err := c.Connect(); err != nil {
-			fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
 		fmt.Printf("    connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)

@@ -1,0 +1,32 @@
+PORT := env('PORT', '3021')
+# Defaults to a local Keycloak realm (free, hermetic). For Okta:
+#   source .../okta.env && just run ISSUER="$OKTA_ISSUER" AUDIENCE=api://default
+ISSUER := env('ISSUER', 'http://localhost:8180/realms/mcpkit-test')
+# AUDIENCE: empty for Keycloak; api://default for Okta's default custom AS.
+AUDIENCE := env('AUDIENCE', '')
+
+# Show available targets
+help:
+    @just --list --unsorted
+
+# Start the SUT against $ISSUER (expects the AS reachable)
+run ISSUER_OVERRIDE="" AUDIENCE_OVERRIDE="":
+    #!/usr/bin/env bash
+    set -eu
+    ISSUER_VAL="{{ISSUER}}"
+    AUDIENCE_VAL="{{AUDIENCE}}"
+    if [ -n "{{ISSUER_OVERRIDE}}" ]; then
+        ISSUER_VAL="{{ISSUER_OVERRIDE}}"
+    fi
+    if [ -n "{{AUDIENCE_OVERRIDE}}" ]; then
+        AUDIENCE_VAL="{{AUDIENCE_OVERRIDE}}"
+    fi
+    go run . -addr :{{PORT}} -issuer "$ISSUER_VAL" -audience "$AUDIENCE_VAL"
+
+# Compile the SUT to ./step-up-sut
+build:
+    go build -o step-up-sut .
+
+# Remove built binary
+clean:
+    rm -f step-up-sut

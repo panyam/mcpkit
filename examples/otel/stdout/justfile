@@ -1,0 +1,27 @@
+EXPORTER := env('EXPORTER', 'stdout')
+
+# Run the demokit walkthrough (TUI). EXPORTER=stdout|otlp (default stdout).
+demo:
+    go run . --tui --exporter={{EXPORTER}}
+
+# Run the walkthrough in notebook mode (Bubble Tea cells). EXPORTER=stdout|otlp (default stdout).
+note:
+    go run . --note --exporter={{EXPORTER}}
+
+# Start the otel-stdout demo server on :8080. EXPORTER=stdout|otlp (default stdout).
+serve:
+    go run . --serve --exporter={{EXPORTER}}
+
+# Regenerate WALKTHROUGH.md from demo definitions
+readme:
+    go run . --doc md > WALKTHROUGH.md
+
+# Build the binary
+build:
+    go build -o otel-stdout-demo .
+
+# Run the e2e smoke test
+test:
+    go test ./... -count=1 -timeout 60s
+
+default: demo

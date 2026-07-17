@@ -27,7 +27,7 @@ host ↔ server ↔ App-iframe round trip.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=basic-vanillajs
+just demo-app EXAMPLE=basic-vanillajs
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
@@ -58,5 +58,5 @@ See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in
 ## What to Try Next
 
 - Move up the [examples ladder](../README.md#reading-order--examples-ladder) — rung 2 (`basic-preact`, `basic-react`, `basic-solid`, `basic-svelte`, `basic-vue`) shows the same shape behind frameworks; rung 3 onwards introduces richer payloads.
-- Compare upstream's TS server side-by-side: `make demo-upstream EXAMPLE=basic-vanillajs` runs the TS one; the visual + wire surface should be identical.
+- Compare upstream's TS server side-by-side: `just demo-upstream EXAMPLE=basic-vanillajs` runs the TS one; the visual + wire surface should be identical.
 - See [`main.go`](main.go) — fixture is ~60 lines.

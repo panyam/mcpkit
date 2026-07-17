@@ -15,7 +15,7 @@ A condensed walkthrough showing the same MCP Events extension wired against a Te
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
     participant Receiver as Local webhook receiver (this process)
 
     Note over Host,Receiver: Step 1: Connect to the events server
@@ -53,17 +53,17 @@ This walkthrough runs against either a test-mode server or a real Telegram bot.
 **Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.
 
 ```
-Terminal 1:  make serve                                # server in test mode
-Terminal 2:  make demo                                 # this walkthrough
-Terminal 3:  make inject TEXT='hello'                  # message event
+Terminal 1:  just serve                                # server in test mode
+Terminal 2:  just demo                                 # this walkthrough
+Terminal 3:  just inject TEXT='hello'                  # message event
              make inject-typing                        # typing event (cursorless, demo-only)
 ```
 
 **Option B — Real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only — see the live step's note for details.
 
 ```
-Terminal 1:  TELEGRAM_BOT_TOKEN=... make serve         # server in bot mode
-Terminal 2:  make demo                                 # this walkthrough
+Terminal 1:  TELEGRAM_BOT_TOKEN=... just serve         # server in bot mode
+Terminal 2:  just demo                                 # this walkthrough
              # In Telegram: send a message to the bot. Live step captures it.
 ```
 
@@ -143,7 +143,7 @@ curl -s -X POST http://localhost:8080/mcp \
 Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
 
 ```
-TELEGRAM_BOT_TOKEN=<your-token> make serve
+TELEGRAM_BOT_TOKEN=<your-token> just serve
 ```
 
 Bot setup (BotFather token, chat link) is documented in this demo's README.md.

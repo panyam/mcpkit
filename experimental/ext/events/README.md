@@ -285,7 +285,7 @@ sub.start()
 sub.stop()
 ```
 
-Smoke-tested by `make test-ttl` in [`examples/events/discord/`](../../../examples/events/discord/).
+Smoke-tested by `just test-ttl` in [`examples/events/discord/`](../../../examples/events/discord/).
 
 ### Go — typed delivery
 

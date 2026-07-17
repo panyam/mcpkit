@@ -4,7 +4,7 @@
 
 Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-driven model: the *server* decides when to create a task, and clients call `tools/call` normally with no task hint.
 
-> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `make serve` + `make demo`.
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `just serve` + `just demo`.
 >
 > **🔁 Migrating from v1?** See the [v1 → v2 migration guide](../../docs/TASKS_V2_MIGRATION.md) for the wire-shape diff, server entry points (`tasks.Register` in `ext/tasks` / `server.RegisterTasksV1`), and the rolling-upgrade recipe.
 
@@ -30,8 +30,8 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 ## Quick Start
 
 ```bash
-make serve   # terminal 1: v2 tasks server on :8080
-make demo     # terminal 2: demokit walkthrough (7 steps)
+just serve   # terminal 1: v2 tasks server on :8080
+just demo     # terminal 2: demokit walkthrough (7 steps)
 ```
 
 See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and sequence diagram.
@@ -39,11 +39,11 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 ## Agent mode
 
 ```bash
-make agent                            # scripted agent, no LLM (also the golden test via make agent-test)
-make agent-live MODEL=qwen2.5-7b-instruct   # a live model improvising against the same server
+just agent                                  # scripted agent, no LLM (also the golden test via just agent-test)
+MODEL=qwen2.5-7b-instruct just agent-live   # a live model improvising against the same server
 ```
 
-`make agent` runs a scripted agent (mcpkit's host layer plus a deterministic
+`just agent` runs a scripted agent (mcpkit's host layer plus a deterministic
 `StubProvider`) against an in-process copy of this server, so it needs no second
 terminal and no model. It shows the point of v2 from the *agent's* side: the
 model calls a sync-only tool (`greet`) and a server-directed async tool

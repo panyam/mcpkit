@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # MCP Tasks server on :8080
-//	Terminal 2:  make run           # demokit walkthrough
+//	Terminal 1:  just serve         # MCP Tasks server on :8080
+//	Terminal 2:  just run           # demokit walkthrough
 //
 // Tools:
 //   - greet:          sync-only (no Execution field = forbidden per spec)

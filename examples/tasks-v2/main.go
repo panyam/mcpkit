@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # tasks-v2 server on :8080
-//	Terminal 2:  make run           # demokit walkthrough
+//	Terminal 1:  just serve         # tasks-v2 server on :8080
+//	Terminal 2:  just run           # demokit walkthrough
 //
 // Tools:
 //   - greet:              sync-only (no Execution field = forbidden)

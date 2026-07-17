@@ -45,7 +45,7 @@ work, not just printing the tool result.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=wiki-explorer
+just demo-app EXAMPLE=wiki-explorer
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)
