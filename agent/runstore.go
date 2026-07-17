@@ -86,6 +86,12 @@ type CreateRunResponse struct {
 // Callers pass exactly the entries a turn added (the user message plus
 // TurnResult.Messages) so the stored log threads the same way in-process
 // history does.
+//
+// Stamping rule: implementations set Message.Timestamp to their own
+// clock for every appended message whose Timestamp is zero, and
+// preserve non-zero values verbatim (caller wins — a surface can stamp
+// the user message at keypress). One boundary, one rule: code that
+// constructs messages never needs to remember to stamp.
 type AppendMessagesRequest struct {
 	RunID    string
 	Messages []Message
@@ -196,7 +202,8 @@ func (s *InMemoryRunStore) CreateRun(ctx context.Context, req CreateRunRequest) 
 	return CreateRunResponse{RunID: id, Created: true}, nil
 }
 
-// AppendMessages implements RunStore.
+// AppendMessages implements RunStore, stamping zero Timestamps per the
+// AppendMessagesRequest rule.
 func (s *InMemoryRunStore) AppendMessages(ctx context.Context, req AppendMessagesRequest) (AppendMessagesResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -204,7 +211,14 @@ func (s *InMemoryRunStore) AppendMessages(ctx context.Context, req AppendMessage
 	if !ok {
 		return AppendMessagesResponse{Found: false}, nil
 	}
+	start := len(e.messages)
 	e.messages = append(e.messages, req.Messages...)
+	now := time.Now()
+	for i := start; i < len(e.messages); i++ {
+		if e.messages[i].Timestamp.IsZero() {
+			e.messages[i].Timestamp = now
+		}
+	}
 	return AppendMessagesResponse{Found: true}, nil
 }
 
