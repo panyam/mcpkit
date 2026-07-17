@@ -42,12 +42,12 @@ path was hardcoded for that.
 
 - `scenario.go` — the app-domain MCP server (`user.created` events, `send_email`,
   a task-backed `long_report`), the scripted model turns, and `runScenario`
-  wiring the reusable host (`cmd/agentchat/host`) to it.
+  wiring the reusable host (`agent/host`) to it.
 - `main.go` — dual-mode entry (stub vs `--model`) plus a concurrency-safe
   transcript writer (the proactive trigger turn writes from the event goroutine).
 
-The host is `github.com/panyam/mcpkit/cmd/agentchat/host` — the same App that
-backs the agentchat CLI, imported here to drive it programmatically.
+The host is `github.com/panyam/mcpkit/agent/host` — the same App that backs the
+agentchat CLI, imported here to drive it programmatically.
 
 Background-detach on genuinely long tasks (the task runs past its grace window
 and notifies via a `task.completed` event) is exercised in the agentchat
