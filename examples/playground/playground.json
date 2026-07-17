@@ -1,0 +1,17 @@
+{
+  "instructions": "You are a helpful assistant with access to tools. Be concise.",
+  "connections": {
+    "active": "local",
+    "connections": {
+      "local": { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
+      "local-thinker": {
+        "type": "lmstudio",
+        "model": "deepseek-r1-distill-llama-8b",
+        "thinkingHint": { "openTag": "<think>", "closeTag": "</think>" }
+      }
+    }
+  },
+  "servers": [
+    { "id": "demo", "url": "http://localhost:8787/mcp" }
+  ]
+}
