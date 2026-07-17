@@ -42,8 +42,10 @@ stay out of the lean `agent/` module.
   (`Config.Offload`). Over-threshold results are stored out of band and the
   model gets a compact stub plus a `read_tool_result` tool; omit the option and
   offloading uses an in-memory store, pass a durable one for blobs that survive
-  restarts. `Config.Offload` (nil = off) sets the byte threshold, preview
-  length, and per-tool overrides. `App.AttachRun` names or resumes a session at startup;
+  restarts. Durable options: `agent/store/redis`, `agent/store/gorm`, or the
+  dependency-free `agent.NewFileToolResultStore(dir)` — the no-server local path
+  where blobs are files the agent can also read directly. `Config.Offload`
+  (nil = off) sets the byte threshold, preview length, and per-tool overrides. `App.AttachRun` names or resumes a session at startup;
   `App.Resume` and `App.Fork` switch runs mid-session (`/resume <id>`,
   `/fork [id]`, `/session` in the REPL). A failed or cancelled turn persists
   nothing; persistence failures degrade to a rendered warning, never a turn
