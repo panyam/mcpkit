@@ -1,6 +1,6 @@
 # Screenshots — customer-segmentation
 
-Capture by running `make demo-app EXAMPLE=customer-segmentation`.
+Capture by running `just demo-app EXAMPLE=customer-segmentation`.
 
 | File | What to capture |
 |---|---|

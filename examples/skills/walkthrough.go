@@ -62,15 +62,15 @@ func runDemo() {
 		Description("SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a skill directory is a `skill://` URI; `skill://index.json` enumerates them with SHA-256 digests.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve, file mode by default)"),
+			demokit.Actor("Server", "MCP Server (just serve, file mode by default)"),
 		)
 
 	demo.Section("Setup",
 		"```",
-		"Terminal 1:  make serve         # default (file mode, :8080)",
-		"             make serve-archive # one .tar.gz per skill",
-		"             make serve-zip     # one .zip per skill",
-		"Terminal 2:  make demo          # this walkthrough (--tui interactive)",
+		"Terminal 1:  just serve         # default (file mode, :8080)",
+		"             just serve-archive # one .tar.gz per skill",
+		"             just serve-zip     # one .zip per skill",
+		"Terminal 2:  just demo          # this walkthrough (--tui interactive)",
 		"```",
 		"This walkthrough auto-detects which of the three distribution modes the server is serving. The mode-aware section near the bottom shows the archive read-and-unpack flow; the file-mode read steps in the middle SKIP cleanly when archive mode is in effect (and vice versa).",
 	)
@@ -136,7 +136,7 @@ echo "SID=$SID"
     core.ClientInfo{Name: "skills-host", Version: "1.0"},
     client.WithClientMode(wireMode), // adaptive | stateless | legacy
 )
-if err := c.Connect(); err != nil { /* server not up — run: make serve */ }
+if err := c.Connect(); err != nil { /* server not up — run: just serve */ }
 stateless := c.UsingStatelessWire()
 supports  := c.ServerSupportsExtension(skills.ExtensionID)`),
 		).
@@ -147,7 +147,7 @@ supports  := c.ServerSupportsExtension(skills.ExtensionID)`),
 				client.WithClientMode(wireMode),
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
 			serverInfo = c.ServerInfo
@@ -498,13 +498,13 @@ body, _ := c.ReadResource(target.String())`),
 		})
 
 	demo.Section("Cross-source reads (issues #797 + #808)",
-		"`make serve` composes multiple sources into one catalog via `fsutil.NewMountFS`: bundled local skills at the FS root + an `archived/` sub-mount (a `.tar.gz` packed from one bundled skill, auto-wrapped by frontmatter name) + a `github/` sub-mount (fetched from anthropics/skills). The previous read steps exercised the local layer. These two steps probe the sub-mounts so the cross-source story is visible in the demo, not just in resource counts. Both steps gracefully skip when running against `--source=dir` (no sub-mounts present).",
+		"`just serve` composes multiple sources into one catalog via `fsutil.NewMountFS`: bundled local skills at the FS root + an `archived/` sub-mount (a `.tar.gz` packed from one bundled skill, auto-wrapped by frontmatter name) + a `github/` sub-mount (fetched from anthropics/skills). The previous read steps exercised the local layer. These two steps probe the sub-mounts so the cross-source story is visible in the demo, not just in resource counts. Both steps gracefully skip when running against `--source=dir` (no sub-mounts present).",
 	)
 
 	demo.Step("Read a skill via the archive sub-mount (proves auto-wrap end-to-end)").
 		Arrow("Host", "Server", "resources/read uri=skill://archived/git-workflow/SKILL.md").
 		DashedArrow("Server", "Host", "text/markdown body (same content as skill://git-workflow/SKILL.md)").
-		Note("`make serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.").
+		Note("`just serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
@@ -520,7 +520,7 @@ fmt.Println(body)`),
 			}
 			body, err := c.ReadResource("skill://archived/git-workflow/SKILL.md")
 			if err != nil {
-				fmt.Printf("    SKIP: %v (run with `make serve` for the multi-source demo)\n", err)
+				fmt.Printf("    SKIP: %v (run with `just serve` for the multi-source demo)\n", err)
 				return nil
 			}
 			fmt.Printf("    served via archived/ sub-mount (auto-wrapped by frontmatter name):\n")
@@ -575,7 +575,7 @@ fmt.Println(body)`),
 				}
 			}
 			if githubURI == "" {
-				fmt.Printf("    SKIP: no skill://github/... resources in the catalog (run with `make serve` and ensure network is available)\n")
+				fmt.Printf("    SKIP: no skill://github/... resources in the catalog (run with `just serve` and ensure network is available)\n")
 				return nil
 			}
 			fmt.Printf("    discovered: %s\n", githubURI)
@@ -668,7 +668,7 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 		})
 
 	demo.Section("fsnotify-driven invalidation (issue #800)",
-		"The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. `make serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.",
+		"The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. `just serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.",
 	)
 
 	demo.Step("Observe an fsnotify-driven broadcast").
@@ -678,7 +678,7 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 		Note("In `--non-interactive` mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal — the notification arrives as soon as your editor flushes the save.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("server", "bash", `# In one terminal:
-make serve  # opt-in fsnotify:
+just serve  # opt-in fsnotify:
             # (edit Makefile to add --watch to the serve target, or run directly:)
             # go run . --serve --watch
 
@@ -832,7 +832,7 @@ for _, r := range result.Resources {
 	demo.Step("Wrap reads in skills.NewClient(...) and call Client.Activate").
 		Arrow("Host", "Server", "resources/read via sc.ReadAndVerify (span: skills.read_and_verify)").
 		DashedArrow("Server", "Host", "bytes + digest match").
-		Note("Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.").
+		Note("Activate is intra-process — no wire traffic. Run with `just serve EXPORTER=stdout` + `just demo EXPORTER=stdout` to see spans.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil

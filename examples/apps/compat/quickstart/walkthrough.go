@@ -11,7 +11,7 @@ import (
 )
 
 // runDemo is the quickstart walkthrough. Acts as a scripted MCP host
-// against a server started by `make serve` in another terminal.
+// against a server started by `just serve` in another terminal.
 //
 // Walks four steps + a closing narrative Section. The wire surface is
 // the same minimum-viable shape as basic-vanillajs (one tool, one ui://
@@ -48,28 +48,28 @@ func runDemo() {
 
 	demo := demokit.New("quickstart — minimum-viable MCP App with the bare-minimum bridge dance").
 		Dir("quickstart").
-		Description("Walks the get-time round trip end-to-end as a scripted MCP client. quickstart is the simplest fixture in apps/compat — one tool, one resource, text content only — but its iframe also uses the bare-minimum bridge surface (ontoolresult + callServerTool), making it the cleanest fixture for understanding what an MCP App fundamentally IS. The final narrative section spells out the bridge dance a Go-only host can't directly drive. Run `make serve` in another terminal first.").
+		Description("Walks the get-time round trip end-to-end as a scripted MCP client. quickstart is the simplest fixture in apps/compat — one tool, one resource, text content only — but its iframe also uses the bare-minimum bridge surface (ontoolresult + callServerTool), making it the cleanest fixture for understanding what an MCP App fundamentally IS. The final narrative section spells out the bridge dance a Go-only host can't directly drive. Run `just serve` in another terminal first.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "mcpkit-Go fixture (make serve)"),
+			demokit.Actor("Server", "mcpkit-Go fixture (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # mcpkit-Go fixture on :3101 by default",
-		"Terminal 2:  make demo          # this walkthrough (--tui for interactive TUI)",
+		"Terminal 1:  just serve         # mcpkit-Go fixture on :3101 by default",
+		"Terminal 2:  just demo          # this walkthrough (--tui for interactive TUI)",
 		"```",
 		"",
 		"Point the walkthrough at a different host via either of:",
 		"",
 		"```",
 		"go run . --demo --url http://localhost:1234       # CLI flag",
-		"MCPKIT_SERVER_URL=http://localhost:1234 make demo # env var",
+		"MCPKIT_SERVER_URL=http://localhost:1234 just demo # env var",
 		"```",
 		"",
-		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no JS. The same protocol calls drive the iframe when you run `make demo-app EXAMPLE=quickstart` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
+		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser, no JS. The same protocol calls drive the iframe when you run `just demo-app EXAMPLE=quickstart` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
 	)
 
 	var c *client.Client
@@ -105,7 +105,7 @@ fmt.Printf("connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`,
 			core.ClientInfo{Name: "quickstart-host", Version: "1.0"},
 		)
 		if err := c.Connect(); err != nil {
-			fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
 		fmt.Printf("    connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)

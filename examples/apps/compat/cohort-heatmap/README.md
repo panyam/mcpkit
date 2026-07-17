@@ -37,7 +37,7 @@ cohort-retention heatmap.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=cohort-heatmap
+just demo-app EXAMPLE=cohort-heatmap
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

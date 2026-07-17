@@ -49,7 +49,7 @@ const LoggerInstrumentationName = "github.com/panyam/mcpkit/server"
 //	                     + otelslog bridge. Dial-failure logs a
 //	                     warning and falls back to slog.Default() so
 //	                     a dead docker/observability/ stack never
-//	                     breaks `make demo`.
+//	                     breaks `just demo`.
 //	Exporter=="auto"   → same as "otlp" but silent on dial-failure
 //	                     (the operator explicitly opted into
 //	                     maybe-on-maybe-off semantics).

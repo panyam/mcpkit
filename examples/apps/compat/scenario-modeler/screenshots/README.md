@@ -1,6 +1,6 @@
 # Screenshots — scenario-modeler
 
-Capture by running `make demo-app EXAMPLE=scenario-modeler`.
+Capture by running `just demo-app EXAMPLE=scenario-modeler`.
 
 | File | What to capture |
 |---|---|

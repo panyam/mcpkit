@@ -2,7 +2,7 @@
 """Bootstrap walkthrough scaffolding for compat fixtures.
 
 For each `examples/apps/compat/<name>/` directory, writes:
-  - Makefile (one-liner that includes the shared fragment)
+  - justfile (one-liner that imports the shared fragment)
   - walkthrough.go (stub that connects + lists tools; ready for the author to refine)
   - .gitignore (just ignores the compiled binary)
   - Converts main.go to a dual-mode dispatcher:
@@ -30,15 +30,15 @@ COMPAT_ROOT = MCPKIT_ROOT / "examples" / "apps" / "compat"
 SKIP_FIXTURES = {"basic-vanillajs"}
 
 
-MAKEFILE_BODY = """# Per-fixture conventions live in the shared fragment. Override
-# FIXTURE_NAME / SERVER_PORT above the include if you need to.
-include ../../../common/walkthrough.mk
+JUSTFILE_BODY = """# Per-fixture conventions live in the shared fragment. Override
+# FIXTURE_NAME / SERVER_PORT via environment variables if you need to.
+import '../../../common/walkthrough.just'
 """
 
 
 GITIGNORE_BODY_TEMPLATE = """# walkthrough.trace.json is the SOURCE of truth -- commit it.
 # bundle/ is the GENERATED playable HTML + sibling JS/CSS -- commit it too,
-# so docs-site can publish without regenerating. Run `make bundle` to
+# so docs-site can publish without regenerating. Run `just bundle` to
 # refresh after editing walkthrough.go or re-recording.
 #
 # Only the compiled fixture binary is gitignored here.
@@ -170,7 +170,7 @@ def convert_main_to_dispatcher(main_go: str) -> str | None:
 
 def binary_name(fixture: str) -> str:
     """Return the convention binary name: <fixture>-demo (matches the
-    Makefile fragment's `go build -o $(FIXTURE_NAME)`)."""
+    justfile fragment's `go build -o {{FIXTURE_NAME}}`)."""
     return f"{fixture}-demo"
 
 
@@ -208,7 +208,7 @@ def bootstrap_fixture(fixture_dir: Path) -> tuple[bool, str]:
     (fixture_dir / "walkthrough.go").write_text(
         WALKTHROUGH_STUB_TEMPLATE.format(title=title + " walkthrough (stub)", fixture=fixture)
     )
-    (fixture_dir / "Makefile").write_text(MAKEFILE_BODY)
+    (fixture_dir / "justfile").write_text(JUSTFILE_BODY)
     (fixture_dir / ".gitignore").write_text(
         GITIGNORE_BODY_TEMPLATE.format(binary_name=binary_name(fixture))
     )

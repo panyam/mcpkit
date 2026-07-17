@@ -1,0 +1,19 @@
+# ext/ui justfile
+
+# Run Go + JS bridge unit tests
+test:
+    go test ./... -count=1 -timeout 30s
+    cd assets && pnpm install --frozen-lockfile --silent && pnpm test
+
+# Run JS bridge unit tests (requires pnpm + Node.js)
+test-bridge:
+    cd assets && pnpm install --frozen-lockfile --silent && pnpm test
+
+# Run Playwright bridge integration tests (requires Chromium)
+test-bridge-e2e:
+    cp assets/mcp-app-bridge.js tests/playwright/mcp-app-bridge.js
+    cd tests/playwright && pnpm install --frozen-lockfile --silent && pnpm test
+
+# Compile mcp-app-bridge.ts → .js (requires pnpm + TypeScript)
+build-bridge:
+    cd assets && pnpm install --frozen-lockfile && pnpm build

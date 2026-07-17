@@ -39,10 +39,10 @@ see the security note in the migration guide.
 
 ```bash
 # Terminal 1 — start the MCP server (ttlMs=60000)
-make serve
+just serve
 
 # Terminal 2 — scripted walkthrough
-make demo
+just demo
 
 # Or for the interactive TUI:
 go run . --tui
@@ -61,7 +61,7 @@ step-by-step description.
 
 ## Other states
 
-The default `make serve` runs with `ttlMs=60000` (the "fresh for 60s"
+The default `just serve` runs with `ttlMs=60000` (the "fresh for 60s"
 state). To exercise the other modes:
 
 | Command | Mode |

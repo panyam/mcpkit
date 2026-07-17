@@ -1,6 +1,6 @@
 # Screenshots — transcript
 
-Capture by running `make demo-app EXAMPLE=transcript`.
+Capture by running `just demo-app EXAMPLE=transcript`.
 
 | File | What to capture |
 |---|---|

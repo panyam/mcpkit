@@ -46,7 +46,7 @@ func main() {
 
 	// OTel telemetry. See the event-server's main.go comment block for
 	// the EXPORTER selector semantics — auto mode (default) means
-	// "best-effort OTLP with silent Noop fallback" so `make demo-up`
+	// "best-effort OTLP with silent Noop fallback" so `just demo-up`
 	// works whether docker/observability is running or not.
 	_, shutdown, err := commonotel.SetupTelemetry(context.Background(),
 		commonotel.WithExporter(*tel.Exporter),

@@ -388,10 +388,10 @@ Author flow:
 # Edit walkthrough.go.
 # Record a new trace -- press Enter to advance each step (server in another terminal):
 just serve   # terminal 1
-make record  # terminal 2
+just record  # terminal 2
 
 # Regenerate the bundle from the trace:
-make bundle  # aliases: make walkthrough, make walk
+just bundle  # aliases: just walkthrough, make walk
 
 # Commit walkthrough.go, walkthrough.trace.json, and bundle/ together.
 ```

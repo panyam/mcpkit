@@ -1,6 +1,6 @@
 # Screenshots — sheet-music
 
-Capture by running `make demo-app EXAMPLE=sheet-music`.
+Capture by running `just demo-app EXAMPLE=sheet-music`.
 
 | File | What to capture |
 |---|---|

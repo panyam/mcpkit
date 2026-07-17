@@ -35,15 +35,15 @@ func runDemo() {
 		Description("Walks through the v2 Tasks extension where the *server* decides whether to create a task — clients no longer send a task hint. Polymorphic tools/call, inlined results, ack-only cancel, and the new tasks/update flow that closes the elicit/sample (MRTR) loop.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve        # tasks-v2 server on :8080",
-		"Terminal 2:  make demo         # this demo",
+		"Terminal 1:  just serve        # tasks-v2 server on :8080",
+		"Terminal 2:  just demo         # this demo",
 		"```",
 	)
 
@@ -113,7 +113,7 @@ _ = c.ServerSupportsExtension(core.TasksExtensionID) // true once negotiated`),
 				opts...,
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)

@@ -39,7 +39,7 @@ iframe HTML / TS server. For SKIP examples that have no Go drop-in
 (lazy-auth-server, video-resource-server, qr-server, say-server), pass
 upstream's name directly to `--server upstream`.
 
-Env vars (preserved from the bash predecessors for drop-in Makefile compatibility):
+Env vars (preserved from the bash predecessors for drop-in justfile compatibility):
   EXT_APPS_DIR       Path to ext-apps checkout (default: /tmp/ext-apps)
   HARNESS_PORT       basic-host HTTP port (default: 8080)
   SANDBOX_PORT       basic-host sandbox port (default: 8081)

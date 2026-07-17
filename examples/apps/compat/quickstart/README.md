@@ -30,7 +30,7 @@ rather than a hand-rolled minimal one.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=quickstart
+just demo-app EXAMPLE=quickstart
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

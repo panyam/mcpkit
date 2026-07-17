@@ -22,10 +22,10 @@ Spec: modelcontextprotocol/specification PR 2356.
 
 ```bash
 # Terminal 1 — start the MCP server
-make serve
+just serve
 
 # Terminal 2 — scripted walkthrough
-make demo
+just demo
 # or for the interactive TUI:
 go run . --tui
 ```
@@ -41,7 +41,7 @@ elsewhere), the first lines of text, and a hex preview for everything
 else. See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram
 and step-by-step description.
 
-Run `make serve` in a second terminal to watch the server side too — it
+Run `just serve` in a second terminal to watch the server side too — it
 streams colored `[mcp]` traces (`MCP tools/call ok [276µs]`, `[http] →
 POST /mcp`) for every request the walkthrough fires, matching the
 elicitation / mrtr examples.

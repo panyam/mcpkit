@@ -451,7 +451,7 @@ Three load-bearing details:
   non-nil exporter even when the endpoint refuses; without the
   500ms TCP probe in `probeOTLPEndpoint`, the "dial-failure → Noop"
   contract wouldn't fire (failures would surface later on first
-  Export, way past `make demo` startup).
+  Export, way past `just demo` startup).
 - **Service-name convention.** Server side uses `<example-name>`;
   walkthrough (client) side uses `<example-name>-host`. Grafana's
   service filter distinguishes the two halves of each stitched trace.
@@ -748,7 +748,7 @@ Coverage:
 - `ext/skills/client_trace_test.go` — eight tests pin Layer 2: each wrapped method emits the right span + attrs; `Activate` fires hook + span; `Activate` omits the reason attr when not supplied; hook fires independently of tracer install; zero-overhead path (no `WithTracerProvider`) emits no observable spans.
 - End-to-end trace context propagation across `resources/read` is the same code path the MRTR e2e already exercises for `tools/call` (`_meta.traceparent` injection in dispatch is method-agnostic). A skills-specific real-SDK e2e is deliberately omitted — it would require either inverting the `ext/otel`-doesn't-import-`ext/skills` layering or adding the real OTel SDK as a test-only dep on `ext/skills`.
 
-**Runnable demo**: `examples/skills/walkthrough.go` exercises the wrap span + Activate path with the `--exporter=stdout` (or `--exporter=otlp`) flag pair. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout`.
+**Runnable demo**: `examples/skills/walkthrough.go` exercises the wrap span + Activate path with the `--exporter=stdout` (or `--exporter=otlp`) flag pair. Run with `EXPORTER=stdout just serve` + `EXPORTER=stdout just demo`.
 
 ## Downstream consumers of the Phase 1 contract
 

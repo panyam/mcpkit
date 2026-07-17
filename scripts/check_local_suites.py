@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Staleness gate for conformance/local-suites.yaml.
 
-Catches four mechanical drift cases against conformance/Makefile and the
+Catches four mechanical drift cases against conformance/justfile and the
 root justfile's testall stage list:
 
-    A. Suite added to conformance/Makefile as a testconf-* target but not
+    A. Suite added to conformance/justfile as a testconf-* recipe but not
        declared in local-suites.yaml. Docs site would silently omit it.
     B. Suite declared in local-suites.yaml but no matching testconf-*
-       target. Docs site would show a phantom row.
+       recipe. Docs site would show a phantom row.
     C. Suite's `stage:` field in YAML does not match the stage label used
-       in the testall macro call. Docs site would point at the wrong stage.
-    E. conformance/path-defaults.mk is out of sync with the YAML's
-       source.default_path declarations. The generated include would
-       point testconf-* targets at the wrong worktree. Delegates to
+       in the testall run_stage call. Docs site would point at the wrong stage.
+    E. conformance/path-defaults.just is out of sync with the YAML's
+       source.default_path declarations. The generated import would
+       point testconf-* recipes at the wrong worktree. Delegates to
        scripts/gen_conf_paths.py --check.
 
 Drift case D (declared status diverges from actual run result) is not
@@ -24,7 +24,7 @@ Allowlists for targets that are NOT individual SEP suites:
     testconf-external-checker.
 
 Exit codes:
-    0   manifest and Makefile agree
+    0   manifest and justfile agree
     1   drift detected, see stderr
     2   bad input (missing file, malformed YAML)
 
@@ -48,7 +48,7 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "conformance" / "local-suites.yaml"
-CONF_MAKEFILE = REPO_ROOT / "conformance" / "Makefile"
+CONF_JUSTFILE = REPO_ROOT / "conformance" / "justfile"
 ROOT_JUSTFILE = REPO_ROOT / "justfile"
 
 ALLOWLIST = {
@@ -61,7 +61,7 @@ ALLOWLIST = {
     "testconf-external-checker",  # external client-side gauntlet vs val.town, not a per-SEP fork suite; published via conformance/EXTERNAL_CHECKER.md
 }
 
-# Matches a testconf-* target definition at the start of a Makefile line.
+# Matches a testconf-* recipe definition at the start of a justfile line.
 TARGET_RE = re.compile(r"^(testconf[-a-z0-9]*):", re.MULTILINE)
 
 # Matches a `run_stage X 9 name testconf-*` line in the root justfile's
@@ -81,8 +81,8 @@ def die(msg: str, code: int = 2) -> None:
 def load_inputs():
     if not MANIFEST.exists():
         die(f"{MANIFEST} not found")
-    if not CONF_MAKEFILE.exists():
-        die(f"{CONF_MAKEFILE} not found")
+    if not CONF_JUSTFILE.exists():
+        die(f"{CONF_JUSTFILE} not found")
     if not ROOT_JUSTFILE.exists():
         die(f"{ROOT_JUSTFILE} not found")
 
@@ -98,7 +98,7 @@ def load_inputs():
     if not isinstance(suites, list):
         die(f"{MANIFEST}: `suites` must be a list")
 
-    makefile_targets = set(TARGET_RE.findall(CONF_MAKEFILE.read_text()))
+    makefile_targets = set(TARGET_RE.findall(CONF_JUSTFILE.read_text()))
     stage_map = {}
     for stage, target in RUN_STAGE_RE.findall(ROOT_JUSTFILE.read_text()):
         stage_map[target] = stage
@@ -114,12 +114,12 @@ def main() -> int:
 
     for t in sorted(makefile_targets - yaml_targets - ALLOWLIST):
         drifts.append(
-            f"case A: {t} is a testconf target in conformance/Makefile but has no entry in {MANIFEST.relative_to(REPO_ROOT)}"
+            f"case A: {t} is a testconf recipe in conformance/justfile but has no entry in {MANIFEST.relative_to(REPO_ROOT)}"
         )
 
     for s in sorted(yaml_targets - makefile_targets):
         drifts.append(
-            f"case B: {s} is declared in {MANIFEST.relative_to(REPO_ROOT)} but no matching testconf target in conformance/Makefile"
+            f"case B: {s} is declared in {MANIFEST.relative_to(REPO_ROOT)} but no matching testconf recipe in conformance/justfile"
         )
 
     for entry in suites:
@@ -147,13 +147,13 @@ def main() -> int:
         sys.stderr.write("\n")
         sys.stderr.write(
             "check_local_suites: drift detected. Update conformance/local-suites.yaml,\n"
-            "                    conformance/Makefile, and/or the justfile testall stage\n"
+            "                    conformance/justfile, and/or the justfile testall stage\n"
             "                    list so the three sources agree. Then run:\n"
             "                      just refresh-conformance && just check-conformance-stale\n"
         )
         return 1
 
-    # Case E: conformance/path-defaults.mk must match what
+    # Case E: conformance/path-defaults.just must match what
     # gen_conf_paths.py would produce from the YAML. Run the generator in
     # --check mode and propagate its exit code.
     import subprocess  # local import; only needed when no earlier drift fired

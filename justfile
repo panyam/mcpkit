@@ -1,8 +1,8 @@
 # MCPKit justfile
 #
-# Root task runner. Sub-directory Makefiles (conformance/, experimental/,
-# docs/site/, ext/ui/, examples/*) are unchanged and are delegated to via
-# `make -C <dir> <target>`.
+# Root task runner. Sub-directory justfiles (conformance/, experimental/,
+# docs/site/, ext/ui/, examples/*) are delegated to via
+# `just -f <dir>/justfile <recipe>`.
 
 # Sub-modules that get tagged alongside the root module. Every importable
 # sub-module (its own go.mod, `require`s the root) needs a tag here so
@@ -100,67 +100,67 @@ smoke-wire:
 verify-dual:
     bash scripts/verify-dual.sh
 
-# Conformance shims — actual logic lives in conformance/Makefile.
+# Conformance shims — actual logic lives in conformance/justfile.
 
-# Run base + auth conformance only (delegates to conformance/Makefile)
+# Run base + auth conformance only (delegates to conformance/justfile)
 testconfall:
-    make -C conformance test
+    just -f conformance/justfile test
 
-# Run MCP conformance test suite (delegates to conformance/Makefile)
+# Run MCP conformance test suite (delegates to conformance/justfile)
 testconf:
-    make -C conformance testconf
+    just -f conformance/justfile testconf
 
-# Run MCP Auth conformance suite (delegates to conformance/Makefile)
+# Run MCP Auth conformance suite (delegates to conformance/justfile)
 testconfauth:
-    make -C conformance testconfauth
+    just -f conformance/justfile testconfauth
 
-# Run MCP Tasks v1 conformance (delegates to conformance/Makefile)
+# Run MCP Tasks v1 conformance (delegates to conformance/justfile)
 testconf-tasks:
-    make -C conformance testconf-tasks
+    just -f conformance/justfile testconf-tasks
 
-# Run SEP-2663 tasks conformance — upstream + mcpkit-local sentinel (delegates to conformance/Makefile)
+# Run SEP-2663 tasks conformance — upstream + mcpkit-local sentinel (delegates to conformance/justfile)
 testconf-tasks-v2:
-    make -C conformance testconf-tasks-v2
+    just -f conformance/justfile testconf-tasks-v2
 
-# Run SEP-2322 MRTR conformance — upstream + mcpkit-local sentinel (delegates to conformance/Makefile)
+# Run SEP-2322 MRTR conformance — upstream + mcpkit-local sentinel (delegates to conformance/justfile)
 testconf-mrtr:
-    make -C conformance testconf-mrtr
+    just -f conformance/justfile testconf-mrtr
 
-# Run SEP-2356 file-inputs conformance — fork-based (delegates to conformance/Makefile)
+# Run SEP-2356 file-inputs conformance — fork-based (delegates to conformance/justfile)
 testconf-file-inputs:
-    make -C conformance testconf-file-inputs
+    just -f conformance/justfile testconf-file-inputs
 
-# Run server-side auth conformance — fork-based, RFC 9728 + RFC 8414 (delegates to conformance/Makefile)
+# Run server-side auth conformance — fork-based, RFC 9728 + RFC 8414 (delegates to conformance/justfile)
 testconf-auth-server:
-    make -C conformance testconf-auth-server
+    just -f conformance/justfile testconf-auth-server
 
-# Run SEP-1036 elicitation conformance (delegates to conformance/Makefile)
+# Run SEP-1036 elicitation conformance (delegates to conformance/justfile)
 testconf-elicitation:
-    make -C conformance testconf-elicitation
+    just -f conformance/justfile testconf-elicitation
 
-# Run SEP-2575 stateless conformance — drives examples/stateless (delegates to conformance/Makefile)
+# Run SEP-2575 stateless conformance — drives examples/stateless (delegates to conformance/justfile)
 testconf-stateless:
-    make -C conformance testconf-stateless
+    just -f conformance/justfile testconf-stateless
 
-# Run SEP-2640 skills conformance — fork-based (delegates to conformance/Makefile)
+# Run SEP-2640 skills conformance — fork-based (delegates to conformance/justfile)
 testconf-skills:
-    make -C conformance testconf-skills
+    just -f conformance/justfile testconf-skills
 
-# Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational; delegates to conformance/Makefile)
+# Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational; delegates to conformance/justfile)
 testconf-upstream-audit:
-    make -C conformance testconf-upstream-audit
+    just -f conformance/justfile testconf-upstream-audit
 
-# Grade the mcpkit CLIENT against the external stateless-draft checker (live network, not a CI gate; delegates to conformance/Makefile)
+# Grade the mcpkit CLIENT against the external stateless-draft checker (live network, not a CI gate; delegates to conformance/justfile)
 testconf-external-checker:
-    make -C conformance testconf-external-checker
+    just -f conformance/justfile testconf-external-checker
 
-# Regenerate CONFORMANCE.md from upstream tier-check + traceability (delegates to conformance/Makefile)
+# Regenerate CONFORMANCE.md from upstream tier-check + traceability (delegates to conformance/justfile)
 refresh-conformance:
-    make -C conformance refresh-conformance
+    just -f conformance/justfile refresh-conformance
 
 # Fail if CONFORMANCE.md is stale relative to current testserver + upstream (CI gate)
 check-conformance-stale: check-local-suites-stale
-    make -C conformance check-conformance-stale
+    just -f conformance/justfile check-conformance-stale
 
 # CI gate — fail if conformance/local-suites.yaml drifts from the justfile (cases A/B/C)
 check-local-suites-stale:
@@ -217,7 +217,7 @@ test-otel-example: (_go-test "examples/otel/stdout")
 
 # Run UI extension sub-module tests
 test-ui:
-    make -C ext/ui test
+    just -f ext/ui/justfile test
 
 # Run skills extension sub-module tests (SEP-2640, experimental)
 test-skills: (_go-test "ext/skills")
@@ -237,50 +237,50 @@ test-mcpskills-walkthrough:
 
 # Compile mcp-app-bridge.ts → .js (delegates to ext/ui)
 build-bridge:
-    make -C ext/ui build-bridge
+    just -f ext/ui/justfile build-bridge
 
 # Run protogen sub-module tests + e2e example
 test-protogen:
-    cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && make test-e2e
+    cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && just test-e2e
 
 # Run all E2E tests (auth, apps — no Docker)
 test-e2e: (_go-test "tests/e2e" "60s")
 
-# Run all experimental POC tests (delegates to experimental/Makefile)
+# Run all experimental POC tests (delegates to experimental/justfile)
 test-experimental:
-    make -C experimental test
+    just -f experimental/justfile test
 
 # Run experimental ext/events library tests
 test-experimental-events:
-    make -C experimental test-events
+    just -f experimental/justfile test-events
 
 # Run experimental ext/events Go client SDK tests
 test-experimental-events-clients-go:
-    make -C experimental test-events-clients-go
+    just -f experimental/justfile test-events-clients-go
 
 # Run experimental ext/events GORM stores (sqlite + inmemory; no Docker required)
 test-experimental-events-stores-gorm:
-    make -C experimental test-events-stores-gorm
+    just -f experimental/justfile test-events-stores-gorm
 
 # Run experimental ext/events GORM stores against a real Postgres container (Docker)
 test-experimental-events-stores-gorm-pg:
-    make -C experimental test-events-stores-gorm-pg
+    just -f experimental/justfile test-events-stores-gorm-pg
 
 # Run experimental ext/events Redis pubsub Emitter (miniredis; no Docker required)
 test-experimental-events-stores-redis:
-    make -C experimental test-events-stores-redis
+    just -f experimental/justfile test-events-stores-redis
 
 # Run experimental ext/events Redis pubsub Emitter against a real Redis container (Docker)
 test-experimental-events-stores-redis-real:
-    make -C experimental test-events-stores-redis-real
+    just -f experimental/justfile test-events-stores-redis-real
 
 # Run experimental events Discord example tests
 test-experimental-events-discord:
-    make -C experimental test-events-discord
+    just -f experimental/justfile test-events-discord
 
 # Run experimental events Telegram example tests
 test-experimental-events-telegram:
-    make -C experimental test-events-telegram
+    just -f experimental/justfile test-events-telegram
 
 # Run ext-apps Playwright tests against testserver (needs Node.js + Playwright). EXAMPLE=<name> picks a fixture.
 test-apps-playwright:
@@ -688,21 +688,21 @@ bump-root V: && tidy-all verify-submodule-deps
 # Docs site (issue 508 — GitHub Pages)
 # =============================================================================
 
-# Manually mirror every examples/.../bundle/ (with a sibling walkthrough.trace.json) into docs/site/dist/docs/walkthroughs/<example-path>/. Normally runs automatically as a tail step of docs/site/Makefile's `build`.
+# Manually mirror every examples/.../bundle/ (with a sibling walkthrough.trace.json) into docs/site/dist/docs/walkthroughs/<example-path>/. Normally runs automatically as a tail step of docs/site/justfile's `build`.
 collect-walkthroughs:
     uv run scripts/collect_walkthroughs.py
 
-# Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Includes walkthrough bundles via docs/site/Makefile's build tail.
+# Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Includes walkthrough bundles via docs/site/justfile's build tail.
 ghbuild:
-    make -C docs/site build
+    just -f docs/site/justfile build
 
 # Run the docs site dev server on :8085 with live rebuild
 ghserve:
-    make -C docs/site run
+    just -f docs/site/justfile run
 
 # Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
 ghdeploy:
-    make -C docs/site gh-pages
+    just -f docs/site/justfile gh-pages
 
 # =============================================================================
 # Release
