@@ -287,41 +287,39 @@ func (r *renderer) command(res CmdResult) {
 	}
 }
 
-// Emit implements Surface: the terminal rendering of the host's UIEvent
+// On implements Observer: the terminal rendering of the host's HostEvent
 // stream. It dispatches each kind to the shape-specific formatter; the
 // formatters are unchanged, so behavior is identical to the pre-seam
 // direct calls.
-func (r *renderer) Emit(ev UIEvent) {
+func (r *renderer) On(ev HostEvent) {
 	switch ev.Kind {
-	case UIRunnerEvent:
+	case HostRunnerEvent:
 		r.handle(ev.RunnerEvent)
-	case UICommand:
+	case HostCommandResult:
 		r.command(ev.Command)
-	case UITurnDone:
+	case HostTurnDone:
 		r.turnDone(ev.Result)
-	case UITurnFailed:
+	case HostTurnFailed:
 		r.turnFailed(errors.New(ev.Err))
-	case UISession:
+	case HostSessionChanged:
 		r.session(ev.RunID)
-	case UISessionWarn:
+	case HostSessionWarn:
 		r.sessionWarn(errors.New(ev.Err))
-	case UITriggerFired:
+	case HostTriggerFired:
 		r.triggerFired(ev.Label)
-	case UISkillsLoaded:
+	case HostSkillsLoaded:
 		r.skillsLoaded(ev.ServerID, ev.Loaded, ev.Skipped)
-	case UISkillSkipped:
+	case HostSkillSkipped:
 		r.skillSkipped(ev.ServerID, ev.URI, errors.New(ev.Err))
-	case UIEventDropped:
+	case HostEventDropped:
 		r.eventDropped(ev.ServerID, ev.EventName)
-	case UITaskStatus:
+	case HostTaskStatus:
 		r.taskStatus(ev.TaskStatus)
-	case UITaskDetached:
+	case HostTaskDetached:
 		r.taskDetached(ev.Task)
-	case UITaskCompleted:
+	case HostTaskCompleted:
 		r.taskCompleted(ev.Task)
-	case UIPrompt:
-		r.prompt()
-	case UIMessage:
+	case HostMessage:
 		fmt.Fprintf(r.out, "%s\n", r.dim(ev.Message))
 	}
 }
