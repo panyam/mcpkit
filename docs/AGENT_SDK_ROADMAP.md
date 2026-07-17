@@ -282,9 +282,22 @@ design: tool-result offloading (issue 966 — `OffloadingSource` + `ToolResultSt
 `read_tool_result`; lossless pay-on-demand beats lossy compaction for tool outputs, sequence with
 P2 memory).
 
-**Phase 2 — memory:**
-working memory + `MemorySource` (A) · `SummarizingCompactor` (A) · `Embedder` seam + `VectorStore` +
-recall→injection wiring (A).
+**Phase 2 — memory. Tool-result offloading shipped as the opener; memory tracks next.**
+Shipped (the just-in-time-context layer, lossless/pay-on-demand — see the diagram in
+`docs/AGENT_MEMORY_FLOW.md`): `OffloadingSource` + `ToolResultStore` interface + in-memory (issue 966)
+· durable `ToolResultStore` on redis (TTL) + gorm (configurable table, `PruneExpired`) (issue 971) ·
+dep-free `FileToolResultStore` in `agent/` — the no-server local path, blobs as inspectable files
+(issue 977) · host `Config.Offload` + `WithToolResultStore` + agentchat `--offload-threshold` /
+`--offload-dir` (issue 972) · turn-end `Result.Messages` redaction closing the event-log dedup pair
+(issue 973). Merged as PRs 970/975/976/978/981.
+Still to build: **the eval bar first** — LongMemEval-derived cases behind `eval_llm` (issue 974), the
+quality gate that must precede the lossy tracks · working memory + `MemorySource` (A) ·
+`SummarizingCompactor` (A, heuristic `TokenEstimator` first, real tokenizer a follow-up) · `Embedder`
+seam (Ollama + API impls, like `Provider`) + `VectorStore` (pgvector on the gorm backend, Pinecone
+etc. as sibling impls) + recall→injection wiring (A).
+Deferred offloading follow-ups: binary offloading — size trigger + non-text retrieval (issue 979);
+streaming / handle-based results for 100s-of-MB payloads via MCP resource links + a ranged/seek store
+(issue 980, design — the full "filesystem as memory" pattern, `FileToolResultStore` its first backend).
 
 **Phase 3 — composition:**
 `SubAgent` + `AgentSource` (B) · sub-agent event nesting (B) · `Team`/`Orchestrator` handoff +
