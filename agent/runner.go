@@ -472,7 +472,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	cancelled := func() bool { return ctx.Err() != nil && parent.Err() == nil }
 	cancelledText := func() string {
 		span.SetAttribute("agent.tool.cancelled", "true")
-		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: "cancelled by user"})
+		emit(Event{Kind: EventToolCancelled, Step: step, ToolCall: &call, Reason: "cancelled by user"})
 		return "cancelled by user"
 	}
 	failed := func(err error) string {
