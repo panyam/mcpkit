@@ -13,11 +13,18 @@ SUB_MODS_TO_TAG := "agent agent/host agent/store/redis agent/store/gorm ext/auth
 
 REPORT_DIR := "tests/reports"
 
+# Discovers every sub-module go.mod (root excluded). Kept as a command string
+# (not a backtick expression) so `find` only runs when a consuming recipe
+# executes, not on every just invocation. Consumers: tidy-all, bump-root.
+SUB_MODS_FIND := "find . -name go.mod -not -path '*/node_modules/*' -not -path './go.mod' | sed 's|^\\./||;s|/go.mod$||' | sort"
+
 # Keycloak (for interop tests)
 KC_IMAGE := "quay.io/keycloak/keycloak:26.0"
 KC_PORT := "8180"
 KC_CONTAINER := "mcpkit-keycloak"
 KC_REALM := "mcpkit-test"
+# Probed by upkcl / testkcl-auto to detect a healthy realm import.
+KC_REALM_URL := "http://localhost:" + KC_PORT + "/realms/" + KC_REALM
 
 # Show available recipes
 default:
@@ -184,40 +191,39 @@ check-apps-compat-stale: refresh-apps-compat-report
 pg:
     bash scripts/playground.sh
 
+# Run go test in one sub-module (shared by the test-* recipes below)
+_go-test dir timeout="30s" extra="":
+    cd {{dir}} && go test ./... -count=1 -timeout {{timeout}} {{extra}}
+
 # Run agent sub-module tests
 test-agent:
-    cd agent && go test ./... -count=1 -timeout 30s
-    cd agent/store/redis && go test ./... -count=1 -timeout 60s
-    cd agent/store/gorm && go test ./... -count=1 -timeout 60s
-    cd agent/host && go test ./... -count=1 -timeout 60s
-    cd cmd/agentchat && go test ./... -count=1 -timeout 60s
-    cd examples/agent-async && go test ./... -count=1 -timeout 60s
-    cd examples/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario
-    cd examples/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario
+    @{{just_executable()}} _go-test agent
+    @{{just_executable()}} _go-test agent/store/redis 60s
+    @{{just_executable()}} _go-test agent/store/gorm 60s
+    @{{just_executable()}} _go-test agent/host 60s
+    @{{just_executable()}} _go-test cmd/agentchat 60s
+    @{{just_executable()}} _go-test examples/agent-async 60s
+    @{{just_executable()}} _go-test examples/skills 60s "-run TestAgentScenario"
+    @{{just_executable()}} _go-test examples/tasks-v2 60s "-run TestAgentScenario"
 
 # Run auth sub-module tests
-test-auth:
-    cd ext/auth && go test ./... -count=1 -timeout 30s
+test-auth: (_go-test "ext/auth")
 
 # Run SEP-414 ext/otel adapter sub-module tests
-test-otel:
-    cd ext/otel && go test ./... -count=1 -timeout 30s
+test-otel: (_go-test "ext/otel")
 
 # Run the examples/otel/stdout smoke test
-test-otel-example:
-    cd examples/otel/stdout && go test ./... -count=1 -timeout 30s
+test-otel-example: (_go-test "examples/otel/stdout")
 
 # Run UI extension sub-module tests
 test-ui:
     make -C ext/ui test
 
 # Run skills extension sub-module tests (SEP-2640, experimental)
-test-skills:
-    cd ext/skills && go test ./... -count=1 -timeout 30s
+test-skills: (_go-test "ext/skills")
 
 # Run cmd/mcpskills CLI smoke tests (SEP-2640)
-test-mcpskills:
-    cd cmd/mcpskills && go test ./... -count=1 -timeout 60s
+test-mcpskills: (_go-test "cmd/mcpskills" "60s")
 
 # Build the mcpskills CLI binary into ./bin/mcpskills
 build-mcpskills:
@@ -238,8 +244,7 @@ test-protogen:
     cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && make test-e2e
 
 # Run all E2E tests (auth, apps — no Docker)
-test-e2e:
-    cd tests/e2e && go test ./... -count=1 -timeout 60s
+test-e2e: (_go-test "tests/e2e" "60s")
 
 # Run all experimental POC tests (delegates to experimental/Makefile)
 test-experimental:
@@ -358,47 +363,42 @@ testall:
 
     # run_stage runs a just recipe as a testall stage with per-stage log files.
     # Each stage writes to {{REPORT_DIR}}/stage-<label>.log (not the shared run.log).
-    # Usage: run_stage STEP_NUM TOTAL LABEL RECIPE
+    # Usage: run_stage STEP_NUM TOTAL LABEL RECIPE [info]
+    #
+    # A 5th argument of "info" is the soft-failure mode for experimental or
+    # in-flight conformance work where the suite SHOULD surface in testall
+    # reports but MUST NOT block the build. Failure is recorded as INFO and
+    # counted separately so a failing experimental stage does not show up in
+    # the PASS/FAIL tallies.
     run_stage() {
-        local STEP=$1 TOTAL=$2 LABEL=$3 TARGET=$4
+        local STEP=$1 TOTAL=$2 LABEL=$3 TARGET=$4 MODE=${5:-}
         local STAGE_LOG={{REPORT_DIR}}/stage-$LABEL.log
         local STAGE_START=$(date +%s)
-        echo "--- [$STEP/$TOTAL] $LABEL ---" | tee -a {{REPORT_DIR}}/run.log
-        echo "=== Stage $STEP/$TOTAL: $LABEL (just $TARGET) ===" > $STAGE_LOG
-        echo "Started: $(date)" >> $STAGE_LOG
-        if {{just_executable()}} $TARGET >> $STAGE_LOG 2>&1; then
-            local ELAPSED=$(($(date +%s) - STAGE_START))
-            echo "  PASS: $LABEL (${ELAPSED}s)" | tee -a {{REPORT_DIR}}/run.log
-            PASS=$((PASS+1)); STAGES="$STAGES $LABEL:PASS:$TARGET:${ELAPSED}s"
+        if [ "$MODE" = "info" ]; then
+            echo "--- [$STEP/$TOTAL] $LABEL (informational) ---" | tee -a {{REPORT_DIR}}/run.log
+            echo "=== Stage $STEP/$TOTAL: $LABEL (just $TARGET) [informational] ===" > $STAGE_LOG
         else
-            local ELAPSED=$(($(date +%s) - STAGE_START))
-            echo "  FAIL: $LABEL (${ELAPSED}s)" | tee -a {{REPORT_DIR}}/run.log
-            FAIL=$((FAIL+1)); STAGES="$STAGES $LABEL:FAIL:$TARGET:${ELAPSED}s"
-            echo "  --- $LABEL tail ---"; tail -20 $STAGE_LOG; echo "  ---"
+            echo "--- [$STEP/$TOTAL] $LABEL ---" | tee -a {{REPORT_DIR}}/run.log
+            echo "=== Stage $STEP/$TOTAL: $LABEL (just $TARGET) ===" > $STAGE_LOG
         fi
-        echo "Finished: $(date) (elapsed ${ELAPSED}s)" >> $STAGE_LOG
-    }
-
-    # run_stage_info is the soft-failure variant for experimental or in-flight
-    # conformance work where the suite SHOULD surface in testall reports but
-    # MUST NOT block the build. Failure is recorded as INFO and counted
-    # separately so a failing experimental stage does not show up in the
-    # PASS/FAIL tallies.
-    run_stage_info() {
-        local STEP=$1 TOTAL=$2 LABEL=$3 TARGET=$4
-        local STAGE_LOG={{REPORT_DIR}}/stage-$LABEL.log
-        local STAGE_START=$(date +%s)
-        echo "--- [$STEP/$TOTAL] $LABEL (informational) ---" | tee -a {{REPORT_DIR}}/run.log
-        echo "=== Stage $STEP/$TOTAL: $LABEL (just $TARGET) [informational] ===" > $STAGE_LOG
         echo "Started: $(date)" >> $STAGE_LOG
         if {{just_executable()}} $TARGET >> $STAGE_LOG 2>&1; then
             local ELAPSED=$(($(date +%s) - STAGE_START))
-            echo "  PASS: $LABEL (${ELAPSED}s, informational)" | tee -a {{REPORT_DIR}}/run.log
+            if [ "$MODE" = "info" ]; then
+                echo "  PASS: $LABEL (${ELAPSED}s, informational)" | tee -a {{REPORT_DIR}}/run.log
+            else
+                echo "  PASS: $LABEL (${ELAPSED}s)" | tee -a {{REPORT_DIR}}/run.log
+            fi
             PASS=$((PASS+1)); STAGES="$STAGES $LABEL:PASS:$TARGET:${ELAPSED}s"
         else
             local ELAPSED=$(($(date +%s) - STAGE_START))
-            echo "  INFO: $LABEL (${ELAPSED}s, informational, not counted as failure)" | tee -a {{REPORT_DIR}}/run.log
-            INFO=$((INFO+1)); STAGES="$STAGES $LABEL:INFO:$TARGET:${ELAPSED}s"
+            if [ "$MODE" = "info" ]; then
+                echo "  INFO: $LABEL (${ELAPSED}s, informational, not counted as failure)" | tee -a {{REPORT_DIR}}/run.log
+                INFO=$((INFO+1)); STAGES="$STAGES $LABEL:INFO:$TARGET:${ELAPSED}s"
+            else
+                echo "  FAIL: $LABEL (${ELAPSED}s)" | tee -a {{REPORT_DIR}}/run.log
+                FAIL=$((FAIL+1)); STAGES="$STAGES $LABEL:FAIL:$TARGET:${ELAPSED}s"
+            fi
             echo "  --- $LABEL tail ---"; tail -20 $STAGE_LOG; echo "  ---"
         fi
         echo "Finished: $(date) (elapsed ${ELAPSED}s)" >> $STAGE_LOG
@@ -426,7 +426,7 @@ testall:
     run_stage 8e 9 mrtr-conformance testconf-mrtr
     run_stage 8f 9 file-inputs-conformance testconf-file-inputs
     run_stage 8g 9 auth-server-conformance testconf-auth-server
-    run_stage_info 8h 9 skills-conformance testconf-skills
+    run_stage 8h 9 skills-conformance testconf-skills info
     run_stage 9 9 keycloak testkcl-auto
     echo "" | tee -a {{REPORT_DIR}}/run.log
     echo "=== Results: $PASS passed, $FAIL failed, $INFO informational ===" | tee -a {{REPORT_DIR}}/run.log
@@ -440,12 +440,12 @@ testall:
 testkcl-auto:
     #!/usr/bin/env bash
     set -u
-    if ! curl -sf http://localhost:{{KC_PORT}}/realms/{{KC_REALM}} > /dev/null 2>&1; then
+    if ! curl -sf {{KC_REALM_URL}} > /dev/null 2>&1; then
         echo "Starting Keycloak for interop tests..."
         {{just_executable()}} upkcl
         echo "Waiting for Keycloak realm..."
         for i in $(seq 1 60); do
-            curl -sf http://localhost:{{KC_PORT}}/realms/{{KC_REALM}} > /dev/null 2>&1 && break
+            curl -sf {{KC_REALM_URL}} > /dev/null 2>&1 && break
             sleep 2
         done
         KC_STARTED=1
@@ -548,7 +548,7 @@ test-report STAGES:
 upkcl:
     #!/usr/bin/env bash
     set -u
-    if curl -sf http://localhost:{{KC_PORT}}/realms/{{KC_REALM}} > /dev/null 2>&1; then
+    if curl -sf {{KC_REALM_URL}} > /dev/null 2>&1; then
         echo "Keycloak already running on port {{KC_PORT}} — skipping start"
     else
         docker rm -f {{KC_CONTAINER}} 2>/dev/null || true
@@ -562,7 +562,7 @@ upkcl:
         echo "Keycloak starting on port {{KC_PORT}}... (realm import takes ~30s)"
         echo "Waiting for realm import to land before flipping master sslRequired..."
         for i in $(seq 1 60); do
-            curl -sf http://localhost:{{KC_PORT}}/realms/{{KC_REALM}} > /dev/null 2>&1 && break
+            curl -sf {{KC_REALM_URL}} > /dev/null 2>&1 && break
             sleep 1
         done
         echo "Flipping master realm sslRequired=NONE so the test admin-token grant works over HTTP..."
@@ -662,7 +662,7 @@ tidy-all:
     # All sub-modules with their own go.mod (root excluded — handled
     # separately). Dynamically discovered so new examples / sub-packages
     # are picked up automatically.
-    for mod in $(find . -name go.mod -not -path '*/node_modules/*' -not -path './go.mod' | sed 's|^\./||;s|/go.mod$||' | sort); do
+    for mod in $({{SUB_MODS_FIND}}); do
         if [ -f "$mod/go.mod" ]; then
             echo "==> tidy $mod"
             (cd $mod && go mod tidy) || exit 1
@@ -670,21 +670,19 @@ tidy-all:
     done
 
 # Update sub-modules to require a specific root version (usage: just bump-root v0.1.22)
-bump-root V:
+bump-root V: && tidy-all verify-submodule-deps
     #!/usr/bin/env bash
     set -eu
     # Only touches the root self-reference (github.com/panyam/mcpkit). Sub-module
     # cross-references (github.com/panyam/mcpkit/ext/auth, /ext/ui) have their
     # own independent tag timelines and must be bumped manually to a real ext/*
     # tag — or left alone when a `replace` directive is in play.
-    for mod in $(find . -name go.mod -not -path '*/node_modules/*' -not -path './go.mod' | sed 's|^\./||;s|/go.mod$||' | sort); do
+    for mod in $({{SUB_MODS_FIND}}); do
         if [ ! -f "$mod/go.mod" ]; then continue; fi
         if ! grep -q "github.com/panyam/mcpkit v" "$mod/go.mod"; then continue; fi
         echo "==> $mod/go.mod: require github.com/panyam/mcpkit {{V}}"
         (cd $mod && go mod edit -require=github.com/panyam/mcpkit@{{V}}) || exit 1
     done
-    {{just_executable()}} tidy-all
-    {{just_executable()}} verify-submodule-deps
 
 # =============================================================================
 # Docs site (issue 508 — GitHub Pages)
@@ -710,6 +708,10 @@ ghdeploy:
 # Release
 # =============================================================================
 
+# Emit the full ref list for pushing a release: root tag + every sub-module tag
+_tag-list V:
+    @echo "{{V}} $(echo '{{SUB_MODS_TO_TAG}}' | tr ' ' '\n' | sed 's|$|/{{V}}|' | tr '\n' ' ')"
+
 # Tag root + all sub-modules (usage: just tag v0.0.11)
 tag V:
     #!/usr/bin/env bash
@@ -722,14 +724,14 @@ tag V:
     done
     echo ""
     echo "Tags created locally. Push with:"
-    echo "  git push origin {{V}} $(echo '{{SUB_MODS_TO_TAG}}' | tr ' ' '\n' | sed 's|$|/{{V}}|' | tr '\n' ' ')"
+    echo "  git push origin $({{just_executable()}} _tag-list {{V}})"
 
 # Tag and push in one step (usage: just tag-push v0.0.11)
 tag-push V:
     #!/usr/bin/env bash
     set -eu
     {{just_executable()}} tag {{V}}
-    git push origin {{V}} $(echo '{{SUB_MODS_TO_TAG}}' | tr ' ' '\n' | sed 's|$|/{{V}}|' | tr '\n' ' ')
+    git push origin $({{just_executable()}} _tag-list {{V}})
 
 # =============================================================================
 # Setup
