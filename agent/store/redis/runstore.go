@@ -285,6 +285,17 @@ const (
 // actually committed and Created=false reports the existing, complete
 // fork (confirm lineage via LoadRun ParentID).
 //
+// The script is Redis's native atomicity primitive, chosen over the
+// lock-free alternative (copy lists first, SETNX meta last, DEL stale
+// lists on retry) for the same reasons the gorm backend uses a
+// transaction: claim-last makes statement order a correctness
+// invariant, needs an extra cleanup step per retry, and lets two
+// concurrent forks of the same NewRunID interleave each other's
+// half-written copies. Unlike the gorm transaction (MVCC, non-
+// blocking), a Redis script does briefly serialize the server — the
+// price of Redis having only one atomicity primitive; fork frequency
+// and session-sized logs keep it negligible.
+//
 // Cluster caveat: the script touches both runs' keys, which a Redis
 // Cluster may place in different slots. A session store is assumed to
 // run against a single node or replicated setup; cluster deployments
