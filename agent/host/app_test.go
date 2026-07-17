@@ -196,6 +196,104 @@ func TestREPLCommandsAndQuit(t *testing.T) {
 	}
 }
 
+func TestAppApprovalDenyRuleBlocksTool(t *testing.T) {
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Approval = &ApprovalConfig{Rules: map[string]string{"echo": "deny"}}
+
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "echo", Args: core.NewRawJSON(json.RawMessage(`{"message":"hi"}`))}}},
+		agent.StubTurn{Text: "I was not allowed to echo."},
+	)
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "echo hi"); err != nil {
+		t.Fatal(err)
+	}
+	transcript := out.String()
+	if !strings.Contains(transcript, "⃠ echo not permitted") {
+		t.Fatalf("transcript missing denial line:\n%s", transcript)
+	}
+	if strings.Contains(transcript, "✓ echo:") {
+		t.Fatalf("denied tool must not run:\n%s", transcript)
+	}
+	// The model is told and the turn continues to its text answer.
+	toolMsg := stub.Requests()[1].Messages[2]
+	if toolMsg.Role != agent.RoleTool || !strings.Contains(toolMsg.Text, "not permitted") {
+		t.Fatalf("model-visible denial missing: %+v", toolMsg)
+	}
+	if !strings.Contains(transcript, "I was not allowed to echo.") {
+		t.Fatalf("turn should continue after denial:\n%s", transcript)
+	}
+}
+
+func TestAppApprovalAskApproves(t *testing.T) {
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Approval = &ApprovalConfig{Mode: "ask"}
+
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "c1", Name: "echo", Args: core.NewRawJSON(json.RawMessage(`{"message":"hi"}`))}}},
+		agent.StubTurn{Text: "The server said: echo: hi"},
+	)
+	var out strings.Builder
+	// The approval prompt is a boolean "confirm" elicitation; "y" accepts it.
+	app, err := NewApp(cfg, &out, strings.NewReader("y\n"), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "echo hi"); err != nil {
+		t.Fatal(err)
+	}
+	transcript := out.String()
+	for _, want := range []string{`Allow tool call "echo"`, "✓ echo: echo: hi", "The server said: echo: hi"} {
+		if !strings.Contains(transcript, want) {
+			t.Fatalf("transcript missing %q:\n%s", want, transcript)
+		}
+	}
+}
+
+func TestAppApprovalRuntimeToggle(t *testing.T) {
+	ts := startTestServer(t)
+
+	// With a policy configured, /approve reports and changes the mode.
+	cfg := testConfig(ts.URL)
+	cfg.Approval = &ApprovalConfig{Mode: "ask"}
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "x"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	app.setApprovalMode("allow")
+	if app.approval.DefaultMode() != agent.ModeAlwaysAllow {
+		t.Fatalf("runtime toggle did not take: %v", app.approval.DefaultMode())
+	}
+	if !strings.Contains(out.String(), "approval: allow") {
+		t.Fatalf("toggle should render new mode:\n%s", out.String())
+	}
+
+	// Without a policy, /approve is a no-op that reports the gate is off.
+	var out2 strings.Builder
+	app2, err := NewApp(testConfig(ts.URL), &out2, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "x"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app2.Close()
+	app2.setApprovalMode("allow")
+	if !strings.Contains(out2.String(), "approval: off") {
+		t.Fatalf("no-policy toggle should say off:\n%s", out2.String())
+	}
+}
+
 func TestConfigLoadingAndValidation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cfg.json")
