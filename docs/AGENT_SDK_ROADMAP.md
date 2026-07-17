@@ -408,6 +408,103 @@ wrong-modality for an MCP tool-calling SDK.)
 
 ---
 
+## 7. Advanced techniques enabled by our primitives
+
+A survey of research techniques (current through 2025) mapped onto what our SDK can express — so we
+can ship demos and let people experiment with new strategies on mcpkit. The unifying observation:
+**most of these techniques are orchestration patterns over one-or-more model calls plus a
+scoring/verification step.** Our `Runner` (bounded loop, parallel dispatch, error-fed-back, per-step
+`Selector`) + `Provider.Generate` (`ResponseSchema` + `ToolChoice`) + `FuncSource` verifiers already
+cover the entire *single-trajectory* family. Two roadmap primitives unlock most of the rest.
+
+### 7.1 The two primitives that unlock the most techniques
+
+- **Sub-agents (`AgentSource` = a Runner-as-a-tool).** Unlocks the whole *multi-trajectory /
+  multi-agent* family at once: multi-agent debate, Mixture-of-Agents, CAMEL role-play,
+  supervisor/hierarchical delegation, and the tree-search methods (Tree-of-Thoughts, LATS, MCTS/RAP,
+  ADaPT recursion). Today these are only approximable via host-side orchestration around single
+  `Runner`/`Generate` calls. **Highest leverage roadmap item for technique coverage.**
+- **`Embedder` + `VectorStore` (feeding the injection path).** Unlocks the whole *semantic-retrieval*
+  family: baseline RAG, Self-RAG, HyDE, GraphRAG, RAPTOR, relevance-ranked memory (Generative Agents,
+  A-MEM), tool-retrieval relevance, and episodic experience replay. Build this one primitive and ~8
+  techniques become demoable. (Keyword/BM25 variants work *before* it lands.)
+
+### 7.2 Techniques that showcase our *distinctive* primitives (buildable today)
+
+These are the demos competitors' SDKs mostly can't express, because they lean on primitives unique to
+mcpkit — the async control plane, `Selector`, `FailoverProvider`, and the event-stage pipeline.
+
+| Primitive | Technique it enables | How | Cite |
+|---|---|---|---|
+| **Trigger / injection (async control plane)** | **Sleep-time compute** — consolidate memory during idle so query-time needs less compute | idle-event trigger → proactive turn → `Generate` compaction → write to working-memory `FuncSource` | Lin 2025, [2504.13171](https://arxiv.org/abs/2504.13171) |
+| | **Generative-Agents reflection** — importance-threshold → synthesize insights back into memory | importance sum crosses threshold → trigger fires proactive reflection turn | Park 2023, [2304.03442](https://arxiv.org/abs/2304.03442) |
+| | **Budget-forcing test-time scaling** — nudge "wait, re-check" when the model tries to stop early | trigger injects a continuation on an early-finish event (turn-level, not token-level) | s1, [2501.19393](https://arxiv.org/abs/2501.19393) |
+| | **A-MEM memory evolution** — rewrite linked notes when new info arrives | new-note event → trigger → `Generate` updates related notes | Xu 2025, [2502.12110](https://arxiv.org/abs/2502.12110) |
+| **`Selector`** | **Tool retrieval (RAG over tools)** — narrow a 200+-tool `MultiSource` to top-k per step | `Selector` embeds query/history, vector-searches `ToolDef`s, offers only the relevant set | Toolshed [2410.14594](https://arxiv.org/abs/2410.14594), RAG-MCP [2505.03275](https://arxiv.org/abs/2505.03275) |
+| | **Model routing (RouteLLM)** — send easy turns to the cheap model | a classifier `Selector`/`Provider` front picks the backend (single upfront decision) | Ong 2024, [2406.18665](https://arxiv.org/abs/2406.18665) |
+| **`FailoverProvider`** | **Model cascades (FrugalGPT)** — escalate to a pricier model only when the cheap answer scores low | backup-first + a `ResponseSchema`/judge acceptance score gates escalation | Chen 2023, [2305.05176](https://arxiv.org/abs/2305.05176) |
+| **Event stages (Filter/Transform/Window)** | **Spotlighting / datamarking** — mark untrusted tool output as data, not instructions | a Transform stage wraps every tool result in delimiters/datamarks before it reaches the model | Hines 2024, [2403.14720](https://arxiv.org/abs/2403.14720) |
+| | **Step-level PRM scoring** — score each reasoning step, prune low-scoring ones | Transform each `emit` step event into a scored event; abort/branch on low score | Lightman 2023, [2305.20050](https://arxiv.org/abs/2305.20050) |
+| **`ToolChoice` forced-tool + `ResponseSchema` + `FuncSource` verifiers** | **Best-of-N + verifier** — sample N, score each, pick best | N `Runner` runs at `Temperature>0`, scored by a `FuncSource` test-harness or judge `Generate` | Cobbe 2021, [2110.14168](https://arxiv.org/abs/2110.14168) |
+| | **CRITIC** — forced tool-grounded self-correction | `ToolChoice=required` + `Selector` exposing only a verify tool → error-feedback loop revises | Gou 2023, [2305.11738](https://arxiv.org/abs/2305.11738) |
+| | **Judge panel / jury (PoLL)** — several diverse judges vote to cut bias | a `MultiSource`/parallel set of judge `Provider`s, each emitting `{score}` via `ResponseSchema` | Verga 2024, [2404.18796](https://arxiv.org/abs/2404.18796) |
+| | **CodeAct** — code as the action space | one `execute_code` `FuncSource` + `ToolChoice=forced` + error-feedback observe-revise loop | Wang 2024, [2402.01030](https://arxiv.org/abs/2402.01030) |
+| | **Self-Consistency / Chain-of-Verification** — majority vote / independent verification | K parallel `Generate` at `Temp>0`; CoVe's *independent* answers = isolated parallel calls | [2203.11171](https://arxiv.org/abs/2203.11171), [2309.11495](https://arxiv.org/abs/2309.11495) |
+
+Also fully buildable today with the core loop (no distinctive primitive needed): **ReAct**
+([2210.03629](https://arxiv.org/abs/2210.03629), *is* our Runner), **Reflexion**
+([2303.11366](https://arxiv.org/abs/2303.11366)), **Self-Refine**
+([2303.17651](https://arxiv.org/abs/2303.17651)), **Plan-and-Solve / Least-to-Most**
+([2305.04091](https://arxiv.org/abs/2305.04091), [2205.10625](https://arxiv.org/abs/2205.10625)),
+**MemGPT paging** ([2310.08560](https://arxiv.org/abs/2310.08560), memory tools as `FuncSource` +
+injection budget), **context offloading / scratchpads**, and **Corrective-RAG control flow**
+([2401.15884](https://arxiv.org/abs/2401.15884), keyword KB before embeddings land).
+
+### 7.3 Honest infrastructure gaps (block whole classes of technique)
+
+- **No logprob or grammar hooks on `Provider`.** Caps true grammar-constrained/guided decoding
+  (Outlines [2307.09702](https://arxiv.org/abs/2307.09702) — token-mask GBNF/regex) and
+  calibrated uncertainty/abstention ([2407.16221](https://arxiv.org/abs/2407.16221)). We approximate
+  both via `ResponseSchema` + sampling-agreement, but the real thing needs logprob exposure and a
+  self-hosted provider (vLLM/SGLang) exposing guided-grammar params.
+- **Prompt caching needs a provider-scoped option — and it fights `Selector`.** Cache hit-rate
+  depends on a byte-stable prefix (system prompt + tool schemas first, volatile content last). A
+  per-step `Selector` that *reorders* the serialized tools busts the cache. Design guidance to
+  document + guard: cache the full tool catalog as a stable prefix and do retrieval by instruction,
+  not by reordering. Lands with the Anthropic provider (Phase 0, area G).
+- **No fan-out / vote / tree-search helper.** Self-Consistency, Best-of-N, ToT, LATS all hand-roll
+  the N-loop and search bookkeeping today. A small helper (part of the eval harness, area H) would
+  formalize parallel-run + aggregate; full tree search waits on `AgentSource`.
+- **`FailoverProvider`'s trigger is failure/cooldown, not a quality score.** Cascades/routing want
+  "escalate if the answer looks wrong" — a concrete, small SDK improvement (accept a scorer callback).
+
+### 7.4 Demo shortlist — ranked by (buildable-now × showcases-a-distinctive-primitive × appeal)
+
+1. **Tool retrieval via `Selector`** (RAG over a big `MultiSource`) — most distinctive primitive,
+   immediately practical (everyone hits prompt-bloat with many MCP servers). Buildable now.
+2. **Best-of-N with a `FuncSource` test-harness verifier** (code-gen-with-tests) — best
+   impact/effort; substrate for PRM/LATS later. Buildable now.
+3. **Sleep-time compute / background memory consolidation** — the demo that *uniquely* exercises the
+   async control plane; produces measurable latency/token wins. Buildable now (persistence-limited).
+4. **Judge panel / jury** — `MultiSource` of judges + structured verdicts; doubles as the eval-harness
+   seed. Buildable now.
+5. **Model routing + cascade (RouteLLM / FrugalGPT)** on `FailoverProvider` — high "wow" (cost curves);
+   surfaces the quality-score-trigger improvement. Buildable now with a scorer wrapper.
+6. **CRITIC — forced tool-grounded self-correction** — showcases `Selector` + `ToolChoice=required` +
+   error-feedback; honest self-correction (external signal, not intrinsic). Buildable now.
+7. **Spotlighting / datamarking injection defense** (with a mini AgentDojo task) — showcases the event
+   pipeline; safety demos land well. Buildable now.
+8. **Mixture-of-Agents / Multi-Agent Debate** — the flagship forcing-function for the `AgentSource`
+   roadmap primitive; most visually compelling multi-agent demo. **Needs sub-agents.**
+
+**Bottom line for the roadmap:** prioritizing **`AgentSource`** (Phase 3) and **`Embedder`+`VectorStore`**
+(Phase 2) has by far the highest technique-unlock-per-unit-work — between them they gate the entire
+multi-agent and semantic-retrieval literature. Everything in demos #1–#7 above ships on primitives we
+already have or that land in Phase 0–2, which makes a compelling "experiment with SOTA agent strategies
+on mcpkit" story available early.
+
+---
+
 ## Appendix — key files
 
 | Area | Files |
