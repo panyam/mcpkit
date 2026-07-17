@@ -60,9 +60,21 @@ func (r *renderer) handle(e agent.Event) {
 		fmt.Fprintf(r.out, "%s\n", r.dim("  "+status+" "+e.ToolCall.Name+": "+snippet(resultText(e.ToolResult), 100)))
 	case agent.EventToolError:
 		fmt.Fprintf(r.out, "%s\n", r.dim("  ✗ "+e.ToolCall.Name+" failed: "+snippet(e.Error, 120)))
+	case agent.EventToolDenied:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ⃠ "+e.ToolCall.Name+" not permitted: "+snippet(e.Reason, 120)))
 	case agent.EventError:
 		r.breakLine()
 	}
+}
+
+// approvalMode reports the host's current approval disposition (the /approve
+// command). A nil policy means the gate is off (every call runs).
+func (r *renderer) approvalMode(p *agent.TieredApproval) {
+	if p == nil {
+		fmt.Fprintf(r.out, "%s\n", r.dim("approval: off (every tool call runs)"))
+		return
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim("approval: "+approvalModeName(p.DefaultMode())))
 }
 
 func (r *renderer) breakLine() {

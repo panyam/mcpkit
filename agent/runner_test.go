@@ -324,6 +324,7 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 		{Kind: EventToolBegin, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}},
 		{Kind: EventToolEnd, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, ToolResult: &core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}},
 		{Kind: EventToolError, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Error: "boom"},
+		{Kind: EventToolDenied, Step: 1, ToolCall: &ToolCall{ID: "c", Name: "n", Args: core.NewRawJSON(json.RawMessage(`{}`))}, Reason: "declined by user"},
 		{Kind: EventTurnEnd, Result: &TurnResult{Text: "done", Steps: 1, Usage: Usage{InputTokens: 1, OutputTokens: 2}}},
 		{Kind: EventError, Error: "fatal"},
 	}
@@ -343,6 +344,185 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 		if string(raw) != string(raw2) {
 			t.Fatalf("round-trip drift for %s: %s vs %s", e.Kind, raw, raw2)
 		}
+	}
+}
+
+// denyAll is an ApprovalPolicy that refuses every call with a fixed reason.
+type denyAll struct{ reason string }
+
+func (d denyAll) Approve(context.Context, ApprovalRequest) (ApprovalDecision, error) {
+	return ApprovalDecision{Reason: d.reason}, nil
+}
+
+func TestRunnerApprovalDeniedFeedsBackAndContinues(t *testing.T) {
+	called := false
+	src := NewFuncSource()
+	AddFunc(src, "send_email", "sends mail", func(ctx context.Context, in struct {
+		To string `json:"to"`
+	}) (string, error) {
+		called = true
+		return "sent", nil
+	})
+
+	stub := NewStubProvider(
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "send_email", Args: core.NewRawJSON(json.RawMessage(`{"to":"a@b.c"}`))}}},
+		StubTurn{Text: "I could not send it."},
+	)
+	emit, events := collectEvents()
+
+	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src, Approval: denyAll{reason: "declined by user"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "email a@b.c"}}, emit)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if called {
+		t.Fatal("denied tool must not execute")
+	}
+	if res.Steps != 2 || res.Text != "I could not send it." {
+		t.Fatalf("turn should continue past the denial: %+v", res)
+	}
+
+	// The denial surfaces as a distinct event and as model-visible tool text.
+	want := []EventKind{EventTurnBegin, EventToolBegin, EventToolDenied, EventTextDelta, EventTurnEnd}
+	if fmt.Sprint(kinds(*events)) != fmt.Sprint(want) {
+		t.Fatalf("events = %v, want %v", kinds(*events), want)
+	}
+	var denied *Event
+	for i := range *events {
+		if (*events)[i].Kind == EventToolDenied {
+			denied = &(*events)[i]
+		}
+	}
+	if denied == nil || denied.Reason != "declined by user" || denied.ToolCall.Name != "send_email" {
+		t.Fatalf("tool-denied event = %+v", denied)
+	}
+	toolMsg := stub.Requests()[1].Messages[2]
+	if toolMsg.Role != RoleTool || !strings.Contains(toolMsg.Text, "not permitted") || !strings.Contains(toolMsg.Text, "declined by user") {
+		t.Fatalf("model-visible denial text = %+v", toolMsg)
+	}
+}
+
+func TestRunnerApprovalAllowedRunsTool(t *testing.T) {
+	called := false
+	src := NewFuncSource()
+	AddFunc(src, "read_status", "reads status", func(ctx context.Context, _ struct{}) (string, error) {
+		called = true
+		return "green", nil
+	})
+	stub := NewStubProvider(
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "read_status", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
+		StubTurn{Text: "Status is green."},
+	)
+	emit, events := collectEvents()
+
+	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src,
+		Approval: NewTieredApproval(WithDefaultMode(ModeAlwaysAllow))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "status?"}}, emit); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("allowed tool should execute")
+	}
+	want := []EventKind{EventTurnBegin, EventToolBegin, EventToolEnd, EventTextDelta, EventTurnEnd}
+	if fmt.Sprint(kinds(*events)) != fmt.Sprint(want) {
+		t.Fatalf("allowed path should reach tool-end: %v", kinds(*events))
+	}
+}
+
+func TestRunnerStructuredFinalizesAfterTerminalText(t *testing.T) {
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object","properties":{"answer":{"type":"integer"}},"required":["answer"]}`))
+	stub := NewStubProvider(
+		StubTurn{Text: "The answer is 42."}, // terminal text (Stream)
+		StubTurn{Text: `{"answer":42}`},     // finalizing coercion (Generate)
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "what is the answer"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Text != "The answer is 42." {
+		t.Fatalf("text answer should be unchanged: %q", res.Text)
+	}
+	var got struct {
+		Answer int `json:"answer"`
+	}
+	if err := res.Structured.Bind(&got); err != nil || got.Answer != 42 {
+		t.Fatalf("structured = %s (bind err %v)", res.Structured.Raw(), err)
+	}
+	// The finalizing Generate consumed a second turn.
+	if len(stub.Requests()) != 2 {
+		t.Fatalf("want 2 provider calls (stream + finalize), got %d", len(stub.Requests()))
+	}
+	// The finalizing request carries the schema and offers no tools.
+	fin := stub.Requests()[1]
+	if fin.ResponseSchema.Len() == 0 || len(fin.Tools) != 0 {
+		t.Fatalf("finalize request should set schema and no tools: %+v", fin)
+	}
+}
+
+func TestRunnerNoSchemaSkipsFinalize(t *testing.T) {
+	stub := NewStubProvider(StubTurn{Text: "plain answer"})
+	r, err := NewRunner(RunnerConfig{Provider: stub})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "hi"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Structured.Len() != 0 {
+		t.Fatalf("no schema means no structured output: %s", res.Structured.Raw())
+	}
+	if len(stub.Requests()) != 1 {
+		t.Fatalf("no schema means no finalize call, got %d calls", len(stub.Requests()))
+	}
+}
+
+func TestRunnerStructuredRetriesInvalidJSON(t *testing.T) {
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object"}`))
+	stub := NewStubProvider(
+		StubTurn{Text: "done"},            // terminal text
+		StubTurn{Text: "not json at all"}, // first finalize: invalid
+		StubTurn{Text: `{"ok":true}`},     // retry: valid
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "go"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(res.Structured.Raw()) != `{"ok":true}` {
+		t.Fatalf("retry should have produced valid JSON, got %s", res.Structured.Raw())
+	}
+	if len(stub.Requests()) != 3 {
+		t.Fatalf("want stream + 2 finalize attempts = 3 calls, got %d", len(stub.Requests()))
+	}
+}
+
+func TestRunnerStructuredProviderErrorAbortsTurn(t *testing.T) {
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object"}`))
+	stub := NewStubProvider(
+		StubTurn{Text: "done"},                    // terminal text
+		StubTurn{Err: errors.New("upstream 500")}, // finalize fails
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Run(context.Background(), []Message{{Role: RoleUser, Text: "go"}}, nil); err == nil {
+		t.Fatal("a failed structured finalize must abort the turn")
 	}
 }
 

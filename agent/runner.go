@@ -53,6 +53,23 @@ type RunnerConfig struct {
 	// (the ToolSource layer). A selector error aborts the turn: it is a
 	// host configuration bug, not something the model can recover from.
 	Selector ToolSelector
+
+	// Approval, when non-nil, gates each tool call before it runs: the
+	// Runner asks the policy in callTool, after argument binding and before
+	// ToolSource.Call. A refusal is fed back to the model as a tool result
+	// (a tool-denied event, then the turn continues), never a turn abort.
+	// Nil means every call runs, the pre-approval behavior.
+	Approval ApprovalPolicy
+
+	// ResponseSchema, when set, coerces the turn's final answer into
+	// structured output. After the tool loop reaches its terminal
+	// no-tool-call text, the Runner makes one additional Generate call with
+	// this schema (and no tools) and puts the JSON document on
+	// TurnResult.Structured. Tools and a response schema are never sent in
+	// the same request (many endpoints forbid it), which is why this is a
+	// separate finalizing call rather than a field on the loop's requests.
+	// Empty means no structured coercion.
+	ResponseSchema core.RawJSON
 }
 
 // ToolSelector narrows the model-facing tool set for one step. Returning the
@@ -92,6 +109,12 @@ type TurnResult struct {
 	Usage        Usage     `json:"usage"`
 	Steps        int       `json:"steps"`
 	FinishReason string    `json:"finishReason,omitempty"`
+
+	// Structured is the schema-coerced final answer, present only when
+	// RunnerConfig.ResponseSchema was set. It is the JSON document from the
+	// finalizing Generate call; Bind it into a typed value. Its Usage is
+	// already folded into Usage above. Empty when no schema was configured.
+	Structured core.RawJSON `json:"structured,omitempty"`
 }
 
 // Run executes one turn against history. Events stream to emit (nil is
@@ -162,12 +185,21 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 
 		if len(resp.ToolCalls) == 0 {
 			stepSpan.End()
+			var structured core.RawJSON
+			if r.cfg.ResponseSchema.Len() > 0 {
+				s, err := r.finalizeStructured(ctx, msgs, &usage)
+				if err != nil {
+					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: structured finalize: %w", err))
+				}
+				structured = s
+			}
 			result := &TurnResult{
 				Text:         resp.Text,
 				Messages:     added,
 				Usage:        usage,
 				Steps:        step,
 				FinishReason: resp.FinishReason,
+				Structured:   structured,
 			}
 			turnSpan.SetAttribute("agent.steps", fmt.Sprint(step))
 			turnSpan.SetAttribute("agent.finish_reason", resp.FinishReason)
@@ -177,7 +209,7 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 			return result, nil
 		}
 
-		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, emit)
+		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit)
 		stepSpan.End()
 		if err := ctx.Err(); err != nil {
 			return nil, r.failSpan(emit, turnSpan, err)
@@ -235,10 +267,45 @@ func consumeStream(stream Stream, step int, emit func(Event)) (*ProviderResponse
 	return acc.Result(), nil
 }
 
+// structuredMaxAttempts bounds the finalizing Generate: one initial call plus
+// retries when the model returns text that is not valid JSON. Two total keeps
+// the extra cost low while absorbing the occasional near-miss.
+const structuredMaxAttempts = 2
+
+// finalizeStructured makes the schema-coercing Generate call over the finished
+// conversation (msgs already includes the terminal assistant text) with no
+// tools offered. It retries up to structuredMaxAttempts when the returned text
+// is not valid JSON, folding each call's usage into usage. A provider error
+// aborts (the caller asked for structured output and cannot get it); after the
+// retry budget it returns the last output best-effort so a caller's Bind, not
+// a lost turn, surfaces a still-malformed document.
+func (r *Runner) finalizeStructured(ctx context.Context, msgs []Message, usage *Usage) (core.RawJSON, error) {
+	var last string
+	for attempt := 0; attempt < structuredMaxAttempts; attempt++ {
+		resp, err := r.cfg.Provider.Generate(ctx, ProviderRequest{
+			Instructions:   r.cfg.Instructions,
+			Messages:       msgs,
+			ResponseSchema: r.cfg.ResponseSchema,
+		})
+		if err != nil {
+			return core.RawJSON{}, err
+		}
+		if resp.Usage != nil {
+			usage.InputTokens += resp.Usage.InputTokens
+			usage.OutputTokens += resp.Usage.OutputTokens
+		}
+		last = resp.Text
+		if json.Valid([]byte(last)) {
+			return core.NewRawJSON(json.RawMessage(last)), nil
+		}
+	}
+	return core.NewRawJSON(json.RawMessage(last)), nil
+}
+
 // dispatch runs the step's tool calls concurrently, serializes event
 // emission, and returns RoleTool messages in call order regardless of
 // completion order.
-func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit func(Event)) []Message {
+func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event)) []Message {
 	results := make([]Message, len(calls))
 	var emitMu sync.Mutex
 	locked := func(ev Event) {
@@ -255,7 +322,7 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit 
 			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.tool",
 				core.Attribute{Key: "agent.tool.name", Value: call.Name})
 			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
-			text := r.callTool(toolCtx, step, call, locked, toolSpan)
+			text := r.callTool(toolCtx, step, call, tools, locked, toolSpan)
 			toolSpan.End()
 			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
 		}(i, call)
@@ -264,9 +331,24 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, emit 
 	return results
 }
 
+// toolReadOnly reports whether the named tool declares the readOnlyHint
+// annotation in the step's offered set. It is the signal the read-only-auto
+// approval tier keys on; an unknown tool or an absent hint is treated as
+// not read-only (fail-safe: a tool that does not promise read-only gets the
+// stricter path).
+func toolReadOnly(tools []core.ToolDef, name string) bool {
+	for _, t := range tools {
+		if t.Name == name {
+			ro, _ := t.Annotations["readOnlyHint"].(bool)
+			return ro
+		}
+	}
+	return false
+}
+
 // callTool executes one call and renders the text fed back to the model.
 // Every failure shape becomes model-visible text rather than a turn abort.
-func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit func(Event), span core.Span) string {
+func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, tools []core.ToolDef, emit func(Event), span core.Span) string {
 	failed := func(err error) string {
 		span.RecordError(err)
 		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
@@ -276,6 +358,27 @@ func (r *Runner) callTool(ctx context.Context, step int, call ToolCall, emit fun
 	if r.cfg.Tools == nil {
 		return failed(fmt.Errorf("%w: %q (no tools offered)", ErrUnknownTool, call.Name))
 	}
+
+	if r.cfg.Approval != nil {
+		dec, err := r.cfg.Approval.Approve(ctx, ApprovalRequest{
+			ToolName: call.Name,
+			Args:     call.Args,
+			ReadOnly: toolReadOnly(tools, call.Name),
+		})
+		if err != nil {
+			return failed(fmt.Errorf("agent: approval policy for %q: %w", call.Name, err))
+		}
+		if !dec.Allowed {
+			reason := dec.Reason
+			if reason == "" {
+				reason = "denied by approval policy"
+			}
+			span.SetAttribute("agent.tool.denied", "true")
+			emit(Event{Kind: EventToolDenied, Step: step, ToolCall: &call, Reason: reason})
+			return "tool call not permitted: " + reason
+		}
+	}
+
 	args := map[string]any{}
 	if call.Args.Len() > 0 {
 		if err := call.Args.Bind(&args); err != nil {
