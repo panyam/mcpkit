@@ -60,6 +60,16 @@ type RunnerConfig struct {
 	// (a tool-denied event, then the turn continues), never a turn abort.
 	// Nil means every call runs, the pre-approval behavior.
 	Approval ApprovalPolicy
+
+	// ResponseSchema, when set, coerces the turn's final answer into
+	// structured output. After the tool loop reaches its terminal
+	// no-tool-call text, the Runner makes one additional Generate call with
+	// this schema (and no tools) and puts the JSON document on
+	// TurnResult.Structured. Tools and a response schema are never sent in
+	// the same request (many endpoints forbid it), which is why this is a
+	// separate finalizing call rather than a field on the loop's requests.
+	// Empty means no structured coercion.
+	ResponseSchema core.RawJSON
 }
 
 // ToolSelector narrows the model-facing tool set for one step. Returning the
@@ -99,6 +109,12 @@ type TurnResult struct {
 	Usage        Usage     `json:"usage"`
 	Steps        int       `json:"steps"`
 	FinishReason string    `json:"finishReason,omitempty"`
+
+	// Structured is the schema-coerced final answer, present only when
+	// RunnerConfig.ResponseSchema was set. It is the JSON document from the
+	// finalizing Generate call; Bind it into a typed value. Its Usage is
+	// already folded into Usage above. Empty when no schema was configured.
+	Structured core.RawJSON `json:"structured,omitempty"`
 }
 
 // Run executes one turn against history. Events stream to emit (nil is
@@ -169,12 +185,21 @@ func (r *Runner) Run(ctx context.Context, history []Message, emit func(Event)) (
 
 		if len(resp.ToolCalls) == 0 {
 			stepSpan.End()
+			var structured core.RawJSON
+			if r.cfg.ResponseSchema.Len() > 0 {
+				s, err := r.finalizeStructured(ctx, msgs, &usage)
+				if err != nil {
+					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: structured finalize: %w", err))
+				}
+				structured = s
+			}
 			result := &TurnResult{
 				Text:         resp.Text,
 				Messages:     added,
 				Usage:        usage,
 				Steps:        step,
 				FinishReason: resp.FinishReason,
+				Structured:   structured,
 			}
 			turnSpan.SetAttribute("agent.steps", fmt.Sprint(step))
 			turnSpan.SetAttribute("agent.finish_reason", resp.FinishReason)
@@ -240,6 +265,41 @@ func consumeStream(stream Stream, step int, emit func(Event)) (*ProviderResponse
 	}
 	endThinking()
 	return acc.Result(), nil
+}
+
+// structuredMaxAttempts bounds the finalizing Generate: one initial call plus
+// retries when the model returns text that is not valid JSON. Two total keeps
+// the extra cost low while absorbing the occasional near-miss.
+const structuredMaxAttempts = 2
+
+// finalizeStructured makes the schema-coercing Generate call over the finished
+// conversation (msgs already includes the terminal assistant text) with no
+// tools offered. It retries up to structuredMaxAttempts when the returned text
+// is not valid JSON, folding each call's usage into usage. A provider error
+// aborts (the caller asked for structured output and cannot get it); after the
+// retry budget it returns the last output best-effort so a caller's Bind, not
+// a lost turn, surfaces a still-malformed document.
+func (r *Runner) finalizeStructured(ctx context.Context, msgs []Message, usage *Usage) (core.RawJSON, error) {
+	var last string
+	for attempt := 0; attempt < structuredMaxAttempts; attempt++ {
+		resp, err := r.cfg.Provider.Generate(ctx, ProviderRequest{
+			Instructions:   r.cfg.Instructions,
+			Messages:       msgs,
+			ResponseSchema: r.cfg.ResponseSchema,
+		})
+		if err != nil {
+			return core.RawJSON{}, err
+		}
+		if resp.Usage != nil {
+			usage.InputTokens += resp.Usage.InputTokens
+			usage.OutputTokens += resp.Usage.OutputTokens
+		}
+		last = resp.Text
+		if json.Valid([]byte(last)) {
+			return core.NewRawJSON(json.RawMessage(last)), nil
+		}
+	}
+	return core.NewRawJSON(json.RawMessage(last)), nil
 }
 
 // dispatch runs the step's tool calls concurrently, serializes event
