@@ -62,6 +62,12 @@ jobs:
       - name: Run agent-async example test
         run: cd examples/agent-async && go test ./... -v
 
+      - name: Run skills agent-mode test
+        run: cd examples/skills && go test ./... -v -run TestAgentScenario
+
+      - name: Run tasks-v2 agent-mode test
+        run: cd examples/tasks-v2 && go test ./... -v -run TestAgentScenario
+
   test-auth:
     runs-on: ubuntu-latest
     steps:

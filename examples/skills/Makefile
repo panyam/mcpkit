@@ -1,4 +1,13 @@
 
+agent: ## Run the scripted agent scenario (no LLM): an agent loads the served skills and answers by them
+	go run . --agent
+
+agent-live: ## Run the agent scenario against a live model (MODEL=<name> [BASE_URL=<url>])
+	go run . --agent --model $(MODEL) $(if $(BASE_URL),--base-url $(BASE_URL))
+
+agent-test: ## Run the agent golden-transcript test
+	go test ./... -count=1 -run TestAgentScenario
+
 demo: ## Run the demokit walkthrough (text, non-interactive). Server must be up via `make serve` in another terminal.
 	go run . --tui
 
@@ -37,5 +46,5 @@ fetch-docx: ## Stage Anthropic's docx skill from github.com/anthropics/skills in
 build: ## Build the binary to ./skills-demo
 	go build -o skills-demo .
 
-.PHONY: serve serve-archive serve-zip demo tui note readme fetch-docx build
+.PHONY: agent agent-live agent-test serve serve-archive serve-zip demo tui note readme fetch-docx build
 .DEFAULT_GOAL := serve
