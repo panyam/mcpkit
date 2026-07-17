@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -45,7 +47,47 @@ type RunStore interface {
 	AppendEvents(ctx context.Context, req AppendEventsRequest) (AppendEventsResponse, error)
 	LoadRun(ctx context.Context, req LoadRunRequest) (LoadRunResponse, error)
 	ForkRun(ctx context.Context, req ForkRunRequest) (ForkRunResponse, error)
+
+	// ListRuns enumerates stored runs as lightweight RunInfo (no message
+	// bodies), for a session picker or a dashboard. Paged via an opaque
+	// cursor; NextCursor is empty when the last page was returned. A
+	// non-agent consumer (a poller, a UI) wants this too, which is why it
+	// returns protocol/data objects, not model-facing ones.
+	ListRuns(ctx context.Context, req ListRunsRequest) (ListRunsResponse, error)
 }
+
+// RunInfo is the header of a run — identity, lineage, and counts — without
+// the message or event bodies, so a listing stays cheap. MessageCount is
+// the current length of the message log; the fork lineage (ParentID,
+// ForkPoint) is the session tree a picker renders.
+type RunInfo struct {
+	ID           string    `json:"id"`
+	ParentID     string    `json:"parentId,omitempty"`
+	ForkPoint    int       `json:"forkPoint,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+	MessageCount int       `json:"messageCount"`
+}
+
+// ListRunsRequest pages the run listing. Cursor is empty for the first
+// page and echoes a prior response's NextCursor thereafter; its content is
+// backend-defined and opaque. Limit caps the page (zero means the
+// backend's default).
+type ListRunsRequest struct {
+	Cursor string
+	Limit  int
+}
+
+// ListRunsResponse carries one page. NextCursor is empty on the last page.
+// Ordering is best-effort newest-first where the backend can (in-memory,
+// gorm); the Redis backend lists in scan order (unordered) — documented on
+// its implementation.
+type ListRunsResponse struct {
+	Runs       []RunInfo
+	NextCursor string
+}
+
+// DefaultListRunsLimit bounds a page when ListRunsRequest.Limit is zero.
+const DefaultListRunsLimit = 50
 
 // Run is one persisted run: identity, fork lineage, and the append-only
 // logs. Messages is the conversation history a resume feeds back into
@@ -280,6 +322,53 @@ func (s *InMemoryRunStore) LoadRun(ctx context.Context, req LoadRunRequest) (Loa
 		},
 		Found: true,
 	}, nil
+}
+
+// ListRuns implements RunStore, newest-first. The cursor is a decimal
+// offset into the ordered set — fine for an in-memory store whose set is
+// stable within a process.
+func (s *InMemoryRunStore) ListRuns(ctx context.Context, req ListRunsRequest) (ListRunsResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	infos := make([]RunInfo, 0, len(s.runs))
+	for id, e := range s.runs {
+		infos = append(infos, RunInfo{
+			ID:           id,
+			ParentID:     e.parentID,
+			ForkPoint:    e.forkPoint,
+			CreatedAt:    e.createdAt,
+			MessageCount: len(e.messages),
+		})
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		if !infos[i].CreatedAt.Equal(infos[j].CreatedAt) {
+			return infos[i].CreatedAt.After(infos[j].CreatedAt)
+		}
+		return infos[i].ID < infos[j].ID
+	})
+
+	offset := 0
+	if req.Cursor != "" {
+		if n, err := strconv.Atoi(req.Cursor); err == nil && n > 0 {
+			offset = n
+		}
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = DefaultListRunsLimit
+	}
+	if offset >= len(infos) {
+		return ListRunsResponse{}, nil
+	}
+	end := offset + limit
+	var next string
+	if end < len(infos) {
+		next = strconv.Itoa(end)
+	} else {
+		end = len(infos)
+	}
+	return ListRunsResponse{Runs: infos[offset:end], NextCursor: next}, nil
 }
 
 // ForkRun implements RunStore. The fork gets cloned logs, so parent and

@@ -64,6 +64,21 @@ func (a *App) AttachRun(ctx context.Context, runID string) error {
 	return a.resumeLocked(ctx, runID)
 }
 
+// Sessions lists the persisted runs newest-first (the /sessions picker),
+// or an error when no RunStore is configured. It returns the first page;
+// a surface that needs more pages the store's cursor via ListRuns
+// directly.
+func (a *App) Sessions(ctx context.Context) ([]agent.RunInfo, error) {
+	if a.store == nil {
+		return nil, fmt.Errorf("host: no RunStore configured")
+	}
+	resp, err := a.store.ListRuns(ctx, agent.ListRunsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("host: listing sessions: %w", err)
+	}
+	return resp.Runs, nil
+}
+
 // Resume switches the session to an existing run: its persisted
 // messages replace the in-memory history and subsequent turns append to
 // it. An unknown runID is an error (nothing changes), so a typo cannot
