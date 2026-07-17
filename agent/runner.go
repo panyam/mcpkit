@@ -117,15 +117,33 @@ type TurnResult struct {
 	Structured core.RawJSON `json:"structured,omitempty"`
 }
 
-// Control steers a turn while it runs. Surfaces send Controls on
-// TurnRequest.Control; today the only steering is per-call cancellation
-// (the coding-agent "Esc cancels the call, not the session" behavior).
+// Control is the turn's steering envelope: surfaces send Controls on
+// TurnRequest.Control to steer a turn while it runs. Cancellation is the
+// first (currently only) verb, in two modes:
+//
+//   - Control{} — cancel ALL calls currently in flight, one send. The
+//     naive-Esc path: a surface needs no bookkeeping, three in-flight
+//     calls die from a single Control.
+//   - Control{CallID: id} — cancel exactly one call, identified by the
+//     ToolCall.ID the surface saw on that call's tool-begin event. For
+//     richer surfaces (a TUI with a row per running call).
+//
+// Either way the decision stays with the sender: surfaces already hold
+// the call inventory via tool-begin/tool-end events, and constraint A4
+// keeps decision callbacks out of the loop.
+//
+// Future steering verbs (pause, budget bumps, mid-turn priority hints)
+// extend this struct additively — a Kind discriminator plus verb fields,
+// with the zero Kind meaning cancel for compatibility — rather than new
+// channels or a handler registry. Mid-turn *content* (a "/btw" note for
+// the model) is deliberately not a Control: anything the model should
+// see routes through the injection path so it enters history as a
+// message, not a side effect.
 type Control struct {
-	// CallID names the in-flight tool call to cancel — the ToolCall.ID
-	// surfaces saw on that call's tool-begin event. Empty cancels every
-	// call currently in flight. An ID that is not in flight (already
-	// finished, or never dispatched) is a no-op, so racing a call's
-	// natural completion is safe.
+	// CallID names the in-flight tool call to cancel; empty cancels
+	// every call currently in flight. An ID that is not in flight
+	// (already finished, or never dispatched) is a no-op, so racing a
+	// call's natural completion is safe.
 	CallID string
 }
 
