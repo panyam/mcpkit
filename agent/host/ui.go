@@ -1,6 +1,8 @@
 package host
 
 import (
+	"io"
+
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -99,3 +101,9 @@ type Surface interface {
 func WithSurface(s Surface) AppOption {
 	return func(o *appOptions) { o.surface = s }
 }
+
+// NewTerminalSurface returns the built-in terminal Surface — the ANSI
+// line renderer, writing to w. A TUI reuses it by pointing w at a buffer
+// and reading the formatted transcript back, rather than reimplementing
+// every UIEvent's formatting.
+func NewTerminalSurface(w io.Writer) Surface { return newRenderer(w) }
