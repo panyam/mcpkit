@@ -358,6 +358,56 @@ than importing a second orchestration paradigm.
 
 ---
 
+## 6. Validation & benchmarks — what we can test against
+
+A recurring question for the eval-harness work (Phase 0, area H): is there an existing conformance
+or benchmark suite we can validate the agent SDK against? The honest answer has two halves.
+
+**The competitor projects do not give us a reusable suite.** Their tests are internal or coupled to
+their own runtime:
+
+- **Eino** — no eval/conformance harness at all (plain Go unit tests). Useful as API-shape
+  inspiration, not validation.
+- **Mastra** — its `scorers` are a TypeScript/Node judge library (`createScorer`), not an agent
+  conformance suite. Usable only as the *judge* inside a harness we write, and only cross-runtime.
+- **Genkit Go** — its eval runner drives Genkit `flow`s, so we'd have to wrap our agent as a Genkit
+  flow first — at which point we've built our own harness.
+- **aider** — the harness is aider-coupled ("not intended for external use"), but the **polyglot
+  problem set** (225 Exercism problems across 6 languages incl. Go) is freely reusable *data*. Steal
+  the problems, rebuild the harness.
+- **Claude Code / Cursor / Gemini CLI / Codex / OpenCode** — nothing first-party; they only *report*
+  scores on third-party benchmarks.
+
+**MCP's own `modelcontextprotocol/conformance` is protocol/wire-level only** (`initialize`,
+`tools/call` handshake correctness — which mcpkit already passes). There is **no first-party
+agent-level MCP conformance suite**; that gap is real, and the framework-agnostic benchmarks below
+are the practical stand-ins. (Note SEP-2484: an MCP Standards-Track SEP can't reach Final without a
+matching conformance scenario — worth tracking, but it certifies wire behavior, not the agent loop.)
+
+**What we can actually adopt** (all Python + usually Docker; the standard integration for a Go SDK is
+to expose the agent — or just its tool-calling turn — behind an HTTP endpoint):
+
+| Suite | Validates | Integration cost | Source |
+|---|---|---|---|
+| **BFCL v3/v4** (Berkeley Function-Calling Leaderboard) | Tool-calling fidelity (AST + executable match, single & multi-turn) | **Lowest** — supports OpenAI-compatible endpoints with `--skip-server-setup`; our `OpenAIProvider` already speaks that wire | [gorilla](https://github.com/ShishirPatil/gorilla/tree/main/berkeley-function-call-leaderboard) |
+| **τ²-bench** (sierra-research) | The multi-turn **tool-agent-*user*** loop, policy adherence, reliability (pass^k) | One thin Python `HalfDuplexAgent` proxying HTTP → our Runner | [tau2-bench](https://github.com/sierra-research/tau2-bench) |
+| **SWE-bench Verified** | End coding-task resolution | Near-zero — contract is a predictions JSONL (`instance_id` + `model_patch`); adopt only once we build a coding agent | [SWE-bench](https://github.com/swe-bench/SWE-bench) |
+| **AgentDojo** | Prompt-injection *security* over untrusted tool output | Optional — adopt if MCP tool-output hijacking is a threat we want regression coverage on | [agentdojo](https://github.com/ethz-spylab/agentdojo) |
+
+(ToolBench, AgentBench, GAIA, WebArena, ToolSandbox exist but are dated, heavyweight, or
+wrong-modality for an MCP tool-calling SDK.)
+
+**Recommended shape for Phase 0's eval harness (H):** two layers, not one —
+
+1. **`agent/eval` internal harness** (`StubProvider` + SEP-414 spans + captured `emit` stream) for
+   fast, deterministic, offline regression — the CI gate.
+2. **An external-benchmark adapter**: since the OpenAI-compatible endpoint already exists, a **BFCL
+   run is genuinely low-friction** and yields a quantitative, reputable tool-calling-fidelity number;
+   **τ²-bench** (behind the small Python shim) covers the multi-turn loop. These are the practical
+   stand-ins for the agent-level MCP conformance suite that does not yet exist.
+
+---
+
 ## Appendix — key files
 
 | Area | Files |
