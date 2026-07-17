@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
@@ -41,6 +42,103 @@ type Config struct {
 	// and a transcript line; /tasks manages running tasks). Zero uses the
 	// 10s default; negative disables detaching (wait inline forever).
 	TaskGraceSec int `json:"taskGraceSec,omitempty"`
+
+	// Approval configures the tool-call permission ladder. Nil means the
+	// gate is off: every tool call the model makes runs (the pre-approval
+	// behavior). Set it to gate calls behind a mode and per-tool rules,
+	// with "ask" prompts routed through the terminal elicitation UI.
+	Approval *ApprovalConfig `json:"approval,omitempty"`
+}
+
+// ApprovalConfig is the host's view of the agent approval ladder. It maps to
+// an agent.TieredApproval whose "ask" outcome is presented through the same
+// terminal UI as elicitation (via ElicitationCoordinator.Confirm).
+type ApprovalConfig struct {
+	// Mode is the default disposition for calls no rule covers: "ask"
+	// (default), "read-only-auto" (auto-allow tools that declare the
+	// readOnlyHint annotation, ask for the rest), or "allow" (run
+	// everything, "yolo"). An unknown value falls back to "ask".
+	Mode string `json:"mode,omitempty"`
+
+	// Rules pins per-tool overrides that win over Mode: tool name ->
+	// "allow" | "ask" | "deny". Unknown rule values are ignored.
+	Rules map[string]string `json:"rules,omitempty"`
+
+	// Remember caches a tool the user approved so later calls to it skip the
+	// prompt for the life of the session.
+	Remember bool `json:"remember,omitempty"`
+}
+
+// approvalPrompt renders the yes/no question shown when a tool call needs
+// approval. The args are trimmed so a large payload does not flood the prompt.
+func approvalPrompt(req agent.ApprovalRequest) string {
+	args := strings.TrimSpace(string(req.Args.Raw()))
+	if len(args) > 200 {
+		args = args[:200] + "…"
+	}
+	if args == "" || args == "{}" {
+		return fmt.Sprintf("Allow tool call %q?", req.ToolName)
+	}
+	return fmt.Sprintf("Allow tool call %q with %s?", req.ToolName, args)
+}
+
+// parseApprovalMode maps a config string to an agent mode, defaulting to ask.
+func parseApprovalMode(s string) agent.ApprovalMode {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "allow", "yolo", "auto", "full-auto":
+		return agent.ModeAlwaysAllow
+	case "read-only-auto", "readonly", "read-only", "auto-edit":
+		return agent.ModeReadOnlyAuto
+	default:
+		return agent.ModeAlwaysAsk
+	}
+}
+
+// approvalModeName is the inverse of parseApprovalMode for display.
+func approvalModeName(m agent.ApprovalMode) string {
+	switch m {
+	case agent.ModeAlwaysAllow:
+		return "allow"
+	case agent.ModeReadOnlyAuto:
+		return "read-only-auto"
+	default:
+		return "ask"
+	}
+}
+
+// parseToolRule maps a config rule string to an agent rule; ok is false for an
+// unrecognized value so the caller can skip it.
+func parseToolRule(s string) (agent.ToolRule, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "allow":
+		return agent.RuleAllow, true
+	case "deny":
+		return agent.RuleDeny, true
+	case "ask":
+		return agent.RuleAsk, true
+	default:
+		return 0, false
+	}
+}
+
+// buildApproval turns the config into a live policy whose ask seam presents
+// through the shared elicitation coordinator. Returns nil when no approval is
+// configured (the Runner then runs every call).
+func (c *ApprovalConfig) buildApproval(confirm agent.AskFunc) *agent.TieredApproval {
+	if c == nil {
+		return nil
+	}
+	opts := []agent.TieredOption{
+		agent.WithDefaultMode(parseApprovalMode(c.Mode)),
+		agent.WithAsk(confirm),
+		agent.WithRememberApprovals(c.Remember),
+	}
+	for tool, r := range c.Rules {
+		if rule, ok := parseToolRule(r); ok {
+			opts = append(opts, agent.WithToolRule(tool, rule))
+		}
+	}
+	return agent.NewTieredApproval(opts...)
 }
 
 // taskGrace resolves the configured grace window.
