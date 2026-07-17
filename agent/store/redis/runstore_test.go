@@ -286,3 +286,76 @@ func TestRedisRunStore_KeyPrefixIsolation(t *testing.T) {
 		t.Fatalf("prefix isolation broken: CreateRun = (%+v, %v)", resp, err)
 	}
 }
+
+func TestRedisRunStore_ForkRetryConverges(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	mustCreate(t, s, "src")
+	base := []agent.Message{{Role: agent.RoleUser, Text: "shared"}}
+	if _, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: "src", Messages: base}); err != nil {
+		t.Fatalf("AppendMessages: %v", err)
+	}
+
+	first, err := s.ForkRun(ctx, agent.ForkRunRequest{RunID: "src", NewRunID: "retry-fork"})
+	if err != nil || !first.Found || !first.Created {
+		t.Fatalf("first ForkRun = (%+v, %v)", first, err)
+	}
+	retry, err := s.ForkRun(ctx, agent.ForkRunRequest{RunID: "src", NewRunID: "retry-fork"})
+	if err != nil {
+		t.Fatalf("retry ForkRun: %v", err)
+	}
+	if !retry.Found || retry.Created {
+		t.Fatalf("retry ForkRun = %+v, want Found=true Created=false", retry)
+	}
+
+	run := mustLoad(t, s, "retry-fork")
+	assertMessagesEqual(t, run.Messages, base)
+	if run.ParentID != "src" {
+		t.Fatalf("fork ParentID = %q, want src (retry convergence check)", run.ParentID)
+	}
+}
+
+// TestRedisRunStore_ForkDoesNotInheritPlantedGarbage pins the
+// all-or-nothing contract: leftover list entries at an unclaimed
+// NewRunID (what a crashed earlier fork attempt could leave behind)
+// must not leak into a subsequent fork of the same name.
+func TestRedisRunStore_ForkDoesNotInheritPlantedGarbage(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	mustCreate(t, s, "src")
+	base := []agent.Message{{Role: agent.RoleUser, Text: "clean"}}
+	if _, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: "src", Messages: base}); err != nil {
+		t.Fatalf("AppendMessages: %v", err)
+	}
+
+	if err := s.client.RPush(ctx, s.key("crashed-fork", "messages"), `{"role":"user","text":"orphan"}`).Err(); err != nil {
+		t.Fatalf("planting garbage: %v", err)
+	}
+
+	fork, err := s.ForkRun(ctx, agent.ForkRunRequest{RunID: "src", NewRunID: "crashed-fork"})
+	if err != nil || !fork.Found || !fork.Created {
+		t.Fatalf("ForkRun = (%+v, %v)", fork, err)
+	}
+	run := mustLoad(t, s, "crashed-fork")
+	assertMessagesEqual(t, run.Messages, base)
+}
+
+func TestRedisRunStore_ListKeysWithoutMetaAreInvisible(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	if err := s.client.RPush(ctx, s.key("ghost", "messages"), `{"role":"user","text":"x"}`).Err(); err != nil {
+		t.Fatalf("planting ghost list: %v", err)
+	}
+
+	if resp, err := s.LoadRun(ctx, agent.LoadRunRequest{RunID: "ghost"}); err != nil || resp.Found {
+		t.Fatalf("LoadRun(ghost) = (%+v, %v), want invisible", resp, err)
+	}
+	if resp, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{
+		RunID: "ghost", Messages: []agent.Message{{Role: agent.RoleUser, Text: "y"}},
+	}); err != nil || resp.Found {
+		t.Fatalf("AppendMessages(ghost) = (%+v, %v), want invisible", resp, err)
+	}
+	if resp, err := s.ForkRun(ctx, agent.ForkRunRequest{RunID: "ghost"}); err != nil || resp.Found {
+		t.Fatalf("ForkRun(ghost) = (%+v, %v), want invisible", resp, err)
+	}
+}
