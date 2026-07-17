@@ -31,6 +31,14 @@ import (
 // root stores/ package would force a root→agent dependency (constraint
 // A6 corollary). Durable backends are sibling modules (agent/store/...)
 // so their dependencies stay out of this module.
+//
+// Atomicity contract: CreateRun with an explicit RunID and ForkRun are
+// all-or-nothing. On error, no run observable at the requested ID came
+// into existence; a run exists at that ID only because some create or
+// fork fully committed. This is what makes caller-chosen IDs safe
+// idempotency keys for retry loops (see ForkRunRequest). Implementers
+// must uphold it — a partially-forked run that reports Created=false
+// to a retry is a contract violation, not a quirk.
 type RunStore interface {
 	CreateRun(ctx context.Context, req CreateRunRequest) (CreateRunResponse, error)
 	AppendMessages(ctx context.Context, req AppendMessagesRequest) (AppendMessagesResponse, error)
@@ -123,6 +131,14 @@ type LoadRunResponse struct {
 // ForkRunRequest copies an existing run's logs into a new run so the
 // copy can diverge. NewRunID follows CreateRunRequest.RunID semantics:
 // empty generates a unique ID, non-empty claims a caller-chosen one.
+//
+// A non-empty NewRunID is also the fork's idempotency key. Forks are
+// all-or-nothing (see RunStore), so a retry loop that mints one
+// deterministic ID (a session-scoped name, a ULID) and reuses it
+// across attempts converges: retry after a failure finds nothing at
+// the ID and forks clean; retry after an unobserved success gets
+// Created=false against a complete fork, confirmable by loading it and
+// checking ParentID.
 type ForkRunRequest struct {
 	RunID    string
 	NewRunID string
