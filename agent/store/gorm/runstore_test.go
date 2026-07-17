@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
@@ -185,7 +187,7 @@ func TestGormRunStore_CreateAppendLoad(t *testing.T) {
 
 		run := mustLoad(t, s, id)
 		want := append(append([]agent.Message{}, turn1...), turn2...)
-		assertMessagesEqual(t, run.Messages, want)
+		assertMessagesEqual(t, stripStamps(t, run.Messages), want)
 		if run.ID != id || run.ParentID != "" {
 			t.Fatalf("Run identity = (%q, parent %q), want (%q, \"\")", run.ID, run.ParentID, id)
 		}
@@ -278,7 +280,7 @@ func TestGormRunStore_ForkDiverges(t *testing.T) {
 		}
 
 		forked := mustLoad(t, s, fork.RunID)
-		assertMessagesEqual(t, forked.Messages, base)
+		assertMessagesEqual(t, stripStamps(t, forked.Messages), base)
 		if forked.ParentID != id {
 			t.Fatalf("fork ParentID = %q, want %q", forked.ParentID, id)
 		}
@@ -338,7 +340,7 @@ func TestGormRunStore_ForkPreservesLongOrder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ForkRun: %v", err)
 		}
-		assertMessagesEqual(t, mustLoad(t, s, fork.RunID).Messages, want)
+		assertMessagesEqual(t, stripStamps(t, mustLoad(t, s, fork.RunID).Messages), want)
 	})
 }
 
@@ -366,4 +368,41 @@ func TestGormRunStore_SurvivesReopen(t *testing.T) {
 	if len(run.Messages) != 1 || run.Messages[0].Text != "persisted" {
 		t.Fatalf("run did not survive reopen: %+v", run.Messages)
 	}
+}
+
+func TestGormRunStore_StampsTimestamps(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, s *RunStore) {
+		ctx := context.Background()
+		id := mustCreate(t, s, "")
+
+		pre := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+		if _, err := s.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: id, Messages: []agent.Message{
+			{Role: agent.RoleUser, Text: "unstamped"},
+			{Role: agent.RoleAssistant, Text: "pre-stamped", Timestamp: pre},
+		}}); err != nil {
+			t.Fatalf("AppendMessages: %v", err)
+		}
+
+		run := mustLoad(t, s, id)
+		if run.Messages[0].Timestamp.IsZero() {
+			t.Fatal("store did not stamp the unstamped message")
+		}
+		if !run.Messages[1].Timestamp.Equal(pre) {
+			t.Fatalf("caller-set timestamp clobbered: %v, want %v", run.Messages[1].Timestamp, pre)
+		}
+	})
+}
+
+// stripStamps asserts every message got stamped, then zeroes the field
+// so the wire-form comparisons stay exact on everything else.
+func stripStamps(t *testing.T, msgs []agent.Message) []agent.Message {
+	t.Helper()
+	out := slices.Clone(msgs)
+	for i := range out {
+		if out[i].Timestamp.IsZero() {
+			t.Fatalf("message %d not stamped: %+v", i, out[i])
+		}
+		out[i].Timestamp = time.Time{}
+	}
+	return out
 }
