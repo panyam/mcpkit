@@ -337,3 +337,58 @@ func TestAppForkAtRewindsHistory(t *testing.T) {
 		t.Fatalf("fork lineage = (parent %q, forkPoint %d), want (%q, 2)", fork.Run.ParentID, fork.Run.ForkPoint, original)
 	}
 }
+
+func TestPersistingEmitRedactsTurnEndMessages(t *testing.T) {
+	ctx := context.Background()
+	store := agent.NewInMemoryRunStore()
+	created, err := store.CreateRun(ctx, agent.CreateRunRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var seen []agent.Event
+	pe := NewPersistingEmit(store, created.RunID, func(e agent.Event) { seen = append(seen, e) })
+
+	result := &agent.TurnResult{
+		Text:         "done",
+		Steps:        2,
+		FinishReason: "stop",
+		Messages: []agent.Message{
+			{Role: agent.RoleUser, Text: "hi"},
+			{Role: agent.RoleAssistant, Text: "done"},
+		},
+	}
+	pe.Emit(agent.Event{Kind: agent.EventTurnBegin})
+	pe.Emit(agent.Event{Kind: agent.EventTurnEnd, Result: result})
+	if err := pe.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	// live consumer saw the full event, and the caller's TurnResult was
+	// not mutated
+	live := seen[len(seen)-1]
+	if live.Result == nil || len(live.Result.Messages) != 2 {
+		t.Fatalf("live handler did not see full messages: %+v", live.Result)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("redaction mutated the caller's TurnResult: %+v", result.Messages)
+	}
+
+	// persisted turn-end event dropped Messages but kept the rest
+	run, _ := store.LoadRun(ctx, agent.LoadRunRequest{RunID: created.RunID})
+	var end *agent.Event
+	for i := range run.Run.Events {
+		if run.Run.Events[i].Kind == agent.EventTurnEnd {
+			end = &run.Run.Events[i]
+		}
+	}
+	if end == nil || end.Result == nil {
+		t.Fatal("no persisted turn-end event with a result")
+	}
+	if len(end.Result.Messages) != 0 {
+		t.Fatalf("persisted turn-end still carries Messages: %+v", end.Result.Messages)
+	}
+	if end.Result.Text != "done" || end.Result.Steps != 2 || end.Result.FinishReason != "stop" {
+		t.Fatalf("redaction dropped non-message fields: %+v", end.Result)
+	}
+}
