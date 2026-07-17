@@ -12,7 +12,7 @@ type EventKind string
 // Event kinds, in the order a typical turn emits them. Thinking markers wrap
 // contiguous reasoning deltas within one step; tool events may interleave
 // across parallel calls of the same step, but tool-begin always precedes its
-// call's tool-end, tool-error, or tool-denied.
+// call's tool-end, tool-error, tool-denied, or tool-cancelled.
 const (
 	EventTurnBegin     EventKind = "turn-begin"
 	EventThinkingBegin EventKind = "thinking-begin"
@@ -23,6 +23,12 @@ const (
 	EventToolEnd       EventKind = "tool-end"
 	EventToolError     EventKind = "tool-error"
 	EventToolDenied    EventKind = "tool-denied"
+	// EventToolCancelled marks a call the user cancelled mid-flight via
+	// a TurnRequest Control. Distinct from tool-error (the tool did not
+	// fail; the user stopped it) so surfaces can render an interrupt
+	// differently from a failure. Reason carries the model-visible
+	// feedback text.
+	EventToolCancelled EventKind = "tool-cancelled"
 	EventTurnEnd       EventKind = "turn-end"
 	EventError         EventKind = "error"
 )
@@ -55,10 +61,11 @@ type Event struct {
 	// not an error value, so the event crosses wires unchanged.
 	Error string `json:"error,omitempty"`
 
-	// Reason is the human-readable justification on tool-denied: why the
-	// approval policy refused the call. Distinct from Error because a
-	// denial is a policy outcome, not a dispatch failure; the call never
-	// ran, so there is no ToolResult.
+	// Reason is the human-readable justification on tool-denied (why the
+	// approval policy refused the call) and tool-cancelled (the user
+	// stopped the call). Distinct from Error because both are outcomes
+	// of someone's decision, not dispatch failures; neither carries a
+	// ToolResult.
 	Reason string `json:"reason,omitempty"`
 
 	// Result is the completed turn on turn-end.
