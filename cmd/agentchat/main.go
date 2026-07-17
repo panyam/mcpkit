@@ -79,13 +79,17 @@ func openGormDB(dial gorm.Dialector) (*gorm.DB, error) {
 	return db, nil
 }
 
-// buildToolResultStore maps --session-store to a ToolResultStore backend,
-// so offloaded blobs share the run store's backend: "" / "memory" give
-// the in-memory store (blobs die with the process), sqlite / redis /
-// postgres give restart-surviving blobs. Offloading itself is gated by
-// --offload-threshold, not this; a nil return means "use the host's
-// in-memory default".
-func buildToolResultStore(spec string) (agent.ToolResultStore, error) {
+// buildToolResultStore chooses the offload blob backend. A non-empty dir
+// wins: offloaded results become files under it, the no-server local path
+// (see agent.FileToolResultStore). Otherwise it maps --session-store so
+// blobs share the run store's backend: "" / "memory" give the in-memory
+// store (blobs die with the process), sqlite / redis / postgres give
+// restart-surviving blobs. A nil return means "use the host's in-memory
+// default".
+func buildToolResultStore(spec, dir string) (agent.ToolResultStore, error) {
+	if dir != "" {
+		return agent.NewFileToolResultStore(dir)
+	}
 	switch {
 	case spec == "" || spec == "memory":
 		return nil, nil
@@ -149,6 +153,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
 	fl.Int("offload-threshold", 0, "offload tool results at/over N bytes to a store, feeding the model a stub + read_tool_result (0 = off; blobs use --session-store's backend)")
+	fl.String("offload-dir", "", "store offloaded tool results as files under this directory (no server needed); overrides --session-store for blobs")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -206,7 +211,7 @@ func runChat(v *viper.Viper) error {
 
 	if threshold := v.GetInt("offload-threshold"); threshold > 0 {
 		cfg.Offload = &host.OffloadConfig{ThresholdBytes: threshold}
-		trStore, err := buildToolResultStore(sessionStore)
+		trStore, err := buildToolResultStore(sessionStore, v.GetString("offload-dir"))
 		if err != nil {
 			return err
 		}
