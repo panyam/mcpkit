@@ -9,31 +9,31 @@ import (
 	"github.com/panyam/mcpkit/agent"
 )
 
-// recordSurface captures the UIEvent stream so a test can assert what the
+// recordObserver captures the HostEvent stream so a test can assert what the
 // host emitted, independent of any terminal formatting — the proof that a
 // non-terminal surface (web) gets everything it needs.
-type recordSurface struct {
+type recordObserver struct {
 	mu  sync.Mutex
-	evs []UIEvent
+	evs []HostEvent
 }
 
-func (s *recordSurface) Emit(ev UIEvent) {
+func (s *recordObserver) On(ev HostEvent) {
 	s.mu.Lock()
 	s.evs = append(s.evs, ev)
 	s.mu.Unlock()
 }
 
-func (s *recordSurface) kinds() []UIKind {
+func (s *recordObserver) kinds() []HostEventKind {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]UIKind, len(s.evs))
+	out := make([]HostEventKind, len(s.evs))
 	for i, e := range s.evs {
 		out[i] = e.Kind
 	}
 	return out
 }
 
-func (s *recordSurface) has(k UIKind) bool {
+func (s *recordObserver) has(k HostEventKind) bool {
 	for _, got := range s.kinds() {
 		if got == k {
 			return true
@@ -44,10 +44,10 @@ func (s *recordSurface) has(k UIKind) bool {
 
 func TestSurface_TurnEmitsStructuredEvents(t *testing.T) {
 	ts := startTestServer(t)
-	rec := &recordSurface{}
+	rec := &recordObserver{}
 	stub := agent.NewStubProvider(agent.StubTurn{Text: "hello"})
 	app, err := NewApp(testConfig(ts.URL), nil, strings.NewReader(""),
-		WithProvider(stub), WithSurface(rec))
+		WithProvider(stub), WithObserver(rec))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,26 +58,26 @@ func TestSurface_TurnEmitsStructuredEvents(t *testing.T) {
 	}
 
 	// the turn streamed as runner events and ended with a turn-done
-	if !rec.has(UIRunnerEvent) {
+	if !rec.has(HostRunnerEvent) {
 		t.Fatalf("no runner events emitted: %v", rec.kinds())
 	}
-	if !rec.has(UITurnDone) {
+	if !rec.has(HostTurnDone) {
 		t.Fatalf("no turn-done emitted: %v", rec.kinds())
 	}
 	// the final event carries the TurnResult, not a formatted string
 	last := rec.evs[len(rec.evs)-1]
-	if last.Kind != UITurnDone || last.Result == nil || last.Result.Text != "hello" {
+	if last.Kind != HostTurnDone || last.Result == nil || last.Result.Text != "hello" {
 		t.Fatalf("turn-done payload = %+v", last)
 	}
 }
 
 func TestSurface_CommandEmitsUICommand(t *testing.T) {
 	ts := startTestServer(t)
-	rec := &recordSurface{}
+	rec := &recordObserver{}
 	cfg := testConfig(ts.URL)
 	cfg.Connections = twoConn()
 	app, err := NewApp(cfg, nil, strings.NewReader(""),
-		WithProviderBuilder(stubBuilder(t)), WithSurface(rec))
+		WithProviderBuilder(stubBuilder(t)), WithObserver(rec))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,14 +87,14 @@ func TestSurface_CommandEmitsUICommand(t *testing.T) {
 	if err := app.REPL(context.Background(), strings.NewReader("/provider\n/quit\n"), nil); err != nil {
 		t.Fatal(err)
 	}
-	var providers *UIEvent
+	var providers *HostEvent
 	for i := range rec.evs {
-		if rec.evs[i].Kind == UICommand && rec.evs[i].Command.Kind == CmdProviders {
+		if rec.evs[i].Kind == HostCommandResult && rec.evs[i].Command.Kind == CmdProviders {
 			providers = &rec.evs[i]
 		}
 	}
 	if providers == nil {
-		t.Fatalf("no UICommand/CmdProviders emitted: %v", rec.kinds())
+		t.Fatalf("no HostCommandResult/CmdProviders emitted: %v", rec.kinds())
 	}
 	if providers.Command.ActiveProvider != "local" || len(providers.Command.Providers) != 2 {
 		t.Fatalf("provider command payload = %+v", providers.Command)
@@ -102,7 +102,7 @@ func TestSurface_CommandEmitsUICommand(t *testing.T) {
 }
 
 // TestSurface_DefaultRendererStillFormats pins that the default terminal
-// path is unchanged: with no WithSurface, output still lands on the writer.
+// path is unchanged: with no WithObserver, output still lands on the writer.
 func TestSurface_DefaultRendererStillFormats(t *testing.T) {
 	ts := startTestServer(t)
 	var out strings.Builder
@@ -117,5 +117,26 @@ func TestSurface_DefaultRendererStillFormats(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "world") || !strings.Contains(out.String(), "step(s)") {
 		t.Fatalf("default renderer did not format the turn:\n%s", out.String())
+	}
+}
+
+// TestObserver_FanOutToMany pins that events reach every registered
+// observer — the reason these are HostEvents, not UI events: a renderer
+// and a tracer (here two recorders) both see the stream.
+func TestObserver_FanOutToMany(t *testing.T) {
+	ts := startTestServer(t)
+	a, b := &recordObserver{}, &recordObserver{}
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "hi"})
+	app, err := NewApp(testConfig(ts.URL), nil, strings.NewReader(""),
+		WithProvider(stub), WithObserver(a), WithObserver(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	if err := app.RunTurn(context.Background(), "go"); err != nil {
+		t.Fatal(err)
+	}
+	if !a.has(HostTurnDone) || !b.has(HostTurnDone) {
+		t.Fatalf("both observers should see turn-done: a=%v b=%v", a.kinds(), b.kinds())
 	}
 }

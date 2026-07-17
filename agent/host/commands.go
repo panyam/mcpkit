@@ -40,7 +40,7 @@ const (
 // command. Only the fields for the result's Kind are set. Keeping command
 // output as data — not io.Writer prints — is what lets every surface reuse
 // one command set (the web-version unlock; see the render-seam follow-up
-// issue 992, which folds these into the unified UIEvent stream).
+// issue 992, which folds these into the unified HostEvent stream).
 type CmdResult struct {
 	Kind    CmdKind
 	Message string
