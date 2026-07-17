@@ -183,6 +183,30 @@ func TestNoErrorCatchesDispatchError(t *testing.T) {
 	}
 }
 
+func TestNotDeniedCatchesDenialButNoErrorIgnoresIt(t *testing.T) {
+	// A tool-denied transcript: the approval policy blocked "deploy". The Runner
+	// emits tool-begin then tool-denied (no tool-end, no error).
+	denied := Result{Events: []agent.Event{
+		{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "deploy"}},
+		{Kind: agent.EventToolDenied, ToolCall: &agent.ToolCall{Name: "deploy"}, Reason: "declined by user"},
+	}}
+	if s := NotDenied().Score(denied); s.Pass {
+		t.Fatalf("NotDenied must fail when a tool was blocked: %+v", s)
+	}
+	if d := NotDenied().Score(denied).Detail; !strings.Contains(d, "deploy") || !strings.Contains(d, "declined by user") {
+		t.Fatalf("detail should name the denied tool and reason: %q", d)
+	}
+	// The crux: a denial is a policy outcome, not an error, so NoError ignores it.
+	if s := NoError().Score(denied); !s.Pass {
+		t.Fatalf("NoError must not treat a policy denial as an error: %+v", s)
+	}
+
+	clean := Result{Events: []agent.Event{{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "read"}}}}
+	if s := NotDenied().Score(clean); !s.Pass {
+		t.Fatalf("NotDenied must pass when nothing was denied: %+v", s)
+	}
+}
+
 func TestSuiteAggregate(t *testing.T) {
 	src := lookupSource(t)
 	// Two cases x two scorers. Case A passes both; case B fails ExactMatch.
