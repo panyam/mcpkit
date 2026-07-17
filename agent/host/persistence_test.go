@@ -141,7 +141,7 @@ func TestAppForkDiverges(t *testing.T) {
 	}
 	original := app.RunID()
 
-	forkID, err := app.Fork(ctx, "")
+	forkID, err := app.Fork(ctx, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestAppForkWithoutRunErrors(t *testing.T) {
 	stub := agent.NewStubProvider()
 	var out strings.Builder
 	app := newPersistedApp(t, store, stub, &out)
-	if _, err := app.Fork(context.Background(), ""); err == nil {
+	if _, err := app.Fork(context.Background(), "", 0); err == nil {
 		t.Fatal("Fork with no active run succeeded, want error")
 	}
 }
@@ -245,7 +245,7 @@ func TestAppWithoutStoreSessionMethodsError(t *testing.T) {
 	if err := app.AttachRun(ctx, "x"); err == nil {
 		t.Fatal("AttachRun without store succeeded")
 	}
-	if _, err := app.Fork(ctx, ""); err == nil {
+	if _, err := app.Fork(ctx, "", 0); err == nil {
 		t.Fatal("Fork without store succeeded")
 	}
 	if got := app.RunID(); got != "" {
@@ -288,5 +288,52 @@ func TestPersistingEmitFlush(t *testing.T) {
 	missing.Emit(agent.Event{Kind: agent.EventTurnBegin})
 	if err := missing.Flush(ctx); err == nil {
 		t.Fatal("Flush against a missing run succeeded, want error")
+	}
+}
+
+func TestAppForkAtRewindsHistory(t *testing.T) {
+	ctx := context.Background()
+	store := agent.NewInMemoryRunStore()
+	stub := agent.NewStubProvider(
+		agent.StubTurn{Text: "first answer"},
+		agent.StubTurn{Text: "second answer"},
+		agent.StubTurn{Text: "divergent answer"},
+	)
+	var out strings.Builder
+	app := newPersistedApp(t, store, stub, &out)
+	if err := app.RunTurn(ctx, "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.RunTurn(ctx, "two"); err != nil {
+		t.Fatal(err)
+	}
+	original := app.RunID()
+
+	forkID, err := app.Fork(ctx, "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(app.history) != 2 {
+		t.Fatalf("Fork at 2 left history at %d messages, want rewind to 2: %+v", len(app.history), app.history)
+	}
+	if err := app.RunTurn(ctx, "diverge"); err != nil {
+		t.Fatal(err)
+	}
+
+	req := stub.Requests()[2].Messages
+	if len(req) != 3 || req[0].Text != "one" || req[1].Text != "first answer" || req[2].Text != "diverge" {
+		t.Fatalf("post-rewind model request = %+v, want first turn + diverge", req)
+	}
+
+	orig, _ := store.LoadRun(ctx, agent.LoadRunRequest{RunID: original})
+	if len(orig.Run.Messages) != 4 {
+		t.Fatalf("original run mutated by fork-at: %d messages, want 4", len(orig.Run.Messages))
+	}
+	fork, _ := store.LoadRun(ctx, agent.LoadRunRequest{RunID: forkID})
+	if len(fork.Run.Messages) != 4 || fork.Run.Messages[2].Text != "diverge" {
+		t.Fatalf("fork run = %+v, want 2 copied + 2 divergent", fork.Run.Messages)
+	}
+	if fork.Run.ForkPoint != 2 || fork.Run.ParentID != original {
+		t.Fatalf("fork lineage = (parent %q, forkPoint %d), want (%q, 2)", fork.Run.ParentID, fork.Run.ForkPoint, original)
 	}
 }

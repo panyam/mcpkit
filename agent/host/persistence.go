@@ -75,10 +75,14 @@ func (a *App) resumeLocked(ctx context.Context, runID string) error {
 }
 
 // Fork copies the current run's log into a new run (newRunID empty asks
-// the store to generate one) and switches the session to the copy: the
-// in-memory history is already the shared prefix, so the fork diverges
-// from the next turn on while the original run stays untouched.
-func (a *App) Fork(ctx context.Context, newRunID string) (string, error) {
+// the store to generate one) and switches the session to the copy,
+// which diverges from the next turn on while the original stays
+// untouched. atMessage positive forks from an earlier point — only the
+// first atMessage messages carry over (checkpoint/rewind), and the
+// in-memory history rewinds to match by reloading the fork; zero or
+// negative forks the whole log, and history is already the shared
+// prefix so no reload is needed.
+func (a *App) Fork(ctx context.Context, newRunID string, atMessage int) (string, error) {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 	if a.store == nil {
@@ -87,7 +91,7 @@ func (a *App) Fork(ctx context.Context, newRunID string) (string, error) {
 	if a.runID == "" {
 		return "", fmt.Errorf("host: no active run to fork (run at least one turn first)")
 	}
-	resp, err := a.store.ForkRun(ctx, agent.ForkRunRequest{RunID: a.runID, NewRunID: newRunID})
+	resp, err := a.store.ForkRun(ctx, agent.ForkRunRequest{RunID: a.runID, NewRunID: newRunID, AtMessage: atMessage})
 	if err != nil {
 		return "", fmt.Errorf("host: forking run %q: %w", a.runID, err)
 	}
@@ -96,6 +100,9 @@ func (a *App) Fork(ctx context.Context, newRunID string) (string, error) {
 	}
 	if !resp.Created {
 		return "", fmt.Errorf("host: run %q already exists", newRunID)
+	}
+	if atMessage > 0 {
+		return resp.RunID, a.resumeLocked(ctx, resp.RunID)
 	}
 	a.runID = resp.RunID
 	return resp.RunID, nil

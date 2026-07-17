@@ -59,6 +59,15 @@ type Run struct {
 	// created directly.
 	ParentID string `json:"parentId,omitempty"`
 
+	// ForkPoint is the number of ParentID's messages this run was
+	// forked with — the fork position as a backend-neutral message
+	// count (never a timestamp: the fork's wall-clock moment is this
+	// run's CreatedAt; never a storage sequence value either). Zero for
+	// runs created directly. Lineage metadata for surfaces (rewind
+	// pickers, history UIs): nothing reconstructs history from it,
+	// since every run owns its full copy.
+	ForkPoint int `json:"forkPoint,omitempty"`
+
 	CreatedAt time.Time `json:"createdAt"`
 
 	Messages []Message `json:"messages"`
@@ -148,16 +157,32 @@ type LoadRunResponse struct {
 type ForkRunRequest struct {
 	RunID    string
 	NewRunID string
+
+	// AtMessage forks from an earlier point: a positive value copies
+	// only the first AtMessage messages (checkpoint/rewind semantics);
+	// zero or negative copies everything, today's behavior. A value at
+	// or beyond the source's length clamps to a full copy. The source's
+	// length is observed when the fork starts; appends racing the fork
+	// land after the cut.
+	//
+	// Event-log handling: the audit stream is not sliceable by message
+	// index, so a partial fork copies NO events — only a full copy
+	// carries the event log across. The fork's message log is complete
+	// either way, which is all resume needs.
+	AtMessage int
 }
 
 // ForkRunResponse identifies the fork. Found is false when the source
 // run does not exist; Created is false when NewRunID was claimed and
-// already existed (no copy happens). On success both are true and RunID
-// names the new run, whose ParentID records the lineage.
+// already existed (no copy happens). On success both are true, RunID
+// names the new run (ParentID records the lineage), and ForkPoint is
+// the message count actually copied — the resolved fork position after
+// clamping, also persisted on the fork's Run.
 type ForkRunResponse struct {
-	RunID   string
-	Found   bool
-	Created bool
+	RunID     string
+	Found     bool
+	Created   bool
+	ForkPoint int
 }
 
 // InMemoryRunStore is the default RunStore: a mutex-guarded map, useful
@@ -175,6 +200,7 @@ type InMemoryRunStore struct {
 // instead of parallel same-keyed maps).
 type runEntry struct {
 	parentID  string
+	forkPoint int
 	createdAt time.Time
 	messages  []Message
 	events    []Event
@@ -247,6 +273,7 @@ func (s *InMemoryRunStore) LoadRun(ctx context.Context, req LoadRunRequest) (Loa
 		Run: Run{
 			ID:        req.RunID,
 			ParentID:  e.parentID,
+			ForkPoint: e.forkPoint,
 			CreatedAt: e.createdAt,
 			Messages:  slices.Clone(e.messages),
 			Events:    slices.Clone(e.events),
@@ -256,7 +283,8 @@ func (s *InMemoryRunStore) LoadRun(ctx context.Context, req LoadRunRequest) (Loa
 }
 
 // ForkRun implements RunStore. The fork gets cloned logs, so parent and
-// fork diverge independently after the copy.
+// fork diverge independently after the copy; see ForkRunRequest for the
+// AtMessage cut and event-log semantics.
 func (s *InMemoryRunStore) ForkRun(ctx context.Context, req ForkRunRequest) (ForkRunResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -271,11 +299,20 @@ func (s *InMemoryRunStore) ForkRun(ctx context.Context, req ForkRunRequest) (For
 	} else if _, exists := s.runs[id]; exists {
 		return ForkRunResponse{RunID: id, Found: true, Created: false}, nil
 	}
+	n := len(src.messages)
+	if req.AtMessage > 0 && req.AtMessage < n {
+		n = req.AtMessage
+	}
+	var events []Event
+	if n == len(src.messages) {
+		events = slices.Clone(src.events)
+	}
 	s.runs[id] = &runEntry{
 		parentID:  req.RunID,
+		forkPoint: n,
 		createdAt: time.Now(),
-		messages:  slices.Clone(src.messages),
-		events:    slices.Clone(src.events),
+		messages:  slices.Clone(src.messages[:n]),
+		events:    events,
 	}
-	return ForkRunResponse{RunID: id, Found: true, Created: true}, nil
+	return ForkRunResponse{RunID: id, Found: true, Created: true, ForkPoint: n}, nil
 }
