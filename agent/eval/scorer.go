@@ -128,3 +128,24 @@ func NoError() Scorer {
 		return boolScore("NoError", true, "no run, dispatch, or tool errors")
 	})
 }
+
+// NotDenied passes when no tool call was blocked by an approval policy. A
+// denial is deliberately not an error (the Runner emits a distinct tool-denied
+// event, not tool-error), so NoError ignores it; this scorer is the separate
+// check for evals that assert the model never attempted a gated tool. Compose
+// with NoError when a case must be both clean and unblocked.
+func NotDenied() Scorer {
+	return scorerFunc(func(r Result) Score {
+		for _, e := range r.Events {
+			if e.Kind == agent.EventToolDenied {
+				name := ""
+				if e.ToolCall != nil {
+					name = e.ToolCall.Name
+				}
+				return boolScore("NotDenied", false,
+					fmt.Sprintf("tool %q denied: %s", name, e.Reason))
+			}
+		}
+		return boolScore("NotDenied", true, "no tool calls were denied")
+	})
+}
