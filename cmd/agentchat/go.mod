@@ -18,9 +18,22 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/log v0.20.0
 	go.opentelemetry.io/otel/trace v1.44.0
+	gorm.io/driver/postgres v1.6.0
+	gorm.io/driver/sqlite v1.6.0
+	gorm.io/gorm v1.31.1
 )
 
-require github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+require (
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.6.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+)
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -43,6 +56,7 @@ require (
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/mcpkit/agent v0.0.0
+	github.com/panyam/mcpkit/agent/store/gorm v0.0.0
 	github.com/panyam/mcpkit/agent/store/redis v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
@@ -100,3 +114,5 @@ replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
 replace github.com/panyam/mcpkit/agent/host => ../../agent/host
 
 replace github.com/panyam/mcpkit/agent/store/redis => ../../agent/store/redis
+
+replace github.com/panyam/mcpkit/agent/store/gorm => ../../agent/store/gorm
