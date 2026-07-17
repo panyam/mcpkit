@@ -6,6 +6,7 @@ require (
 	github.com/panyam/mcpkit v0.4.0-b2
 	github.com/panyam/mcpkit/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.3.1
+	github.com/redis/go-redis/v9 v9.7.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
@@ -18,6 +19,8 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.20.0
 	go.opentelemetry.io/otel/trace v1.44.0
 )
+
+require github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
@@ -39,7 +42,8 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/mcpkit/agent v0.0.0 // indirect
+	github.com/panyam/mcpkit/agent v0.0.0
+	github.com/panyam/mcpkit/agent/store/redis v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
@@ -94,3 +98,5 @@ replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../exp
 replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
 
 replace github.com/panyam/mcpkit/agent/host => ../../agent/host
+
+replace github.com/panyam/mcpkit/agent/store/redis => ../../agent/store/redis

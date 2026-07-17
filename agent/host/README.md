@@ -34,6 +34,14 @@ stay out of the lean `agent/` module.
   `OpenAIProvider` for a real model).
 - `WithTracerProvider(tp)` — SEP-414 tracing.
 - `WithLogger(l)` — structured logging.
+- `WithRunStore(store)` — session persistence. Every completed turn's messages
+  and event stream append to a run in the store (`agent.NewInMemoryRunStore`
+  for in-process resume/fork, `agent/store/redis` for restart-surviving
+  sessions). `App.AttachRun` names or resumes a session at startup;
+  `App.Resume` and `App.Fork` switch runs mid-session (`/resume <id>`,
+  `/fork [id]`, `/session` in the REPL). A failed or cancelled turn persists
+  nothing; persistence failures degrade to a rendered warning, never a turn
+  failure.
 
 ## Testing
 
