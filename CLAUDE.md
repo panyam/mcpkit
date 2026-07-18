@@ -150,7 +150,7 @@ Module-specific gotchas live in their READMEs.
 
 ## Conformance
 
-Server 30/30, Auth 14/14, Apps 21, Tasks v1 26/27 (1 skip — v1 task-sampling push not dispatched by the 2.0 SDK client; sampling is SEP-2577 deprecated), Tasks v2 47/47 (SEP-2663, upstream), MRTR 3/3 negative (SEP-2322, upstream), List-TTL 5/5 (SEP-2549), File-Inputs 7/7 (SEP-2356), Stateless 30/30 (SEP-2575; upstream `modelcontextprotocol/conformance#376` fixed the former array-vs-object `requiredCapabilities` test that mcpkit had always been correct on), Keycloak 12/12, testall 9/9 logical stages. Tasks v2, MRTR, and SEP-2575 stateless all run against [`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance) `main` directly (merged upstream; no fork needed). See CAPABILITIES.md `mcp-tasks-v2-conformance` and `mcp-stateless-wire`.
+Server 30/30, Auth 14/14, Apps 21, Tasks v1 26/27 (1 skip — v1 task-sampling push not dispatched by the 2.0 SDK client; sampling is SEP-2577 deprecated), Tasks v2 47/47 (SEP-2663, upstream), MRTR 3/3 negative (SEP-2322, upstream), List-TTL 5/5 (SEP-2549), File-Inputs 7/7 (SEP-2356), Stateless 30/30 (SEP-2575; upstream `modelcontextprotocol/conformance#376` fixed the former array-vs-object `requiredCapabilities` test that mcpkit had always been correct on), Keycloak 12/12, testall 9/9 logical stages. Tasks v2, MRTR, and SEP-2575 stateless all run against [`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance) `main` directly (merged upstream; no fork needed). See CONFORMANCE.md for the full per-suite breakdown.
 
 ## Tasks v1 vs v2
 

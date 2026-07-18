@@ -57,10 +57,6 @@
     ]
   },
   {
-    "name": "Capabilities",
-    "url": "capabilities/"
-  },
-  {
     "name": "Packages",
     "url": "packages/core/",
     "children": [
