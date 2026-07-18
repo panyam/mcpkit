@@ -152,6 +152,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
+	fl.String("ui", "auto", "interface: auto (TUI when interactive) | tui | plain")
 	fl.Int("offload-threshold", 0, "offload tool results at/over N bytes to a store, feeding the model a stub + read_tool_result (0 = off; blobs use --session-store's backend)")
 	fl.String("offload-dir", "", "store offloaded tool results as files under this directory (no server needed); overrides --session-store for blobs")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
@@ -200,6 +201,12 @@ func runChat(v *viper.Viper) error {
 		host.WithTracerProvider(tp),
 		host.WithLogger(logger),
 	}
+	tuiMode := wantTUI(v.GetString("ui"))
+	var surface *tuiObserver
+	if tuiMode {
+		surface = newTUIObserver()
+		appOpts = append(appOpts, host.WithObserver(surface))
+	}
 	sessionStore := v.GetString("session-store")
 	store, err := buildRunStore(sessionStore)
 	if err != nil {
@@ -234,6 +241,10 @@ func runChat(v *viper.Viper) error {
 			return err
 		}
 		fmt.Printf("agentchat: session %s\n", session)
+	}
+
+	if tuiMode {
+		return runTUI(app, surface)
 	}
 
 	fmt.Printf("agentchat: %d server(s), model %s. /tools /history /quit; Ctrl-C cancels a turn.\n", len(cfg.Servers), cfg.Model.Model)
