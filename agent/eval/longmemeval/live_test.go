@@ -44,7 +44,7 @@ func TestLiveLongMemEval(t *testing.T) {
 	ctx := context.Background()
 
 	var passed, total int
-	for _, c := range Cases() {
+	for _, c := range SmokeScenarios() {
 		cfg := agent.RunnerConfig{Provider: provider}
 		if c.CompactTokens > 0 {
 			// The compaction case runs under a low budget so the early turns
