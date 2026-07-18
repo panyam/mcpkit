@@ -62,6 +62,24 @@ type Config struct {
 	// supplied by the surface via WithToolResultStore (in-memory when
 	// omitted), the same split as WithRunStore.
 	Offload *OffloadConfig `json:"offload,omitempty"`
+
+	// Memory enables model-managed working memory: a remember/recall/forget
+	// scratchpad the model reads and writes across turns. Nil means off.
+	// The backing MemoryStore is supplied by the surface via
+	// WithMemoryStore (in-memory when omitted), the same split as
+	// WithRunStore and WithToolResultStore.
+	Memory *MemoryConfig `json:"memory,omitempty"`
+}
+
+// MemoryConfig is the host's view of working memory. Its presence enables
+// the MemorySource; the fields tune how memory reaches the turn.
+type MemoryConfig struct {
+	// InjectSummary, when true, prepends a summary of the current
+	// scratchpad as a RoleSystem message before each turn, so the model
+	// stays aware of what it saved without a recall call. It costs tokens
+	// proportional to the scratchpad size, so it is opt-in; when false the
+	// model still reaches memory through the recall tool on demand.
+	InjectSummary bool `json:"injectSummary,omitempty"`
 }
 
 // OffloadConfig is the host's view of tool-result offloading; it maps to

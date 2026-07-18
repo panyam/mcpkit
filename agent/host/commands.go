@@ -174,6 +174,21 @@ func (a *App) registerBuiltinCommands() {
 			return CmdResult{Kind: CmdHistory, Messages: a.history}, nil
 		}})
 
+	r.Register(&Command{Name: "memory", Help: "show working memory (the model's remember/recall scratchpad)",
+		Run: func(ctx context.Context, _ string) (CmdResult, error) {
+			if a.memory == nil {
+				return msg("working memory is off (enable with Config.Memory)")
+			}
+			summary, err := a.memory.Summary(ctx)
+			if err != nil {
+				return CmdResult{}, err
+			}
+			if summary == "" {
+				return msg("working memory is empty")
+			}
+			return msg(summary)
+		}})
+
 	r.Register(&Command{Name: "health", Help: "show model failover state",
 		Run: func(context.Context, string) (CmdResult, error) {
 			return CmdResult{Kind: CmdHealth, Failover: a.failover}, nil
