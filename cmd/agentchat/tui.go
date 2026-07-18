@@ -9,26 +9,33 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/panyam/mcpkit/agent/host"
 )
 
-// transcriptMsg carries the freshly formatted scrollback (the whole
-// transcript so far) from the surface goroutine into the model.
-type transcriptMsg string
+// liveMsg carries the current uncommitted turn segment (streaming text +
+// tool lines) into the model's live region above the input.
+type liveMsg string
+
+// commitMsg carries a finished segment to commit into the terminal's own
+// scrollback (via tea.Println), so it persists past exit, scrolls
+// natively, and is copy/paste-able.
+type commitMsg string
 
 // turnDoneMsg re-enables input after a dispatched command or a turn
 // finishes on its goroutine.
 type turnDoneMsg struct{}
 
-// tuiObserver is the host.Observer the App renders through in TUI mode. It
-// forwards each UIEvent to the built-in terminal renderer (writing to a
-// buffer, so all formatting is reused) and pushes the accumulated
-// transcript into the bubbletea program. UIPrompt is dropped — the
-// textarea is the prompt.
+// tuiObserver is the host.Observer the App renders through in inline TUI
+// mode. It forwards each HostEvent to the built-in terminal renderer
+// (writing to a buffer, so all formatting is reused), then either streams
+// the growing turn into the model's live region or commits a finished
+// segment to the terminal scrollback. Inline (no alt-screen) keeps the
+// transcript in the real terminal buffer: native scroll, copy/paste, and
+// it survives exit. HostRunnerEvent accumulates live; every other event
+// closes a segment and commits.
 type tuiObserver struct {
 	mu   sync.Mutex
 	buf  *bytes.Buffer
@@ -41,31 +48,48 @@ func newTUIObserver() *tuiObserver {
 	return &tuiObserver{buf: buf, term: host.NewTerminalRenderer(buf)}
 }
 
+// isBoundary reports whether an event closes a scrollback segment. Every
+// discrete event commits immediately; only the streaming turn
+// (HostRunnerEvent) accumulates live until a non-runner event closes it.
+func isBoundary(k host.HostEventKind) bool {
+	return k != host.HostRunnerEvent
+}
+
 func (s *tuiObserver) On(ev host.HostEvent) {
 	s.mu.Lock()
 	s.term.On(ev)
-	content := s.buf.String()
+	segment := s.buf.String()
+	boundary := isBoundary(ev.Kind)
+	if boundary {
+		s.buf.Reset()
+	}
 	prog := s.prog
 	s.mu.Unlock()
-	if prog != nil {
-		prog.Send(transcriptMsg(content))
+	if prog == nil {
+		return
+	}
+	if boundary {
+		prog.Send(commitMsg(segment))
+	} else {
+		prog.Send(liveMsg(segment))
 	}
 }
 
-// tuiModel is the bubbletea Model: a scrollback viewport over the
-// transcript plus an editable input, with slash-command tab-completion
-// and up/down history recall. All behavior routes through the App
-// (Dispatch / RunTurn); the model is pure presentation.
+// tuiModel is the inline bubbletea Model: an editable input at the bottom
+// (bubbles textarea) with up/down history and slash-command tab
+// completion, plus a live region showing the in-flight turn. Finished
+// segments commit to the terminal's own scrollback, not a managed
+// viewport, so the terminal's native scroll and selection work. All
+// behavior routes through the App (Dispatch / RunTurn); the model is pure
+// presentation.
 type tuiModel struct {
 	app     *host.App
 	surface *tuiObserver
 	ta      textarea.Model
-	vp      viewport.Model
 	history []string
 	histIdx int // len(history) == "not navigating"
 	running bool
-	ready   bool
-	status  string
+	pending string
 }
 
 func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
@@ -73,9 +97,9 @@ func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
 	ta.Placeholder = "message, or /command (Tab completes, ↑↓ history)"
 	ta.Prompt = "› "
 	ta.ShowLineNumbers = false
-	ta.SetHeight(3)
+	ta.SetHeight(2)
 	ta.Focus()
-	m := tuiModel{app: app, surface: surface, ta: ta, status: "ready"}
+	m := tuiModel{app: app, surface: surface, ta: ta}
 	m.histIdx = 0
 	return m
 }
@@ -83,28 +107,25 @@ func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
 func (m tuiModel) Init() tea.Cmd { return textarea.Blink }
 
 func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		inputH := 4
-		if !m.ready {
-			m.vp = viewport.New(msg.Width, msg.Height-inputH)
-			m.ready = true
-		} else {
-			m.vp.Width = msg.Width
-			m.vp.Height = msg.Height - inputH
-		}
 		m.ta.SetWidth(msg.Width)
 		return m, nil
 
-	case transcriptMsg:
-		m.vp.SetContent(string(msg))
-		m.vp.GotoBottom()
+	case liveMsg:
+		m.pending = string(msg)
 		return m, nil
+
+	case commitMsg:
+		m.pending = ""
+		text := strings.TrimRight(string(msg), "\n")
+		if text == "" {
+			return m, nil
+		}
+		return m, tea.Println(text)
 
 	case turnDoneMsg:
 		m.running = false
-		m.status = "ready"
 		return m, nil
 
 	case tea.KeyMsg:
@@ -136,28 +157,35 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	// input + viewport get the rest (scrolling, editing, cursor motion)
-	var tcmd, vcmd tea.Cmd
-	m.ta, tcmd = m.ta.Update(msg)
-	m.vp, vcmd = m.vp.Update(msg)
-	cmds = append(cmds, tcmd, vcmd)
-	return m, tea.Batch(cmds...)
+	// the input gets the rest (editing, cursor motion)
+	var cmd tea.Cmd
+	m.ta, cmd = m.ta.Update(msg)
+	return m, cmd
 }
 
 func (m tuiModel) View() string {
-	if !m.ready {
-		return "starting…"
+	// Only the live region + input are managed; the committed transcript
+	// lives in the terminal's own scrollback above this frame.
+	var b strings.Builder
+	if m.pending != "" {
+		b.WriteString(strings.TrimRight(m.pending, "\n"))
+		b.WriteString("\n")
 	}
-	status := lipgloss.NewStyle().Faint(true).Render(m.status)
-	return m.vp.View() + "\n" + status + "\n" + m.ta.View()
+	status := "ready"
+	if m.running {
+		status = "working…"
+	}
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render(status))
+	b.WriteString("\n")
+	b.WriteString(m.ta.View())
+	return b.String()
 }
 
 // submit routes a line to a command dispatch or a conversational turn,
 // both on a goroutine so the UI stays responsive; the surface streams
-// results back as transcriptMsg and the goroutine ends with turnDoneMsg.
+// segments back and the goroutine ends with turnDoneMsg.
 func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 	m.running = true
-	m.status = "working…"
 	app, surface := m.app, m.surface
 	ctx := context.Background()
 	if strings.HasPrefix(line, "/") {
@@ -253,11 +281,12 @@ func wantTUI(mode string) bool {
 	}
 }
 
-// runTUI starts the bubbletea program: the alt-screen scrollback UI over
-// the App. The surface is wired to the program so host UIEvents stream in
-// as the model renders.
+// runTUI starts the inline bubbletea program (no alt-screen): the input
+// and the live turn render at the bottom while finished segments commit to
+// the terminal's own scrollback. The surface is wired to the program so
+// host events stream in as the model renders.
 func runTUI(app *host.App, surface *tuiObserver) error {
-	prog := tea.NewProgram(newTUIModel(app, surface), tea.WithAltScreen())
+	prog := tea.NewProgram(newTUIModel(app, surface))
 	surface.prog = prog
 	_, err := prog.Run()
 	return err
