@@ -122,10 +122,58 @@ func toolMsgByID(t *testing.T, msgs []agent.Message, id string) agent.Message {
 }
 
 func hasSystemContaining(msgs []agent.Message, sub string) bool {
+	return countSystemContaining(msgs, sub) > 0
+}
+
+func countSystemContaining(msgs []agent.Message, sub string) int {
+	n := 0
 	for _, m := range msgs {
 		if m.Role == agent.RoleSystem && strings.Contains(m.Text, sub) {
-			return true
+			n++
 		}
 	}
-	return false
+	return n
+}
+
+// TestMemorySummaryIsTransient proves the injected summary never lands in the
+// persistent history and never accumulates: over three turns with a fact
+// remembered on turn 1, a.history holds zero summaries and every later turn's
+// model request carries exactly one (not a growing stack).
+func TestMemorySummaryIsTransient(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(
+		// turn 1: remember, then reply
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{
+			ID: "c1", Name: agent.RememberToolName,
+			Args: core.NewRawJSON(json.RawMessage(`{"key":"lang","value":"Go"}`)),
+		}}},
+		agent.StubTurn{Text: "saved"},
+		// turns 2 and 3: plain replies — each should see exactly one summary
+		agent.StubTurn{Text: "reply2"},
+		agent.StubTurn{Text: "reply3"},
+	)
+	var out strings.Builder
+	app, err := NewApp(memoryConfig(ts.URL, true), &out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	for _, in := range []string{"remember Go", "and?", "still there?"} {
+		if err := app.RunTurn(context.Background(), in); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	const marker = "Working memory"
+	// the durable history never carries a summary
+	if n := countSystemContaining(app.history, marker); n != 0 {
+		t.Fatalf("a.history holds %d summary messages, want 0 (must be transient)", n)
+	}
+	// turns 2 and 3 (requests[2], [3]) each carry exactly one — no accumulation
+	for _, i := range []int{2, 3} {
+		if n := countSystemContaining(stub.Requests()[i].Messages, marker); n != 1 {
+			t.Fatalf("request[%d] carried %d summaries, want exactly 1", i, n)
+		}
+	}
 }
