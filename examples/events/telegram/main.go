@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # telegram-events server on :8080
-//	Terminal 2:  make demo          # demokit walkthrough (--tui for the TUI)
+//	Terminal 1:  just serve         # telegram-events server on :8080
+//	Terminal 2:  just demo          # demokit walkthrough (--tui for the TUI)
 //
 // Without --serve, the binary runs the walkthrough against a server it
 // expects at --url (default http://localhost:8080). Use --readme to
@@ -90,7 +90,7 @@ func serve() {
 	// main.go — if OAUTH_ISSUER is set, wire real OIDC auth and
 	// follow the spec strictly (anonymous webhook subscribes
 	// rejected with -32012 per §"Subscription Identity" L361).
-	// Otherwise fall back to the demo escape hatch so `make demo`
+	// Otherwise fall back to the demo escape hatch so `just demo`
 	// works without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
 	srvOpts = append(srvOpts, server.WithSubscriptions())

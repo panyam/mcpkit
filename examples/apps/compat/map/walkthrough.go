@@ -11,7 +11,7 @@ import (
 )
 
 // runDemo is the map walkthrough. Acts as a scripted MCP host against
-// a server started by `make serve` in another terminal.
+// a server started by `just serve` in another terminal.
 //
 // Walks six steps:
 //
@@ -40,21 +40,21 @@ func runDemo() {
 
 	demo := demokit.New("map — CesiumJS globe over MCP Apps").
 		Dir("map").
-		Description("Walks the show-map + geocode round trip end-to-end as a scripted MCP client: initialize, tools/list, resources/read (CSP allowlist verified), tools/call show-map, tools/call geocode (live OSM Nominatim hit), and the chained geocode → show-map call a model would make. The fixture mirrors upstream's map-server example: CesiumJS-backed iframe, per-content `_meta.ui.csp.connectDomains` + `resourceDomains` for cesium.com and *.openstreetmap.org, OSM Nominatim geocoding with 1.1s rate-limit. Run `make serve` in another terminal first.").
+		Description("Walks the show-map + geocode round trip end-to-end as a scripted MCP client: initialize, tools/list, resources/read (CSP allowlist verified), tools/call show-map, tools/call geocode (live OSM Nominatim hit), and the chained geocode → show-map call a model would make. The fixture mirrors upstream's map-server example: CesiumJS-backed iframe, per-content `_meta.ui.csp.connectDomains` + `resourceDomains` for cesium.com and *.openstreetmap.org, OSM Nominatim geocoding with 1.1s rate-limit. Run `just serve` in another terminal first.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "mcpkit-Go fixture (make serve)"),
+			demokit.Actor("Server", "mcpkit-Go fixture (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # mcpkit-Go fixture on :3101",
-		"Terminal 2:  make demo          # this walkthrough (--tui for interactive TUI)",
+		"Terminal 1:  just serve         # mcpkit-Go fixture on :3101",
+		"Terminal 2:  just demo          # this walkthrough (--tui for interactive TUI)",
 		"```",
 		"",
-		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=map` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
+		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `just demo-app EXAMPLE=map` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
 	)
 
 	var c *client.Client
@@ -88,7 +88,7 @@ if err := c.Connect(); err != nil {
 			core.ClientInfo{Name: "map-host", Version: "1.0"},
 		)
 		if err := c.Connect(); err != nil {
-			fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
 		fmt.Printf("    connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)

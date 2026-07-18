@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # MCP server on :8080 with WithListTTLMs(60000)
-//	Terminal 2:  make demo          # demokit walkthrough (or `make demo --tui`)
+//	Terminal 1:  just serve         # MCP server on :8080 with WithListTTLMs(60000)
+//	Terminal 2:  just demo          # demokit walkthrough (or `just demo --tui`)
 //
 // The server is a real MCP server — any host can connect to it (Claude
 // Desktop, MCPJam, VS Code) and observe the SEP-2549 `ttlMs` and

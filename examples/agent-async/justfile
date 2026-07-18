@@ -1,0 +1,28 @@
+# agent-async — an agent managing async work (events + tasks) through chat.
+
+# Show available recipes
+default:
+    @just --list --unsorted
+
+# Run the deterministic scripted scenario (no LLM)
+agent:
+    go run .
+
+# Run against a live model (MODEL=<name> [BASE_URL=<url>])
+demo MODEL="" BASE_URL="":
+    #!/usr/bin/env bash
+    set -eu
+    if [ -n "{{MODEL}}" ]; then
+        if [ -n "{{BASE_URL}}" ]; then
+            go run . --model {{MODEL}} --base-url {{BASE_URL}}
+        else
+            go run . --model {{MODEL}}
+        fi
+    else
+        echo "Error: MODEL is required" >&2
+        exit 1
+    fi
+
+# Run the golden-transcript test
+test:
+    go test ./... -count=1

@@ -1,0 +1,13 @@
+# Start the stateless-demo server (default :8080, pure stateless wire)
+serve:
+    go run . --serve
+
+# Start the server in Dual mode (legacy + stateless on one URL)
+serve-dual:
+    go run . --serve --mode=dual
+
+# Build the binary
+build:
+    go build -o stateless-demo .
+
+default: serve

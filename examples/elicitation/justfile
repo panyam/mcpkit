@@ -1,0 +1,21 @@
+# Run the demo interactively
+demo:
+    go run . --tui
+
+# Run the walkthrough in notebook mode (Bubble Tea cells)
+note:
+    go run . --note
+
+# Start the MCP server standalone (for MCPJam or other clients)
+serve:
+    go run . --serve
+
+# Regenerate WALKTHROUGH.md from demo definitions
+readme:
+    go run . --doc md > WALKTHROUGH.md
+
+# Build the example binary
+build:
+    go build -o elicitation-example .
+
+default: demo

@@ -37,7 +37,7 @@ func runDemo() {
 		Description("A condensed walkthrough showing the same MCP Events extension wired against a Telegram-shaped event source. The protocol exposition lives in the discord walkthrough; this one focuses on the telegram-specific payload (chat_id, user, text) and the cursored vs cursorless distinction.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 			demokit.Actor("Receiver", "Local webhook receiver (this process)"),
 		)
 
@@ -47,17 +47,17 @@ func runDemo() {
 		"**Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.",
 		"",
 		"```",
-		"Terminal 1:  make serve                                # server in test mode",
-		"Terminal 2:  make demo                                 # this walkthrough",
-		"Terminal 3:  make inject TEXT='hello'                  # message event",
+		"Terminal 1:  just serve                                # server in test mode",
+		"Terminal 2:  just demo                                 # this walkthrough",
+		"Terminal 3:  just inject TEXT='hello'                  # message event",
 		"             make inject-typing                        # typing event (cursorless, demo-only)",
 		"```",
 		"",
 		"**Option B — Real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only — see the live step's note for details.",
 		"",
 		"```",
-		"Terminal 1:  TELEGRAM_BOT_TOKEN=... make serve         # server in bot mode",
-		"Terminal 2:  make demo                                 # this walkthrough",
+		"Terminal 1:  TELEGRAM_BOT_TOKEN=... just serve         # server in bot mode",
+		"Terminal 2:  just demo                                 # this walkthrough",
 		"             # In Telegram: send a message to the bot. Live step captures it.",
 		"```",
 	)
@@ -96,7 +96,7 @@ if err := c.Connect(); err != nil { /* handle */ }`),
 				core.ClientInfo{Name: "telegram-events-host", Version: "1.0"},
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
@@ -315,7 +315,7 @@ sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 			"Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.",
 			"",
 			"```",
-			"TELEGRAM_BOT_TOKEN=<your-token> make serve",
+			"TELEGRAM_BOT_TOKEN=<your-token> just serve",
 			"```",
 			"",
 			"Bot setup (BotFather token, chat link) is documented in this demo's README.md.",

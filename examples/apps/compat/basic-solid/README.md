@@ -26,7 +26,7 @@ the iframe is built with Solid instead of vanilla JS.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=basic-solid
+just demo-app EXAMPLE=basic-solid
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

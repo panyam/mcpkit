@@ -14,9 +14,9 @@ Host ─[MCP]→ Nginx ─→ Event-server (N replicas) ←[HTTP /events/<name>/
 
 Two **push delivery surfaces** are the headline; polling is available for ad-hoc/operator use but is not the narrative.
 
-- **Streaming push** — `make streamer`: a long-running `events/stream` subscriber over the **SEP-2575 stateless wire**. The open POST response carries `notifications/events/event` frames as SSE (response-as-SSE, issue 753), so nginx round-robins freely across replicas and no per-session push channel is needed.
-- **Webhook** — `make webhook`: HTTP POST delivery with a Standard Webhooks signature, plus the full lifecycle (client `ttlMs` suggestion clamped to the server envelope, `refreshBefore`, 410-abandon / 500-retry-then-suspend, and failure-based GC of no-expiry subs).
-- **Poll** — `make poller`: an `events/poll` subscriber, kept for ad-hoc operator use and to show cursor durability (any replica reads the same Postgres buffer, with bounded TTL replay).
+- **Streaming push** — `just streamer`: a long-running `events/stream` subscriber over the **SEP-2575 stateless wire**. The open POST response carries `notifications/events/event` frames as SSE (response-as-SSE, issue 753), so nginx round-robins freely across replicas and no per-session push channel is needed.
+- **Webhook** — `just webhook`: HTTP POST delivery with a Standard Webhooks signature, plus the full lifecycle (client `ttlMs` suggestion clamped to the server envelope, `refreshBefore`, 410-abandon / 500-retry-then-suspend, and failure-based GC of no-expiry subs).
+- **Poll** — `just poller`: an `events/poll` subscriber, kept for ad-hoc operator use and to show cursor durability (any replica reads the same Postgres buffer, with bounded TTL replay).
 - **Per-tenant isolation** via Keycloak introspection: three realms (`asgard`, `babylon`, `camelot`), a `MultiRealmIntrospectionValidator` that accepts a token if any realm says active, and per-event tenant tags so delivery is scoped to `Claims.Tenant`. One terminal per tenant makes the isolation visible — an event for one tenant does not show up on the other two.
 - **Synchronously revocable tokens** — signing a user out in Keycloak kills that tenant's live subscribers within `OAUTH_CACHE_TTL`; the demo's headline win over plain JWT.
 - **Cross-replica delivery** (N=3 by default) — a Redis pub/sub bus fans every yielded event to every replica's local delivery loop, so killing a replica mid-stream doesn't drop delivery on the survivors; subscription caps are enforced globally (Redis Lua-atomic INCR-with-check).
@@ -36,55 +36,55 @@ go install github.com/panyam/oneauth/cmd/oneauth@v0.1.19
 Bring up the stack:
 
 ```bash
-make up           # docker compose up -d with N=3 event-server replicas + Keycloak + Postgres + Redis. Add BUILD=true to force a fresh docker rebuild.
-make demo         # interactive walkthrough (TUI) — pure narrative; press Enter between Steps
-make test         # non-interactive walkthrough (CI / scripting)
-make down         # tear down
+just up           # docker compose up -d with N=3 event-server replicas + Keycloak + Postgres + Redis. Add BUILD=true to force a fresh docker rebuild.
+just demo         # interactive walkthrough (TUI) — pure narrative; press Enter between Steps
+just test         # non-interactive walkthrough (CI / scripting)
+just down         # tear down
 ```
 
 Override the replica count (default N=3):
 
 ```bash
-make up N=5   # 5 event-server replicas (synthetic producers are operator-run via `make drive-chat` / `make drive-presence`)
+just up N=5   # 5 event-server replicas (synthetic producers are operator-run via `just drive-chat` / `just drive-presence`)
 ```
 
 Local in-process tests (no Docker):
 
 ```bash
-make unittest          # event-server e2e tests — includes 8 tenant-isolation cases
+just unittest          # event-server e2e tests — includes 8 tenant-isolation cases
 ```
 
-The `unittest` suite verifies (1) tagged events deliver only to matching tenants, (2) untagged events still deliver to all, (3) interleaved cross-tenant events don't leak — using an in-process fake `token-as-tenant` validator. `make test` (the walkthrough run against the live Docker stack) adds the Keycloak interop layer on top.
+The `unittest` suite verifies (1) tagged events deliver only to matching tenants, (2) untagged events still deliver to all, (3) interleaved cross-tenant events don't leak — using an in-process fake `token-as-tenant` validator. `just test` (the walkthrough run against the live Docker stack) adds the Keycloak interop layer on top.
 
 ## Interactive multi-terminal demo
 
-Once `make up` is running, open a terminal per tenant to see per-tenant isolation in action. The headline is the **two push surfaces** — three streaming subscribers and three webhook receivers, one tenant each. Each `make streamer` / `make webhook` logs in on demand (`USERNAME=<user>` opens a browser to that realm's login page), so no upfront token juggling. Seeded users: `alice` (asgard/A), `bob` (babylon/B), `carol` (camelot/C) — passwords match usernames; the realms also ship `user{a,b,c}{1..5}`.
+Once `just up` is running, open a terminal per tenant to see per-tenant isolation in action. The headline is the **two push surfaces** — three streaming subscribers and three webhook receivers, one tenant each. Each `just streamer` / `just webhook` logs in on demand (`USERNAME=<user>` opens a browser to that realm's login page), so no upfront token juggling. Seeded users: `alice` (asgard/A), `bob` (babylon/B), `carol` (camelot/C) — passwords match usernames; the realms also ship `user{a,b,c}{1..5}`.
 
 ```bash
 # T1 — keep this running
-make up
+just up
 
 # T2/T3/T4 — one streaming push subscriber per tenant (events/stream, response-as-SSE)
-make streamer TENANT=A USERNAME=alice
-make streamer TENANT=B USERNAME=bob
-make streamer TENANT=C USERNAME=carol
+just streamer TENANT=A USERNAME=alice
+just streamer TENANT=B USERNAME=bob
+just streamer TENANT=C USERNAME=carol
 
 # T5/T6/T7 — one webhook receiver per tenant
-make webhook TENANT=A USERNAME=alice
-make webhook TENANT=B USERNAME=bob
-make webhook TENANT=C USERNAME=carol
+just webhook TENANT=A USERNAME=alice
+just webhook TENANT=B USERNAME=bob
+just webhook TENANT=C USERNAME=carol
 
 # T8 — inject one event per tenant; only the matching tenant's two windows print
-make inject TENANT=A EVENT=chat.message TEXT="hi from A"
-make inject TENANT=B EVENT=chat.message TEXT="hi from B"
-make inject TENANT=C EVENT=presence.changed USER=carol STATE=online
+just inject TENANT=A EVENT=chat.message TEXT="hi from A"
+just inject TENANT=B EVENT=chat.message TEXT="hi from B"
+just inject TENANT=C EVENT=presence.changed USER=carol STATE=online
 ```
 
-`make up` brings the stack up silent — no events flow until you inject (single deliberate events, above) or run the synthetic drivers `make drive-chat` / `make drive-presence` in sibling windows. The drivers rotate tenant tags round-robin across A/B/C; leave the subscribers running and watch each tenant's windows light up in turn. Tune with `EVERY=200ms` (high-volume) or restrict to one tenant with `TENANTS=asgard`.
+`just up` brings the stack up silent — no events flow until you inject (single deliberate events, above) or run the synthetic drivers `just drive-chat` / `just drive-presence` in sibling windows. The drivers rotate tenant tags round-robin across A/B/C; leave the subscribers running and watch each tenant's windows light up in turn. Tune with `EVERY=200ms` (high-volume) or restrict to one tenant with `TENANTS=asgard`.
 
-For scripted/CI use, swap the browser login for ROPC: `make newtoken-ci TENANT=A USER=usera1 PASSWORD=usera1` (ROPC; deprecated by OAuth 2.1 but supported), then pass `TOKEN=<bearer>`.
+For scripted/CI use, swap the browser login for ROPC: `just newtoken-ci TENANT=A USER=usera1 PASSWORD=usera1` (ROPC; deprecated by OAuth 2.1 but supported), then pass `TOKEN=<bearer>`.
 
-**Poll mode (ad-hoc).** `make poller TENANT=A USERNAME=alice` runs an `events/poll` subscriber. It's not part of the headline narrative — the push surfaces are — but it's handy for operator spot-checks and for showing cursor durability: `START_CURSOR=<N>` resumes from the shared Postgres buffer (bounded by its TTL), so any replica serves the same replay.
+**Poll mode (ad-hoc).** `just poller TENANT=A USERNAME=alice` runs an `events/poll` subscriber. It's not part of the headline narrative — the push surfaces are — but it's handy for operator spot-checks and for showing cursor durability: `START_CURSOR=<N>` resumes from the shared Postgres buffer (bounded by its TTL), so any replica serves the same replay.
 
 ### Revocation walkthrough (the load-bearing demo step)
 
@@ -95,7 +95,7 @@ The introspection-based auth has *synchronously revocable* tokens — the demo's
 3. Within `OAUTH_CACHE_TTL` seconds (default 5s), Asgard's streaming + webhook terminals die with `-32012 Forbidden` — revocation fires across both push surfaces uniformly.
 4. Babylon + Camelot terminals stay alive — revocation is per-realm, isolation holds.
 
-This is the operator-facing flow a real production admin would use; nothing in the demo "fakes" the revocation. Log back in (`make streamer TENANT=A USERNAME=alice`) and the subscriber reconnects.
+This is the operator-facing flow a real production admin would use; nothing in the demo "fakes" the revocation. Log back in (`just streamer TENANT=A USERNAME=alice`) and the subscriber reconnects.
 
 ## Observability (traces in Grafana)
 
@@ -103,19 +103,19 @@ Both the event-server and push-server emit OTel traces via SEP-414. Bring up the
 
 ```bash
 # T1 — observability stack (Tempo + Loki + Mimir + Grafana + OTel Collector)
-make -C ../../../docker up           # ports: Grafana :3000, OTLP :4317
+just -f ../../../docker up           # ports: Grafana :3000, OTLP :4317
 
 # T2 — whole-enchilada demo (auto-attaches to the shared `mcpkit` docker
 # network when the collector is reachable)
-make up
+just up
 ```
 
-The compose template sets `EXPORTER=auto`, which means **best-effort OTLP with silent Noop fallback**. Translation: `make up` works whether the observability stack is up or not. When it IS up, traces land at `http://localhost:3000` → Explore → Tempo → search by service name `whole-enchilada-event-server` or `whole-enchilada-push-server`.
+The compose template sets `EXPORTER=auto`, which means **best-effort OTLP with silent Noop fallback**. Translation: `just up` works whether the observability stack is up or not. When it IS up, traces land at `http://localhost:3000` → Explore → Tempo → search by service name `whole-enchilada-event-server` or `whole-enchilada-push-server`.
 
 To force OTLP and fail loudly when the collector is missing, override:
 
 ```bash
-EXPORTER=otlp make up
+EXPORTER=otlp just up
 ```
 
 The shared docker network is named `mcpkit` and is created by whichever stack starts first; both composes declare it with the same literal name.
@@ -137,10 +137,10 @@ Two paths, depending on whether you want to use the demo's Keycloak or your own 
 For "I have my own Auth0 / Okta / Keycloak", flip the event-server from introspection to JWT-mode validation:
 
 ```bash
-# in your shell before make up
+# in your shell before just up
 export OAUTH_INTROSPECTION_URLS=    # explicitly clear
 export OAUTH_ISSUER=https://your-idp.example.com/realms/your-realm
-make up
+just up
 ```
 
 The event-server's `tryEnableAuth()` picks up `OAUTH_ISSUER` and fetches JWKS from `<issuer>/protocol/openid-connect/certs`. Tokens signed by your IdP are validated locally; no callback to your AS per request. **Trade-off:** revocation is no longer synchronously visible — tokens stay valid until they expire (the JWT-vs-introspection trade-off; see `ext/auth/introspection_validator.go` doc for context).
@@ -155,14 +155,14 @@ The event-server's `tryEnableAuth()` picks up `OAUTH_ISSUER` and fetches JWKS fr
 | **event-server** (N replicas) | MCP Events extension (events/list, events/poll, events/subscribe, events/stream), webhook delivery, push fanout. | Scales with MCP client count + delivery throughput. |
 | **push-server** (reference) | Source-side concerns — upstream integration (real-world: Discord WebSocket, Telegram bot, OAuth refresh; this demo: synthetic chat + presence feeders, run as host drivers under `drivers/synth/`). Pushes events into the event-server via `events.HTTPSource` over HTTP. | Scales with upstream-integration count, not with MCP client count. Credentials for upstreams live here, never in the event-server. |
 
-Webhook and stream **subscribers** are not a compose tier. The demo runs them as host processes (`make webhook` / `make streamer`) that reach the stack through `host.docker.internal` — exactly how your own apps would consume events in production.
+Webhook and stream **subscribers** are not a compose tier. The demo runs them as host processes (`just webhook` / `just streamer`) that reach the stack through `host.docker.internal` — exactly how your own apps would consume events in production.
 
 ### How events flow
 
-1. A producer (host driver via `make inject` / `make drive-chat`, or in production the `push-server` via `eventsclient.Pusher.PushNamed("chat.message", data)`) POSTs to `http://event-server.whole-enchilada/events/chat.message/inject`.
+1. A producer (host driver via `just inject` / `just drive-chat`, or in production the `push-server` via `eventsclient.Pusher.PushNamed("chat.message", data)`) POSTs to `http://event-server.whole-enchilada/events/chat.message/inject`.
 2. `event-server`'s `events.HTTPSource[ChatMessageData]` handler decodes and yields into the library's `YieldingSource`.
 3. The library fans out: streaming subscribers receive the event as an SSE frame on their open `events/stream` response, webhook subscribers get an HTTP POST with a Standard Webhooks signature; an ad-hoc poll subscriber would see it on its next `events/poll`.
-4. Each host-run subscriber (`make webhook` / `make streamer`) verifies the signature and logs the payload.
+4. Each host-run subscriber (`just webhook` / `just streamer`) verifies the signature and logs the payload.
 
 ### Cross-replica delivery (why N>1 works)
 
@@ -170,7 +170,7 @@ With N event-server replicas behind nginx, an inject lands on whichever replica 
 
 ```mermaid
 sequenceDiagram
-    participant Drv as make inject / drive-chat
+    participant Drv as just inject / drive-chat
     participant NX as nginx :9090
     participant ES1 as event-server-1 (origin)
     participant Redis as Redis pub/sub
@@ -219,8 +219,8 @@ Every service answers a `<role>.whole-enchilada` hostname via Docker network ali
 **From the host shell**, install the `/etc/hosts` entries once:
 
 ```bash
-make hosts-install        # appends 127.0.0.1 nginx.whole-enchilada ... (needs sudo)
-make hosts-uninstall      # removes them
+just hosts-install        # appends 127.0.0.1 nginx.whole-enchilada ... (needs sudo)
+just hosts-uninstall      # removes them
 ```
 
 After that:
@@ -253,7 +253,7 @@ whole-enchilada/
 ├── walkthrough/            # demokit walkthrough binary
 ├── Makefile                # up / test / down / gen-compose
 ├── README.md               # this file
-└── WALKTHROUGH.md          # GENERATED by `make readme`
+└── WALKTHROUGH.md          # GENERATED by `just readme`
 ```
 
 ## Where each thing is documented

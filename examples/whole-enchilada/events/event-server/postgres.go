@@ -85,7 +85,7 @@ func (p *postgresBackend) shutdown() {
 // The store calls AutoMigrate on construction by default; the gorm
 // sub-module's WithoutAutoMigrate option (or an out-of-band migration
 // tool) is the production path. The demo runs against a fresh
-// container each `make up`, so AutoMigrate is the right call here.
+// container each `just up`, so AutoMigrate is the right call here.
 func configurePostgresBackend() *postgresBackend {
 	dsn := strings.TrimSpace(os.Getenv("POSTGRES_DSN"))
 	if dsn == "" {

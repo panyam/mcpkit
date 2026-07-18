@@ -227,8 +227,8 @@ strip set), so they reach the stdlib `flag.Parse` naturally — no
 
 When `--exporter=otlp` is selected and the endpoint is unreachable,
 SetupTelemetry logs a warning and falls back to Noop — a dead
-`docker/observability/` stack never breaks `make demo`. Bring the
-stack up with `cd docker/observability && make up` before the OTLP
+`docker/observability/` stack never breaks `just demo`. Bring the
+stack up with `cd docker/observability && just up` before the OTLP
 path lights up in Grafana.
 
 `examples/otel/stdout/` is the deliberate exception: its
@@ -300,7 +300,7 @@ not the `ModeDual` fall-through `--wire=""` would give.
 
 Every new non-UI example MUST work on both wires — the legacy session wire
 and the SEP-2575 stateless wire — because servers default to `ModeDual`.
-`make verify-dual` enforces this for the auto-drivable examples;
+`just verify-dual` enforces this for the auto-drivable examples;
 `examples/DUAL_MODE_AUDIT.md` records the per-example verdict.
 
 Rules for a dual-safe example:
@@ -539,7 +539,7 @@ force a conversion — in these cases:
   to a typed handler but pin the exact schema with
   `core.WithInputSchemaOverride(...)` — `TypedTool`'s reflected schema adds
   `$schema` + `properties:{}`, which can drift an asserted `tools/list` shape.
-  `examples/stateless` does this; verify with the relevant `make testconf-*`.
+  `examples/stateless` does this; verify with the relevant `just testconf-*`.
 
 An empty-input tool (`struct{}`) gains nothing from typing beyond consistency;
 converting one is optional, not required.
@@ -567,7 +567,7 @@ func runDemo() {
         Description("<one paragraph: what this example teaches>").
         Actors(
             demokit.Actor("Host",   "MCP Host (this client)"),
-            demokit.Actor("Server", "MCP Server (make serve)"),
+            demokit.Actor("Server", "MCP Server (just serve)"),
         )
 
     demo.Section("Setup", "Start the MCP server in a separate terminal first:", "...")
@@ -732,13 +732,13 @@ Pick whichever the example actually needs — both are first-class.
 
 ## 4. WALKTHROUGH.md
 
-- **Auto-generated.** Regenerated via `make readme` (`go run . --doc md >
+- **Auto-generated.** Regenerated via `just readme` (`go run . --doc md >
   WALKTHROUGH.md`). Never hand-edit.
 - Sections demokit emits: "What you'll learn" (bulleted step titles),
   "Flow" (Mermaid sequence diagram from `Arrow` / `DashedArrow`), "Steps"
   (one `###` per step with the `Note()` prose expanded), and any
   hand-written `Section()` blocks.
-- Commit the generated file. CI / `/example-audit` re-runs `make readme`
+- Commit the generated file. CI / `/example-audit` re-runs `just readme`
   and diffs to catch drift.
 
 ## 5. README.md
@@ -760,7 +760,7 @@ just reference. Required sections (in order):
    invite; the repo has none). Use `modelcontextprotocol/modelcontextprotocol/pull/N`,
    not the old `.../specification/...` path.
 3. **Quick Start** — the exact two commands a reader runs (typically
-   `make serve` in one terminal, `make demo` in another).
+   `just serve` in one terminal, `just demo` in another).
 4. **What it demonstrates** — bullet list mapping to the demokit steps.
 5. **Architecture** — Mermaid block-or-sequence diagram if the example has
    non-trivial topology (separate processes, webhook callbacks, MCP Apps
@@ -773,40 +773,47 @@ just reference. Required sections (in order):
    site.
 
 Optional: "What's still pending" (phase tracker), "Setup — getting an API
-token", "Make targets" (only if the Makefile has more than the baseline four).
+token", "Recipes" (only if the justfile has more than the baseline four).
 
 ---
 
-## 6. Makefile
+## 6. justfile
 
-### Baseline targets (every example)
+### Baseline recipes (every example)
 
-```make
-demo: ## Run the demokit walkthrough (interactive, TUI)
-	go run . --tui
+```just
+# Run the walkthrough (bare `just` runs this)
+default: demo
 
-note: ## Run the walkthrough in notebook mode (Bubble Tea cells)
-	go run . --note
+# Run the demokit walkthrough (interactive, TUI)
+demo:
+    go run . --tui
 
-serve: ## Start the <name> demo server (default :8080)
-	go run . --serve
+# Run the walkthrough in notebook mode (Bubble Tea cells)
+note:
+    go run . --note
 
-readme: ## Regenerate WALKTHROUGH.md from demo definitions
-	go run . --doc md > WALKTHROUGH.md
+# Start the <name> demo server (default :8080)
+serve:
+    go run . --serve
 
-build: ## Build the binary
-	go build -o <name>-demo .
+# Regenerate WALKTHROUGH.md from demo definitions
+readme:
+    go run . --doc md > WALKTHROUGH.md
 
-.PHONY: demo note serve readme build
-.DEFAULT_GOAL := demo
+# Build the binary
+build:
+    go build -o <name>-demo .
 ```
 
-- `## help-text` after each target — discoverable via `make help` if the
-  repo grows one.
-- `.DEFAULT_GOAL := demo` so a bare `make` runs the walkthrough.
+- Doc comment on the line above each recipe — discoverable via `just --list`.
+- `default: demo` so a bare `just` runs the walkthrough.
+- Each directory also keeps its original `Makefile` during the make→just
+  transition; targets and recipes must stay name-and-behavior identical.
+  New targets are added to both files until the Makefiles are retired.
 - `--doc md` (no `=`) is the canonical form; `--doc=md` works too but the
   convention is the spaced form for readability.
-- `make note` shells out to `--note`, which `demokit.Mode()` resolves to
+- `just note` shells out to `--note`, which `demokit.Mode()` resolves to
   `"notebook"`. `common.SetupRenderer` routes that to
   `notebookbridge.New()` — wired once centrally, so every walkthrough
   inherits notebook mode without per-example renderer glue. Notebook
@@ -919,8 +926,8 @@ output rather than emitted as N/A.
   block between `.Note(...)` and `.Run(...)` (see §3 "Verbatim variants").
   Skip steps that don't make a call (bootstrap HTTP, narrative-only).
 - [ ] `makefile-default-goal` — Makefile sets `.DEFAULT_GOAL := demo`.
-- [ ] `readme-quickstart` — README has a Quick Start block with `make serve`
-  + `make demo`.
+- [ ] `readme-quickstart` — README has a Quick Start block with `just serve`
+  + `just demo`.
 - [ ] `readme-what-it-demonstrates` — README has a "What it demonstrates"
   bullet list mapping to the walkthrough steps.
 - [ ] `readme-where-to-look` — README has a "Where to look in the code"
@@ -978,7 +985,7 @@ the non-UI conventions but with a different process shape:
   client + AppHost + (in-process) AppBridge inside one `go run .`
   invocation. `InProcessAppBridge` is part of what's being demonstrated —
   "you can exercise host code without spinning up an iframe app." There is
-  no separate-process server to start, so `make serve` doesn't apply.
+  no separate-process server to start, so `just serve` doesn't apply.
 - **`main.go` is single-mode.** No `--serve` flag, no `runDemo()` —
   `main()` directly constructs the demo and calls `demo.Execute()`.
 - **No HTTP middleware.** All transports are in-process, so
@@ -998,8 +1005,8 @@ What host examples still share with non-UI:
 - `walkthrough.go` structure (demokit `.Section` / `.Step` pattern, raw
   JSON pretty-print on success, `printRPCError` helper on errors, client
   closes after `Execute`).
-- `WALKTHROUGH.md` auto-generated via `make readme` → `go run . --doc md`.
-- README sections: Quick Start (single-terminal — just `make demo`), What
+- `WALKTHROUGH.md` auto-generated via `just readme` → `go run . --doc md`.
+- README sections: Quick Start (single-terminal — just `just demo`), What
   it demonstrates, Where to look in the code.
 - `demokit.IsTUI()` / `demokit.IsNonInteractive()` for renderer + mode
   selection.

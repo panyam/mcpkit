@@ -43,10 +43,10 @@ Coverage in this revision:
 
 ```bash
 # default path
-make testconf-skills
+just testconf-skills
 
 # override path
-MCPCONFORMANCE_SKILLS_PATH=/path/to/conf-skills make testconf-skills
+MCPCONFORMANCE_SKILLS_PATH=/path/to/conf-skills just testconf-skills
 ```
 
 The target builds `examples/skills/skills-demo`, launches it on

@@ -28,7 +28,7 @@ fixture targeted at WebGL-style rendering inside the App iframe.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=shadertoy
+just demo-app EXAMPLE=shadertoy
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

@@ -25,8 +25,8 @@ End-to-end example demonstrating all three MCP primitives generated from proto a
 ## Quick start
 
 ```bash
-make generate   # Generate Go code from protos
-make run        # Start MCP server on :8080
+just generate   # Generate Go code from protos
+just run        # Start MCP server on :8080
 ```
 
 ## Testing

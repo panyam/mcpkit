@@ -118,7 +118,7 @@ The wire types (`CreateTaskResult`, `DetailedTask`, `UpdateTaskRequest`, `TaskIn
 
 ## Where the conformance suite lives
 
-[`panyam/mcpconformance`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) on the `feat/tasks-mrtr-extension` branch. Run via `make testconf-tasks-v2` in the root repo — it spawns `examples/tasks-v2/tasks-v2 --serve` as the reference implementation fixture.
+[`panyam/mcpconformance`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) on the `feat/tasks-mrtr-extension` branch. Run via `just testconf-tasks-v2` in the root repo — it spawns `examples/tasks-v2/tasks-v2 --serve` as the reference implementation fixture.
 
 ## V1-RETIREMENT markers
 

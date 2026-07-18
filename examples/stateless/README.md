@@ -14,8 +14,8 @@ A single mcpkit server that demonstrates two complementary draft SEPs:
 ## Run
 
 ```bash
-make serve           # pure stateless wire on :8080 (default)
-make serve-dual      # accepts both legacy AND stateless wires on one URL
+just serve           # pure stateless wire on :8080 (default)
+just serve-dual      # accepts both legacy AND stateless wires on one URL
 ```
 
 Override the address: `go run . --serve --addr=:9090`.
@@ -49,7 +49,7 @@ These exist so the upstream conformance scenario can drive specific spec invaria
 ## Conformance
 
 ```bash
-cd ../../conformance && make testconf-stateless
+cd ../../conformance && just testconf-stateless
 ```
 
 (Target lands alongside this example — see [`docs/SEP_2567_HANDLES.md`](../../docs/SEP_2567_HANDLES.md) for the bundle context.)

@@ -33,7 +33,7 @@ Usage (CLI flags or env vars; CLI wins):
   uv run scripts/apps_playwright_test.py --docker --all        # sweep every fixture
 
 Environment variables (preserved from the bash predecessor for drop-in
-Makefile/CI compatibility — CLI flags override):
+justfile/CI compatibility — CLI flags override):
   EXT_APPS_DIR       Path to ext-apps checkout (default: /tmp/ext-apps)
   HARNESS_PORT       basic-host HTTP port (default: 8080)
   SANDBOX_PORT       basic-host sandbox port (default: 8081)

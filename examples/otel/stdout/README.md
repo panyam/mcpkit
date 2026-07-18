@@ -37,8 +37,8 @@ Two exporter modes:
 ### Stdout mode — default (no infrastructure)
 
 ```
-Terminal 1:  make serve         # server-side spans dump here
-Terminal 2:  make demo          # client-side spans dump here
+Terminal 1:  just serve         # server-side spans dump here
+Terminal 2:  just demo          # client-side spans dump here
 ```
 
 Keep both terminals visible. Match TraceID across them to see the
@@ -47,13 +47,13 @@ client→server stitch.
 ### OTLP mode (Grafana UI) — pass `EXPORTER=otlp`
 
 ```
-Terminal 1:  make -C ../../../docker up           # bring observability stack up
-Terminal 2:  make serve EXPORTER=otlp             # server → OTLP collector
-Terminal 3:  make demo EXPORTER=otlp              # walkthrough → OTLP collector
-Browser:     open http://localhost:3000           # Grafana — anonymous Admin
+Terminal 1:  just -f ../../../docker/justfile up           # bring observability stack up
+Terminal 2:  just serve EXPORTER=otlp                      # server → OTLP collector
+Terminal 3:  just demo EXPORTER=otlp                       # walkthrough → OTLP collector
+Browser:     open http://localhost:3000                    # Grafana — anonymous Admin
 
 # When done:
-make -C ../../../docker down
+just -f ../../../docker/justfile down
 ```
 
 Each iteration of the Explore step prints a pre-filtered Grafana
@@ -75,8 +75,8 @@ the same trace view, linked by parent-of via `_meta.traceparent`.
 ```mermaid
 sequenceDiagram
     participant HostStdout as walkthrough stdout
-    participant H as Host (make demo)
-    participant SRV as Server (make serve)
+    participant H as Host (just demo)
+    participant SRV as Server (just serve)
     participant ServerStdout as serve stdout
 
     Note over H: client pipeline stdouttrace then sdktrace then mcpotel
@@ -104,15 +104,15 @@ sequenceDiagram
 - `server/trace_middleware.go` (in main mcpkit) — the SEP-414 P2 middleware that consumes the adapter on the server side. Sits outermost so user middleware runs INSIDE the recorded span.
 - `ext/otel/provider.go` (in the adapter module) — `Provider.StartSpan` is the hot-path: parses inbound `core.TraceContext` into an OTel SpanContext, calls `tracer.Start`, and re-attaches the child traceparent via `core.WithTraceContext` so the outbound `_meta` injection stamps the right ID downstream.
 
-## Make targets
+## Just recipes
 
 ```
-make demo      # run the walkthrough (TUI mode)
-make note      # run the walkthrough in notebook mode
-make serve     # start the server on :8080
-make readme    # regenerate WALKTHROUGH.md
-make build     # compile to ./otel-stdout-demo
-make test      # run the e2e smoke test (uses an in-memory exporter)
+just demo      # run the walkthrough (TUI mode)
+just note      # run the walkthrough in notebook mode
+just serve     # start the server on :8080
+just readme    # regenerate WALKTHROUGH.md
+just build     # compile to ./otel-stdout-demo
+just test      # run the e2e smoke test (uses an in-memory exporter)
 ```
 
 ## Beyond stdout

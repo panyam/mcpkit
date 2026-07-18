@@ -447,7 +447,7 @@ make inject-terminate CODE=-32012 MESSAGE="auth token revoked"
 make inject TEXT="hello from make inject"
 ```
 
-Run a `make webhook` receiver alongside and you'll see the control envelope POST land on the same callback URL as event deliveries, distinguishable only by the `webhook-id: msg_terminated_...` prefix and the `{type:"terminated", error:...}` body.
+Run a `just webhook` receiver alongside and you'll see the control envelope POST land on the same callback URL as event deliveries, distinguishable only by the `webhook-id: msg_terminated_...` prefix and the `{type:"terminated", error:...}` body.
 
 > [!NOTE]
 > **The drop policy on the Error variant is intentional.** Like event drops, error fanout is non-blocking — a slow consumer that backs up doesn't block the source. Unlike event drops, errors don't carry recovery semantics, so missing one is acceptable; future events still get the `Truncated` flag if any actual events were dropped. See `fanoutLocked` commentary.
