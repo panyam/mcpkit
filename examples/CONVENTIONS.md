@@ -808,6 +808,9 @@ build:
 
 - Doc comment on the line above each recipe — discoverable via `just --list`.
 - `default: demo` so a bare `just` runs the walkthrough.
+- Each directory also keeps its original `Makefile` during the make→just
+  transition; targets and recipes must stay name-and-behavior identical.
+  New targets are added to both files until the Makefiles are retired.
 - `--doc md` (no `=`) is the canonical form; `--doc=md` works too but the
   convention is the spaced form for readability.
 - `just note` shells out to `--note`, which `demokit.Mode()` resolves to

@@ -19,7 +19,11 @@ cd mcpkit
 just test          # core/server/client/testutil unit tests
 ```
 
-Go 1.26+ is required. The base conformance suite additionally needs Node.js 22+.
+Go 1.26+ and [`just`](https://github.com/casey/just) are required. The base
+conformance suite additionally needs Node.js 22+. The task runner is moving
+from make to just; during the transition the original Makefiles remain
+alongside the justfiles with the same target names, so `make <target>` also
+works. New targets must be added to both files.
 
 ## Repository layout
 
