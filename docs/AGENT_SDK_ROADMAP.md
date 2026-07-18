@@ -196,7 +196,7 @@ change:
 2. **Conversation store** — this *is* D's `RunStore` at session grain; don't build a second thing.
 3. **Semantic recall** — new `Embedder` seam (sibling to `Provider`, → `agent/`) + `VectorStore`
    (interface in `agent/`, backends in siblings). Retrieved context enters via the **same pre-turn
-   injection path** as `InjectionPolicy.Drain` (produces `InjectedContext`/system messages) — reuse
+   injection path** as `EventInjectionPolicy.Drain` (produces `InjectedContext`/system messages) — reuse
    that shape, don't invent a parallel one. (L)
 4. **Compaction** — `Compactor` / `SummarizingCompactor` backed by `Provider.Generate`, run pre-turn
    when a token estimate trips a threshold; keep a verbatim tail window and summarize only the head.

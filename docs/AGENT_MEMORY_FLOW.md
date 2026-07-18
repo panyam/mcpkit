@@ -16,7 +16,7 @@ flowchart TD
     end
 
     subgraph PATHS["Three ways into the turn (existing seams)"]
-        INJ["Pre-turn injection<br/>InjectionPolicy.Drain to RoleSystem"]
+        INJ["Pre-turn injection<br/>EventInjectionPolicy.Drain to RoleSystem"]
         TOOL["Tools<br/>ToolSource / FuncSource"]
         HIST["History rewrite<br/>Compactor rewrites the head"]
     end
@@ -63,7 +63,7 @@ flowchart TD
 ## Reading the diagram
 
 - **Top band** — the four memory types. A real taxonomy: each has a different home, write path, and failure mode. Only **episodic** (the `RunStore`) exists; **procedural** is partly covered by skills + the system prompt.
-- **Middle band** — the three entry paths. No new Runner seam. Semantic recall and the working-memory summary arrive as `RoleSystem` messages through `InjectionPolicy` (do it *async* so embedding latency stays off the critical path). Working-memory ops, RAG search, and offloading arrive as tools the model calls on demand. Compaction rewrites the head of the `history` slice before `Run` is even called.
+- **Middle band** — the three entry paths. No new Runner seam. Semantic recall and the working-memory summary arrive as `RoleSystem` messages through `EventInjectionPolicy` (do it *async* so embedding latency stays off the critical path). Working-memory ops, RAG search, and offloading arrive as tools the model calls on demand. Compaction rewrites the head of the `history` slice before `Run` is even called.
 - **The spine** — `Run` is stateless over history, so resume / fork / compaction / injection all compose *around* it.
 - **Write path** — after the turn, the episodic log feeds distillation. Storing is trivial; **Extract** (lossy) and **Consolidate** (duplicate vs update vs contradiction) are where memory actually gets hard. The loop closes: consolidated facts re-enter the next turn through injection.
 

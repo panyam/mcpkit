@@ -196,7 +196,7 @@ func (s *InMemoryMemoryStore) DeleteMemory(ctx context.Context, req DeleteMemory
 //
 // Summary renders the current scratchpad for optional pre-turn injection,
 // keeping the model aware of what it has stored without a recall call every
-// turn. Injection is the host's job (through its existing InjectionPolicy
+// turn. Injection is the host's job (through its existing EventInjectionPolicy
 // path); MemorySource only supplies the text, so the Runner never changes.
 type MemorySource struct {
 	store MemoryStore

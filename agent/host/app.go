@@ -31,7 +31,7 @@ type App struct {
 	replOut   io.Writer // terminal REPL draws its own prompt here
 	failover  *agent.FailoverProvider
 
-	injection *agent.InjectionPolicy
+	injection *agent.EventInjectionPolicy
 	triggers  *agent.TriggerPolicy
 	approval  *agent.TieredApproval
 	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
@@ -251,7 +251,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		app.failover = fo
 	}
 
-	app.injection = agent.NewInjectionPolicy(agent.InjectionConfig{Hints: hintOverrides(cfg)})
+	app.injection = agent.NewEventInjectionPolicy(agent.EventInjectionConfig{Hints: hintOverrides(cfg)})
 	app.triggers = agent.NewTriggerPolicy(agent.TriggerPolicyConfig{
 		Bindings: buildTriggerBindings(cfg.Triggers),
 		Logger:   o.logger,
