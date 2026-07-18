@@ -366,7 +366,6 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	defer a.turnMu.Unlock()
 	a.triggers.NotifyEngagement()
 	a.drainInjectionLocked()
-	a.injectMemoryLocked(ctx)
 	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
 	a.history = append(a.history, userMsg)
 
@@ -382,7 +381,10 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 		emit = pe.Emit
 	}
 
-	result, err := a.runner.Run(ctx, a.history, emit)
+	// The memory summary is woven into the per-turn slice only, never into
+	// a.history — see withMemorySummaryLocked.
+	turnMsgs := a.withMemorySummaryLocked(ctx)
+	result, err := a.runner.Run(ctx, turnMsgs, emit)
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
 		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
