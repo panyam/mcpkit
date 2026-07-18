@@ -282,6 +282,18 @@ design: tool-result offloading (issue 966 — `OffloadingSource` + `ToolResultSt
 `read_tool_result`; lossless pay-on-demand beats lossy compaction for tool outputs, sequence with
 P2 memory).
 
+**Interactive surface — agentchat playground (epic 983): ✅ SHIPPED.** The UX layer that makes P1/P2
+usable and delivers the coding-agent-loop rows (Gap table B: checkpoint/rewind conversation side,
+finer interrupt). `agent/host` gains named-provider connections + registry (per-session and
+mid-session provider switching, issues 984/985), a `CommandRegistry` + `App.Dispatch` slash-command
+system (986), `HostEvent`/`Observer` domain-event fan-out replacing io.Writer prints (992 — host
+lifecycle events, not "UI" events; `UIPrompt` dropped as it's request/response not fire-and-forget),
+and `RunStore.ListRuns` + a `/sessions` picker (986). `cmd/agentchat` is the thin CLI over it: an
+**inline** bubbletea TUI (997 — commit-to-scrollback, native scroll/copy/paste/persist; alt-screen
+`--ui notebook` deferred to issue 1001) and `make pg` (988). Layering rule: host concerns in
+`agent/host` so a web surface reuses everything and swaps only stdin/stdout. Follow-ups: run
+retention (999), paged session picker (1000), provider-routing policy (991).
+
 **Phase 2 — memory. Tool-result offloading shipped as the opener; memory tracks next.**
 Shipped (the just-in-time-context layer, lossless/pay-on-demand — see the diagram in
 `docs/AGENT_MEMORY_FLOW.md`): `OffloadingSource` + `ToolResultStore` interface + in-memory (issue 966)
