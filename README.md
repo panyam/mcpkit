@@ -106,7 +106,6 @@ just/make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Transport design, type definitions, protocol details |
 | [ext/auth/docs/DESIGN.md](ext/auth/docs/DESIGN.md) | Auth architecture, spec compliance (C1-C23, X1-X5) |
 | [docs/APPS_DESIGN.md](docs/APPS_DESIGN.md) | MCP Apps extension design, protocol flows, conformance strategy |
-| [CAPABILITIES.md](CAPABILITIES.md) | Stack component: all capabilities listed |
 
 ## Client Features
 

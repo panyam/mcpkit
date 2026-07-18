@@ -270,7 +270,6 @@ The flat `ui/resourceUri` key alongside the nested `ui.resourceUri` is a backwar
 - [`docs/APPS_HOST.md`](../../docs/APPS_HOST.md) — the host-side `AppHost` / `ServerRegistry` API
 - [`docs/APPS_ONBOARDING.md`](../../docs/APPS_ONBOARDING.md) — onboarding guide for new mcpkit Apps developers
 - [`examples/apps/compat/README.md`](../../examples/apps/compat/README.md) — the upstream-parity testing harness
-- `CAPABILITIES.md` entries `mcp-apps-*` — feature-by-feature changelog
 
 ## Sub-module status
 

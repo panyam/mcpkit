@@ -14,7 +14,6 @@ on:
       - 'ext/auth/docs/DESIGN.md'
       - 'ext/tasks/README.md'
       - 'CONFORMANCE.md'
-      - 'CAPABILITIES.md'
       - 'conformance/UPSTREAM_AUDIT.md'
       - 'conformance/FIXTURE_AUDIT.md'
       - 'conformance/EXTERNAL_CHECKER.md'
