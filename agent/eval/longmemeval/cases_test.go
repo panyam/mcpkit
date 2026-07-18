@@ -24,8 +24,8 @@ func TestCasesWellFormed(t *testing.T) {
 			t.Fatalf("%q: a memory scenario needs at least a setup turn and a question", name)
 		}
 		// every case exercises SOME memory mechanism: the working-memory
-		// tools (Memory) or history compaction (CompactTokens).
-		if !c.Scenario.Memory && c.CompactTokens == 0 {
+		// tools (Memory) or history compaction (NewCompactor).
+		if !c.Scenario.Memory && c.NewCompactor == nil {
 			t.Fatalf("%q: case exercises neither working memory nor compaction", name)
 		}
 		// every case must be gradeable: a deterministic assertion or a rubric

@@ -46,13 +46,11 @@ func TestLiveLongMemEval(t *testing.T) {
 	var passed, total int
 	for _, c := range SmokeScenarios() {
 		cfg := agent.RunnerConfig{Provider: provider}
-		if c.CompactTokens > 0 {
-			// The compaction case runs under a low budget so the early turns
-			// are summarized before the final question — this is issue 939's
+		if c.NewCompactor != nil {
+			// The case supplies the compaction strategy (a Compactor that
+			// decides per turn whether to compact) — issue 939's
 			// SummarizingCompactor graded by issue 974's harness.
-			compactor, err := agent.NewSummarizingCompactor(agent.SummarizingConfig{
-				Provider: provider, MaxTokens: c.CompactTokens,
-			})
+			compactor, err := c.NewCompactor(provider)
 			if err != nil {
 				t.Fatalf("%s: build compactor: %v", c.Scenario.Name, err)
 			}
