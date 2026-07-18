@@ -179,7 +179,7 @@ func (a *App) registerBuiltinCommands() {
 			if a.memory == nil {
 				return msg("working memory is off (enable with Config.Memory)")
 			}
-			summary, err := a.memory.Summary(ctx)
+			summary, err := a.memory.Summary(ctx, agent.SummaryOptions{})
 			if err != nil {
 				return CmdResult{}, err
 			}
