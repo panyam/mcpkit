@@ -88,7 +88,7 @@ func TestRunScenarioUsesInjectedStore(t *testing.T) {
 		t.Fatalf("factory built %d times, want exactly 1 per RunScenario", built)
 	}
 	got, _ := injected.ListMemories(context.Background(), agent.ListMemoriesRequest{})
-	if len(got.Items) != 1 || got.Items[0].Value != "Go" {
+	if len(got.Items) != 1 || got.Items[0].Item.Value != "Go" {
 		t.Fatalf("injected store = %+v, want the scenario to have used it", got.Items)
 	}
 }

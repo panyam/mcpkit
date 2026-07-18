@@ -159,6 +159,9 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Bool("memory-inject-summary", false, "with --memory, prepend a summary of the scratchpad before each turn (costs tokens; off = recall on demand)")
 	fl.Int("memory-summary-max-items", 0, "with --memory-inject-summary, cap the injected summary to the newest N notes (0 = all)")
 	fl.Int("memory-summary-max-chars", 0, "with --memory-inject-summary, cap the injected summary's length in characters (0 = no cap)")
+	fl.String("memory-embed-model", "", "with --memory, use semantic recall: embedding model for the memory store (empty = substring match)")
+	fl.String("memory-embed-url", "http://localhost:1234/v1", "OpenAI-compatible /embeddings endpoint for --memory-embed-model")
+	fl.String("memory-embed-api-key-env", "", "env var holding the embeddings API key")
 	fl.Int("compact-tokens", 0, "compact history when its estimated token count exceeds N: summarize the head, keep a recent tail (0 = off)")
 	fl.Int("compact-keep-recent", 0, "with --compact-tokens, how many trailing messages to keep verbatim (0 = default 6)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
@@ -238,6 +241,25 @@ func runChat(v *viper.Viper) error {
 			InjectSummary:   v.GetBool("memory-inject-summary"),
 			SummaryMaxItems: v.GetInt("memory-summary-max-items"),
 			SummaryMaxChars: v.GetInt("memory-summary-max-chars"),
+		}
+		// A semantic store makes recall similarity-ranked instead of
+		// substring; without an embed model, memory stays the in-memory
+		// substring default.
+		if em := v.GetString("memory-embed-model"); em != "" {
+			embedder, err := agent.NewOpenAIEmbedder(agent.OpenAIEmbedderConfig{
+				BaseURL:        v.GetString("memory-embed-url"),
+				Model:          em,
+				APIKey:         os.Getenv(v.GetString("memory-embed-api-key-env")),
+				TracerProvider: tp,
+			})
+			if err != nil {
+				return err
+			}
+			store, err := agent.NewSemanticMemoryStore(embedder, agent.WithSemanticTracerProvider(tp))
+			if err != nil {
+				return err
+			}
+			appOpts = append(appOpts, host.WithMemoryStore(store))
 		}
 	}
 

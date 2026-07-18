@@ -61,7 +61,7 @@ func TestAppWorkingMemoryAcrossTurns(t *testing.T) {
 
 	// and the store actually holds it
 	got, _ := store.ListMemories(context.Background(), agent.ListMemoriesRequest{})
-	if len(got.Items) != 1 || got.Items[0].Key != "lang" || got.Items[0].Value != "Go" {
+	if len(got.Items) != 1 || got.Items[0].Item.Key != "lang" || got.Items[0].Item.Value != "Go" {
 		t.Fatalf("store = %+v, want lang=Go", got.Items)
 	}
 }

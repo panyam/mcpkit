@@ -54,7 +54,12 @@ type MemoryStore interface {
 	PutMemory(ctx context.Context, req PutMemoryRequest) (PutMemoryResponse, error)
 
 	// ListMemories returns items relevant to req.Query (all items when
-	// Query is empty), oldest first.
+	// Query is empty), most-relevant first, capped at req.Limit. The "how"
+	// of relevance is the implementation's business — the substring default
+	// filters and returns Score 1, a semantic store ranks by embedding
+	// similarity, a pgvector backend does ANN — but the contract (ranked,
+	// scored, top-k) is the same, which is why recall never branches on the
+	// backend.
 	ListMemories(ctx context.Context, req ListMemoriesRequest) (ListMemoriesResponse, error)
 
 	// DeleteMemory removes an item by Key. Deleted reports whether a
@@ -73,14 +78,29 @@ type PutMemoryRequest struct {
 // app-state without a signature break, per the gRPC-style convention.
 type PutMemoryResponse struct{}
 
-// ListMemoriesRequest filters by Query (empty means all).
+// ListMemoriesRequest filters by Query (empty means all) and caps the result
+// at Limit (0 means no cap). Limit is the k of a top-k recall.
 type ListMemoriesRequest struct {
 	Query string
+	Limit int
 }
 
-// ListMemoriesResponse carries the matching items, oldest first.
+// ListMemoriesResponse carries the matching items, most-relevant first.
 type ListMemoriesResponse struct {
-	Items []MemoryItem
+	Items []ScoredMemory
+}
+
+// ScoredMemory pairs a stored MemoryItem with its per-query relevance Score.
+// Score is a property of the QUERY, not of the stored fact (the same item
+// scores differently against different queries), which is why it lives here
+// on the result and not on MemoryItem — that keeps MemoryItem the durable,
+// query-independent fact. A substring store returns 1 for a match; a
+// semantic store returns cosine similarity. Room to grow: a future
+// ranking/reranker stage can add per-signal provenance (similarity vs
+// recency vs importance) here without touching the store or the item.
+type ScoredMemory struct {
+	Item  MemoryItem
+	Score float64
 }
 
 // DeleteMemoryRequest identifies the item to forget by Key.
@@ -158,16 +178,20 @@ func (s *InMemoryMemoryStore) PutMemory(ctx context.Context, req PutMemoryReques
 }
 
 // ListMemories implements MemoryStore: substring match on key or value
-// (case-insensitive), oldest first.
+// (case-insensitive), oldest first, each match scored 1 (the substring
+// store has no graded relevance). Limit caps the count.
 func (s *InMemoryMemoryStore) ListMemories(ctx context.Context, req ListMemoriesRequest) (ListMemoriesResponse, error) {
 	q := strings.ToLower(req.Query)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []MemoryItem
+	var out []ScoredMemory
 	for e := s.order.Front(); e != nil; e = e.Next() {
+		if req.Limit > 0 && len(out) >= req.Limit {
+			break
+		}
 		item := s.items[e.Value.(string)]
 		if q == "" || strings.Contains(strings.ToLower(item.Key), q) || strings.Contains(strings.ToLower(item.Value), q) {
-			out = append(out, item)
+			out = append(out, ScoredMemory{Item: item, Score: 1})
 		}
 	}
 	return ListMemoriesResponse{Items: out}, nil
@@ -265,7 +289,17 @@ func (m *MemorySource) recall(ctx context.Context, in recallArgs) (string, error
 		}
 		return "no memories match " + in.Query, nil
 	}
-	return renderMemories(resp.Items), nil
+	return renderMemories(itemsOf(resp.Items)), nil
+}
+
+// itemsOf drops the per-query Score, yielding the bare stored items for
+// rendering or recency budgeting.
+func itemsOf(sms []ScoredMemory) []MemoryItem {
+	items := make([]MemoryItem, len(sms))
+	for i, sm := range sms {
+		items[i] = sm.Item
+	}
+	return items
 }
 
 func (m *MemorySource) forget(ctx context.Context, in forgetArgs) (string, error) {
@@ -315,7 +349,7 @@ func (m *MemorySource) Summary(ctx context.Context, opts SummaryOptions) (string
 	if err != nil {
 		return "", err
 	}
-	items := budgetMemories(resp.Items, opts)
+	items := budgetMemories(itemsOf(resp.Items), opts)
 	if len(items) == 0 {
 		return "", nil
 	}
