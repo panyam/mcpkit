@@ -133,6 +133,9 @@ check-apps-compat-stale: refresh-apps-compat-report ## Fail if conformance/apps/
 		exit 1 \
 	)
 
+pg: ## Playground: boot the demo MCP server + launch agentchat's TUI (needs a local OpenAI-compatible model; see examples/playground/README.md)
+	bash scripts/playground.sh
+
 test-agent: ## Run agent sub-module tests
 	cd agent && go test ./... -count=1 -timeout 30s
 	cd agent/store/redis && go test ./... -count=1 -timeout 60s
