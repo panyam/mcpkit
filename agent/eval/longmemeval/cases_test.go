@@ -3,7 +3,7 @@ package longmemeval
 import "testing"
 
 func TestCasesWellFormed(t *testing.T) {
-	cases := Cases()
+	cases := SmokeScenarios()
 	if len(cases) == 0 {
 		t.Fatal("no cases")
 	}
@@ -41,7 +41,7 @@ func TestCasesWellFormed(t *testing.T) {
 }
 
 func TestDeterministicScorers(t *testing.T) {
-	for _, c := range Cases() {
+	for _, c := range SmokeScenarios() {
 		got := len(c.Deterministic())
 		if want := len(c.Must) + len(c.MustNot); got != want {
 			t.Fatalf("%q: Deterministic() = %d scorers, want %d", c.Scenario.Name, got, want)

@@ -44,7 +44,7 @@ func TestLiveLongMemEval(t *testing.T) {
 	ctx := context.Background()
 
 	var passed, total int
-	for _, c := range Cases() {
+	for _, c := range SmokeScenarios() {
 		results, err := eval.RunScenario(ctx, agent.RunnerConfig{Provider: provider}, c.Scenario)
 		if err != nil {
 			t.Fatalf("%s: harness error: %v", c.Scenario.Name, err)
