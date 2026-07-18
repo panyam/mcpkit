@@ -350,8 +350,12 @@ func LoadConfig(path string) (*Config, error) {
 
 // Validate enforces the invariants the app relies on.
 func (c *Config) Validate() error {
-	if c.Model.BaseURL == "" || c.Model.Model == "" {
-		return fmt.Errorf("model.baseUrl and model.model are required")
+	// A connections registry supersedes Model for the chat provider, so
+	// Model is only required when no connections are configured.
+	if c.Connections == nil {
+		if c.Model.BaseURL == "" || c.Model.Model == "" {
+			return fmt.Errorf("model.baseUrl and model.model are required (or set a connections block)")
+		}
 	}
 	seen := map[string]bool{}
 	for i, s := range c.Servers {
