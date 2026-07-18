@@ -119,11 +119,36 @@ type MemoryConfig struct {
 	// token proxy), dropping the oldest kept notes until it fits. Zero means
 	// no length cap. Only meaningful with InjectSummary.
 	SummaryMaxChars int `json:"summaryMaxChars,omitempty"`
+
+	// InjectRecall, when true, injects the notes RELEVANT to the current
+	// user message as a RoleSystem message before each turn, so the model
+	// "just knows" what matters without a recall call — the auto-push (RAG)
+	// half of semantic recall. Complementary to InjectSummary (ambient,
+	// recency-budgeted): a deployment usually picks one. Backend-agnostic,
+	// but only useful with a relevance-ranking store (a semantic store);
+	// over the substring default it injects notes literally containing the
+	// query words.
+	InjectRecall bool `json:"injectRecall,omitempty"`
+
+	// RecallTopK caps how many relevant notes InjectRecall injects. Zero
+	// uses the agent default (5).
+	RecallTopK int `json:"recallTopK,omitempty"`
+
+	// RecallMinScore drops recalled notes scoring below it (the poison guard
+	// — a semantic store scores every note, so a floor keeps low-TopK recall
+	// from injecting the least-irrelevant notes when nothing truly matches).
+	// Zero means no floor.
+	RecallMinScore float64 `json:"recallMinScore,omitempty"`
 }
 
 // summaryOptions maps the host config onto the agent-layer budget.
 func (c *MemoryConfig) summaryOptions() agent.SummaryOptions {
 	return agent.SummaryOptions{MaxItems: c.SummaryMaxItems, MaxChars: c.SummaryMaxChars}
+}
+
+// recallOptions maps the host config onto the agent-layer recall budget.
+func (c *MemoryConfig) recallOptions() agent.RecallOptions {
+	return agent.RecallOptions{TopK: c.RecallTopK, MinScore: c.RecallMinScore}
 }
 
 // OffloadConfig is the host's view of tool-result offloading; it maps to

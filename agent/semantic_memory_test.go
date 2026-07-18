@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -84,6 +85,40 @@ func TestInMemorySemanticStore_Delete(t *testing.T) {
 func TestInMemorySemanticStore_NilEmbedder(t *testing.T) {
 	if _, err := NewInMemorySemanticStore(nil); err == nil {
 		t.Fatal("nil embedder should error")
+	}
+}
+
+func TestRecallRelevant(t *testing.T) {
+	m, err := NewMemorySource(seedSemantic(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	// relevant query surfaces the matching note as an injectable block
+	block, err := m.RecallRelevant(ctx, "which programming language do i like", RecallOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(block, "lang:") || !strings.Contains(block, "Relevant") {
+		t.Fatalf("recall block did not surface the language note:\n%s", block)
+	}
+
+	// TopK caps the rendered notes
+	block, _ = m.RecallRelevant(ctx, "programming language", RecallOptions{TopK: 1})
+	if strings.Count(block, "\n- ") != 0 && strings.Count(block, "- ") != 1 {
+		t.Fatalf("TopK=1 should render one note; got:\n%s", block)
+	}
+
+	// a MinScore above every hit's score admits nothing -> empty block
+	block, _ = m.RecallRelevant(ctx, "which programming language do i like", RecallOptions{MinScore: 2})
+	if block != "" {
+		t.Fatalf("MinScore above all scores should inject nothing; got:\n%s", block)
+	}
+
+	// empty query injects nothing
+	if block, _ := m.RecallRelevant(ctx, "  ", RecallOptions{}); block != "" {
+		t.Fatalf("empty query should inject nothing; got %q", block)
 	}
 }
 
