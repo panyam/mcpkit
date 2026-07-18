@@ -56,7 +56,7 @@ func (a *App) withMemorySummaryLocked(ctx context.Context) []agent.Message {
 	if a.memory == nil || a.cfg.Memory == nil || !a.cfg.Memory.InjectSummary {
 		return a.history
 	}
-	summary, err := a.memory.Summary(ctx)
+	summary, err := a.memory.Summary(ctx, a.cfg.Memory.summaryOptions())
 	if err != nil || summary == "" {
 		return a.history
 	}

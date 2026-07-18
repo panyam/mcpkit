@@ -173,7 +173,7 @@ func TestMemorySource_Summary(t *testing.T) {
 	m, _ := NewMemorySource(NewInMemoryMemoryStore())
 
 	// empty memory injects nothing
-	sum, err := m.Summary(ctx)
+	sum, err := m.Summary(ctx, SummaryOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,8 +183,39 @@ func TestMemorySource_Summary(t *testing.T) {
 
 	_, _ = m.Call(ctx, RememberToolName, map[string]any{"key": "lang", "value": "Go"})
 	_, _ = m.Call(ctx, RememberToolName, map[string]any{"key": "os", "value": "darwin"})
-	sum, _ = m.Summary(ctx)
+	sum, _ = m.Summary(ctx, SummaryOptions{})
 	if !strings.Contains(sum, "lang: Go") || !strings.Contains(sum, "os: darwin") {
 		t.Fatalf("summary = %q, want both notes", sum)
+	}
+}
+
+func TestMemorySource_SummaryBudget(t *testing.T) {
+	ctx := context.Background()
+	m, _ := NewMemorySource(NewInMemoryMemoryStore())
+	// stored oldest -> newest: a, b, c
+	_, _ = m.Call(ctx, RememberToolName, map[string]any{"key": "a", "value": "1"})
+	_, _ = m.Call(ctx, RememberToolName, map[string]any{"key": "b", "value": "2"})
+	_, _ = m.Call(ctx, RememberToolName, map[string]any{"key": "c", "value": "3"})
+
+	// MaxItems keeps the newest N, drops the oldest
+	sum, _ := m.Summary(ctx, SummaryOptions{MaxItems: 2})
+	if strings.Contains(sum, "a: 1") {
+		t.Fatalf("MaxItems=2 should drop the oldest (a); got %q", sum)
+	}
+	if !strings.Contains(sum, "b: 2") || !strings.Contains(sum, "c: 3") {
+		t.Fatalf("MaxItems=2 should keep the two newest (b,c); got %q", sum)
+	}
+
+	// MaxChars drops oldest-of-kept until the rendered notes fit
+	full, _ := m.Summary(ctx, SummaryOptions{})
+	tight, _ := m.Summary(ctx, SummaryOptions{MaxChars: 10})
+	if len(tight) >= len(full) {
+		t.Fatalf("MaxChars=10 should shrink the summary: full=%d tight=%d", len(full), len(tight))
+	}
+	if !strings.Contains(tight, "c: 3") {
+		t.Fatalf("MaxChars should keep the newest note (c); got %q", tight)
+	}
+	if strings.Contains(tight, "a: 1") {
+		t.Fatalf("MaxChars=10 should drop the oldest notes; got %q", tight)
 	}
 }

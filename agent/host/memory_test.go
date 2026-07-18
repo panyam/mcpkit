@@ -121,6 +121,48 @@ func toolMsgByID(t *testing.T, msgs []agent.Message, id string) agent.Message {
 	return agent.Message{}
 }
 
+// TestAppMemorySummaryBudget wires SummaryMaxItems through the host: with two
+// notes stored and a cap of 1, the injected summary carries only the newest.
+func TestAppMemorySummaryBudget(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{
+			ID: "c1", Name: agent.RememberToolName,
+			Args: core.NewRawJSON(json.RawMessage(`{"key":"old","value":"first"}`)),
+		}}},
+		agent.StubTurn{Text: "saved"},
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{
+			ID: "c2", Name: agent.RememberToolName,
+			Args: core.NewRawJSON(json.RawMessage(`{"key":"new","value":"second"}`)),
+		}}},
+		agent.StubTurn{Text: "saved"},
+		agent.StubTurn{Text: "reply3"},
+	)
+	cfg := memoryConfig(ts.URL, true)
+	cfg.Memory.SummaryMaxItems = 1
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	for _, in := range []string{"remember old", "remember new", "anything?"} {
+		if err := app.RunTurn(context.Background(), in); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// turn 3's request (index 4) carries the budgeted summary: newest only
+	msgs := stub.Requests()[4].Messages
+	if !hasSystemContaining(msgs, "new: second") {
+		t.Fatal("budgeted summary should include the newest note")
+	}
+	if hasSystemContaining(msgs, "old: first") {
+		t.Fatal("SummaryMaxItems=1 should drop the older note from the injection")
+	}
+}
+
 func hasSystemContaining(msgs []agent.Message, sub string) bool {
 	return countSystemContaining(msgs, sub) > 0
 }

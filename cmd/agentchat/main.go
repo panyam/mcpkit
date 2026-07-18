@@ -157,6 +157,8 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("offload-dir", "", "store offloaded tool results as files under this directory (no server needed); overrides --session-store for blobs")
 	fl.Bool("memory", false, "enable working memory: remember/recall/forget tools the model manages across turns (in-memory store)")
 	fl.Bool("memory-inject-summary", false, "with --memory, prepend a summary of the scratchpad before each turn (costs tokens; off = recall on demand)")
+	fl.Int("memory-summary-max-items", 0, "with --memory-inject-summary, cap the injected summary to the newest N notes (0 = all)")
+	fl.Int("memory-summary-max-chars", 0, "with --memory-inject-summary, cap the injected summary's length in characters (0 = no cap)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -230,7 +232,11 @@ func runChat(v *viper.Viper) error {
 	}
 
 	if v.GetBool("memory") {
-		cfg.Memory = &host.MemoryConfig{InjectSummary: v.GetBool("memory-inject-summary")}
+		cfg.Memory = &host.MemoryConfig{
+			InjectSummary:   v.GetBool("memory-inject-summary"),
+			SummaryMaxItems: v.GetInt("memory-summary-max-items"),
+			SummaryMaxChars: v.GetInt("memory-summary-max-chars"),
+		}
 	}
 
 	app, err := host.NewApp(cfg, os.Stdout, os.Stdin, appOpts...)
