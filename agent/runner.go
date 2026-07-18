@@ -61,6 +61,19 @@ type RunnerConfig struct {
 	// Nil means every call runs, the pre-approval behavior.
 	Approval ApprovalPolicy
 
+	// Compactor, when non-nil, may rewrite the turn's history before the
+	// first model call — the head summarized, a recent tail kept verbatim —
+	// to keep a long conversation under a context budget. The Runner calls
+	// it on its own clone of the history, so Run stays stateless over the
+	// history it is handed; a no-op (Compactor returns the input unchanged)
+	// emits nothing, a real compaction emits EventCompaction. A Compactor
+	// error aborts the turn (a misconfiguration or summarizer-provider
+	// outage, not something the model can recover from), mirroring Selector.
+	// Nil means history is sent verbatim. Mid-turn compaction (a single turn
+	// that itself grows past the budget) is a follow-up; this fires once,
+	// pre-loop.
+	Compactor Compactor
+
 	// ResponseSchema, when set, coerces the turn's final answer into
 	// structured output. After the tool loop reaches its terminal
 	// no-tool-call text, the Runner makes one additional Generate call with
@@ -213,6 +226,17 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 	emit(Event{Kind: EventTurnBegin})
 
 	msgs := slices.Clone(history)
+	if r.cfg.Compactor != nil {
+		before := len(msgs)
+		compacted, err := r.cfg.Compactor.Compact(ctx, msgs)
+		if err != nil {
+			return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: compaction: %w", err))
+		}
+		if len(compacted) != before {
+			msgs = compacted
+			emit(Event{Kind: EventCompaction, Compaction: &CompactionInfo{Before: before, After: len(msgs)}})
+		}
+	}
 	var added []Message
 	var usage Usage
 

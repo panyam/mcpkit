@@ -29,8 +29,14 @@ const (
 	// differently from a failure. Reason carries the model-visible
 	// feedback text.
 	EventToolCancelled EventKind = "tool-cancelled"
-	EventTurnEnd       EventKind = "turn-end"
-	EventError         EventKind = "error"
+	// EventCompaction marks that a Compactor rewrote the turn's history
+	// before the first model call (the head summarized, a recent tail kept
+	// verbatim). Emitted only when compaction actually fired; Compaction
+	// carries the before/after message counts. Surfaces can render a
+	// "compacted context" note; evals can assert it happened.
+	EventCompaction EventKind = "compaction"
+	EventTurnEnd    EventKind = "turn-end"
+	EventError      EventKind = "error"
 )
 
 // Event is one increment of a running turn, the payload surfaces consume
@@ -70,4 +76,15 @@ type Event struct {
 
 	// Result is the completed turn on turn-end.
 	Result *TurnResult `json:"result,omitempty"`
+
+	// Compaction carries the before/after message counts on compaction.
+	Compaction *CompactionInfo `json:"compaction,omitempty"`
+}
+
+// CompactionInfo reports what a compaction pass did: the message count
+// before and after the head was summarized. After < Before whenever the
+// event fires.
+type CompactionInfo struct {
+	Before int `json:"before"`
+	After  int `json:"after"`
 }
