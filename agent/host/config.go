@@ -69,6 +69,35 @@ type Config struct {
 	// WithMemoryStore (in-memory when omitted), the same split as
 	// WithRunStore and WithToolResultStore.
 	Memory *MemoryConfig `json:"memory,omitempty"`
+
+	// Compaction enables history compaction: when the conversation exceeds
+	// MaxTokens, the head is summarized (by the chat provider) and a recent
+	// tail is kept verbatim, before each turn. Nil means off — history is
+	// sent verbatim. Lossy; complementary to Offload (lossless).
+	Compaction *CompactionConfig `json:"compaction,omitempty"`
+}
+
+// CompactionConfig is the host's view of history compaction; it maps to an
+// agent.SummarizingCompactor over the chat provider. Its presence enables
+// compaction.
+type CompactionConfig struct {
+	// MaxTokens is the budget (estimated) above which compaction fires.
+	// Required (must be > 0); NewApp fails if it is not set.
+	MaxTokens int `json:"maxTokens"`
+
+	// KeepRecent is how many trailing messages stay verbatim. Zero uses the
+	// agent default (6).
+	KeepRecent int `json:"keepRecent,omitempty"`
+}
+
+// build maps the host config onto an agent.SummarizingCompactor using
+// provider (the chat model) as the summarizer.
+func (c *CompactionConfig) build(provider agent.Provider) (agent.Compactor, error) {
+	return agent.NewSummarizingCompactor(agent.SummarizingConfig{
+		Provider:   provider,
+		MaxTokens:  c.MaxTokens,
+		KeepRecent: c.KeepRecent,
+	})
 }
 
 // MemoryConfig is the host's view of working memory. Its presence enables

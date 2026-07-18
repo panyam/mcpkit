@@ -45,7 +45,20 @@ func TestLiveLongMemEval(t *testing.T) {
 
 	var passed, total int
 	for _, c := range Cases() {
-		results, err := eval.RunScenario(ctx, agent.RunnerConfig{Provider: provider}, c.Scenario)
+		cfg := agent.RunnerConfig{Provider: provider}
+		if c.CompactTokens > 0 {
+			// The compaction case runs under a low budget so the early turns
+			// are summarized before the final question — this is issue 939's
+			// SummarizingCompactor graded by issue 974's harness.
+			compactor, err := agent.NewSummarizingCompactor(agent.SummarizingConfig{
+				Provider: provider, MaxTokens: c.CompactTokens,
+			})
+			if err != nil {
+				t.Fatalf("%s: build compactor: %v", c.Scenario.Name, err)
+			}
+			cfg.Compactor = compactor
+		}
+		results, err := eval.RunScenario(ctx, cfg, c.Scenario)
 		if err != nil {
 			t.Fatalf("%s: harness error: %v", c.Scenario.Name, err)
 		}
