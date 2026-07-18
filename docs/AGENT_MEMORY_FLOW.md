@@ -82,6 +82,27 @@ The stores are the easy 20% (they look like `RunStore`). The other 80% is policy
 - **RAG today.** The shift is from "pre-baked top-k every turn" to *retrieval as a tool the agent calls* (the Tools path). Large context windows plus offloading erode classic RAG; it still wins when the corpus is larger than the context window, or for freshness, citations, and cost.
 - **Offloading (issue 966).** Extends the *episodic* layer with on-demand reads (`read_tool_result`). Lossless and pay-per-lookup — it shrinks how much the lossy layers ever have to guess, which is why it is the right opener before full memory.
 
+## Prior art & interface extensibility
+
+Working memory's `remember` / `recall` / `forget` verbs are not idiosyncratic — they are the **agent-self-edited** camp of memory design, done minimally. Two camps exist:
+
+- **Model-managed** (ours): the agent decides what to keep by calling tools. Letta/MemGPT (`core_memory_append` / `archival_memory_insert` / `archival_memory_search`), LangChain LangMem (`manage_memory` + `search_memory`).
+- **Pipeline-managed**: a background LLM step extracts and consolidates facts from the raw conversation; the agent never explicitly remembers. Mem0 (`add()` runs an ADD/UPDATE/DELETE/NOOP decision internally), Zep (temporal knowledge-graph extraction). This is the **write path** above (Extract → Consolidate), complementary to the tool surface, not a replacement.
+
+Primitives other systems expose, and where each lands for us:
+
+| Primitive | Who | Our plan |
+|---|---|---|
+| Semantic `search` with a relevance **score** (vs substring list) | Mem0, LangGraph `BaseStore.search`, Letta archival, Zep | Issue 940. `ListMemoriesRequest` already carries `Query`; a `Score` on the returned items is the only add. |
+| **Namespace / scope** (`user_id`, `agent_id`, `run_id`, session) | Near-universal — LangGraph hierarchical namespaces, Mem0 scoping, Letta per-agent | Issue 1003. The most-standard thing we don't yet have; a `Namespace` field on the request structs. |
+| Explicit **`update` / supersede** as a distinct op | Mem0, LangMem | Covered as upsert-by-key today; consolidation is the pipeline camp — defer. |
+| **`history(id)`** — how a fact changed over time | Mem0, Zep (bi-temporal) | Nice-to-have for the knowledge-update category; not now. |
+| **Tiered**: in-context core blocks vs archival | Letta/MemGPT, Mastra (markdown profile) | `InjectSummary` is "core-lite"; editable core blocks are a bigger design — defer. |
+| Memory-as-**filesystem** (`view` / `create` / `str_replace`) | Anthropic memory tool (2025 beta) | This is our offloading / `FileToolResultStore` direction, a different substrate than the working-memory scratchpad. |
+| Configurable tool **names** (vs fixed `remember`/`recall`/`forget`) | competitors use fixed names + namespacing | YAGNI. Names are exported constants; a variadic `NewMemorySource(store, opts...)` with a name-prefix option is non-breaking to add when a second in-agent MemorySource or prompt-tuning actually needs it. `MultiSource` already collision-qualifies names, so it isn't needed for aggregation. |
+
+**Why none of this forces a change to the first cut:** the `MemoryStore` seam uses the gRPC-style req/resp struct convention. `Namespace`, `Score`, a `GetMemory` point-read, `DeleteAll` — all land as new struct fields or new methods without breaking the interface or any backend (same reason `PutMemoryResponse` is an empty struct). The store starts minimal on purpose and grows additively into the primitives above.
+
 ## Sequencing (roadmap §A)
 
 issue 966 offloading → working memory + `MemorySource` → compaction (`SummarizingCompactor`) → embedder / vectorstore recall wired into injection.
