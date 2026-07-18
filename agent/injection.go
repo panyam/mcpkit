@@ -45,8 +45,8 @@ type AggregateHint struct {
 	Strategy WindowStrategy `json:"strategy,omitempty"`
 }
 
-// InjectionConfig assembles an InjectionPolicy.
-type InjectionConfig struct {
+// EventInjectionConfig assembles an EventInjectionPolicy.
+type EventInjectionConfig struct {
 	// Hints maps event name to its ContextHint. Entries here override
 	// server-advertised hints (host config wins over vendor _meta).
 	Hints map[string]ContextHint
@@ -84,13 +84,13 @@ type InjectedContext struct {
 	Priority string
 }
 
-// InjectionPolicy is the host half of the context-hints SEP draft: it
+// EventInjectionPolicy is the host half of the context-hints SEP draft: it
 // buffers incoming events (per-event aggregation windows), renders them, and
 // releases them in priority order under a budget when the host drains before
 // a turn. Safe for concurrent Ingest against one Drain (the wiring's event
 // goroutine vs the turn path).
-type InjectionPolicy struct {
-	cfg InjectionConfig
+type EventInjectionPolicy struct {
+	cfg EventInjectionConfig
 
 	mu      sync.Mutex
 	windows map[string]Stage[IncomingEvent]
@@ -100,8 +100,8 @@ type InjectionPolicy struct {
 	dropped int
 }
 
-// NewInjectionPolicy builds the policy.
-func NewInjectionPolicy(cfg InjectionConfig) *InjectionPolicy {
+// NewEventInjectionPolicy builds the policy.
+func NewEventInjectionPolicy(cfg EventInjectionConfig) *EventInjectionPolicy {
 	if cfg.MaxPerDrain <= 0 {
 		cfg.MaxPerDrain = DefaultMaxPerDrain
 	}
@@ -111,7 +111,7 @@ func NewInjectionPolicy(cfg InjectionConfig) *InjectionPolicy {
 	if cfg.now == nil {
 		cfg.now = time.Now
 	}
-	return &InjectionPolicy{cfg: cfg, windows: map[string]Stage[IncomingEvent]{}, session: map[string]IncomingEvent{}}
+	return &EventInjectionPolicy{cfg: cfg, windows: map[string]Stage[IncomingEvent]{}, session: map[string]IncomingEvent{}}
 }
 
 // HintFromMeta extracts a server-advertised ContextHint from an events/list
@@ -155,7 +155,7 @@ func HintFromMeta(meta map[string]any) (ContextHint, bool) {
 // SetHint installs (or overrides) the hint for an event name at runtime,
 // e.g. from events/list discovery. Host-config entries passed at
 // construction still win: SetHint is a no-op for names already configured.
-func (p *InjectionPolicy) SetHint(name string, h ContextHint) {
+func (p *EventInjectionPolicy) SetHint(name string, h ContextHint) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, configured := p.cfg.Hints[name]; configured {
@@ -167,13 +167,13 @@ func (p *InjectionPolicy) SetHint(name string, h ContextHint) {
 	p.cfg.Hints[name] = h
 }
 
-func (p *InjectionPolicy) hint(name string) ContextHint {
+func (p *EventInjectionPolicy) hint(name string) ContextHint {
 	return p.cfg.Hints[name]
 }
 
 // Ingest feeds one event through the developer stages and into its
 // aggregation window (or straight to pending when the hint has none).
-func (p *InjectionPolicy) Ingest(ev IncomingEvent) {
+func (p *EventInjectionPolicy) Ingest(ev IncomingEvent) {
 	for _, f := range p.cfg.Filters {
 		if !f(ev) {
 			return
@@ -206,7 +206,7 @@ func (p *InjectionPolicy) Ingest(ev IncomingEvent) {
 	}
 }
 
-func (p *InjectionPolicy) buffer(ev IncomingEvent, h ContextHint) {
+func (p *EventInjectionPolicy) buffer(ev IncomingEvent, h ContextHint) {
 	if h.Retention == "session" {
 		key := ev.Server + "/" + ev.Name
 		if _, seen := p.session[key]; !seen {
@@ -223,7 +223,7 @@ func (p *InjectionPolicy) buffer(ev IncomingEvent, h ContextHint) {
 // session-retention entries re-drain every call until superseded. Entries
 // beyond the budget stay buffered for the next drain; restricted events
 // denied by the consent gate are counted and dropped.
-func (p *InjectionPolicy) Drain() []InjectedContext {
+func (p *EventInjectionPolicy) Drain() []InjectedContext {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.cfg.now()
@@ -281,13 +281,13 @@ func (p *InjectionPolicy) Drain() []InjectedContext {
 }
 
 // Dropped reports how many events the consent gate has refused so far.
-func (p *InjectionPolicy) Dropped() int {
+func (p *EventInjectionPolicy) Dropped() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.dropped
 }
 
-func (p *InjectionPolicy) consentLocked(h ContextHint, ev IncomingEvent) bool {
+func (p *EventInjectionPolicy) consentLocked(h ContextHint, ev IncomingEvent) bool {
 	sensitivity := h.Sensitivity
 	if sensitivity == "" || sensitivity == "public" {
 		return true
