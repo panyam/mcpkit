@@ -24,6 +24,7 @@
 package longmemeval
 
 import (
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/eval"
 )
 
@@ -41,6 +42,10 @@ const (
 	CatTemporal Category = "temporal"
 	// CatAbstention — a fact was never stated; the model must not invent one.
 	CatAbstention Category = "abstention"
+	// CatCompaction — an early fact must survive history compaction: the run
+	// uses a low compaction budget so the head is summarized, and the answer
+	// still depends on a detail from the summarized region.
+	CatCompaction Category = "compaction"
 )
 
 // memoryInstructions steer the model to actually use its scratchpad — the
@@ -63,6 +68,16 @@ type MemCase struct {
 	// MustNot forbids each substring in the final answer (deterministic) —
 	// the supersede and abstention checks.
 	MustNot []string
+
+	// NewCompactor, when set, runs the scenario under the Compactor it builds
+	// (given the run's provider, since a SummarizingCompactor needs a model to
+	// summarize the head). Nil runs with no compaction. It is how a
+	// CatCompaction case proves a fact survives the compaction boundary — and
+	// because it hands over a Compactor, not a token budget, a case can plug
+	// ANY compaction strategy, not just SummarizingCompactor. The Compactor
+	// itself decides per turn whether to compact (Compact is a no-op under
+	// budget), so this only chooses the strategy, not the trigger.
+	NewCompactor func(provider agent.Provider) (agent.Compactor, error)
 }
 
 // SmokeScenarios returns the illustrative smoke set, one short scenario per
@@ -118,6 +133,28 @@ func SmokeScenarios() []MemCase {
 				"What is my sister's name?"),
 			MustNot: []string{"Analytical"}, // must not bleed an unrelated remembered token
 			Rubric:  "The user never gave their sister's name. The answer must acknowledge it does not know and must NOT invent a name.",
+		},
+		{
+			Category: CatCompaction,
+			Scenario: eval.Scenario{
+				Name:         "compaction-employee-id",
+				Instructions: memoryInstructions,
+				// The ID is stated first, then buried under filler chatter so a
+				// low compaction budget summarizes it out of the raw transcript;
+				// the summarizer must carry it forward for the final answer.
+				Turns: []string{
+					"Please note my employee ID is 4471 for anything work-related.",
+					"Also I like hiking on weekends and cold brew coffee.",
+					"My commute is about 40 minutes each way on the train.",
+					"I have a standup every morning at 9:30.",
+					"What is my employee ID?",
+				},
+			},
+			Must:   []string{"4471"},
+			Rubric: "The answer must give the employee ID 4471, recalled from the earlier (compacted) part of the conversation.",
+			NewCompactor: func(p agent.Provider) (agent.Compactor, error) {
+				return agent.NewSummarizingCompactor(agent.SummarizingConfig{Provider: p, MaxTokens: 40})
+			},
 		},
 	}
 }

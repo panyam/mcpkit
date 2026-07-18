@@ -23,8 +23,10 @@ func TestCasesWellFormed(t *testing.T) {
 		if len(c.Scenario.Turns) < 2 {
 			t.Fatalf("%q: a memory scenario needs at least a setup turn and a question", name)
 		}
-		if !c.Scenario.Memory {
-			t.Fatalf("%q: memory scenarios must enable Memory", name)
+		// every case exercises SOME memory mechanism: the working-memory
+		// tools (Memory) or history compaction (NewCompactor).
+		if !c.Scenario.Memory && c.NewCompactor == nil {
+			t.Fatalf("%q: case exercises neither working memory nor compaction", name)
 		}
 		// every case must be gradeable: a deterministic assertion or a rubric
 		if len(c.Must) == 0 && len(c.MustNot) == 0 && c.Rubric == "" {
@@ -32,8 +34,8 @@ func TestCasesWellFormed(t *testing.T) {
 		}
 	}
 
-	// the first slice covers all five LongMemEval categories
-	for _, want := range []Category{CatExtraction, CatMultiSession, CatKnowledgeUpdate, CatTemporal, CatAbstention} {
+	// the first slice covers all LongMemEval categories plus compaction
+	for _, want := range []Category{CatExtraction, CatMultiSession, CatKnowledgeUpdate, CatTemporal, CatAbstention, CatCompaction} {
 		if !cats[want] {
 			t.Fatalf("category %q not covered", want)
 		}
