@@ -1,12 +1,12 @@
 # agentchat playground
 
-One command to feel the mcpkit agent SDK: `make pg` from the repo root boots a
+One command to feel the mcpkit agent SDK: `just pg` from the repo root boots a
 demo MCP server (`examples/getting-started/server`, a `greet` tool on
 `:8787`) and launches `agentchat` in its TUI, wired to a local model, a
 SQLite session store, and a filesystem offload dir.
 
 ```bash
-make pg
+just pg
 ```
 
 ## What you need

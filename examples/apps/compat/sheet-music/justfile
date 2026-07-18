@@ -1,0 +1,3 @@
+# Per-fixture conventions live in the shared fragment. Override
+# FIXTURE_NAME / SERVER_PORT via environment variables if you need to.
+import '../../../common/walkthrough.just'

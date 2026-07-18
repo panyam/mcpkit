@@ -26,7 +26,7 @@ Audit an mcpkit example for compliance with `examples/CONVENTIONS.md`. Read-only
 
 5. **Emit findings** in the format under "## Output format" below. Use the **canonical IDs from CONVENTIONS.md §8** (one per checklist item) so `/example-upgrade` can match them deterministically.
 
-6. **Do not edit any files.** Do not run `make readme`, do not run `go fmt`, do not run `make tidy`. The audit's only side effects are read operations + the `--doc md` build attempt in step 4.
+6. **Do not edit any files.** Do not run `just readme`, do not run `go fmt`, do not run `just tidy`. The audit's only side effects are read operations + the `--doc md` build attempt in step 4.
 
 7. **Final line:** print exactly `Audit complete: <N> pass, <M> fail` so a follow-up `/example-upgrade` invocation can detect a recent audit in conversation context.
 
@@ -69,7 +69,7 @@ is skipped.
 
 ## Principles
 
-- **Read-only, no exceptions.** This skill never writes a file, never runs `go fmt`, never edits the Makefile. If the user wants fixes, they run `/example-upgrade`.
+- **Read-only, no exceptions.** This skill never writes a file, never runs `go fmt`, never edits the justfile. If the user wants fixes, they run `/example-upgrade`.
 - **Stable IDs are a contract.** `/example-upgrade` parses these from context to know what to fix; renaming an ID is a breaking change to the audit/upgrade pipeline.
 - **CONVENTIONS.md is the spec.** If a check here drifts from the doc, the doc wins — fix the skill.
 - **Don't audit what isn't there.** If an example legitimately doesn't use a feature (e.g. no side endpoints → `mux-withmux` is N/A), omit the check rather than failing it.

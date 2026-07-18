@@ -13,10 +13,10 @@ they would write in their own project.
 
 ```bash
 # terminal 1 — the server
-make server
+just server
 
 # terminal 2 — the client
-make client
+just client
 # → Hello, world!
 ```
 

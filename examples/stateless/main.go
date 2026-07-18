@@ -55,7 +55,7 @@ func main() {
 		}
 	}
 	fmt.Println("examples/stateless — see --serve to run the MCP server.")
-	fmt.Println("Conformance: cd ../../conformance && make testconf-stateless")
+	fmt.Println("Conformance: cd ../../conformance && just testconf-stateless")
 }
 
 func serve() {

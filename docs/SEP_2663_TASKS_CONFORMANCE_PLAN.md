@@ -89,7 +89,7 @@ Files to change:
   `docs/TASKS_V2_MIGRATION.md`, `CAPABILITIES.md`.
 
 **Test:** `TestCreateTaskResultWireShape` covers the round-trip; full
-`make test` and `make testconf-tasks-v2` (27/27) + `make testconf-mrtr`
+`just test` and `just testconf-tasks-v2` (27/27) + `just testconf-mrtr`
 (7/7 + 1 skip) pass against the flat shape.
 
 ### Fix 2: Protocol version
@@ -246,7 +246,7 @@ Mcpkit's `conformance/tasks-v2/` and `conformance/mrtr/` folders now
 host vitest sentinels (placeholder tests) reserved for future
 mcpkit-stricter scenarios — assertions that go beyond what the spec
 mandates because mcpkit deliberately picks the louder / safer option in
-spec-silent corners. `make testconf-tasks-v2` and `make testconf-mrtr`
+spec-silent corners. `just testconf-tasks-v2` and `just testconf-mrtr`
 delegate to the fork via `MCPCONFORMANCE_PATH` and chain the local
 sentinel run.
 

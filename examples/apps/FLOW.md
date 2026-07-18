@@ -96,9 +96,9 @@ This is the one slot in the flow that can be **either** upstream's TS **or** our
 
 | Workflow | Server is… | Owner |
 |---|---|---|
-| `make demo-app` (any `RENDERER`) | mcpkit-Go drop-in (`examples/apps/compat/<name>/main.go`) | us |
-| `make demo-upstream` (any `RENDERER`) | upstream's TS server (`basic-server-vanillajs/dist/index.js` etc.) | upstream |
-| `make test-apps-playwright[-docker]` | mcpkit-Go drop-in (`examples/apps/compat/<name>/main.go`) | us |
+| `just demo-app` (any `RENDERER`) | mcpkit-Go drop-in (`examples/apps/compat/<name>/main.go`) | us |
+| `just demo-upstream` (any `RENDERER`) | upstream's TS server (`basic-server-vanillajs/dist/index.js` etc.) | upstream |
+| `just test-apps-playwright[-docker]` | mcpkit-Go drop-in (`examples/apps/compat/<name>/main.go`) | us |
 
 In `test-apps-playwright-docker` mode, upstream's TS *also* runs on a side port (`UPSTREAM_PORT`, default 3102) so the wrapper can JSON-diff `tools/list` against the Go fixture before Playwright starts — the strict drift gate. Playwright itself only drives the Go fixture on `:3101`.
 
@@ -259,11 +259,11 @@ Two axes — **server** (Go fixture vs. upstream TS) × **renderer** (MCPJam for
 
 | You want to… | Use |
 |---|---|
-| Inspect the wire of the **mcpkit Go fixture** | `make demo-app EXAMPLE=<name>` |
-| See the **mcpkit Go fixture** rendered in basic-host | `RENDERER=basic-host make demo-app EXAMPLE=<name>` |
-| Inspect the wire of **upstream's TS reference** (incl. SKIP examples) | `make demo-upstream EXAMPLE=<name>` |
-| See **upstream's TS reference** rendered in basic-host | `RENDERER=basic-host make demo-upstream EXAMPLE=<name>` |
-| Strict parity check — Go fixture wire vs upstream TS wire + visual regression | `make test-apps-playwright-docker EXAMPLE=<name>` |
+| Inspect the wire of the **mcpkit Go fixture** | `just demo-app EXAMPLE=<name>` |
+| See the **mcpkit Go fixture** rendered in basic-host | `RENDERER=basic-host just demo-app EXAMPLE=<name>` |
+| Inspect the wire of **upstream's TS reference** (incl. SKIP examples) | `just demo-upstream EXAMPLE=<name>` |
+| See **upstream's TS reference** rendered in basic-host | `RENDERER=basic-host just demo-upstream EXAMPLE=<name>` |
+| Strict parity check — Go fixture wire vs upstream TS wire + visual regression | `just test-apps-playwright-docker EXAMPLE=<name>` |
 
 Demo targets default to **MCPJam** (lower-friction first-touch, works for SKIP examples that have no `dist/mcp-app.html` to render). `RENDERER=basic-host` flips to the iframe-rendering path when you want to *see* the App rather than inspect its wire.
 

@@ -3,8 +3,8 @@
 //
 // Two-process architecture (matches examples/fine-grained-auth/):
 //
-//	Terminal 1:  make serve         # MCP server + in-process AS on :8080
-//	Terminal 2:  make run           # demokit walkthrough
+//	Terminal 1:  just serve         # MCP server + in-process AS on :8080
+//	Terminal 2:  just run           # demokit walkthrough
 //
 // Patterns covered:
 //   - Public discovery: tools/list works without a token
@@ -92,7 +92,7 @@ func runDemo() {
 		Description("Walks through auth patterns layered on a single mcpkit server: public method allowlist, JWT/JWKS validation, per-tool scope enforcement, and session hijacking prevention.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 			demokit.Actor("AS", "Auth Server (in-process)"),
 		)
 
@@ -100,8 +100,8 @@ func runDemo() {
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve        # MCP server + in-process AS on :8080",
-		"Terminal 2:  make run          # this demo",
+		"Terminal 1:  just serve        # MCP server + in-process AS on :8080",
+		"Terminal 2:  just run          # this demo",
 		"```",
 	)
 
@@ -142,7 +142,7 @@ json.NewDecoder(resp.Body).Decode(&boot)
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			resp, err := http.Get(serverURL + "/demo/bootstrap")
 			if err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			defer resp.Body.Close()

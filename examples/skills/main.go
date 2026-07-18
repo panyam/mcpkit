@@ -2,8 +2,8 @@
 //
 // Two-process architecture (matches the events/discord and tasks examples):
 //
-//	Terminal 1:  make serve         # skills server on :8080 in file mode
-//	Terminal 2:  make demo          # walkthrough (--tui for interactive TUI)
+//	Terminal 1:  just serve         # skills server on :8080 in file mode
+//	Terminal 2:  just demo          # walkthrough (--tui for interactive TUI)
 //
 // Walks the bundled skills/ directory through ext/skills.SkillProvider
 // and exposes each skill either as individual file resources (file

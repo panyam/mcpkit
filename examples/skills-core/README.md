@@ -22,14 +22,14 @@ are the deferred / extended features and are deliberately left out here.
 ## Run it
 
 ```
-Terminal 1:  make serve   # skills-core server, file mode, :8080
-Terminal 2:  make demo    # this walkthrough (interactive TUI)
+Terminal 1:  just serve   # skills-core server, file mode, :8080
+Terminal 2:  just demo    # this walkthrough (interactive TUI)
 ```
 
 Or drive it non-interactively:
 
 ```
-make serve            # in one terminal
+just serve            # in one terminal
 go run . --non-interactive
 ```
 
@@ -62,7 +62,7 @@ disk. That invariant is enforced by `TestNoCodeExecutionSurface` in the
 `ext/skills` package.
 
 See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the generated step-by-step (run
-`make readme` to regenerate).
+`just readme` to regenerate).
 
 ## Next steps
 

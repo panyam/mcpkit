@@ -64,7 +64,7 @@ func runDemo() {
 		Description(buildDescription(otlpMode)).
 		Actors(
 			demokit.Actor("Host", "MCP Host (this walkthrough)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 		)
 
 	demo.Section("Setup", buildSetupLines(otlpMode)...)
@@ -90,7 +90,7 @@ func runDemo() {
 				client.WithTracerProvider(clientTP),
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
@@ -167,9 +167,9 @@ func runDemo() {
 // reader doesn't see references to the WRONG mode's setup.
 func buildDescription(otlpMode bool) string {
 	if otlpMode {
-		return "Walks through SEP-414 against the LGTM observability stack at `docker/observability/`. Both sides — server (`make serve EXPORTER=otlp`) and walkthrough (`make demo EXPORTER=otlp`) — ship spans via OTLP gRPC to the OTel Collector, which fans them out to Tempo. Grafana renders the stitched client→server trace under one TraceID per `tools/call`. Each step prints a pre-filtered Grafana Explore deep link so you can drill straight into Tempo. The looping \"Explore trace shapes\" step lets you A/B four distinct tools and compare their span shapes in Grafana."
+		return "Walks through SEP-414 against the LGTM observability stack at `docker/observability/`. Both sides — server (`just serve EXPORTER=otlp`) and walkthrough (`just demo EXPORTER=otlp`) — ship spans via OTLP gRPC to the OTel Collector, which fans them out to Tempo. Grafana renders the stitched client→server trace under one TraceID per `tools/call`. Each step prints a pre-filtered Grafana Explore deep link so you can drill straight into Tempo. The looping \"Explore trace shapes\" step lets you A/B four distinct tools and compare their span shapes in Grafana."
 	}
-	return "Walks through SEP-414 in stdout-exporter mode (no external stack required). Both sides — server (`make serve`) and walkthrough (`make demo`) — print spans as pretty JSON on their respective terminals. The looping \"Explore trace shapes\" step lets you A/B four distinct tool calls; matching TraceIDs across the two terminals is the SEP-414 wire stitching client and server into a single distributed trace. Run with `EXPORTER=otlp` after `make -C docker up` to ship spans to Grafana instead."
+	return "Walks through SEP-414 in stdout-exporter mode (no external stack required). Both sides — server (`just serve`) and walkthrough (`just demo`) — print spans as pretty JSON on their respective terminals. The looping \"Explore trace shapes\" step lets you A/B four distinct tool calls; matching TraceIDs across the two terminals is the SEP-414 wire stitching client and server into a single distributed trace. Run with `EXPORTER=otlp` after `just -f docker/observability/justfile up` (from the repo root) to ship spans to Grafana instead."
 }
 
 // buildSetupLines returns the markdown lines for the Setup section,
@@ -182,9 +182,9 @@ func buildSetupLines(otlpMode bool) []string {
 			"Bring up the LGTM observability stack and start the OTel-instrumented server:",
 			"",
 			"```",
-			"Terminal 1:  make -C ../../../docker up           # Tempo + Loki + Mimir + Grafana + OTel Collector",
-			"Terminal 2:  make serve EXPORTER=otlp             # MCP server, exports OTLP",
-			"Terminal 3:  make demo EXPORTER=otlp              # this walkthrough, exports OTLP",
+			"Terminal 1:  cd ../../../docker/observability && just up   # Tempo + Loki + Mimir + Grafana + OTel Collector",
+			"Terminal 2:  just serve EXPORTER=otlp             # MCP server, exports OTLP",
+			"Terminal 3:  just demo EXPORTER=otlp              # this walkthrough, exports OTLP",
 			"```",
 			"",
 			"Then open Grafana — the steps below print pre-filtered Explore deep links you can click straight into:",
@@ -200,13 +200,13 @@ func buildSetupLines(otlpMode bool) []string {
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # OTel-instrumented server on :8080",
-		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
+		"Terminal 1:  just serve         # OTel-instrumented server on :8080",
+		"Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)",
 		"```",
 		"",
 		"Keep both terminals visible — the walkthrough surfaces what the *Host* sees on the wire (JSON-RPC results); the OpenTelemetry spans land on the *Server* terminal's stdout via the `stdouttrace` exporter. Match the TraceID across the two terminals to see the SEP-414 stitch.",
 		"",
-		"To send spans to a real backend instead, run with `EXPORTER=otlp` after `make -C ../../../docker up`.",
+		"To send spans to a real backend instead, run with `EXPORTER=otlp` after `cd ../../../docker/observability && just up`.",
 	}
 }
 

@@ -37,13 +37,13 @@ inspection). Run a single one with:
 
 ```bash
 # mcpkit-Go fixture + basic-host visual demo (default — no LLM needed)
-make demo-app EXAMPLE=basic-vanillajs
+just demo-app basic-vanillajs
 
 # Wire inspection instead of visual rendering
-RENDERER=mcpjam make demo-app EXAMPLE=basic-vanillajs
+RENDERER=mcpjam just demo-app basic-vanillajs
 
 # Upstream TS reference server (use for SKIP examples below)
-make demo-upstream EXAMPLE=basic-vanillajs
+just demo-upstream basic-vanillajs
 ```
 
 See [Other ways to test a fixture](#other-ways-to-test-a-fixture) for
@@ -52,7 +52,7 @@ the full 2×2 of server × renderer.
 **SKIP rows** — examples upstream's `servers.spec.ts` deliberately
 excludes (special build-time deps or out of the default test matrix).
 No mcpkit-Go drop-in exists for these; browse them with
-`make demo-upstream`:
+`just demo-upstream`:
 [`lazy-auth-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/lazy-auth-server),
 [`qr-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/qr-server),
 [`say-server`](https://github.com/modelcontextprotocol/ext-apps/tree/main/examples/say-server),
@@ -70,8 +70,8 @@ on `demo-app` vs `demo-upstream` (or always Go fixture under
 
 ### basic-host renderer (Playwright or interactive)
 
-Used by `make test-apps-playwright[-docker]` (Playwright drives) and
-`RENDERER=basic-host make demo-app|demo-upstream` (your browser drives).
+Used by `just test-apps-playwright[-docker]` (Playwright drives) and
+`RENDERER=basic-host just demo-app|demo-upstream` (your browser drives).
 Renders the App iframe end-to-end.
 
 ```mermaid
@@ -95,7 +95,7 @@ flowchart LR
 
 ### MCPJam Inspector renderer (default for `demo-app` / `demo-upstream`)
 
-Used by `make demo-app` and `make demo-upstream` without a `RENDERER`
+Used by `just demo-app` and `just demo-upstream` without a `RENDERER`
 flag. Shows the wire (`tools/list`, `_meta.ui`, tool-call payloads); does
 **not** render the App iframe — that's basic-host's job.
 
@@ -137,7 +137,7 @@ wire contract. See [`../FLOW.md`](../FLOW.md#production-hosts-vs-basic-host).
 
 ## The basic-host bridge dance
 
-The protocol surface scripted hosts exercise (`initialize` → `tools/list` → `tools/call` → `resources/read`) is the *floor* of an MCP Apps interaction. When `make demo-app EXAMPLE=<fixture>` runs a fixture inside basic-host, the host does those same calls — and then a JavaScript handoff inside a sandboxed iframe takes over. Walkthroughs in this folder narrate the floor end-to-end, but each one ends with a *"What the App iframe does with all this"* section pointing here for the framework story.
+The protocol surface scripted hosts exercise (`initialize` → `tools/list` → `tools/call` → `resources/read`) is the *floor* of an MCP Apps interaction. When `just demo-app <fixture>` runs a fixture inside basic-host, the host does those same calls — and then a JavaScript handoff inside a sandboxed iframe takes over. Walkthroughs in this folder narrate the floor end-to-end, but each one ends with a *"What the App iframe does with all this"* section pointing here for the framework story.
 
 The handoff:
 
@@ -202,13 +202,13 @@ upstream's TS server at the wire level.
 3. Generate the canonical baseline (Docker, byte-identical to what
    upstream's CI would produce):
    ```bash
-   DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
+   DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> just test-apps-playwright
    ```
    Writes `examples/apps/compat/<fixture>/__snapshots__/<key>.png`.
 4. Verify clean runs pass:
    ```bash
-   DOCKER=1 EXAMPLE=<name> make test-apps-playwright   # visual + protocol gate
-   EXAMPLE=<name> make test-apps-playwright            # native — `loads app UI` only
+   DOCKER=1 EXAMPLE=<name> just test-apps-playwright   # visual + protocol gate
+   EXAMPLE=<name> just test-apps-playwright            # native — `loads app UI` only
    ```
 5. Write the fixture's `README.md` from the canonical template:
    ```bash
@@ -228,8 +228,8 @@ Two run modes, same wrapper:
 
 | Mode | Invocation | Purpose |
 |---|---|---|
-| Native (default) | `make test-apps-playwright` | Fast local iteration. Runs `loads app UI` (functional check) — passes anywhere. Runs `screenshot matches golden` — **expected to fail on non-Linux hosts** because the committed baseline is Docker-pinned. |
-| Docker | `make test-apps-playwright-docker` (or `DOCKER=1 …`) | CI-identical run inside `mcr.microsoft.com/playwright:v1.57.0-noble` — same image upstream's `test:e2e:docker` uses. Cross-compiles the Go fixture for `linux/amd64` on the host, mounts it in; `basic-host` + Playwright run inside. The real visual gate. |
+| Native (default) | `just test-apps-playwright` | Fast local iteration. Runs `loads app UI` (functional check) — passes anywhere. Runs `screenshot matches golden` — **expected to fail on non-Linux hosts** because the committed baseline is Docker-pinned. |
+| Docker | `just test-apps-playwright-docker` (or `DOCKER=1 …`) | CI-identical run inside `mcr.microsoft.com/playwright:v1.57.0-noble` — same image upstream's `test:e2e:docker` uses. Cross-compiles the Go fixture for `linux/amd64` on the host, mounts it in; `basic-host` + Playwright run inside. The real visual gate. |
 
 One canonical baseline per fixture (no `{platform}` suffix), matching
 upstream's pinning convention. macOS / Windows contributors use Docker mode
@@ -281,7 +281,7 @@ fair regression check we can do.
 ## Other ways to test a fixture
 
 Every per-fixture README leads with the default visual demo
-(`make demo-app EXAMPLE=<name>`, which boots the mcpkit-Go fixture in
+(`just demo-app EXAMPLE=<name>`, which boots the mcpkit-Go fixture in
 upstream's `basic-host` and opens a browser — no LLM needed). This
 section is the single source of truth for the other axes.
 
@@ -297,18 +297,18 @@ The demo targets pick a server and a renderer independently:
 
 | Command | MCP server | Renderer |
 |---|---|---|
-| `make demo-app EXAMPLE=<name>` | **mcpkit-Go fixture** | **basic-host** (default) |
-| `RENDERER=mcpjam make demo-app EXAMPLE=<name>` | mcpkit-Go fixture | MCPJam Inspector |
-| `make demo-upstream EXAMPLE=<name>` | **upstream TS reference** | basic-host (default) |
-| `RENDERER=mcpjam make demo-upstream EXAMPLE=<name>` | upstream TS reference | MCPJam Inspector |
+| `just demo-app EXAMPLE=<name>` | **mcpkit-Go fixture** | **basic-host** (default) |
+| `RENDERER=mcpjam just demo-app EXAMPLE=<name>` | mcpkit-Go fixture | MCPJam Inspector |
+| `just demo-upstream EXAMPLE=<name>` | **upstream TS reference** | basic-host (default) |
+| `RENDERER=mcpjam just demo-upstream EXAMPLE=<name>` | upstream TS reference | MCPJam Inspector |
 
 ### When to reach for each
 
-- **Default (`make demo-app`, Go + basic-host).** Visual demo of the
+- **Default (`just demo-app`, Go + basic-host).** Visual demo of the
   mcpkit fixture. **No LLM required** — the App's iframe + bridge
   drives the tool calls itself. Best first-touch experience. Use this
   unless you have a reason not to.
-- **`RENDERER=mcpjam make demo-app`** — same Go fixture, but launches
+- **`RENDERER=mcpjam just demo-app`** — same Go fixture, but launches
   [MCPJam Inspector](https://github.com/MCPJam/inspector) instead of
   basic-host. Use when you want to browse `tools/list` JSON, `_meta.ui`
   structure, tool-call payloads, resource list on the wire. (MCPJam has
@@ -320,25 +320,25 @@ The demo targets pick a server and a renderer independently:
   VS Code, Claude Desktop, MCPJam, or your own client. Useful for the
   LLM-driven flow (ask the model to call the tool) and for verifying
   cross-host compatibility.
-- **`make demo-upstream`** — upstream's TypeScript reference server
+- **`just demo-upstream`** — upstream's TypeScript reference server
   instead of the Go fixture. Use this to compare the Go fixture's wire
   surface against the canonical implementation, or to browse the SKIP
   examples that have no Go drop-in (`lazy-auth-server`,
   `video-resource-server`, `qr-server`, `say-server`).
-- **`make test-apps-playwright-docker EXAMPLE=<name>`** — strict parity
+- **`just test-apps-playwright-docker EXAMPLE=<name>`** — strict parity
   gate. Wire-level `tools/list` diff + visual PNG baseline. Requires
   Docker. Separate axis; not interactive.
 
 ### Friendly errors
 
-`make demo-app EXAMPLE=<name>` requires a mcpkit-Go drop-in to exist
+`just demo-app EXAMPLE=<name>` requires a mcpkit-Go drop-in to exist
 under `examples/apps/compat/`. For SKIP examples that don't have one,
 the wrapper prints a redirect:
 
 ```
 ERROR: no mcpkit-Go drop-in for 'lazy-auth-server'.
 
-  Try `make demo-upstream EXAMPLE=lazy-auth-server` to browse the upstream
+  Try `just demo-upstream EXAMPLE=lazy-auth-server` to browse the upstream
   TS reference instead.
 ```
 
@@ -387,11 +387,11 @@ Author flow:
 ```bash
 # Edit walkthrough.go.
 # Record a new trace -- press Enter to advance each step (server in another terminal):
-make serve   # terminal 1
-make record  # terminal 2
+just serve   # terminal 1
+just record  # terminal 2
 
 # Regenerate the bundle from the trace:
-make bundle  # aliases: make walkthrough, make walk
+just bundle  # aliases: just walkthrough, make walk
 
 # Commit walkthrough.go, walkthrough.trace.json, and bundle/ together.
 ```
@@ -426,7 +426,7 @@ for the single-trace template.
 ### Discovery + publish
 
 A repo-root collector (`scripts/collect_walkthroughs.py`, invoked by
-`make collect-walkthroughs`) walks `examples/` for any `bundle/` directory
+`just collect-walkthroughs`) walks `examples/` for any `bundle/` directory
 paired with a `walkthrough.trace.json` (or `walkthroughs/` dir) sibling
 and mirrors it into `docs/site/dist/docs/walkthroughs/<fixture-path>/`.
 `make docs-site-build` / `docs-site-deploy` depend on it; you don't need
@@ -459,11 +459,11 @@ a display. Run native mode for visible-browser debugging; run Docker
 mode for the strict drift gate.
 
 ```bash
-make test-apps-playwright                        # headed native (local default)
-HEADLESS=1 make test-apps-playwright             # native, headless (CI / conformance)
-DEBUG_PW=1 make test-apps-playwright             # step through with Inspector
-UI=1 make test-apps-playwright                   # full Playwright UI runner
-make test-apps-playwright-docker                 # docker, always headless
+just test-apps-playwright                        # headed native (local default)
+HEADLESS=1 just test-apps-playwright             # native, headless (CI / conformance)
+DEBUG_PW=1 just test-apps-playwright             # step through with Inspector
+UI=1 just test-apps-playwright                   # full Playwright UI runner
+just test-apps-playwright-docker                 # docker, always headless
 ```
 
 ## Where test results land
@@ -496,7 +496,7 @@ image their `test:e2e:docker` target uses, and so do we.
 Regenerate with:
 
 ```bash
-DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> make test-apps-playwright
+DOCKER=1 UPDATE_SNAPSHOTS=1 EXAMPLE=<name> just test-apps-playwright
 ```
 
 The native (non-Docker) wrapper still runs the visual test on the host, but

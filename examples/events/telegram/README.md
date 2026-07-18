@@ -15,15 +15,15 @@ A condensed walkthrough focused on the telegram-specific payload shape and the t
 All walkthrough steps run; the final live-interaction step skips with a "no token" message.
 
 ```bash
-make serve    # terminal 1 — server in test mode
-make demo     # terminal 2 — walkthrough
+just serve    # terminal 1 — server in test mode
+just demo     # terminal 2 — walkthrough
 ```
 
 To simulate Telegram activity from a third terminal:
 
 ```bash
-make inject TEXT="hello world"   # message event (cursored)
-make inject-typing               # typing indicator (cursorless, demo-only — see below)
+TEXT=... just inject TEXT="hello world"   # message event (cursored)
+TEXT=... just inject-typing               # typing indicator (cursorless, demo-only — see below)
 ```
 
 ### Option B — Real bot mode (requires `TELEGRAM_BOT_TOKEN`)
@@ -31,14 +31,14 @@ make inject-typing               # typing indicator (cursorless, demo-only — s
 Same walkthrough plus the final live step captures real message events from a chat with the bot.
 
 ```bash
-TELEGRAM_BOT_TOKEN=your-token make serve   # terminal 1 — server in bot mode
-make demo                                   # terminal 2 — walkthrough
+TELEGRAM_BOT_TOKEN=your-token just serve   # terminal 1 — server in bot mode
+just demo                                  # terminal 2 — walkthrough
 # When the live step starts, send a message to your bot in Telegram.
 ```
 
-**Note on typing events**: Telegram's Bot API doesn't expose user typing events to bots — only the bot can send typing chat actions, not the other way around. So `make inject-typing` works as a demo of the cursorless wire shape, but Option B can't capture real typing events. Discord can; see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md) for the live-typing demo.
+**Note on typing events**: Telegram's Bot API doesn't expose user typing events to bots — only the bot can send typing chat actions, not the other way around. So `TEXT=... just inject-typing` works as a demo of the cursorless wire shape, but Option B can't capture real typing events. Discord can; see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md) for the live-typing demo.
 
-Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `make readme`. For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
+Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `just readme`. For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
@@ -91,7 +91,7 @@ Telegram Bot (long-poll)  ──or──  POST /inject
 
 ## Server flag examples (outside the walkthrough)
 
-The walkthrough runs against the default server config. To exercise the legacy header mode, pass flags to `make serve`:
+The walkthrough runs against the default server config. To exercise the legacy header mode, pass flags to `just serve`:
 
 ```bash
 # Opt out of the Standard Webhooks default back to legacy X-MCP-* headers
@@ -105,8 +105,8 @@ Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + bas
 Same auto-detect pattern as the discord demo — see [`../discord/README.md`](../discord/README.md#auth-posture-demo-escape-vs-real-oidc) for the full env-var contract. TL;DR:
 
 ```bash
-make serve                                                      # demo posture (anonymous escape)
-OAUTH_ISSUER=http://localhost:8081/realms/demo make serve       # real OIDC, spec-strict
+just serve                                                      # demo posture (anonymous escape)
+OAUTH_ISSUER=http://localhost:8081/realms/demo just serve       # real OIDC, spec-strict
 ```
 
 Server logs which posture is active at startup.
@@ -115,13 +115,13 @@ Server logs which posture is active at startup.
 
 | Target | Description |
 |--------|-------------|
-| `make serve` | Start the server (with bot if `TELEGRAM_BOT_TOKEN` set; test mode otherwise) |
-| `make demo` | Run the demokit walkthrough — `--tui` mode |
-| `make readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
-| `make build` | Build the binary |
-| `make test` | Go tests |
-| `make inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHAT_ID=`) |
-| `make inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHAT_ID=`) |
+| `just serve` | Start the server (with bot if `TELEGRAM_BOT_TOKEN` set; test mode otherwise) |
+| `just demo` | Run the demokit walkthrough — `--tui` mode |
+| `just readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
+| `just build` | Build the binary |
+| `just test` | Go tests |
+| `TEXT=... just inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHAT_ID=`) |
+| `TEXT=... just inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHAT_ID=`) |
 | `make list` | Show server capabilities via Python client |
 | `make listen` | Python SSE push listener |
 | `make webhook` | Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |

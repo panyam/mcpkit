@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # MCP server on :8080
-//	Terminal 2:  make demo          # demokit walkthrough (or `make demo --tui`)
+//	Terminal 1:  just serve         # MCP server on :8080
+//	Terminal 2:  just demo          # demokit walkthrough (or `just demo --tui`)
 //
 // The server is a real MCP server — any host (VS Code, Claude Desktop,
 // MCPJam) can connect to it and observe the SEP-2356 `x-mcp-file` keyword
@@ -184,7 +184,7 @@ func uploadImageHandler(ctx core.ToolContext, req core.ToolRequest, uploadDir st
 		return core.ErrorResult("could not decode image data URI: " + err.Error()), nil
 	}
 	// Demo-only: echo the received payload to the server's stdout so a
-	// side-by-side `make serve` + `make demo` shows the image on both
+	// side-by-side `just serve` + `just demo` shows the image on both
 	// ends of the wire. A production handler would not do this.
 	previewFile(displayName(filename), mediaType, data)
 	saved, saveErr := saveUpload(uploadDir, filename, mediaType, data)

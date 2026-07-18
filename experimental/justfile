@@ -1,0 +1,53 @@
+# Experimental POC test orchestration.
+#
+# Runs as one umbrella (`just test`) or per sub-suite. The top-level
+# repo justfile delegates to these recipes via `just -f experimental/justfile ...`,
+# and testall uses the per-suite recipes to record sub-stage timing
+# (7a/7b/7c/7d/7e) instead of a single bucket.
+#
+# Two of the sub-suites live under `examples/events/` rather than
+# `experimental/`, but they're conceptually part of the experimental
+# events POC (they're demo apps consuming the experimental library), so
+# they're orchestrated here next to the library tests.
+
+EXPERIMENTAL_DIR := justfile_directory()
+REPO_ROOT := absolute_path(justfile_directory() / "..")
+
+# Run all experimental POC tests
+test: test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram
+
+# Run experimental ext/events library tests
+test-events:
+    cd {{EXPERIMENTAL_DIR}}/ext/events && go test ./... -count=1 -timeout 120s
+
+# Run experimental ext/events Go client SDK tests
+test-events-clients-go:
+    cd {{EXPERIMENTAL_DIR}}/ext/events/clients/go && go test ./... -count=1 -timeout 60s
+
+# Run GORM-backed Webhook + Quota stores (sqlite + inmemory; no Docker required)
+test-events-stores-gorm:
+    cd {{EXPERIMENTAL_DIR}}/ext/events/stores/gorm && go test ./... -count=1 -timeout 60s
+
+# Run GORM stores against a real Postgres container (full matrix; needs Docker)
+test-events-stores-gorm-pg:
+    just -f {{EXPERIMENTAL_DIR}}/ext/events/stores/gorm/justfile testpg
+
+# Run Redis pubsub Emitter sub-module (miniredis; no Docker required)
+test-events-stores-redis:
+    cd {{EXPERIMENTAL_DIR}}/ext/events/stores/redis && go test ./... -count=1 -timeout 60s
+
+# Run the Redis pubsub Emitter against a real Redis container (Docker)
+test-events-stores-redis-real:
+    just -f {{EXPERIMENTAL_DIR}}/ext/events/stores/redis/justfile testredis
+
+# Run experimental events Discord example tests
+test-events-discord:
+    cd {{REPO_ROOT}}/examples/events/discord && go test ./... -count=1 -timeout 60s
+
+# Run experimental events Telegram example tests
+test-events-telegram:
+    cd {{REPO_ROOT}}/examples/events/telegram && go test ./... -count=1 -timeout 60s
+
+# Show available recipes
+help:
+    @just --list --unsorted

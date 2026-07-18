@@ -2,7 +2,7 @@
 
 Runnable examples covering authentication, async tasks, MCP Apps, and proto-based code generation. Each example is self-contained with its own `go.mod`.
 
-> **Most examples ship a guided walkthrough.** Each walkthrough is a scripted MCP host that drives the server through every wire-format detail of the feature. Two terminals: `make serve` (real MCP server, also works with VS Code/MCPJam/Claude Desktop) + `make demo` (the walkthrough). External MCP hosts are only needed when there is no `make demo`.
+> **Most examples ship a guided walkthrough.** Each walkthrough is a scripted MCP host that drives the server through every wire-format detail of the feature. Two terminals: `just serve` (real MCP server, also works with VS Code/MCPJam/Claude Desktop) + `just demo` (the walkthrough). External MCP hosts are only needed when there is no `just demo`.
 
 > **Adding or auditing an example?** See [CONVENTIONS.md](CONVENTIONS.md) for the canonical structure (layout, server setup, walkthrough, Makefile). The `/example-new`, `/example-audit`, and `/example-upgrade` skills under `.claude/commands/` apply and enforce these conventions.
 
@@ -17,7 +17,7 @@ The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md
 | [tasks-v2/](tasks-v2/) | Server-directed async (SEP-2557): no client task hint, `resultType` discriminator, inlined results, tool-vs-protocol error semantics |
 | [mrtr/](mrtr/) | SEP-2322 ephemeral MRTR — `InputRequiredResult` round-trips for `elicitation/create`, `sampling/createMessage`, `roots/list`; multi-round accumulation via signed `requestState`; `client.CallToolWithInputs` auto-loop |
 | [list-ttl/](list-ttl/) | SEP-2549 list TTL — server emits `"ttl": <seconds>` cache-freshness hint on every list endpoint; three-state pointer encoding (`nil` / `&0` / `&N`); `client.ListXPage` typed helpers |
-| [file-inputs/](file-inputs/) ⚠ experimental | SEP-2356 file inputs — `x-mcp-file` schema marker on tool input properties, RFC 2397 base64 data URI encoding (`core.EncodeDataURI` / `core.DecodeDataURI`), single-file + array-of-files + unconstrained tools; embedded `testdata/` fixtures (PNG / PDFs / text) so `make demo` is hermetic |
+| [file-inputs/](file-inputs/) ⚠ experimental | SEP-2356 file inputs — `x-mcp-file` schema marker on tool input properties, RFC 2397 base64 data URI encoding (`core.EncodeDataURI` / `core.DecodeDataURI`), single-file + array-of-files + unconstrained tools; embedded `testdata/` fixtures (PNG / PDFs / text) so `just demo` is hermetic |
 | [skills-core/](skills-core/) ⚠ experimental | SEP-2640 **minimal shape** (scoped-down core blessed 2026-06-30): a skills file served as `skill://` resources + `skill://index.json` discovery + tool handling (a skill points the host at a tool), consumed load-on-demand. Archives / remote sources / fsnotify are the extended surface in [skills/](skills/) |
 | [elicitation/](elicitation/) ⚠ experimental | URL-mode elicitation with consent approval (FineGrainedAuth UC1 — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643)) |
 | [fine-grained-auth/](fine-grained-auth/) ⚠ experimental | Authorization denial with scope step-up (UC2) + RAR per-payment ephemeral credentials (UC3) — tracks draft [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) |
@@ -28,8 +28,8 @@ The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md
 
 ```bash
 cd examples/<name>
-make serve   # terminal 1 — real MCP server
-make demo    # terminal 2 — scripted walkthrough
+just serve   # terminal 1 — real MCP server
+just demo    # terminal 2 — scripted walkthrough
 ```
 
 ## Examples that need an MCP host
@@ -55,7 +55,7 @@ go run . -addr :8080
 
 ## Connecting an external MCP host
 
-If you're using `make serve` and want to point an external host at it (instead of `make demo`):
+If you're using `just serve` and want to point an external host at it (instead of `just demo`):
 
 ### Claude Code
 

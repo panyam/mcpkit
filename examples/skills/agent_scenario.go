@@ -22,7 +22,7 @@ import (
 )
 
 // buildAgentServer serves the bundled skills/ directory (file mode) the same
-// way `make serve` does, so the agent loads the exact skill surface a real
+// way `just serve` does, so the agent loads the exact skill surface a real
 // client would.
 func buildAgentServer() (*server.Server, error) {
 	provider, err := skills.NewProvider(skills.WithDirectory("skills"))

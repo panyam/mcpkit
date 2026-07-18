@@ -15,15 +15,15 @@ The canonical demo for the events extension. Two ways to run it.
 All walkthrough steps run; the final live-interaction step skips with a "no token" message. Great for a quick read-through of the protocol features.
 
 ```bash
-make serve    # terminal 1 — server in test mode
-make demo     # terminal 2 — walkthrough
+just serve    # terminal 1 — server in test mode
+just demo     # terminal 2 — walkthrough
 ```
 
 To simulate Discord activity (so you can see push/poll/webhook fanout in real time), inject events from a third terminal:
 
 ```bash
-make inject TEXT="hello world"   # message event (cursored)
-make inject-typing               # typing indicator (cursorless)
+TEXT=... just inject TEXT="hello world"   # message event (cursored)
+TEXT=... just inject-typing               # typing indicator (cursorless)
 ```
 
 ### Option B — Real bot mode (requires `DISCORD_BOT_TOKEN`)
@@ -31,12 +31,12 @@ make inject-typing               # typing indicator (cursorless)
 Same walkthrough plus the final live step captures real typing + message events from the Discord channel where you invited the bot.
 
 ```bash
-DISCORD_BOT_TOKEN=your-token make serve   # terminal 1 — server in bot mode
-make demo                                  # terminal 2 — walkthrough
+DISCORD_BOT_TOKEN=your-token just serve   # terminal 1 — server in bot mode
+just demo                                 # terminal 2 — walkthrough
 # When the live step starts, go type in your Discord channel.
 ```
 
-See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation. The walkthrough is generated from the demo step definitions in `walkthrough.go` — run `make readme` to regenerate.
+See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation. The walkthrough is generated from the demo step definitions in `walkthrough.go` — run `just readme` to regenerate.
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
@@ -117,7 +117,7 @@ Discord events have a richer structure than Telegram — nested author, optional
 
 ## Server flag examples (outside the walkthrough)
 
-The walkthrough runs against the default server config. To exercise the other modes, pass flags to `make serve`:
+The walkthrough runs against the default server config. To exercise the other modes, pass flags to `just serve`:
 
 ```bash
 # Opt out of the Standard Webhooks default back to legacy X-MCP-* headers
@@ -127,7 +127,7 @@ go run . --serve -webhook-header-mode mcp
 go run . --serve -webhook-ttl 5s
 ```
 
-Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). The python `make webhook` and the Go SDK both auto-generate when the application doesn't supply one. See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
+Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + base64 of 24-64 random bytes). The python `just webhook` and the Go SDK both auto-generate when the application doesn't supply one. See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) for the full configuration reference.
 
 ## Auth posture: demo escape vs real OIDC
 
@@ -136,9 +136,9 @@ Per spec §"Subscription Identity" L361 webhook subscribe MUST require an authen
 ```bash
 # Demo posture (default): no env vars set.
 # Server runs anonymous; events.Config.UnsafeAnonymousPrincipal="demo-user"
-# is the escape hatch so make demo works end-to-end without an OIDC provider.
+# is the escape hatch so just demo works end-to-end without an OIDC provider.
 # Server logs:  [server] auth: demo (anonymous → UnsafeAnonymousPrincipal)
-make serve
+just serve
 
 # Real-OIDC posture: set OAUTH_ISSUER (and optionally OAUTH_AUDIENCE / OAUTH_JWKS_URL).
 # Server wires server.WithAuth(JWTValidator) and follows the spec strictly —
@@ -146,7 +146,7 @@ make serve
 # Server logs:  [server] auth: real OIDC (...) — anonymous webhook subscribes rejected per spec
 OAUTH_ISSUER=http://localhost:8081/realms/demo \
 OAUTH_AUDIENCE=mcp-events \
-make serve
+just serve
 ```
 
 Recognized env vars:
@@ -175,20 +175,20 @@ The events package itself depends only on `core.Claims` (the abstract auth contr
 
 | Target | Description |
 |--------|-------------|
-| `make serve` | Start the server (with bot if `DISCORD_BOT_TOKEN` set; test mode otherwise) |
-| `make demo` | Run the demokit walkthrough — `--tui` mode |
-| `make readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
-| `make build` | Build the binary |
-| `make test` | Go tests |
-| `make test-ttl` | Drive the Python `WebhookSubscription` auto-refresh helper end-to-end (POSIX-only — see Makefile for Windows steps) |
-| `make inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHANNEL=`, `GUILD=`) |
-| `make inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHANNEL=`, `GUILD=`) |
+| `just serve` | Start the server (with bot if `DISCORD_BOT_TOKEN` set; test mode otherwise) |
+| `just demo` | Run the demokit walkthrough — `--tui` mode |
+| `just readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
+| `just build` | Build the binary |
+| `just test` | Go tests |
+| `just test-ttl` | Drive the Python `WebhookSubscription` auto-refresh helper end-to-end (POSIX-only — see Makefile for Windows steps) |
+| `TEXT=... just inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHANNEL=`, `GUILD=`) |
+| `TEXT=... just inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHANNEL=`, `GUILD=`) |
 | `make list` | Show server capabilities via Python client (tools, resources, events, sample poll) |
 | `make listen` | Python SSE push listener |
-| `make webhook` | Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
+| `just webhook` | Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Python polling loop (default 5s interval, override: `INTERVAL=10`) |
 
-The Python clients (`make list / listen / webhook / poll`) are convenient for ad-hoc poking. The walkthrough above (`make demo`) is the canonical tour. Both share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.
+The Python clients (`make list / listen / webhook / poll`) are convenient for ad-hoc poking. The walkthrough above (`just demo`) is the canonical tour. Both share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.
 
 ## Next steps
 

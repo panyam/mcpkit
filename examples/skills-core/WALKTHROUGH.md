@@ -14,7 +14,7 @@ The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served ov
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Choose the client wire mode
 
@@ -44,8 +44,8 @@ sequenceDiagram
 ### Setup
 
 ```
-Terminal 1:  make serve   # skills-core server, file mode, :8080
-Terminal 2:  make demo    # this walkthrough (--tui interactive)
+Terminal 1:  just serve   # skills-core server, file mode, :8080
+Terminal 2:  just demo    # this walkthrough (--tui interactive)
 ```
 
 ### What 'minimal' means
@@ -65,7 +65,7 @@ c := client.NewClient(serverURL+"/mcp",
     core.ClientInfo{Name: "skills-core-host", Version: "1.0"},
     client.WithClientMode(wireMode),
 )
-if err := c.Connect(); err != nil { /* run: make serve */ }
+if err := c.Connect(); err != nil { /* run: just serve */ }
 ```
 
 ### Step 3: resources/list — each skill file is a skill:// resource

@@ -41,12 +41,12 @@
 //
 // OTLP dial / construction failure (explicit "otlp" mode) → log a
 // warning and fall back to Noop. A dead observability stack should
-// never break `make demo`.
+// never break `just demo`.
 //
 // Standard OTel env vars (OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT,
 // OTEL_RESOURCE_ATTRIBUTES) are honored as fallbacks under explicit
 // options — explicit code beats spooky env, but env still works for
-// `make demo` orchestration.
+// `just demo` orchestration.
 //
 // The returned core.TracerProvider is already wrapped via
 // mcpotel.NewProvider so the caller hands it directly to
@@ -78,7 +78,7 @@ import (
 // connect attempt to the OTLP endpoint before declaring the stack
 // unreachable and falling back to Noop. Generous enough for a
 // container starting up but short enough that a wholly-absent stack
-// doesn't visibly stall `make demo`.
+// doesn't visibly stall `just demo`.
 const otlpProbeTimeout = 500 * time.Millisecond
 
 // Exporter mode constants — the strings examples accept on
@@ -247,7 +247,7 @@ func SetupClientTelemetry(ctx context.Context, opts ...SetupOption) (core.Tracer
 //
 // Errors surface ONLY for unknown exporter names. Endpoint
 // construction failures fall back to Noop with a log warning — the
-// contract is "a dead observability stack never breaks make demo."
+// contract is "a dead observability stack never breaks just demo."
 func SetupTelemetry(ctx context.Context, opts ...SetupOption) (core.TracerProvider, ShutdownFunc, error) {
 	cfg := setupConfig{stdoutWriter: os.Stdout}
 	for _, opt := range opts {
@@ -378,7 +378,7 @@ func noopShutdown(context.Context) error { return nil }
 // timeout to check reachability before constructing the OTLP
 // exporter. otlptracegrpc.New is lazy and returns a non-nil exporter
 // even when the endpoint is refused, so the dial-failure fallback
-// the issue specifies (`a dead stack never breaks make demo`) needs
+// the issue specifies (`a dead stack never breaks just demo`) needs
 // an explicit synchronous check here.
 func probeOTLPEndpoint(endpoint string) error {
 	conn, err := net.DialTimeout("tcp", endpoint, otlpProbeTimeout)

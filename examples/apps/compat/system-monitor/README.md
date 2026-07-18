@@ -27,7 +27,7 @@ iframe polls from inside via the bridge. First fixture introducing
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=system-monitor
+just demo-app EXAMPLE=system-monitor
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

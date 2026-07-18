@@ -30,10 +30,10 @@ field (`inputRequests`, `inputResponses`, `requestState`, `taskId`, …).
 
 ```bash
 # Terminal 1 — start the MCP server
-make serve
+just serve
 
 # Terminal 2 — scripted walkthrough
-make demo
+just demo
 
 # Or for the interactive TUI:
 go run . --tui

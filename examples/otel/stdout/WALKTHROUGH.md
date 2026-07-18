@@ -1,6 +1,6 @@
 # MCP SEP-414 — OpenTelemetry Trace Context Propagation
 
-Walks through SEP-414 in stdout-exporter mode (no external stack required). Both sides — server (`make serve`) and walkthrough (`make demo`) — print spans as pretty JSON on their respective terminals. The looping "Explore trace shapes" step lets you A/B four distinct tool calls; matching TraceIDs across the two terminals is the SEP-414 wire stitching client and server into a single distributed trace. Run with `EXPORTER=otlp` after `make -C docker up` to ship spans to Grafana instead.
+Walks through SEP-414 in stdout-exporter mode (no external stack required). Both sides — server (`just serve`) and walkthrough (`just demo`) — print spans as pretty JSON on their respective terminals. The looping "Explore trace shapes" step lets you A/B four distinct tool calls; matching TraceIDs across the two terminals is the SEP-414 wire stitching client and server into a single distributed trace. Run with `EXPORTER=otlp` after `just -f docker/observability/justfile up` (from the repo root) to ship spans to Grafana instead.
 
 ## What you'll learn
 
@@ -12,7 +12,7 @@ Walks through SEP-414 in stdout-exporter mode (no external stack required). Both
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this walkthrough)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the OTel-instrumented server
     Host->>Server: POST /mcp — initialize
@@ -28,13 +28,13 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve         # OTel-instrumented server on :8080
-Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)
+Terminal 1:  just serve         # OTel-instrumented server on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
 ```
 
 Keep both terminals visible — the walkthrough surfaces what the *Host* sees on the wire (JSON-RPC results); the OpenTelemetry spans land on the *Server* terminal's stdout via the `stdouttrace` exporter. Match the TraceID across the two terminals to see the SEP-414 stitch.
 
-To send spans to a real backend instead, run with `EXPORTER=otlp` after `make -C ../../../docker up`.
+To send spans to a real backend instead, run with `EXPORTER=otlp` after `cd ../../../docker/observability && just up`.
 
 ### Wire format
 

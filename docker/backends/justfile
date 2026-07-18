@@ -1,0 +1,34 @@
+# backends stack — Keycloak + Postgres + Redis.
+# Run from this directory: `cd docker/backends && just up`.
+
+COMPOSE := "docker compose -f docker-compose.yml"
+
+# Start the backends stack in the background. Keycloak admin UI lands at http://localhost:8180.
+up:
+    {{COMPOSE}} up -d
+    @echo ""
+    @echo "  Keycloak UI: http://localhost:8180  (admin/admin)"
+    @echo "  Postgres:    postgres:5432 on the mcpkit network (postgres/postgres, db=events)"
+    @echo "  Redis:       redis:6379 on the mcpkit network"
+    @echo ""
+
+# Stop and remove the backends stack containers.
+down:
+    {{COMPOSE}} down
+
+# Tail logs from all backend containers (Ctrl-C to exit).
+logs:
+    {{COMPOSE}} logs -f
+
+# Build any custom images referenced by the stack. No-op today; reserved for future custom images.
+build:
+    {{COMPOSE}} build
+
+# Show running containers for the backends stack.
+ps:
+    {{COMPOSE}} ps
+
+# Validate the compose file syntax without bringing anything up.
+config:
+    {{COMPOSE}} config --quiet
+    @echo "docker-compose.yml: OK"

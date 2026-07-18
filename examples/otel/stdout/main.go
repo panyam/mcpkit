@@ -14,13 +14,13 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve                       # stdouttrace, CI mode
-//	Terminal 2:  make demo                        # stdouttrace, CI mode
+//	Terminal 1:  just serve                       # stdouttrace, CI mode
+//	Terminal 2:  just demo                        # stdouttrace, CI mode
 //
-//	Terminal 1:  make serve EXPORTER=otlp         # OTLP → stack
-//	Terminal 2:  make demo EXPORTER=otlp          # OTLP → stack
+//	Terminal 1:  just serve EXPORTER=otlp         # OTLP → stack
+//	Terminal 2:  just demo EXPORTER=otlp          # OTLP → stack
 //
-// `make -C ../../../docker up` brings the stack up before either
+// `cd ../../../docker/observability && just up` brings the stack up before either
 // EXPORTER=otlp invocation.
 //
 // The server is a real MCP server: any host (VS Code, Claude Desktop,

@@ -1,0 +1,21 @@
+# 01 — AppHost Basics
+#
+# Pure Go, in-process. No external dependencies.
+
+EXAMPLE_DIR := "01-apphost"
+
+# Interactive — pause between steps
+run:
+    cd .. && go run -buildvcs=false ./{{EXAMPLE_DIR}}/
+
+# Non-interactive — full output
+demo:
+    cd .. && go run -buildvcs=false ./{{EXAMPLE_DIR}}/ --non-interactive
+
+# Run the walkthrough in notebook mode (Bubble Tea cells)
+note:
+    cd .. && go run -buildvcs=false ./{{EXAMPLE_DIR}}/ --note
+
+# Regenerate README.md from code
+readme:
+    cd .. && go run -buildvcs=false ./{{EXAMPLE_DIR}}/ --readme > {{EXAMPLE_DIR}}/README.md
