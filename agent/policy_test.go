@@ -25,7 +25,7 @@ func newClock() *fakeClock {
 
 func TestInjectionMergeWindowCoalescesBurst(t *testing.T) {
 	clock := newClock()
-	p := NewInjectionPolicy(InjectionConfig{
+	p := NewEventInjectionPolicy(EventInjectionConfig{
 		Hints: map[string]ContextHint{
 			"cart.changed": {Aggregate: &AggregateHint{WindowMs: 2000, Strategy: WindowMerge},
 				Template: "cart has {{count}} items"},
@@ -52,7 +52,7 @@ func TestInjectionMergeWindowCoalescesBurst(t *testing.T) {
 
 func TestInjectionDebounceRestartsWindow(t *testing.T) {
 	clock := newClock()
-	p := NewInjectionPolicy(InjectionConfig{
+	p := NewEventInjectionPolicy(EventInjectionConfig{
 		Hints: map[string]ContextHint{
 			"typing": {Aggregate: &AggregateHint{WindowMs: 1000, Strategy: WindowDebounce}},
 		},
@@ -73,7 +73,7 @@ func TestInjectionDebounceRestartsWindow(t *testing.T) {
 
 func TestInjectionPriorityOrderAndBudget(t *testing.T) {
 	clock := newClock()
-	p := NewInjectionPolicy(InjectionConfig{
+	p := NewEventInjectionPolicy(EventInjectionConfig{
 		Hints: map[string]ContextHint{
 			"low.ev":  {Priority: "low"},
 			"crit.ev": {Priority: "critical"},
@@ -99,7 +99,7 @@ func TestInjectionPriorityOrderAndBudget(t *testing.T) {
 func TestInjectionSensitivityGate(t *testing.T) {
 	clock := newClock()
 	consented := false
-	p := NewInjectionPolicy(InjectionConfig{
+	p := NewEventInjectionPolicy(EventInjectionConfig{
 		Hints: map[string]ContextHint{
 			"secret.ev": {Sensitivity: "restricted"},
 			"pers.ev":   {Sensitivity: "personal"},
@@ -116,7 +116,7 @@ func TestInjectionSensitivityGate(t *testing.T) {
 		t.Fatalf("dropped count = %d", p.Dropped())
 	}
 
-	p2 := NewInjectionPolicy(InjectionConfig{
+	p2 := NewEventInjectionPolicy(EventInjectionConfig{
 		Hints:   map[string]ContextHint{"secret.ev": {Sensitivity: "restricted"}},
 		Consent: func(h ContextHint, ev IncomingEvent) bool { consented = true; return true },
 		now:     clock.now,
@@ -129,7 +129,7 @@ func TestInjectionSensitivityGate(t *testing.T) {
 
 func TestInjectionSessionRetentionReinjectsLatest(t *testing.T) {
 	clock := newClock()
-	p := NewInjectionPolicy(InjectionConfig{
+	p := NewEventInjectionPolicy(EventInjectionConfig{
 		Hints: map[string]ContextHint{"loc": {Retention: "session", Template: "at {{city}}"}},
 		now:   clock.now,
 	})
@@ -152,7 +152,7 @@ func TestInjectionDeveloperStagesAndHintFromMeta(t *testing.T) {
 		Count int    `json:"count"`
 		User  string `json:"user"`
 	}
-	p := NewInjectionPolicy(InjectionConfig{
+	p := NewEventInjectionPolicy(EventInjectionConfig{
 		Filters: []func(IncomingEvent) bool{
 			TypedFilter(func(c cart) bool { return c.Count > 0 }),
 		},
