@@ -82,13 +82,17 @@ Three artifacts describe mcpkit's conformance posture at increasing granularity:
 
 ## Testing
 
+The task runner is moving to [`just`](https://github.com/casey/just); during
+the transition the original Makefiles remain alongside the justfiles with the
+same target names, so both `just <target>` and `make <target>` work.
+
 ```bash
-just test          # Unit tests (200+ across core/server/client)
-just testall       # ALL tests + Keycloak + conformance + HTML report
-just testconf      # MCP conformance suite
-just testconfauth  # Auth conformance
-just test-e2e      # E2E tests (auth + apps)
-just test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
+just/make test          # Unit tests (200+ across core/server/client)
+just/make testall       # ALL tests + Keycloak + conformance + HTML report
+just/make testconf      # MCP conformance suite
+just/make testconfauth  # Auth conformance
+just/make test-e2e      # E2E tests (auth + apps)
+just/make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 ```
 
 ## Documentation
