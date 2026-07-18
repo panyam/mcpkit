@@ -13,25 +13,18 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// Embedder turns text into dense vectors so memory can be recalled by
-// semantic similarity rather than substring match. It is the sibling of
-// Provider: an independently swappable seam (a hosted API, a local model, a
-// stub) that the rest of the agent depends on only through this interface.
-//
-// Embed returns exactly one vector per input text, in the same order, and
-// every vector an Embedder produces shares one dimensionality — callers may
-// rely on that to compare vectors from the same Embedder with
-// CosineSimilarity. Embedding different providers' vectors together is
-// meaningless; a store must be built and queried with the same Embedder.
-type Embedder interface {
-	Embed(ctx context.Context, texts []string) ([][]float32, error)
-}
+// Embedding is a dense vector produced by an Embedder. A defined type (not a
+// bare []float32) so the comparison lives on it as a method and signatures
+// read in domain terms; every Embedding from one Embedder shares a
+// dimensionality, and comparing embeddings from different Embedders is
+// meaningless.
+type Embedding []float32
 
-// CosineSimilarity returns the cosine of the angle between a and b, in
-// [-1, 1] (1 = identical direction). It returns 0 when either vector is zero
-// or the lengths differ — a degenerate comparison ranks last rather than
-// erroring, so a recall query never fails on a malformed vector.
-func CosineSimilarity(a, b []float32) float64 {
+// Cosine returns the cosine of the angle between a and b, in [-1, 1] (1 =
+// identical direction). It returns 0 when either vector is zero or the
+// lengths differ — a degenerate comparison ranks last rather than erroring,
+// so a recall query never fails on a malformed vector.
+func (a Embedding) Cosine(b Embedding) float64 {
 	if len(a) != len(b) {
 		return 0
 	}
@@ -45,6 +38,17 @@ func CosineSimilarity(a, b []float32) float64 {
 		return 0
 	}
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
+}
+
+// Embedder turns text into Embeddings so memory can be recalled by semantic
+// similarity rather than substring match. It is the sibling of Provider: an
+// independently swappable seam (a hosted API, a local model, a stub) that the
+// rest of the agent depends on only through this interface.
+//
+// Embed returns exactly one Embedding per input text, in the same order. A
+// store must be built and queried with the same Embedder.
+type Embedder interface {
+	Embed(ctx context.Context, texts []string) ([]Embedding, error)
 }
 
 // OpenAIEmbedderConfig configures an OpenAIEmbedder.
@@ -103,14 +107,14 @@ type embeddingRequest struct {
 type embeddingResponse struct {
 	Data []struct {
 		Index     int       `json:"index"`
-		Embedding []float32 `json:"embedding"`
+		Embedding Embedding `json:"embedding"`
 	} `json:"data"`
 }
 
 // Embed implements Embedder. It sends all texts in one request and returns
-// the vectors reordered to match the input order (the API echoes an index
+// the embeddings reordered to match the input order (the API echoes an index
 // per embedding, which need not be in request order).
-func (e *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (e *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([]Embedding, error) {
 	ctx, span := e.tp.StartSpan(ctx, "agent.embed",
 		core.Attribute{Key: "agent.embed.count", Value: fmt.Sprint(len(texts))},
 		core.Attribute{Key: "agent.embed.model", Value: e.cfg.Model})
@@ -159,7 +163,7 @@ func (e *OpenAIEmbedder) Embed(ctx context.Context, texts []string) ([][]float32
 		span.RecordError(err)
 		return nil, err
 	}
-	vecs := make([][]float32, len(texts))
+	vecs := make([]Embedding, len(texts))
 	for _, d := range out.Data {
 		if d.Index < 0 || d.Index >= len(vecs) {
 			continue
@@ -184,14 +188,14 @@ type StubEmbedder struct {
 }
 
 // Embed implements Embedder.
-func (e StubEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (e StubEmbedder) Embed(ctx context.Context, texts []string) ([]Embedding, error) {
 	dim := e.Dim
 	if dim <= 0 {
 		dim = DefaultStubEmbedderDim
 	}
-	out := make([][]float32, len(texts))
+	out := make([]Embedding, len(texts))
 	for i, t := range texts {
-		vec := make([]float32, dim)
+		vec := make(Embedding, dim)
 		for _, tok := range strings.Fields(strings.ToLower(t)) {
 			h := fnv.New32a()
 			_, _ = h.Write([]byte(tok))

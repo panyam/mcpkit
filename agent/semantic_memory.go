@@ -11,7 +11,7 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// SemanticMemoryStore is a MemoryStore that recalls by embedding similarity
+// InMemorySemanticStore is a MemoryStore that recalls by embedding similarity
 // instead of substring match. It composes an Embedder (text -> vector) with
 // an in-process brute-force cosine index: PutMemory embeds the note and keeps
 // its vector; ListMemories embeds the query and returns items ranked by
@@ -28,13 +28,13 @@ import (
 // Concurrency: safe for concurrent use. Embedding happens outside the lock
 // (a network call for a hosted Embedder), so Put/List never hold the mutex
 // across I/O.
-type SemanticMemoryStore struct {
+type InMemorySemanticStore struct {
 	embedder Embedder
 	tp       core.TracerProvider
 
 	mu    sync.Mutex
 	items map[string]MemoryItem
-	vecs  map[string][]float32
+	vecs  map[string]Embedding
 	// order tracks insertion order for the Query-empty listing and the cap,
 	// mirroring InMemoryMemoryStore; front is oldest.
 	order      *list.List
@@ -42,13 +42,13 @@ type SemanticMemoryStore struct {
 	maxEntries int
 }
 
-// SemanticMemoryOption configures a SemanticMemoryStore.
-type SemanticMemoryOption func(*SemanticMemoryStore)
+// InMemorySemanticStoreOption configures a InMemorySemanticStore.
+type InMemorySemanticStoreOption func(*InMemorySemanticStore)
 
 // WithSemanticMaxMemories caps the store at n items, evicting the oldest when
 // a Put of a new key would exceed n. Zero or negative means unbounded.
-func WithSemanticMaxMemories(n int) SemanticMemoryOption {
-	return func(s *SemanticMemoryStore) {
+func WithSemanticMaxMemories(n int) InMemorySemanticStoreOption {
+	return func(s *InMemorySemanticStore) {
 		if n > 0 {
 			s.maxEntries = n
 		}
@@ -57,26 +57,26 @@ func WithSemanticMaxMemories(n int) SemanticMemoryOption {
 
 // WithSemanticTracerProvider opts the store into an agent.memory.recall span
 // per similarity query. Nil / NoopTracerProvider means zero overhead.
-func WithSemanticTracerProvider(tp core.TracerProvider) SemanticMemoryOption {
-	return func(s *SemanticMemoryStore) {
+func WithSemanticTracerProvider(tp core.TracerProvider) InMemorySemanticStoreOption {
+	return func(s *InMemorySemanticStore) {
 		if tp != nil {
 			s.tp = tp
 		}
 	}
 }
 
-// NewSemanticMemoryStore builds a semantic store over embedder. The embedder
+// NewInMemorySemanticStore builds a semantic store over embedder. The embedder
 // is required; every note and query is embedded with it, so a store must be
 // queried with the same Embedder it was built with.
-func NewSemanticMemoryStore(embedder Embedder, opts ...SemanticMemoryOption) (*SemanticMemoryStore, error) {
+func NewInMemorySemanticStore(embedder Embedder, opts ...InMemorySemanticStoreOption) (*InMemorySemanticStore, error) {
 	if embedder == nil {
-		return nil, fmt.Errorf("agent: SemanticMemoryStore needs an Embedder")
+		return nil, fmt.Errorf("agent: InMemorySemanticStore needs an Embedder")
 	}
-	s := &SemanticMemoryStore{
+	s := &InMemorySemanticStore{
 		embedder: embedder,
 		tp:       core.NoopTracerProvider{},
 		items:    map[string]MemoryItem{},
-		vecs:     map[string][]float32{},
+		vecs:     map[string]Embedding{},
 		order:    list.New(),
 		elems:    map[string]*list.Element{},
 	}
@@ -90,7 +90,7 @@ func NewSemanticMemoryStore(embedder Embedder, opts ...SemanticMemoryOption) (*S
 // and upserts it. Embedding is synchronous — a just-remembered fact is
 // immediately recallable; background/batch indexing of a distillation write
 // path is a separate concern.
-func (s *SemanticMemoryStore) PutMemory(ctx context.Context, req PutMemoryRequest) (PutMemoryResponse, error) {
+func (s *InMemorySemanticStore) PutMemory(ctx context.Context, req PutMemoryRequest) (PutMemoryResponse, error) {
 	item := req.Item
 	if item.CreatedAt.IsZero() {
 		item.CreatedAt = time.Now()
@@ -99,7 +99,7 @@ func (s *SemanticMemoryStore) PutMemory(ctx context.Context, req PutMemoryReques
 	if err != nil {
 		return PutMemoryResponse{}, fmt.Errorf("agent: embedding memory %q: %w", item.Key, err)
 	}
-	var vec []float32
+	var vec Embedding
 	if len(vecs) > 0 {
 		vec = vecs[0]
 	}
@@ -125,7 +125,7 @@ func (s *SemanticMemoryStore) PutMemory(ctx context.Context, req PutMemoryReques
 // ListMemories ranks items by cosine similarity to the query. An empty Query
 // returns all items oldest-first with Score 0 (the "list everything" path the
 // summary uses — there is no query to score against). Limit caps the result.
-func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req ListMemoriesRequest) (ListMemoriesResponse, error) {
+func (s *InMemorySemanticStore) ListMemories(ctx context.Context, req ListMemoriesRequest) (ListMemoriesResponse, error) {
 	if req.Query == "" {
 		return s.listAll(req.Limit), nil
 	}
@@ -134,7 +134,7 @@ func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req ListMemories
 	if err != nil {
 		return ListMemoriesResponse{}, fmt.Errorf("agent: embedding query: %w", err)
 	}
-	var qvec []float32
+	var qvec Embedding
 	if len(qvecs) > 0 {
 		qvec = qvecs[0]
 	}
@@ -147,7 +147,7 @@ func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req ListMemories
 	scored := make([]ScoredMemory, 0, len(s.items))
 	for e := s.order.Front(); e != nil; e = e.Next() {
 		key := e.Value.(string)
-		scored = append(scored, ScoredMemory{Item: s.items[key], Score: CosineSimilarity(qvec, s.vecs[key])})
+		scored = append(scored, ScoredMemory{Item: s.items[key], Score: qvec.Cosine(s.vecs[key])})
 	}
 	s.mu.Unlock()
 
@@ -162,7 +162,7 @@ func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req ListMemories
 	return ListMemoriesResponse{Items: scored}, nil
 }
 
-func (s *SemanticMemoryStore) listAll(limit int) ListMemoriesResponse {
+func (s *InMemorySemanticStore) listAll(limit int) ListMemoriesResponse {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]ScoredMemory, 0, s.order.Len())
@@ -177,7 +177,7 @@ func (s *SemanticMemoryStore) listAll(limit int) ListMemoriesResponse {
 
 // DeleteMemory removes an item and its vector. An unknown key is
 // Deleted=false, not an error (same contract as the substring store).
-func (s *SemanticMemoryStore) DeleteMemory(ctx context.Context, req DeleteMemoryRequest) (DeleteMemoryResponse, error) {
+func (s *InMemorySemanticStore) DeleteMemory(ctx context.Context, req DeleteMemoryRequest) (DeleteMemoryResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.items[req.Key]; !ok {

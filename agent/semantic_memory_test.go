@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func seedSemantic(t *testing.T) *SemanticMemoryStore {
+func seedSemantic(t *testing.T) *InMemorySemanticStore {
 	t.Helper()
-	s, err := NewSemanticMemoryStore(StubEmbedder{})
+	s, err := NewInMemorySemanticStore(StubEmbedder{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func seedSemantic(t *testing.T) *SemanticMemoryStore {
 	return s
 }
 
-func TestSemanticMemoryStore_RanksBySimilarity(t *testing.T) {
+func TestInMemorySemanticStore_RanksBySimilarity(t *testing.T) {
 	s := seedSemantic(t)
 	resp, err := s.ListMemories(context.Background(), ListMemoriesRequest{Query: "which programming language do i like"})
 	if err != nil {
@@ -43,7 +43,7 @@ func TestSemanticMemoryStore_RanksBySimilarity(t *testing.T) {
 	}
 }
 
-func TestSemanticMemoryStore_Limit(t *testing.T) {
+func TestInMemorySemanticStore_Limit(t *testing.T) {
 	s := seedSemantic(t)
 	resp, _ := s.ListMemories(context.Background(), ListMemoriesRequest{Query: "programming language", Limit: 2})
 	if len(resp.Items) != 2 {
@@ -51,7 +51,7 @@ func TestSemanticMemoryStore_Limit(t *testing.T) {
 	}
 }
 
-func TestSemanticMemoryStore_EmptyQueryListsAllOldestFirst(t *testing.T) {
+func TestInMemorySemanticStore_EmptyQueryListsAllOldestFirst(t *testing.T) {
 	s := seedSemantic(t)
 	resp, _ := s.ListMemories(context.Background(), ListMemoriesRequest{})
 	if len(resp.Items) != 3 {
@@ -65,7 +65,7 @@ func TestSemanticMemoryStore_EmptyQueryListsAllOldestFirst(t *testing.T) {
 	}
 }
 
-func TestSemanticMemoryStore_Delete(t *testing.T) {
+func TestInMemorySemanticStore_Delete(t *testing.T) {
 	s := seedSemantic(t)
 	ctx := context.Background()
 	if r, _ := s.DeleteMemory(ctx, DeleteMemoryRequest{Key: "editor"}); !r.Deleted {
@@ -81,8 +81,8 @@ func TestSemanticMemoryStore_Delete(t *testing.T) {
 	}
 }
 
-func TestSemanticMemoryStore_NilEmbedder(t *testing.T) {
-	if _, err := NewSemanticMemoryStore(nil); err == nil {
+func TestInMemorySemanticStore_NilEmbedder(t *testing.T) {
+	if _, err := NewInMemorySemanticStore(nil); err == nil {
 		t.Fatal("nil embedder should error")
 	}
 }
