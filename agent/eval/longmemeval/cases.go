@@ -24,6 +24,7 @@
 package longmemeval
 
 import (
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/eval"
 )
 
@@ -68,11 +69,15 @@ type MemCase struct {
 	// the supersede and abstention checks.
 	MustNot []string
 
-	// CompactTokens, when > 0, runs the scenario under a SummarizingCompactor
-	// with this token budget, so the early turns are summarized before the
-	// final question. It is how a CatCompaction case proves a fact survives
-	// the compaction boundary. Zero runs with no compactor.
-	CompactTokens int
+	// NewCompactor, when set, runs the scenario under the Compactor it builds
+	// (given the run's provider, since a SummarizingCompactor needs a model to
+	// summarize the head). Nil runs with no compaction. It is how a
+	// CatCompaction case proves a fact survives the compaction boundary — and
+	// because it hands over a Compactor, not a token budget, a case can plug
+	// ANY compaction strategy, not just SummarizingCompactor. The Compactor
+	// itself decides per turn whether to compact (Compact is a no-op under
+	// budget), so this only chooses the strategy, not the trigger.
+	NewCompactor func(provider agent.Provider) (agent.Compactor, error)
 }
 
 // SmokeScenarios returns the illustrative smoke set, one short scenario per
@@ -145,9 +150,11 @@ func SmokeScenarios() []MemCase {
 					"What is my employee ID?",
 				},
 			},
-			Must:          []string{"4471"},
-			Rubric:        "The answer must give the employee ID 4471, recalled from the earlier (compacted) part of the conversation.",
-			CompactTokens: 40,
+			Must:   []string{"4471"},
+			Rubric: "The answer must give the employee ID 4471, recalled from the earlier (compacted) part of the conversation.",
+			NewCompactor: func(p agent.Provider) (agent.Compactor, error) {
+				return agent.NewSummarizingCompactor(agent.SummarizingConfig{Provider: p, MaxTokens: 40})
+			},
 		},
 	}
 }
