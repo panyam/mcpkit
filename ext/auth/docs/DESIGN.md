@@ -385,7 +385,7 @@ comment citing the clause, in one of three forms:
 The markers travel with the code, so `grep -rE "// (RFC|MCP-Auth|SEP-) [0-9]"
 ext/auth/` reconstructs the clause→site mapping that
 [`conformance/AUTH_SPEC_COVERAGE.md`](../../../conformance/AUTH_SPEC_COVERAGE.md)
-records by `file:line` (which drifts). `make check-auth-markers` asserts that
+records by `file:line` (which drifts). `just check-auth-markers` asserts that
 every matrix row citing an ext/auth site has its inline marker — so the matrix
 stays honest as the code moves. When you add a matrix row, add the marker;
 when you touch a spec-mandated site, cite the clause inline.

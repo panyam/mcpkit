@@ -1,0 +1,78 @@
+# tutorials/walkthrough/justfile
+#
+# Operations on the walkthrough pages. Run from this directory.
+#
+# Each page declares its kind and prerequisites in a header line that looks like:
+#   > **Kind:** root *(FAQ-style)* · **Prerequisites:** [bring-up](./bringup.md), [transport-mechanics](./transport-mechanics.md)
+#
+# The justfile parses those headers to derive the graph, count pages by kind,
+# and surface planned-but-unwritten pages.
+
+# Meta files don't appear as graph nodes.
+META := "README.md STRUCTURE.md INDEX.md GRAPH.md"
+
+# Show available targets
+help:
+    @just --list
+
+# Auto-generate GRAPH.md from page Prerequisites headers
+graph:
+    #!/usr/bin/env bash
+    ./build-graph.sh > GRAPH.md
+    echo "Wrote GRAPH.md ($(wc -l < GRAPH.md | tr -d ' ') lines)"
+
+# Count pages by kind, written/stub status, stub-link references
+stats:
+    #!/usr/bin/env bash
+    set -e
+    PAGES=$(ls *.md | grep -v -E '(README|STRUCTURE|INDEX|GRAPH)\.md' || true)
+    echo "Content pages:    $(echo $PAGES | wc -w | tr -d ' ')"
+    echo "  roots:          $(grep -l '\*\*Kind:\*\* root' $PAGES 2>/dev/null | wc -l | tr -d ' ')"
+    echo "  branches:       $(grep -l '\*\*Kind:\*\* branch' $PAGES 2>/dev/null | wc -l | tr -d ' ')"
+    echo "  leaves:         $(grep -l '\*\*Kind:\*\* leaf' $PAGES 2>/dev/null | wc -l | tr -d ' ')"
+    echo "  written:        $(for f in $PAGES; do grep -L '^<!-- STUB -->' "$f" 2>/dev/null || true; done | wc -l | tr -d ' ')"
+    echo "  stubs:          $(grep -l '^<!-- STUB -->' $PAGES 2>/dev/null | wc -l | tr -d ' ')"
+    echo "Stub-link refs:   $(grep -hoE '\*\(stub[^)]*\)\*' *.md 2>/dev/null | wc -l | tr -d ' ') unique"
+    echo "Broken links:     $(just missing 2>/dev/null | wc -l | tr -d ' ') file(s)"
+
+# List link targets that don't exist on disk (should be empty since all stubs are created)
+missing:
+    #!/usr/bin/env bash
+    for link in $(grep -hoE '\(\./[a-zA-Z-]+\.md\)' *.md 2>/dev/null | sed 's|(\./||;s|)||' | sort -u); do
+        [ -f "$link" ] || echo "$link"
+    done
+
+# List stub pages (header-only, body TBD)
+stubs:
+    #!/usr/bin/env bash
+    PAGES=$(ls *.md | grep -v -E '(README|STRUCTURE|INDEX|GRAPH)\.md' || true)
+    grep -l '^<!-- STUB -->' $PAGES 2>/dev/null | sort || true
+
+# List all internal page links (deduped)
+links:
+    @grep -hoE '\(\./[a-zA-Z-]+\.md[^)]*\)' *.md 2>/dev/null | sort -u
+
+# Verify all internal links resolve to written pages or to the INDEX forthcoming-nodes table
+check:
+    #!/usr/bin/env bash
+    set +e
+    PAGES=$(ls *.md | grep -v -E '(README|STRUCTURE|INDEX|GRAPH)\.md' || true)
+    planned=$(awk '/^## Forthcoming nodes/{flag=1; next} /^## /{flag=0} flag' INDEX.md \
+        | grep -oE '\(\./[a-zA-Z-]+\.md\)' \
+        | sed 's|(\./||;s|)||' | sort -u)
+    bad=0
+    for f in $PAGES README.md STRUCTURE.md INDEX.md; do
+        [ -f "$f" ] || continue
+        for target in $(grep -oE '\(\./[a-zA-Z-]+\.md\)' "$f" | sed 's|(\./||;s|)||' | sort -u); do
+            if [ ! -f "$target" ]; then
+                if ! echo "$planned" | grep -qx "$target"; then
+                    printf "BROKEN: %s -> %s  (404 and not listed in INDEX forthcoming-nodes)\n" "$f" "$target"
+                    bad=1
+                fi
+            fi
+        done
+    done
+    if [ "$bad" = "0" ]; then
+        echo "ok: all internal links resolve to written or canonically-planned pages."
+    fi
+    exit $bad

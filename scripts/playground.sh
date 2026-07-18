@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Playground launcher (make pg): boots the getting-started demo MCP server
+# Playground launcher (just pg): boots the getting-started demo MCP server
 # and launches agentchat's TUI wired to it. Needs a local OpenAI-compatible
 # model; see examples/playground/README.md.
 set -euo pipefail

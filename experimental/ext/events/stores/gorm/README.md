@@ -95,15 +95,15 @@ This matches the demo's acceptance criteria (Tenant A and Tenant B see fully iso
 
 ```bash
 # Default: in-memory + sqlite. No Docker required.
-make test
+just test
 
 # Full conformance matrix including Postgres. Boots a container on port 5434.
-make testpg
+just testpg
 
 # Long-running Postgres for ad-hoc test iteration.
-make updb
-make testpg     # repeats fast against the running container
-make downdb
+just updb
+just testpg     # repeats fast against the running container
+just downdb
 ```
 
 The conformance suite runs the same assertion body against every available backend (in-memory, sqlite, postgres). `TestQuotaStore_ConcurrentReserveAtomicity` skips the in-memory backend by design: the in-memory store's contract is "wrapper-locked, not self-locked", so racing it directly is a no-test.

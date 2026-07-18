@@ -16,7 +16,7 @@ The walkthrough exercises the SEP's wire shape step by step:
 capability declaration, the discovery index, SHA-256 digest
 verification, and reading both single-segment and nested-prefix skills.
 Full step-by-step is in [WALKTHROUGH.md](./WALKTHROUGH.md) (regenerate
-via `make readme`).
+via `just readme`).
 
 ## Running
 
@@ -24,22 +24,22 @@ via `make readme`).
 
 ```bash
 # Terminal 1: start the server
-make serve
+just serve
 
 # Terminal 2: drive the walkthrough
-make demo        # text mode (non-interactive)
-make tui         # interactive TUI (paginated, key-driven)
-make note        # notebook mode (Bubble Tea cells)
+just demo        # text mode (non-interactive)
+just tui         # interactive TUI (paginated, key-driven)
+just note        # notebook mode (Bubble Tea cells)
 ```
 
 ### Agent mode
 
 ```bash
-make agent                            # scripted agent, no LLM (also the golden test via make agent-test)
-make agent-live MODEL=qwen2.5-7b-instruct   # a live model improvising against the same server
+just agent                                  # scripted agent, no LLM (also the golden test via just agent-test)
+MODEL=qwen2.5-7b-instruct just agent-live   # a live model improvising against the same server
 ```
 
-`make agent` runs a scripted agent (mcpkit's host layer plus a deterministic
+`just agent` runs a scripted agent (mcpkit's host layer plus a deterministic
 `StubProvider`) against an in-process copy of this server, so it needs no second
 terminal and no model. It shows what skills are *for* on the agent side: the
 host discovers the server's skills, digest-verifies them, and injects them into
@@ -47,14 +47,14 @@ the model's system instructions before the first turn. The agent then answers a
 git question by the team's `git-workflow` conventions and a PDF question by the
 `pdf-processing` skill, with no tool call. The knowledge rides in the prompt.
 The whole run is deterministic, so it doubles as a golden-transcript test
-(`agent_scenario_test.go`). With `make agent-live` a real model derives the same
+(`agent_scenario_test.go`). With `MODEL=... just agent-live` a real model derives the same
 answers from the injected blocks instead of reciting scripted ones.
 
 ### Other server modes
 
 ```bash
-make serve-archive   # publishes each skill as one .tar.gz resource
-make serve-zip       # publishes each skill as one .zip resource
+just serve-archive   # publishes each skill as one .tar.gz resource
+just serve-zip       # publishes each skill as one .zip resource
 ```
 
 In archive mode `resources/list` returns one URI per skill (e.g.
@@ -85,11 +85,11 @@ to exercise the `Annotations` surface that surfaces extras under the
 ## Adding a real-world skill (anthropics/skills docx)
 
 ```bash
-make fetch-docx
-make serve
+just fetch-docx
+just serve
 ```
 
-`make fetch-docx` clones the public [`anthropics/skills`](https://github.com/anthropics/skills) repo
+`just fetch-docx` clones the public [`anthropics/skills`](https://github.com/anthropics/skills) repo
 to `/tmp/anthropics-skills-cache` (override via `ANTHROPIC_SKILLS_CACHE`),
 copies the `docx` skill into `skills/docx`, and warns if the upstream
 frontmatter `name` does not match the staged path (SEP-2640 requires
@@ -123,7 +123,7 @@ suite:
 
 ```bash
 # from repo root
-MCPCONFORMANCE_SKILLS_PATH=$HOME/newstack/mcpkit/conf-skills make testconf-skills
+MCPCONFORMANCE_SKILLS_PATH=$HOME/newstack/mcpkit/conf-skills just testconf-skills
 ```
 
 The Makefile target spawns this binary in `--serve` mode on `:18099`

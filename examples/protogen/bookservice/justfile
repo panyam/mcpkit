@@ -1,0 +1,25 @@
+# bookservice example justfile
+
+# Generate Go code from proto files
+generate:
+    rm -rf gen
+    buf generate
+
+# Run the example MCP server
+run:
+    go run .
+
+# Run e2e tests
+test:
+    go test -count=1 -timeout 30s -v .
+
+# Remove generated artifacts
+clean:
+    rm -rf gen
+
+# Show this help
+help:
+    @just --list
+
+# Default: generate, test, and run
+all: generate test run

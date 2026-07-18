@@ -1,6 +1,6 @@
 # Screenshots — wiki-explorer
 
-Capture by running `make demo-app EXAMPLE=wiki-explorer`.
+Capture by running `just demo-app EXAMPLE=wiki-explorer`.
 
 | File | What to capture |
 |---|---|

@@ -99,7 +99,7 @@ func SplitLines(s string) []string {
 // that have no Default declared (panyam/demokit#59 tracks the
 // fail-fast fix). Until that ships, prefer interactive recording.
 //
-// `make note` target shells out to `--note`, which demokit.Mode()
+// `just note` target shells out to `--note`, which demokit.Mode()
 // resolves to "notebook" — so notebook mode is wired once here and
 // applies to all walkthroughs uniformly. notebookbridge renders output
 // cells with horizontal-only borders (no vertical bars) so streamed

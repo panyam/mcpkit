@@ -11,7 +11,7 @@ import (
 )
 
 // runDemo is the shadertoy walkthrough. Acts as a scripted MCP host
-// against a server started by `make serve` in another terminal.
+// against a server started by `just serve` in another terminal.
 //
 // Walks five steps:
 //
@@ -35,21 +35,21 @@ func runDemo() {
 
 	demo := demokit.New("shadertoy — GLSL fragment shaders over MCP Apps").
 		Dir("shadertoy").
-		Description("Walks the render-shadertoy round trip end-to-end as a scripted MCP client: initialize, tools/list (6-field input surface with a multi-line GLSL default), tools/call with empty + custom shaders, and resources/read on the App's iframe HTML. The fixture mirrors upstream's shadertoy-server example: ShaderToy-compatible mainImage entry point, iResolution / iTime / iMouse uniforms, optional bufferA-D multi-pass channels. Server just acknowledges; the WebGL2 compile + render happens iframe-side. Run `make serve` in another terminal first.").
+		Description("Walks the render-shadertoy round trip end-to-end as a scripted MCP client: initialize, tools/list (6-field input surface with a multi-line GLSL default), tools/call with empty + custom shaders, and resources/read on the App's iframe HTML. The fixture mirrors upstream's shadertoy-server example: ShaderToy-compatible mainImage entry point, iResolution / iTime / iMouse uniforms, optional bufferA-D multi-pass channels. Server just acknowledges; the WebGL2 compile + render happens iframe-side. Run `just serve` in another terminal first.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "mcpkit-Go fixture (make serve)"),
+			demokit.Actor("Server", "mcpkit-Go fixture (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # mcpkit-Go fixture on :3101",
-		"Terminal 2:  make demo          # this walkthrough (--tui for interactive TUI)",
+		"Terminal 1:  just serve         # mcpkit-Go fixture on :3101",
+		"Terminal 2:  just demo          # this walkthrough (--tui for interactive TUI)",
 		"```",
 		"",
-		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `make demo-app EXAMPLE=shadertoy` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
+		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam, basic-host). The walkthrough below acts as a scripted host that issues the protocol calls directly through `*mcpkit/client.Client` — no LLM, no browser. The same calls drive the iframe when you run `just demo-app EXAMPLE=shadertoy` in basic-host (see the [centralized guide](../README.md#other-ways-to-test-a-fixture)).",
 	)
 
 	var c *client.Client
@@ -81,7 +81,7 @@ if err := c.Connect(); err != nil {
 			core.ClientInfo{Name: "shadertoy-host", Version: "1.0"},
 		)
 		if err := c.Connect(); err != nil {
-			fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
 		fmt.Printf("    connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)

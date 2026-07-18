@@ -1,0 +1,34 @@
+PORT := env('PORT', '3020')
+KEYCLOAK_URL := env('KEYCLOAK_URL', 'http://localhost:8180')
+KC_REALM := env('KC_REALM', 'mcpkit-test')
+
+# Show available targets
+help:
+    @just --list --unsorted
+
+# Start the SUT (expects Keycloak already running at $KEYCLOAK_URL)
+run:
+    go run . -addr :{{PORT}} -keycloak-url {{KEYCLOAK_URL}} -realm {{KC_REALM}}
+
+# Compile the SUT to ./step-up-keycloak-sut
+build:
+    go build -o step-up-keycloak-sut .
+
+# curl-test the 403 path with an under-scoped token
+smoke:
+    #!/usr/bin/env bash
+    set -eu
+    TOKEN=$(curl -fsS -X POST {{KEYCLOAK_URL}}/realms/{{KC_REALM}}/protocol/openid-connect/token \
+        -d "grant_type=client_credentials" \
+        -d "client_id=mcp-confidential" \
+        -d "client_secret=mcp-test-secret-for-confidential" \
+        -d "scope=openid tools-read" | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+    echo "--- under-scoped (expect 403 + WWW-Authenticate) ---"
+    curl -i -X POST http://localhost:{{PORT}}/mcp \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $TOKEN" \
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"admin_call","arguments":{}}}' 2>&1 | head -15
+
+# Remove built binary
+clean:
+    rm -f step-up-keycloak-sut

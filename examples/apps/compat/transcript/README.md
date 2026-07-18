@@ -32,7 +32,7 @@ meaningful work in the iframe (rather than just rendering a value).
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=transcript
+just demo-app EXAMPLE=transcript
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

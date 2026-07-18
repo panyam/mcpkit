@@ -19,7 +19,7 @@ Walks through SEP-2356, which lets servers declare file-input properties on tool
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the file-inputs server
     Host->>Server: POST /mcp — initialize (capabilities.fileInputs={})
@@ -65,8 +65,8 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve         # file-inputs server on :8080
-Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)
+Terminal 1:  just serve         # file-inputs server on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
 ```
 
 Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam). The walkthrough below acts as a scripted host that reads files from disk, encodes them as data URIs via `core.EncodeDataURI`, and calls the tools. See the README for VS Code config.

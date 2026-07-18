@@ -18,7 +18,7 @@ Walks through auth patterns layered on a single mcpkit server: public method all
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
     participant AS as Auth Server (in-process)
 
     Note over Host,AS: Step 1: Discover server URL + minted tokens
@@ -63,8 +63,8 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve        # MCP server + in-process AS on :8080
-Terminal 2:  make run          # this demo
+Terminal 1:  just serve        # MCP server + in-process AS on :8080
+Terminal 2:  just run          # this demo
 ```
 
 ### Auth patterns covered

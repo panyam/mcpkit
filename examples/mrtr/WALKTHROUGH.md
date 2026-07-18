@@ -8,13 +8,14 @@ Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server 
 - **Round 1 (raw): tools/call → InputRequiredResult** — Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is `resultType` — camelCase like every other MCP wire field. `inputRequests` is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / `"incomplete"`.
 - **Auto-loop: CallToolWithInputs runs the round-trip** — `client.CallToolWithInputs(ctx, c, name, args, handler)` collapses the whole loop. `DefaultInputHandler` synthesizes a server-to-client request for each `inputRequest` and routes it through `client.HandleServerRequestWithContext` — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.
 - **Multi-round: server accumulates answers across rounds via requestState** — The wire only ships the LATEST round's `inputResponses`. Dispatch decodes prior answers from `requestState` (a signed `MRTRRoundState` containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same `name: Alice` for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.
+- **Tracing: rounds 2+ link back to round 1 (SEP-414 P6)** — Without this PR the same operation produced N unrelated traces — operators looking at round N had no way to navigate to round 1. The vendor-namespaced `_meta.io.modelcontextprotocol/tracelink` field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.
 
 ## Flow
 
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the MRTR server with capability handlers
     Host->>Server: POST /mcp — initialize (capabilities: elicitation, sampling, roots)
@@ -38,6 +39,8 @@ sequenceDiagram
     Server-->>Host: Round 2 InputRequiredResult: ask step2 (color) — requestState now carries step1's answer
     Host->>Server: retry with inputResponses{step2} (NOT step1 — that's already in requestState)
     Server-->>Host: Round 3 ToolResult: "Hi Alice, your favorite color is Alice."
+
+    Note over Host,Server: Step 5: Tracing: rounds 2+ link back to round 1 (SEP-414 P6)
 ```
 
 ## Steps
@@ -47,8 +50,8 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve         # MRTR demo server on :8080
-Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)
+Terminal 1:  just serve         # MRTR demo server on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
 ```
 
 ### What MRTR adds to tools/call
@@ -147,6 +150,10 @@ curl -s -X POST http://localhost:8080/mcp \
   | jq '.result'
 ```
 
+### Step 5: Tracing: rounds 2+ link back to round 1 (SEP-414 P6)
+
+Without this PR the same operation produced N unrelated traces — operators looking at round N had no way to navigate to round 1. The vendor-namespaced `_meta.io.modelcontextprotocol/tracelink` field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.
+
 ### Where to look in the code
 
 - Server dispatch: `server/dispatch.go` (handleToolsCall reshapes InputRequired into the wire envelope; merges accumulated answers from `requestState`)
@@ -155,7 +162,7 @@ curl -s -X POST http://localhost:8080/mcp \
 - Tool handler API: `ctx.RequestInput(reqs)` sentinel + `ctx.InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors — core/handler_context.go
 - Client auto-loop: `client.CallToolWithInputs` + `DefaultInputHandler` — client/mrtr.go
 - Client dispatch unification: `client.HandleServerRequestWithContext` — single switch for both real server-initiated requests AND MRTR-synthesized ones — client/client.go
-- Conformance: panyam/mcpconformance fork (`src/scenarios/server/mrtr/`, 7 checks + 1 SKIPPED composition; upstream Draft PR modelcontextprotocol/conformance#262; `make testconf-mrtr` runs it)
+- Conformance: panyam/mcpconformance fork (`src/scenarios/server/mrtr/`, 7 checks + 1 SKIPPED composition; upstream Draft PR modelcontextprotocol/conformance#262; `just testconf-mrtr` runs it)
 - SEP-2322 spec: https://github.com/modelcontextprotocol/specification/pull/2322
 
 ## Run it

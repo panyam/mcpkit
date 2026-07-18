@@ -6,7 +6,7 @@
 
 Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
 
-> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `make serve` + `make demo`.
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `just serve` + `just demo`.
 
 ## What it demonstrates
 

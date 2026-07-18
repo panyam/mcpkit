@@ -100,7 +100,7 @@ Walks both trees and asserts byte equality file-for-file. A mismatch here would 
 
 The walkthrough has exercised every mcpskills subcommand against a fresh fixture. The same shell-out approach a CI smoke test would use is identical to what runs in front of an audience under --tui — the binary doesn't know it's being demoed.
 
-`make test-mcpskills-walkthrough` at the repo root runs this same flow with --non-interactive and asserts exit 0. Use it as the per-commit gate for the CLI surface.
+`just test-mcpskills-walkthrough` at the repo root runs this same flow with --non-interactive and asserts exit 0. Use it as the per-commit gate for the CLI surface.
 
 ## Run it
 

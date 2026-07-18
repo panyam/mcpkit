@@ -1,0 +1,50 @@
+MODEL := env('MODEL', '')
+BASE_URL := env('BASE_URL', '')
+
+# Start the skills-demo server with local + archive + github sources layered (best-effort github)
+serve:
+	go run . --serve --source=multi
+
+# Run the scripted agent scenario (no LLM): an agent loads the served skills and answers by them
+agent:
+	go run . --agent
+
+# Run the agent scenario against a live model (MODEL=<name> [BASE_URL=<url>])
+agent-live:
+	go run . --agent --model {{MODEL}} {{if BASE_URL != '' { '--base-url ' + BASE_URL } else { '' }}}
+
+# Run the agent golden-transcript test
+agent-test:
+	go test ./... -count=1 -run TestAgentScenario
+
+# Run the demokit walkthrough (text, non-interactive). Server must be up via `just serve` in another terminal.
+demo:
+	go run . --tui
+
+# Start the server in archive mode (.tar.gz per skill)
+serve-archive:
+	go run . --serve --bundle=archive
+
+# Start the server in archive mode (.zip per skill)
+serve-zip:
+	go run . --serve --bundle=zip
+
+# Run the walkthrough in interactive TUI mode (paginated, key-driven).
+run:
+	go run .
+
+# Run the walkthrough in notebook mode (Bubble Tea cells).
+note:
+	go run . --note
+
+# Regenerate WALKTHROUGH.md from the demo definitions.
+readme:
+	go run . --doc=md > WALKTHROUGH.md
+
+# Stage Anthropic's docx skill from github.com/anthropics/skills into skills/ for a real-world demo.
+fetch-docx:
+	bash scripts/fetch-docx-skill.sh
+
+# Build the binary to ./skills-demo
+build:
+	go build -o skills-demo .

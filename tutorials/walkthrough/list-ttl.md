@@ -25,7 +25,7 @@
 - Where the TTL field lives in list responses (`tools/list`, `prompts/list`, `resources/list`)
 - The server's role: be honest about lifetime
 - The client's role: cache up to TTL, refetch on TTL expiry, also refetch on `list_changed` (TTL is a backup, not a replacement)
-- The `make testconf-list-ttl` 5-scenario conformance suite
+- The (since-retired) `testconf-list-ttl` 5-scenario conformance suite — SEP-2549 coverage now runs in the default `just testconf` suite
 
 ## Next to read
 

@@ -33,15 +33,15 @@ func runDemo() {
 		Description("Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server returns `InputRequiredResult{inputRequests, requestState}` when it needs more input from the client; the client resolves each `inputRequest` (elicitation, sampling, roots) locally and retries the SAME `tools/call` with `inputResponses` + the echoed `requestState`. Stateless on the server side — accumulated answers live inside `requestState` across rounds. Renamed from `IncompleteResult` in SEP-2322 commit de6d76fb (merged 2026-05-06).").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # MRTR demo server on :8080",
-		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
+		"Terminal 1:  just serve         # MRTR demo server on :8080",
+		"Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)",
 		"```",
 	)
 
@@ -89,7 +89,7 @@ c := client.NewClient(serverURL+"/mcp",
         return []core.Root{{URI: "file:///demo/root", Name: "Demo Root"}}, nil
     }),
 )
-if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
+if err := c.Connect(); err != nil { /* server not up — run: just serve */ }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			opts := []client.ClientOption{
@@ -121,7 +121,7 @@ if err := c.Connect(); err != nil { /* server not up — run: make serve */ }`),
 				opts...,
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
@@ -267,7 +267,7 @@ res, _ := client.CallToolWithInputs(context.Background(), c,
 
 	demo.Step("Tracing: rounds 2+ link back to round 1 (SEP-414 P6)").
 		Note("`CallToolWithInputs` captures round 1's outbound traceparent and stamps it onto round 2+ as `_meta.io.modelcontextprotocol/tracelink` (SEP-414 P6 / issue 682). The server's trace middleware reads the link and calls `AddLink` on the round-N dispatch span, stitching the logical operation across separate W3C traces. **Star semantic** — every round 2+ links to round 1, not the previous round, so Tempo / Jaeger / Honeycomb show round 1 as the anchor regardless of how deep the loop goes.").
-		Note("To see the stitched trace, bring up the LGTM observability stack alongside the demo: `(cd ../../docker/observability && docker compose up -d)` then `EXPORTER=auto make serve` here. Open Grafana → Tempo → service `mrtr-demo`. Click any round-2/3 dispatch span's Link entry — one click navigates to round 1's trace tree, looking at the original input-required handoff that the final ToolResult resolved from.").
+		Note("To see the stitched trace, bring up the LGTM observability stack alongside the demo: `(cd ../../docker/observability && docker compose up -d)` then `EXPORTER=auto just serve` here. Open Grafana → Tempo → service `mrtr-demo`. Click any round-2/3 dispatch span's Link entry — one click navigates to round 1's trace tree, looking at the original input-required handoff that the final ToolResult resolved from.").
 		Note("Without this PR the same operation produced N unrelated traces — operators looking at round N had no way to navigate to round 1. The vendor-namespaced `_meta.io.modelcontextprotocol/tracelink` field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.")
 
 	demo.Section("Where to look in the code",
@@ -277,7 +277,7 @@ res, _ := client.CallToolWithInputs(context.Background(), c,
 		"- Tool handler API: `ctx.RequestInput(reqs)` sentinel + `ctx.InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors — core/handler_context.go",
 		"- Client auto-loop: `client.CallToolWithInputs` + `DefaultInputHandler` — client/mrtr.go",
 		"- Client dispatch unification: `client.HandleServerRequestWithContext` — single switch for both real server-initiated requests AND MRTR-synthesized ones — client/client.go",
-		"- Conformance: panyam/mcpconformance fork (`src/scenarios/server/mrtr/`, 7 checks + 1 SKIPPED composition; upstream Draft PR modelcontextprotocol/conformance#262; `make testconf-mrtr` runs it)",
+		"- Conformance: panyam/mcpconformance fork (`src/scenarios/server/mrtr/`, 7 checks + 1 SKIPPED composition; upstream Draft PR modelcontextprotocol/conformance#262; `just testconf-mrtr` runs it)",
 		"- SEP-2322 spec: https://github.com/modelcontextprotocol/specification/pull/2322",
 	)
 

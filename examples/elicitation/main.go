@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # starts the MCP server on :8080
-//	Terminal 2:  make run           # runs the demokit client (scripted MCP host)
+//	Terminal 1:  just serve         # starts the MCP server on :8080
+//	Terminal 2:  just run           # runs the demokit client (scripted MCP host)
 //
 // The server is a real MCP server that any host can connect to.
 // The demokit client acts as a scripted host walking through the UC1 flow.
@@ -67,7 +67,7 @@ func runDemo() {
 		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 			demokit.Actor("Browser", "User Browser"),
 		)
 
@@ -75,8 +75,8 @@ func runDemo() {
 		"Before running this demo, start the MCP server in a separate terminal:",
 		"",
 		"```",
-		"Terminal 1:  make serve        # start the MCP server on :8080",
-		"Terminal 2:  make run          # run this demo",
+		"Terminal 1:  just serve        # start the MCP server on :8080",
+		"Terminal 2:  just run          # run this demo",
 		"```",
 	)
 
@@ -126,7 +126,7 @@ c := client.NewClient(serverURL+"/mcp",
     }),
     client.WithGetSSEStream(),
 )
-if err := c.Connect(); err != nil { /* server not up — run: make serve */ }
+if err := c.Connect(); err != nil { /* server not up — run: just serve */ }
 tools, _ := c.ListTools(ctx.Ctx)`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
@@ -151,7 +151,7 @@ tools, _ := c.ListTools(ctx.Ctx)`),
 			)
 			if err := c.Connect(); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
-				fmt.Printf("    Start the server with: make serve\n")
+				fmt.Printf("    Start the server with: just serve\n")
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
