@@ -255,7 +255,7 @@ func runChat(v *viper.Viper) error {
 			if err != nil {
 				return err
 			}
-			store, err := agent.NewSemanticMemoryStore(embedder, agent.WithSemanticTracerProvider(tp))
+			store, err := agent.NewInMemorySemanticStore(embedder, agent.WithSemanticTracerProvider(tp))
 			if err != nil {
 				return err
 			}
