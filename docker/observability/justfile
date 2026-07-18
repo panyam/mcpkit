@@ -1,0 +1,34 @@
+# observability stack — OTel Collector + Tempo + Loki + Mimir + Grafana.
+# Run from this directory: `cd docker/observability && just up`.
+
+COMPOSE := "docker compose -f docker-compose.yml"
+
+# Start the observability stack in the background. Grafana lands at http://localhost:3000.
+up:
+    {{COMPOSE}} up -d
+    @echo ""
+    @echo "  Grafana UI:  http://localhost:3000  (anonymous Admin, no login)"
+    @echo "  OTLP gRPC:   localhost:4317"
+    @echo "  OTLP HTTP:   localhost:4318"
+    @echo ""
+
+# Stop and remove the observability stack containers.
+down:
+    {{COMPOSE}} down
+
+# Tail logs from all observability containers (Ctrl-C to exit).
+logs:
+    {{COMPOSE}} logs -f
+
+# Build any custom images referenced by the stack. No-op today; reserved for future custom images.
+build:
+    {{COMPOSE}} build
+
+# Show running containers for the observability stack.
+ps:
+    {{COMPOSE}} ps
+
+# Validate the compose file syntax without bringing anything up.
+config:
+    {{COMPOSE}} config --quiet
+    @echo "docker-compose.yml: OK"

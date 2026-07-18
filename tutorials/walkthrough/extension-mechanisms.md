@@ -86,7 +86,7 @@ if core.ClientSupportsExtension(ctx, core.TasksExtensionID) {
 
 ### The SEP governance process
 
-SEPs (Standard Enhancement Proposals) are MCP's RFC process. A SEP specifies the methods / capabilities / notifications / `_meta` an extension adds. It gets prototyped, conformance-tested (mcpkit runs per-SEP suites — `make testconf-tasks-v2` for SEP-2663, `testconf-mrtr` for SEP-2322, …), and iterated. The extension ID and its `capabilities.extensions` entry exist from day one; what *changes* as the SEP matures is the `stability` value and `specVersion`.
+SEPs (Standard Enhancement Proposals) are MCP's RFC process. A SEP specifies the methods / capabilities / notifications / `_meta` an extension adds. It gets prototyped, conformance-tested (mcpkit runs per-SEP suites — `just testconf-tasks-v2` for SEP-2663, `testconf-mrtr` for SEP-2322, …), and iterated. The extension ID and its `capabilities.extensions` entry exist from day one; what *changes* as the SEP matures is the `stability` value and `specVersion`.
 
 ```mermaid
 graph LR
@@ -141,7 +141,7 @@ Three tiers, by stability:
 3. **Smaller blast radius** — a breaking change in `experimental/ext/events` doesn't touch consumers of `core/` or `server/`.
 
 > [!NOTE]
-> The cost is module discipline. Adding a new `core/` import that an extension needs requires `make tidy-all` to update sub-module `go.sum` files. CLAUDE.md flags this as a recurring gotcha.
+> The cost is module discipline. Adding a new `core/` import that an extension needs requires `just tidy-all` to update sub-module `go.sum` files. CLAUDE.md flags this as a recurring gotcha.
 
 ## Q4 — How do you write a server-side feature without forking core?
 
@@ -172,7 +172,7 @@ Brief — each gets its own full page later.
 | **Auth** | bring-up extension | none of the four MCP surfaces — extends the HTTP layer below: `WWW-Authenticate` + OAuth + bearer token per request | `core/auth.go`, `core/www_authenticate.go`, `ext/auth/` (separate `go.mod`) |
 | **Apps** | library-architecture | thin protocol surface; bulk is host-architecture (AppHost lifecycle, Bridge JS runtime, ServerRegistry tracking live servers) | `ext/ui/` (separate `go.mod`) · docs in `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `docs/APPS_ONBOARDING.md` |
 | **Events** | method-namespace, target-shape | registered as an extension with `stability: experimental`; explores events as first-class beyond raw SSE event-id replay | `experimental/ext/events/` |
-| **List-TTL** (SEP-2549) | `_meta`-only | a `*int` field with explicit-zero semantics on list responses; no new methods or capabilities | hooked into existing list responses; conformance via `make testconf-list-ttl` |
+| **List-TTL** (SEP-2549) | `_meta`-only | a `*int` field with explicit-zero semantics on list responses; no new methods or capabilities | hooked into existing list responses; conformance originally via a dedicated `testconf-list-ttl` suite, now folded into `just testconf` |
 | **MRTR** (SEP-2322) | method-namespace + `_meta` | extends `tools/call` — server can return `InputRequiredResult` with `inputRequests` + signed `requestState`; client retries with `inputResponses` + echoed token; stateless across rounds. Default `InputHandler` bridges to sampling/elicitation/roots | [`server/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/server/mrtr.go), [`client/mrtr.go`](https://github.com/panyam/mcpkit/blob/main/client/mrtr.go) |
 | **Elicitation** | method-namespace | `elicitation/create` method + `elicitation` capability declared by client; Form mode + URL mode | `core/elicitation.go` · server-originates, client receives |
 

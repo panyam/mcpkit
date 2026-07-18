@@ -12,7 +12,7 @@ branch (paired with the SEP-2663 tasks scenarios since the two surfaces
 share base types). Run from mcpkit via:
 
 ```bash
-make testconf-mrtr
+just testconf-mrtr
 ```
 
 The Makefile target invokes vitest in the fork (auto-spawning the
@@ -36,7 +36,7 @@ cd conformance && npm install
 npx vitest run mrtr/
 ```
 
-The `make testconf-mrtr` target picks up new tests in this folder
+The `just testconf-mrtr` target picks up new tests in this folder
 automatically.
 
 ## When to upstream a stricter test

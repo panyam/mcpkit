@@ -1,6 +1,6 @@
 # Screenshots — map
 
-Capture by running `make demo-app EXAMPLE=map`.
+Capture by running `just demo-app EXAMPLE=map`.
 
 | File | What to capture |
 |---|---|

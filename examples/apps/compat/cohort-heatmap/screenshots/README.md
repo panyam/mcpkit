@@ -1,6 +1,6 @@
 # Screenshots — cohort-heatmap
 
-Capture by running `make demo-app EXAMPLE=cohort-heatmap`.
+Capture by running `just demo-app EXAMPLE=cohort-heatmap`.
 
 | File | What to capture |
 |---|---|

@@ -34,15 +34,15 @@ func runDemo() {
 		Description("Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve        # tasks server on :8080",
-		"Terminal 2:  make run          # this demo",
+		"Terminal 1:  just serve        # tasks server on :8080",
+		"Terminal 2:  just run          # this demo",
 		"```",
 	)
 
@@ -109,7 +109,7 @@ tools, _ := c.ListTools(ctx.Ctx) // each tool carries Execution.TaskSupport meta
 				opts...,
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)

@@ -1,6 +1,6 @@
 # Screenshots — system-monitor
 
-Capture by running `make demo-app EXAMPLE=system-monitor`.
+Capture by running `just demo-app EXAMPLE=system-monitor`.
 
 | File | What to capture |
 |---|---|

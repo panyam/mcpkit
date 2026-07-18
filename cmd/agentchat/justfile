@@ -1,0 +1,36 @@
+# agentchat — terminal chat harness over MCP servers.
+BINARY := "agentchat"
+
+# Build the binary into ./bin
+build:
+    @mkdir -p bin
+    go build -o bin/{{BINARY}} .
+
+# Run the test suite
+test:
+    go test ./... -count=1 -timeout 60s
+
+# Run the test suite with the race detector
+test-race:
+    go test ./... -count=1 -race -timeout 120s
+
+# Build then run with CONFIG=<path> (or ARGS="--model m --url u")
+run: build
+    #!/usr/bin/env bash
+    if [ -n "$CONFIG" ]; then
+        ./bin/{{BINARY}} --config "$CONFIG"
+    else
+        ./bin/{{BINARY}} $ARGS
+    fi
+
+# go install into GOPATH/bin
+install:
+    go install .
+
+# Remove build artifacts
+clean:
+    rm -rf bin
+
+# Show targets
+help:
+    @just --list

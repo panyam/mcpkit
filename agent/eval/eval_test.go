@@ -107,6 +107,20 @@ func TestContains(t *testing.T) {
 	}
 }
 
+func TestNotContains(t *testing.T) {
+	res := runCase(t, nil, Case{Name: "nc"}, agent.StubTurn{Text: "your language is Rust"})
+	if s := NotContains("Go").Score(res); !s.Pass {
+		t.Fatalf("Go is absent, NotContains should pass: %+v", s)
+	}
+	if s := NotContains("Rust").Score(res); s.Pass {
+		t.Fatalf("Rust is present, NotContains should fail: %+v", s)
+	}
+	// a failed run (no turn) fails NotContains — there's no answer to trust
+	if s := NotContains("anything").Score(Result{}); s.Pass {
+		t.Fatalf("no-turn result should fail NotContains: %+v", s)
+	}
+}
+
 func TestToolCalledTrueAndFalse(t *testing.T) {
 	src := lookupSource(t)
 	res := runCase(t, src, Case{Name: "tc", Input: "get x"},

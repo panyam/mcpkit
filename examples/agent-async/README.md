@@ -13,9 +13,9 @@ it is both a runnable demo and a golden-transcript test.
 ## Run it
 
 ```bash
-make agent          # deterministic scripted run (no model)
-make test           # the golden-transcript test
-make demo MODEL=qwen2.5-7b-instruct   # a live model improvising against the same server
+just agent          # deterministic scripted run (no model)
+just test           # the golden-transcript test
+just demo qwen2.5-7b-instruct   # a live model improvising against the same server
 ```
 
 ## What happens

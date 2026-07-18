@@ -1,0 +1,71 @@
+ADDR := env('ADDR', 'http://localhost:8080')
+MCP := ADDR + '/mcp'
+EVENT := 'telegram.message'
+RESOURCE_URI := 'telegram://messages/recent'
+EVENTS_CLIENT := 'python3 ../../../experimental/ext/events/clients/python/events_client.py --mcp ' + MCP + ' --event ' + EVENT + ' --resource-uri ' + RESOURCE_URI
+TELEGRAM_BOT_TOKEN := env('TELEGRAM_BOT_TOKEN', '')
+HOOK_PORT := env('HOOK_PORT', '9999')
+INTERVAL := env('INTERVAL', '5')
+CHAT_ID := env('CHAT_ID', '100')
+SENDER := env('SENDER', 'test-user')
+TEXT := env('TEXT', 'hello from make inject')
+USER_NAME := env('USER_NAME', 'test-user')
+
+# Run the demokit walkthrough (interactive, TUI). Server must be up via `just serve` in another terminal.
+demo:
+	go run . --tui
+
+# Run the walkthrough in notebook mode (Bubble Tea cells). Server must be up via `just serve`.
+note:
+	go run . --note
+
+# Alias for serve
+run: serve
+
+# Start the telegram-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
+serve:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -n "{{TELEGRAM_BOT_TOKEN}}" ]; then
+	  echo "Starting with Telegram bot..."
+	  go run . --serve -addr :8080 -token "{{TELEGRAM_BOT_TOKEN}}"
+	else
+	  echo "Starting in test mode (no Telegram token)..."
+	  go run . --serve -addr :8080
+	fi
+
+# Regenerate WALKTHROUGH.md from demo definitions
+readme:
+	go run . --doc md > WALKTHROUGH.md
+
+# Build the binary
+build:
+	go build -o telegram-events-demo .
+
+test:
+	go test ./... -v -count=1
+
+test-race:
+	go test ./... -race -count=1
+
+inject:
+	@curl -s -X POST {{ADDR}}/inject \
+	  -H 'Content-Type: application/json' \
+	  -d '{"chat_id": {{CHAT_ID}}, "sender": "{{SENDER}}", "text": "{{TEXT}}"}' | jq .
+
+inject-typing:
+	@curl -s -X POST '{{ADDR}}/inject?event=telegram.typing' \
+	  -H 'Content-Type: application/json' \
+	  -d '{"chat_id": {{CHAT_ID}}, "user": "{{USER_NAME}}"}' | jq .
+
+list:
+	@{{EVENTS_CLIENT}} list
+
+listen:
+	@{{EVENTS_CLIENT}} listen
+
+webhook:
+	@{{EVENTS_CLIENT}} webhook --port {{HOOK_PORT}}
+
+poll:
+	@{{EVENTS_CLIENT}} poll --interval {{INTERVAL}}

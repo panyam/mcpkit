@@ -21,7 +21,7 @@ import (
 
 // forEachBackend runs the assertion body against SQLite (always; no
 // Docker required) and Postgres (only when the MCPKIT_AGENT_TEST_PG*
-// env vars are set — `make testpg` in this directory boots a container
+// env vars are set — `just testpg` in this directory boots a container
 // and exports them).
 func forEachBackend(t *testing.T, run func(t *testing.T, s *RunStore)) {
 	t.Helper()

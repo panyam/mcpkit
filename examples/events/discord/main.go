@@ -2,8 +2,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # discord-events server on :8080
-//	Terminal 2:  make demo          # demokit walkthrough (--tui for the TUI)
+//	Terminal 1:  just serve         # discord-events server on :8080
+//	Terminal 2:  just demo          # demokit walkthrough (--tui for the TUI)
 //
 // Without --serve, the binary runs the walkthrough against a server it
 // expects at --url (default http://localhost:8080). Use --readme to
@@ -48,7 +48,7 @@ func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
 	token := flag.String("token", "", "Discord bot token (omit for test mode)")
 	whTTL := flag.Duration("webhook-ttl", 0, "override webhook subscription TTL (default 1h; library clamps to spec envelope [5m, 24h] unless -unsafe-webhook-ttl-bypass is also set)")
-	whTTLBypass := flag.Bool("unsafe-webhook-ttl-bypass", false, "disable the [5m, 24h] envelope clamp on -webhook-ttl; required for the make test-ttl walkthrough (3s TTL). Production deployments MUST NOT use this.")
+	whTTLBypass := flag.Bool("unsafe-webhook-ttl-bypass", false, "disable the [5m, 24h] envelope clamp on -webhook-ttl; required for the just test-ttl walkthrough (3s TTL). Production deployments MUST NOT use this.")
 	whHeaderMode := flag.String("webhook-header-mode", "standard", "webhook header style: standard | mcp")
 	whSuspendThreshold := flag.Int("webhook-suspend-threshold", 0, "override consecutive-failures count that flips a webhook target to Active=false (default 5; lower to 1 for demoing the suspend transition without waiting 5×retry-cycles)")
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
@@ -148,7 +148,7 @@ func serve() {
 	// and follow the spec strictly — anonymous webhook subscribes are
 	// rejected with -32012 per §"Subscription Identity" → "Authentication
 	// required" L361. Otherwise fall back to the demo escape hatch so
-	// `make demo` works end-to-end without an auth provider.
+	// `just demo` works end-to-end without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
 	srvOpts = append(srvOpts, server.WithSubscriptions())
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"

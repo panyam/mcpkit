@@ -61,6 +61,22 @@ func Contains(substr string) Scorer {
 	})
 }
 
+// NotContains passes when the final turn text does NOT contain substr. It is
+// the abstention / knowledge-supersede check: a memory eval asserts the model
+// did not surface a stale fact (the old value after an update) or did not
+// hallucinate a specific it was never told. A failed run (no turn) fails the
+// scorer — there is no answer to trust.
+func NotContains(substr string) Scorer {
+	return scorerFunc(func(r Result) Score {
+		if r.Turn == nil {
+			return boolScore("NotContains", false, "no turn result (run failed)")
+		}
+		got := r.Turn.Text
+		return boolScore("NotContains", !strings.Contains(got, substr),
+			fmt.Sprintf("want substring %q absent from %q", substr, got))
+	})
+}
+
 // ToolCalled passes when the turn requested the named tool at least once. It
 // scans the event stream for tool-begin (emitted for every dispatched call,
 // including ones that later error or are denied), so it reports intent to call

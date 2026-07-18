@@ -3,7 +3,7 @@
 Placeholder paths referenced from `../README.md`. Capture by running:
 
 ```bash
-make demo-app EXAMPLE=basic-vanillajs
+just demo-app EXAMPLE=basic-vanillajs
 ```
 
 | File | What to capture |

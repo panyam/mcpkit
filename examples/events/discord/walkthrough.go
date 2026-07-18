@@ -27,7 +27,7 @@ import (
 const liveInteractionMaxWait = 30 * time.Second
 
 // runDemo drives the demokit walkthrough against a server that the user
-// started separately via `make serve`. Steps walk through every events-spec
+// started separately via `just serve`. Steps walk through every events-spec
 // feature mcpkit currently supports: list, push, poll, cursorless, webhook
 // + auto-refresh, all driven through the typed Go SDK at clients/go.
 func runDemo() {
@@ -40,7 +40,7 @@ func runDemo() {
 		Description("Walks through the four delivery modes of the experimental MCP Events extension (events/list, push via SSE, poll, webhook with TTL refresh) plus the cursored vs cursorless source distinction. Webhook subscriber uses the typed Go SDK at experimental/ext/events/clients/go.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 			demokit.Actor("Receiver", "Local webhook receiver (this process)"),
 			demokit.Actor("Discord", "Discord (real bot mode only)"),
 		)
@@ -51,17 +51,17 @@ func runDemo() {
 		"**Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.",
 		"",
 		"```",
-		"Terminal 1:  make serve                                # server in test mode",
-		"Terminal 2:  make demo                                 # this walkthrough",
-		"Terminal 3:  make inject TEXT='hello'                  # message event",
+		"Terminal 1:  just serve                                # server in test mode",
+		"Terminal 2:  just demo                                 # this walkthrough",
+		"Terminal 3:  just inject TEXT='hello'                  # message event",
 		"             make inject-typing                        # typing event (cursorless)",
 		"```",
 		"",
 		"**Option B — Real bot mode** (requires `DISCORD_BOT_TOKEN`). Same walkthrough plus the live step captures real typing + message events from your Discord channel. Token setup in the demo's README.",
 		"",
 		"```",
-		"Terminal 1:  DISCORD_BOT_TOKEN=... make serve          # server in bot mode",
-		"Terminal 2:  make demo                                 # this walkthrough",
+		"Terminal 1:  DISCORD_BOT_TOKEN=... just serve          # server in bot mode",
+		"Terminal 2:  just demo                                 # this walkthrough",
 		"             # In Discord: type, then send. Live step captures both.",
 		"```",
 	)
@@ -74,7 +74,7 @@ func runDemo() {
 		"- **Source-side health signals** — `YieldError` (transient `notifications/events/error`, stream stays open).",
 		"- **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard, no-redirects, 256 KiB body cap with 413 non-retryable, Standard Webhooks signature scheme as default.",
 		"- **Multi-subscription routing** — two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` plus push-side `requestId` echo on every notification.",
-		"- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `make serve-fast-suspend`.",
+		"- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `just serve-fast-suspend`.",
 		"- **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal`. Production deployments wire real OIDC and reject anonymous subscribes with `-32012 Forbidden`.",
 		"- **Spec validation** — empty / malformed `delivery.secret` rejected; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed.",
 		"",
@@ -105,7 +105,7 @@ echo "SID=$SID"`).Default(),
 			demokit.MakeVariant("go", "go", `// Vanilla MCP initialize over Streamable HTTP — no new capability declared.
 c := client.NewClient(mcpURL, core.ClientInfo{Name: "discord-events-host", Version: "1.0"})
 if err := c.Connect(); err != nil {
-    log.Fatalf("connect failed (start the server with: make serve): %v", err)
+    log.Fatalf("connect failed (start the server with: just serve): %v", err)
 }
 fmt.Printf("Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`),
 		).
@@ -114,7 +114,7 @@ fmt.Printf("Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`),
 				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
 			fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
@@ -699,7 +699,7 @@ if err != nil {
 			"- Spec §\"Webhook Event Delivery\" L413+L460: \"after repeated failures the server SHOULD set active: false.\" The transition fires after 5 consecutive failures within a 10-min sliding window. On the `true→false` transition the server auto-Posts a `{type:terminated}` control envelope to the (now-suspended) receiver — `webhook-id` prefix is `msg_terminated_<random>` so receivers can distinguish it from event deliveries (which use `evt_<eventId>`). (in mcpkit: knobs are `events.WithWebhookSuspendThreshold(n)` and `events.WithWebhookSuspendWindow(d)`)",
 			"- A successful refresh of a suspended target reactivates it: clears the failure run, resets `lastError` and `failedSince`, flips `active` back to true.",
 			"",
-			"**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).",
+			"**Fast-mode tip:** with the default `just serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `just serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).",
 		).
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# First subscribe has no deliveryStatus (nothing to report yet).
@@ -827,7 +827,7 @@ _ = res2`),
 				active, status["lastError"], status["failedSince"])
 			if active {
 				fmt.Printf("    Suspend has NOT fired (default threshold = 5; need 5 failed deliveries).\n")
-				fmt.Printf("    For a fast suspend demo, restart server with `make serve-fast-suspend`\n")
+				fmt.Printf("    For a fast suspend demo, restart server with `just serve-fast-suspend`\n")
 				fmt.Printf("    (sets -webhook-suspend-threshold 1 so ONE failure flips Active=false).\n")
 			} else {
 				fmt.Printf("    Suspend FIRED — Active=false. Refresh of this subscription will reactivate.\n")
@@ -1063,7 +1063,7 @@ c.Call("events/unsubscribe", map[string]any{
 			"Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.",
 			"",
 			"```",
-			"DISCORD_BOT_TOKEN=<your-token> make serve",
+			"DISCORD_BOT_TOKEN=<your-token> just serve",
 			"```",
 			"",
 			"Bot setup (token + invite URL) is documented in this demo's README.md.",

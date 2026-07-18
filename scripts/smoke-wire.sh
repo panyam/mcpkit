@@ -160,7 +160,7 @@ if curl -sf -m 2 -o /dev/null "$KC_REALM_URL" 2>/dev/null; then
 	fi
 	EXPLICIT_TOKEN=""
 else
-	echo "SKIP auth-step-up-kc — Keycloak not running on :$KC_PORT (start it with: make upkcl)"
+	echo "SKIP auth-step-up-kc — Keycloak not running on :$KC_PORT (start it with: just upkcl)"
 fi
 
 echo

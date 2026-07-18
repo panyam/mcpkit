@@ -6,7 +6,7 @@
  * branch feat/tasks-mrtr-extension; eventually upstreamed to
  * modelcontextprotocol/conformance). Run it via:
  *
- *     make testconf-tasks-v2
+ *     just testconf-tasks-v2
  *
  * which delegates to vitest in the fork.
  *

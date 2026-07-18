@@ -14,12 +14,12 @@ SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a s
 - **Read a supporting file via skill:// (references/FORMS.md)** — Relative reference resolution: references/FORMS.md from inside pdf-processing/SKILL.md resolves to this full URI via the SDK helper that walks the skill root.
 - **Read a nested-prefix skill (acme/billing/refunds)** — Demonstrates that the prefix-segment routing works end-to-end. The skill name is refunds; the acme/billing/ prefix is server-chosen and is opaque to the skill's own frontmatter.
 - **Read a supporting file in the nested skill (templates/email.md)** — Same relative-reference resolution as the pdf-processing example, this time across a multi-segment prefix.
-- **Read a skill via the archive sub-mount (proves auto-wrap end-to-end)** — `make serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.
+- **Read a skill via the archive sub-mount (proves auto-wrap end-to-end)** — `just serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.
 - **Discover and read a skill via the github sub-mount** — Robust against changes in the upstream repo: instead of hardcoding a github URI, we enumerate `resources/list`, pick the first entry under the `github/` prefix, and read it. Proves the entire FetchGitHubArchive → MountFS sub-mount → resources/read chain — server reaches out to GitHub at boot, the bytes flow through the same MCP wire as everything else.
 - **Read the version, refresh, observe it bump** — The version field lives under `_meta` with the reverse-domain key `io.modelcontextprotocol.skills/version`, matching mcpkit's existing convention for extension metadata. The dual-wire story: subscribed stateful clients get the push notification; stateless clients see the same change by re-reading and comparing the version.
 - **Observe an fsnotify-driven broadcast** — In `--non-interactive` mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal — the notification arrives as soon as your editor flushes the save.
 - **List a directory inside a skill and recurse into a subdirectory** — Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.
-- **Wrap reads in skills.NewClient(...) and call Client.Activate** — Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.
+- **Wrap reads in skills.NewClient(...) and call Client.Activate** — Activate is intra-process — no wire traffic. Run with `just serve EXPORTER=stdout` + `just demo EXPORTER=stdout` to see spans.
 - **Read pdf-processing archive, verify digest, unpack, list recovered files** — Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.
 
 ## Flow
@@ -27,7 +27,7 @@ SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a s
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve, file mode by default)
+    participant Server as MCP Server (just serve, file mode by default)
 
     Note over Host,Server: Step 1: Choose the client wire mode
 
@@ -105,10 +105,10 @@ sequenceDiagram
 ### Setup
 
 ```
-Terminal 1:  make serve         # default (file mode, :8080)
-             make serve-archive # one .tar.gz per skill
-             make serve-zip     # one .zip per skill
-Terminal 2:  make demo          # this walkthrough (--tui interactive)
+Terminal 1:  just serve         # default (file mode, :8080)
+             just serve-archive # one .tar.gz per skill
+             just serve-zip     # one .zip per skill
+Terminal 2:  just demo          # this walkthrough (--tui interactive)
 ```
 This walkthrough auto-detects which of the three distribution modes the server is serving. The mode-aware section near the bottom shows the archive read-and-unpack flow; the file-mode read steps in the middle SKIP cleanly when archive mode is in effect (and vice versa).
 
@@ -293,11 +293,11 @@ curl -s -X POST http://localhost:8080/mcp \
 
 ### Cross-source reads (issues #797 + #808)
 
-`make serve` composes multiple sources into one catalog via `fsutil.NewMountFS`: bundled local skills at the FS root + an `archived/` sub-mount (a `.tar.gz` packed from one bundled skill, auto-wrapped by frontmatter name) + a `github/` sub-mount (fetched from anthropics/skills). The previous read steps exercised the local layer. These two steps probe the sub-mounts so the cross-source story is visible in the demo, not just in resource counts. Both steps gracefully skip when running against `--source=dir` (no sub-mounts present).
+`just serve` composes multiple sources into one catalog via `fsutil.NewMountFS`: bundled local skills at the FS root + an `archived/` sub-mount (a `.tar.gz` packed from one bundled skill, auto-wrapped by frontmatter name) + a `github/` sub-mount (fetched from anthropics/skills). The previous read steps exercised the local layer. These two steps probe the sub-mounts so the cross-source story is visible in the demo, not just in resource counts. Both steps gracefully skip when running against `--source=dir` (no sub-mounts present).
 
 ### Step 11: Read a skill via the archive sub-mount (proves auto-wrap end-to-end)
 
-`make serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.
+`just serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.
 
 #### Reproduce on the wire
 
@@ -370,7 +370,7 @@ echo "before=$V1 after=$V2"
 
 ### fsnotify-driven invalidation (issue #800)
 
-The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. `make serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.
+The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. `just serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.
 
 ### Step 14: Observe an fsnotify-driven broadcast
 
@@ -380,7 +380,7 @@ In `--non-interactive` mode this step synthesizes the edit (writes the same SKIL
 
 ```bash
 # In one terminal:
-make serve  # opt-in fsnotify:
+just serve  # opt-in fsnotify:
             # (edit Makefile to add --watch to the serve target, or run directly:)
             # go run . --serve --watch
 
@@ -427,7 +427,7 @@ Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attr
 
 ### Step 16: Wrap reads in skills.NewClient(...) and call Client.Activate
 
-Activate is intra-process — no wire traffic. Run with `make serve EXPORTER=stdout` + `make demo EXPORTER=stdout` to see spans.
+Activate is intra-process — no wire traffic. Run with `just serve EXPORTER=stdout` + `just demo EXPORTER=stdout` to see spans.
 
 ### Archive mode — atomic delivery + in-process unpack
 
