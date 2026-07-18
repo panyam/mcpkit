@@ -22,10 +22,10 @@ func TestInMemoryMemoryStore_CRUD(t *testing.T) {
 	if len(got.Items) != 2 {
 		t.Fatalf("list = %d items, want 2", len(got.Items))
 	}
-	if got.Items[0].Key != "a" || got.Items[1].Key != "b" {
-		t.Fatalf("list order = %q,%q, want a,b (oldest first)", got.Items[0].Key, got.Items[1].Key)
+	if got.Items[0].Item.Key != "a" || got.Items[1].Item.Key != "b" {
+		t.Fatalf("list order = %q,%q, want a,b (oldest first)", got.Items[0].Item.Key, got.Items[1].Item.Key)
 	}
-	if got.Items[0].CreatedAt.IsZero() {
+	if got.Items[0].Item.CreatedAt.IsZero() {
 		t.Fatal("PutMemory should stamp a zero CreatedAt")
 	}
 }
@@ -39,7 +39,7 @@ func TestInMemoryMemoryStore_UpdateKeepsPosition(t *testing.T) {
 	_, _ = s.PutMemory(ctx, PutMemoryRequest{Item: MemoryItem{Key: "a", Value: "alpha2"}})
 
 	got, _ := s.ListMemories(ctx, ListMemoriesRequest{})
-	if len(got.Items) != 2 || got.Items[0].Key != "a" || got.Items[0].Value != "alpha2" {
+	if len(got.Items) != 2 || got.Items[0].Item.Key != "a" || got.Items[0].Item.Value != "alpha2" {
 		t.Fatalf("update reordered or lost the value: %+v", got.Items)
 	}
 }
@@ -52,12 +52,12 @@ func TestInMemoryMemoryStore_QueryFilter(t *testing.T) {
 
 	// match on value, case-insensitive
 	got, _ := s.ListMemories(ctx, ListMemoriesRequest{Query: "go"})
-	if len(got.Items) != 1 || got.Items[0].Key != "lang" {
+	if len(got.Items) != 1 || got.Items[0].Item.Key != "lang" {
 		t.Fatalf("query 'go' = %+v, want just lang", got.Items)
 	}
 	// match on key
 	got, _ = s.ListMemories(ctx, ListMemoriesRequest{Query: "edit"})
-	if len(got.Items) != 1 || got.Items[0].Key != "editor" {
+	if len(got.Items) != 1 || got.Items[0].Item.Key != "editor" {
 		t.Fatalf("query 'edit' = %+v, want just editor", got.Items)
 	}
 }
@@ -92,7 +92,7 @@ func TestInMemoryMemoryStore_MaxEvictsOldest(t *testing.T) {
 	_, _ = s.PutMemory(ctx, PutMemoryRequest{Item: MemoryItem{Key: "c", Value: "3"}})
 
 	got, _ := s.ListMemories(ctx, ListMemoriesRequest{})
-	if len(got.Items) != 2 || got.Items[0].Key != "b" || got.Items[1].Key != "c" {
+	if len(got.Items) != 2 || got.Items[0].Item.Key != "b" || got.Items[1].Item.Key != "c" {
 		t.Fatalf("cap evict = %+v, want b,c (a evicted)", got.Items)
 	}
 }
