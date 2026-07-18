@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -57,6 +58,54 @@ func TestRunScenarioThreadsMemoryAcrossTurns(t *testing.T) {
 		t.Fatal("second turn did not see the first turn's history; threading is broken")
 	}
 }
+
+// TestRunScenarioUsesInjectedStore proves NewMemoryStore is honored, so the
+// harness can grade a specific MemoryStore impl (redis, gorm, semantic)
+// through the same scenarios rather than always the in-memory default.
+func TestRunScenarioUsesInjectedStore(t *testing.T) {
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{
+			ID: "c1", Name: agent.RememberToolName,
+			Args: core.NewRawJSON(json.RawMessage(`{"key":"lang","value":"Go"}`)),
+		}}},
+		agent.StubTurn{Text: "saved"},
+	)
+
+	// hand RunScenario a store we hold a reference to (via the factory), then
+	// assert the remember landed in THAT store — not a hidden default.
+	injected := agent.NewInMemoryMemoryStore()
+	built := 0
+	_, err := RunScenario(context.Background(), agent.RunnerConfig{Provider: stub},
+		Scenario{
+			Name:           "injected",
+			Turns:          []string{"remember my language is Go"},
+			NewMemoryStore: func() (agent.MemoryStore, error) { built++; return injected, nil },
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built != 1 {
+		t.Fatalf("factory built %d times, want exactly 1 per RunScenario", built)
+	}
+	got, _ := injected.ListMemories(context.Background(), agent.ListMemoriesRequest{})
+	if len(got.Items) != 1 || got.Items[0].Value != "Go" {
+		t.Fatalf("injected store = %+v, want the scenario to have used it", got.Items)
+	}
+}
+
+func TestRunScenarioMemoryStoreErrorIsHarnessError(t *testing.T) {
+	_, err := RunScenario(context.Background(), agent.RunnerConfig{Provider: agent.NewStubProvider()},
+		Scenario{
+			Name:           "bad-store",
+			Turns:          []string{"hi"},
+			NewMemoryStore: func() (agent.MemoryStore, error) { return nil, errFactory },
+		})
+	if err == nil {
+		t.Fatal("a store-factory error should surface as a harness error")
+	}
+}
+
+var errFactory = fmt.Errorf("boom")
 
 func TestRunScenarioReportsHarnessError(t *testing.T) {
 	// no Provider -> NewRunner rejects -> harness-level error, not a Result

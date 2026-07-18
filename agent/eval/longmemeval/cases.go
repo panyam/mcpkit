@@ -1,17 +1,26 @@
-// Package longmemeval adapts a small, hand-written slice of long-term chat
-// memory scenarios, in the spirit of the LongMemEval benchmark, into the
-// agent/eval harness. It is the external quality yardstick for the Phase 2
-// memory work: compaction and recall fail silently (a missing or stale
-// memory yields a subtly worse answer, not an error), so a borrowed task set
-// graded by a model is the only honest measure that memory actually helps.
+// Package longmemeval provides fast, self-contained SMOKE scenarios for the
+// Phase 2 memory work, shaped after the LongMemEval benchmark's skill
+// categories. These are NOT the LongMemEval benchmark: they are a handful of
+// short, hand-authored conversations (2–5 turns), not the dataset's long
+// (~100k-token) histories, so they exercise the memory plumbing end-to-end
+// with a real model and no download — a regression signal, not a
+// published-comparable score.
 //
-// These scenarios are hand-authored in the categories LongMemEval defines
-// (information extraction, multi-session reasoning, knowledge updates,
-// temporal reasoning, abstention). The upstream dataset is NOT vendored —
-// see ATTRIBUTION.md. The case table and its deterministic assertions live
-// in the default build so they are unit-testable for well-formedness;
-// running them against a live model (with an LLM judge for the fuzzy
-// categories) is behind the eval_llm build tag in live_test.go.
+// Why a smoke layer at all: memory fails silently (a missing or stale memory
+// yields a subtly worse answer, not an error), so even a coarse model-graded
+// check is worth having in a form that runs with zero external data.
+//
+// The rigorous bar — the actual LongMemEval dataset adapted through this same
+// agent/eval harness — is a follow-up loader that reads the downloaded
+// dataset from an env path (the dataset is NOT vendored; see ATTRIBUTION.md),
+// the same convention the conformance suites use for external test data. That
+// loader, plus a general eval/benchmark adapter seam so the harness can point
+// at many external suites, is where comparable numbers come from.
+//
+// The scenario table and its deterministic assertions live in the default
+// build so they are unit-testable for well-formedness; running them against a
+// live model (with an LLM judge for the fuzzy categories) is behind the
+// eval_llm build tag in live_test.go.
 package longmemeval
 
 import (
@@ -56,9 +65,11 @@ type MemCase struct {
 	MustNot []string
 }
 
-// Cases returns the adapted scenario set, one per category as a first slice.
-// Each is memory-enabled so the model manages the fact through its tools.
-func Cases() []MemCase {
+// SmokeScenarios returns the illustrative smoke set, one short scenario per
+// category. Each is memory-enabled so the model manages the fact through its
+// tools. These are a plumbing regression signal, not the LongMemEval
+// benchmark — see the package doc.
+func SmokeScenarios() []MemCase {
 	scenario := func(name string, turns ...string) eval.Scenario {
 		return eval.Scenario{Name: name, Turns: turns, Memory: true, Instructions: memoryInstructions}
 	}

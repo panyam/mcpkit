@@ -27,10 +27,21 @@ type Scenario struct {
 	Turns []string
 
 	// Memory, when true, gives the run a working-memory scratchpad (a
-	// MemorySource over a fresh in-memory store) merged with any base Tools,
-	// so the model can remember/recall across the turns. The store is fresh
-	// per RunScenario call — scenarios never share memory.
+	// MemorySource) merged with any base Tools, so the model can
+	// remember/recall across the turns. The backing store is NewMemoryStore
+	// when set, else a fresh in-memory default. The store is built once per
+	// RunScenario call — scenarios never share memory.
 	Memory bool
+
+	// NewMemoryStore builds the MemoryStore backing this scenario's working
+	// memory. Nil uses the in-memory default. Set it to grade a different
+	// backend (redis, gorm, a future semantic store) through the same
+	// scenarios — the whole point of an eval harness is comparing impls. It
+	// is a factory, not a value, so each RunScenario gets its own store and
+	// scenarios in a suite never cross-contaminate; a caller that WANTS
+	// shared state across scenarios can close over one store and return it.
+	// A non-nil NewMemoryStore implies Memory.
+	NewMemoryStore func() (agent.MemoryStore, error)
 
 	// Tools is the base tool surface, merged under the memory tools when
 	// Memory is set. Nil offers only the memory tools (or none, when Memory
@@ -65,8 +76,15 @@ func RunScenario(ctx context.Context, cfg agent.RunnerConfig, s Scenario) ([]Res
 	if s.Tools != nil {
 		cfg.Tools = s.Tools
 	}
-	if s.Memory {
-		mem, err := agent.NewMemorySource(agent.NewInMemoryMemoryStore())
+	if s.Memory || s.NewMemoryStore != nil {
+		store := agent.MemoryStore(agent.NewInMemoryMemoryStore())
+		if s.NewMemoryStore != nil {
+			var err error
+			if store, err = s.NewMemoryStore(); err != nil {
+				return nil, fmt.Errorf("eval: scenario %q memory store: %w", s.Name, err)
+			}
+		}
+		mem, err := agent.NewMemorySource(store)
 		if err != nil {
 			return nil, fmt.Errorf("eval: scenario %q memory: %w", s.Name, err)
 		}
