@@ -5,7 +5,7 @@ Snapshot of mcpkit graded against `modelcontextprotocol/conformance@794dcab` —
 **mcpkit HEAD:** `794dcab`  
 **Driver:** `cmd/testserver` (server scenarios) + `cmd/testclient` (client scenarios). SEP-2663 `tasks-*` server scenarios are graded against `examples/tasks-v2` instead, which wires `ext/tasks` in its own module (keeping the root module free of that dependency) — mirroring how `testconf-stateless` uses `examples/stateless`.
 
-Informational report — not a CI gate. Regenerate via `make testconf-upstream-audit`.
+Informational report — not a CI gate. Regenerate via `just testconf-upstream-audit`.
 
 Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCESS and one FAILURE · **fail** = all checks FAILURE · **harness-gap** = no `checks.json` produced (driver missing) · **fork-covered** = same surface graded by an existing `testconf-*` SEP fork target.
 
@@ -232,7 +232,7 @@ _None — every scenario produced results._
 
 ## Methodology
 
-- `make testconf-upstream-audit` spawns `cmd/testserver` (Streamable HTTP on port 18099), builds `cmd/testclient`, then drives upstream's CLI: `node dist/index.js server --url ... --suite all` once, and `... client --command ... --scenario <name>` per scenario in a loop (sequentially — upstream's parallel `--suite all` mode is flaky on the client side). The `tasks-*` server scenarios are then re-graded against `examples/tasks-v2` on a second port (port 18101), replacing the bulk-sweep results.
+- `just testconf-upstream-audit` spawns `cmd/testserver` (Streamable HTTP on port 18099), builds `cmd/testclient`, then drives upstream's CLI: `node dist/index.js server --url ... --suite all` once, and `... client --command ... --scenario <name>` per scenario in a loop (sequentially — upstream's parallel `--suite all` mode is flaky on the client side). The `tasks-*` server scenarios are then re-graded against `examples/tasks-v2` on a second port (port 18101), replacing the bulk-sweep results.
 - Upstream's CLI writes one `<scenario>/checks.json` per scenario; this report aggregates by `specReferences[]` (first matching `SEP-NNNN` wins as primary group).
 - Scenarios with no `checks.json` are tagged `harness-gap` — they require driver work in `cmd/testclient` (or a dedicated client harness) before the upstream runner can invoke them.
 - `also-covered-by-fork` is hand-maintained in `scripts/conformance-audit-report.ts` (`FORK_OVERLAP` map). Update there as SEP-fork targets land coverage.

@@ -5,10 +5,10 @@ A demokit-narrated end-to-end exercise of the [`mcpskills`](../../cmd/mcpskills)
 ## Run
 
 ```bash
-make demo            # text mode (default)
-make tui             # interactive TUI
-make note            # notebook mode
-make smoke           # non-interactive CI smoke test
+just demo            # text mode (default)
+just tui             # interactive TUI
+just note            # notebook mode
+just smoke           # non-interactive CI smoke test
 ```
 
 Or directly:
@@ -41,7 +41,7 @@ Cleanup is deferred until after the demokit run returns, so interactive viewers 
 The walkthrough resolves the `mcpskills` binary in this order:
 
 1. `$MCPSKILLS_BIN` (explicit override)
-2. `<repo-root>/bin/mcpskills` (produced by `make build-mcpskills`)
+2. `<repo-root>/bin/mcpskills` (produced by `just build-mcpskills`)
 3. Fresh `go build` of `./cmd/mcpskills` into a temp path
 
 The temp binary, if built, is cleaned up at the end alongside the temp fixture dir.
@@ -51,11 +51,11 @@ The temp binary, if built, is cleaned up at the end alongside the temp fixture d
 Set `MCPSKILLS_INSPECT_UPSTREAM_URL` to any spec-compliant MCP server URL to run the inspect step a second time against it. Useful for proving the CLI works against non-mcpkit implementations of SEP-2640.
 
 ```bash
-MCPSKILLS_INSPECT_UPSTREAM_URL=http://localhost:9000/mcp make smoke
+MCPSKILLS_INSPECT_UPSTREAM_URL=http://localhost:9000/mcp just smoke
 ```
 
 When the env var is unset, the step prints a one-line skip note and the walkthrough continues.
 
 ## CI integration
 
-`make test-mcpskills-walkthrough` at the repo root runs this same walkthrough with `--non-interactive` and asserts exit 0. Use it as the per-commit gate for the CLI's behavioral surface (verify lints, serve listens, inspect verifies, pack round-trips through unpack).
+`just test-mcpskills-walkthrough` at the repo root runs this same walkthrough with `--non-interactive` and asserts exit 0. Use it as the per-commit gate for the CLI's behavioral surface (verify lints, serve listens, inspect verifies, pack round-trips through unpack).

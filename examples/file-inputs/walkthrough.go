@@ -20,7 +20,7 @@ import (
 
 // Walkthrough fixtures live on disk under testdata/ so readers can inspect
 // real bytes (open them, hash them, replace them) without grepping for
-// hex literals. They're embedded at build time so `make demo` stays
+// hex literals. They're embedded at build time so `just demo` stays
 // hermetic — no working-directory arithmetic, no path flags.
 //
 //go:embed testdata/pixel.png
@@ -55,15 +55,15 @@ func runDemo() {
 		Description("Walks through SEP-2356, which lets servers declare file-input properties on tool inputSchemas via the `x-mcp-file` JSON Schema extension. Clients render a file picker for those fields and pass selected files as RFC 2397 base64 data URIs (`data:<mediatype>;name=<filename>;base64,<...>`). The server decodes the URI, validates size/MIME, and processes the bytes.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"Start the MCP server in a separate terminal first:",
 		"",
 		"```",
-		"Terminal 1:  make serve         # file-inputs server on :8080",
-		"Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)",
+		"Terminal 1:  just serve         # file-inputs server on :8080",
+		"Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)",
 		"```",
 		"",
 		"Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam). The walkthrough below acts as a scripted host that reads files from disk, encodes them as data URIs via `core.EncodeDataURI`, and calls the tools. See the README for VS Code config.",
@@ -97,7 +97,7 @@ func runDemo() {
 				opts...,
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
 			fmt.Printf("    Connected to %s %s (fileInputs cap declared)\n", c.ServerInfo.Name, c.ServerInfo.Version)

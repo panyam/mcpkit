@@ -159,6 +159,8 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Bool("memory-inject-summary", false, "with --memory, prepend a summary of the scratchpad before each turn (costs tokens; off = recall on demand)")
 	fl.Int("memory-summary-max-items", 0, "with --memory-inject-summary, cap the injected summary to the newest N notes (0 = all)")
 	fl.Int("memory-summary-max-chars", 0, "with --memory-inject-summary, cap the injected summary's length in characters (0 = no cap)")
+	fl.Int("compact-tokens", 0, "compact history when its estimated token count exceeds N: summarize the head, keep a recent tail (0 = off)")
+	fl.Int("compact-keep-recent", 0, "with --compact-tokens, how many trailing messages to keep verbatim (0 = default 6)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -237,6 +239,10 @@ func runChat(v *viper.Viper) error {
 			SummaryMaxItems: v.GetInt("memory-summary-max-items"),
 			SummaryMaxChars: v.GetInt("memory-summary-max-chars"),
 		}
+	}
+
+	if ct := v.GetInt("compact-tokens"); ct > 0 {
+		cfg.Compaction = &host.CompactionConfig{MaxTokens: ct, KeepRecent: v.GetInt("compact-keep-recent")}
 	}
 
 	app, err := host.NewApp(cfg, os.Stdout, os.Stdin, appOpts...)

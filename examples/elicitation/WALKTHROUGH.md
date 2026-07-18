@@ -13,7 +13,7 @@
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
     participant Browser as User Browser
 
     Note over Host,Browser: Step 1: Connect to the MCP server and initialize session
@@ -40,8 +40,8 @@ sequenceDiagram
 Before running this demo, start the MCP server in a separate terminal:
 
 ```
-Terminal 1:  make serve        # start the MCP server on :8080
-Terminal 2:  make run          # run this demo
+Terminal 1:  just serve        # start the MCP server on :8080
+Terminal 2:  just run          # run this demo
 ```
 
 ### Step 1: Connect to the MCP server and initialize session

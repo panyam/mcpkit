@@ -304,6 +304,14 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	if app.approval != nil {
 		runnerCfg.Approval = app.approval
 	}
+	if cfg.Compaction != nil {
+		compactor, err := cfg.Compaction.build(provider)
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		runnerCfg.Compactor = compactor
+	}
 	runner, err := agent.NewRunner(runnerCfg)
 	if err != nil {
 		app.Close()

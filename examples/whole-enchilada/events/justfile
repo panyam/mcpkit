@@ -1,0 +1,287 @@
+N := env('N', '3')
+TENANT := env('TENANT', '')
+TOKEN := env('TOKEN', '')
+EVENT := env('EVENT', 'chat.message')
+TEXT := env('TEXT', 'hello from `just inject`')
+USER := env('USER', '')
+PASSWORD := env('PASSWORD', '')
+KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:8180')
+ONEAUTH_VERSION := env('ONEAUTH_VERSION', 'v0.1.17')
+ONEAUTH := 'oneauth'
+DEMO_CLIENT_ID := env('DEMO_CLIENT_ID', 'mcp-events-poller')
+DEMO_CLIENT_SECRET := env('DEMO_CLIENT_SECRET', 'mcpkit-demo-secret-DEMO-ONLY')
+BACKENDS_COMPOSE := '../../../docker/backends/docker-compose.yml'
+OBSERVABILITY_COMPOSE := '../../../docker/observability/docker-compose.yml'
+HOSTS_MARKER := '# whole-enchilada hostnames — managed by make hosts-install'
+HOSTS_NAMES := 'nginx.whole-enchilada event-server.whole-enchilada event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada'
+REPLICAS := env('REPLICAS', '1')
+NAME := env('NAME', 'discord.message')
+CHANNELS := env('CHANNELS', '')
+SOURCE := env('SOURCE', '')
+EVERY := env('EVERY', '')
+TENANTS := env('TENANTS', 'asgard,babylon,camelot')
+TTL_MS := env('TTL_MS', '')
+REPLY_STATUS := env('REPLY_STATUS', '')
+EXIT_AFTER := env('EXIT_AFTER', '')
+USERNAME := env('USERNAME', '')
+START_CURSOR := env('START_CURSOR', '')
+BUILD := env('BUILD', '')
+
+# tenant-realm maps a shorthand TENANT letter to the canonical realm
+# name. A → asgard, B → babylon, C → camelot. Pass a literal realm
+# name (or any custom realm) and it's preserved unchanged.
+tenant_realm := if TENANT =~ '(?i)^a$' { 'asgard' } else if TENANT =~ '(?i)^b$' { 'babylon' } else if TENANT =~ '(?i)^c$' { 'camelot' } else { TENANT }
+
+# Show this help.
+help:
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' {{justfile()}}
+
+# Regenerate docker-compose.yaml + nginx/nginx.conf for N event-servers.
+gen-compose:
+	go -C tools/gen-compose run . -n={{N}} -out=../..
+
+# Build all binaries locally (without Docker). push-server stays a reference for the production-shape HTTPSource pattern (run via `go -C push-server run .`).
+build:
+	go -C event-server build -o ../bin/event-server ./
+	go -C poller build -o ../bin/poller ./
+	go -C webhook build -o ../bin/webhook ./
+	go -C streamer build -o ../bin/streamer ./
+	go -C inject build -o ../bin/inject ./
+	go -C drivers/synth build -o ../../bin/synth ./
+	go -C evctl build -o ../bin/evctl ./
+	go -C walkthrough build -o ../bin/walkthrough ./
+
+# In-process Go tests (no Docker needed; covers tenant-isolation + protocol contracts).
+unittest:
+	go -C event-server test ./... -count=1 -timeout 60s
+
+# Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
+infraup:
+	docker compose -f {{BACKENDS_COMPOSE}} up -d --wait
+
+# Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
+infradown:
+	docker compose -f {{BACKENDS_COMPOSE}} down
+
+# Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
+up: gen-compose infraup
+	docker compose up -d {{if BUILD != '' { '--build' } else { '' }}}
+	@echo "stack up{{if BUILD != '' { ' (rebuilt)' } else { '' }}}; nginx on http://localhost:9090 — see README for hostname routing"
+
+# docker compose down — tears down the events services only. Backends keep running (shared infra). Use `just infradown` to stop them too.
+down:
+	docker compose down
+
+# Run the walkthrough in non-interactive mode against the running docker stack.
+test:
+	go -C walkthrough run . --non-interactive
+
+# Clean slate (run ONCE before the demo): WIPE backend data, rebuild images, restart everything, open Keycloak + Grafana. Wiping the DB is deliberate — schema changes ship "fresh deploys only" (no migrations), so a stale volume can crash event-server on AutoMigrate.
+predemo: gen-compose
+	#!/usr/bin/env bash
+	set -eu
+	echo "[predemo] tearing down events + observability..."
+	docker compose down 2>/dev/null || true
+	docker compose -f {{OBSERVABILITY_COMPOSE}} down 2>/dev/null || true
+	echo "[predemo] wiping backend data (fresh empty DB → AutoMigrate builds the current schema)..."
+	just clean-backends
+	echo "[predemo] starting backends + observability fresh..."
+	docker compose -f {{BACKENDS_COMPOSE}} up -d --wait
+	docker compose -f {{OBSERVABILITY_COMPOSE}} up -d --wait
+	echo "[predemo] building + starting events stack fresh..."
+	docker compose up -d --build
+	echo "[predemo] opening Keycloak admin + Grafana in browser..."
+	open http://localhost:8180 2>/dev/null || xdg-open http://localhost:8180 2>/dev/null || echo "  → http://localhost:8180 (admin/admin)"
+	open http://localhost:3000 2>/dev/null || xdg-open http://localhost:3000 2>/dev/null || echo "  → http://localhost:3000"
+	echo ""
+	echo "[predemo] ready. Walkthrough is now self-driving — open the windows and run commands as you go."
+
+# Run the walkthrough interactively against the running stack.
+demo:
+	go -C walkthrough run . --tui
+
+# Regenerate WALKTHROUGH.md from walkthrough/walkthrough.go.
+readme:
+	go -C walkthrough run . --doc=md > WALKTHROUGH.md
+
+# Acquire a bearer token via Keycloak browser auth. TENANT=A|B|C. Prints ONLY the access token so `$(just newtoken TENANT=A)` captures cleanly.
+newtoken:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TENANT}}" ]; then echo "usage: TENANT=A|B|C just newtoken" >&2; exit 2; fi
+	{{ONEAUTH}} token browser {{KEYCLOAK_HOST}}/realms/{{tenant_realm}} \
+		--client-id {{DEMO_CLIENT_ID}} \
+		--client-secret {{DEMO_CLIENT_SECRET}} \
+		--format=access-token-only
+
+# Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C USER=alice PASSWORD=alice.
+newtoken-ci:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TENANT}}" ] || [ -z "{{USER}}" ] || [ -z "{{PASSWORD}}" ]; then
+		echo "usage: TENANT=A|B|C USER=<user> PASSWORD=<pw> just newtoken-ci" >&2; exit 2
+	fi
+	{{ONEAUTH}} token password {{KEYCLOAK_HOST}}/realms/{{tenant_realm}} \
+		--client-id {{DEMO_CLIENT_ID}} \
+		--client-secret {{DEMO_CLIENT_SECRET}} \
+		--user {{USER}} \
+		--password {{PASSWORD}} \
+		--format=access-token-only
+	echo
+
+# Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Resume knob: START_CURSOR=<N> (default 0 = replay from buffer head).
+poller:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TOKEN}}" ] && [ -z "{{USERNAME}}" ]; then
+		echo "usage: TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] [START_CURSOR=<N>] just poller" >&2; exit 2
+	fi
+	go -C poller run . --tenant {{tenant_realm}} \
+		{{if TOKEN != '' { '--token ' + TOKEN } else { '' }}} \
+		{{if USERNAME != '' { '--username ' + USERNAME + ' --password ' + if PASSWORD != '' { PASSWORD } else { USERNAME } } else { '' }}} \
+		{{if START_CURSOR != '' { '--start-cursor ' + START_CURSOR } else { '' }}} \
+		--event {{EVENT}}
+
+# Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Demo knobs: TTL_MS=<int|null> REPLY_STATUS=<int> EXIT_AFTER=<int>.
+webhook:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TOKEN}}" ] && [ -z "{{USERNAME}}" ]; then
+		echo "usage: TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] [TTL_MS=<int|null>] [REPLY_STATUS=<int>] [EXIT_AFTER=<int>] just webhook" >&2; exit 2
+	fi
+	go -C webhook run . --tenant {{tenant_realm}} \
+		{{if TOKEN != '' { '--token ' + TOKEN } else { '' }}} \
+		{{if USERNAME != '' { '--username ' + USERNAME + ' --password ' + if PASSWORD != '' { PASSWORD } else { USERNAME } } else { '' }}} \
+		--event {{EVENT}} \
+		{{if TTL_MS != '' { '--ttl-ms ' + TTL_MS } else { '' }}} \
+		{{if REPLY_STATUS != '' { '--reply-status ' + REPLY_STATUS } else { '' }}} \
+		{{if EXIT_AFTER != '' { '--exit-after ' + EXIT_AFTER } else { '' }}}
+
+# Long-running events/stream subscriber over the stateless wire (push delivery). TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
+streamer:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TOKEN}}" ] && [ -z "{{USERNAME}}" ]; then
+		echo "usage: TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] just streamer" >&2; exit 2
+	fi
+	go -C streamer run . --tenant {{tenant_realm}} \
+		{{if TOKEN != '' { '--token ' + TOKEN } else { '' }}} \
+		{{if USERNAME != '' { '--username ' + USERNAME + ' --password ' + if PASSWORD != '' { PASSWORD } else { USERNAME } } else { '' }}} \
+		--event {{EVENT}}
+
+# Synthetic chat.message producer. EVERY=2s (default), TENANTS=asgard,babylon,camelot.
+drive-chat:
+	go -C drivers/synth run . --event chat.message --tenants {{TENANTS}} {{if EVERY != '' { '--every ' + EVERY } else { '' }}}
+
+# Synthetic presence.changed producer. EVERY=5s (default), TENANTS=asgard,babylon,camelot.
+drive-presence:
+	go -C drivers/synth run . --event presence.changed --tenants {{TENANTS}} {{if EVERY != '' { '--every ' + EVERY } else { '' }}}
+
+# Register a real Discord source on specified replicas. TOKEN=... CHANNELS=A,B REPLICAS=1,4 [TENANTS=a,c] [NAME=discord.message].
+add-discord:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TOKEN}}" ] || [ -z "{{CHANNELS}}" ] || [ -z "{{REPLICAS}}" ]; then
+		echo "usage: TOKEN=<bot-token> CHANNELS=<id,id> REPLICAS=<idx,idx> [TENANTS=<a,c>] [NAME=<source>] just add-discord" >&2; exit 2
+	fi
+	go -C evctl run . sources add discord \
+		--token={{TOKEN}} --channels={{CHANNELS}} --tenants={{TENANTS}} \
+		--replicas={{REPLICAS}} --name={{NAME}}
+
+# Remove a runtime-added source. SOURCE=<name> REPLICAS=<idx,idx>.
+rm-source:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{SOURCE}}" ] || [ -z "{{REPLICAS}}" ]; then
+		echo "usage: SOURCE=<name> REPLICAS=<idx,idx> just rm-source" >&2; exit 2
+	fi
+	go -C evctl run . sources rm {{SOURCE}} --replicas={{REPLICAS}}
+
+# List sources known to a replica. REPLICAS=<idx>.
+list-sources:
+	go -C evctl run . sources list --replicas={{REPLICAS}}
+
+# macOS+iTerm2 only — open a 2x3 grid: row1 = pollers A/B/C, row2 = webhooks A/B/C.
+iterm:
+	@bash ./iterm-6up.sh
+
+# macOS+iTerm2 only — open one iTerm window with 3 vertically-stacked panes tailing backends / observability / events logs.
+alllogs:
+	@bash ./iterm-logs.sh
+
+# Sign out every USER session in all 3 tenant realms (keeps mcp-event-server client creds intact).
+clear_all_tokens:
+	#!/usr/bin/env bash
+	set -eu
+	docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+		--server http://keycloak:8080 --realm master --user admin --password admin >/dev/null
+	for realm in asgard babylon camelot; do
+		docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $realm >/dev/null && \
+		echo "[clear_all_tokens] $realm: all user sessions signed out"
+	done
+
+# Quick clean slate without a full predemo: sign out Keycloak sessions + delete Redis quota keys + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear. Heavier hammer if needed: stop the stack and `rm -rf ../../../docker/backends/data/redis`.
+clear-all: clear_all_tokens
+	#!/usr/bin/env bash
+	set -eu
+	deleted=$(docker exec mcpkit-redis sh -c 'redis-cli --scan --pattern "mcpkit.events.quota.*" | xargs -r redis-cli DEL' 2>/dev/null || echo 0)
+	echo "[clear-all] redis quota keys deleted: $deleted"
+	docker exec mcpkit-postgres psql -U postgres -d events -c "TRUNCATE TABLE webhooks" >/dev/null 2>&1 && \
+		echo "[clear-all] webhooks table truncated" || \
+		echo "[clear-all] webhooks table not present yet (no subs ever created) — skip"
+
+# Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
+inject:
+	#!/usr/bin/env bash
+	set -eu
+	if [ -z "{{TENANT}}" ]; then echo "usage: TENANT=A|B|C [EVENT=<name>] [TEXT='...'] just inject"; exit 2; fi
+	go -C inject run . --tenant {{tenant_realm}} --event {{EVENT}} --text '{{TEXT}}'
+
+# Tail logs from all services.
+logs:
+	docker compose logs -f --tail=200
+
+# docker compose ps.
+ps:
+	docker compose ps
+
+# Print the webhooks table from Postgres — used by the no-expiry restart-survival beat to confirm rows survive a `just restart-event-servers`.
+psql-webhooks:
+	docker compose -f {{BACKENDS_COMPOSE}} exec -T postgres \
+		psql -U postgres -d events \
+		-c "SELECT id, principal, url, expires_at, status_failing_continuously_since FROM webhooks ORDER BY principal;"
+
+# Rolling-restart the event-server replicas. Used by the no-expiry restart-survival beat — finite subs and no-expiry subs both survive (rows stay in Postgres), proving the GORM-backed WebhookStore is the durability backbone. Replica set is discovered from compose, so it tracks whatever N the stack was generated with.
+restart-event-servers:
+	#!/usr/bin/env bash
+	set -eu
+	svcs=$(docker compose config --services | grep '^event-server-')
+	echo "[restart-event-servers] restarting: $svcs"
+	docker compose restart $svcs
+	docker compose up -d --wait $svcs
+
+# docker compose down -v on the events stack + remove built binaries. Backends data is preserved — use `just clean-backends` for a full reset.
+clean:
+	docker compose down -v 2>/dev/null || true
+	rm -rf bin/
+
+# Tear down backends AND wipe their persisted data (postgres + redis bind mounts). Use after schema changes or when starting fresh.
+clean-backends:
+	docker compose -f {{BACKENDS_COMPOSE}} down -v 2>/dev/null || true
+	rm -rf ../../../docker/backends/data/
+
+# Append *.whole-enchilada hostnames to /etc/hosts (idempotent).
+hosts-install:
+	#!/usr/bin/env bash
+	set -eu
+	if grep -q "whole-enchilada hostnames" /etc/hosts; then
+		echo "[hosts] already installed; run hosts-uninstall first to refresh"
+	else
+		sudo sh -c 'printf "\n# whole-enchilada hostnames — managed by make hosts-install\n127.0.0.1 {{HOSTS_NAMES}}\n" >> /etc/hosts'
+		echo "[hosts] installed: {{HOSTS_NAMES}}"
+	fi
+
+# Remove the whole-enchilada /etc/hosts entries.
+hosts-uninstall:
+	@sudo sed -i.bak '/whole-enchilada hostnames/,+1 d' /etc/hosts && rm -f /etc/hosts.bak
+	@echo "[hosts] uninstalled"

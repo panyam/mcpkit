@@ -24,9 +24,10 @@ If `$1` is missing, ask the user for one before doing anything else.
 
    **Non-UI (default):**
    - `main.go` — dual-mode dispatcher + `serve()` using `common.MCPServerOptions(*addr, "[mcp] ")` for the listen + canonical logger middleware (single-line replacement for the older 12-line block; see CONVENTIONS.md §2), `srv.ListenAndServe(server.WithStreamableHTTP(true))`, `demokit.FilterArgs(os.Args[1:], demokit.BoolFlag("--serve"), demokit.ValueFlag("--url"))` (add more `ValueFlag(...)` for example-specific flags). Append example-specific options (`server.WithListTTL`, `server.WithExtension`, etc.) onto the slice returned by `MCPServerOptions`. If the example needs side endpoints (e.g. `/inject`), wire them via `server.WithMux(...)` — never hand-roll an `http.Server{}`. Add the `examples/common` dependency to `go.mod` (`require github.com/panyam/mcpkit/examples/common ...` + `replace ... => ../common`).
-   - `walkthrough.go` — `runDemo()` skeleton from CONVENTIONS.md §3. Pre-fill: title, `Dir("<name>")`, the description from step 3, two actors (Host / Server), a `Setup` section pointing to `make serve`, one placeholder `Step()` per tool with `// TODO` markers in the `Run()` body for the user to fill in, the closing "Where to look in the code" `Section()`, and `common.SetupRenderer(demo)` + `demo.Execute()`. Use `common.ServerURL()` (no args) as the default endpoint — honors `--url`, `$MCPKIT_SERVER_URL`, then falls back to `:8080`. Error-path steps use `common.PrintRPCError(err, wantReason)`; pass `wantReason=""` unless asserting a specific spec-defined reason.
-   - `README.md` — Quick Start (`make serve` / `make demo`), What it demonstrates (mirrors the step list), Architecture placeholder (Mermaid block stub if the topology is non-trivial — leave blank otherwise), Where to look in the code (mirrors walkthrough.go).
-   - `Makefile` — exactly the four baseline targets (`demo`, `serve`, `readme`, `build`) with `## help-text` comments, `.PHONY` line, `.DEFAULT_GOAL := demo`. No example-specific extras at scaffold time — the user adds those after.
+   - `walkthrough.go` — `runDemo()` skeleton from CONVENTIONS.md §3. Pre-fill: title, `Dir("<name>")`, the description from step 3, two actors (Host / Server), a `Setup` section pointing to `just serve`, one placeholder `Step()` per tool with `// TODO` markers in the `Run()` body for the user to fill in, the closing "Where to look in the code" `Section()`, and `common.SetupRenderer(demo)` + `demo.Execute()`. Use `common.ServerURL()` (no args) as the default endpoint — honors `--url`, `$MCPKIT_SERVER_URL`, then falls back to `:8080`. Error-path steps use `common.PrintRPCError(err, wantReason)`; pass `wantReason=""` unless asserting a specific spec-defined reason.
+   - `README.md` — Quick Start (`just serve` / `just demo`), What it demonstrates (mirrors the step list), Architecture placeholder (Mermaid block stub if the topology is non-trivial — leave blank otherwise), Where to look in the code (mirrors walkthrough.go).
+   - `justfile` — exactly the four baseline recipes (`demo`, `serve`, `readme`, `build`) with doc comments above each recipe and `default: demo`. No example-specific extras at scaffold time — the user adds those after.
+   - `Makefile` — the make twin of the justfile during the transition: the same four baseline targets (`demo`, `serve`, `readme`, `build`) with `## help-text` comments, `.PHONY` line, `.DEFAULT_GOAL := demo`.
    - `go.mod` — module name `github.com/panyam/mcpkit/examples/<name>` (or `.../examples/events/<name>`), Go 1.23+, dependencies on `github.com/panyam/mcpkit/{core,server,client}` and `github.com/panyam/demokit` at the version currently used by `examples/file-inputs/go.mod`. Add a local `replace github.com/panyam/mcpkit => ../..` directive (relative path from the new example).
    - `testdata/` — only if the user said static fixtures in step 3. Empty directory with a `.gitkeep` is fine; user adds the actual files.
 
@@ -34,11 +35,11 @@ If `$1` is missing, ask the user for one before doing anything else.
    - `main.go` — single-mode (no `--serve` dispatch, no `runDemo`). `server.NewServer` with `server.WithExtension(&ui.UIExtension{})`, `server.WithRequestLogging(logger)`, `server.WithMiddleware(server.LoggingMiddleware(logger))`. Tools registered via `ui.RegisterTypedAppTool(...)`. Embeds `<name>.html` via `//go:embed` and renders with `html/template` including `{{ template "mcpkit-bridge" .Bridge }}`. Serves via `server.Run(*addr)`.
    - `<name>.html` — minimal iframe payload: `<!doctype html>` + a `<script>` block scaffolding `MCPApp.callTool(...)` / `MCPApp.on('event', ...)` patterns, with `// TODO` markers.
    - `README.md` — required sections: setup (`go run . -addr :8080`), connect-a-host (MCPJam URL), Sequence Diagrams (3 Mermaid stubs: LLM→server, iframe→server, app-provided tools — leave content placeholder), "Try it — Step by Step" (LLM prompts + UI clicks placeholder), Screenshots placeholder, Where to look.
-   - `Makefile` — single `run: ; go run . -addr :8080` target with help comment, `.PHONY: run`, `.DEFAULT_GOAL := run`.
+   - `justfile` — single `run` recipe (`go run . -addr :8080`) with a doc comment and `default: run`.
    - `go.mod` — same as non-UI but also depends on `github.com/panyam/mcpkit/ext/ui` (separate go.mod — needs its own `replace` directive).
    - **Do not** create `walkthrough.go` or `WALKTHROUGH.md` — UI examples are host-driven.
 
-5. **Generate the WALKTHROUGH.md** for non-UI examples by running `cd examples/<name> && go run . --doc md > WALKTHROUGH.md` once the scaffolding compiles. If the build fails, fix the obvious issues (missing imports, typos) and retry; if it still fails, leave a `WALKTHROUGH.md` placeholder with a comment telling the user to run `make readme` after they fill in the steps.
+5. **Generate the WALKTHROUGH.md** for non-UI examples by running `cd examples/<name> && go run . --doc md > WALKTHROUGH.md` once the scaffolding compiles. If the build fails, fix the obvious issues (missing imports, typos) and retry; if it still fails, leave a `WALKTHROUGH.md` placeholder with a comment telling the user to run `just readme` after they fill in the steps.
 
 6. **Build sanity check:** `cd examples/<name> && go build ./...`. Surface any errors.
 
@@ -47,7 +48,7 @@ If `$1` is missing, ask the user for one before doing anything else.
 8. **Report to the user:**
    - The directory created and what's in it.
    - The placeholder `// TODO` sites in `walkthrough.go` (or `<name>.html` for UI) the user needs to fill in.
-   - How to run it (`make demo` for non-UI, `make run` + connect-host for UI).
+   - How to run it (`just demo` for non-UI, `just run` + connect-host for UI).
    - Suggest `/example-audit <name>` after they finish filling it in.
 
 ## Principles

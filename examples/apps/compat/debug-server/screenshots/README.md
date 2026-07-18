@@ -1,6 +1,6 @@
 # Screenshots — debug-server
 
-Capture by running `make demo-app EXAMPLE=debug-server`.
+Capture by running `just demo-app EXAMPLE=debug-server`.
 
 | File | What to capture |
 |---|---|

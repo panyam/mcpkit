@@ -57,5 +57,5 @@ Fully offline: real in-process mcpkit servers plus a scripted `StubProvider` plu
 a canned reader. See `examples/agent-async` for a golden-transcript scenario and
 `cmd/agentchat` for the terminal CLI built on this package.
 
-Run the module's tests with `make test-agent` from the repo root, or
+Run the module's tests with `just test-agent` from the repo root, or
 `cd agent/host && go test ./...` directly.

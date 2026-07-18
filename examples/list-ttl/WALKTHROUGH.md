@@ -15,7 +15,7 @@ Walks through SEP-2549, which adds two cache hints — `ttlMs` (integer millisec
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve, WithListTTLMs(60000))
+    participant Server as MCP Server (just serve, WithListTTLMs(60000))
 
     Note over Host,Server: Step 1: Connect to the list-ttl server
     Host->>Server: POST /mcp — initialize
@@ -44,8 +44,8 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve         # list-ttl server on :8080 with WithListTTLMs(60000)
-Terminal 2:  make demo          # this walkthrough (--tui for the interactive TUI)
+Terminal 1:  just serve         # list-ttl server on :8080 with WithListTTLMs(60000)
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
 ```
 
 ### The ttlMs cache hint
@@ -158,7 +158,7 @@ An absent `TTLMs` and `*page.TTLMs == 0` both mean "immediately stale — do not
 - Wire types: `core.ToolsListResult` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult / ResourceResult — core/{tool,prompt,resource}.go; `core.CacheScopePublic` / `CacheScopePrivate` — core/cache.go
 - Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage / ReadResource — client/iterators.go
 - Migration guide: docs/LIST_TTL_MIGRATION.md
-- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — drive via `make testconf-list-ttl`
+- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — originally driven by a dedicated `testconf-list-ttl` suite, now folded into `just testconf`
 - SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549
 
 ## Run it

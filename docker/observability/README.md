@@ -17,9 +17,9 @@ unified under one Grafana UI.
 ## Quick start
 
 ```
-cd docker/observability && make up    # bring the stack up
+cd docker/observability && just up    # bring the stack up
 open http://localhost:3000            # Grafana — anonymous Admin, no login
-cd docker/observability && make down  # tear it down
+cd docker/observability && just down  # tear it down
 ```
 
 To point a mcpkit example at the stack, configure its OTel SDK to
@@ -98,7 +98,7 @@ mode; the env vars are documented here for non-mcpkit OTLP emitters.
   not up yet. Wait for `make logs` to show all five containers
   serving, then refresh the Grafana tab.
 - **`OTLP connection refused`** — collector container isn't running.
-  `make ps` to confirm, `make logs` to inspect, `make down && make up`
+  `just ps` to confirm, `just logs` to inspect, `just down && just up`
   to reset.
 - **`unknown_service` in the trace UI** — the emitting process didn't
   set an OTel `service.name` Resource. mcpkit examples set it via

@@ -8,15 +8,15 @@ A scripted MCP host walking through the **UC1 consent approval flow**: a tool ca
 
 ```bash
 # Terminal 1 — start the MCP server
-make serve
+just serve
 
 # Terminal 2 — run the scripted walkthrough
-make demo
+just demo
 ```
 
 The walkthrough opens a browser to `http://localhost:8080/approve?ctx=...`. Click **Approve** there; the demo auto-retries and completes.
 
-See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-step description (regenerate via `make readme`).
+See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-step description (regenerate via `just readme`).
 
 ## What it demonstrates
 

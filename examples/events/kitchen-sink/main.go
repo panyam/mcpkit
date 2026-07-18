@@ -3,10 +3,10 @@
 //
 // Two-process pattern:
 //
-//	Terminal 1:  make serve           # the events server
-//	Terminal 2:  make demo            # demokit walkthrough (--tui)
-//	             make demo-test       # non-interactive
-//	             make readme          # regenerate WALKTHROUGH.md
+//	Terminal 1:  just serve           # the events server
+//	Terminal 2:  just demo            # demokit walkthrough (--tui)
+//	             just demo-test       # non-interactive
+//	             just readme          # regenerate WALKTHROUGH.md
 package main
 
 import (

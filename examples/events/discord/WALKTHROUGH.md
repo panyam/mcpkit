@@ -11,7 +11,7 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 - **What about events I don't need to replay, like 'user is typing'?** — On the wire, the event type is marked cursorless: `events/list` advertises `cursorless: true` for that EventDef, every event delivery emits `cursor: null`, and `events/poll` always returns empty with `cursor: null` (there's nothing buffered to serve). Push delivery still fans out events live — the only thing that changes versus a cursored source is replay. (in mcpkit: source authors opt in via `events.NewYieldingSource[T](def, events.WithoutCursors())`)
 - **What happens when the upstream source has a hiccup?** — On the wire, two notification methods carry source health. `notifications/events/error` (spec L255+L261) is transient — the source had a failure, the stream stays open, subsequent events still arrive. `notifications/events/terminated` (spec L783-795) is terminal — the subscription has ended. This step exercises the transient path: `inject?action=error` causes the source to surface one upstream failure, the open stream sees `notifications/events/error` arrive while staying connected. (in mcpkit: server authors trigger these via `source.YieldError(err)` / `source.YieldTerminated(err)`)
 - **What if my client itself keeps restarting, but I have a public callback URL?** — Use webhook delivery. `events/subscribe` registers a callback URL plus a client-supplied `whsec_` secret with a TTL; the server POSTs HMAC-signed events to that URL as they happen, the subscription is soft-state on the server (in-memory with TTL), and the client refreshes before `refreshBefore` to keep it alive. If the client process dies and reconnects later with the same canonical tuple, the subscription either is still alive (refresh is idempotent) or has lapsed and the next subscribe creates a fresh one with the supplied cursor as the replay point. (in mcpkit: `clients/go` provides `Subscription` for subscribe + auto-refresh and `Receiver[Data]` for a typed inbound channel)
-- **Two subs to the same event with different arguments — how do I tell deliveries apart?** — Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §"Webhook Event Delivery" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, arguments)` (spec §"Subscription Identity" → "Key composition" L363), so two subscribes with the same `(principal, url, name)` but different `arguments` produce different ids — and the receiver branches by header without parsing the body.
+- **Two subs to the same event with different params — how do I tell deliveries apart?** — Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §"Webhook Event Delivery" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, params)` (spec §"Subscription Identity" → "Key composition" L363), so two subscribes with the same `(principal, url, name)` but different `params` produce different ids — and the receiver branches by header without parsing the body.
 - **My webhook receiver just died. How does the server let me know?** — Two answers, layered. First, every subscribe-refresh response carries a `deliveryStatus` block when the target has prior delivery attempts (spec §"Webhook Delivery Status" L425-460): `active` / `lastDeliveryAt` / `lastError` / `failedSince`. Second, after N consecutive failures within a sliding window, the server flips `active: false` and auto-Posts a `{type:terminated}` control envelope to the receiver as a courtesy heads-up. Refresh of a suspended target reactivates it.
 - **What if I forget the secret?** — Rejected with `-32602 InvalidParams` at subscribe time. `delivery.secret` is REQUIRED on every `events/subscribe` per spec — there's no server-side fallback. Rejecting at subscribe time means a malformed subscription never exists in the registry, so the server can't ever produce unverifiable deliveries.
 - **What if I supply garbage instead of a `whsec_` value?** — Rejected with `-32602 InvalidParams`. The validator enforces the full Standard Webhooks format: `whsec_` followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail at subscribe time — catches IaC-pinned secrets that don't match the spec format before they create a broken subscription.
@@ -24,7 +24,7 @@ Walks through the four delivery modes of the experimental MCP Events extension (
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
     participant Receiver as Local webhook receiver (this process)
     participant Discord as Discord (real bot mode only)
 
@@ -119,17 +119,17 @@ This walkthrough runs against either a test-mode server or a real Discord bot.
 **Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.
 
 ```
-Terminal 1:  make serve                                # server in test mode
-Terminal 2:  make demo                                 # this walkthrough
-Terminal 3:  make inject TEXT='hello'                  # message event
+Terminal 1:  just serve                                # server in test mode
+Terminal 2:  just demo                                 # this walkthrough
+Terminal 3:  just inject TEXT='hello'                  # message event
              make inject-typing                        # typing event (cursorless)
 ```
 
 **Option B — Real bot mode** (requires `DISCORD_BOT_TOKEN`). Same walkthrough plus the live step captures real typing + message events from your Discord channel. Token setup in the demo's README.
 
 ```
-Terminal 1:  DISCORD_BOT_TOKEN=... make serve          # server in bot mode
-Terminal 2:  make demo                                 # this walkthrough
+Terminal 1:  DISCORD_BOT_TOKEN=... just serve          # server in bot mode
+Terminal 2:  just demo                                 # this walkthrough
              # In Discord: type, then send. Live step captures both.
 ```
 
@@ -142,7 +142,7 @@ Terminal 2:  make demo                                 # this walkthrough
 - **Source-side health signals** — `YieldError` (transient `notifications/events/error`, stream stays open).
 - **Webhook + auto-refresh** — `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard, no-redirects, 256 KiB body cap with 413 non-retryable, Standard Webhooks signature scheme as default.
 - **Multi-subscription routing** — two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` plus push-side `requestId` echo on every notification.
-- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `make serve-fast-suspend`.
+- **Webhook delivery health** — `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `just serve-fast-suspend`.
 - **Auth posture** — `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal`. Production deployments wire real OIDC and reject anonymous subscribes with `-32012 Forbidden`.
 - **Spec validation** — empty / malformed `delivery.secret` rejected; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed.
 
@@ -291,7 +291,7 @@ curl -s -X POST http://localhost:8080/mcp \
 
 ### Step 8: Two subs to the same event with different params — how do I tell deliveries apart?
 
-Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §"Webhook Event Delivery" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, arguments)` (spec §"Subscription Identity" → "Key composition" L363), so two subscribes with the same `(principal, url, name)` but different `arguments` produce different ids — and the receiver branches by header without parsing the body.
+Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §"Webhook Event Delivery" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, params)` (spec §"Subscription Identity" → "Key composition" L363), so two subscribes with the same `(principal, url, name)` but different `params` produce different ids — and the receiver branches by header without parsing the body.
 
 - The library fans out one yielded event to **both** webhook targets by default. Authors that want per-subscription filtering attach a `Match` (and optionally `Transform`) hook on the `EventDef` — the hook fires once per (event × subscription) on the fanout step and short-circuits delivery for non-matching subs. The discord demo doesn't wire one because params-based routing (different ids per `(name, params)` tuple) is enough for the "two subs, same event, different params" story.
 - Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload — each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.
@@ -303,11 +303,11 @@ Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §"W
 # One event then fans out to both; each delivery POST carries its own X-MCP-Subscription-Id.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"events/subscribe","params":{"name":"discord.message","arguments":{"channel_id":"alpha"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<a>"}}}' | jq '.result.id'
+  -d '{"jsonrpc":"2.0","id":7,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"alpha"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<a>"}}}' | jq '.result.id'
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":8,"method":"events/subscribe","params":{"name":"discord.message","arguments":{"channel_id":"beta"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<b>"}}}' | jq '.result.id'
-# later: events/unsubscribe per tuple — { name, arguments: { channel_id }, delivery: { url } }
+  -d '{"jsonrpc":"2.0","id":8,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"beta"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<b>"}}}' | jq '.result.id'
+# later: events/unsubscribe per tuple — { name, params: { channel_id }, delivery: { url } }
 ```
 
 ### Step 9: My webhook receiver just died. How does the server let me know?
@@ -319,7 +319,7 @@ Two answers, layered. First, every subscribe-refresh response carries a `deliver
 - Spec §"Webhook Event Delivery" L413+L460: "after repeated failures the server SHOULD set active: false." The transition fires after 5 consecutive failures within a 10-min sliding window. On the `true→false` transition the server auto-Posts a `{type:terminated}` control envelope to the (now-suspended) receiver — `webhook-id` prefix is `msg_terminated_<random>` so receivers can distinguish it from event deliveries (which use `evt_<eventId>`). (in mcpkit: knobs are `events.WithWebhookSuspendThreshold(n)` and `events.WithWebhookSuspendWindow(d)`)
 - A successful refresh of a suspended target reactivates it: clears the failure run, resets `lastError` and `failedSince`, flips `active` back to true.
 
-**Fast-mode tip:** with the default `make serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `make serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).
+**Fast-mode tip:** with the default `just serve` (`-webhook-suspend-threshold 5`), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with `just serve-fast-suspend` (sets `-webhook-suspend-threshold 1`).
 
 #### Reproduce on the wire
 
@@ -329,7 +329,7 @@ Two answers, layered. First, every subscribe-refresh response carries a `deliver
 # deliveryStatus { active, lastDeliveryAt, lastError, failedSince }.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":9,"method":"events/subscribe","params":{"name":"discord.message","arguments":{"role":"health-demo"},"delivery":{"mode":"webhook","url":"https://dead-receiver.example/hook","secret":"whsec_<v>"}}}' | jq '.result'
+  -d '{"jsonrpc":"2.0","id":9,"method":"events/subscribe","params":{"name":"discord.message","params":{"role":"health-demo"},"delivery":{"mode":"webhook","url":"https://dead-receiver.example/hook","secret":"whsec_<v>"}}}' | jq '.result'
 # (inject an event, let the ~8.5s retry cycle exhaust, then re-issue the SAME subscribe to see deliveryStatus)
 ```
 
@@ -397,7 +397,7 @@ curl -s -X POST http://localhost:8080/mcp \
 Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.
 
 ```
-DISCORD_BOT_TOKEN=<your-token> make serve
+DISCORD_BOT_TOKEN=<your-token> just serve
 ```
 
 Bot setup (token + invite URL) is documented in this demo's README.md.

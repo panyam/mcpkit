@@ -41,7 +41,7 @@ func runDemo() {
 		Description("Single-process showcase of the per-subscription delivery surface added by the η work. Three event sources fan out to several distinct subscribers per source with different params, so the spec's per-subscription Match / Transform / OnSubscribe + EmitToSubscription model is actually visible on the wire instead of being theoretical. Companion to examples/whole-enchilada/events/ which exercises the deploy axis.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this walkthrough)"),
-			demokit.Actor("Server", "MCP Events server (make serve)"),
+			demokit.Actor("Server", "MCP Events server (just serve)"),
 			demokit.Actor("SubA", "Subscriber A — chat channel:general"),
 			demokit.Actor("SubB", "Subscriber B — chat channel:dev"),
 			demokit.Actor("SubC", "Subscriber C — alert.fired (redact_pii:true)"),
@@ -60,10 +60,10 @@ func runDemo() {
 		"Single-process; in-memory; synthetic upstreams. Two-terminal flow:",
 		"",
 		"```",
-		"Terminal 1:  make serve            # the events server",
-		"Terminal 2:  make demo             # this walkthrough (--tui)",
-		"             make demo-test        # non-interactive run",
-		"             make readme           # regenerate WALKTHROUGH.md",
+		"Terminal 1:  just serve            # the events server",
+		"Terminal 2:  just demo             # this walkthrough (--tui)",
+		"             just demo-test        # non-interactive run",
+		"             just readme           # regenerate WALKTHROUGH.md",
 		"```",
 	)
 
@@ -80,7 +80,7 @@ func runDemo() {
 			}
 			c = client.NewClient(mcpURL, core.ClientInfo{Name: "kitchen-sink-host", Version: "1.0"}, opts...)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			} else {
 				fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
 			}

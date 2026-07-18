@@ -1,6 +1,6 @@
 # Screenshots — budget-allocator
 
-Capture by running `make demo-app EXAMPLE=budget-allocator`.
+Capture by running `just demo-app EXAMPLE=budget-allocator`.
 
 | File | What to capture |
 |---|---|

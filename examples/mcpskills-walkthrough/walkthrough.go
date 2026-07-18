@@ -288,7 +288,7 @@ func runDemo() {
 	demo.Section("Wrap-up",
 		"The walkthrough has exercised every mcpskills subcommand against a fresh fixture. The same shell-out approach a CI smoke test would use is identical to what runs in front of an audience under --tui — the binary doesn't know it's being demoed.",
 		"",
-		"`make test-mcpskills-walkthrough` at the repo root runs this same flow with --non-interactive and asserts exit 0. Use it as the per-commit gate for the CLI surface.",
+		"`just test-mcpskills-walkthrough` at the repo root runs this same flow with --non-interactive and asserts exit 0. Use it as the per-commit gate for the CLI surface.",
 	)
 
 	common.SetupRenderer(demo)
@@ -358,13 +358,17 @@ func resolveBinary() (path, source string, err error) {
 		return "", "", err
 	}
 	tmp.Close()
-	cmd := exec.Command("go", "build", "-o", tmp.Name(), "./cmd/mcpskills")
-	cmd.Dir = root
+	// cmd/mcpskills is its own Go module (separate go.mod), so the build
+	// must run from inside that directory — `go build ./cmd/mcpskills`
+	// from the repo root fails with "main module does not contain
+	// package".
+	cmd := exec.Command("go", "build", "-o", tmp.Name(), ".")
+	cmd.Dir = filepath.Join(root, "cmd", "mcpskills")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		os.Remove(tmp.Name())
 		return "", "", fmt.Errorf("go build: %w\n%s", err, out)
 	}
-	return tmp.Name(), "freshly built from ./cmd/mcpskills", nil
+	return tmp.Name(), "freshly built from cmd/mcpskills", nil
 }
 
 // findRepoRoot walks up from the example's directory until it finds

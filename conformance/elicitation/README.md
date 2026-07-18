@@ -32,7 +32,7 @@ STREAMABLE=1 PORT=8080 go run ./cmd/testserver &
 SERVER_URL=http://localhost:8080/mcp npx tsx --test elicitation/scenarios.test.ts
 
 # Or via Makefile (starts its own server):
-make testconf-elicitation
+just testconf-elicitation
 ```
 
 ## Scenarios
