@@ -12,7 +12,7 @@
 // MRTR input_required round-trip).
 //
 // The endpoint is an external, version-pinned, ephemeral deployment, so this is
-// run manually (make testconf-external-checker), not in the blocking CI path.
+// run manually (just testconf-external-checker), not in the blocking CI path.
 // The committed report is a point-in-time snapshot, like conformance/UPSTREAM_AUDIT.md.
 package main
 
@@ -216,7 +216,7 @@ func render(url string, info core.ServerInfo, checks []check) string {
 	b.WriteString("simultaneously, by an independent third party) from the client side.\n\n")
 
 	b.WriteString("The endpoint is an external, version-pinned, ephemeral deployment, so this is a\n")
-	b.WriteString("**point-in-time snapshot**, not a CI gate. Regenerate via `make testconf-external-checker`.\n\n")
+	b.WriteString("**point-in-time snapshot**, not a CI gate. Regenerate via `just testconf-external-checker`.\n\n")
 
 	b.WriteString("## Results\n\n")
 	b.WriteString("| Check | SEP | Result | Detail |\n")

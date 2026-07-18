@@ -29,7 +29,7 @@ metric, and a per-segment legend / hover detail panel.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=customer-segmentation
+just demo-app EXAMPLE=customer-segmentation
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

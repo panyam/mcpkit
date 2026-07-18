@@ -8,8 +8,8 @@
 //
 // Two-process architecture (matches the other non-UI examples):
 //
-//	Terminal 1:  make serve   # skills-core server on :8080 (file mode)
-//	Terminal 2:  make demo    # walkthrough (--tui for interactive TUI)
+//	Terminal 1:  just serve   # skills-core server on :8080 (file mode)
+//	Terminal 2:  just demo    # walkthrough (--tui for interactive TUI)
 //
 // The server serves the bundled skills/ directory as skill:// resources,
 // auto-registers skill://index.json, declares the io.modelcontextprotocol/skills

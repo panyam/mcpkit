@@ -41,7 +41,7 @@ literally a multi-line JavaScript program.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=threejs
+just demo-app EXAMPLE=threejs
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

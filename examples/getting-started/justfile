@@ -1,0 +1,16 @@
+# examples/getting-started — the minimal quickstart used by the Get Started
+# guide. Not a demokit walkthrough (see README); just a server + client pair.
+
+# Start the minimal MCP server on :8787
+server:
+    go run ./server
+
+# Run the minimal MCP client against the server
+client:
+    go run ./client
+
+# Build both binaries
+build:
+    go build ./...
+
+default: server

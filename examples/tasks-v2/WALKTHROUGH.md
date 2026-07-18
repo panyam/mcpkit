@@ -17,7 +17,7 @@ Walks through the v2 Tasks extension where the *server* decides whether to creat
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the v2 tasks server (declare extension)
     Host->>Server: POST /mcp — initialize (declares io.modelcontextprotocol/tasks)
@@ -68,8 +68,8 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve        # tasks-v2 server on :8080
-Terminal 2:  make demo         # this demo
+Terminal 1:  just serve        # tasks-v2 server on :8080
+Terminal 2:  just demo         # this demo
 ```
 
 ### v1 vs v2 — what changed

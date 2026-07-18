@@ -13,7 +13,7 @@ This file has two parts:
 - **SEP Coverage** is sourced from upstream's traceability manifest, which maps each SEP to its declared requirements. A row's `Status` says whether upstream has emitted a check ID for every declared requirement — *not* whether mcpkit passes them. Scenario-level pass/fail per SEP lives in [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md), which grades mcpkit against every scenario upstream currently ships.
 - **Open Gaps** lists failing scenarios + traceability rows with no emitted check. Tracking links and one-line context come from [`conformance/known-gaps.yaml`](conformance/known-gaps.yaml).
 
-Every report on this site grades an mcpkit **server**. For the inverse — the mcpkit **client** graded by an independent third-party gauntlet on the integrated stateless draft wire (`2026-07-28`) — see [`conformance/EXTERNAL_CHECKER.md`](conformance/EXTERNAL_CHECKER.md), regenerated via `make testconf-external-checker`.
+Every report on this site grades an mcpkit **server**. For the inverse — the mcpkit **client** graded by an independent third-party gauntlet on the integrated stateless draft wire (`2026-07-28`) — see [`conformance/EXTERNAL_CHECKER.md`](conformance/EXTERNAL_CHECKER.md), regenerated via `just testconf-external-checker`.
 
 ## What this report is *not*
 
@@ -41,7 +41,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 
 ## mcpkit-local Conformance Suites
 
-These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `make testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.
 
 | Suite | Covers | Stage | Status | Source | Tracking |
 |---|---|:---:|:---:|---|---|

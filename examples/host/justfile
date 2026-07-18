@@ -1,0 +1,33 @@
+# Host Examples — top-level justfile
+# Generates READMEs and runs all examples non-interactively.
+
+EXAMPLES := "01-apphost 02-multi-server"
+
+# Regenerate all READMEs from code
+readme:
+    #!/usr/bin/env bash
+    set -eu
+    for ex in {{EXAMPLES}}; do
+        echo "=== Generating $ex/README.md ==="
+        go run -buildvcs=false ./$ex/ --readme > $ex/README.md
+    done
+
+# Run all examples non-interactively
+demo:
+    #!/usr/bin/env bash
+    set -eu
+    for ex in {{EXAMPLES}}; do
+        echo "=== Running $ex ==="
+        go run -buildvcs=false ./$ex/ --non-interactive
+        echo
+    done
+
+# Run each example in notebook mode (Bubble Tea cells), one at a time
+note:
+    #!/usr/bin/env bash
+    set -eu
+    for ex in {{EXAMPLES}}; do
+        echo "=== Running $ex (notebook) ==="
+        go run -buildvcs=false ./$ex/ --note
+        echo
+    done

@@ -77,18 +77,22 @@ Tasks v2, MRTR, and the SEP-2575 stateless wire all run against [`modelcontextpr
 Three artifacts describe mcpkit's conformance posture at increasing granularity:
 
 - [`CONFORMANCE.md`](CONFORMANCE.md) — auto-generated per-SEP rollup (regenerated on every PR; CI-gated for staleness). [Live site](https://panyam.github.io/mcpkit/conformance/).
-- [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md) — per-scenario pass/fail against upstream's full test set (`make testconf-upstream-audit`). [Live site](https://panyam.github.io/mcpkit/conformance/upstream-audit/).
+- [`conformance/UPSTREAM_AUDIT.md`](conformance/UPSTREAM_AUDIT.md) — per-scenario pass/fail against upstream's full test set (`just testconf-upstream-audit`). [Live site](https://panyam.github.io/mcpkit/conformance/upstream-audit/).
 - [`conformance/AUTH_SPEC_COVERAGE.md`](conformance/AUTH_SPEC_COVERAGE.md) — hand-curated per-clause traceability for the auth surface: every MUST/SHOULD → mcpkit impl file:line → test that proves it.
 
 ## Testing
 
+The task runner is moving to [`just`](https://github.com/casey/just); during
+the transition the original Makefiles remain alongside the justfiles with the
+same target names, so both `just <target>` and `make <target>` work.
+
 ```bash
-make test          # Unit tests (200+ across core/server/client)
-make testall       # ALL tests + Keycloak + conformance + HTML report
-make testconf      # MCP conformance suite
-make testconfauth  # Auth conformance
-make test-e2e      # E2E tests (auth + apps)
-make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
+just/make test          # Unit tests (200+ across core/server/client)
+just/make testall       # ALL tests + Keycloak + conformance + HTML report
+just/make testconf      # MCP conformance suite
+just/make testconfauth  # Auth conformance
+just/make test-e2e      # E2E tests (auth + apps)
+just/make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 ```
 
 ## Documentation

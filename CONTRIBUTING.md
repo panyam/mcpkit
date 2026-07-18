@@ -16,10 +16,14 @@ examples, docs, and new SEP implementations — are all welcome.
 ```bash
 git clone https://github.com/panyam/mcpkit
 cd mcpkit
-make test          # core/server/client/testutil unit tests
+just test          # core/server/client/testutil unit tests
 ```
 
-Go 1.26+ is required. The base conformance suite additionally needs Node.js 22+.
+Go 1.26+ and [`just`](https://github.com/casey/just) are required. The base
+conformance suite additionally needs Node.js 22+. The task runner is moving
+from make to just; during the transition the original Makefiles remain
+alongside the justfiles with the same target names, so `make <target>` also
+works. New targets must be added to both files.
 
 ## Repository layout
 
@@ -28,24 +32,24 @@ mcpkit is a multi-module repo. The root module holds `core/`, `server/`,
 `ext/` and `experimental/ext/` (`ext/auth`, `ext/tasks`, `ext/ui`,
 `ext/otel`, `ext/skills`, `experimental/ext/events`, `experimental/ext/protogen`).
 
-Because each extension is a separate `go.mod`, `make test` does **not** cover
-them. After changing anything in `core/`, run `make tidy-all` so the
+Because each extension is a separate `go.mod`, `just test` does **not** cover
+them. After changing anything in `core/`, run `just tidy-all` so the
 sub-modules pick up new imports, and run the relevant sub-module suite
-(`make test-auth`, `make test-ui`, etc.). See [CLAUDE.md](CLAUDE.md) for the
+(`just test-auth`, `just test-ui`, etc.). See [CLAUDE.md](CLAUDE.md) for the
 full command reference and the package-level gotchas.
 
 ## Tests and conformance
 
 ```bash
-make test              # unit tests (root module)
-make test-auth         # ext/auth
-make test-ui           # ext/ui
-make testconf          # base MCP server conformance (published upstream suite; Node 22+)
-make testall           # everything + Keycloak + HTML report
-make audit             # govulncheck + gosec + gitleaks + race
+just test              # unit tests (root module)
+just test-auth         # ext/auth
+just test-ui           # ext/ui
+just testconf          # base MCP server conformance (published upstream suite; Node 22+)
+just testall           # everything + Keycloak + HTML report
+just audit             # govulncheck + gosec + gitleaks + race
 ```
 
-The base `make testconf` runs against the published
+The base `just testconf` runs against the published
 `@modelcontextprotocol/conformance` CLI and needs no extra checkouts. The
 per-SEP suites (`testconf-tasks-v2`, `testconf-mrtr`, `testconf-stateless`,
 …) drive fixtures under `examples/` against upstream / fork conformance
@@ -56,7 +60,7 @@ worktrees; see the `MCPCONFORMANCE_*_PATH` notes in
 
 1. Branch from `main`.
 2. Make your change with tests.
-3. Run `make test` (plus the relevant sub-module suite) and `make testconf`.
+3. Run `just test` (plus the relevant sub-module suite) and `just testconf`.
 4. Open a pull request describing the change and linking any related issue
    or SEP.
 

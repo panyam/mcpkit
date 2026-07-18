@@ -1,0 +1,47 @@
+ADDR := env('ADDR', 'http://localhost:8080')
+MCP := ADDR + '/mcp'
+EXPORTER := env('EXPORTER', '')
+
+# Show this help.
+help:
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' {{justfile()}}
+
+# Start the kitchen-sink server standalone. Pass EXPORTER=stdout|otlp|auto to opt into spans.
+serve:
+	go run . --serve -addr :8080 --exporter={{EXPORTER}}
+
+# Start with EXPORTER=auto (probes docker/observability stack; silent Noop fallback if unreachable).
+serve-otlp:
+	go run . --serve -addr :8080 --exporter=auto
+
+# Run the demokit walkthrough (interactive TUI). Server must be up via `just serve` in another terminal.
+demo:
+	go run . --tui
+
+# Run the walkthrough non-interactive (CI / scripting).
+demo-test:
+	go run . --non-interactive
+
+# Run the walkthrough in notebook mode (Bubble Tea cells).
+note:
+	go run . --note
+
+# Regenerate WALKTHROUGH.md from walkthrough.go definitions.
+readme:
+	go run . --doc=md > WALKTHROUGH.md
+
+# Build the kitchen-sink binary.
+build:
+	go build -o kitchen-sink-events .
+
+# In-process e2e tests for Match / Transform / OnSubscribe / EmitToSubscription / Quota.
+test:
+	go test ./... -count=1 -v
+
+# Tests under -race.
+test-race:
+	go test ./... -race -count=1
+
+# Remove built binaries.
+clean:
+	rm -f kitchen-sink-events

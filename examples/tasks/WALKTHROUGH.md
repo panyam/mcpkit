@@ -18,7 +18,7 @@ Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the MCP server
     Host->>Server: POST /mcp — initialize
@@ -67,8 +67,8 @@ sequenceDiagram
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve        # tasks server on :8080
-Terminal 2:  make run          # this demo
+Terminal 1:  just serve        # tasks server on :8080
+Terminal 2:  just run          # this demo
 ```
 
 ### How tasks work

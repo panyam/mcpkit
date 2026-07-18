@@ -35,13 +35,13 @@ func runDemo() {
 		Description("The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP's Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify — those are the deferred / extended surface (see examples/skills for the full walkthrough).").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
-			demokit.Actor("Server", "MCP Server (make serve)"),
+			demokit.Actor("Server", "MCP Server (just serve)"),
 		)
 
 	demo.Section("Setup",
 		"```",
-		"Terminal 1:  make serve   # skills-core server, file mode, :8080",
-		"Terminal 2:  make demo    # this walkthrough (--tui interactive)",
+		"Terminal 1:  just serve   # skills-core server, file mode, :8080",
+		"Terminal 2:  just demo    # this walkthrough (--tui interactive)",
 		"```",
 	)
 
@@ -80,7 +80,7 @@ func runDemo() {
     core.ClientInfo{Name: "skills-core-host", Version: "1.0"},
     client.WithClientMode(wireMode),
 )
-if err := c.Connect(); err != nil { /* run: make serve */ }`).Default(),
+if err := c.Connect(); err != nil { /* run: just serve */ }`).Default(),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			c = client.NewClient(serverURL+"/mcp",
@@ -89,7 +89,7 @@ if err := c.Connect(); err != nil { /* run: make serve */ }`).Default(),
 				client.WithClientMode(wireMode),
 			)
 			if err := c.Connect(); err != nil {
-				fmt.Printf("    ERROR: %v\n    Start the server with: make serve\n", err)
+				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
 			fmt.Printf("    Connected to %s %s (wire: %s)\n",

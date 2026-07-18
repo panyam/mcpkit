@@ -21,7 +21,7 @@ import (
 )
 
 // buildAgentServer is the tasks-v2 demo server, in-process: the same tools
-// registerTasksV2DemoTools installs for `make serve`, so the agent drives the
+// registerTasksV2DemoTools installs for `just serve`, so the agent drives the
 // exact surface a real client would.
 func buildAgentServer() *server.Server {
 	srv := server.NewServer(core.ServerInfo{Name: "tasks-v2-demo", Version: "0.1.0"})

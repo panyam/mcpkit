@@ -141,10 +141,10 @@ This is a deliberate opt-in — `Options` doesn't take a `TracerProvider` becaus
 ## Testing
 
 ```
-make test         # miniredis (no Docker, default)
-make testredis    # real Redis via Docker
-make updb         # start the Redis container long-running
-make downdb       # stop it
+just test         # miniredis (no Docker, default)
+just testredis    # real Redis via Docker
+just updb         # start the Redis container long-running
+just downdb       # stop it
 ```
 
 The same test bodies run against either backend — `MCPKIT_EVENTS_TEST_REDIS_ADDR=<addr>` flips the test fixture from miniredis to a live Redis.

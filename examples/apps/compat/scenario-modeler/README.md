@@ -45,7 +45,7 @@ the full `OutputSchemaOverride` is genuinely cleaner.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=scenario-modeler
+just demo-app EXAMPLE=scenario-modeler
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

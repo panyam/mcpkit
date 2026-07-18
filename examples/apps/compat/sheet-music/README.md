@@ -34,7 +34,7 @@ schema. Introduces the `InputSchemaPatch` escape hatch.
 ### Start Server
 
 ```bash
-make demo-app EXAMPLE=sheet-music
+just demo-app EXAMPLE=sheet-music
 ```
 
 Starts the mcpkit-Go fixture on `http://localhost:3101/mcp` and basic-host on `http://localhost:8080`. (Pass `OPEN=1` to auto-open the browser.)

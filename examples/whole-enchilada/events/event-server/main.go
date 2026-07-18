@@ -75,7 +75,7 @@ func main() {
 	// every span the server emits flows through. Exporter selector
 	// honors --exporter / EXPORTER env (auto | stdout | otlp | "").
 	// auto = best-effort OTLP with silent Noop fallback when the
-	// observability stack isn't reachable — keeps `make demo-up`
+	// observability stack isn't reachable — keeps `just demo-up`
 	// working whether docker/observability is up or not.
 	tp, shutdown, err := commonotel.SetupTelemetry(context.Background(),
 		commonotel.WithExporter(*tel.Exporter),
@@ -207,7 +207,7 @@ func main() {
 	}
 	if !hasIntrospectionEnv() {
 		// Anonymous-mode demo escape — explicit fallback principal so
-		// `make demo` works without any auth provider. When auth IS
+		// `just demo` works without any auth provider. When auth IS
 		// wired, the validator stamps the principal from claims and
 		// anonymous subscribes are rejected per the events spec.
 		cfg.UnsafeAnonymousPrincipal = "demo-principal"

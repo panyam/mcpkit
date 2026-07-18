@@ -46,7 +46,7 @@ jobs:
         with:
           go-version-file: docs/site/go.mod
 
-      # docs/site/Makefile's build target ends with
+      # docs/site/justfile's build recipe ends with
       # `uv run scripts/collect_walkthroughs.py` so the walkthrough
       # bundles ship alongside the rendered docs.  Provision uv +
       # sync the project's Python tooling env first; matches the
@@ -55,12 +55,14 @@ jobs:
         with:
           enable-cache: true
 
+      - uses: extractions/setup-just@v2
+
       - name: Sync Python tooling env
         run: uv sync
 
       - name: Build site
         working-directory: docs/site
-        run: make build
+        run: just build
 
       - uses: actions/upload-artifact@v4
         with:

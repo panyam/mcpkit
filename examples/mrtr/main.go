@@ -3,8 +3,8 @@
 //
 // Two-process architecture:
 //
-//	Terminal 1:  make serve         # MCP server on :8080
-//	Terminal 2:  make demo          # demokit walkthrough (or `make demo --tui`)
+//	Terminal 1:  just serve         # MCP server on :8080
+//	Terminal 2:  just demo          # demokit walkthrough (or `just demo --tui`)
 //
 // The server is a real MCP server — any host can connect to it. The
 // walkthrough acts as a scripted MCP host that drives `tools/call`

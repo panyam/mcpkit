@@ -1,0 +1,25 @@
+# Run the demo interactively (requires Keycloak — see 'just kcl')
+demo:
+    go run . --tui
+
+# Run the walkthrough in notebook mode (requires Keycloak — see 'just kcl')
+note:
+    go run . --note
+
+# Start the MCP server standalone (for MCPJam or other clients)
+serve:
+    go run . --serve
+
+# Start Keycloak from repo root (convenience wrapper)
+kcl:
+    just -f ../../justfile upkcl
+
+# Regenerate WALKTHROUGH.md from demo definitions
+readme:
+    go run . --doc md > WALKTHROUGH.md
+
+# Build the example binary
+build:
+    go build -o fine-grained-auth-example .
+
+default: demo

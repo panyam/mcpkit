@@ -20,7 +20,7 @@
 ```mermaid
 sequenceDiagram
     participant Host as MCP Host (this client)
-    participant Server as MCP Server (make serve)
+    participant Server as MCP Server (just serve)
     participant AS as Auth Server (in-process oneauth)
 
     Note over Host,AS: Step 1: Discover the in-process AS bootstrap from the MCP server
@@ -81,8 +81,8 @@ host to discover.
 Start the MCP server in a separate terminal first:
 
 ```
-Terminal 1:  make serve        # MCP server + in-process AS on :8080
-Terminal 2:  make run          # this demo
+Terminal 1:  just serve        # MCP server + in-process AS on :8080
+Terminal 2:  just run          # this demo
 ```
 
 ### UC1 vs UC2/UC3 — When does the host react?

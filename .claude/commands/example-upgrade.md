@@ -15,8 +15,8 @@ Apply fixes that bring an mcpkit example into compliance with `examples/CONVENTI
 3. **If `build-broken` is among the findings, stop.** Surface the build error to the user and ask them to fix it first (the upgrade skill can't safely apply other fixes against code that doesn't compile). Exit.
 
 4. **Group findings by fix complexity** and present them as a plan:
-   - **Mechanical** (single-edit, low-risk): `makefile-default-goal`, `filterargs-promoted`, `tui-helper`, `mode-helpers`, `logger-colorlogger`, `serve-srv-listenandserve`, `mux-withmux` (when the side-endpoint already exists in a hand-rolled mux), `walkthrough-md-fresh` (just re-run `make readme`).
-   - **Structural** (touches multiple files or rewrites a section): `dispatch-loop`, `makefile-baseline` (full Makefile rewrite), `readme-quickstart` / `readme-what-it-demonstrates` / `readme-where-to-look` (README sections), `ui-extension`, `ui-bridge-template`, `ui-typed-app-tool`.
+   - **Mechanical** (single-edit, low-risk): `makefile-default-goal`, `filterargs-promoted`, `tui-helper`, `mode-helpers`, `logger-colorlogger`, `serve-srv-listenandserve`, `mux-withmux` (when the side-endpoint already exists in a hand-rolled mux), `walkthrough-md-fresh` (re-run `just readme`).
+   - **Structural** (touches multiple files or rewrites a section): `dispatch-loop`, `makefile-baseline` (full justfile rewrite), `readme-quickstart` / `readme-what-it-demonstrates` / `readme-where-to-look` (README sections), `ui-extension`, `ui-bridge-template`, `ui-typed-app-tool`.
    - **Manual-only** (skill flags but doesn't auto-apply): `client-close` (placement depends on walkthrough flow), `pretty-print-raw` (depends on the step's intent), `ui-readme-diagrams` (needs human-authored sequence diagrams). Report these as "would need manual edits at <file>:<line>" and skip them.
 
 5. **Show the plan to the user before editing.** Format:
@@ -69,8 +69,8 @@ For each ID, the upgrade applies this exact transformation. (Read CONVENTIONS.md
 - **`tui-helper`** — replace the `for _, arg := range os.Args[1:] { if ... "--tui" ... }` block with `common.SetupRenderer(demo)`. Drop unused `tui` import.
 - **`url-helper`** — replace the inline `--url` arg scan + hardcoded `"http://localhost:8080"` default with `serverURL := common.ServerURL()`. Drop unused `os` import if it was only used for the scan.
 - **`mode-helpers`** — delete local `tuiMode()` / `nonInteractive()` helpers; replace their call sites with `demokit.IsTUI()` / `demokit.IsNonInteractive()`.
-- **`makefile-baseline`** — rewrite the Makefile to the four-target baseline from CONVENTIONS.md §6, **preserving any example-specific extras** (the user added them deliberately) under their existing section comment dividers.
-- **`makefile-default-goal`** — append `.DEFAULT_GOAL := demo` to the Makefile if missing.
+- **`makefile-baseline`** — rewrite the justfile to the four-recipe baseline from CONVENTIONS.md §6, **preserving any example-specific extras** (the user added them deliberately) under their existing section comment dividers.
+- **`makefile-default-goal`** — add `default: demo` to the justfile if missing.
 - **`dispatch-loop`** — wrap the existing `main()` body in the dual-mode dispatcher from CONVENTIONS.md §2. The current `main()` becomes either `serve()` or `runDemo()` based on whether it's the server or the walkthrough.
 - **`readme-quickstart` / `readme-what-it-demonstrates` / `readme-where-to-look`** — insert missing sections at the canonical position (CONVENTIONS.md §5). Don't rewrite existing prose; only add what's missing. If the section exists but is in the wrong order, leave it (don't reorder hand-curated docs).
 - **`ui-extension`** — add `server.WithExtension(&ui.UIExtension{})` to `server.NewServer(...)`. Add the `ext/ui` dependency to `go.mod` if missing.

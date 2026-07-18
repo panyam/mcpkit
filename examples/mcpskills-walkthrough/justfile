@@ -1,0 +1,25 @@
+# Run the walkthrough in text mode (default, non-interactive once stepped through).
+demo:
+    go run .
+
+# Run the walkthrough in interactive TUI mode (paginated, key-driven).
+tui:
+    go run . --tui
+
+# Run the walkthrough in notebook mode (Bubble Tea cells).
+note:
+    go run . --note
+
+# Run the walkthrough non-interactively as a CI smoke test (asserts exit 0).
+smoke:
+    go run . --non-interactive
+
+# Regenerate WALKTHROUGH.md from the demo definitions.
+readme:
+    go run . --doc=md > WALKTHROUGH.md
+
+# Build the example binary to ./mcpskills-walkthrough.
+build:
+    go build -o mcpskills-walkthrough .
+
+default: demo

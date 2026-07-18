@@ -77,7 +77,7 @@ extract_prereqs() {
 cat <<'HEADER'
 # Walkthrough graph (auto-generated)
 
-Run `make graph` to regenerate. Source of truth: each page's `**Prerequisites:**` header.
+Run `just graph` to regenerate. Source of truth: each page's `**Prerequisites:**` header.
 Nodes are clickable — they link to the page on GitHub (planned pages 404 by design).
 
 ```mermaid

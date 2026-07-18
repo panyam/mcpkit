@@ -2,10 +2,10 @@
 """Pre-flight gate for conformance suites.
 
 Validates that every MCPCONFORMANCE_*_PATH worktree exists and contains
-the test files / build artifacts that conformance/Makefile expects to run.
+the test files / build artifacts that conformance/justfile expects to run.
 
 Catches the class of bug where:
-- A fork branch refactors its test layout, and the Makefile's hardcoded
+- A fork branch refactors its test layout, and the justfile's hardcoded
   `npx vitest run <file>` path becomes stale.
 - A worktree is missing entirely.
 - A worktree drifts to a different branch than local-suites.yaml documents.
@@ -16,7 +16,7 @@ fixes are explicit decisions, not silent state changes.
 
 Reads:
 - conformance/local-suites.yaml  — worktree paths + expected branch per suite
-- conformance/Makefile           — actual test-file paths the targets run
+- conformance/justfile           — actual test-file paths the recipes run
 
 Usage:
     uv run scripts/sync_conformance_worktrees.py [--fetch]
@@ -54,7 +54,7 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "conformance" / "local-suites.yaml"
-MAKEFILE = REPO_ROOT / "conformance" / "Makefile"
+JUSTFILE = REPO_ROOT / "conformance" / "justfile"
 
 
 @dataclass
@@ -94,15 +94,15 @@ def load_yaml() -> dict[str, Suite]:
 
 
 def extract_makefile_artifacts(suites: dict[str, Suite]) -> None:
-    """Walk the Makefile, attribute `npx vitest run X` and `node dist/X`
-    references to the most-recently-opened `(cd $(MCPCONFORMANCE_*_PATH) ...)`
+    """Walk conformance/justfile, attribute `npx vitest run X` and `node dist/X`
+    references to the most-recently-opened `(cd {{MCPCONFORMANCE_*_PATH}} ...)`
     shell block."""
     var_to_suites: dict[str, list[str]] = {}
     for name, s in suites.items():
         if s.path_var:
             var_to_suites.setdefault(s.path_var, []).append(name)
 
-    text = MAKEFILE.read_text()
+    text = JUSTFILE.read_text()
     current_var: str | None = None
     paren_depth = 0
 
@@ -110,8 +110,8 @@ def extract_makefile_artifacts(suites: dict[str, Suite]) -> None:
         # Track shell-block context. Lines like `(cd $(VAR) && ...)` open a
         # block; closing `)` ends it. We track depth so multi-line blocks
         # (continuation with `\`) keep the var bound.
-        var_open = re.search(r"\(\s*cd\s+\$\((MCPCONFORMANCE_\w+_PATH)\)", line)
-        any_cd = re.search(r"\(\s*cd\s+\$\(\w+\)", line)
+        var_open = re.search(r"\(\s*cd\s+\{\{(MCPCONFORMANCE_\w+_PATH)\}\}", line)
+        any_cd = re.search(r"\(\s*cd\s+\{\{\w+\}\}", line)
         if var_open:
             current_var = var_open.group(1)
             paren_depth = 1
@@ -232,8 +232,8 @@ def check_worktree(suite: Suite, do_fetch: bool) -> Status:
         if not full.exists():
             s.blockers.append(
                 f"Missing artifact: {art} "
-                f"(Makefile expects {full}). The fork branch may have "
-                f"refactored its layout — update conformance/Makefile or "
+                f"(justfile expects {full}). The fork branch may have "
+                f"refactored its layout — update conformance/justfile or "
                 f"`git checkout` a branch that has this file."
             )
 
@@ -254,8 +254,8 @@ def main() -> int:
     if not MANIFEST.exists():
         sys.stderr.write(f"Manifest not found: {MANIFEST}\n")
         return 2
-    if not MAKEFILE.exists():
-        sys.stderr.write(f"Makefile not found: {MAKEFILE}\n")
+    if not JUSTFILE.exists():
+        sys.stderr.write(f"justfile not found: {JUSTFILE}\n")
         return 2
 
     suites = load_yaml()
@@ -300,7 +300,7 @@ def main() -> int:
     if blocker_count:
         print(
             "\nGate FAILED. Fix the blockers above before running "
-            "`make -C conformance test`."
+            "`just conformance/test`."
         )
         return 1
     print("Gate PASS.")

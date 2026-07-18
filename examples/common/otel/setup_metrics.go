@@ -58,7 +58,7 @@ const metricsPeriodicReaderInterval = 5 * time.Second
 //	                     (default localhost:4317), wrapped in a
 //	                     periodic reader. Dial-failure logs a warning
 //	                     and falls back to Noop — a dead collector
-//	                     does not break `make demo`.
+//	                     does not break `just demo`.
 //	Exporter=="auto"   → same as "otlp" but silent on dial-failure
 //	                     (the operator explicitly opted into
 //	                     maybe-on-maybe-off semantics).
