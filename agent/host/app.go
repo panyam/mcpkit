@@ -22,14 +22,14 @@ import (
 // parsing and signal handling. Construct with NewApp, converse with RunTurn
 // (one input, one rendered turn) or REPL (interactive loop).
 type App struct {
-	cfg      *Config
-	runner   *agent.Runner
-	sources  *agent.MultiSource
-	clients  []*client.Client
-	history  []agent.Message
+	cfg       *Config
+	runner    *agent.Runner
+	sources   *agent.MultiSource
+	clients   []*client.Client
+	history   []agent.Message
 	observers []Observer
-	replOut  io.Writer // terminal REPL draws its own prompt here
-	failover *agent.FailoverProvider
+	replOut   io.Writer // terminal REPL draws its own prompt here
+	failover  *agent.FailoverProvider
 
 	injection *agent.InjectionPolicy
 	triggers  *agent.TriggerPolicy
@@ -54,6 +54,11 @@ type App struct {
 	// is set; nil when offloading is off.
 	toolResultStore agent.ToolResultStore
 
+	// memory is the working-memory source when Config.Memory is set; nil
+	// when memory is off. Held so RunTurn can inject its summary and the
+	// /memory command can list it.
+	memory *agent.MemorySource
+
 	// connections + providerSwitch are the runtime provider-switch seam
 	// (Config.Connections): the Runner holds the switch, /provider swaps
 	// its underlying. Both nil when Connections is not configured.
@@ -76,6 +81,7 @@ type appOptions struct {
 	logger          *slog.Logger
 	store           agent.RunStore
 	toolResultStore agent.ToolResultStore
+	memoryStore     agent.MemoryStore
 	providerBuilder ProviderBuilder
 	observers       []Observer
 }
@@ -262,6 +268,16 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		}
 	}
 
+	// Working memory is a leaf source added to the aggregate, so its
+	// remember/recall/forget tools sit alongside the server tools (and are
+	// covered by offloading below like any other source).
+	if cfg.Memory != nil {
+		if err := app.registerMemory(multi, o.memoryStore); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
 	// Offloading wraps the whole aggregate, so one read_tool_result and
 	// one store cover every server's tools. The stub it substitutes is a
 	// normal ToolResult, so the transcript and persisted log see exactly
@@ -342,6 +358,7 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	defer a.turnMu.Unlock()
 	a.triggers.NotifyEngagement()
 	a.drainInjectionLocked()
+	a.injectMemoryLocked(ctx)
 	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
 	a.history = append(a.history, userMsg)
 
@@ -380,7 +397,6 @@ func (a *App) Tools(ctx context.Context) error {
 	a.emit(HostEvent{Kind: HostCommandResult, Command: CmdResult{Kind: CmdTools, Tools: defs}})
 	return nil
 }
-
 
 // Providers returns the configured connection names and the active one,
 // or (nil, "") when no connection registry is configured. Structured so a
