@@ -37,18 +37,33 @@ func (a *App) registerMemory(multi *agent.MultiSource, store agent.MemoryStore) 
 	return nil
 }
 
-// injectMemoryLocked prepends the working-memory summary as a RoleSystem
-// message when Config.Memory.InjectSummary is on, so the model stays aware
-// of its scratchpad without a recall call. A summary error is non-fatal —
-// memory awareness is best-effort and must never fail a turn. Caller holds
-// turnMu.
-func (a *App) injectMemoryLocked(ctx context.Context) {
+// withMemorySummaryLocked returns the messages for this turn, weaving the
+// working-memory summary in as a RoleSystem message just before the current
+// (last) user message when Config.Memory.InjectSummary is on.
+//
+// The summary is a stateful snapshot of current memory, re-rendered every
+// turn, so it is injected TRANSIENTLY: it goes into the returned slice for
+// this one model call and is never written into a.history. That keeps the
+// durable conversation (and the persisted RunStore log) free of stacked,
+// mostly-identical snapshots — the opposite of drainInjectionLocked, which
+// appends because each event is drained exactly once.
+//
+// When memory is off or empty it returns a.history unchanged (no copy). A
+// summary error is non-fatal — memory awareness is best-effort and must
+// never fail a turn. Caller holds turnMu and has already appended the user
+// message to a.history.
+func (a *App) withMemorySummaryLocked(ctx context.Context) []agent.Message {
 	if a.memory == nil || a.cfg.Memory == nil || !a.cfg.Memory.InjectSummary {
-		return
+		return a.history
 	}
 	summary, err := a.memory.Summary(ctx)
 	if err != nil || summary == "" {
-		return
+		return a.history
 	}
-	a.history = append(a.history, agent.Message{Role: agent.RoleSystem, Text: summary})
+	n := len(a.history)
+	msgs := make([]agent.Message, 0, n+1)
+	msgs = append(msgs, a.history[:n-1]...)
+	msgs = append(msgs, agent.Message{Role: agent.RoleSystem, Text: summary})
+	msgs = append(msgs, a.history[n-1])
+	return msgs
 }
