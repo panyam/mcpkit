@@ -77,9 +77,24 @@ type MemoryConfig struct {
 	// InjectSummary, when true, prepends a summary of the current
 	// scratchpad as a RoleSystem message before each turn, so the model
 	// stays aware of what it saved without a recall call. It costs tokens
-	// proportional to the scratchpad size, so it is opt-in; when false the
+	// proportional to the injected slice, so it is opt-in; when false the
 	// model still reaches memory through the recall tool on demand.
 	InjectSummary bool `json:"injectSummary,omitempty"`
+
+	// SummaryMaxItems bounds how many notes the injected summary carries,
+	// keeping the newest. Zero means no item cap (the whole scratchpad).
+	// Only meaningful with InjectSummary.
+	SummaryMaxItems int `json:"summaryMaxItems,omitempty"`
+
+	// SummaryMaxChars bounds the injected summary's rendered length (a cheap
+	// token proxy), dropping the oldest kept notes until it fits. Zero means
+	// no length cap. Only meaningful with InjectSummary.
+	SummaryMaxChars int `json:"summaryMaxChars,omitempty"`
+}
+
+// summaryOptions maps the host config onto the agent-layer budget.
+func (c *MemoryConfig) summaryOptions() agent.SummaryOptions {
+	return agent.SummaryOptions{MaxItems: c.SummaryMaxItems, MaxChars: c.SummaryMaxChars}
 }
 
 // OffloadConfig is the host's view of tool-result offloading; it maps to

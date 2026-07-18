@@ -289,18 +289,53 @@ func (m *MemorySource) Call(ctx context.Context, name string, args map[string]an
 	return m.fs.Call(ctx, name, args)
 }
 
-// Summary renders the current working memory as a block a host can inject
-// as a RoleSystem message before a turn. It returns "" when memory is empty
+// SummaryOptions budgets what Summary renders, so injecting the scratchpad
+// every turn stays bounded even if the store grows. Both limits prioritize
+// by recency (newest notes win — they are the most likely to matter). The
+// zero value is unbounded: the whole scratchpad, which is affordable while
+// working memory is kept small (WithMaxMemories). Relevance-based selection
+// (inject only what matches the current turn) is the semantic-recall upgrade,
+// a separate seam.
+type SummaryOptions struct {
+	// MaxItems caps how many notes are rendered, keeping the newest. Zero
+	// means no item cap.
+	MaxItems int
+	// MaxChars caps the rendered length of the notes (a cheap token proxy;
+	// the fixed header is not counted), dropping the oldest kept notes until
+	// they fit. Zero means no length cap.
+	MaxChars int
+}
+
+// Summary renders the current working memory as a block a host can inject as
+// a RoleSystem message before a turn, honoring opts as a recency-priority
+// budget. It returns "" when memory is empty (or the budget admits nothing)
 // so the host injects nothing.
-func (m *MemorySource) Summary(ctx context.Context) (string, error) {
+func (m *MemorySource) Summary(ctx context.Context, opts SummaryOptions) (string, error) {
 	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{})
 	if err != nil {
 		return "", err
 	}
-	if len(resp.Items) == 0 {
+	items := budgetMemories(resp.Items, opts)
+	if len(items) == 0 {
 		return "", nil
 	}
-	return "Working memory (notes you saved earlier):\n" + renderMemories(resp.Items), nil
+	return "Working memory (notes you saved earlier):\n" + renderMemories(items), nil
+}
+
+// budgetMemories trims items (oldest-first) to opts, keeping the newest that
+// fit. MaxItems keeps the last N; MaxChars then drops from the front (oldest)
+// until the rendered length is within budget. The kept notes stay in
+// chronological order for readability.
+func budgetMemories(items []MemoryItem, opts SummaryOptions) []MemoryItem {
+	if opts.MaxItems > 0 && len(items) > opts.MaxItems {
+		items = items[len(items)-opts.MaxItems:]
+	}
+	if opts.MaxChars > 0 {
+		for len(items) > 0 && len(renderMemories(items)) > opts.MaxChars {
+			items = items[1:]
+		}
+	}
+	return items
 }
 
 func renderMemories(items []MemoryItem) string {
