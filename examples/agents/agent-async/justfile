@@ -1,0 +1,6 @@
+# agent-async — an agent managing async work (events + tasks) through chat.
+import '../common.just'
+
+# Show available recipes
+default:
+    @just --list --unsorted

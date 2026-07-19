@@ -168,7 +168,7 @@ opt-in.
 
 **Built (Phase 3):** `AgentSource` (941, agent-as-tool + depth/budget guards),
 `SubAgentEvent` nesting (942), `Team` handoff (943), and the
-`examples/multi-agent` walkthrough (1031, part 1).
+`examples/agents/multi-agent` walkthrough (1031, part 1).
 
 **Deferred, mapped to the axes:**
 

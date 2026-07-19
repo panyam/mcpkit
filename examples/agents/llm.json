@@ -1,0 +1,11 @@
+{
+  "connections": {
+    "active": "local",
+    "connections": {
+      "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
+      "ollama": { "type": "ollama", "model": "llama3.1" },
+      "cloud":  { "type": "openai", "model": "gpt-4o", "apiKeyEnv": "OPENAI_API_KEY" },
+      "router": { "baseURL": "https://openrouter.ai/api/v1", "model": "anthropic/claude-sonnet-4", "apiKeyEnv": "OPENROUTER_API_KEY" }
+    }
+  }
+}
