@@ -294,22 +294,35 @@ and `RunStore.ListRuns` + a `/sessions` picker (986). `cmd/agentchat` is the thi
 `agent/host` so a web surface reuses everything and swaps only stdin/stdout. Follow-ups: run
 retention (999), paged session picker (1000), provider-routing policy (991).
 
-**Phase 2 — memory. Tool-result offloading shipped as the opener; memory tracks next.**
-Shipped (the just-in-time-context layer, lossless/pay-on-demand — see the diagram in
-`docs/AGENT_MEMORY_FLOW.md`): `OffloadingSource` + `ToolResultStore` interface + in-memory (issue 966)
-· durable `ToolResultStore` on redis (TTL) + gorm (configurable table, `PruneExpired`) (issue 971) ·
-dep-free `FileToolResultStore` in `agent/` — the no-server local path, blobs as inspectable files
-(issue 977) · host `Config.Offload` + `WithToolResultStore` + agentchat `--offload-threshold` /
-`--offload-dir` (issue 972) · turn-end `Result.Messages` redaction closing the event-log dedup pair
-(issue 973). Merged as PRs 970/975/976/978/981.
-Still to build: **the eval bar first** — LongMemEval-derived cases behind `eval_llm` (issue 974), the
-quality gate that must precede the lossy tracks · working memory + `MemorySource` (A) ·
-`SummarizingCompactor` (A, heuristic `TokenEstimator` first, real tokenizer a follow-up) · `Embedder`
-seam (Ollama + API impls, like `Provider`) + `VectorStore` (pgvector on the gorm backend, Pinecone
-etc. as sibling impls) + recall→injection wiring (A).
-Deferred offloading follow-ups: binary offloading — size trigger + non-text retrieval (issue 979);
-streaming / handle-based results for 100s-of-MB payloads via MCP resource links + a ranged/seek store
-(issue 980, design — the full "filesystem as memory" pattern, `FileToolResultStore` its first backend).
+**Phase 2 — memory: ✅ SHIPPED (epic issue 926, closed).** All four tracks landed — see the diagram in
+`docs/AGENT_MEMORY_FLOW.md`.
+- **Tool-result offloading** (the just-in-time-context opener, lossless/pay-on-demand): `OffloadingSource`
+  + `ToolResultStore` + in-memory (966) · durable redis (TTL) + gorm (configurable table, `PruneExpired`)
+  (971) · dep-free `FileToolResultStore` (977) · host `Config.Offload` + agentchat `--offload-threshold` /
+  `--offload-dir` (972) · turn-end `Result.Messages` redaction (973). PRs 970/975/976/978/981.
+- **Working memory** (938, PR 1004): `MemorySource` (leaf ToolSource: remember/recall/forget) over the
+  `MemoryStore` seam (in-memory substring default); pluggable via `WithMemoryStore`.
+- **Eval harness** (974, PR 1005): multi-turn `eval.Scenario` / `RunScenario` (threads history + a shared
+  MemorySource; one Runner reused), `NotContains` scorer, and `agent/eval/longmemeval` `SmokeScenarios()`
+  (hand-authored, NOT the dataset — real loader is 1014). `Scenario.NewMemoryStore` /
+  `MemCase.NewCompactor` factories grade different impls through the same scenarios.
+- **Compaction** (939, PR 1008): `SummarizingCompactor` + `TokenEstimator`/`CharTokenEstimator` +
+  `RunnerConfig.Compactor` hook (in the Runner, top of the turn, so the eval harness can grade it);
+  `EventCompaction`; host `Config.Compaction` + agentchat `--compact-tokens`/`--compact-keep-recent`.
+- **Semantic recall** (940, PRs 1017 + 1025): `Embedder` seam (`Embedding` type + `Cosine` method;
+  `OpenAIEmbedder` no-SDK `/embeddings` + `StubEmbedder`) + `InMemorySemanticStore` (brute-force cosine
+  behind `MemoryStore`; retrieval stays an impl detail — no separate `VectorStore` public seam) +
+  `ScoredMemory` results (`ListMemories(Query, Limit)`) + pre-turn recall auto-injection
+  (`RecallRelevant`, `Config.Memory.InjectRecall`/`RecallMinScore` poison-guard). `agent.embed` /
+  `agent.memory.recall` spans.
+- **Injection correctness/budget** (1010 transient-not-stacked, 1011 recency-budget) + the
+  `InjectionPolicy` → `EventInjectionPolicy` rename (memory injection is its own step).
+
+Deferred follow-ups (all filed): pgvector semantic store (1019) · Scorer/Reranker multi-signal (1020) ·
+VectorStore for doc-RAG (1021) · distillation write path (1022) · metrics seam (1023) · unified
+injection arbiter (1024) · explicit context-assembly pipeline (1026) · faster cosine (1018) ·
+durable/session-scoped MemoryStore backends (1003) · LongMemEval loader (1014) + eval adapter seam
+(1015) · binary offloading (979) · streaming/handle-based large results (980).
 
 **Phase 3 — composition:**
 `SubAgent` + `AgentSource` (B) · sub-agent event nesting (B) · `Team`/`Orchestrator` handoff +
