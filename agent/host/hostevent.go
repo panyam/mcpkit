@@ -47,6 +47,10 @@ const (
 	HostTaskCompleted HostEventKind = "task-completed"
 	// HostMessage is a plain informational line (Message).
 	HostMessage HostEventKind = "message"
+	// HostSubAgentEvent carries a sub-agent's nested turn-lifecycle event
+	// (SubAgent) — a persona's activity, scoped/depth on the envelope, for a
+	// surface to render indented under the parent's turn.
+	HostSubAgentEvent HostEventKind = "sub-agent-event"
 )
 
 // HostEvent is one domain event the host announces: a thing that
@@ -87,6 +91,9 @@ type HostEvent struct {
 
 	TaskStatus *core.DetailedTask
 	Task       *client.BackgroundTask
+
+	// SubAgent is the nested sub-agent event on HostSubAgentEvent.
+	SubAgent agent.SubAgentEvent
 }
 
 // Observer receives the host's HostEvent stream and does whatever it

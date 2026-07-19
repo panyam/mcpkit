@@ -75,6 +75,35 @@ type Config struct {
 	// tail is kept verbatim, before each turn. Nil means off — history is
 	// sent verbatim. Lossy; complementary to Offload (lossless).
 	Compaction *CompactionConfig `json:"compaction,omitempty"`
+
+	// SubAgents declares specialist personas the main agent can delegate to
+	// as tools (AgentSource). Each runs over the SAME provider and a filtered
+	// view of the SAME server tools, with its own instructions — a persona,
+	// not a separately-configured agent. Empty means no sub-agents.
+	SubAgents []SubAgentConfig `json:"subAgents,omitempty"`
+}
+
+// SubAgentConfig is one delegatable persona. The host builds it into an
+// agent.AgentSource over a child Runner that shares the main provider and a
+// FilterSource-narrowed view of the server tools.
+type SubAgentConfig struct {
+	// Name is the tool name the main agent calls to delegate. Required.
+	Name string `json:"name"`
+
+	// Description tells the main agent when to delegate to this persona.
+	Description string `json:"description,omitempty"`
+
+	// Instructions is the persona's system prompt. Empty means the sub-agent
+	// is defined only by the task it is handed.
+	Instructions string `json:"instructions,omitempty"`
+
+	// Allow narrows which server tools this persona may use (by tool name).
+	// Empty means all server tools.
+	Allow []string `json:"allow,omitempty"`
+
+	// MaxDepth caps sub-agent nesting for this persona. Zero uses the agent
+	// default.
+	MaxDepth int `json:"maxDepth,omitempty"`
 }
 
 // CompactionConfig is the host's view of history compaction; it maps to an
