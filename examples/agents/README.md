@@ -21,3 +21,18 @@ commit. The active connection is a local model, so `just demo` works offline
 against a running LM Studio / Ollama with nothing to configure. A model router
 (OpenRouter, LiteLLM, a gateway) is just another connection — point `baseURL` at
 it. For machine-specific overrides, copy it to `llm.local.json` (gitignored).
+
+## Multi-agent via host config (agentchat)
+
+`agentchat-multi-agent.json` is a sample host config declaring **sub-agent
+personas** (`subAgents`): each is a specialist the main agent delegates to as a
+tool, running on the same provider over a filtered view of the same server
+tools, with its own instructions. Run it:
+
+```bash
+agentchat --config examples/agents/agentchat-multi-agent.json   # needs the demo server running
+```
+
+The sub-agents' activity renders **nested** under the main agent's turn
+(`HostSubAgentEvent`). This is the declarative counterpart to the `multi-agent`
+example, which wires the same `AgentSource`/`Team` primitives by hand.

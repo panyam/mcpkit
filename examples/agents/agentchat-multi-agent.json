@@ -1,0 +1,26 @@
+{
+  "instructions": "You are a supervisor. Delegate research to the researcher and coding to the coder, then synthesize their findings.",
+  "connections": {
+    "active": "local",
+    "connections": {
+      "local": { "type": "lmstudio", "model": "qwen2.5-7b-instruct" }
+    }
+  },
+  "servers": [
+    { "id": "demo", "url": "http://localhost:8787/mcp" }
+  ],
+  "subAgents": [
+    {
+      "name": "researcher",
+      "description": "researches a topic using the available server tools",
+      "instructions": "You are a researcher. Use the tools to look things up, then report concisely.",
+      "allow": ["search"]
+    },
+    {
+      "name": "coder",
+      "description": "writes and verifies code",
+      "instructions": "You are a coder. Write a snippet, verify it with the run tool, then present it.",
+      "allow": ["run_code"]
+    }
+  ]
+}

@@ -321,5 +321,24 @@ func (r *renderer) On(ev HostEvent) {
 		r.taskCompleted(ev.Task)
 	case HostMessage:
 		fmt.Fprintf(r.out, "%s\n", r.dim(ev.Message))
+	case HostSubAgentEvent:
+		r.subAgent(ev.SubAgent)
+	}
+}
+
+// subAgent renders a persona's nested activity indented by depth and tagged
+// by scope: the tools it calls and its final answer. Other lifecycle events
+// (deltas, turn boundaries) are omitted to keep the nested transcript terse.
+func (r *renderer) subAgent(sa agent.SubAgentEvent) {
+	indent := strings.Repeat("  ", sa.Depth)
+	switch sa.Event.Kind {
+	case agent.EventToolBegin:
+		if sa.Event.ToolCall != nil {
+			fmt.Fprintf(r.out, "%s%s\n", indent, r.dim("["+sa.Scope+"] · "+sa.Event.ToolCall.Name))
+		}
+	case agent.EventTurnEnd:
+		if sa.Event.Result != nil && sa.Event.Result.Text != "" {
+			fmt.Fprintf(r.out, "%s%s\n", indent, r.dim("["+sa.Scope+"] → "+sa.Event.Result.Text))
+		}
 	}
 }

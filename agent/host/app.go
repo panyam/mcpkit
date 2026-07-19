@@ -143,6 +143,15 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	app.approval = cfg.Approval.buildApproval(ask)
 
+	// serverTools mirrors the server sources only — no meta-tools, no
+	// sub-agents — so a sub-agent persona gets a filtered view of the servers
+	// without seeing the meta-tools or the other personas (which would let it
+	// recurse). Built only when sub-agents are configured.
+	var serverTools *agent.MultiSource
+	if len(cfg.SubAgents) > 0 {
+		serverTools = agent.NewMultiSource()
+	}
+
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
 			client.WithGetSSEStream(),
@@ -182,6 +191,12 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		if err := multi.Add(sc.ID, src); err != nil {
 			app.Close()
 			return nil, err
+		}
+		if serverTools != nil {
+			if err := serverTools.Add(sc.ID, src); err != nil {
+				app.Close()
+				return nil, err
+			}
 		}
 	}
 
@@ -273,6 +288,17 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// covered by offloading below like any other source).
 	if cfg.Memory != nil {
 		if err := app.registerMemory(multi, o.memoryStore); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
+	// Sub-agent personas are AgentSources added to the aggregate: the main
+	// agent delegates to them as tools. Each runs on the shared provider over
+	// a filtered view of serverTools (built above), so it never sees the
+	// meta-tools or its sibling personas.
+	if len(cfg.SubAgents) > 0 {
+		if err := app.registerSubAgents(multi, serverTools, provider, o.tp); err != nil {
 			app.Close()
 			return nil, err
 		}
