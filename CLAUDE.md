@@ -36,7 +36,7 @@ just tag-push vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; pr
 | `core/` — Protocol types, typed contexts, session APIs | `core/README.md`, `core/CONSTRAINTS.md` |
 | `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md` |
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
-| `agent/` — Host layer: Provider, Runner loop, ToolSource, elicitation, injection/trigger policies, generic event stages (separate go.mod) | `docs/AGENT_DESIGN.md`, `agent/CONSTRAINTS.md` |
+| `agent/` — Host layer: Provider, Runner loop, ToolSource, elicitation, injection/trigger policies, generic event stages (separate go.mod) | `docs/AGENT_DESIGN.md`, `docs/AGENT_MEMORY_FLOW.md`, `docs/AGENT_COMPOSITION.md`, `agent/CONSTRAINTS.md` |
 | `agent/host/` — Reusable host application core: config loading (providers/servers/policies/skills), meta-tools, App/REPL wiring. Surface-agnostic (a CLI or a web-chat both build on it). Nested go.mod under `agent/` | `agent/host/README.md` |
 | `cmd/agentchat/` — Thin terminal CLI over `agent/host` (cobra/viper; separate go.mod) | `cmd/agentchat/README.md` |
 | `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
