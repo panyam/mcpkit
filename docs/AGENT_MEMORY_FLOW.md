@@ -1,6 +1,6 @@
 # Agent Memory — how it wraps the Runner
 
-Design sketch for the Phase 2 memory work (`docs/AGENT_SDK_ROADMAP.md` §A). Nothing here is built yet except the episodic layer (the Phase 1 `RunStore`).
+Design map for the Phase 2 memory work (`docs/AGENT_SDK_ROADMAP.md` §A). **Phase 2 is now SHIPPED (epic 926 closed):** episodic (`RunStore`) + offloading + working memory (`MemorySource`/`MemoryStore`) + compaction (`SummarizingCompactor`) + semantic recall (`Embedder` + `InMemorySemanticStore` + pre-turn `RecallRelevant` injection). What remains are the deferred refinements (a distillation write path, a Scorer/Reranker, pgvector, the injection arbiter, an explicit context pipeline — all filed). The seams below are real code now, not a sketch.
 
 **The one-liner:** persistence keeps the conversation; memory chooses what crosses into the next one. The `RunStore` is about *not losing* things. Memory is about *choosing* things — which tiny subset of everything-ever-known enters the next model call, under a finite budget.
 
@@ -53,19 +53,18 @@ flowchart TD
     classDef loop fill:#f7ecdb,stroke:#b8792d,color:#2a1c08,stroke-width:2px;
     classDef note fill:#f3e2e6,stroke:#a24d5f,color:#2a141a;
 
-    class EP built
-    class PROC built
-    class WK,SEM,INJ,TOOL,HIST,RAG,OFF p2
+    class EP,PROC,WK,SEM,INJ,TOOL,HIST,OFF built
+    class RAG p2
     class RUN loop
     class EXT,CON note
 ```
 
 ## Reading the diagram
 
-- **Top band** — the four memory types. A real taxonomy: each has a different home, write path, and failure mode. Only **episodic** (the `RunStore`) exists; **procedural** is partly covered by skills + the system prompt.
-- **Middle band** — the three entry paths. No new Runner seam. Semantic recall and the working-memory summary arrive as `RoleSystem` messages through `EventInjectionPolicy` (do it *async* so embedding latency stays off the critical path). Working-memory ops, RAG search, and offloading arrive as tools the model calls on demand. Compaction rewrites the head of the `history` slice before `Run` is even called.
+- **Top band** — the four memory types. A real taxonomy: each has a different home, write path, and failure mode. **Episodic** (the `RunStore`), **working** (`MemorySource`/`MemoryStore`), and **semantic** (`Embedder` + `InMemorySemanticStore`) are built; **procedural** is partly covered by skills + the system prompt.
+- **Middle band** — the entry paths. No new Runner seam. The working-memory summary and semantic recall arrive as `RoleSystem` messages through a **dedicated host injection step** (`withMemorySummaryLocked`), NOT through `EventInjectionPolicy` (which is events-only — the reason for that rename). **Read is synchronous** (embed the user's turn, query, inject); the *write* (indexing) is what stays off the critical path, and the automatic distillation write path is still deferred (issue 1022). Working-memory ops and offloading arrive as tools the model calls on demand. Compaction rewrites the head of the `history` slice via the Runner's `Compactor` hook, at the top of the turn.
 - **The spine** — `Run` is stateless over history, so resume / fork / compaction / injection all compose *around* it.
-- **Write path** — after the turn, the episodic log feeds distillation. Storing is trivial; **Extract** (lossy) and **Consolidate** (duplicate vs update vs contradiction) are where memory actually gets hard. The loop closes: consolidated facts re-enter the next turn through injection.
+- **Write path** — the episodic log feeds distillation. Storing is trivial; **Extract** (lossy) and **Consolidate** (duplicate vs update vs contradiction) are where memory actually gets hard, and are the still-deferred part (issue 1022). Today semantic memory is populated by the model calling `remember`, not auto-extracted.
 
 ## Why it's a phase, not a weekend
 
@@ -103,6 +102,8 @@ Primitives other systems expose, and where each lands for us:
 
 **Why none of this forces a change to the first cut:** the `MemoryStore` seam uses the gRPC-style req/resp struct convention. `Namespace`, `Score`, a `GetMemory` point-read, `DeleteAll` — all land as new struct fields or new methods without breaking the interface or any backend (same reason `PutMemoryResponse` is an empty struct). The store starts minimal on purpose and grows additively into the primitives above.
 
-## Sequencing (roadmap §A)
+## Sequencing (roadmap §A) — all shipped
 
-issue 966 offloading → working memory + `MemorySource` → compaction (`SummarizingCompactor`) → embedder / vectorstore recall wired into injection.
+issue 966 offloading → working memory + `MemorySource` (938) → eval harness (974) → compaction `SummarizingCompactor` (939) → `Embedder` + `InMemorySemanticStore` + recall auto-injection (940). Phase 2 complete (epic 926 closed).
+
+**Deferred refinements (filed):** distillation write path (1022, the Extract→Consolidate loop above), Scorer/Reranker multi-signal ranking (1020), pgvector durable store (1019), unified injection arbiter (1024), explicit context-assembly pipeline (1026), faster cosine (1018), metrics seam (1023), LongMemEval dataset loader (1014).
