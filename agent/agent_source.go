@@ -49,6 +49,30 @@ type AgentSourceConfig struct {
 	// MaxDepth caps sub-agent nesting depth (this source's calls plus any
 	// deeper sub-agent calls the child makes). Zero uses DefaultMaxAgentDepth.
 	MaxDepth int
+
+	// OnEvent, when set, receives the child's event stream wrapped in a
+	// SubAgentEvent envelope (scope + depth + the flat Event), so a surface
+	// can render the sub-agent's turn nested under the parent's. Nil drops
+	// the child's events (the sub-agent runs invisibly). Wire OnEvent on
+	// every AgentSource in a tree to the same sink and the scope/depth
+	// disambiguate nested runs.
+	OnEvent func(SubAgentEvent)
+}
+
+// SubAgentEvent is the envelope that carries a sub-agent's event to the
+// parent surface. The scope and depth live on the envelope, NOT on Event, so
+// Event stays flat and wire-serializable (constraint A2): a surface adds
+// sub-agent framing without the core event vocabulary growing a nesting
+// field.
+type SubAgentEvent struct {
+	// Scope is the slash-joined sub-agent path, e.g. "researcher" at the top
+	// level or "researcher/summarizer" one level deeper.
+	Scope string
+	// Depth is the nesting depth: 1 for a top-level sub-agent, 2 for a
+	// sub-agent it spawns, and so on.
+	Depth int
+	// Event is the child's event, unchanged.
+	Event Event
 }
 
 type agentTaskArgs struct {
@@ -115,8 +139,20 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 		return errorToolResult(fmt.Sprintf("sub-agent %q requires a non-empty 'task'", s.cfg.Name)), nil
 	}
 
-	childCtx := withAgentDepth(ctx, depth+1)
-	result, err := s.cfg.Runner.Run(childCtx, []Message{{Role: RoleUser, Text: in.Task}}, func(Event) {})
+	// Extend both ctx threads for the child: depth (guards) and scope (the
+	// path this sub-agent's events are tagged with).
+	childScope := s.cfg.Name
+	if parent := agentScope(ctx); parent != "" {
+		childScope = parent + "/" + s.cfg.Name
+	}
+	childCtx := withAgentScope(withAgentDepth(ctx, depth+1), childScope)
+
+	emit := func(Event) {}
+	if s.cfg.OnEvent != nil {
+		childDepth := depth + 1
+		emit = func(e Event) { s.cfg.OnEvent(SubAgentEvent{Scope: childScope, Depth: childDepth, Event: e}) }
+	}
+	result, err := s.cfg.Runner.Run(childCtx, []Message{{Role: RoleUser, Text: in.Task}}, emit)
 	if err != nil {
 		return errorToolResult(fmt.Sprintf("sub-agent %q failed: %v", s.cfg.Name, err)), nil
 	}
@@ -125,6 +161,20 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 
 type agentDepthKey struct{}
 type agentBudgetKey struct{}
+type agentScopeKey struct{}
+
+// withAgentScope stamps the slash-joined sub-agent path on ctx so a nested
+// AgentSource can prefix its own name and tag its child's events with the
+// full path.
+func withAgentScope(ctx context.Context, scope string) context.Context {
+	return context.WithValue(ctx, agentScopeKey{}, scope)
+}
+
+// agentScope reads the current sub-agent path ("" at the top level).
+func agentScope(ctx context.Context) string {
+	s, _ := ctx.Value(agentScopeKey{}).(string)
+	return s
+}
 
 // withAgentDepth stamps the current sub-agent nesting depth on ctx; each
 // AgentSource increments it before running its child.
