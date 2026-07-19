@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/panyam/mcpkit/core"
@@ -117,6 +118,70 @@ func TestAgentSource_CallBudget(t *testing.T) {
 	res, _ := as.Call(ctx, "b", map[string]any{"task": "go"})
 	if !res.IsError || !strings.Contains(res.Content[0].Text, "budget") {
 		t.Fatalf("second call over budget = %+v, want an IsError budget refusal", res)
+	}
+}
+
+func TestAgentSource_EventNesting(t *testing.T) {
+	var mu sync.Mutex
+	var got []SubAgentEvent
+	sink := func(e SubAgentEvent) { mu.Lock(); got = append(got, e); mu.Unlock() }
+
+	as, _ := NewAgentSource(AgentSourceConfig{
+		Name: "worker", Description: "w", Runner: childRunner(t, StubTurn{Text: "done"}), OnEvent: sink})
+
+	if _, err := as.Call(context.Background(), "worker", map[string]any{"task": "go"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatal("no sub-agent events forwarded")
+	}
+	// every forwarded event carries scope + depth on the envelope (Event stays flat)
+	for _, ev := range got {
+		if ev.Scope != "worker" || ev.Depth != 1 {
+			t.Fatalf("envelope scope/depth = %q/%d, want worker/1", ev.Scope, ev.Depth)
+		}
+	}
+	if got[0].Event.Kind != EventTurnBegin {
+		t.Fatalf("first forwarded event = %v, want the child's turn-begin", got[0].Event.Kind)
+	}
+}
+
+// TestAgentSource_NestedEventScope proves scopes compose down a tree: a
+// sub-agent that spawns another sub-agent yields depth-2 events tagged with
+// the joined path, all reaching one shared sink.
+func TestAgentSource_NestedEventScope(t *testing.T) {
+	var mu sync.Mutex
+	var got []SubAgentEvent
+	sink := func(e SubAgentEvent) { mu.Lock(); got = append(got, e); mu.Unlock() }
+
+	inner, _ := NewAgentSource(AgentSourceConfig{
+		Name: "inner", Description: "i", Runner: childRunner(t, StubTurn{Text: "deep"}), OnEvent: sink})
+	innerTools := NewMultiSource()
+	if err := innerTools.Add("inner-src", inner); err != nil {
+		t.Fatal(err)
+	}
+	outerChild, _ := NewRunner(RunnerConfig{Tools: innerTools, Provider: NewStubProvider(
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "inner", Args: core.NewRawJSON(json.RawMessage(`{"task":"dig"}`))}}},
+		StubTurn{Text: "outer done"},
+	)})
+	outer, _ := NewAgentSource(AgentSourceConfig{
+		Name: "outer", Description: "o", Runner: outerChild, OnEvent: sink})
+
+	if _, err := outer.Call(context.Background(), "outer", map[string]any{"task": "start"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var sawOuter, sawInner bool
+	for _, ev := range got {
+		if ev.Scope == "outer" && ev.Depth == 1 {
+			sawOuter = true
+		}
+		if ev.Scope == "outer/inner" && ev.Depth == 2 {
+			sawInner = true
+		}
+	}
+	if !sawOuter || !sawInner {
+		t.Fatalf("nested scopes missing: sawOuter=%v sawInner=%v", sawOuter, sawInner)
 	}
 }
 
