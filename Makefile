@@ -143,6 +143,7 @@ test-agent: ## Run agent sub-module tests
 	cd agent/host && go test ./... -count=1 -timeout 60s
 	cd cmd/agentchat && go test ./... -count=1 -timeout 60s
 	cd examples/agent-async && go test ./... -count=1 -timeout 60s
+	cd examples/multi-agent && go test ./... -count=1 -timeout 60s
 	cd examples/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario
 	cd examples/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario
 
