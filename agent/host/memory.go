@@ -53,17 +53,39 @@ func (a *App) registerMemory(multi *agent.MultiSource, store agent.MemoryStore) 
 // never fail a turn. Caller holds turnMu and has already appended the user
 // message to a.history.
 func (a *App) withMemorySummaryLocked(ctx context.Context) []agent.Message {
-	if a.memory == nil || a.cfg.Memory == nil || !a.cfg.Memory.InjectSummary {
-		return a.history
-	}
-	summary, err := a.memory.Summary(ctx, a.cfg.Memory.summaryOptions())
-	if err != nil || summary == "" {
+	if a.memory == nil || a.cfg.Memory == nil {
 		return a.history
 	}
 	n := len(a.history)
-	msgs := make([]agent.Message, 0, n+1)
+	if n == 0 {
+		return a.history
+	}
+
+	// Two independent memory-injection producers, each self-capping and each
+	// a RoleSystem message woven in just before the current user message.
+	// Recall (relevant to this turn) sits closest to the user message — most
+	// salient; the summary (ambient scratchpad) precedes it. Neither is
+	// written into a.history (transient — see the RunTurn note).
+	var blocks []string
+	if a.cfg.Memory.InjectSummary {
+		if s, err := a.memory.Summary(ctx, a.cfg.Memory.summaryOptions()); err == nil && s != "" {
+			blocks = append(blocks, s)
+		}
+	}
+	if a.cfg.Memory.InjectRecall {
+		if r, err := a.memory.RecallRelevant(ctx, a.history[n-1].Text, a.cfg.Memory.recallOptions()); err == nil && r != "" {
+			blocks = append(blocks, r)
+		}
+	}
+	if len(blocks) == 0 {
+		return a.history
+	}
+
+	msgs := make([]agent.Message, 0, n+len(blocks))
 	msgs = append(msgs, a.history[:n-1]...)
-	msgs = append(msgs, agent.Message{Role: agent.RoleSystem, Text: summary})
+	for _, b := range blocks {
+		msgs = append(msgs, agent.Message{Role: agent.RoleSystem, Text: b})
+	}
 	msgs = append(msgs, a.history[n-1])
 	return msgs
 }

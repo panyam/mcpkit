@@ -356,6 +356,53 @@ func (m *MemorySource) Summary(ctx context.Context, opts SummaryOptions) (string
 	return "Working memory (notes you saved earlier):\n" + renderMemories(items), nil
 }
 
+// DefaultRecallTopK bounds a relevance recall when RecallOptions.TopK is unset.
+const DefaultRecallTopK = 5
+
+// RecallOptions bounds a pre-turn relevance recall (RecallRelevant).
+type RecallOptions struct {
+	// TopK caps how many of the most-relevant notes are returned. Zero uses
+	// DefaultRecallTopK.
+	TopK int
+	// MinScore drops notes scoring below it — the poison guard: with a
+	// semantic store every note gets some cosine score, so without a floor a
+	// low-TopK recall would inject the least-irrelevant notes even when
+	// nothing is actually relevant. Zero means no floor (keep all TopK).
+	MinScore float64
+}
+
+// RecallRelevant queries the store for notes relevant to query and renders
+// them as a block a host can inject as a RoleSystem message before a turn.
+// Unlike Summary (ambient, recency-budgeted, the whole scratchpad), this is
+// targeted at the current turn: it surfaces what matters for what the user
+// just said. The store's relevance ranking does the work (cosine for a
+// semantic store, substring for the default), so this is backend-agnostic; it
+// returns "" when the query is empty or nothing clears MinScore.
+func (m *MemorySource) RecallRelevant(ctx context.Context, query string, opts RecallOptions) (string, error) {
+	if strings.TrimSpace(query) == "" {
+		return "", nil
+	}
+	topK := opts.TopK
+	if topK <= 0 {
+		topK = DefaultRecallTopK
+	}
+	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{Query: query, Limit: topK})
+	if err != nil {
+		return "", err
+	}
+	kept := make([]MemoryItem, 0, len(resp.Items))
+	for _, sm := range resp.Items {
+		if sm.Score < opts.MinScore {
+			continue
+		}
+		kept = append(kept, sm.Item)
+	}
+	if len(kept) == 0 {
+		return "", nil
+	}
+	return "Relevant to the current message (from your memory):\n" + renderMemories(kept), nil
+}
+
 // budgetMemories trims items (oldest-first) to opts, keeping the newest that
 // fit. MaxItems keeps the last N; MaxChars then drops from the front (oldest)
 // until the rendered length is within budget. The kept notes stay in
