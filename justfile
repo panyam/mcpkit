@@ -203,6 +203,7 @@ test-agent:
     @{{just_executable()}} _go-test agent/host 60s
     @{{just_executable()}} _go-test cmd/agentchat 60s
     @{{just_executable()}} _go-test examples/agent-async 60s
+    @{{just_executable()}} _go-test examples/multi-agent 60s
     @{{just_executable()}} _go-test examples/skills 60s "-run TestAgentScenario"
     @{{just_executable()}} _go-test examples/tasks-v2 60s "-run TestAgentScenario"
 
