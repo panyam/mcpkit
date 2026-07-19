@@ -162,6 +162,9 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("memory-embed-model", "", "with --memory, use semantic recall: embedding model for the memory store (empty = substring match)")
 	fl.String("memory-embed-url", "http://localhost:1234/v1", "OpenAI-compatible /embeddings endpoint for --memory-embed-model")
 	fl.String("memory-embed-api-key-env", "", "env var holding the embeddings API key")
+	fl.Bool("memory-inject-recall", false, "with --memory, inject notes relevant to each user message before the turn (auto-recall; best with --memory-embed-model)")
+	fl.Int("memory-recall-top-k", 0, "with --memory-inject-recall, max relevant notes to inject (0 = default 5)")
+	fl.Float64("memory-recall-min-score", 0, "with --memory-inject-recall, drop recalled notes below this relevance score (0 = no floor)")
 	fl.Int("compact-tokens", 0, "compact history when its estimated token count exceeds N: summarize the head, keep a recent tail (0 = off)")
 	fl.Int("compact-keep-recent", 0, "with --compact-tokens, how many trailing messages to keep verbatim (0 = default 6)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
@@ -241,6 +244,9 @@ func runChat(v *viper.Viper) error {
 			InjectSummary:   v.GetBool("memory-inject-summary"),
 			SummaryMaxItems: v.GetInt("memory-summary-max-items"),
 			SummaryMaxChars: v.GetInt("memory-summary-max-chars"),
+			InjectRecall:    v.GetBool("memory-inject-recall"),
+			RecallTopK:      v.GetInt("memory-recall-top-k"),
+			RecallMinScore:  v.GetFloat64("memory-recall-min-score"),
 		}
 		// A semantic store makes recall similarity-ranked instead of
 		// substring; without an embed model, memory stays the in-memory

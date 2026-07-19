@@ -163,6 +163,45 @@ func TestAppMemorySummaryBudget(t *testing.T) {
 	}
 }
 
+// TestAppInjectsRelevantRecall is the 940 PR2 payoff: with InjectRecall on
+// and a semantic store, the model receives the note relevant to the user's
+// message as background context WITHOUT calling the recall tool — and the
+// injected block is transient (never written into a.history).
+func TestAppInjectsRelevantRecall(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "you use Go"})
+
+	store, err := agent.NewInMemorySemanticStore(agent.StubEmbedder{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = store.PutMemory(context.Background(), agent.PutMemoryRequest{
+		Item: agent.MemoryItem{Key: "lang", Value: "my favorite programming language is Go"}})
+
+	cfg := testConfig(ts.URL)
+	cfg.Memory = &MemoryConfig{InjectRecall: true}
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub), WithMemoryStore(store))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "which programming language do i use?"); err != nil {
+		t.Fatal(err)
+	}
+
+	// the model saw the relevant note injected as context
+	msgs := stub.Requests()[0].Messages
+	if !hasSystemContaining(msgs, "Relevant to the current message") || !hasSystemContaining(msgs, "lang: my favorite") {
+		t.Fatalf("relevant recall was not injected into the model request: %+v", msgs)
+	}
+	// transient: the injected block is not persisted into history
+	if countSystemContaining(app.history, "Relevant to the current message") != 0 {
+		t.Fatal("recall injection must be transient, not written to a.history")
+	}
+}
+
 func hasSystemContaining(msgs []agent.Message, sub string) bool {
 	return countSystemContaining(msgs, sub) > 0
 }
