@@ -43,6 +43,15 @@ model manages its own async through meta-tools today: `create_trigger`,
   `cancel_agent`, `await_agent`, `transfer_to`, `schedule` — the async-control
   plane extended to sub-agents, so "supervision/orchestration" is *a Runner
   whose tools control other Runners*, not a separate engine.
+- **Composition-via-tools** — the same principle one level up: not just steering
+  *execution* but mutating the *graph*. Membership is **static today** (`Team`
+  declares its members at construction; a fixed, validated handoff graph), and
+  **model-driven dynamic** is the deferred extension (issue 1038): an agent
+  **catalog** the model composes from via `add_agent` / `remove_agent` /
+  `spawn(role)`, with the transfer graph recomputed as it changes. Dynamic
+  composition trades the static graph's determinism, so the depth / budget /
+  handoff caps matter *more* — a model that grows its own tree needs hard
+  bounds.
 - **Interruptible turn** (opt-in) — reacting to a signal or a partial result
   mid-fan-out breaks the join barrier. Gated so the default fan-out-then-join
   stays deterministic; only a signal-wired turn becomes interruptible.
