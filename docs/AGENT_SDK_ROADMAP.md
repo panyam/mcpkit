@@ -324,9 +324,22 @@ injection arbiter (1024) · explicit context-assembly pipeline (1026) · faster 
 durable/session-scoped MemoryStore backends (1003) · LongMemEval loader (1014) + eval adapter seam
 (1015) · binary offloading (979) · streaming/handle-based large results (980).
 
-**Phase 3 — composition:**
-`SubAgent` + `AgentSource` (B) · sub-agent event nesting (B) · `Team`/`Orchestrator` handoff +
-depth/budget caps (B).
+**Phase 3 — composition: ✅ SHIPPED (epic 927, closed).** Design frame: `docs/AGENT_COMPOSITION.md`
+(the two-axis model — context via injection, control via tools + signals; observability the third
+channel). Multi-agent is not a new engine; it wraps the same stateless `Runner`.
+- `AgentSource` (941, PR 1028): agent-as-tool — a child Runner exposed to a parent as a tool over its
+  own isolated slice; depth (`MaxDepth`) + ctx-threaded aggregate call budget (`WithAgentCallBudget`)
+  guards; supervision falls out via a `MultiSource` of `AgentSource`s.
+- `SubAgentEvent` nesting (942, PR 1029): the child's turn-lifecycle emit stream surfaces to the
+  parent surface, scoped on an envelope (`Event` stays wire-flat, A2). NOT domain-event
+  subscriptions — a sub-agent's `subscribe_events` injects into its OWN context.
+- `Team` handoff (943, PR 1030): transfer control (not call-and-return) via `transfer_to_<name>`
+  tools + a shared-thread swap loop; static membership; `MaxHandoffs` ping-pong cap; per-Run ctx
+  handoff signal. `examples/multi-agent` (PR 1034) demos both modes offline.
+Deferred (new scope, filed): host multi-agent surface (1031) · aggregate step/token tree budget
+(1032) · parallel fan-out (1033) · async sub-agents / Task form (1035) · upward signals +
+runner-control meta-tools + interruptible turn (1036) · model-driven dynamic composition + agent
+catalog (1038). Handoff-as-injection (per-agent actor context) is the general form of `Team`.
 
 **Phase 4 — orchestration:**
 `workflow/` engine (C) · `SuspendNode` via `TriggerPolicy` + `RunStore` checkpoint (C) ·
