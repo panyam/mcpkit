@@ -109,6 +109,22 @@ Two orthogonal knobs recur across the rows: **context isolation** (fresh slice
 vs shared thread vs injected-into-a-persistent-context) and **control timing**
 (blocking this turn vs async-and-injected-later vs interrupt-on-signal).
 
+## Multi-model falls out for free
+
+There is no separate multi-model machinery — **every `Runner` carries its own
+`Provider`**, so composing models is just composing agents. A heavy supervisor
+delegating to cheaper sub-agents is a supervisor `Runner` on one model whose
+`AgentSource`/`TeamMember` children each have a `RunnerConfig.Provider` on
+another. "Route the hard subtask to the big model, the bulk to a small one" is
+which provider you hand each child — an axis-agnostic config property, not a
+composition primitive.
+
+*Within* a single conversation, switching models is a different seam:
+`ConnectionRegistry` + `providerSwitch` (the `/provider` command),
+`FailoverProvider` (primary/backup with cooldown), and the deferred
+per-turn/per-role routing policy (issue 991). Across agents = per-`Runner`
+provider (here); within one agent = provider switching (that seam).
+
 ## Handoff, two ways
 
 Handoff moves two things: **(a) context** — the specialist needs to know what
