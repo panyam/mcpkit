@@ -47,6 +47,28 @@ model manages its own async through meta-tools today: `create_trigger`,
   mid-fan-out breaks the join barrier. Gated so the default fan-out-then-join
   stays deterministic; only a signal-wired turn becomes interruptible.
 
+### A note on the third channel — observability (not an axis)
+
+The two axes are about how *context* and *control* move. There is a third,
+pre-existing channel that is neither: the Runner's **emit stream** —
+`emit func(Event)`, the turn-lifecycle events (`turn-begin`, `tool-begin`,
+`text-delta`, `turn-end`) a surface renders and a tracer records. It carries
+**observability out**, fire-and-forget; it never affects execution.
+
+`SubAgentEvent` (942) is exactly this channel, **nested**: a sub-agent's emit
+stream forwarded to the parent's surface, scoped, so the parent can *render*
+what the child is doing. It is not context-in and not control — do not confuse
+it with either:
+
+- It carries `agent.Event` (lifecycle), **not** MCP domain events. If a
+  sub-agent subscribes to some event `e1`, that `e1` is injected into the
+  **sub-agent's** context, never the parent's; the parent only sees the
+  sub-agent's *activity* (its lifecycle events), never its *inputs*.
+- Because it is observability, the control signals (1036) do not replace it —
+  a "stop the siblings" signal is not a render event. The two may share one
+  upward child→parent pipe, but with different consumers (a surface that
+  renders vs. the Runner that acts).
+
 ```mermaid
 flowchart TD
     subgraph ctx["CONTEXT axis — injection"]
