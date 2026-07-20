@@ -118,6 +118,30 @@ func TestResolveBaseURL(t *testing.T) {
 	if u, _ := resolveBaseURL(ConnectionConfig{Type: "anthropic"}); u != "https://api.anthropic.com" {
 		t.Fatalf("anthropic base = %q", u)
 	}
+	if u, _ := resolveBaseURL(ConnectionConfig{Type: "openrouter"}); u != "https://openrouter.ai/api/v1" {
+		t.Fatalf("openrouter base = %q", u)
+	}
+	if u, _ := resolveBaseURL(ConnectionConfig{Type: "litellm"}); u != "http://localhost:4000/v1" {
+		t.Fatalf("litellm base = %q", u)
+	}
+	// a router connection can override the preset base (hosted litellm)
+	if u, _ := resolveBaseURL(ConnectionConfig{Type: "litellm", BaseURL: "https://gw.example/v1"}); u != "https://gw.example/v1" {
+		t.Fatalf("litellm BaseURL override = %q", u)
+	}
+}
+
+// TestRouterPresets_BuildOpenAIWire pins that the router types build the
+// OpenAI-wire provider (they are gateways, not a native provider).
+func TestRouterPresets_BuildOpenAIWire(t *testing.T) {
+	for _, typ := range []string{"openrouter", "litellm"} {
+		p, err := DefaultProviderBuilder(ConnectionConfig{Type: typ, Model: "m"})
+		if err != nil {
+			t.Fatalf("%s build: %v", typ, err)
+		}
+		if _, ok := p.(*agent.OpenAIProvider); !ok {
+			t.Fatalf("%s built %T, want *agent.OpenAIProvider", typ, p)
+		}
+	}
 }
 
 // TestDefaultProviderBuilder_ProviderType pins that only "anthropic" routes to
