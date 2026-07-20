@@ -27,7 +27,9 @@ flag, because it is a separate endpoint from the chat model.
 
 - Docker (for the backend + observability stacks).
 - A local chat model on an OpenAI-compatible endpoint (LM Studio / Ollama), or
-  point `connections.active` at a cloud provider in `kitchen-sink.json`.
+  a cloud provider — `kitchen-sink.json` ships `cloud` (OpenAI), `gemini`, and
+  `anthropic` connections (set the matching `*_API_KEY` env var). Point
+  `connections.active` at one, or switch at runtime with `/provider`.
 - An OpenAI-compatible **embeddings** endpoint for semantic memory. `just check`
   tells you exactly what to start if it's missing.
 

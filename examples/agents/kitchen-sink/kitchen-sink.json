@@ -5,7 +5,9 @@
     "connections": {
       "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
       "ollama": { "type": "ollama", "model": "llama3.1" },
-      "cloud":  { "type": "openai", "model": "gpt-4o", "apiKeyEnv": "OPENAI_API_KEY" }
+      "cloud":  { "type": "openai", "model": "gpt-4o", "apiKeyEnv": "OPENAI_API_KEY" },
+      "gemini": { "type": "gemini", "model": "gemini-2.5-flash", "apiKeyEnv": "GEMINI_API_KEY" },
+      "anthropic": { "type": "anthropic", "model": "claude-sonnet-5", "apiKeyEnv": "ANTHROPIC_API_KEY" }
     }
   },
   "servers": [
