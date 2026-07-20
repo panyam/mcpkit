@@ -55,9 +55,11 @@ func (c *ConnectionsConfig) EmbedderConnection() (ConnectionConfig, bool) {
 // resolve, or construction fails.
 type ConnectionConfig struct {
 	// Type names a built-in endpoint profile ("lmstudio", "openai",
-	// "ollama", "gemini", "anthropic"). All but "anthropic" speak the OpenAI
-	// wire; "anthropic" uses the native Messages-API provider (x-api-key
-	// auth, /v1/messages). Optional when BaseURL is set.
+	// "ollama", "gemini", "anthropic", "openrouter", "litellm"). All but
+	// "anthropic" speak the OpenAI wire; "anthropic" uses the native
+	// Messages-API provider (x-api-key auth, /v1/messages). "openrouter" and
+	// "litellm" are model-router gateways (set BaseURL to override the
+	// litellm proxy's local default). Optional when BaseURL is set.
 	Type string `json:"type,omitempty"`
 
 	// BaseURL is the API root including any version prefix, e.g.
@@ -93,18 +95,23 @@ type ThinkingHint struct {
 	CloseTag string `json:"closeTag,omitempty"`
 }
 
-// connectionBaseURLs maps a built-in Type to its default API root. Local
-// runtimes, the OpenAI cloud, Gemini's OpenAI-compatible endpoint, and
-// Anthropic; anything else sets BaseURL explicitly. Every type here is
-// OpenAI-wire EXCEPT "anthropic", which DefaultProviderBuilder routes to the
-// native Messages-API provider (see below) — the base still resolves here so
-// registry validation and BaseURL overrides work uniformly.
+// connectionBaseURLs maps a built-in Type to its default API root: local
+// runtimes, the OpenAI cloud, Gemini's OpenAI-compatible endpoint, Anthropic,
+// and the OpenAI-wire model routers (OpenRouter cloud, LiteLLM proxy).
+// Anything else sets BaseURL explicitly. Every type here is OpenAI-wire EXCEPT
+// "anthropic", which DefaultProviderBuilder routes to the native Messages-API
+// provider (see below) — the base still resolves here so registry validation
+// and BaseURL overrides work uniformly. A router is just a connection whose
+// base URL is the gateway; "litellm" defaults to the proxy's local port and is
+// typically overridden with BaseURL for a hosted deployment.
 var connectionBaseURLs = map[string]string{
-	"lmstudio":  "http://localhost:1234/v1",
-	"openai":    "https://api.openai.com/v1",
-	"ollama":    "http://localhost:11434/v1",
-	"gemini":    "https://generativelanguage.googleapis.com/v1beta/openai",
-	"anthropic": "https://api.anthropic.com",
+	"lmstudio":   "http://localhost:1234/v1",
+	"openai":     "https://api.openai.com/v1",
+	"ollama":     "http://localhost:11434/v1",
+	"gemini":     "https://generativelanguage.googleapis.com/v1beta/openai",
+	"anthropic":  "https://api.anthropic.com",
+	"openrouter": "https://openrouter.ai/api/v1",
+	"litellm":    "http://localhost:4000/v1",
 }
 
 // ProviderBuilder builds a Provider from a resolved connection. Injected
