@@ -22,6 +22,7 @@ import (
 	"github.com/panyam/mcpkit/agent/host"
 	gormstore "github.com/panyam/mcpkit/agent/store/gorm"
 	redisstore "github.com/panyam/mcpkit/agent/store/redis"
+	"github.com/panyam/mcpkit/core"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -120,6 +121,24 @@ func buildToolResultStore(spec, dir string) (agent.ToolResultStore, error) {
 	}
 }
 
+// buildSemanticMemoryStore picks the semantic MemoryStore backend for
+// --memory-embed-model. A postgres --session-store routes to the durable
+// pgvector store (ANN top-k in SQL, survives restart) over its own handle,
+// with dim as the pgvector column width; every other spec (including empty,
+// sqlite, and redis, which have no vector index) uses the in-process
+// brute-force store. Both embed client-side through embedder, so recall is
+// identical apart from durability and scale.
+func buildSemanticMemoryStore(sessionStore string, embedder agent.Embedder, dim int, tp core.TracerProvider) (agent.MemoryStore, error) {
+	if strings.HasPrefix(sessionStore, "postgres://") || strings.HasPrefix(sessionStore, "postgresql://") {
+		db, err := openGormDB(postgres.Open(sessionStore))
+		if err != nil {
+			return nil, err
+		}
+		return gormstore.NewSemanticMemoryStore(db, embedder, gormstore.WithVectorDimensions(dim))
+	}
+	return agent.NewInMemorySemanticStore(embedder, agent.WithSemanticTracerProvider(tp))
+}
+
 const version = "0.1.0"
 
 // newRoot builds the CLI. Every flag is env-overridable with the AGENTCHAT_
@@ -162,6 +181,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("memory-embed-model", "", "with --memory, use semantic recall: embedding model for the memory store (empty = substring match)")
 	fl.String("memory-embed-url", "http://localhost:1234/v1", "OpenAI-compatible /embeddings endpoint for --memory-embed-model")
 	fl.String("memory-embed-api-key-env", "", "env var holding the embeddings API key")
+	fl.Int("memory-embed-dim", 1536, "with --memory-embed-model on a postgres --session-store, the pgvector column width (must match the embedding model)")
 	fl.Bool("memory-inject-recall", false, "with --memory, inject notes relevant to each user message before the turn (auto-recall; best with --memory-embed-model)")
 	fl.Int("memory-recall-top-k", 0, "with --memory-inject-recall, max relevant notes to inject (0 = default 5)")
 	fl.Float64("memory-recall-min-score", 0, "with --memory-inject-recall, drop recalled notes below this relevance score (0 = no floor)")
@@ -261,7 +281,7 @@ func runChat(v *viper.Viper) error {
 			if err != nil {
 				return err
 			}
-			store, err := agent.NewInMemorySemanticStore(embedder, agent.WithSemanticTracerProvider(tp))
+			store, err := buildSemanticMemoryStore(v.GetString("session-store"), embedder, v.GetInt("memory-embed-dim"), tp)
 			if err != nil {
 				return err
 			}
