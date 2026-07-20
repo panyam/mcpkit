@@ -1,7 +1,7 @@
 {
   "instructions": "You are a capable assistant with access to MCP tools and two specialist sub-agents (researcher, analyst). Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and keep answers concise.",
   "connections": {
-    "active": "openai-5.1",
+    "active": "deepseek-r1",
     "embedder": "openai-embed",
     "connections": {
 
@@ -9,7 +9,11 @@
       "gemini-embed": { "type": "gemini", "model": "text-embedding-004", "dim": 768, "apiKeyEnv": "GEMINI_API_KEY" },
 
       "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
+      "local-thinker": { "type": "lmstudio", "model": "deepseek-r1-distill-llama-8b", "thinkingHint": { "openTag": "<think>", "closeTag": "</think>" } },
+      "r1-qwen-7b": { "type": "lmstudio", "model": "deepseek-r1-distill-qwen-7b", "thinkingHint": { "openTag": "<think>", "closeTag": "</think>" } },
       "ollama": { "type": "ollama", "model": "llama3.1" },
+
+      "deepseek-r1": { "baseUrl": "https://api.deepseek.com", "model": "deepseek-reasoner", "apiKeyEnv": "DEEPSEEK_API_KEY" },
 
       "openai-5.1":      { "type": "openai", "model": "gpt-5.1", "apiKeyEnv": "OPENAI_API_KEY" },
       "openai-5.1-mini": { "type": "openai", "model": "gpt-5.1-mini", "apiKeyEnv": "OPENAI_API_KEY" },

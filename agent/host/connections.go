@@ -81,9 +81,10 @@ type ConnectionConfig struct {
 	Dim int `json:"dim,omitempty"`
 
 	// ThinkingHint describes how this model delimits inline reasoning, for
-	// models that emit it in the text stream (e.g. <think>…</think>).
-	// Carried through the registry; the stream parser that acts on it is a
-	// follow-up (issue 989) — for now it is metadata.
+	// models that emit it in the text stream (e.g. <think>…</think>). When
+	// set, DefaultProviderBuilder wraps the provider so the delimited text is
+	// re-tagged as reasoning (agent.NewThinkingProvider). A nil hint or empty
+	// CloseTag leaves the provider unwrapped.
 	ThinkingHint *ThinkingHint `json:"thinkingHint,omitempty"`
 }
 
@@ -133,18 +134,31 @@ func DefaultProviderBuilder(conn ConnectionConfig) (agent.Provider, error) {
 	if conn.APIKeyEnv != "" {
 		key = os.Getenv(conn.APIKeyEnv)
 	}
+	var p agent.Provider
 	if conn.Type == "anthropic" {
-		return agent.NewAnthropicProvider(agent.AnthropicConfig{
+		p, err = agent.NewAnthropicProvider(agent.AnthropicConfig{
+			BaseURL: base,
+			Model:   conn.Model,
+			APIKey:  key,
+		})
+	} else {
+		p, err = agent.NewOpenAIProvider(agent.OpenAIConfig{
 			BaseURL: base,
 			Model:   conn.Model,
 			APIKey:  key,
 		})
 	}
-	return agent.NewOpenAIProvider(agent.OpenAIConfig{
-		BaseURL: base,
-		Model:   conn.Model,
-		APIKey:  key,
-	})
+	if err != nil {
+		return nil, err
+	}
+	// A ThinkingHint activates the inline-reasoning parser: a model that emits
+	// "<think>…</think>" in its text stream gets that content re-tagged as
+	// reasoning, so the surface renders it as thinking. Inert when CloseTag is
+	// empty (NewThinkingProvider returns p unwrapped).
+	if h := conn.ThinkingHint; h != nil {
+		p = agent.NewThinkingProvider(p, h.OpenTag, h.CloseTag)
+	}
+	return p, nil
 }
 
 // BuildEmbedder builds an agent.Embedder from an embedder connection, the
