@@ -30,13 +30,24 @@ UI="${UI:-tui}"
 
 bash "$DIR/preflight.sh"
 
+# Build the binaries up front, then run them directly (NOT `go run`). Two
+# reasons: `go run` recompiles on every launch — a 20-30s pause after "booting"
+# with no output, which reads as a hang — and it wraps agentchat in a parent
+# process that interferes with bubbletea's raw-mode TTY handling, so the inline
+# prompt doesn't render. Building once and exec'ing the binary fixes both.
+BIN="${KITCHEN_SINK_BIN:-${TMPDIR:-/tmp}/kitchen-sink-bin}"
+mkdir -p "$BIN"
+echo "==> building demo server + agentchat (first build is slow; cached after)"
+( cd "$DIR/server" && go build -o "$BIN/server" . )
+( cd "$ROOT/cmd/agentchat" && go build -o "$BIN/agentchat" . )
+
 # Redirect the demo server's logs to a file — its stdout/stderr (and mcpkit's
 # per-connection SSE logging) share this terminal with agentchat's inline TUI
 # and would clobber the input region otherwise. Tail it in another window to
 # watch tool calls: tail -f "$SERVER_LOG".
 SERVER_LOG="${SERVER_LOG:-${TMPDIR:-/tmp}/kitchen-sink-server.log}"
 echo "==> booting kitchen-sink demo server on :8788 (logs -> $SERVER_LOG)"
-( cd "$DIR/server" && go run . ) >"$SERVER_LOG" 2>&1 &
+"$BIN/server" >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
@@ -46,7 +57,6 @@ for _ in $(seq 1 30); do
 done
 
 echo "==> launching agentchat (session=$SESSION, store=$SESSION_STORE)"
-cd "$ROOT/cmd/agentchat"
 args=(
 	--config "$DIR/kitchen-sink.json"
 	--session-store "$SESSION_STORE"
@@ -65,4 +75,4 @@ if [ -n "$EMBED_MODEL" ]; then
 	[ -n "$EMBED_API_KEY_ENV" ] && args+=(--memory-embed-api-key-env "$EMBED_API_KEY_ENV")
 fi
 
-exec go run . "${args[@]}"
+exec "$BIN/agentchat" "${args[@]}"
