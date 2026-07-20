@@ -1,6 +1,6 @@
 # Agent Memory — how it wraps the Runner
 
-Design map for the Phase 2 memory work (`docs/AGENT_SDK_ROADMAP.md` §A). **Phase 2 is now SHIPPED (epic 926 closed):** episodic (`RunStore`) + offloading + working memory (`MemorySource`/`MemoryStore`) + compaction (`SummarizingCompactor`) + semantic recall (`Embedder` + `InMemorySemanticStore` + pre-turn `RecallRelevant` injection). What remains are the deferred refinements (a distillation write path, a Scorer/Reranker, pgvector, the injection arbiter, an explicit context pipeline — all filed). The seams below are real code now, not a sketch.
+Design map for the Phase 2 memory work (`docs/AGENT_SDK_ROADMAP.md` §A). **Phase 2 is now SHIPPED (epic 926 closed):** episodic (`RunStore`) + offloading + working memory (`MemorySource`/`MemoryStore`) + compaction (`SummarizingCompactor`) + semantic recall (`Embedder` + `InMemorySemanticStore` + pre-turn `RecallRelevant` injection). The durable pgvector semantic store (issue 1019) has since landed (`gormstore.SemanticMemoryStore`); what remains are the deferred refinements (a distillation write path, a Scorer/Reranker, the injection arbiter, an explicit context pipeline — all filed). The seams below are real code now, not a sketch.
 
 **The one-liner:** persistence keeps the conversation; memory chooses what crosses into the next one. The `RunStore` is about *not losing* things. Memory is about *choosing* things — which tiny subset of everything-ever-known enters the next model call, under a finite budget.
 
@@ -106,4 +106,6 @@ Primitives other systems expose, and where each lands for us:
 
 issue 966 offloading → working memory + `MemorySource` (938) → eval harness (974) → compaction `SummarizingCompactor` (939) → `Embedder` + `InMemorySemanticStore` + recall auto-injection (940). Phase 2 complete (epic 926 closed).
 
-**Deferred refinements (filed):** distillation write path (1022, the Extract→Consolidate loop above), Scorer/Reranker multi-signal ranking (1020), pgvector durable store (1019), unified injection arbiter (1024), explicit context-assembly pipeline (1026), faster cosine (1018), metrics seam (1023), LongMemEval dataset loader (1014).
+**Durable semantic store (issue 1019) shipped:** `gormstore.SemanticMemoryStore` (`agent/store/gorm`) is the durable, ANN-backed counterpart to `InMemorySemanticStore` — Postgres + pgvector, same `MemoryStore` contract, same client-side `Embedder`, but the top-k lives in SQL (`ORDER BY embedding <=> $query LIMIT k` over an HNSW cosine index) so recall survives process exit and scales past a scratchpad. A namespace column scopes many sessions to one table; the per-request `Namespace` field stays with issue 1003. agentchat routes a postgres `--session-store` + `--memory-embed-model` here (one spec backs runs, blobs, and semantic memory).
+
+**Deferred refinements (filed):** distillation write path (1022, the Extract→Consolidate loop above), Scorer/Reranker multi-signal ranking (1020), unified injection arbiter (1024), explicit context-assembly pipeline (1026), faster cosine (1018), metrics seam (1023), LongMemEval dataset loader (1014).
