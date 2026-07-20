@@ -60,7 +60,10 @@ jobs:
         run: cd cmd/agentchat && go test ./... -v
 
       - name: Run agent-async example test
-        run: cd examples/agent-async && go test ./... -v
+        run: cd examples/agents/agent-async && go test ./... -v
+
+      - name: Run multi-agent example test
+        run: cd examples/agents/multi-agent && go test ./... -v
 
       - name: Run skills agent-mode test
         run: cd examples/skills && go test ./... -v -run TestAgentScenario
