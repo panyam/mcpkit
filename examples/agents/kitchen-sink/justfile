@@ -1,0 +1,92 @@
+# kitchen-sink — every agent feature wired at once.
+#
+# Quick start:
+#   just allup     # bring up postgres+pgvector and the observability stack
+#   just run       # preflight, boot the demo server, launch agentchat
+#   just alldown   # tear the stacks back down
+#
+# Every store/endpoint below is a variable: override on the CLI or via env,
+#   e.g.  SESSION=demo2 EMBED_DIM=1536 just run
+# The chat MODEL comes from kitchen-sink.json's connections block (offline
+# local by default); only the embedder is passed by flag.
+
+# --- backends (durable sessions, offload blobs, semantic memory) ----------
+export SESSION_STORE := env_var_or_default("SESSION_STORE", "postgres://postgres:postgres@localhost:5432/agent")
+export SESSION       := env_var_or_default("SESSION", "kitchen-sink")
+
+# --- tool-result offloading ----------------------------------------------
+export OFFLOAD_THRESHOLD := env_var_or_default("OFFLOAD_THRESHOLD", "1024")
+
+# --- semantic pgvector memory (embedder is an OpenAI-compatible endpoint) --
+export EMBED_MODEL       := env_var_or_default("EMBED_MODEL", "text-embedding-nomic-embed-text-v1.5")
+export EMBED_URL         := env_var_or_default("EMBED_URL", "http://localhost:1234/v1")
+export EMBED_DIM         := env_var_or_default("EMBED_DIM", "768")
+export EMBED_API_KEY_ENV := env_var_or_default("EMBED_API_KEY_ENV", "")
+
+# --- compaction ----------------------------------------------------------
+export COMPACT_TOKENS := env_var_or_default("COMPACT_TOKENS", "8000")
+
+# --- observability -------------------------------------------------------
+export EXPORTER      := env_var_or_default("EXPORTER", "otlp")
+export OTLP_ENDPOINT := env_var_or_default("OTLP_ENDPOINT", "localhost:4317")
+
+# --- misc ----------------------------------------------------------------
+export UI      := env_var_or_default("UI", "tui")
+export PG_HOST := env_var_or_default("PG_HOST", "localhost")
+export PG_PORT := env_var_or_default("PG_PORT", "5432")
+export PG_DB   := env_var_or_default("PG_DB", "agent")
+export PG_USER := env_var_or_default("PG_USER", "postgres")
+
+# List targets (default).
+default:
+    @just --list
+
+# Probe every backend; print bring-up instructions for whatever is missing.
+check:
+    @bash preflight.sh
+
+# Alias for check.
+preflight: check
+
+# Preflight, boot the demo server, launch agentchat with everything wired.
+run:
+    @bash run.sh
+
+# Alias for run.
+demo: run
+
+# Bring up ALL stacks kitchen-sink can use (backends + observability).
+allup:
+    cd ../../../docker/backends && just up
+    cd ../../../docker/observability && just up
+    @echo ""
+    @echo "  Stacks up. The embedder is external (LM Studio / Ollama) — see 'just check'."
+
+# Tear down ALL stacks brought up by allup.
+alldown:
+    cd ../../../docker/observability && just down
+    cd ../../../docker/backends && just down
+
+# Bring up only the backends stack (postgres+pgvector, redis, keycloak).
+up:
+    cd ../../../docker/backends && just up
+
+# Bring up only the observability stack (grafana/tempo/loki/otel-collector).
+obs-up:
+    cd ../../../docker/observability && just up
+
+# Open a psql shell on the agent DB (inspect agent_runs / agent_memories).
+psql:
+    docker exec -it mcpkit-postgres psql -U {{PG_USER}} -d {{PG_DB}}
+
+# Show the durable semantic-memory rows for the current session.
+mem:
+    docker exec mcpkit-postgres psql -U {{PG_USER}} -d {{PG_DB}} -c "select namespace, key, created_at from agent_memories order by created_at;"
+
+# Boot just the demo MCP server in the foreground (:8788).
+server:
+    cd server && go run .
+
+# Build the demo server (compile check).
+build:
+    cd server && go build ./...

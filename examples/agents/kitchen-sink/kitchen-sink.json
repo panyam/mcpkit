@@ -1,0 +1,28 @@
+{
+  "instructions": "You are a capable assistant with access to MCP tools and two specialist sub-agents (researcher, analyst). Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and keep answers concise.",
+  "connections": {
+    "active": "local",
+    "connections": {
+      "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
+      "ollama": { "type": "ollama", "model": "llama3.1" },
+      "cloud":  { "type": "openai", "model": "gpt-4o", "apiKeyEnv": "OPENAI_API_KEY" }
+    }
+  },
+  "servers": [
+    { "id": "demo", "url": "http://localhost:8788/mcp" }
+  ],
+  "subAgents": [
+    {
+      "name": "researcher",
+      "description": "Researches a topic and produces a detailed report using the demo server's report tool.",
+      "instructions": "You are a researcher. Call the report tool for the requested topic, then summarize the key points concisely.",
+      "allow": ["report"]
+    },
+    {
+      "name": "analyst",
+      "description": "Computes summary statistics for a list of numbers using the analyze tool.",
+      "instructions": "You are a data analyst. Call the analyze tool on the numbers you are given and explain the result in one sentence.",
+      "allow": ["analyze"]
+    }
+  ]
+}
