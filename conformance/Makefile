@@ -53,90 +53,16 @@ testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/au
 	cd $(REPO_ROOT) && bash scripts/conformance-auth-test.sh
 
 testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
-	@cd $(REPO_ROOT)/examples/tasks && go build -o tasks .
-	@$(REPO_ROOT)/examples/tasks/tasks --serve -addr :18091 & PID=$$!; \
-	for i in $$(seq 1 30); do \
-		curl -sf -o /dev/null -X POST http://localhost:18091/mcp \
-			-H "Content-Type: application/json" \
-			-H "Accept: application/json, text/event-stream" \
-			-d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"healthcheck","version":"0.0"}}}' \
-			&& break; \
-		sleep 0.5; \
-	done; \
-	(cd $(CONFORMANCE_DIR) && npm install --silent && \
-	SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts); \
-	RC=$$?; kill $$PID 2>/dev/null; wait $$PID 2>/dev/null; exit $$RC
+	@bash $(CONFORMANCE_DIR)/scripts/conf-tasks.sh
 
 testconf-tasks-v2: ## Run SEP-2663 tasks conformance — upstream scenarios + mcpkit-local stricter sentinel
-	@if [ ! -d "$(MCPCONFORMANCE_TASKS_V2_PATH)" ]; then \
-		echo "MCPCONFORMANCE_TASKS_V2_PATH=$(MCPCONFORMANCE_TASKS_V2_PATH) does not exist."; \
-		echo "Clone https://github.com/modelcontextprotocol/conformance there or set MCPCONFORMANCE_TASKS_V2_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/tasks-v2 && go build -o tasks-v2 .)
-	(cd $(MCPCONFORMANCE_TASKS_V2_PATH) && npm install --silent && \
-		TASKS_SERVER_URL=http://localhost:18092/mcp \
-		TASKS_SERVER_CMD="$(REPO_ROOT)/examples/tasks-v2/tasks-v2 --serve --addr :18092" \
-		npx vitest run src/scenarios/server/all-scenarios.test.ts)
-	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run tasks-v2/)
+	@bash $(CONFORMANCE_DIR)/scripts/conf-tasks-v2.sh
 
 testconf-mrtr: ## Run SEP-2322 MRTR conformance — upstream scenarios + mcpkit-local stricter sentinel
-	@if [ ! -d "$(MCPCONFORMANCE_MRTR_PATH)" ]; then \
-		echo "MCPCONFORMANCE_MRTR_PATH=$(MCPCONFORMANCE_MRTR_PATH) does not exist."; \
-		echo "Clone https://github.com/modelcontextprotocol/conformance there or set MCPCONFORMANCE_MRTR_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/mrtr && go build -o mrtr-demo .)
-	(cd $(MCPCONFORMANCE_MRTR_PATH) && npm install --silent && \
-		MRTR_SERVER_URL=http://localhost:18093/mcp \
-		MRTR_SERVER_CMD="$(REPO_ROOT)/examples/mrtr/mrtr-demo --serve --addr :18093" \
-		npx vitest run src/scenarios/server/negative-mrtr.test.ts)
-	(cd $(CONFORMANCE_DIR) && npm install --silent && npx vitest run mrtr/)
+	@bash $(CONFORMANCE_DIR)/scripts/conf-mrtr.sh
 
 testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/stateless via upstream's ServerStatelessScenario class
-	@if [ ! -d "$(MCPCONFORMANCE_STATELESS_PATH)" ]; then \
-		echo "MCPCONFORMANCE_STATELESS_PATH=$(MCPCONFORMANCE_STATELESS_PATH) does not exist."; \
-		echo "Clone https://github.com/modelcontextprotocol/conformance there:"; \
-		echo "  git clone https://github.com/modelcontextprotocol/conformance.git $(MCPCONFORMANCE_STATELESS_PATH)"; \
-		echo "Or set MCPCONFORMANCE_STATELESS_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/stateless && go build -o stateless-demo .)
-	@OUT=$$(mktemp -d -t conf-stateless.XXXXXX); \
-	echo "Spawning fixture on :18100, scratch dir $$OUT"; \
-	$(REPO_ROOT)/examples/stateless/stateless-demo --serve --addr=:18100 > $$OUT/server.log 2>&1 & \
-	PID=$$!; \
-	for i in 1 2 3 4 5 6 7 8 9 10; do \
-		curl -sf -X POST -H "Content-Type: application/json" \
-			-d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"poll","version":"1"},"io.modelcontextprotocol/clientCapabilities":{}}}}' \
-			-H "MCP-Protocol-Version: 2026-07-28" \
-			http://localhost:18100/mcp > /dev/null 2>&1 && break; \
-		sleep 0.3; \
-	done; \
-	(cd $(MCPCONFORMANCE_STATELESS_PATH) && \
-		node dist/index.js server \
-			--url http://localhost:18100/mcp \
-			--scenario server-stateless \
-			-o $$OUT/checks > $$OUT/runner.log 2>&1); \
-	RC=$$?; \
-	kill $$PID 2>/dev/null; \
-	wait $$PID 2>/dev/null; \
-	CHECKS=$$(ls -t $$OUT/checks/server-server-stateless-*/checks.json 2>/dev/null | head -1); \
-	if [ -z "$$CHECKS" ] || [ ! -f "$$CHECKS" ]; then \
-		echo "testconf-stateless: upstream runner produced no checks.json"; \
-		tail -30 $$OUT/runner.log; \
-		exit 1; \
-	fi; \
-	FAILS=$$(grep -c '"status": "FAILURE"' $$CHECKS); \
-	PASSES=$$(grep -c '"status": "SUCCESS"' $$CHECKS); \
-	SKIPS=$$(grep -c '"status": "SKIPPED"' $$CHECKS); \
-	WARNS=$$(grep -c '"status": "WARNING"' $$CHECKS); \
-	echo "testconf-stateless: $$PASSES pass / $$FAILS fail / $$WARNS warn / $$SKIPS skip (artifact: $$CHECKS)"; \
-	if [ "$$FAILS" -gt 0 ]; then \
-		echo "Unexpected FAILURE rows:"; \
-		grep -B 2 '"status": "FAILURE"' $$CHECKS | head -60; \
-		exit 1; \
-	fi
+	@bash $(CONFORMANCE_DIR)/scripts/conf-stateless.sh
 # Suite is fully green (30/30) as of modelcontextprotocol/conformance
 # 0.2.0-alpha.9. Upstream #376 fixed the former ServerRejectsUndeclaredCapability
 # bug (it had checked requiredCapabilities as a string-array; the SEP-2575
@@ -144,98 +70,13 @@ testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/st
 # requires zero FAILURE rows — if upstream regresses, we want to catch it.
 
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
-	@if [ ! -d "$(MCPCONFORMANCE_FILE_INPUTS_PATH)" ]; then \
-		echo "MCPCONFORMANCE_FILE_INPUTS_PATH=$(MCPCONFORMANCE_FILE_INPUTS_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_FILE_INPUTS_PATH=<path-to-clone>."; \
-		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/file-inputs && go build -o file-inputs-demo .)
-	(cd $(MCPCONFORMANCE_FILE_INPUTS_PATH) && npm install --silent && \
-		FILE_INPUTS_SERVER_URL=http://localhost:18097/mcp \
-		FILE_INPUTS_SERVER_CMD="$(REPO_ROOT)/examples/file-inputs/file-inputs-demo --serve --addr=:18097" \
-		npx vitest run src/scenarios/server/file-inputs/file-inputs.test.ts)
+	@bash $(CONFORMANCE_DIR)/scripts/conf-file-inputs.sh
 
 testconf-auth-server: ## Run server-side auth conformance — fork-based scenarios (RFC 9728 PRM + RFC 8414 AS metadata + RFC 6750 Bearer enforcement)
-	@if [ ! -d "$(MCPCONFORMANCE_AUTH_PATH)" ]; then \
-		echo "MCPCONFORMANCE_AUTH_PATH=$(MCPCONFORMANCE_AUTH_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_AUTH_PATH=<path-to-clone>."; \
-		echo "Default expects the 'pending' branch checked out at ../conf-pending."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/auth && go build -o auth-demo .)
-	@(cd $(MCPCONFORMANCE_AUTH_PATH) && npm install --silent)
-	# Manual spawn: Phase 2 + 2.5's token-needing checks pull four pre-
-	# minted tokens from the fixture's bootstrap (one valid, three
-	# deliberately-bad-claim variants), so we spawn here (instead of
-	# letting vitest auto-spawn) and curl /demo/bootstrap before
-	# invoking the scenarios.
-	@$(REPO_ROOT)/examples/auth/auth-demo --serve --addr=:18098 > /tmp/auth-demo.log 2>&1 & \
-	PID=$$!; \
-	for i in 1 2 3 4 5 6 7 8 9 10; do \
-	  curl -sf http://localhost:18098/.well-known/oauth-protected-resource > /dev/null 2>&1 && break; \
-	  sleep 0.5; \
-	done; \
-	BOOT=$$(curl -sf http://localhost:18098/demo/bootstrap); \
-	TOK_VALID=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read"])' 2>/dev/null); \
-	TOK_RW=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read_write"])' 2>/dev/null); \
-	TOK_FULL=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_all"])' 2>/dev/null); \
-	TOK_EXPIRED=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_expired"])' 2>/dev/null); \
-	TOK_WRONG_AUD=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_wrong_audience"])' 2>/dev/null); \
-	TOK_WRONG_ISS=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_wrong_issuer"])' 2>/dev/null); \
-	TOK_UPSTREAM=$$(echo "$$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_upstream_assertion"])' 2>/dev/null); \
-	AS_TOKEN_ENDPOINT=$$(curl -sf http://localhost:18098/.well-known/oauth-authorization-server | python3 -c 'import json,sys;print(json.load(sys.stdin)["token_endpoint"])' 2>/dev/null); \
-	(cd $(MCPCONFORMANCE_AUTH_PATH) && \
-	  AUTH_SERVER_URL=http://localhost:18098/mcp \
-	  AUTH_VALID_TOKEN="$$TOK_VALID" \
-	  AUTH_READWRITE_TOKEN="$$TOK_RW" \
-	  AUTH_FULL_TOKEN="$$TOK_FULL" \
-	  AUTH_EXPIRED_TOKEN="$$TOK_EXPIRED" \
-	  AUTH_WRONG_AUDIENCE_TOKEN="$$TOK_WRONG_AUD" \
-	  AUTH_WRONG_ISSUER_TOKEN="$$TOK_WRONG_ISS" \
-	  AUTH_SUBJECT_ASSERTION_TOKEN="$$TOK_UPSTREAM" \
-	  AUTH_AS_TOKEN_ENDPOINT="$$AS_TOKEN_ENDPOINT" \
-	  npx vitest run src/scenarios/server/auth/auth.test.ts); \
-	RC=$$?; \
-	kill $$PID 2>/dev/null; \
-	wait $$PID 2>/dev/null; \
-	exit $$RC
+	@bash $(CONFORMANCE_DIR)/scripts/conf-auth-server.sh
 
 testconf-skills: ## Run SEP-2640 skills conformance — informational (exit 0 regardless of check results while WG iterates sep-2640.yaml). Drives examples/skills via the fork's scenario runner. Scenarios land in a follow-up using the Scenario class primitives PR 8 introduced; this target wires the fixture spawn + URL today so the conf-side PR plugs in cleanly.
-	@if [ ! -d "$(MCPCONFORMANCE_SKILLS_PATH)" ]; then \
-		echo "MCPCONFORMANCE_SKILLS_PATH=$(MCPCONFORMANCE_SKILLS_PATH) does not exist."; \
-		echo "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_SKILLS_PATH=<path-to-clone>."; \
-		echo "Default expects the chore/sep-2640-yaml branch checked out at ../conf-skills."; \
-		exit 1; \
-	fi
-	@(cd $(REPO_ROOT)/examples/skills && go build -o skills-demo .)
-	@OUT=$$(mktemp -d -t conf-skills.XXXXXX); \
-	echo "Spawning fixture on :18099, scratch dir $$OUT"; \
-	$(REPO_ROOT)/examples/skills/skills-demo --serve --addr=:18099 --skills=$(REPO_ROOT)/examples/skills/skills > $$OUT/server.log 2>&1 & \
-	PID=$$!; \
-	for i in 1 2 3 4 5 6 7 8 9 10; do \
-		curl -sf -o /dev/null -X OPTIONS http://localhost:18099/mcp && break; \
-		sleep 0.3; \
-	done; \
-	(cd $(MCPCONFORMANCE_SKILLS_PATH) && \
-		node dist/index.js server \
-			--url http://localhost:18099/mcp \
-			--scenario sep-2640-skills \
-			-o $$OUT/checks > $$OUT/runner.log 2>&1); \
-	RC=$$?; \
-	kill $$PID 2>/dev/null; \
-	wait $$PID 2>/dev/null; \
-	if [ $$RC -ne 0 ]; then \
-		echo "==================================================================="; \
-		echo "testconf-skills: INFORMATIONAL — runner exited $$RC (artifacts in $$OUT)"; \
-		echo "This suite is INFO status in conformance/local-suites.yaml while the"; \
-		echo "fork-side Scenario classes iterate on sep-2640.yaml (mcpconformance"; \
-		echo "PR 330). The check failures are pre-existing input-required-result"; \
-		echo "(SEP-2567) gaps the skills runner also exercises, not new regressions."; \
-		echo "Exiting 0 so the umbrella reaches refresh-conformance. See issue 613."; \
-		echo "==================================================================="; \
-		tail -30 $$OUT/runner.log 2>/dev/null; \
-	fi
+	@bash $(CONFORMANCE_DIR)/scripts/conf-skills.sh
 # Scenario class for SEP-2640 to be registered under the name
 # "sep-2640-skills" in the fork's src/scenarios/index.ts, mirroring how
 # tasks-v2 and stateless are wired. Per Paul Carleton's review, the

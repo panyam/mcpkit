@@ -3,18 +3,16 @@
 .PHONY: build test test-e2e lint generate push install help
 
 build: ## Build the protoc plugin
-	go build -o bin/protoc-gen-go-mcp ./cmd/protoc-gen-go-mcp
+	@bash scripts/build.sh
 
 test: ## Run unit tests
-	go test ./... -count=1 -timeout 30s
+	@bash scripts/test.sh
 
-test-e2e: install ## Regenerate examples, compile, and run e2e tests
-	@echo "==> e2e: bookservice example"
-	cd ../../../examples/protogen/bookservice && rm -rf gen && buf generate && go test -count=1 -timeout 30s .
-	@echo "==> e2e: passed"
+test-e2e: ## Install plugin, regenerate examples, compile, and run e2e tests
+	@bash scripts/test-e2e.sh
 
-install: build ## Install the protoc plugin to $GOPATH/bin
-	go install ./cmd/protoc-gen-go-mcp
+install: ## Install the protoc plugin to $GOPATH/bin
+	@bash scripts/install.sh
 
 # --- Proto / Buf targets ---
 

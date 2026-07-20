@@ -148,16 +148,16 @@ test-agent: ## Run agent sub-module tests
 	cd examples/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario
 
 test-auth: ## Run auth sub-module tests
-	cd ext/auth && go test ./... -count=1 -timeout 30s
+	@bash scripts/test-auth.sh
 
 test-otel: ## Run SEP-414 ext/otel adapter sub-module tests
-	cd ext/otel && go test ./... -count=1 -timeout 30s
+	@bash scripts/test-otel.sh
 
 test-otel-example: ## Run the examples/otel/stdout smoke test
-	cd examples/otel/stdout && go test ./... -count=1 -timeout 30s
+	@bash scripts/test-otel-example.sh
 
 test-ui: ## Run UI extension sub-module tests
-	cd ext/ui && $(MAKE) test
+	@bash ext/ui/scripts/test.sh
 
 test-skills: ## Run skills extension sub-module tests (SEP-2640, experimental)
 	cd ext/skills && go test ./... -count=1 -timeout 30s
@@ -174,40 +174,44 @@ test-mcpskills-walkthrough: ## Run the mcpskills CLI walkthrough non-interactive
 	cd examples/mcpskills-walkthrough && go run . --non-interactive
 
 build-bridge: ## Compile mcp-app-bridge.ts → .js (delegates to ext/ui)
-	cd ext/ui && $(MAKE) build-bridge
+	@bash ext/ui/scripts/build-bridge.sh
 
 test-protogen: ## Run protogen sub-module tests + e2e example
-	cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && $(MAKE) test-e2e
+	@bash scripts/test-protogen.sh
 
 test-e2e: ## Run all E2E tests (auth, apps — no Docker)
-	cd tests/e2e && go test ./... -count=1 -timeout 60s
+	@bash scripts/test-e2e.sh
 
-test-experimental: ## Run all experimental POC tests (delegates to experimental/Makefile)
-	$(MAKE) -C experimental test
+test-experimental: ## Run all experimental POC tests
+	@bash experimental/scripts/test-events.sh
+	@bash experimental/scripts/test-events-clients-go.sh
+	@bash experimental/scripts/test-events-stores-gorm.sh
+	@bash experimental/scripts/test-events-discord.sh
+	@bash experimental/scripts/test-events-telegram.sh
 
 test-experimental-events: ## Run experimental ext/events library tests
-	$(MAKE) -C experimental test-events
+	@bash experimental/scripts/test-events.sh
 
 test-experimental-events-clients-go: ## Run experimental ext/events Go client SDK tests
-	$(MAKE) -C experimental test-events-clients-go
+	@bash experimental/scripts/test-events-clients-go.sh
 
 test-experimental-events-stores-gorm: ## Run experimental ext/events GORM stores (sqlite + inmemory; no Docker required)
-	$(MAKE) -C experimental test-events-stores-gorm
+	@bash experimental/scripts/test-events-stores-gorm.sh
 
 test-experimental-events-stores-gorm-pg: ## Run experimental ext/events GORM stores against a real Postgres container (Docker)
 	$(MAKE) -C experimental test-events-stores-gorm-pg
 
 test-experimental-events-stores-redis: ## Run experimental ext/events Redis pubsub Emitter (miniredis; no Docker required)
-	$(MAKE) -C experimental test-events-stores-redis
+	@bash experimental/scripts/test-events-stores-redis.sh
 
 test-experimental-events-stores-redis-real: ## Run experimental ext/events Redis pubsub Emitter against a real Redis container (Docker)
 	$(MAKE) -C experimental test-events-stores-redis-real
 
 test-experimental-events-discord: ## Run experimental events Discord example tests
-	$(MAKE) -C experimental test-events-discord
+	@bash experimental/scripts/test-events-discord.sh
 
 test-experimental-events-telegram: ## Run experimental events Telegram example tests
-	$(MAKE) -C experimental test-events-telegram
+	@bash experimental/scripts/test-events-telegram.sh
 
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright). EXAMPLE=<name> picks a fixture.
 	uv run scripts/apps_playwright_test.py
@@ -226,37 +230,7 @@ refresh-visual-gallery: ## Regenerate the side-by-side baselines gallery (mcpkit
 	@echo "Gallery refreshed. Commit docs/site/content/conformance/apps/visual-gallery/ + docs/site/static/conformance/apps/visual-gallery/."
 
 release-audit-apps: ## Release-time apps/compat audit umbrella — fully end-to-end: refresh ext-apps clone → docker-all (parity + visual gate) → regenerate gallery → commit + push the gallery → ghdeploy. Single command for "release-time, just do everything."
-	@echo "==> [1/5] Refreshing upstream ext-apps clone at /tmp/ext-apps..."
-	@if [ -f /tmp/ext-apps/.git/HEAD ]; then \
-		(cd /tmp/ext-apps && git pull --quiet) && echo "  pulled"; \
-	elif [ -e /tmp/ext-apps ]; then \
-		rm -rf /tmp/ext-apps && git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  re-cloned (was corrupted: missing .git/HEAD)"; \
-	else \
-		git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  cloned"; \
-	fi
-	@echo ""
-	@echo "==> [2/5] Running docker-all (parity diff + Playwright visual gate across 21 fixtures)..."
-	@$(MAKE) test-apps-playwright-docker-all || echo "  WARNING: docker-all failed. Continuing so drift is captured in the gallery for inspection."
-	@echo ""
-	@echo "==> [3/5] Regenerating visual gallery..."
-	@$(MAKE) refresh-visual-gallery
-	@echo ""
-	@echo "==> [4/5] Committing + pushing regenerated gallery artifacts..."
-	@if git status --porcelain docs/site/content/conformance/apps/visual-gallery/ docs/site/static/conformance/apps/visual-gallery/ 2>/dev/null | grep -q .; then \
-		git add docs/site/content/conformance/apps/visual-gallery/ docs/site/static/conformance/apps/visual-gallery/; \
-		git commit -m "refresh: visual gallery for release"; \
-		git push; \
-		echo "  committed + pushed"; \
-	else \
-		echo "  no gallery changes; nothing to commit"; \
-	fi
-	@echo ""
-	@echo "==> [5/5] Deploying docs site to gh-pages..."
-	@$(MAKE) ghdeploy
-	@echo ""
-	@echo "==> Release audit complete."
-	@echo "    Gallery: https://panyam.github.io/mcpkit/conformance/apps/visual-gallery/"
-	@echo "    (gh-pages CDN may take 1-5 min to flush)"
+	@bash scripts/release-audit-apps.sh
 
 demo-app: ## Browse a compat fixture interactively. Default: mcpkit-Go server + basic-host (no LLM needed). basic-host runs on :8080; open it manually (or pass OPEN=1 to auto-open). Override with RENDERER=mcpjam for wire inspection. Usage: make demo-app EXAMPLE=<name>.
 	EXAMPLE=$(EXAMPLE) SERVER=$${SERVER:-go} RENDERER=$${RENDERER:-basic-host} OPEN=$(OPEN) uv run scripts/apps_demo.py
@@ -269,188 +243,14 @@ testkcl: ## Run Keycloak auth interop tests (requires Docker, run upkcl first)
 
 REPORT_DIR := tests/reports
 
-# run_stage runs a make target as a testall stage with per-stage log files.
-# Each stage writes to $(REPORT_DIR)/stage-<label>.log (not the shared run.log).
-# Usage: $(call run_stage,STEP_NUM,TOTAL,LABEL,MAKE_TARGET)
-# Shell vars PASS, FAIL, STAGES must be initialized by the caller.
-define run_stage
-	STAGE_LOG=$(REPORT_DIR)/stage-$(3).log; \
-	STAGE_START=$$(date +%s); \
-	echo "--- [$(1)/$(2)] $(3) ---" | tee -a $(REPORT_DIR)/run.log; \
-	echo "=== Stage $(1)/$(2): $(3) (make $(4)) ===" > $$STAGE_LOG; \
-	echo "Started: $$(date)" >> $$STAGE_LOG; \
-	if $(MAKE) $(4) >> $$STAGE_LOG 2>&1; then \
-		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
-		echo "  PASS: $(3) ($${ELAPSED}s)" | tee -a $(REPORT_DIR)/run.log; \
-		PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS:$(4):$${ELAPSED}s"; \
-	else \
-		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
-		echo "  FAIL: $(3) ($${ELAPSED}s)" | tee -a $(REPORT_DIR)/run.log; \
-		FAIL=$$((FAIL+1)); STAGES="$$STAGES $(3):FAIL:$(4):$${ELAPSED}s"; \
-		echo "  --- $(3) tail ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
-	fi; \
-	echo "Finished: $$(date) (elapsed $${ELAPSED}s)" >> $$STAGE_LOG;
-endef
-
-# run_stage_info is the soft-failure variant for experimental or in-flight
-# conformance work where the suite SHOULD surface in testall reports but
-# MUST NOT block the build. Failure is recorded as INFO and counted
-# separately so a failing experimental stage does not show up in the
-# PASS/FAIL tallies. Shell vars PASS, FAIL, INFO, STAGES must be
-# initialized by the caller.
-define run_stage_info
-	STAGE_LOG=$(REPORT_DIR)/stage-$(3).log; \
-	STAGE_START=$$(date +%s); \
-	echo "--- [$(1)/$(2)] $(3) (informational) ---" | tee -a $(REPORT_DIR)/run.log; \
-	echo "=== Stage $(1)/$(2): $(3) (make $(4)) [informational] ===" > $$STAGE_LOG; \
-	echo "Started: $$(date)" >> $$STAGE_LOG; \
-	if $(MAKE) $(4) >> $$STAGE_LOG 2>&1; then \
-		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
-		echo "  PASS: $(3) ($${ELAPSED}s, informational)" | tee -a $(REPORT_DIR)/run.log; \
-		PASS=$$((PASS+1)); STAGES="$$STAGES $(3):PASS:$(4):$${ELAPSED}s"; \
-	else \
-		ELAPSED=$$(($$(date +%s) - STAGE_START)); \
-		echo "  INFO: $(3) ($${ELAPSED}s, informational, not counted as failure)" | tee -a $(REPORT_DIR)/run.log; \
-		INFO=$$((INFO+1)); STAGES="$$STAGES $(3):INFO:$(4):$${ELAPSED}s"; \
-		echo "  --- $(3) tail ---"; tail -20 $$STAGE_LOG; echo "  ---"; \
-	fi; \
-	echo "Finished: $$(date) (elapsed $${ELAPSED}s)" >> $$STAGE_LOG;
-endef
-
 testall: ## Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
-	@mkdir -p $(REPORT_DIR)
-	@rm -f $(REPORT_DIR)/stage-*.log
-	@echo "=== MCPKit Comprehensive Test Suite ===" | tee $(REPORT_DIR)/run.log
-	@echo "Started: $$(date)" | tee -a $(REPORT_DIR)/run.log
-	@PASS=0; FAIL=0; INFO=0; STAGES=""; \
-	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	$(call run_stage,1,9,unit+coverage,cover-html) \
-	$(call run_stage,2,9,race,test-race) \
-	$(call run_stage,3,9,auth,test-auth) \
-	$(call run_stage,4,9,ui,test-ui) \
-	$(call run_stage,5,9,protogen,test-protogen) \
-	$(call run_stage,5a,9,otel-adapter,test-otel) \
-	$(call run_stage,5b,9,otel-example,test-otel-example) \
-	$(call run_stage,6,9,e2e,test-e2e) \
-	$(call run_stage,7a,9,experimental-events,test-experimental-events) \
-	$(call run_stage,7b,9,experimental-events-clients-go,test-experimental-events-clients-go) \
-	$(call run_stage,7c,9,experimental-events-stores-gorm,test-experimental-events-stores-gorm) \
-	$(call run_stage,7d,9,experimental-events-stores-redis,test-experimental-events-stores-redis) \
-	$(call run_stage,7e,9,experimental-events-discord,test-experimental-events-discord) \
-	$(call run_stage,7f,9,experimental-events-telegram,test-experimental-events-telegram) \
-	$(call run_stage,8a,9,conformance,testconf) \
-	$(call run_stage,8b,9,auth-conformance,testconfauth) \
-	$(call run_stage,8c,9,tasks-conformance,testconf-tasks) \
-	$(call run_stage,8d,9,tasks-v2-conformance,testconf-tasks-v2) \
-	$(call run_stage,8e,9,mrtr-conformance,testconf-mrtr) \
-	$(call run_stage,8f,9,file-inputs-conformance,testconf-file-inputs) \
-	$(call run_stage,8g,9,auth-server-conformance,testconf-auth-server) \
-	$(call run_stage_info,8h,9,skills-conformance,testconf-skills) \
-	$(call run_stage,9,9,keycloak,testkcl-auto) \
-	echo "" | tee -a $(REPORT_DIR)/run.log; \
-	echo "=== Results: $$PASS passed, $$FAIL failed, $$INFO informational ===" | tee -a $(REPORT_DIR)/run.log; \
-	echo "Finished: $$(date)" | tee -a $(REPORT_DIR)/run.log; \
-	echo "Per-stage logs: $(REPORT_DIR)/stage-*.log"; \
-	$(MAKE) -s test-report STAGES="$$STAGES"; \
-	echo "HTML report: $(REPORT_DIR)/report.html"; \
-	[ $$FAIL -eq 0 ]
+	@REPORT_DIR=$(REPORT_DIR) bash scripts/testall.sh
 
 testkcl-auto: ## Start Keycloak if needed, run interop tests, stop after
-	@if ! curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1; then \
-		echo "Starting Keycloak for interop tests..."; \
-		$(MAKE) upkcl; \
-		echo "Waiting for Keycloak realm..."; \
-		for i in $$(seq 1 60); do \
-			curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1 && break; \
-			sleep 2; \
-		done; \
-		KC_STARTED=1; \
-	fi; \
-	cd tests/keycloak && go test ./... -count=1 -timeout 120s -v; \
-	EXIT=$$?; \
-	if [ "$${KC_STARTED:-}" = "1" ]; then $(MAKE) downkcl; fi; \
-	exit $$EXIT
+	@bash scripts/testkcl-auto.sh
 
 test-report: ## Generate HTML report with per-stage collapsible logs
-	@mkdir -p $(REPORT_DIR)
-	@TIMESTAMP=$$(date '+%Y-%m-%d %H:%M:%S'); \
-	COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo "unknown"); \
-	BRANCH=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"); \
-	R=$(REPORT_DIR)/report.html; \
-	echo '<!DOCTYPE html>' > $$R; \
-	echo '<html><head><meta charset="utf-8"><title>MCPKit Test Report</title>' >> $$R; \
-	echo '<style>' >> $$R; \
-	echo 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }' >> $$R; \
-	echo 'h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }' >> $$R; \
-	echo '.meta { color: #666; font-size: 14px; margin-bottom: 20px; }' >> $$R; \
-	echo 'table { border-collapse: collapse; width: 100%; margin: 20px 0; }' >> $$R; \
-	echo 'th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }' >> $$R; \
-	echo 'th { background: #f5f5f5; font-weight: 600; }' >> $$R; \
-	echo '.pass { color: #22863a; font-weight: 600; }' >> $$R; \
-	echo '.fail { color: #cb2431; font-weight: 600; }' >> $$R; \
-	echo '.skip { color: #6a737d; font-weight: 600; }' >> $$R; \
-	echo '.info { color: #b08800; font-weight: 600; }' >> $$R; \
-	echo '.summary-pass { background: #dcffe4; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $$R; \
-	echo '.summary-fail { background: #ffdce0; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $$R; \
-	echo 'details { margin: 8px 0; }' >> $$R; \
-	echo 'summary { cursor: pointer; font-weight: 600; padding: 6px 0; }' >> $$R; \
-	echo 'summary:hover { color: #0366d6; }' >> $$R; \
-	echo 'pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 500px; overflow-y: auto; }' >> $$R; \
-	echo 'code.cmd { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }' >> $$R; \
-	echo '</style></head><body>' >> $$R; \
-	echo "<h1>MCPKit Test Report</h1>" >> $$R; \
-	echo "<div class='meta'>Branch: <strong>$$BRANCH</strong> | Commit: <code>$$COMMIT</code> | Date: $$TIMESTAMP</div>" >> $$R; \
-	\
-	PASS=0; FAIL=0; INFO=0; \
-	echo "<table><tr><th>Stage</th><th>Result</th><th>Re-run</th></tr>" >> $$R; \
-	for entry in $(STAGES); do \
-		STAGE=$$(echo $$entry | cut -d: -f1); \
-		RESULT=$$(echo $$entry | cut -d: -f2); \
-		TARGET=$$(echo $$entry | cut -d: -f3); \
-		if [ "$$RESULT" = "PASS" ]; then \
-			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='pass'>PASS</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
-			PASS=$$((PASS+1)); \
-		elif [ "$$RESULT" = "SKIP" ]; then \
-			echo "<tr><td>$$STAGE</td><td class='skip'>SKIP</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
-		elif [ "$$RESULT" = "INFO" ]; then \
-			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='info'>INFO</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
-			INFO=$$((INFO+1)); \
-		else \
-			echo "<tr><td><a href='#log-$$STAGE'>$$STAGE</a></td><td class='fail'>FAIL</td><td><code class='cmd'>make $$TARGET</code></td></tr>" >> $$R; \
-			FAIL=$$((FAIL+1)); \
-		fi; \
-	done; \
-	echo "</table>" >> $$R; \
-	\
-	if [ $$FAIL -eq 0 ] && [ $$INFO -eq 0 ]; then \
-		echo "<div class='summary-pass'>All $$PASS stages passed</div>" >> $$R; \
-	elif [ $$FAIL -eq 0 ]; then \
-		echo "<div class='summary-pass'>$$PASS passed, $$INFO informational (no failures)</div>" >> $$R; \
-	else \
-		echo "<div class='summary-fail'>$$PASS passed, $$FAIL failed, $$INFO informational</div>" >> $$R; \
-	fi; \
-	\
-	echo "<h2>Stage Logs</h2>" >> $$R; \
-	for entry in $(STAGES); do \
-		STAGE=$$(echo $$entry | cut -d: -f1); \
-		RESULT=$$(echo $$entry | cut -d: -f2); \
-		LOGFILE=$(REPORT_DIR)/stage-$$STAGE.log; \
-		OPEN=""; if [ "$$RESULT" = "FAIL" ] || [ "$$RESULT" = "INFO" ]; then OPEN=" open"; fi; \
-		case "$$RESULT" in \
-			PASS) CLS=pass ;; \
-			INFO) CLS=info ;; \
-			SKIP) CLS=skip ;; \
-			*) CLS=fail ;; \
-		esac; \
-		echo "<details id='log-$$STAGE'$$OPEN><summary class='$$CLS'>$$STAGE — $$RESULT</summary><pre>" >> $$R; \
-		if [ -f "$$LOGFILE" ]; then \
-			sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$$LOGFILE" >> $$R; \
-		else \
-			echo "(no log file found)" >> $$R; \
-		fi; \
-		echo "</pre></details>" >> $$R; \
-	done; \
-	echo "</body></html>" >> $$R
+	@REPORT_DIR=$(REPORT_DIR) bash scripts/test-report.sh "$(STAGES)"
 
 # =============================================================================
 # Keycloak (for interop tests)
@@ -462,30 +262,7 @@ KC_CONTAINER := mcpkit-keycloak
 KC_REALM := mcpkit-test
 
 upkcl: ## Start Keycloak container for interop tests (skips if already healthy)
-	@if curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1; then \
-		echo "Keycloak already running on port $(KC_PORT) — skipping start"; \
-	else \
-		docker rm -f $(KC_CONTAINER) 2>/dev/null || true; \
-		docker run -d --name $(KC_CONTAINER) \
-			-p $(KC_PORT):8080 \
-			-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
-			-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-			-v $(PWD)/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json \
-			$(KC_IMAGE) start-dev --import-realm \
-			--log-level=INFO,org.keycloak.events:DEBUG; \
-		echo "Keycloak starting on port $(KC_PORT)... (realm import takes ~30s)"; \
-		echo "Waiting for realm import to land before flipping master sslRequired..."; \
-		for i in $$(seq 1 60); do \
-			curl -sf http://localhost:$(KC_PORT)/realms/$(KC_REALM) > /dev/null 2>&1 && break; \
-			sleep 1; \
-		done; \
-		echo "Flipping master realm sslRequired=NONE so the test admin-token grant works over HTTP..."; \
-		docker exec $(KC_CONTAINER) /opt/keycloak/bin/kcadm.sh config credentials \
-			--server http://localhost:8080 --realm master --user admin --password admin >/dev/null 2>&1 && \
-		docker exec $(KC_CONTAINER) /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE >/dev/null && \
-		echo "[upkcl] master sslRequired=NONE (the bcl_test admin-cli password grant requires it)"; \
-		echo "Run 'make kcllogs' to watch startup, 'make testkcl' when ready"; \
-	fi
+	@bash scripts/keycloak-up.sh
 
 downkcl: ## Stop Keycloak container
 	docker rm -f $(KC_CONTAINER) 2>/dev/null || true
@@ -590,14 +367,14 @@ bump-root: ## Update sub-modules to require a specific root version (usage: make
 collect-walkthroughs: ## Manually mirror every examples/.../bundle/ (with a sibling walkthrough.trace.json) into docs/site/dist/docs/walkthroughs/<example-path>/. Normally runs automatically as a tail step of docs/site/Makefile's `build`.
 	uv run scripts/collect_walkthroughs.py
 
-ghbuild: ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Includes walkthrough bundles via docs/site/Makefile's build tail.
-	$(MAKE) -C docs/site build
+ghbuild: ## Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Includes walkthrough bundles via the build tail.
+	@bash docs/site/scripts/build.sh
 
 ghserve: ## Run the docs site dev server on :8085 with live rebuild
 	$(MAKE) -C docs/site run
 
 ghdeploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
-	$(MAKE) -C docs/site gh-pages
+	@bash docs/site/scripts/gh-pages.sh
 
 # =============================================================================
 # Release
