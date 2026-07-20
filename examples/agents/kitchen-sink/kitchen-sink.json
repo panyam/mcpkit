@@ -6,10 +6,15 @@
       "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
       "ollama": { "type": "ollama", "model": "llama3.1" },
 
-      "openai-4o":      { "type": "openai", "model": "gpt-4o", "apiKeyEnv": "OPENAI_API_KEY" },
-      "openai-4o-mini": { "type": "openai", "model": "gpt-4o-mini", "apiKeyEnv": "OPENAI_API_KEY" },
-      "openai-o3":      { "type": "openai", "model": "o3", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-5.1":      { "type": "openai", "model": "gpt-5.1", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-5.1-mini": { "type": "openai", "model": "gpt-5.1-mini", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-5":        { "type": "openai", "model": "gpt-5", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-4o":       { "type": "openai", "model": "gpt-4o", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-4o-mini":  { "type": "openai", "model": "gpt-4o-mini", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-o3":       { "type": "openai", "model": "o3", "apiKeyEnv": "OPENAI_API_KEY" },
 
+      "gemini-3-pro":     { "type": "gemini", "model": "gemini-3-pro", "apiKeyEnv": "GEMINI_API_KEY" },
+      "gemini-3-flash":   { "type": "gemini", "model": "gemini-3-flash", "apiKeyEnv": "GEMINI_API_KEY" },
       "gemini-2.5-pro":   { "type": "gemini", "model": "gemini-2.5-pro", "apiKeyEnv": "GEMINI_API_KEY" },
       "gemini-2.5-flash": { "type": "gemini", "model": "gemini-2.5-flash", "apiKeyEnv": "GEMINI_API_KEY" },
       "gemini-2.0-flash": { "type": "gemini", "model": "gemini-2.0-flash", "apiKeyEnv": "GEMINI_API_KEY" },
