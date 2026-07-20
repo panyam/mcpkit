@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MCP Events extension: list, push (SSE), poll, webhook with TTL auto-refresh. Experimental.">
+    <title>Events — Discord · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Events — Discord</h1>
+        
+        <p class="lead">MCP Events extension: list, push (SSE), poll, webhook with TTL auto-refresh. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/README.md"><code>examples/events/discord/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="discord-events-example">Discord Events Example <a class="anchor" href="#discord-events-example">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — MCP Events, a draft extension (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1">spec</a>), built on <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events">experimental/ext/events</a>. Wire format may change.</p>
+</blockquote>
+<p>Reference server demonstrating the <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1">MCP Events spec</a> with Discord as the event source. Built on the <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events"><code>experimental/ext/events</code></a> library.</p>
+<p>Companion to the <a href="/mcpkit/examples/events/telegram/">Telegram example</a> — shows the events library handles structurally different payloads (Discord has nested author objects, embeds, threads, mentions vs Telegram&rsquo;s flat text model).</p>
+<h2 id="walkthrough">Walkthrough <a class="anchor" href="#walkthrough">¶</a></h2>
+<p>The canonical demo for the events extension. Two ways to run it.</p>
+<h3 id="option-a--test-mode-no-discord-token-needed">Option A — Test mode (no Discord token needed) <a class="anchor" href="#option-a--test-mode-no-discord-token-needed">¶</a></h3>
+<p>All walkthrough steps run; the final live-interaction step skips with a &ldquo;no token&rdquo; message. Great for a quick read-through of the protocol features.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve    <span style="color:#998;font-style:italic"># terminal 1 — server in test mode</span>
+</span></span><span style="display:flex;"><span>just demo     <span style="color:#998;font-style:italic"># terminal 2 — walkthrough</span>
+</span></span></code></pre><p>To simulate Discord activity (so you can see push/poll/webhook fanout in real time), inject events from a third terminal:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span>... just inject <span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;hello world&#34;</span>   <span style="color:#998;font-style:italic"># message event (cursored)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span>... just inject-typing               <span style="color:#998;font-style:italic"># typing indicator (cursorless)</span>
+</span></span></code></pre><h3 id="option-b--real-bot-mode-requires-discord-bot-token">Option B — Real bot mode (requires <code>DISCORD_BOT_TOKEN</code>) <a class="anchor" href="#option-b--real-bot-mode-requires-discord-bot-token">¶</a></h3>
+<p>Same walkthrough plus the final live step captures real typing + message events from the Discord channel where you invited the bot.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#008080">DISCORD_BOT_TOKEN</span><span style="color:#000;font-weight:bold">=</span>your-token just serve   <span style="color:#998;font-style:italic"># terminal 1 — server in bot mode</span>
+</span></span><span style="display:flex;"><span>just demo                                 <span style="color:#998;font-style:italic"># terminal 2 — walkthrough</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># When the live step starts, go type in your Discord channel.</span>
+</span></span></code></pre><p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/WALKTHROUGH.md"><code>WALKTHROUGH.md</code></a> for the full sequence diagram and step-by-step explanation. The walkthrough is generated from the demo step definitions in <code>walkthrough.go</code> — run <code>just readme</code> to regenerate.</p>
+<blockquote>
+<p><strong>Going to production?</strong> See <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/DEPLOYMENT.md"><code>experimental/ext/events/DEPLOYMENT.md</code></a> for private-cloud / WAF guidance.</p>
+</blockquote>
+<h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<p>Each bullet maps to a step in the demokit walkthrough:</p>
+<ul>
+<li><strong>events/list</strong> — the source catalog, including the <code>cursorless</code> flag.</li>
+<li><strong>Push</strong> — long-lived <code>events/stream</code> SSE; <code>notifications/events/event</code> arrives in real time.</li>
+<li><strong>Poll</strong> — single-subscription <code>events/poll</code> (multi-sub batching is not supported).</li>
+<li><strong>Cursorless source</strong> — typing indicators wired as <code>cursor: null</code>; subscribers see live events but can&rsquo;t replay.</li>
+<li><strong>Webhook + auto-refresh</strong> — <code>events/subscribe</code> driven via the typed <code>Subscription</code> + <code>Receiver[Data]</code> from <code>clients/go</code>, including HMAC verification and 0.5×TTL re-subscribe.</li>
+<li><strong>Source-side health signals</strong> — <code>YieldError(err)</code> (transient → <code>notifications/events/error</code>) and <code>YieldTerminated(err)</code> (terminal → <code>notifications/events/terminated</code>).</li>
+<li><strong>Spec validation</strong> — empty / malformed <code>delivery.secret</code> rejected with <code>-32602</code>; client-supplied <code>id</code> rejected; valid <code>whsec_</code> accepted with no secret echoed in the response.</li>
+<li><strong>Live Discord interaction</strong> — real typing + message events from a Discord channel (when started with <code>DISCORD_BOT_TOKEN</code>).</li>
+</ul>
+<h2 id="setup--getting-a-discord-bot-token-option-b-only">Setup — getting a Discord bot token (Option B only) <a class="anchor" href="#setup--getting-a-discord-bot-token-option-b-only">¶</a></h2>
+<p>Skip this section if you&rsquo;re running in test mode (Option A above).</p>
+<h3 id="getting-a-discord-bot-token">Getting a Discord Bot Token <a class="anchor" href="#getting-a-discord-bot-token">¶</a></h3>
+<ol>
+<li>Go to <a href="https://discord.com/developers/applications">https://discord.com/developers/applications</a></li>
+<li>Click <strong>New Application</strong>, name it (e.g., &ldquo;MCPKit Events&rdquo;)</li>
+<li>Go to <strong>Bot</strong> tab → click <strong>Reset Token</strong> → copy the token</li>
+<li>Under <strong>Privileged Gateway Intents</strong>, enable <strong>Message Content Intent</strong></li>
+<li>Go to <strong>OAuth2</strong> → <strong>URL Generator</strong>:
+<ul>
+<li>Scopes: <code>bot</code></li>
+<li>Bot Permissions: <code>Send Messages</code>, <code>Read Message History</code></li>
+</ul>
+</li>
+<li>Copy the generated URL and open it to invite the bot to your server</li>
+</ol>
+<p>The typing-indicator step in the walkthrough additionally needs the <code>IntentsGuildMessageTyping</code> intent — the server requests it automatically when started with <code>-token</code>, no extra dev-portal toggle required (typing isn&rsquo;t classified as a privileged intent).</p>
+<h2 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h2>
+<pre><code>Discord Bot (WebSocket)  ──or──  POST /inject
+                │                       │
+                ▼                       ▼
+                yield(DiscordEventData{...})    ← user code: one call
+                │
+                │  YieldingSource (library):
+                │    - assigns cursor + event ID
+                │    - stores in bounded ring (1000 max)
+                │    - calls library-installed fanout hook
+                ▼
+                ├──► events.Emit()              → Push (SSE broadcast)
+                └──► events.EmitToWebhooks()     → Webhook (HMAC POST)
+                                                   ▲
+                                              events/poll reads from
+                                              the same source's buffer
+
+  Resource handlers read typed payloads via:
+    source.Recent(50)         → []DiscordEventData
+    source.ByCursor(&quot;42&quot;)     → (DiscordEventData, true)
+</code></pre>
+<p>The discord callback writes one line — <code>yield(...)</code> — and the library handles cursor assignment, retention, push fanout, webhook fanout, and typed read access. The YieldingSource&rsquo;s internal buffer is the single source of truth, exposed as both an <code>EventSource</code> (for <code>events/poll</code>) and as typed accessors (for resource reads).</p>
+<h2 id="event-payload-shape">Event payload shape <a class="anchor" href="#event-payload-shape">¶</a></h2>
+<p>Discord events have a richer structure than Telegram — nested author, optional threads, embeds, and mentions. The <code>payloadSchema</code> in <code>events/list</code> is auto-derived from the Go struct:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;guild_id&#34;</span>: <span style="color:#d14">&#34;123456&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;channel_id&#34;</span>: <span style="color:#d14">&#34;789012&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;message_id&#34;</span>: <span style="color:#d14">&#34;evt_1&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;author&#34;</span>: { <span style="color:#000080">&#34;id&#34;</span>: <span style="color:#d14">&#34;111&#34;</span>, <span style="color:#000080">&#34;username&#34;</span>: <span style="color:#d14">&#34;alice&#34;</span>, <span style="color:#000080">&#34;bot&#34;</span>: <span style="color:#000;font-weight:bold">false</span> },
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;content&#34;</span>: <span style="color:#d14">&#34;hello world&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;default&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;thread&#34;</span>: { <span style="color:#000080">&#34;id&#34;</span>: <span style="color:#d14">&#34;999&#34;</span>, <span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;discussion&#34;</span>, <span style="color:#000080">&#34;parent_id&#34;</span>: <span style="color:#d14">&#34;789012&#34;</span> },
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;embeds&#34;</span>: [{ <span style="color:#000080">&#34;title&#34;</span>: <span style="color:#d14">&#34;Link Preview&#34;</span>, <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;https://...&#34;</span> }],
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;mentions&#34;</span>: [<span style="color:#d14">&#34;bob&#34;</span>, <span style="color:#d14">&#34;carol&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;ts&#34;</span>: <span style="color:#d14">&#34;2026-04-16T12:00:00Z&#34;</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h2 id="server-flag-examples-outside-the-walkthrough">Server flag examples (outside the walkthrough) <a class="anchor" href="#server-flag-examples-outside-the-walkthrough">¶</a></h2>
+<p>The walkthrough runs against the default server config. To exercise the other modes, pass flags to <code>just serve</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Opt out of the Standard Webhooks default back to legacy X-MCP-* headers</span>
+</span></span><span style="display:flex;"><span>go run . --serve -webhook-header-mode mcp
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Drive a short TTL to watch the SDK&#39;s auto-refresh behavior in real time</span>
+</span></span><span style="display:flex;"><span>go run . --serve -webhook-ttl 5s
+</span></span></code></pre><p>Per spec, the webhook signing secret is <strong>client-supplied only</strong> (<code>whsec_</code> + base64 of 24-64 random bytes). The python <code>just webhook</code> and the Go SDK both auto-generate when the application doesn&rsquo;t supply one. See <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/README.md</code></a> for the full configuration reference.</p>
+<h2 id="auth-posture-demo-escape-vs-real-oidc">Auth posture: demo escape vs real OIDC <a class="anchor" href="#auth-posture-demo-escape-vs-real-oidc">¶</a></h2>
+<p>Per spec §&ldquo;Subscription Identity&rdquo; L361 webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Demo posture (default): no env vars set.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Server runs anonymous; events.Config.UnsafeAnonymousPrincipal=&#34;demo-user&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># is the escape hatch so just demo works end-to-end without an OIDC provider.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Server logs:  [server] auth: demo (anonymous → UnsafeAnonymousPrincipal)</span>
+</span></span><span style="display:flex;"><span>just serve
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Real-OIDC posture: set OAUTH_ISSUER (and optionally OAUTH_AUDIENCE / OAUTH_JWKS_URL).</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Server wires server.WithAuth(JWTValidator) and follows the spec strictly —</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># anonymous webhook subscribes are rejected with -32012 Unauthorized.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Server logs:  [server] auth: real OIDC (...) — anonymous webhook subscribes rejected per spec</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">OAUTH_ISSUER</span><span style="color:#000;font-weight:bold">=</span>http://localhost:8081/realms/demo <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span><span style="color:#008080">OAUTH_AUDIENCE</span><span style="color:#000;font-weight:bold">=</span>mcp-events <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>just serve
+</span></span></code></pre><p>Recognized env vars:</p>
+<table>
+<thead>
+<tr>
+<th>Env var</th>
+<th>Default</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OAUTH_ISSUER</code></td>
+<td>(unset → demo posture)</td>
+<td>OIDC issuer URL. For Keycloak: <code>http://localhost:8081/realms/&lt;realm&gt;</code>. Setting this enables real auth.</td>
+</tr>
+<tr>
+<td><code>OAUTH_JWKS_URL</code></td>
+<td><code>&lt;issuer&gt;/protocol/openid-connect/certs</code></td>
+<td>Override for non-Keycloak providers.</td>
+</tr>
+<tr>
+<td><code>OAUTH_AUDIENCE</code></td>
+<td><code>mcp-events</code></td>
+<td>Tokens MUST have this audience claim.</td>
+</tr>
+</tbody>
+</table>
+<p>The events package itself depends only on <code>core.Claims</code> (the abstract auth contract), not on any specific auth implementation — see <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/README.md</code></a> &ldquo;Auth + extension composition&rdquo; for the design rationale.</p>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<ul>
+<li><code>examples/events/discord/main.go:serve</code> — server bootstrap (auth posture, source registration, <code>/inject</code> side endpoint via <code>server.WithMux</code>).</li>
+<li><code>examples/events/discord/walkthrough.go:runDemo</code> — demokit script driving every step in the bullet list above.</li>
+<li><code>examples/events/discord/events.go:newDiscordSource</code> — <code>events.YieldingSource[DiscordEventData]</code> construction (cursored).</li>
+<li><code>examples/events/discord/events.go:newDiscordTypingSource</code> — cursorless typing source via <code>events.WithoutCursors()</code>.</li>
+<li><code>examples/events/discord/handlers.go:registerResources</code> — typed resource handlers backed by the source&rsquo;s buffer.</li>
+<li><code>examples/events/discord/handlers.go:registerTools</code> — <code>discord.send_message</code> tool.</li>
+<li><code>experimental/ext/events/clients/go/subscription.go:Subscribe</code> — Go SDK subscribe + auto-refresh helper used in step 6.</li>
+<li><code>experimental/ext/events/clients/go/receiver.go:NewReceiver</code> — typed inbound webhook receiver with HMAC verification.</li>
+<li><code>experimental/ext/events/webhook.go:WebhookRegistry</code> — per-subscription delivery + signing + retry.</li>
+</ul>
+<h2 id="make-targets">Make targets <a class="anchor" href="#make-targets">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>just serve</code></td>
+<td>Start the server (with bot if <code>DISCORD_BOT_TOKEN</code> set; test mode otherwise)</td>
+</tr>
+<tr>
+<td><code>just demo</code></td>
+<td>Run the demokit walkthrough — <code>--tui</code> mode</td>
+</tr>
+<tr>
+<td><code>just readme</code></td>
+<td>Regenerate <code>WALKTHROUGH.md</code> from the demo step definitions</td>
+</tr>
+<tr>
+<td><code>just build</code></td>
+<td>Build the binary</td>
+</tr>
+<tr>
+<td><code>just test</code></td>
+<td>Go tests</td>
+</tr>
+<tr>
+<td><code>just test-ttl</code></td>
+<td>Drive the Python <code>WebhookSubscription</code> auto-refresh helper end-to-end (POSIX-only — see Makefile for Windows steps)</td>
+</tr>
+<tr>
+<td><code>TEXT=... just inject TEXT=&quot;...&quot;</code></td>
+<td>Inject a message event (optional: <code>SENDER=</code>, <code>CHANNEL=</code>, <code>GUILD=</code>)</td>
+</tr>
+<tr>
+<td><code>TEXT=... just inject-typing</code></td>
+<td>Inject a cursorless typing event (optional: <code>USER_NAME=</code>, <code>CHANNEL=</code>, <code>GUILD=</code>)</td>
+</tr>
+<tr>
+<td><code>make list</code></td>
+<td>Show server capabilities via Python client (tools, resources, events, sample poll)</td>
+</tr>
+<tr>
+<td><code>make listen</code></td>
+<td>Python SSE push listener</td>
+</tr>
+<tr>
+<td><code>just webhook</code></td>
+<td>Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs</td>
+</tr>
+<tr>
+<td><code>make poll</code></td>
+<td>Python polling loop (default 5s interval, override: <code>INTERVAL=10</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The Python clients (<code>make list / listen / webhook / poll</code>) are convenient for ad-hoc poking. The walkthrough above (<code>just demo</code>) is the canonical tour. Both share the <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/clients/python/events_client.py"><code>events_client.py</code></a> helper.</p>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/events/telegram/">Telegram events — same protocol, different source</a></li>
+<li><a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events">Events library</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/WALKTHROUGH.md"><code>examples/events/discord/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-events-extension--discord-reference-walkthrough">MCP Events Extension — Discord reference walkthrough <a class="anchor" href="#mcp-events-extension--discord-reference-walkthrough">¶</a></h1>
+<p>Walks through the four delivery modes of the experimental MCP Events extension (events/list, push via SSE, poll, webhook with TTL refresh) plus the cursored vs cursorless source distinction. Webhook subscriber uses the typed Go SDK at experimental/ext/events/clients/go.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>How do I open the conversation?</strong> — Vanilla MCP <code>initialize</code> over Streamable HTTP. The events extension doesn&rsquo;t declare any new capability — <code>events/*</code> methods are registered server-side via the events library. Push delivery rides a long-lived per-subscription POST that returns SSE (<code>events/stream</code>), not the session GET back-channel, so the client doesn&rsquo;t need any transport-level wiring to receive events.</li>
+<li><strong>What kinds of events does this server even emit?</strong> — <code>events/list</code> returns the catalog of event <strong>types</strong> the server can emit — not a list of recent event instances. (The naming is a touch misleading: it&rsquo;s much closer in spirit to <code>tools/list</code> than to a CRUD listing. Think of each entry as the schema for a kind of event that subscribers can ask for, not as data.)</li>
+<li><strong>Can I get events as they happen?</strong> — Yes — <code>events/stream</code> is the answer. It&rsquo;s a long-lived JSON-RPC request, one per subscription, that returns its events as <code>notifications/events/event</code> frames on the call&rsquo;s own SSE response stream. Spec §&ldquo;Push-Based Delivery&rdquo; L223-296.</li>
+<li><strong>What if I can&rsquo;t keep a long-lived stream open?</strong> — Poll instead. <code>events/poll</code> is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: <code>{name, params, cursor, maxAge, maxEvents}</code> in, <code>{events, cursor, hasMore, truncated, nextPollSeconds}</code> out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client&rsquo;s polling loop has one code path.</li>
+<li><strong>What about events I don&rsquo;t need to replay, like &lsquo;user is typing&rsquo;?</strong> — On the wire, the event type is marked cursorless: <code>events/list</code> advertises <code>cursorless: true</code> for that EventDef, every event delivery emits <code>cursor: null</code>, and <code>events/poll</code> always returns empty with <code>cursor: null</code> (there&rsquo;s nothing buffered to serve). Push delivery still fans out events live — the only thing that changes versus a cursored source is replay. (in mcpkit: source authors opt in via <code>events.NewYieldingSource[T](def, events.WithoutCursors())</code>)</li>
+<li><strong>What happens when the upstream source has a hiccup?</strong> — On the wire, two notification methods carry source health. <code>notifications/events/error</code> (spec L255+L261) is transient — the source had a failure, the stream stays open, subsequent events still arrive. <code>notifications/events/terminated</code> (spec L783-795) is terminal — the subscription has ended. This step exercises the transient path: <code>inject?action=error</code> causes the source to surface one upstream failure, the open stream sees <code>notifications/events/error</code> arrive while staying connected. (in mcpkit: server authors trigger these via <code>source.YieldError(err)</code> / <code>source.YieldTerminated(err)</code>)</li>
+<li><strong>What if my client itself keeps restarting, but I have a public callback URL?</strong> — Use webhook delivery. <code>events/subscribe</code> registers a callback URL plus a client-supplied <code>whsec_</code> secret with a TTL; the server POSTs HMAC-signed events to that URL as they happen, the subscription is soft-state on the server (in-memory with TTL), and the client refreshes before <code>refreshBefore</code> to keep it alive. If the client process dies and reconnects later with the same canonical tuple, the subscription either is still alive (refresh is idempotent) or has lapsed and the next subscribe creates a fresh one with the supplied cursor as the replay point. (in mcpkit: <code>clients/go</code> provides <code>Subscription</code> for subscribe + auto-refresh and <code>Receiver[Data]</code> for a typed inbound channel)</li>
+<li><strong>Two subs to the same event with different params — how do I tell deliveries apart?</strong> — Each delivery POST carries its own <code>X-MCP-Subscription-Id</code> header (per spec §&ldquo;Webhook Event Delivery&rdquo; L390), and on the push side every notification echoes the originating <code>events/stream</code> request id in <code>params.requestId</code>. Subscriptions are identified by the canonical tuple <code>(principal, delivery.url, name, params)</code> (spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Key composition&rdquo; L363), so two subscribes with the same <code>(principal, url, name)</code> but different <code>params</code> produce different ids — and the receiver branches by header without parsing the body.</li>
+<li><strong>My webhook receiver just died. How does the server let me know?</strong> — Two answers, layered. First, every subscribe-refresh response carries a <code>deliveryStatus</code> block when the target has prior delivery attempts (spec §&ldquo;Webhook Delivery Status&rdquo; L425-460): <code>active</code> / <code>lastDeliveryAt</code> / <code>lastError</code> / <code>failedSince</code>. Second, after N consecutive failures within a sliding window, the server flips <code>active: false</code> and auto-Posts a <code>{type:terminated}</code> control envelope to the receiver as a courtesy heads-up. Refresh of a suspended target reactivates it.</li>
+<li><strong>What if I forget the secret?</strong> — Rejected with <code>-32602 InvalidParams</code> at subscribe time. <code>delivery.secret</code> is REQUIRED on every <code>events/subscribe</code> per spec — there&rsquo;s no server-side fallback. Rejecting at subscribe time means a malformed subscription never exists in the registry, so the server can&rsquo;t ever produce unverifiable deliveries.</li>
+<li><strong>What if I supply garbage instead of a <code>whsec_</code> value?</strong> — Rejected with <code>-32602 InvalidParams</code>. The validator enforces the full Standard Webhooks format: <code>whsec_</code> followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail at subscribe time — catches IaC-pinned secrets that don&rsquo;t match the spec format before they create a broken subscription.</li>
+<li><strong>What if I try to pick my own subscription id?</strong> — Rejected with <code>-32602 InvalidParams</code>. Per spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Key composition&rdquo; L363, the id is server-derived from <code>(principal, name, params, url)</code> — there is no client-generated id. Old SDKs that send an <code>id</code> field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.</li>
+<li><strong>And when everything is right?</strong> — Subscribe succeeds. The response carries the server-derived <code>id</code> (<code>sub_&lt;base64&gt;</code> per spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Derived id&rdquo; L367), plus <code>cursor</code> and <code>refreshBefore</code>. Notably absent: the <code>secret</code> — the client supplied it, so the server doesn&rsquo;t echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.</li>
+<li><strong>Now let&rsquo;s see it against a real bot</strong> — Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+    participant Receiver as Local webhook receiver (this process)
+    participant Discord as Discord (real bot mode only)
+
+    Note over Host,Discord: Step 1: How do I open the conversation?
+    Host-&gt;&gt;Server: POST /mcp — initialize
+    Server--&gt;&gt;Host: serverInfo + capabilities
+
+    Note over Host,Discord: Step 2: What kinds of events does this server even emit?
+    Host-&gt;&gt;Server: events/list
+    Server--&gt;&gt;Host: [discord.message (cursored), discord.typing (cursorless)]
+
+    Note over Host,Discord: Step 3: Can I get events as they happen?
+    Host-&gt;&gt;Server: events/stream { name: discord.message }
+    Server--&gt;&gt;Host: notifications/events/active { requestId, cursor }
+    Receiver-&gt;&gt;Server: POST /inject (simulated Discord message)
+    Server--&gt;&gt;Host: notifications/events/event { requestId, eventId, ... }
+    Host--&gt;&gt;Server: (close request) → StreamEventsResult final frame
+
+    Note over Host,Discord: Step 4: What if I can't keep a long-lived stream open?
+    Host-&gt;&gt;Server: events/poll {name: discord.message, cursor: &lt;head&gt;}
+    Server--&gt;&gt;Host: {events: [], cursor: &lt;head&gt;, hasMore: false}
+
+    Note over Host,Discord: Step 5: What about events I don't need to replay, like 'user is typing'?
+    Host-&gt;&gt;Server: events/stream { name: discord.typing }
+    Server--&gt;&gt;Host: notifications/events/active { cursor: null }
+    Receiver-&gt;&gt;Server: POST /inject?event=discord.typing
+    Server--&gt;&gt;Host: notifications/events/event { cursor: null }
+
+    Note over Host,Discord: Step 6: What happens when the upstream source has a hiccup?
+    Host-&gt;&gt;Server: events/stream { name: discord.message }
+    Server--&gt;&gt;Host: notifications/events/active
+    Receiver-&gt;&gt;Server: POST /inject?action=error
+    Server--&gt;&gt;Host: notifications/events/event/error { requestId, error: { code, message } }
+
+    Note over Host,Discord: Step 7: What if my client itself keeps restarting, but I have a public callback URL?
+    Receiver-&gt;&gt;Receiver: spin up local httptest receiver on :random
+    Host-&gt;&gt;Server: events/subscribe { mode: webhook, url, secret: whsec_&lt;client-supplied&gt; }
+    Server--&gt;&gt;Host: { id, refreshBefore }   (response does NOT echo secret per spec)
+    Receiver-&gt;&gt;Server: POST /inject (simulated message)
+    Server--&gt;&gt;Receiver: POST &lt;url&gt; + HMAC signature headers (default webhook-* per Standard Webhooks, opt-in X-MCP-* via -webhook-header-mode mcp)
+    Host--&gt;&gt;Host: background loop: re-subscribe at 0.5 × TTL
+
+    Note over Host,Discord: Step 8: Two subs to the same event with different params — how do I tell deliveries apart?
+    Host-&gt;&gt;Server: events/subscribe { name: discord.message, params: {channel_id: 'alpha'}, ... }
+    Server--&gt;&gt;Host: { id: sub_&lt;A&gt;, ... }
+    Host-&gt;&gt;Server: events/subscribe { name: discord.message, params: {channel_id: 'beta'}, ... }
+    Server--&gt;&gt;Host: { id: sub_&lt;B&gt;, ... }   (id differs from A — different params → different canonical tuple)
+    Receiver-&gt;&gt;Server: POST /inject (one event)
+    Server--&gt;&gt;Receiver: POST &lt;url&gt; + X-MCP-Subscription-Id: sub_&lt;A&gt;
+    Server--&gt;&gt;Receiver: POST &lt;url&gt; + X-MCP-Subscription-Id: sub_&lt;B&gt;
+
+    Note over Host,Discord: Step 9: My webhook receiver just died. How does the server let me know?
+    Receiver-&gt;&gt;Receiver: spin up failing receiver (returns 500 on event POSTs)
+    Host-&gt;&gt;Server: events/subscribe { name: discord.message, ... }
+    Server--&gt;&gt;Host: { id, refreshBefore }   (no deliveryStatus on first subscribe — nothing to report)
+    Receiver-&gt;&gt;Server: POST /inject (one event)
+    Server--&gt;&gt;Receiver: POST &lt;url&gt;  → 500  (×4 retries with exponential backoff, then recordDeliveryFailure)
+    Host-&gt;&gt;Server: events/subscribe (refresh — same canonical tuple)
+    Server--&gt;&gt;Host: { id, refreshBefore, deliveryStatus: { active, lastDeliveryAt, lastError, failedSince } }
+    Server--&gt;&gt;Receiver: (if suspend fires) POST &lt;url&gt; body={type:terminated, error}  + webhook-id=msg_terminated_&lt;random&gt;
+
+    Note over Host,Discord: Step 10: What if I forget the secret?
+    Host-&gt;&gt;Server: events/subscribe { delivery: { ... } }   (no secret)
+    Server--&gt;&gt;Host: -32602 InvalidParams: delivery.secret is required
+
+    Note over Host,Discord: Step 11: What if I supply garbage instead of a `whsec_` value?
+    Host-&gt;&gt;Server: events/subscribe { delivery: { secret: 'wrong' } }
+    Server--&gt;&gt;Host: -32602 InvalidParams: delivery.secret invalid: must start with the whsec_ prefix
+
+    Note over Host,Discord: Step 12: What if I try to pick my own subscription id?
+    Host-&gt;&gt;Server: events/subscribe { id: 'mine', ... }
+    Server--&gt;&gt;Host: -32602 InvalidParams: client-supplied id is not accepted
+
+    Note over Host,Discord: Step 13: And when everything is right?
+    Host-&gt;&gt;Host: events.GenerateSecret() → whsec_&lt;base64 of 32 bytes&gt;
+    Host-&gt;&gt;Server: events/subscribe { delivery: { secret: whsec_&lt;valid&gt; } }
+    Server--&gt;&gt;Host: { id: sub_&lt;base64-of-16-bytes&gt;, cursor, refreshBefore }   (no secret per spec)
+
+    Note over Host,Discord: Step 14: Now let's see it against a real bot
+    Discord-&gt;&gt;Server: TypingStart event (when you start typing in the channel)
+    Server--&gt;&gt;Host: notifications/events/event { name: discord.typing, cursor: null }
+    Discord-&gt;&gt;Server: MessageCreate event (when you press enter)
+    Server--&gt;&gt;Host: notifications/events/event { name: discord.message, cursor: &lt;fresh&gt; }
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup--two-modes">Setup — two modes <a class="anchor" href="#setup--two-modes">¶</a></h3>
+<p>This walkthrough runs against either a test-mode server or a real Discord bot.</p>
+<p><strong>Option A — Test mode</strong> (no bot token needed). All steps run; the final live-interaction step skips with a &rsquo;no token&rsquo; message. Drive synthetic events from a third terminal via <code>make inject</code> / <code>make inject-typing</code>.</p>
+<pre><code>Terminal 1:  just serve                                # server in test mode
+Terminal 2:  just demo                                 # this walkthrough
+Terminal 3:  just inject TEXT='hello'                  # message event
+             make inject-typing                        # typing event (cursorless)
+</code></pre>
+<p><strong>Option B — Real bot mode</strong> (requires <code>DISCORD_BOT_TOKEN</code>). Same walkthrough plus the live step captures real typing + message events from your Discord channel. Token setup in the demo&rsquo;s README.</p>
+<pre><code>Terminal 1:  DISCORD_BOT_TOKEN=... just serve          # server in bot mode
+Terminal 2:  just demo                                 # this walkthrough
+             # In Discord: type, then send. Live step captures both.
+</code></pre>
+<h3 id="what-this-demo-covers">What this demo covers <a class="anchor" href="#what-this-demo-covers">¶</a></h3>
+<ul>
+<li><strong>events/list</strong> — the source catalog, including the <code>cursorless</code> flag and the <code>_meta</code> per-type metadata field.</li>
+<li><strong>Push</strong> — long-lived SSE stream; <code>notifications/events/event</code> arrives in real time.</li>
+<li><strong>Poll</strong> — single-subscription <code>events/poll</code> (multi-sub batching is not supported).</li>
+<li><strong>Cursorless source</strong> — typing indicators that wire as <code>cursor: null</code>. Subscribers can&rsquo;t replay, only see live events.</li>
+<li><strong>Source-side health signals</strong> — <code>YieldError</code> (transient <code>notifications/events/error</code>, stream stays open).</li>
+<li><strong>Webhook + auto-refresh</strong> — <code>events/subscribe</code> with the typed <code>Subscription</code> + <code>Receiver[Data]</code> from <code>clients/go</code>. Includes the hardened delivery loop: dial-time SSRF guard, no-redirects, 256 KiB body cap with 413 non-retryable, Standard Webhooks signature scheme as default.</li>
+<li><strong>Multi-subscription routing</strong> — two subs to <code>discord.message</code> with different params; one event fans out to both, distinguished by <code>X-MCP-Subscription-Id</code> plus push-side <code>requestId</code> echo on every notification.</li>
+<li><strong>Webhook delivery health</strong> — <code>deliveryStatus</code> block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a <code>{type:terminated}</code> control envelope when run with <code>just serve-fast-suspend</code>.</li>
+<li><strong>Auth posture</strong> — <code>events/subscribe</code> requires an authenticated principal per spec; demo runs anonymously via <code>UnsafeAnonymousPrincipal</code>. Production deployments wire real OIDC and reject anonymous subscribes with <code>-32012 Forbidden</code>.</li>
+<li><strong>Spec validation</strong> — empty / malformed <code>delivery.secret</code> rejected; client-supplied <code>id</code> rejected; valid <code>whsec_</code> accepted with no secret echoed.</li>
+</ul>
+<p>Identity-mode subscribe and Standard Webhooks header naming are exercised by the unit tests in <code>experimental/ext/events/</code> and by <code>discord-events</code>&rsquo;s e2e tests; they require the server to be started with mode flags so they&rsquo;re documented in the README rather than driven from this walkthrough.</p>
+<h3 id="step-1-how-do-i-open-the-conversation">Step 1: How do I open the conversation? <a class="anchor" href="#step-1-how-do-i-open-the-conversation">¶</a></h3>
+<p>Vanilla MCP <code>initialize</code> over Streamable HTTP. The events extension doesn&rsquo;t declare any new capability — <code>events/*</code> methods are registered server-side via the events library. Push delivery rides a long-lived per-subscription POST that returns SSE (<code>events/stream</code>), not the session GET back-channel, so the client doesn&rsquo;t need any transport-level wiring to receive events.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Vanilla MCP initialize over Streamable HTTP — mints the session id.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># The events extension declares no new capability; events/* are server-side methods.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-2-what-kinds-of-events-does-this-server-even-emit">Step 2: What kinds of events does this server even emit? <a class="anchor" href="#step-2-what-kinds-of-events-does-this-server-even-emit">¶</a></h3>
+<p><code>events/list</code> returns the catalog of event <strong>types</strong> the server can emit — not a list of recent event instances. (The naming is a touch misleading: it&rsquo;s much closer in spirit to <code>tools/list</code> than to a CRUD listing. Think of each entry as the schema for a kind of event that subscribers can ask for, not as data.)</p>
+<p>Each entry advertises a name, description, the supported delivery modes, an auto-derived <code>payloadSchema</code>, and the <code>cursorless</code> flag — <code>discord.message</code> buffers events and accepts replay cursors, <code>discord.typing</code> emits ephemerally and always wires <code>cursor: null</code>.</p>
+<ul>
+<li>Each <code>EventDef</code> may carry an opaque <code>_meta</code> map for app-defined per-event-type metadata (mirrors the <code>_meta</code> convention on Tool / Resource / Prompt in base MCP). The same <code>_meta</code> convention applies on <code>EventOccurrence</code> (the wire-format Event envelope). The discord sources don&rsquo;t set <code>_meta</code> here; servers that want to surface trace ids, source-system tags, or other per-type annotations populate it on construction.</li>
+<li>The events/list response carries an optional <code>nextCursor</code> for forward-compatible pagination (mirrors the tools/list / resources/list convention). Library doesn&rsquo;t paginate today (advertised sets are small in practice); the field is plumbed for forward compatibility.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/list returns the catalog of event TYPES (closer to tools/list than a CRUD listing).</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Each entry advertises name, deliveryModes, payloadSchema, the cursorless flag, and optional _meta.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;events/list&#34;,&#34;params&#34;:{}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-3-can-i-get-events-as-they-happen">Step 3: Can I get events as they happen? <a class="anchor" href="#step-3-can-i-get-events-as-they-happen">¶</a></h3>
+<p>Yes — <code>events/stream</code> is the answer. It&rsquo;s a long-lived JSON-RPC request, one per subscription, that returns its events as <code>notifications/events/event</code> frames on the call&rsquo;s own SSE response stream. Spec §&ldquo;Push-Based Delivery&rdquo; L223-296.</p>
+<ul>
+<li>Server confirms with notifications/events/active, then delivers events as notifications/events/event on the call&rsquo;s own SSE response stream.</li>
+<li>Heartbeats fire every ≥30s carrying the source&rsquo;s current cursor so the client&rsquo;s persisted cursor advances during quiet periods.</li>
+<li>Replaces the broadcast-to-all-listeners model from Phase 1; per-stream isolation comes for free since each stream is its own POST.</li>
+<li>Typed Go SDK Stream() helper (experimental/ext/events/clients/go) threads the per-call notification hook (client.CallContext.WithNotifyHook) so callbacks fire only for THIS stream&rsquo;s notifications.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/stream is a long-lived JSON-RPC request; its events arrive as</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># notifications/events/event frames on the call&#39;s own SSE response stream.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Server first confirms with notifications/events/active { requestId, cursor }.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (Inject a message from another terminal: make inject TEXT=&#39;hello&#39;)</span>
+</span></span><span style="display:flex;"><span>curl -N -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;}}&#39;</span>
+</span></span></code></pre><h3 id="step-4-what-if-i-cant-keep-a-long-lived-stream-open">Step 4: What if I can&rsquo;t keep a long-lived stream open? <a class="anchor" href="#step-4-what-if-i-cant-keep-a-long-lived-stream-open">¶</a></h3>
+<p>Poll instead. <code>events/poll</code> is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: <code>{name, params, cursor, maxAge, maxEvents}</code> in, <code>{events, cursor, hasMore, truncated, nextPollSeconds}</code> out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client&rsquo;s polling loop has one code path.</p>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/poll is single-subscription per call with a flat top-level shape.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Polling at the head returns no new events but advances the cursor — same shape either way.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:3,&#34;method&#34;:&#34;events/poll&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;cursor&#34;:&#34;0&#34;}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-5-what-about-events-i-dont-need-to-replay-like-user-is-typing">Step 5: What about events I don&rsquo;t need to replay, like &lsquo;user is typing&rsquo;? <a class="anchor" href="#step-5-what-about-events-i-dont-need-to-replay-like-user-is-typing">¶</a></h3>
+<p>On the wire, the event type is marked cursorless: <code>events/list</code> advertises <code>cursorless: true</code> for that EventDef, every event delivery emits <code>cursor: null</code>, and <code>events/poll</code> always returns empty with <code>cursor: null</code> (there&rsquo;s nothing buffered to serve). Push delivery still fans out events live — the only thing that changes versus a cursored source is replay. (in mcpkit: source authors opt in via <code>events.NewYieldingSource[T](def, events.WithoutCursors())</code>)</p>
+<ul>
+<li>Push delivery via events/stream still works — there&rsquo;s just nothing to replay.</li>
+<li>Heartbeats also carry cursor:null (spec L294: &ldquo;null for event types that do not support replay&rdquo;).</li>
+<li>Useful for ephemeral state (typing indicators, presence, current readings).</li>
+</ul>
+<h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Same events/stream method, but discord.typing is a cursorless source:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># every delivery (and heartbeat) carries cursor:null — push still fans out live,</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># only replay is unavailable. (Inject from another terminal: make inject-typing)</span>
+</span></span><span style="display:flex;"><span>curl -N -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:4,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.typing&#34;}}&#39;</span>
+</span></span></code></pre><h3 id="step-6-what-happens-when-the-upstream-source-has-a-hiccup">Step 6: What happens when the upstream source has a hiccup? <a class="anchor" href="#step-6-what-happens-when-the-upstream-source-has-a-hiccup">¶</a></h3>
+<p>On the wire, two notification methods carry source health. <code>notifications/events/error</code> (spec L255+L261) is transient — the source had a failure, the stream stays open, subsequent events still arrive. <code>notifications/events/terminated</code> (spec L783-795) is terminal — the subscription has ended. This step exercises the transient path: <code>inject?action=error</code> causes the source to surface one upstream failure, the open stream sees <code>notifications/events/error</code> arrive while staying connected. (in mcpkit: server authors trigger these via <code>source.YieldError(err)</code> / <code>source.YieldTerminated(err)</code>)</p>
+<ul>
+<li>Webhook subscribers don&rsquo;t see error envelopes (errors are upstream-side, not delivery-side); they DO see {type:terminated} control envelopes when the suspend state machine flips Active=false or when the source itself terminates.</li>
+<li>This walkthrough step exercises only the transient error path — calling <code>inject?action=terminate</code> would one-shot terminate the discord.message source, breaking subsequent walkthrough steps that depend on it. Full terminate flow is covered by TestE2EHealthSignalsEndToEnd in this demo&rsquo;s e2e_test.go.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-5">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-5">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Open an events/stream, then trigger a transient upstream failure on the source.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># notifications/events/error arrives on the open stream — which stays connected.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (notifications/events/terminated would be terminal; this path is transient only.)</span>
+</span></span><span style="display:flex;"><span>curl -N -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:5,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;}}&#39;</span> &amp;
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#39;http://localhost:8080/inject?action=error&amp;code=-32603&amp;message=demo+upstream+failure&#39;</span>
+</span></span></code></pre><h3 id="step-7-what-if-my-client-itself-keeps-restarting-but-i-have-a-public-callback-url">Step 7: What if my client itself keeps restarting, but I have a public callback URL? <a class="anchor" href="#step-7-what-if-my-client-itself-keeps-restarting-but-i-have-a-public-callback-url">¶</a></h3>
+<p>Use webhook delivery. <code>events/subscribe</code> registers a callback URL plus a client-supplied <code>whsec_</code> secret with a TTL; the server POSTs HMAC-signed events to that URL as they happen, the subscription is soft-state on the server (in-memory with TTL), and the client refreshes before <code>refreshBefore</code> to keep it alive. If the client process dies and reconnects later with the same canonical tuple, the subscription either is still alive (refresh is idempotent) or has lapsed and the next subscribe creates a fresh one with the supplied cursor as the replay point. (in mcpkit: <code>clients/go</code> provides <code>Subscription</code> for subscribe + auto-refresh and <code>Receiver[Data]</code> for a typed inbound channel)</p>
+<ul>
+<li>HMAC signing secret is client-supplied per spec; SDK auto-generates a whsec_ value via events.GenerateSecret() when SubscribeOptions.Secret is empty.</li>
+<li>Subscription.Secret() returns the value the SDK ended up using, so the receiver can verify with the same secret.</li>
+<li>Receiver[DiscordEventData] verifies signatures and decodes the wire envelope into the typed Data shape — consumer reads <code>ev.Data.Content</code> directly, no re-parsing JSON.</li>
+<li>Default header mode is <strong>Standard Webhooks</strong> (spec L390+L431): <code>webhook-id</code> / <code>webhook-timestamp</code> / <code>webhook-signature: v1,&lt;base64&gt;</code> plus the MCP-specific <code>X-MCP-Subscription-Id</code>. Off-the-shelf Svix-style verifiers work. <code>MCPHeaders</code> (<code>X-MCP-Signature</code> + <code>X-MCP-Timestamp</code>) is the opt-in legacy via <code>-webhook-header-mode mcp</code>.</li>
+</ul>
+<p><strong>Hardened delivery loop</strong> (<code>webhook.go</code> <code>deliver()</code>):</p>
+<ul>
+<li>Dial-time SSRF guard rejects loopback / RFC1918 / link-local / IPv6-ULA / multicast at the <code>net.Dialer.Control</code> callback (TOCTOU-safe under DNS rebinding). The demo bypasses this via <code>WithWebhookAllowPrivateNetworks(true)</code> because it delivers to a local httptest receiver; production deployments leave the guard ON. Spec §&ldquo;Webhook Security&rdquo; L464.</li>
+<li>No-redirect-following: <code>http.Client.CheckRedirect</code> returns <code>ErrUseLastResponse</code> so a receiver returning 3xx to an internal address can&rsquo;t bypass the dial-time guard via Go&rsquo;s redirect chain. 3xx is terminal <code>http_3xx_redirect</code>.</li>
+<li>256 KiB body cap (REJECT not TRUNCATE — truncation would corrupt the HMAC); 413 from the receiver is non-retryable. Spec L487.</li>
+<li>5xx retry with exponential backoff (4 attempts: 500ms → 1s → 2s → 5s cap). Standard webhook convention.</li>
+</ul>
+<p><strong>Auth posture:</strong> <code>events/subscribe</code> requires an authenticated principal per spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Authentication required&rdquo; L361. The demo runs anonymously via <code>events.Config.UnsafeAnonymousPrincipal=&quot;demo-user&quot;</code> (logged at startup as &ldquo;auth: demo (anonymous → UnsafeAnonymousPrincipal)&rdquo;). Production deployments unset that field AND wire <code>server.WithAuth(JWTValidator)</code> so anonymous subscribes hit the spec-mandated <code>-32012 Forbidden</code>. See README &ldquo;Auth posture: demo escape vs real OIDC&rdquo;.</p>
+<h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/subscribe registers a callback URL + a client-supplied whsec_ secret with a TTL.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Response carries { id, refreshBefore } and does NOT echo the secret (spec).</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Tear down by tuple (name, params, delivery.url) — the derived id is not accepted as input.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:6,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;https://receiver.example/hook&#34;,&#34;secret&#34;:&#34;whsec_&lt;client-supplied&gt;&#34;},&#34;maxAge&#34;:300}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># later: events/unsubscribe { name, delivery: { url } }</span>
+</span></span></code></pre><h3 id="step-8-two-subs-to-the-same-event-with-different-params--how-do-i-tell-deliveries-apart">Step 8: Two subs to the same event with different params — how do I tell deliveries apart? <a class="anchor" href="#step-8-two-subs-to-the-same-event-with-different-params--how-do-i-tell-deliveries-apart">¶</a></h3>
+<p>Each delivery POST carries its own <code>X-MCP-Subscription-Id</code> header (per spec §&ldquo;Webhook Event Delivery&rdquo; L390), and on the push side every notification echoes the originating <code>events/stream</code> request id in <code>params.requestId</code>. Subscriptions are identified by the canonical tuple <code>(principal, delivery.url, name, params)</code> (spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Key composition&rdquo; L363), so two subscribes with the same <code>(principal, url, name)</code> but different <code>params</code> produce different ids — and the receiver branches by header without parsing the body.</p>
+<ul>
+<li>The library fans out one yielded event to <strong>both</strong> webhook targets by default. Authors that want per-subscription filtering attach a <code>Match</code> (and optionally <code>Transform</code>) hook on the <code>EventDef</code> — the hook fires once per (event × subscription) on the fanout step and short-circuits delivery for non-matching subs. The discord demo doesn&rsquo;t wire one because params-based routing (different ids per <code>(name, params)</code> tuple) is enough for the &ldquo;two subs, same event, different params&rdquo; story.</li>
+<li>Push side: the same routing works via the <code>requestId</code> echo on every <code>notifications/events/event</code> payload — each <code>events/stream</code> POST gets its own JSON-RPC id, and notifications carry it in <code>params.requestId</code>.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-7">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-7">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Two subscribes, same (principal, url, name) but different params → different ids.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># One event then fans out to both; each delivery POST carries its own X-MCP-Subscription-Id.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:7,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;params&#34;:{&#34;channel_id&#34;:&#34;alpha&#34;},&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;https://receiver.example/hook&#34;,&#34;secret&#34;:&#34;whsec_&lt;a&gt;&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.result.id&#39;</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:8,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;params&#34;:{&#34;channel_id&#34;:&#34;beta&#34;},&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;https://receiver.example/hook&#34;,&#34;secret&#34;:&#34;whsec_&lt;b&gt;&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.result.id&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># later: events/unsubscribe per tuple — { name, params: { channel_id }, delivery: { url } }</span>
+</span></span></code></pre><h3 id="step-9-my-webhook-receiver-just-died-how-does-the-server-let-me-know">Step 9: My webhook receiver just died. How does the server let me know? <a class="anchor" href="#step-9-my-webhook-receiver-just-died-how-does-the-server-let-me-know">¶</a></h3>
+<p>Two answers, layered. First, every subscribe-refresh response carries a <code>deliveryStatus</code> block when the target has prior delivery attempts (spec §&ldquo;Webhook Delivery Status&rdquo; L425-460): <code>active</code> / <code>lastDeliveryAt</code> / <code>lastError</code> / <code>failedSince</code>. Second, after N consecutive failures within a sliding window, the server flips <code>active: false</code> and auto-Posts a <code>{type:terminated}</code> control envelope to the receiver as a courtesy heads-up. Refresh of a suspended target reactivates it.</p>
+<ul>
+<li><code>lastError</code> is from a <strong>closed categorical set</strong> (<code>connection_refused</code>, <code>timeout</code>, <code>tls_error</code>, <code>http_3xx_redirect</code>, <code>http_4xx</code>, <code>http_5xx</code>, <code>challenge_failed</code>); the spec forbids raw response bodies / headers / status lines because the subscribe response is visible to the subscriber and arbitrary receiver responses must not become a data oracle.</li>
+<li><code>failedSince</code> is set on the <strong>first failure of the current run</strong> and preserved across subsequent failures, so subscribers can see how long the receiver has been unreachable.</li>
+<li>Spec §&ldquo;Webhook Event Delivery&rdquo; L413+L460: &ldquo;after repeated failures the server SHOULD set active: false.&rdquo; The transition fires after 5 consecutive failures within a 10-min sliding window. On the <code>true→false</code> transition the server auto-Posts a <code>{type:terminated}</code> control envelope to the (now-suspended) receiver — <code>webhook-id</code> prefix is <code>msg_terminated_&lt;random&gt;</code> so receivers can distinguish it from event deliveries (which use <code>evt_&lt;eventId&gt;</code>). (in mcpkit: knobs are <code>events.WithWebhookSuspendThreshold(n)</code> and <code>events.WithWebhookSuspendWindow(d)</code>)</li>
+<li>A successful refresh of a suspended target reactivates it: clears the failure run, resets <code>lastError</code> and <code>failedSince</code>, flips <code>active</code> back to true.</li>
+</ul>
+<p><strong>Fast-mode tip:</strong> with the default <code>just serve</code> (<code>-webhook-suspend-threshold 5</code>), this step demonstrates the deliveryStatus reporting (lastError populated, failedSince populated, active still true) — full suspend takes 5 failed deliveries × ~8.5s each. To see suspend fire after ONE failure (~12s total step time), restart the server with <code>just serve-fast-suspend</code> (sets <code>-webhook-suspend-threshold 1</code>).</p>
+<h4 id="reproduce-on-the-wire-8">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-8">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># First subscribe has no deliveryStatus (nothing to report yet).</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># After a failed delivery, re-subscribe on the SAME tuple → response carries</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># deliveryStatus { active, lastDeliveryAt, lastError, failedSince }.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:9,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;params&#34;:{&#34;role&#34;:&#34;health-demo&#34;},&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;https://dead-receiver.example/hook&#34;,&#34;secret&#34;:&#34;whsec_&lt;v&gt;&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (inject an event, let the ~8.5s retry cycle exhaust, then re-issue the SAME subscribe to see deliveryStatus)</span>
+</span></span></code></pre><h3 id="step-10-what-if-i-forget-the-secret">Step 10: What if I forget the secret? <a class="anchor" href="#step-10-what-if-i-forget-the-secret">¶</a></h3>
+<p>Rejected with <code>-32602 InvalidParams</code> at subscribe time. <code>delivery.secret</code> is REQUIRED on every <code>events/subscribe</code> per spec — there&rsquo;s no server-side fallback. Rejecting at subscribe time means a malformed subscription never exists in the registry, so the server can&rsquo;t ever produce unverifiable deliveries.</p>
+<ul>
+<li>This step makes a raw client.Call to bypass the SDK and demonstrate the server-side validator directly. (in mcpkit: the Go SDK auto-generates a conforming whsec_ value via <code>events.GenerateSecret()</code> when <code>SubscribeOptions.Secret</code> is empty — this step skips that on purpose)</li>
+</ul>
+<h4 id="reproduce-on-the-wire-9">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-9">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># delivery.secret is REQUIRED on every events/subscribe — no server-side fallback.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Omitting it is rejected at subscribe time with -32602 InvalidParams.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:10,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;http://localhost:1/sink&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.error&#39;</span>
+</span></span></code></pre><h3 id="step-11-what-if-i-supply-garbage-instead-of-a-whsec--value">Step 11: What if I supply garbage instead of a <code>whsec_</code> value? <a class="anchor" href="#step-11-what-if-i-supply-garbage-instead-of-a-whsec--value">¶</a></h3>
+<p>Rejected with <code>-32602 InvalidParams</code>. The validator enforces the full Standard Webhooks format: <code>whsec_</code> followed by base64 of 24-64 random bytes. A non-prefixed value, a too-short value, or non-base64 garbage all fail at subscribe time — catches IaC-pinned secrets that don&rsquo;t match the spec format before they create a broken subscription.</p>
+<h4 id="reproduce-on-the-wire-10">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-10">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># A non-whsec_ value fails the Standard Webhooks format check → -32602 InvalidParams.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:11,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;http://localhost:1/sink&#34;,&#34;secret&#34;:&#34;wrong&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.error&#39;</span>
+</span></span></code></pre><h3 id="step-12-what-if-i-try-to-pick-my-own-subscription-id">Step 12: What if I try to pick my own subscription id? <a class="anchor" href="#step-12-what-if-i-try-to-pick-my-own-subscription-id">¶</a></h3>
+<p>Rejected with <code>-32602 InvalidParams</code>. Per spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Key composition&rdquo; L363, the id is server-derived from <code>(principal, name, params, url)</code> — there is no client-generated id. Old SDKs that send an <code>id</code> field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.</p>
+<h4 id="reproduce-on-the-wire-11">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-11">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># The id is server-derived; a client-supplied id field is rejected → -32602 InvalidParams.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:12,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;id&#34;:&#34;client-picked-id&#34;,&#34;name&#34;:&#34;discord.message&#34;,&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;http://localhost:1/sink&#34;,&#34;secret&#34;:&#34;whsec_&lt;valid&gt;&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.error&#39;</span>
+</span></span></code></pre><h3 id="step-13-and-when-everything-is-right">Step 13: And when everything is right? <a class="anchor" href="#step-13-and-when-everything-is-right">¶</a></h3>
+<p>Subscribe succeeds. The response carries the server-derived <code>id</code> (<code>sub_&lt;base64&gt;</code> per spec §&ldquo;Subscription Identity&rdquo; → &ldquo;Derived id&rdquo; L367), plus <code>cursor</code> and <code>refreshBefore</code>. Notably absent: the <code>secret</code> — the client supplied it, so the server doesn&rsquo;t echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.</p>
+<ul>
+<li>The id is non-load-bearing for security; it&rsquo;s surfaced as <code>X-MCP-Subscription-Id</code> on delivery POSTs but knowing the value grants no operations on the subscription.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-12">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-12">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># A valid whsec_ secret succeeds: response carries the server-derived id, cursor,</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># and refreshBefore — and notably NOT the secret (the server never echoes it).</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:13,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;,&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;http://localhost:1/sink&#34;,&#34;secret&#34;:&#34;whsec_&lt;valid&gt;&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># then tear down by tuple: events/unsubscribe { name, delivery: { url } }</span>
+</span></span></code></pre><h3 id="step-14-now-lets-see-it-against-a-real-bot">Step 14: Now let&rsquo;s see it against a real bot <a class="anchor" href="#step-14-now-lets-see-it-against-a-real-bot">¶</a></h3>
+<p>Setup: start the server with a Discord bot token and invite the bot to a channel you can post in.</p>
+<pre><code>DISCORD_BOT_TOKEN=&lt;your-token&gt; just serve
+</code></pre>
+<p>Bot setup (token + invite URL) is documented in this demo&rsquo;s README.md.</p>
+<ul>
+<li>TypingStart handler in main.go yields a cursorless discord.typing event; MessageCreate yields the cursored discord.message.</li>
+<li>Discord&rsquo;s typing indicator fires once when you start (then refires every ~8s if you keep typing), not per keystroke.</li>
+<li>&ndash;non-interactive mode skips the wait so CI runs aren&rsquo;t slowed.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-13">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-13">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Hold two concurrent events/stream requests open against the same session,</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># one per subscription (spec L271). Then type + send in the real Discord channel:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># discord.typing arrives with cursor:null, discord.message with a fresh cursor.</span>
+</span></span><span style="display:flex;"><span>curl -N -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:14,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.message&#34;}}&#39;</span> &amp;
+</span></span><span style="display:flex;"><span>curl -N -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:15,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;discord.typing&#34;}}&#39;</span> &amp;
+</span></span></code></pre><h3 id="where-each-piece-lives-in-mcpkit">Where each piece lives in mcpkit <a class="anchor" href="#where-each-piece-lives-in-mcpkit">¶</a></h3>
+<ul>
+<li>Events library: <code>experimental/ext/events/</code></li>
+<li>Go client SDK (<code>Subscription</code>, <code>Receiver[Data]</code>): <code>experimental/ext/events/clients/go/</code></li>
+<li>Python client SDK (<code>WebhookSubscription</code> class + <code>webhook</code> CLI): <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/clients/python/events_client.py"><code>experimental/ext/events/clients/python/events_client.py</code></a></li>
+<li>Demo source: <code>examples/events/discord/</code></li>
+<li>Companion demo: <code>examples/events/telegram/</code> (lighter walkthrough — same protocol, different bot SDK)</li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/events/discord/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/events/discord/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

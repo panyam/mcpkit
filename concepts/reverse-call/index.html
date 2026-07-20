@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Server-initiated sampling, elicitation, and roots/list — and how the handler context gates them.">
+    <title>Reverse calls · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Reverse calls</h1>
+        
+        <p class="lead">Server-initiated sampling, elicitation, and roots/list — and how the handler context gates them.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/reverse-call.md"><code>tutorials/walkthrough/reverse-call.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="reverse-call-mechanics">Reverse-call mechanics <a class="anchor" href="#reverse-call-mechanics">¶</a></h1>
+<p>How a server handler synchronously asks the client for something — sampling, elicitation, or roots — and what dies when. Six questions.</p>
+<blockquote>
+<p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a>, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a><br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a> Next-to-read, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a> Next-to-read, <a href="/mcpkit/concepts/mrtr/">mrtr</a> Next-to-read, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a> Next-to-read<br />
+<strong>Branches into:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/elicitation.md">elicitation</a> <em>(stub, leaf)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/sampling.md">sampling</a> <em>(stub, leaf)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/roots-list.md">roots-list</a> <em>(stub, leaf)</em><br />
+<strong>Spec:</strong> <a href="https://modelcontextprotocol.io/specification/2025-06-18">Client features (sampling, elicitation, roots)</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> <em>(<code>BaseContext.Sample</code>, <code>BaseContext.Elicit</code>, <code>BaseContext.AllowedRoots</code>)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/core/session.go"><code>core/session.go</code></a> <em>(<code>sessionCtx.request</code>)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/core/request.go"><code>core/request.go</code></a> <em>(<code>RequestFunc</code>, <code>ErrNoRequestFunc</code>)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/core/sampling.go"><code>core/sampling.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/elicitation.go"><code>core/elicitation.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/roots_allowed.go"><code>core/roots_allowed.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>core/background.go</code></a> <em>(<code>DetachForBackground</code>, <code>ReplaceSessionRequestFunc</code>)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client/client.go</code></a> <em>(<code>HandleServerRequest</code>, <code>HandleServerRequestWithContext</code>)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/server/session_wiring.go"><code>server/session_wiring.go</code></a> <em>(<code>makeRequestFunc</code>, push wiring)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/server/roots.go"><code>server/roots.go</code></a></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<ul>
+<li>You know how a <code>tools/call</code> dispatches and what the handler context provides. → If not, read <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a>.</li>
+<li>You know the per-direction pending-id table and the spec&rsquo;s &ldquo;server-initiated requests must be in association with a forward request&rdquo; rule. → If not, read <a href="/mcpkit/concepts/transport-mechanics/#reverse-call-origination">transport mechanics</a>.</li>
+<li><em>(Useful contrast)</em> You know MRTR&rsquo;s stateless-round-trip alternative. → See <a href="/mcpkit/concepts/mrtr/">mrtr</a>.</li>
+</ul>
+<h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
+<p>A tool handler often needs information <em>from the client</em> mid-execution: the user&rsquo;s confirmation, an LLM completion, the host&rsquo;s filesystem roots. MCP defines three client-features that surface this — <strong>sampling</strong> (<code>sampling/createMessage</code>), <strong>elicitation</strong> (<code>elicitation/create</code>), and <strong>roots</strong> (<code>roots/list</code>). When the server originates one of these <em>during</em> a handler, it&rsquo;s a <strong>reverse call</strong>: server→client request, gated by handler context, parked on the server&rsquo;s pending-id table until the client responds.</p>
+<p>This page walks the mechanics: how a handler originates one (<a href="#q3--server-side-bcsample--bcelicit-and-the-sessioncontextrequest-hook">Q3</a>), how the client receives and dispatches it (<a href="#q4--client-side-handleserverrequest-as-the-canonical-dispatcher">Q4</a>), how capability gating prevents misuse, why the three reverse-call types aren&rsquo;t all alike on the inside (<a href="#q5--the-three-reverse-call-types-sampling-elicitation-rootslist">Q5</a>), and the lifetime trap that makes handlers care about <code>DetachForBackground</code> (<a href="#q6--lifetime-when-the-forward-request-dies-and-detachforbackground-as-an-escape">Q6</a>).</p>
+<h2 id="q1--what-is-a-reverse-call-and-why-does-it-exist">Q1 — What is a reverse call and why does it exist? <a class="anchor" href="#q1--what-is-a-reverse-call-and-why-does-it-exist">¶</a></h2>
+<p>The protocol is point-to-point and bidirectional. Either side may originate JSON-RPC requests; the other must respond. Forward calls flow client→server (every <code>tools/call</code>, <code>prompts/get</code>, <code>resources/read</code>); <strong>reverse calls</strong> flow server→client. The three reverse-call methods MCP defines today are all <em>during-tool-execution</em> hooks:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>What the server is asking for</th>
+<th>Capability the <em>client</em> must declare</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sampling/createMessage</code></td>
+<td>&ldquo;Run an LLM completion for me&rdquo;</td>
+<td><code>capabilities.sampling</code></td>
+</tr>
+<tr>
+<td><code>elicitation/create</code></td>
+<td>&ldquo;Ask the user for structured input&rdquo;</td>
+<td><code>capabilities.elicitation</code></td>
+</tr>
+<tr>
+<td><code>roots/list</code></td>
+<td>&ldquo;What filesystem roots am I allowed to see?&rdquo;</td>
+<td><code>capabilities.roots</code></td>
+</tr>
+</tbody>
+</table>
+<p>Why originate from the server at all (vs. asking the host to bake all this info into the original <code>tools/call</code> arguments)? Three reasons, in order of force:</p>
+<ol>
+<li><strong>The server doesn&rsquo;t know up front what it&rsquo;ll need.</strong> A &ldquo;summarize this PR&rdquo; tool might decide mid-execution that it needs the user to disambiguate between two PR numbers. Pre-baking every conceivable input into the call would explode the schema.</li>
+<li><strong>Privacy and policy.</strong> The host (not the server) should mediate sensitive interactions — model invocations cost money; user input flows through host-controlled UI; filesystem roots define the security boundary. Reverse calls put the host in control of <em>each instance</em>, not just the initial setup.</li>
+<li><strong>Composition.</strong> A handler that wants to compose a model call with user confirmation can do both inline, in code that reads top-to-bottom. The alternative (<a href="/mcpkit/concepts/mrtr/">MRTR</a>) makes composition explicit and stateless but adds round-trips.</li>
+</ol>
+<blockquote>
+<p>[!IMPORTANT]<br />
+The spec requires <strong>server-initiated requests to be in association with an originating client request</strong> — see <a href="/mcpkit/concepts/transport-mechanics/#reverse-call-origination">transport-mechanics → reverse-call origination</a>. The server can&rsquo;t push a <code>sampling/createMessage</code> out of the blue; only during a forward-request handler. mcpkit enforces this structurally: the only way to originate a reverse call is through the handler&rsquo;s <code>BaseContext</code>, which only exists <em>inside</em> a forward-request dispatch.</p>
+</blockquote>
+<h2 id="q2--worked-example-a-handler-invokes-elicitationcreate">Q2 — Worked example: a handler invokes elicitation/create <a class="anchor" href="#q2--worked-example-a-handler-invokes-elicitationcreate">¶</a></h2>
+<p>A <code>confirm_destructive_action</code> tool wants the user to confirm before proceeding. One round-trip during the handler.</p>
+<p><strong>1. Forward call arrives.</strong> Client POSTs <code>tools/call</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">→ tools/call
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 7,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;method&#34;: &#34;tools/call&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;params&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;name&#34;: &#34;confirm_destructive_action&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;arguments&#34;: { &#34;what&#34;: &#34;drop database&#34; }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p>Server dispatches to the registered handler. The handler runs.</p>
+<p><strong>2. Handler originates a reverse call.</strong> Inside the handler:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>result, err <span style="color:#000;font-weight:bold">:=</span> ctx.<span style="color:#900;font-weight:bold">Elicit</span>(core.ElicitationRequest{
+</span></span><span style="display:flex;"><span>    Message: <span style="color:#d14">&#34;Confirm: drop the production database?&#34;</span>,
+</span></span><span style="display:flex;"><span>    RequestedSchema: confirmSchema,
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>mcpkit&rsquo;s <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>BaseContext.Elicit</code></a> checks <code>clientCaps.Elicitation != nil</code>, then calls <code>sc.request(ctx, &quot;elicitation/create&quot;, req)</code>. That request hook (installed by <a href="https://github.com/panyam/mcpkit/blob/main/server/session_wiring.go"><code>session_wiring.go</code>&rsquo;s <code>makeRequestFunc</code></a> at session setup) does three things:</p>
+<ul>
+<li>Allocates a fresh server-side JSON-RPC id (server&rsquo;s id-space, independent of the client&rsquo;s).</li>
+<li>Registers a pending-response slot keyed by that id.</li>
+<li>Writes the JSON-RPC request through <code>pushFunc</code> onto whatever channel the transport gives it (the SSE response stream of the in-flight POST for streamable HTTP, the stdio pipe for stdio).</li>
+</ul>
+<p>On the wire (interleaved with the in-flight <code>tools/call</code>&rsquo;s SSE stream, if HTTP):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">← server-initiated request (on POST #7&#39;s SSE stream)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 42,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;method&#34;: &#34;elicitation/create&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;params&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;message&#34;: &#34;Confirm: drop the production database?&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;requestedSchema&#34;: {...}
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p><strong>3. Client dispatches.</strong> mcpkit&rsquo;s <a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>Client.HandleServerRequest</code></a> sees <code>method: &quot;elicitation/create&quot;</code>, finds the host&rsquo;s registered <code>elicitationHandler</code>, calls it. The host shows the form, the user types &ldquo;yes&rdquo;, the handler returns:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">→ client response (back on the same channel)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 42,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;result&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;action&#34;: &#34;accept&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;content&#34;: { &#34;confirmed&#34;: true }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p><strong>4. Server resolves the pending entry.</strong> Server&rsquo;s mrtr (in the per-direction-id-table sense — see <a href="/mcpkit/concepts/transport-mechanics/#per-direction-id-space">transport-mechanics § Per-direction ID space</a>) looks up <code>pending[42]</code>, hands the result to the goroutine parked in <code>sc.request(...)</code>. <code>BaseContext.Elicit</code> returns the unmarshaled <code>ElicitationResult</code> to the handler. Handler proceeds.</p>
+<p><strong>5. Forward response goes out.</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">← tools/call response
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 7,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;result&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;resultType&#34;: &#34;complete&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;content&#34;: [{ &#34;type&#34;: &#34;text&#34;, &#34;text&#34;: &#34;Database dropped.&#34; }]
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p><strong>Two ids on the wire, one logical operation.</strong> id=7 is the forward <code>tools/call</code>; id=42 is the reverse <code>elicitation/create</code>. They share no namespace; they share no pending-table entry. The <em>only</em> link between them is in handler-context state on the server — see <a href="/mcpkit/concepts/transport-mechanics/#reverse-call-origination">transport-mechanics → reverse-call origination</a> for the back-pointer machinery that propagates cancellation.</p>
+<h2 id="q3--server-side-bcsample--bcelicit-and-the-sessionctxrequest-hook">Q3 — Server-side: bc.Sample / bc.Elicit and the sessionCtx.request hook <a class="anchor" href="#q3--server-side-bcsample--bcelicit-and-the-sessionctxrequest-hook">¶</a></h2>
+<p>mcpkit packages reverse-call origination as ordinary Go method calls on the handler context. The relevant API surface (<a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (bc BaseContext) <span style="color:#900;font-weight:bold">Sample</span>(req CreateMessageRequest) (CreateMessageResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (bc BaseContext) <span style="color:#900;font-weight:bold">Elicit</span>(req ElicitationRequest) (ElicitationResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span></code></pre><p>Each does three things in order:</p>
+<ol>
+<li><strong>Capability gate.</strong> <code>bc.Sample</code> returns <code>ErrSamplingNotSupported</code> if <code>clientCaps.Sampling == nil</code>. <code>bc.Elicit</code> returns <code>ErrElicitationNotSupported</code> if <code>clientCaps.Elicitation == nil</code>. The capability is what the <em>client</em> declared during bring-up; if the client never said it&rsquo;d handle the method, the server can&rsquo;t originate it. (Handlers are expected to fall back gracefully — typically by returning a result that asks the user to provide the input through the original tool arguments.)</li>
+<li><strong>Optional schema reshaping.</strong> <code>bc.Elicit</code> strips the <code>x-mcp-file</code> JSON-Schema keyword if the client didn&rsquo;t declare <code>capabilities.fileInputs</code> (per <a href="https://modelcontextprotocol.io/specification/2025-06-18">SEP-2356</a>). The server is responsible for not sending the client schema features it can&rsquo;t render.</li>
+<li><strong>Origination via the request hook.</strong> Calls <code>bc.sc.request(bc.Context, &quot;&lt;method&gt;&quot;, req)</code>. The hook is a <a href="https://github.com/panyam/mcpkit/blob/main/core/request.go"><code>RequestFunc</code></a> installed during session wiring; it returns <code>json.RawMessage</code> (or error) which <code>bc.Sample</code>/<code>bc.Elicit</code> unmarshal into the typed result.</li>
+</ol>
+<p><strong>The request hook is the choke point.</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/session.go"><code>sessionCtx.request</code></a> is set by <a href="https://github.com/panyam/mcpkit/blob/main/server/session_wiring.go"><code>makeRequestFunc(pushFunc)</code></a> during dispatch setup. It encapsulates id allocation, pending-table registration, JSON-RPC encoding, and the wire-write through <code>pushFunc</code> (which writes to the SSE stream / stdio pipe / wherever).</p>
+<p>If <code>sc.request == nil</code> (e.g., a transport that doesn&rsquo;t support server-to-client requests, or a session past the request boundary) the call returns <code>ErrNoRequestFunc</code>. Handlers should treat this as &ldquo;reverse calls aren&rsquo;t available right now&rdquo; rather than as a programming error.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Only handler context has access to <code>sc.request</code>.</strong> That&rsquo;s how the spec&rsquo;s &ldquo;in association with an originating client request&rdquo; constraint is enforced in mcpkit. A goroutine that wants to keep originating reverse calls <em>after</em> the forward handler returns has to escape via <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>DetachForBackground</code></a> — see <a href="#q6--lifetime-when-the-forward-request-dies-and-detachforbackground-as-an-escape">Q6</a>.</p>
+</blockquote>
+<h2 id="q4--client-side-handleserverrequest-as-the-canonical-dispatcher">Q4 — Client-side: HandleServerRequest as the canonical dispatcher <a class="anchor" href="#q4--client-side-handleserverrequest-as-the-canonical-dispatcher">¶</a></h2>
+<p>mcpkit&rsquo;s client receives reverse calls through whatever transport it&rsquo;s bound to (stdio pipe, streamable HTTP standing GET, in-process). Each transport calls a single dispatcher function: <a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>Client.HandleServerRequestWithContext</code></a>.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (c <span style="color:#000;font-weight:bold">*</span>Client) <span style="color:#900;font-weight:bold">HandleServerRequestWithContext</span>(ctx context.Context, req <span style="color:#000;font-weight:bold">*</span>core.Request) <span style="color:#000;font-weight:bold">*</span>core.Response {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">switch</span> req.Method {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">case</span> <span style="color:#d14">&#34;sampling/createMessage&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">if</span> c.samplingHandler <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">NewErrorResponse</span>(req.ID, core.ErrCodeMethodNotFound, <span style="color:#d14">&#34;sampling not supported&#34;</span>)
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// unmarshal params, call samplingHandler, marshal result, return response
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">case</span> <span style="color:#d14">&#34;elicitation/create&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// ditto with elicitationHandler
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">case</span> <span style="color:#d14">&#34;roots/list&#34;</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// ditto with rootsHandler
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">default</span>:
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">NewErrorResponse</span>(req.ID, core.ErrCodeMethodNotFound, <span style="color:#000;font-weight:bold">...</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Three things to internalize:</p>
+<ul>
+<li><strong>One dispatcher, one switch.</strong> The client doesn&rsquo;t have a per-method registry the way the server does (there&rsquo;s a small fixed set of reverse-call methods MCP defines). Adding a new reverse-call method means extending the switch, not registering a handler.</li>
+<li><strong>Host code plugs in handlers, not transports.</strong> When you build a host (Claude Desktop, an IDE, a CLI agent), you set <code>samplingHandler</code>, <code>elicitationHandler</code>, <code>rootsHandler</code> on the Client at construction. The transport doesn&rsquo;t see them; the dispatcher routes to them by method name.</li>
+<li><strong>MRTR reuses this exact dispatcher.</strong> <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>dispatchMRTRInputRequest</code></a> (see <a href="/mcpkit/concepts/mrtr/#q4--client-side-calltoolwithinputs-and-defaultinputhandler">mrtr Q4</a>) synthesizes a fake <code>core.Request</code> from each MRTR <code>InputRequest</code> and routes it through <code>HandleServerRequestWithContext</code>. So a host that handles real reverse calls handles MRTR&rsquo;s inputs for free — same code, same UI, same authorization.</li>
+</ul>
+<h2 id="q5--the-three-reverse-call-types-sampling-elicitation-rootslist">Q5 — The three reverse-call types: sampling, elicitation, roots/list <a class="anchor" href="#q5--the-three-reverse-call-types-sampling-elicitation-rootslist">¶</a></h2>
+<p>Mechanically the three look the same on the wire — server-initiated request, client-side dispatch, response back. But on the <em>server&rsquo;s</em> side, only sampling and elicitation are originated by handlers. Roots is different.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Handler API</th>
+<th>Originated by</th>
+<th>Cached on server?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sampling/createMessage</code></td>
+<td><code>bc.Sample(req)</code></td>
+<td>Per-handler call</td>
+<td>No — each handler call is its own reverse call</td>
+</tr>
+<tr>
+<td><code>elicitation/create</code></td>
+<td><code>bc.Elicit(req)</code></td>
+<td>Per-handler call</td>
+<td>No — each handler call is its own reverse call</td>
+</tr>
+<tr>
+<td><code>roots/list</code></td>
+<td><code>bc.AllowedRoots()</code></td>
+<td>Server infrastructure (background)</td>
+<td><strong>Yes</strong> — fetched once, refreshed on <code>notifications/roots/list_changed</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Roots is infrastructure-managed.</strong> The server doesn&rsquo;t originate <code>roots/list</code> from inside a handler. Instead (<a href="https://github.com/panyam/mcpkit/blob/main/server/roots.go"><code>server/roots.go</code></a>):</p>
+<ol>
+<li>After bring-up, the server eagerly issues a single <code>roots/list</code> reverse call to populate its cached <code>allowedRoots</code>.</li>
+<li>When the client sends <code>notifications/roots/list_changed</code>, the server re-issues <code>roots/list</code> to refresh the cache.</li>
+<li>Handlers read from the cache via <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>bc.AllowedRoots()</code></a>, which is a synchronous lookup — no reverse call, no parked goroutine.</li>
+</ol>
+<p>Why the asymmetry? <strong>Roots are session-scoped policy state</strong>, not per-handler-call data. Every handler in the session shares the same allowed-roots view; making it a synchronous read off a session-level cache is faster, simpler, and matches how filesystem boundaries actually work. Sampling and elicitation are <em>per-call asks</em> — different message each time, no useful cache.</p>
+<p>This means: <strong>when reading mcpkit code, &ldquo;reverse call&rdquo; usually means sampling or elicitation.</strong> Roots-related code lives in <a href="https://github.com/panyam/mcpkit/blob/main/server/roots.go"><code>server/roots.go</code></a> and is largely invisible to tool handlers.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Capability declarations.</strong> The client declares <code>sampling</code>, <code>elicitation</code>, <code>roots</code>, and (for SEP-2356) <code>fileInputs</code> capabilities at bring-up. The server gates origination on these — <code>bc.Sample</code> returns <code>ErrSamplingNotSupported</code> if <code>clientCaps.Sampling == nil</code>, etc. The host implementor is responsible for advertising only the capabilities they actually handle; the server is responsible for failing soft when a capability is missing.</p>
+</blockquote>
+<h2 id="q6--lifetime-when-the-forward-request-dies-and-detachforbackground-as-an-escape">Q6 — Lifetime: when the forward request dies, and DetachForBackground as an escape <a class="anchor" href="#q6--lifetime-when-the-forward-request-dies-and-detachforbackground-as-an-escape">¶</a></h2>
+<p>The hard part of reverse calls isn&rsquo;t the wire shape; it&rsquo;s the lifetime. The handler context is bound to a <strong>specific in-flight forward request</strong>. When the forward request finishes (response sent, error returned, client disconnects), the request hook the handler was holding becomes invalid:</p>
+<ul>
+<li>The transport-scoped <code>pushFunc</code> writes to the SSE stream of <em>that specific POST</em>. After the POST completes, the stream is closed; writes are no-ops or panics.</li>
+<li>Pending-table entries for any reverse calls outstanding when the forward request dies will never resolve — the handler is gone, there&rsquo;s no goroutine to deliver the response to.</li>
+<li>The forward request id (the back-pointer for cancellation propagation) is unregistered.</li>
+</ul>
+<p>This is why <strong>handlers shouldn&rsquo;t spawn goroutines that try to keep originating reverse calls after returning.</strong> The pattern doesn&rsquo;t work; the request hook in the captured <code>ctx</code> is dead.</p>
+<p><strong>The escape: <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>DetachForBackground(ctx)</code></a>.</strong> This is mcpkit&rsquo;s supported way to keep doing server-to-client work after the forward request returns. It produces a new <code>context.Context</code> whose attached <code>sessionCtx.request</code> is the <strong>session-level persistent-push</strong> function — bound to the session&rsquo;s standing GET back-channel, not the dying POST.</p>
+<p>Mechanism (<a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>core/background.go</code></a>):</p>
+<ol>
+<li>The dispatch layer registers a <code>DetachStrategy</code> on the request context via <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>SetDetachStrategy</code></a> at handler setup. The strategy knows how to swap the POST-scoped functions for session-scoped ones.</li>
+<li>When a handler calls <code>core.DetachForBackground(ctx)</code>, the strategy fires: it produces a new context with <code>sessionCtx.request</code> replaced via <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>ReplaceSessionRequestFunc</code></a> (and <code>sessionCtx.notify</code> similarly via <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>ReplaceSessionNotifyFunc</code></a>).</li>
+<li>Goroutines started with the detached context can still call <code>bc.Sample</code> / <code>bc.Elicit</code> / <code>bc.EmitLog</code> — they go through the session-level push, which lives as long as the session does.</li>
+<li>If no detach strategy is registered (e.g. stdio, in-process transports without session-level push), <code>DetachForBackground</code> falls back to <code>context.WithoutCancel</code> — preserves values but doesn&rsquo;t fix the dead push functions. Calls will still fail.</li>
+</ol>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Always use <code>core.DetachForBackground(ctx)</code> instead of <code>context.WithoutCancel(ctx)</code></strong> when spawning goroutines that need to send server-to-client requests. CLAUDE.md flags this as one of the recurring gotchas. <code>context.WithoutCancel</code> only handles cancellation; <code>DetachForBackground</code> handles the dispatch hooks too.</p>
+</blockquote>
+<blockquote>
+<p>[!CAUTION]<br />
+<strong>The spec&rsquo;s &ldquo;in association with an originating client request&rdquo; rule</strong> technically still applies to detached goroutines — they&rsquo;re descendants of an originating call, even after that call returned. mcpkit&rsquo;s runtime trusts the user code on this; a malicious or buggy handler could <code>DetachForBackground</code> and originate reverse calls indefinitely against a session it has no ongoing forward call for. Hosts that care about strict enforcement should layer policy in the client-side dispatcher.</p>
+</blockquote>
+<h2 id="q7--reverse-calls-vs-mrtr-when-to-use-which">Q7 — Reverse calls vs MRTR: when to use which <a class="anchor" href="#q7--reverse-calls-vs-mrtr-when-to-use-which">¶</a></h2>
+<p>Both deliver &ldquo;server gets data from client mid-call.&rdquo; Different tradeoffs. (Full table in <a href="/mcpkit/concepts/mrtr/#q1--what-problem-does-mrtr-solve-that-reverse-calls-dont">mrtr Q1</a>.)</p>
+<p><strong>Reverse calls</strong> are simpler: one synchronous Go call inside the handler, the result comes back, the handler proceeds. The server holds in-flight state (parked goroutine, open transport channel) for the duration. Fast inputs are great. Long waits or transport drops are bad.</p>
+<p><strong>MRTR</strong> (<code>tools/call → InputRequiredResult → retry with inputResponses</code>) is more complex on the wire but stateless on the server. The handler returns; the next round is a fresh dispatch. Multi-round-trip; survives disconnects via the signed <code>requestState</code> token. The right shape for long waits, detachable workloads, and idempotent retries.</p>
+<p><strong>The composition trick:</strong> mcpkit&rsquo;s MRTR <code>DefaultInputHandler</code> <em>bridges</em> MRTR input requests through <code>HandleServerRequestWithContext</code> — the same dispatcher reverse calls use. So a host wired up for sampling/elicitation/roots handles MRTR&rsquo;s inputs too, automatically. You don&rsquo;t have to choose between supporting reverse calls <em>or</em> MRTR; supporting reverse calls is enough infrastructure to do both.</p>
+<pre><code class="language-mermaid">graph LR
+    H[server handler] --&gt;|bc.Sample / bc.Elicit| RC[reverse call&lt;br/&gt;synchronous, in-flight]
+    H --&gt;|ctx.RequestInput| MR[MRTR InputRequiredResult&lt;br/&gt;stateless, handler returns]
+    RC --&gt;|wire: server→client request| Disp[Client.HandleServerRequest]
+    MR -.token-signed retry.-&gt; H2[handler re-runs, sees inputResponses]
+    H2 --&gt;|ctx.RequestInput.* OR&lt;br/&gt;bc.Sample/bc.Elicit| Disp
+    Disp --&gt;|client.samplingHandler&lt;br/&gt;elicitationHandler&lt;br/&gt;rootsHandler| Host[host code]
+</code></pre>
+<p>Use reverse calls when latency matters and the wait is short. Use MRTR when the wait might be long, the workload is detachable, or you want the call to survive disconnects.</p>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<p>After reading this page, downstream pages can assume:</p>
+<ul>
+<li>You know <strong>what a reverse call is</strong>: server→client request originated during a forward-request handler, gated by handler context, parked on the server&rsquo;s pending-id table until the client responds.</li>
+<li>You know the <strong>three reverse-call methods</strong> (<code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>) and that <strong>roots is special</strong> — infrastructure-managed cache, not per-handler origination, exposed via synchronous <code>bc.AllowedRoots()</code>.</li>
+<li>You know how to <strong>originate from a handler</strong> (<code>bc.Sample</code>, <code>bc.Elicit</code>) and what gates them (client-declared capability + the <code>sessionCtx.request</code> hook installed at session wiring).</li>
+<li>You know how the <strong>client dispatches</strong> incoming reverse calls through <code>HandleServerRequestWithContext</code> and that <strong>MRTR shares the same dispatcher</strong> — host code wired for reverse calls handles MRTR for free.</li>
+<li>You know the <strong>lifetime trap</strong> (handler context dies with the forward request) and the <strong>escape</strong> (<code>core.DetachForBackground</code> swaps in session-level push functions; <code>context.WithoutCancel</code> is <em>not</em> enough).</li>
+<li>You know the <strong>MRTR contrast</strong>: sync-but-fragile vs. stateless-but-multi-round; <code>DefaultInputHandler</code> bridges them in the host.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/elicitation.md">Elicitation</a></strong> <em>(stub, leaf)</em> — Form mode vs. URL mode, security implications, host-approval flows.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/sampling.md">Sampling</a></strong> <em>(stub, leaf)</em> — Model selection hints, context inclusion modes, host-approval loop.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/roots-list.md">Roots/list</a></strong> <em>(stub, leaf)</em> — Filesystem roots security model, the <code>notifications/roots/list_changed</code> refresh path, why this one is infrastructure-managed.</li>
+<li><strong><a href="/mcpkit/concepts/mrtr/">MRTR</a></strong> — The stateless-server alternative; full comparison table in Q1.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/cancellation.md">Cancellation deep-dive</a></strong> <em>(stub, leaf)</em> — How cancellation propagates from a forward call into outstanding reverse calls via the handler-context back-pointer.</li>
+<li><strong><a href="/mcpkit/concepts/tracing/">Tracing (SEP-414)</a></strong> <em>(root, FAQ-style)</em> — outbound <code>_meta.traceparent</code> injection on a server-originated <code>sampling</code>/<code>elicitation</code>/<code>roots</code> request is what keeps a distributed trace connected across the reverse-call hop; the chained client→server→client trace in its Q5 passes straight through this machinery.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The events protocol with a lighter, payload-focused walkthrough. Experimental.">
+    <title>Events — Telegram · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Events — Telegram</h1>
+        
+        <p class="lead">The events protocol with a lighter, payload-focused walkthrough. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/README.md"><code>examples/events/telegram/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="telegram-events-example">Telegram Events Example <a class="anchor" href="#telegram-events-example">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — MCP Events, a draft extension (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1">spec</a>), built on <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events">experimental/ext/events</a>. Wire format may change.</p>
+</blockquote>
+<p>Reference server demonstrating the <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1">MCP Events spec</a> with Telegram as the event source. Built on the <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events"><code>experimental/ext/events</code></a> library.</p>
+<p>Companion to <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/tree/main/telegram-reference-server">Clare Liguori&rsquo;s TypeScript implementation</a>. Also a lighter mirror of the <a href="/mcpkit/examples/events/discord/">discord-events demo</a> — same protocol, different bot SDK.</p>
+<h2 id="walkthrough">Walkthrough <a class="anchor" href="#walkthrough">¶</a></h2>
+<p>A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events/clients/go"><code>experimental/ext/events/clients/go/</code></a>. Two ways to run it.</p>
+<h3 id="option-a--test-mode-no-telegram-token-needed">Option A — Test mode (no Telegram token needed) <a class="anchor" href="#option-a--test-mode-no-telegram-token-needed">¶</a></h3>
+<p>All walkthrough steps run; the final live-interaction step skips with a &ldquo;no token&rdquo; message.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve    <span style="color:#998;font-style:italic"># terminal 1 — server in test mode</span>
+</span></span><span style="display:flex;"><span>just demo     <span style="color:#998;font-style:italic"># terminal 2 — walkthrough</span>
+</span></span></code></pre><p>To simulate Telegram activity from a third terminal:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span>... just inject <span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;hello world&#34;</span>   <span style="color:#998;font-style:italic"># message event (cursored)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span>... just inject-typing               <span style="color:#998;font-style:italic"># typing indicator (cursorless, demo-only — see below)</span>
+</span></span></code></pre><h3 id="option-b--real-bot-mode-requires-telegram-bot-token">Option B — Real bot mode (requires <code>TELEGRAM_BOT_TOKEN</code>) <a class="anchor" href="#option-b--real-bot-mode-requires-telegram-bot-token">¶</a></h3>
+<p>Same walkthrough plus the final live step captures real message events from a chat with the bot.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#008080">TELEGRAM_BOT_TOKEN</span><span style="color:#000;font-weight:bold">=</span>your-token just serve   <span style="color:#998;font-style:italic"># terminal 1 — server in bot mode</span>
+</span></span><span style="display:flex;"><span>just demo                                  <span style="color:#998;font-style:italic"># terminal 2 — walkthrough</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># When the live step starts, send a message to your bot in Telegram.</span>
+</span></span></code></pre><p><strong>Note on typing events</strong>: Telegram&rsquo;s Bot API doesn&rsquo;t expose user typing events to bots — only the bot can send typing chat actions, not the other way around. So <code>TEXT=... just inject-typing</code> works as a demo of the cursorless wire shape, but Option B can&rsquo;t capture real typing events. Discord can; see <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/WALKTHROUGH.md"><code>../discord/WALKTHROUGH.md</code></a> for the live-typing demo.</p>
+<p>Generated walkthrough in <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/WALKTHROUGH.md"><code>WALKTHROUGH.md</code></a> — regenerate via <code>just readme</code>. For the full protocol exposition (events/list, poll, secret modes, header modes, the spec&rsquo;s design rationale) see <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/WALKTHROUGH.md"><code>../discord/WALKTHROUGH.md</code></a>. This README intentionally skips repeating what&rsquo;s already in the walkthroughs.</p>
+<blockquote>
+<p><strong>Going to production?</strong> See <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/DEPLOYMENT.md"><code>experimental/ext/events/DEPLOYMENT.md</code></a> for private-cloud / WAF guidance.</p>
+</blockquote>
+<h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<ul>
+<li>The same MCP Events extension wire protocol as discord, against a Telegram-shaped event source.</li>
+<li>Push delivery via <code>events/stream</code> (long-lived per-subscription POST returning SSE) carrying the telegram-specific payload (<code>chat_id</code>, <code>user</code>, <code>text</code>).</li>
+<li>Cursorless event sources (<code>telegram.typing</code>) — <code>cursor: null</code> on the wire, no replay buffer.</li>
+<li>The typed Go SDK at <code>experimental/ext/events/clients/go/</code> consuming the same <code>Stream()</code> / <code>Subscribe()</code> helpers as discord, just with a different <code>Data</code> shape.</li>
+<li>A <code>/inject</code> POST endpoint (wired via <code>server.WithMux</code>) that synthesizes events for the test-mode walkthrough — same convention as discord-events.</li>
+</ul>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<ul>
+<li>Event source registration: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/telegram.go"><code>telegram.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/events.go"><code>events.go</code></a></li>
+<li>Webhook + inject handler wiring: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/main.go"><code>main.go</code></a> (the <code>server.WithMux</code> callback)</li>
+<li>Walkthrough steps: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/walkthrough.go"><code>walkthrough.go</code></a></li>
+<li>Spec library: <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events"><code>experimental/ext/events/</code></a></li>
+<li>Typed Go SDK: <a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events/clients/go"><code>experimental/ext/events/clients/go/</code></a></li>
+<li>Companion (full-protocol) walkthrough: <a href="/mcpkit/examples/events/discord/"><code>examples/events/discord/</code></a></li>
+</ul>
+<h2 id="setup--getting-a-telegram-bot-token-option-b-only">Setup — getting a Telegram bot token (Option B only) <a class="anchor" href="#setup--getting-a-telegram-bot-token-option-b-only">¶</a></h2>
+<p>Skip this section if you&rsquo;re running in test mode (Option A above).</p>
+<p>Get a bot token from <a href="https://t.me/BotFather">@BotFather</a> (<code>/newbot</code>). That&rsquo;s it — no privileged-intent toggles like Discord has.</p>
+<h2 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h2>
+<pre><code>Telegram Bot (long-poll)  ──or──  POST /inject
+                │                       │
+                ▼                       ▼
+                yield(TelegramEventData{...})    ← user code: one call
+                │
+                │  YieldingSource (library):
+                │    - assigns cursor + event ID
+                │    - stores in bounded ring (1000 max)
+                │    - calls library-installed fanout hook
+                ▼
+                ├──► events.Emit()              → Push (SSE broadcast)
+                └──► events.EmitToWebhooks()     → Webhook (HMAC POST)
+                                                   ▲
+                                              events/poll reads from
+                                              the same source's buffer
+
+  Resource handlers read typed payloads via:
+    source.Recent(50)         → []TelegramEventData
+    source.ByCursor(&quot;42&quot;)     → (TelegramEventData, true)
+</code></pre>
+<h2 id="server-flag-examples-outside-the-walkthrough">Server flag examples (outside the walkthrough) <a class="anchor" href="#server-flag-examples-outside-the-walkthrough">¶</a></h2>
+<p>The walkthrough runs against the default server config. To exercise the legacy header mode, pass flags to <code>just serve</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Opt out of the Standard Webhooks default back to legacy X-MCP-* headers</span>
+</span></span><span style="display:flex;"><span>go run . --serve -webhook-header-mode mcp
+</span></span></code></pre><p>Per spec, the webhook signing secret is <strong>client-supplied only</strong> (<code>whsec_</code> + base64 of 24-64 random bytes). See <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/README.md</code></a> for the full configuration reference.</p>
+<h2 id="auth-posture">Auth posture <a class="anchor" href="#auth-posture">¶</a></h2>
+<p>Same auto-detect pattern as the discord demo — see <a href="/mcpkit/examples/events/discord/#auth-posture-demo-escape-vs-real-oidc"><code>../discord/README.md</code></a> for the full env-var contract. TL;DR:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve                                                      <span style="color:#998;font-style:italic"># demo posture (anonymous escape)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">OAUTH_ISSUER</span><span style="color:#000;font-weight:bold">=</span>http://localhost:8081/realms/demo just serve       <span style="color:#998;font-style:italic"># real OIDC, spec-strict</span>
+</span></span></code></pre><p>Server logs which posture is active at startup.</p>
+<h2 id="make-targets">Make targets <a class="anchor" href="#make-targets">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>just serve</code></td>
+<td>Start the server (with bot if <code>TELEGRAM_BOT_TOKEN</code> set; test mode otherwise)</td>
+</tr>
+<tr>
+<td><code>just demo</code></td>
+<td>Run the demokit walkthrough — <code>--tui</code> mode</td>
+</tr>
+<tr>
+<td><code>just readme</code></td>
+<td>Regenerate <code>WALKTHROUGH.md</code> from the demo step definitions</td>
+</tr>
+<tr>
+<td><code>just build</code></td>
+<td>Build the binary</td>
+</tr>
+<tr>
+<td><code>just test</code></td>
+<td>Go tests</td>
+</tr>
+<tr>
+<td><code>TEXT=... just inject TEXT=&quot;...&quot;</code></td>
+<td>Inject a message event (optional: <code>SENDER=</code>, <code>CHAT_ID=</code>)</td>
+</tr>
+<tr>
+<td><code>TEXT=... just inject-typing</code></td>
+<td>Inject a cursorless typing event (optional: <code>USER_NAME=</code>, <code>CHAT_ID=</code>)</td>
+</tr>
+<tr>
+<td><code>make list</code></td>
+<td>Show server capabilities via Python client</td>
+</tr>
+<tr>
+<td><code>make listen</code></td>
+<td>Python SSE push listener</td>
+</tr>
+<tr>
+<td><code>make webhook</code></td>
+<td>Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs</td>
+</tr>
+<tr>
+<td><code>make poll</code></td>
+<td>Python polling loop (default 5s interval, override: <code>INTERVAL=10</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>All Python clients share the <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/clients/python/events_client.py"><code>events_client.py</code></a> helper.</p>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/events/discord/">Discord events — same protocol, different source</a></li>
+<li><a href="https://github.com/panyam/mcpkit/tree/main/experimental/ext/events">Events library</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/telegram/WALKTHROUGH.md"><code>examples/events/telegram/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-events-extension--telegram-reference-walkthrough">MCP Events Extension — Telegram reference walkthrough <a class="anchor" href="#mcp-events-extension--telegram-reference-walkthrough">¶</a></h1>
+<p>A condensed walkthrough showing the same MCP Events extension wired against a Telegram-shaped event source. The protocol exposition lives in the discord walkthrough; this one focuses on the telegram-specific payload (chat_id, user, text) and the cursored vs cursorless distinction.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Connect to the events server</strong> — Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.</li>
+<li><strong>Push: open events/stream, inject a telegram message, observe per-call notifications</strong> — events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram&rsquo;s flat payload (chat_id, user, text) wires through the same Stream() helper as discord&rsquo;s nested one; only the Data shape changes.</li>
+<li><strong>Cursorless: open events/stream for telegram.typing, observe cursor:null</strong> — Telegram&rsquo;s typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.</li>
+<li><strong>Webhook: subscribe via the typed Go SDK, receive a TelegramEventData</strong> — Same <code>Subscription</code> + <code>Receiver[Data]</code> pair as the discord webhook step.</li>
+<li><strong>Live Telegram interaction (real message from a Telegram chat)</strong> — Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+    participant Receiver as Local webhook receiver (this process)
+
+    Note over Host,Receiver: Step 1: Connect to the events server
+    Host-&gt;&gt;Server: POST /mcp — initialize
+    Server--&gt;&gt;Host: serverInfo + capabilities
+
+    Note over Host,Receiver: Step 2: Push: open events/stream, inject a telegram message, observe per-call notifications
+    Host-&gt;&gt;Server: events/stream { name: telegram.message }
+    Server--&gt;&gt;Host: notifications/events/active { requestId, cursor }
+    Receiver-&gt;&gt;Server: POST /inject (simulated telegram message)
+    Server--&gt;&gt;Host: notifications/events/event { requestId, data: {chat_id, user, text, ...} }
+
+    Note over Host,Receiver: Step 3: Cursorless: open events/stream for telegram.typing, observe cursor:null
+    Host-&gt;&gt;Server: events/stream { name: telegram.typing }
+    Server--&gt;&gt;Host: notifications/events/event { cursor: null }
+
+    Note over Host,Receiver: Step 4: Webhook: subscribe via the typed Go SDK, receive a TelegramEventData
+    Receiver-&gt;&gt;Receiver: spin up local httptest receiver on :random
+    Host-&gt;&gt;Server: events/subscribe { mode: webhook, url, secret: whsec_&lt;client-supplied&gt;, name: telegram.message }
+    Server--&gt;&gt;Host: { id, refreshBefore }   (response does NOT echo secret per spec)
+    Receiver-&gt;&gt;Server: POST /inject (simulated message)
+    Server--&gt;&gt;Receiver: POST &lt;url&gt; + HMAC signature headers (default webhook-* per Standard Webhooks, opt-in X-MCP-* via -webhook-header-mode mcp)
+
+    Note over Host,Receiver: Step 5: Live Telegram interaction (real message from a Telegram chat)
+    Telegram-&gt;&gt;Server: MessageCreate event (when you send a message to the bot)
+    Server--&gt;&gt;Host: notifications/events/event { name: telegram.message, cursor: &lt;fresh&gt; }
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup--two-modes">Setup — two modes <a class="anchor" href="#setup--two-modes">¶</a></h3>
+<p>This walkthrough runs against either a test-mode server or a real Telegram bot.</p>
+<p><strong>Option A — Test mode</strong> (no bot token needed). All steps run; the final live-interaction step skips with a &rsquo;no token&rsquo; message. Drive synthetic events from a third terminal via <code>make inject</code> / <code>make inject-typing</code>.</p>
+<pre><code>Terminal 1:  just serve                                # server in test mode
+Terminal 2:  just demo                                 # this walkthrough
+Terminal 3:  just inject TEXT='hello'                  # message event
+             make inject-typing                        # typing event (cursorless, demo-only)
+</code></pre>
+<p><strong>Option B — Real bot mode</strong> (requires <code>TELEGRAM_BOT_TOKEN</code>). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram&rsquo;s Bot API doesn&rsquo;t expose user typing events to bots, so the live step is message-only — see the live step&rsquo;s note for details.</p>
+<pre><code>Terminal 1:  TELEGRAM_BOT_TOKEN=... just serve         # server in bot mode
+Terminal 2:  just demo                                 # this walkthrough
+             # In Telegram: send a message to the bot. Live step captures it.
+</code></pre>
+<h3 id="why-a-separate-telegram-demo">Why a separate telegram demo? <a class="anchor" href="#why-a-separate-telegram-demo">¶</a></h3>
+<p>The two demos share the same <code>experimental/ext/events</code> library and the same wire protocol. The differences are only in the payload shape (telegram has flat <code>chat_id</code> / <code>text</code>; discord has nested <code>author</code> and richer fields) and the bot SDK used to source events (telegram&rsquo;s <code>tgbotapi</code> long-poll vs discord&rsquo;s <code>discordgo</code> WebSocket).</p>
+<p>For the full protocol exposition (events/list, poll, header modes, the spec&rsquo;s design rationale) see <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/WALKTHROUGH.md"><code>examples/events/discord/WALKTHROUGH.md</code></a>.</p>
+<h3 id="step-1-connect-to-the-events-server">Step 1: Connect to the events server <a class="anchor" href="#step-1-connect-to-the-events-server">¶</a></h3>
+<p>Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># initialize: mint the session id, then ack with notifications/initialized</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-2-push-open-eventsstream-inject-a-telegram-message-observe-per-call-notifications">Step 2: Push: open events/stream, inject a telegram message, observe per-call notifications <a class="anchor" href="#step-2-push-open-eventsstream-inject-a-telegram-message-observe-per-call-notifications">¶</a></h3>
+<p>events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram&rsquo;s flat payload (chat_id, user, text) wires through the same Stream() helper as discord&rsquo;s nested one; only the Data shape changes.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/stream: long-lived POST returning SSE; notifications/events/event frames carry chat_id, user, text</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (mint $SID via initialize first — see the connect step)</span>
+</span></span><span style="display:flex;"><span>curl -sN -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;telegram.message&#34;}}&#39;</span>
+</span></span></code></pre><h3 id="step-3-cursorless-open-eventsstream-for-telegramtyping-observe-cursornull">Step 3: Cursorless: open events/stream for telegram.typing, observe cursor:null <a class="anchor" href="#step-3-cursorless-open-eventsstream-for-telegramtyping-observe-cursornull">¶</a></h3>
+<p>Telegram&rsquo;s typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/stream for a cursorless source: notifications/events/event frames carry cursor:null</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (mint $SID via initialize first — see the connect step)</span>
+</span></span><span style="display:flex;"><span>curl -sN -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;telegram.typing&#34;}}&#39;</span>
+</span></span></code></pre><h3 id="step-4-webhook-subscribe-via-the-typed-go-sdk-receive-a-telegrameventdata">Step 4: Webhook: subscribe via the typed Go SDK, receive a TelegramEventData <a class="anchor" href="#step-4-webhook-subscribe-via-the-typed-go-sdk-receive-a-telegrameventdata">¶</a></h3>
+<p>Same <code>Subscription</code> + <code>Receiver[Data]</code> pair as the discord webhook step.</p>
+<ul>
+<li>Receiver[TelegramEventData] decodes the wire envelope&rsquo;s Data field directly into TelegramEventData — consumer reads <code>ev.Data.Text</code>, no re-parsing JSON.</li>
+<li>The only differences from discord: the type parameter and the payload field names.</li>
+<li>SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).</li>
+</ul>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># events/subscribe in webhook mode; response carries id + refreshBefore but NOT the secret.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># cursor:null = &#34;from now&#34;; maxAge:300 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (mint $SID via initialize first — see the connect step)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:3,&#34;method&#34;:&#34;events/subscribe&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;telegram.message&#34;,&#34;delivery&#34;:{&#34;mode&#34;:&#34;webhook&#34;,&#34;url&#34;:&#34;http://localhost:9999/hook&#34;,&#34;secret&#34;:&#34;whsec_&lt;client-supplied&gt;&#34;},&#34;cursor&#34;:null,&#34;maxAge&#34;:300}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-5-live-telegram-interaction-real-message-from-a-telegram-chat">Step 5: Live Telegram interaction (real message from a Telegram chat) <a class="anchor" href="#step-5-live-telegram-interaction-real-message-from-a-telegram-chat">¶</a></h3>
+<p>Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.</p>
+<pre><code>TELEGRAM_BOT_TOKEN=&lt;your-token&gt; just serve
+</code></pre>
+<p>Bot setup (BotFather token, chat link) is documented in this demo&rsquo;s README.md.</p>
+<ul>
+<li>No typing parallel here — Telegram&rsquo;s Bot API doesn&rsquo;t expose user typing events to bots (only the bot can send typing chat actions, not the other way).</li>
+<li>Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo.</li>
+<li>&ndash;non-interactive mode skips the wait so CI runs aren&rsquo;t slowed.</li>
+</ul>
+<h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Live capture: open events/stream and leave it running; each real Telegram message</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># arrives as a notifications/events/event frame on the SSE response.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># (server must be in -token mode; mint $SID via initialize first — see the connect step)</span>
+</span></span><span style="display:flex;"><span>curl -sN -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:4,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;telegram.message&#34;}}&#39;</span>
+</span></span></code></pre><h3 id="more">More <a class="anchor" href="#more">¶</a></h3>
+<p>For the full protocol walkthrough (events/list, poll, header modes, the spec&rsquo;s design rationale) see <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/WALKTHROUGH.md"><code>examples/events/discord/WALKTHROUGH.md</code></a>.</p>
+<p>Both demos share <code>experimental/ext/events</code> (library), <code>clients/go/</code> (Go SDK), and <code>clients/python/events_client.py</code> (Python SDK).</p>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/events/telegram/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/events/telegram/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The scoped-down core skills shape: a skills file served as skill:// resources. Experimental.">
+    <title>Skills — minimal (SEP-2640) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Skills — minimal (SEP-2640)</h1>
+        
+        <p class="lead">The scoped-down core skills shape: a skills file served as skill:// resources. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills-core/README.md"><code>examples/skills-core/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="examplesskills-core">examples/skills-core <a class="anchor" href="#examplesskills-core">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — the minimal <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640</a> (Skills) shape, a draft SEP. Wire format may change.</p>
+</blockquote>
+<p>The <strong>minimal</strong> SEP-2640 shape: a skills file served over MCP&rsquo;s Resources<br />
+primitive, plus tool handling, consumed load-on-demand. This is the<br />
+scoped-down core the Skills Over MCP Working Group blessed at its<br />
+2026-06-30 meeting (<a href="https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/2994">discussion 2994</a>).</p>
+<p>If you want the full surface — archives (<code>.tar.gz</code> / <code>.zip</code>), remote source<br />
+adapters (GitHub, archive directories, multi-source mounts), and<br />
+fsnotify-driven index invalidation — see <a href="/mcpkit/examples/skills/"><code>examples/skills</code></a>. Those<br />
+are the deferred / extended features and are deliberately left out here.</p>
+<h2 id="what-this-shows">What this shows <a class="anchor" href="#what-this-shows">¶</a></h2>
+<ol>
+<li><code>resources/list</code> — every file under a skill directory is a <code>skill://</code> resource.</li>
+<li><code>skill://index.json</code> — the discovery catalog, generated from the live provider (never on disk), each entry carrying a SHA-256 digest.</li>
+<li>Read a <code>SKILL.md</code> — a skill is data: YAML frontmatter (<code>name</code>, <code>description</code>) plus a markdown body of instructions. mcpkit delivers it over <code>resources/read</code>; it is never staged to disk and never executed.</li>
+<li><strong>Tool handling</strong> — the bundled <code>commit-helper</code> skill instructs the host to call the <code>format_commit</code> tool. The walkthrough reads the skill, then calls the tool. Skills make ordinary tools easier to use well.</li>
+</ol>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre><code>Terminal 1:  just serve   # skills-core server, file mode, :8080
+Terminal 2:  just demo    # this walkthrough (interactive TUI)
+</code></pre>
+<p>Or drive it non-interactively:</p>
+<pre><code>just serve            # in one terminal
+go run . --non-interactive
+</code></pre>
+<p>Wire mode: mcpkit&rsquo;s server defaults to dual-wire (SEP-2575). The first step<br />
+lets you pick <code>adaptive</code> (probe <code>server/discover</code>, fall back to <code>initialize</code>),<br />
+<code>stateless</code>, or <code>legacy</code>; the rest of the walkthrough is identical either way.</p>
+<h2 id="the-skill">The skill <a class="anchor" href="#the-skill">¶</a></h2>
+<p><code>skills/commit-helper/SKILL.md</code> describes a task and points the host at a<br />
+tool:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>name: commit-helper
+</span></span><span style="display:flex;"><span>description: Turn a change description into a Conventional Commits subject line using the format_commit tool
+</span></span><span style="display:flex;"><span>---
+</span></span><span style="display:flex;"><span>...call the <span style="color:#d14">`format_commit`</span> tool with type / scope / summary...
+</span></span></code></pre><p>The server registers <code>format_commit</code> alongside the skill provider<br />
+(<code>main.go</code>). That pairing — a skills file plus the tool it references — is the<br />
+minimal shape in one example.</p>
+<h2 id="safety-posture">Safety posture <a class="anchor" href="#safety-posture">¶</a></h2>
+<p><code>ext/skills</code> treats a skill as data delivered over resource primitives, never<br />
+as code to run: it does not import <code>os/exec</code> and never writes skill content to<br />
+disk. That invariant is enforced by <code>TestNoCodeExecutionSurface</code> in the<br />
+<code>ext/skills</code> package.</p>
+<p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills-core/WALKTHROUGH.md"><code>WALKTHROUGH.md</code></a> for the generated step-by-step (run<br />
+<code>just readme</code> to regenerate).</p>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/skills/">Skills — the full surface (archives, remote, fsnotify)</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills-core/WALKTHROUGH.md"><code>examples/skills-core/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-skills--minimal-shape-sep-2640-scoped-down">MCP Skills — Minimal Shape (SEP-2640, scoped down) <a class="anchor" href="#mcp-skills--minimal-shape-sep-2640-scoped-down">¶</a></h1>
+<p>The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP&rsquo;s Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify — those are the deferred / extended surface (see examples/skills for the full walkthrough).</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Choose the client wire mode</strong> — mcpkit&rsquo;s server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.</li>
+<li><strong>Read skill://index.json — the discovery catalog</strong> — mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill&rsquo;s SKILL.md.</li>
+<li><strong>Read the commit-helper SKILL.md — the skill file</strong> — A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.</li>
+<li><strong>Tool handling — call the tool the skill points at</strong> — This is the &rsquo;tool handling&rsquo; half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+
+    Note over Host,Server: Step 1: Choose the client wire mode
+
+    Note over Host,Server: Step 2: Connect to the skills server
+    Host-&gt;&gt;Server: server/discover (stateless) OR initialize (legacy)
+    Server--&gt;&gt;Host: serverInfo + capabilities.extensions.skills
+
+    Note over Host,Server: Step 3: resources/list — each skill file is a skill:// resource
+    Host-&gt;&gt;Server: resources/list
+    Server--&gt;&gt;Host: [ skill://index.json, skill://commit-helper/SKILL.md ]
+
+    Note over Host,Server: Step 4: Read skill://index.json — the discovery catalog
+    Host-&gt;&gt;Server: resources/read uri=skill://index.json
+    Server--&gt;&gt;Host: { $schema, skills:[{name,url,digest}] }
+
+    Note over Host,Server: Step 5: Read the commit-helper SKILL.md — the skill file
+    Host-&gt;&gt;Server: resources/read uri=skill://commit-helper/SKILL.md
+    Server--&gt;&gt;Host: frontmatter (name, description) + body
+
+    Note over Host,Server: Step 6: Tool handling — call the tool the skill points at
+    Host-&gt;&gt;Server: tools/call name=format_commit {type:&quot;feat&quot;, scope:&quot;skills&quot;, summary:&quot;...&quot;}
+    Server--&gt;&gt;Host: feat(skills): ...
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<pre><code>Terminal 1:  just serve   # skills-core server, file mode, :8080
+Terminal 2:  just demo    # this walkthrough (--tui interactive)
+</code></pre>
+<h3 id="what-minimal-means">What &lsquo;minimal&rsquo; means <a class="anchor" href="#what-minimal-means">¶</a></h3>
+<p>Serve each file under a skill directory as a <code>skill://</code> URI, enumerate them at <code>skill://index.json</code> with a SHA-256 digest, and let a skill&rsquo;s instructions point the host at a real tool. That is the whole blessed core: <strong>skills file + tool handling</strong>, consumed load-on-demand. Archives, remote sources, and fsnotify invalidation are deferred/extended and live in <code>examples/skills</code>.</p>
+<h3 id="step-1-choose-the-client-wire-mode">Step 1: Choose the client wire mode <a class="anchor" href="#step-1-choose-the-client-wire-mode">¶</a></h3>
+<p>mcpkit&rsquo;s server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.</p>
+<h3 id="step-2-connect-to-the-skills-server">Step 2: Connect to the skills server <a class="anchor" href="#step-2-connect-to-the-skills-server">¶</a></h3>
+<h4 id="reproduce">Reproduce <a class="anchor" href="#reproduce">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(serverURL<span style="color:#000;font-weight:bold">+</span><span style="color:#d14">&#34;/mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>    core.ClientInfo{Name: <span style="color:#d14">&#34;skills-core-host&#34;</span>, Version: <span style="color:#d14">&#34;1.0&#34;</span>},
+</span></span><span style="display:flex;"><span>    client.<span style="color:#900;font-weight:bold">WithClientMode</span>(wireMode),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">Connect</span>(); err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#998;font-style:italic">/* run: just serve */</span> }
+</span></span></code></pre><h3 id="step-3-resourceslist--each-skill-file-is-a-skill-resource">Step 3: resources/list — each skill file is a skill:// resource <a class="anchor" href="#step-3-resourceslist--each-skill-file-is-a-skill-resource">¶</a></h3>
+<h3 id="step-4-read-skillindexjson--the-discovery-catalog">Step 4: Read skill://index.json — the discovery catalog <a class="anchor" href="#step-4-read-skillindexjson--the-discovery-catalog">¶</a></h3>
+<p>mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill&rsquo;s SKILL.md.</p>
+<h4 id="reproduce-1">Reproduce <a class="anchor" href="#reproduce-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>body, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ReadResource</span>(skills.IndexURI)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">var</span> idx skills.Index
+</span></span><span style="display:flex;"><span>json.<span style="color:#900;font-weight:bold">Unmarshal</span>([]<span style="color:#0086b3">byte</span>(body), <span style="color:#000;font-weight:bold">&amp;</span>idx)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">for</span> _, e <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">range</span> idx.Skills {
+</span></span><span style="display:flex;"><span>    fmt.<span style="color:#900;font-weight:bold">Printf</span>(<span style="color:#d14">&#34;%s digest=%s\n&#34;</span>, e.Name, e.Digest)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="step-5-read-the-commit-helper-skillmd--the-skill-file">Step 5: Read the commit-helper SKILL.md — the skill file <a class="anchor" href="#step-5-read-the-commit-helper-skillmd--the-skill-file">¶</a></h3>
+<p>A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.</p>
+<h3 id="step-6-tool-handling--call-the-tool-the-skill-points-at">Step 6: Tool handling — call the tool the skill points at <a class="anchor" href="#step-6-tool-handling--call-the-tool-the-skill-points-at">¶</a></h3>
+<p>This is the &rsquo;tool handling&rsquo; half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.</p>
+<h4 id="reproduce-2">Reproduce <a class="anchor" href="#reproduce-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>out, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ToolCall</span>(<span style="color:#d14">&#34;format_commit&#34;</span>, <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;type&#34;</span>: <span style="color:#d14">&#34;feat&#34;</span>, <span style="color:#d14">&#34;scope&#34;</span>: <span style="color:#d14">&#34;skills&#34;</span>, <span style="color:#d14">&#34;summary&#34;</span>: <span style="color:#d14">&#34;add commit-helper skill&#34;</span>,
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/skills/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/skills/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

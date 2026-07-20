@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Go library for building production-grade Model Context Protocol servers and clients — conformance, design, package docs.">
+    <title>mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+
+    <div class="content-body">
+        <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>apps/compat visual gallery — mcpkit ⇄ upstream</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1400px; margin: 2rem auto; padding: 0 1.5rem; color: #1f2937; line-height: 1.55; }
+  h1, h2 { color: #111827; }
+  h1 { margin-bottom: 0.25rem; }
+  .lead { color: #4b5563; }
+  .legend { display: flex; gap: 1.5rem; margin: 1rem 0 2rem; padding: 0.75rem 1rem; background: #f3f4f6; border-radius: 8px; font-size: 0.9rem; }
+  .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .swatch { width: 14px; height: 14px; border: 3px solid; box-sizing: border-box; }
+  .swatch.red { border-color: rgb(220,38,38); }
+  .swatch.blue { border-color: rgb(37,99,235); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 1.5rem 0; }
+  .stat { padding: 1rem; background: #f9fafb; border-radius: 8px; text-align: center; }
+  .stat-num { font-size: 1.75rem; font-weight: 600; color: #111827; }
+  .stat-label { font-size: 0.85rem; color: #6b7280; margin-top: 0.25rem; }
+  .fixture { margin: 2rem 0 3rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; cursor: zoom-in; }
+  .fixture:hover { background: #fafbfc; }
+  .fixture-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .fixture h2 { margin: 0; font-size: 1.25rem; font-family: ui-monospace, monospace; }
+  .fixture-hint { font-size: 0.75rem; color: #9ca3af; }
+  .fixture-tag { font-size: 0.85rem; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: 500; }
+  .tag-clean { background: #dcfce7; color: #166534; }
+  .tag-ignored { background: #dbeafe; color: #1e40af; }
+  .tag-drift { background: #fee2e2; color: #991b1b; }
+  .images { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.75rem; }
+  .img-col { background: #fafafa; padding: 0.5rem; border-radius: 6px; }
+  .img-col .caption { text-align: center; font-size: 0.85rem; color: #6b7280; padding: 0.4rem 0 0.3rem; font-weight: 500; }
+  .img-col img { width: 100%; height: auto; display: block; border-radius: 4px; }
+  .missing { padding: 1rem; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px; margin-top: 2rem; }
+
+   
+  .zoom-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(17, 24, 39, 0.94);
+    overflow: auto;
+    cursor: zoom-out;
+  }
+  .zoom-modal.open { display: block; }
+  .zoom-bar {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; align-items: center; gap: 1rem;
+    padding: 0.75rem 1.25rem;
+    background: rgba(17, 24, 39, 0.92);
+    color: #f3f4f6;
+    border-bottom: 1px solid #374151;
+  }
+  .zoom-bar .title { font-family: ui-monospace, monospace; font-size: 1rem; flex: 1; }
+  .zoom-bar .hint { font-size: 0.8rem; color: #9ca3af; }
+  .zoom-close {
+    background: transparent; color: #f3f4f6;
+    border: 1px solid #4b5563; border-radius: 4px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.9rem; cursor: pointer;
+  }
+  .zoom-close:hover { background: #1f2937; }
+  .zoom-stage {
+    display: flex; gap: 1rem;
+    padding: 1rem 1.25rem 2rem;
+    cursor: default;
+     
+    width: max-content;
+    min-width: 100%;
+  }
+  .zoom-col {
+    flex: 0 0 auto;
+    background: #1f2937;
+    padding: 0.5rem;
+    border-radius: 6px;
+  }
+  .zoom-col .caption {
+    color: #d1d5db; font-size: 0.85rem; font-weight: 500;
+    padding: 0.3rem 0.2rem 0.5rem;
+    text-align: center;
+  }
+  .zoom-col img { display: block; max-width: none; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>apps/compat visual gallery</h1>
+<p class="lead">Side-by-side committed baselines: <code>examples/apps/compat/&lt;fixture&gt;/__snapshots__/&lt;fixture&gt;.png</code> vs upstream's <code>modelcontextprotocol/ext-apps</code> equivalent. Bordered boxes mark regions of pixel-level difference; box outlines are positioned identically on both images so you can compare what's under each box.</p>
+<div class="legend">
+<span><span class="swatch red"></span> Dense diff region (solid block of changed pixels — likely real UI drift)</span>
+<span><span class="swatch blue"></span> Sparse / edge-ghost region (thin outline — typically a 1-2 pixel layout shift, not real drift)</span>
+</div>
+<div class="stats">
+<div class="stat"><div class="stat-num">21</div><div class="stat-label">Fixtures audited</div></div>
+<div class="stat"><div class="stat-num">0</div><div class="stat-label">Pixel-identical</div></div>
+<div class="stat"><div class="stat-num">0</div><div class="stat-label">Ignored-only noise</div></div>
+<div class="stat"><div class="stat-num">21</div><div class="stat-label">Significant drift</div></div>
+</div>
+<div class="fixture" data-name="basic-vanillajs" data-mc="../../../static/conformance/apps/visual-gallery/basic-vanillajs-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/basic-vanillajs-upstream.png" tabindex="0" role="button" aria-label="Zoom basic-vanillajs baselines">
+<div class="fixture-head"><h2>basic-vanillajs</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/basic-vanillajs-mcpkit.png" alt="mcpkit baseline for basic-vanillajs"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/basic-vanillajs-upstream.png" alt="upstream baseline for basic-vanillajs"></div>
+</div>
+</div>
+<div class="fixture" data-name="basic-preact" data-mc="../../../static/conformance/apps/visual-gallery/basic-preact-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/basic-preact-upstream.png" tabindex="0" role="button" aria-label="Zoom basic-preact baselines">
+<div class="fixture-head"><h2>basic-preact</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/basic-preact-mcpkit.png" alt="mcpkit baseline for basic-preact"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/basic-preact-upstream.png" alt="upstream baseline for basic-preact"></div>
+</div>
+</div>
+<div class="fixture" data-name="basic-react" data-mc="../../../static/conformance/apps/visual-gallery/basic-react-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/basic-react-upstream.png" tabindex="0" role="button" aria-label="Zoom basic-react baselines">
+<div class="fixture-head"><h2>basic-react</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/basic-react-mcpkit.png" alt="mcpkit baseline for basic-react"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/basic-react-upstream.png" alt="upstream baseline for basic-react"></div>
+</div>
+</div>
+<div class="fixture" data-name="basic-solid" data-mc="../../../static/conformance/apps/visual-gallery/basic-solid-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/basic-solid-upstream.png" tabindex="0" role="button" aria-label="Zoom basic-solid baselines">
+<div class="fixture-head"><h2>basic-solid</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/basic-solid-mcpkit.png" alt="mcpkit baseline for basic-solid"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/basic-solid-upstream.png" alt="upstream baseline for basic-solid"></div>
+</div>
+</div>
+<div class="fixture" data-name="basic-svelte" data-mc="../../../static/conformance/apps/visual-gallery/basic-svelte-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/basic-svelte-upstream.png" tabindex="0" role="button" aria-label="Zoom basic-svelte baselines">
+<div class="fixture-head"><h2>basic-svelte</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/basic-svelte-mcpkit.png" alt="mcpkit baseline for basic-svelte"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/basic-svelte-upstream.png" alt="upstream baseline for basic-svelte"></div>
+</div>
+</div>
+<div class="fixture" data-name="basic-vue" data-mc="../../../static/conformance/apps/visual-gallery/basic-vue-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/basic-vue-upstream.png" tabindex="0" role="button" aria-label="Zoom basic-vue baselines">
+<div class="fixture-head"><h2>basic-vue</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/basic-vue-mcpkit.png" alt="mcpkit baseline for basic-vue"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/basic-vue-upstream.png" alt="upstream baseline for basic-vue"></div>
+</div>
+</div>
+<div class="fixture" data-name="quickstart" data-mc="../../../static/conformance/apps/visual-gallery/quickstart-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/quickstart-upstream.png" tabindex="0" role="button" aria-label="Zoom quickstart baselines">
+<div class="fixture-head"><h2>quickstart</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 18 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/quickstart-mcpkit.png" alt="mcpkit baseline for quickstart"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/quickstart-upstream.png" alt="upstream baseline for quickstart"></div>
+</div>
+</div>
+<div class="fixture" data-name="transcript" data-mc="../../../static/conformance/apps/visual-gallery/transcript-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/transcript-upstream.png" tabindex="0" role="button" aria-label="Zoom transcript baselines">
+<div class="fixture-head"><h2>transcript</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 23 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/transcript-mcpkit.png" alt="mcpkit baseline for transcript"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/transcript-upstream.png" alt="upstream baseline for transcript"></div>
+</div>
+</div>
+<div class="fixture" data-name="sheet-music" data-mc="../../../static/conformance/apps/visual-gallery/sheet-music-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/sheet-music-upstream.png" tabindex="0" role="button" aria-label="Zoom sheet-music baselines">
+<div class="fixture-head"><h2>sheet-music</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 10 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/sheet-music-mcpkit.png" alt="mcpkit baseline for sheet-music"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/sheet-music-upstream.png" alt="upstream baseline for sheet-music"></div>
+</div>
+</div>
+<div class="fixture" data-name="integration" data-mc="../../../static/conformance/apps/visual-gallery/integration-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/integration-upstream.png" tabindex="0" role="button" aria-label="Zoom integration baselines">
+<div class="fixture-head"><h2>integration</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 4 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/integration-mcpkit.png" alt="mcpkit baseline for integration"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/integration-upstream.png" alt="upstream baseline for integration"></div>
+</div>
+</div>
+<div class="fixture" data-name="map" data-mc="../../../static/conformance/apps/visual-gallery/map-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/map-upstream.png" tabindex="0" role="button" aria-label="Zoom map baselines">
+<div class="fixture-head"><h2>map</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 10 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/map-mcpkit.png" alt="mcpkit baseline for map"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/map-upstream.png" alt="upstream baseline for map"></div>
+</div>
+</div>
+<div class="fixture" data-name="threejs" data-mc="../../../static/conformance/apps/visual-gallery/threejs-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/threejs-upstream.png" tabindex="0" role="button" aria-label="Zoom threejs baselines">
+<div class="fixture-head"><h2>threejs</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 9 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/threejs-mcpkit.png" alt="mcpkit baseline for threejs"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/threejs-upstream.png" alt="upstream baseline for threejs"></div>
+</div>
+</div>
+<div class="fixture" data-name="shadertoy" data-mc="../../../static/conformance/apps/visual-gallery/shadertoy-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/shadertoy-upstream.png" tabindex="0" role="button" aria-label="Zoom shadertoy baselines">
+<div class="fixture-head"><h2>shadertoy</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 5 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/shadertoy-mcpkit.png" alt="mcpkit baseline for shadertoy"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/shadertoy-upstream.png" alt="upstream baseline for shadertoy"></div>
+</div>
+</div>
+<div class="fixture" data-name="wiki-explorer" data-mc="../../../static/conformance/apps/visual-gallery/wiki-explorer-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/wiki-explorer-upstream.png" tabindex="0" role="button" aria-label="Zoom wiki-explorer baselines">
+<div class="fixture-head"><h2>wiki-explorer</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 8 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/wiki-explorer-mcpkit.png" alt="mcpkit baseline for wiki-explorer"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/wiki-explorer-upstream.png" alt="upstream baseline for wiki-explorer"></div>
+</div>
+</div>
+<div class="fixture" data-name="budget-allocator" data-mc="../../../static/conformance/apps/visual-gallery/budget-allocator-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/budget-allocator-upstream.png" tabindex="0" role="button" aria-label="Zoom budget-allocator baselines">
+<div class="fixture-head"><h2>budget-allocator</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 11 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/budget-allocator-mcpkit.png" alt="mcpkit baseline for budget-allocator"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/budget-allocator-upstream.png" alt="upstream baseline for budget-allocator"></div>
+</div>
+</div>
+<div class="fixture" data-name="scenario-modeler" data-mc="../../../static/conformance/apps/visual-gallery/scenario-modeler-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/scenario-modeler-upstream.png" tabindex="0" role="button" aria-label="Zoom scenario-modeler baselines">
+<div class="fixture-head"><h2>scenario-modeler</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 12 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/scenario-modeler-mcpkit.png" alt="mcpkit baseline for scenario-modeler"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/scenario-modeler-upstream.png" alt="upstream baseline for scenario-modeler"></div>
+</div>
+</div>
+<div class="fixture" data-name="system-monitor" data-mc="../../../static/conformance/apps/visual-gallery/system-monitor-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/system-monitor-upstream.png" tabindex="0" role="button" aria-label="Zoom system-monitor baselines">
+<div class="fixture-head"><h2>system-monitor</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 6 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/system-monitor-mcpkit.png" alt="mcpkit baseline for system-monitor"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/system-monitor-upstream.png" alt="upstream baseline for system-monitor"></div>
+</div>
+</div>
+<div class="fixture" data-name="cohort-heatmap" data-mc="../../../static/conformance/apps/visual-gallery/cohort-heatmap-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/cohort-heatmap-upstream.png" tabindex="0" role="button" aria-label="Zoom cohort-heatmap baselines">
+<div class="fixture-head"><h2>cohort-heatmap</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 9 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/cohort-heatmap-mcpkit.png" alt="mcpkit baseline for cohort-heatmap"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/cohort-heatmap-upstream.png" alt="upstream baseline for cohort-heatmap"></div>
+</div>
+</div>
+<div class="fixture" data-name="customer-segmentation" data-mc="../../../static/conformance/apps/visual-gallery/customer-segmentation-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/customer-segmentation-upstream.png" tabindex="0" role="button" aria-label="Zoom customer-segmentation baselines">
+<div class="fixture-head"><h2>customer-segmentation</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 10 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/customer-segmentation-mcpkit.png" alt="mcpkit baseline for customer-segmentation"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/customer-segmentation-upstream.png" alt="upstream baseline for customer-segmentation"></div>
+</div>
+</div>
+<div class="fixture" data-name="debug-server" data-mc="../../../static/conformance/apps/visual-gallery/debug-server-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/debug-server-upstream.png" tabindex="0" role="button" aria-label="Zoom debug-server baselines">
+<div class="fixture-head"><h2>debug-server</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 11 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/debug-server-mcpkit.png" alt="mcpkit baseline for debug-server"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/debug-server-upstream.png" alt="upstream baseline for debug-server"></div>
+</div>
+</div>
+<div class="fixture" data-name="pdf-server" data-mc="../../../static/conformance/apps/visual-gallery/pdf-server-mcpkit.png" data-up="../../../static/conformance/apps/visual-gallery/pdf-server-upstream.png" tabindex="0" role="button" aria-label="Zoom pdf-server baselines">
+<div class="fixture-head"><h2>pdf-server</h2><div style="display:flex;align-items:baseline;gap:0.75rem;"><span class="fixture-hint">click to zoom</span><span class="fixture-tag tag-drift">⚠ 13 significant region(s)</span></div></div>
+<div class="images">
+<div class="img-col"><div class="caption">mcpkit-Go</div><img src="../../../static/conformance/apps/visual-gallery/pdf-server-mcpkit.png" alt="mcpkit baseline for pdf-server"></div>
+<div class="img-col"><div class="caption">upstream TS</div><img src="../../../static/conformance/apps/visual-gallery/pdf-server-upstream.png" alt="upstream baseline for pdf-server"></div>
+</div>
+</div>
+
+<div id="zoom-modal" class="zoom-modal" aria-hidden="true" aria-label="Zoomed baseline comparison">
+  <div class="zoom-bar">
+    <span class="title" id="zoom-title"></span>
+    <span class="hint">Scroll horizontally to see both images at native size · ESC or click background to close</span>
+    <button class="zoom-close" type="button" aria-label="Close zoom view">Close</button>
+  </div>
+  <div class="zoom-stage" id="zoom-stage">
+    <div class="zoom-col"><div class="caption">mcpkit-Go</div><img id="zoom-mc" alt=""></div>
+    <div class="zoom-col"><div class="caption">upstream TS</div><img id="zoom-up" alt=""></div>
+  </div>
+</div>
+<script>
+(function () {
+  var modal = document.getElementById('zoom-modal');
+  var titleEl = document.getElementById('zoom-title');
+  var mcImg = document.getElementById('zoom-mc');
+  var upImg = document.getElementById('zoom-up');
+  var stage = document.getElementById('zoom-stage');
+  var closeBtn = modal.querySelector('.zoom-close');
+
+  function openZoom(name, mc, up) {
+    titleEl.textContent = name;
+    mcImg.src = mc;
+    mcImg.alt = 'mcpkit baseline for ' + name;
+    upImg.src = up;
+    upImg.alt = 'upstream baseline for ' + name;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    modal.scrollTop = 0;
+    modal.scrollLeft = 0;
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeZoom() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    mcImg.src = '';
+    upImg.src = '';
+    document.body.style.overflow = '';
+  }
+
+  
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) closeZoom();
+  });
+  closeBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    closeZoom();
+  });
+  stage.addEventListener('click', function (e) { e.stopPropagation(); });
+
+  
+  document.querySelectorAll('.fixture').forEach(function (row) {
+    function open() {
+      openZoom(
+        row.getAttribute('data-name'),
+        row.getAttribute('data-mc'),
+        row.getAttribute('data-up')
+      );
+    }
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        open();
+      }
+    });
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && modal.classList.contains('open')) closeZoom();
+  });
+})();
+</script>
+
+</body></html>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

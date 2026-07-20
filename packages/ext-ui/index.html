@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="MCP Apps, Bridge JS, AppHost, ServerRegistry — separate go.mod sub-module.">
+    <title>ext/ui · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>ext/ui</h1>
+        
+        <p class="lead">MCP Apps, Bridge JS, AppHost, ServerRegistry — separate go.mod sub-module.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_DESIGN.md"><code>docs/APPS_DESIGN.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mcp-apps-extension--design">MCP Apps Extension — Design <a class="anchor" href="#mcp-apps-extension--design">¶</a></h1>
+<h2 id="overview">Overview <a class="anchor" href="#overview">¶</a></h2>
+<p>MCPKit adds support for the MCP Apps extension (<code>io.modelcontextprotocol/ui</code>), enabling servers to return interactive HTML user interfaces that render inline in host conversations (Claude, ChatGPT, VS Code Copilot, Goose, etc.). This document covers the architecture, protocol surface, edge cases, conformance strategy, and the slyds reference integration.</p>
+<p>MCP Apps combines two existing MCP primitives — tools declare a UI resource via <code>_meta.ui.resourceUri</code>, and resources serve the HTML content with MIME type <code>text/html;profile=mcp-app</code>. The interactive iframe↔host protocol (JSON-RPC over <code>postMessage</code>) is the host&rsquo;s responsibility; mcpkit&rsquo;s scope is the server-side metadata, resource serving, capability negotiation, and client-side detection.</p>
+<h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
+<ol>
+<li><strong>Core module stays zero-deps</strong> — UI metadata types live in mcpkit core. No HTML processing, no JS bundling, no browser dependencies.</li>
+<li><strong>Additive extension</strong> — servers without UI config work exactly as before. Existing tools, resources, and transports are unaffected.</li>
+<li><strong>Interface in core, implementation in sub-module</strong> — core defines the <code>UIMetadata</code> struct and <code>_meta</code> plumbing. A future <code>mcpkit/ui</code> sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.</li>
+<li><strong>Follow the auth pattern</strong> — <code>UIExtension</code> implements <code>ExtensionProvider</code>, registered via <code>WithExtension(ui.UIExtension{})</code>. Capability negotiation mirrors auth exactly.</li>
+<li><strong>Slyds as the reference app</strong> — design decisions are validated against a real use case: an HTML slide deck editor served as an MCP App.</li>
+</ol>
+<h2 id="spec-reference">Spec Reference <a class="anchor" href="#spec-reference">¶</a></h2>
+<ul>
+<li>Extension ID: <code>io.modelcontextprotocol/ui</code></li>
+<li>Feature name: &ldquo;MCP Apps&rdquo; (the extension ID uses <code>ui</code>, but the feature is called &ldquo;Apps&rdquo;)</li>
+<li>Spec version: <code>2026-01-26</code> (current stable)</li>
+<li>Overview: <a href="https://modelcontextprotocol.io/extensions/apps/overview">modelcontextprotocol.io/extensions/apps/overview</a></li>
+<li>Repository: <a href="https://github.com/modelcontextprotocol/ext-apps">github.com/modelcontextprotocol/ext-apps</a></li>
+<li>Specification: <a href="https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx">specification/2026-01-26/apps.mdx</a></li>
+<li>Supported hosts: Claude, Claude Desktop, VS Code GitHub Copilot, Goose, Postman, MCPJam</li>
+</ul>
+<h3 id="implementation-notes">Implementation notes <a class="anchor" href="#implementation-notes">¶</a></h3>
+<ul>
+<li>Standard <code>Permissions</code> values: <code>&quot;camera&quot;</code>, <code>&quot;microphone&quot;</code>, <code>&quot;geolocation&quot;</code>, <code>&quot;clipboardWrite&quot;</code></li>
+<li><code>PrefersBorder</code> and <code>Domain</code> fields may be host-specific — not all hosts honor them</li>
+<li>Hosts may preload <code>ui://</code> resources before tools/call for faster rendering</li>
+</ul>
+<h2 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h2>
+<pre><code>┌──────────────────────────────────────────────────────────────────────┐
+│  mcpkit (core module, zero UI deps)                                  │
+│                                                                      │
+│  NEW TYPES:                          CHANGED TYPES:                  │
+│  ├─ UIMetadata                       ├─ ToolDef._Meta                │
+│  ├─ UICSPConfig                      ├─ ResourceDef._Meta            │
+│  ├─ UIVisibility (enum)              ├─ ResourceReadContent._Meta    │
+│  └─ AppMIMEType (const)              ├─ ClientCapabilities.Extensions│
+│                                      └─ initializeParams (extensions)│
+│                                                                      │
+│  EXISTING (unchanged):                                               │
+│  ├─ ExtensionProvider                                                │
+│  ├─ Extension, Stability                                             │
+│  └─ RegisterResource, RegisterTool, etc.                             │
+├──────────────────────────────────────────────────────────────────────┤
+│  mcpkit/ui (optional sub-module, future)                             │
+│                                                                      │
+│  IMPLEMENTATIONS:                                                    │
+│  ├─ UIExtension         → implements ExtensionProvider               │
+│  ├─ CSPBuilder          → constructs CSP from UICSPConfig            │
+│  ├─ HTMLInliner         → inlines CSS/JS/images into single HTML     │
+│  └─ RegisterAppTool()   → convenience: tool + resource in one call   │
+│                                                                      │
+│  (v1 ships UIExtension only; helpers are future work)                │
+├──────────────────────────────────────────────────────────────────────┤
+│  Application (e.g. slyds)                                            │
+│                                                                      │
+│  ├─ Registers tools with _Meta.UI.ResourceUri = &quot;ui://...&quot;           │
+│  ├─ Registers ui:// resources serving HTML                           │
+│  ├─ Optionally embeds App-class JS for bidirectional communication   │
+│  └─ Uses mcpkit server as usual (SSE / Streamable HTTP)              │
+└──────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="responsibility-boundary">Responsibility Boundary <a class="anchor" href="#responsibility-boundary">¶</a></h3>
+<pre><code>┌─────────────┐     ┌──────────────┐     ┌─────────────────┐     ┌──────────┐
+│  MCP Client │     │  MCP Server  │     │  Host (Claude,   │     │  iframe  │
+│  (mcpkit    │     │  (mcpkit     │     │   ChatGPT, etc.) │     │  (MCP    │
+│   client)   │     │   server)    │     │                  │     │   App)   │
+├─────────────┤     ├──────────────┤     ├──────────────────┤     ├──────────┤
+│ Negotiate   │◄───►│ Advertise    │     │                  │     │          │
+│ extensions  │     │ extension    │     │                  │     │          │
+│             │     │              │     │                  │     │          │
+│ tools/list  │◄───►│ Return tools │     │                  │     │          │
+│             │     │ with _meta.ui│     │                  │     │          │
+│             │     │              │     │                  │     │          │
+│ tools/call  │◄───►│ Execute tool │     │ Render iframe    │────►│ Display  │
+│             │     │ return result│     │ from ui:// res   │     │ HTML     │
+│             │     │              │     │                  │     │          │
+│ resources/  │◄───►│ Serve HTML   │     │ postMessage      │◄───►│ JSON-RPC │
+│ read        │     │ content      │     │ bridge           │     │ ui/*     │
+└─────────────┘     └──────────────┘     └──────────────────┘     └──────────┘
+                    ▲                    ▲
+                    │ mcpkit scope       │ host scope
+                    │ (this design)      │ (not mcpkit)
+</code></pre>
+<p><strong>mcpkit is responsible for:</strong></p>
+<ul>
+<li>Capability negotiation (server advertises, client detects)</li>
+<li><code>_meta.ui</code> metadata on tools and resources</li>
+<li>Serving <code>ui://</code> resources with correct MIME type</li>
+<li>Tool visibility filtering</li>
+<li>Text-only fallback when client doesn&rsquo;t support UI</li>
+</ul>
+<p><strong>The host is responsible for:</strong></p>
+<ul>
+<li>Fetching <code>ui://</code> resources via <code>resources/read</code></li>
+<li>Rendering HTML in sandboxed iframe</li>
+<li>The <code>postMessage</code> ↔ JSON-RPC bridge (<code>ui/initialize</code>, <code>ui/notifications/*</code>, etc.)</li>
+<li>CSP enforcement, permission policy, double-iframe sandbox proxy</li>
+<li>Teardown lifecycle</li>
+</ul>
+<h2 id="core-types">Core Types <a class="anchor" href="#core-types">¶</a></h2>
+<h3 id="uimetadata-new-in-mcpkit-core">UIMetadata (new, in mcpkit core) <a class="anchor" href="#uimetadata-new-in-mcpkit-core">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// UIMetadata describes UI presentation metadata for tools and resources.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Serialized as the &#34;_meta.ui&#34; object in tools/list and resources/read responses.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> UIMetadata <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ResourceUri points to a ui:// resource containing the HTML to render.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Required for tools that want inline UI rendering.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    ResourceUri <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;resourceUri,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Visibility controls who can see/call this tool.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Default: [&#34;model&#34;, &#34;app&#34;] (both LLM and iframe can access).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Visibility []UIVisibility <span style="color:#d14">`json:&#34;visibility,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// CSP declares external domains the app needs to load resources from.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Hosts construct Content-Security-Policy from these declarations.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    CSP <span style="color:#000;font-weight:bold">*</span>UICSPConfig <span style="color:#d14">`json:&#34;csp,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Permissions lists browser capabilities the app requests
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// (e.g., &#34;camera&#34;, &#34;microphone&#34;, &#34;geolocation&#34;, &#34;clipboardWrite&#34;).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Permissions []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;permissions,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// PrefersBorder hints whether the host should draw a visible border.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// nil = host decides, true = border, false = no border.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    PrefersBorder <span style="color:#000;font-weight:bold">*</span><span style="color:#458;font-weight:bold">bool</span> <span style="color:#d14">`json:&#34;prefersBorder,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Domain requests a dedicated sandbox origin for the app.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Format is host-dependent (e.g., &#34;myapp&#34; → myapp.claudemcpcontent.com).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Domain <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;domain,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// UICSPConfig declares external domains for Content-Security-Policy construction.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> UICSPConfig <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ConnectDomains → CSP connect-src (fetch, XHR, WebSocket targets).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    ConnectDomains []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;connectDomains,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ResourceDomains → CSP script-src, style-src, img-src, font-src, media-src.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    ResourceDomains []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;resourceDomains,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// FrameDomains → CSP frame-src (nested iframes).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    FrameDomains []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;frameDomains,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// BaseUriDomains → CSP base-uri.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    BaseUriDomains []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;baseUriDomains,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// UIVisibility controls tool access scope.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> UIVisibility <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">const</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// UIVisibilityModel means the tool appears in tools/list for the LLM.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    UIVisibilityModel UIVisibility = <span style="color:#d14">&#34;model&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// UIVisibilityApp means the tool is callable by apps from the same server.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    UIVisibilityApp UIVisibility = <span style="color:#d14">&#34;app&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// AppMIMEType is the MIME type for MCP App HTML resources.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">const</span> AppMIMEType = <span style="color:#d14">&#34;text/html;profile=mcp-app&#34;</span>
+</span></span></code></pre><h3 id="changes-to-tooldef">Changes to ToolDef <a class="anchor" href="#changes-to-tooldef">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ToolDef <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Name        <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;name&#34;`</span>
+</span></span><span style="display:flex;"><span>    Description <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;description&#34;`</span>
+</span></span><span style="display:flex;"><span>    InputSchema any            <span style="color:#d14">`json:&#34;inputSchema&#34;`</span>
+</span></span><span style="display:flex;"><span>    Annotations <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any <span style="color:#d14">`json:&#34;annotations,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Meta holds protocol-level metadata (e.g., UI presentation hints).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Serialized as &#34;_meta&#34; in the tools/list response.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Meta <span style="color:#000;font-weight:bold">*</span>ToolMeta <span style="color:#d14">`json:&#34;_meta,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ToolMeta holds protocol-level metadata for a tool definition.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> ToolMeta <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// UI contains MCP Apps presentation metadata.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    UI <span style="color:#000;font-weight:bold">*</span>UIMetadata <span style="color:#d14">`json:&#34;ui,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="changes-to-resourcereadcontent">Changes to ResourceReadContent <a class="anchor" href="#changes-to-resourcereadcontent">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ResourceReadContent <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    URI      <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;uri&#34;`</span>
+</span></span><span style="display:flex;"><span>    MimeType <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;mimeType,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    Text     <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;text,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    Blob     <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;blob,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Meta holds per-content metadata (e.g., UI overrides).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Takes precedence over the resource-level _meta from resources/list.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Meta <span style="color:#000;font-weight:bold">*</span>ResourceContentMeta <span style="color:#d14">`json:&#34;_meta,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ResourceContentMeta holds per-content metadata in resources/read responses.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> ResourceContentMeta <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    UI <span style="color:#000;font-weight:bold">*</span>UIMetadata <span style="color:#d14">`json:&#34;ui,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="changes-to-clientcapabilities">Changes to ClientCapabilities <a class="anchor" href="#changes-to-clientcapabilities">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ClientCapabilities <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Sampling    <span style="color:#000;font-weight:bold">*</span><span style="color:#000;font-weight:bold">struct</span>{}                     <span style="color:#d14">`json:&#34;sampling,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    Roots       <span style="color:#000;font-weight:bold">*</span>RootsCap                     <span style="color:#d14">`json:&#34;roots,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    Elicitation <span style="color:#000;font-weight:bold">*</span><span style="color:#000;font-weight:bold">struct</span>{}                     <span style="color:#d14">`json:&#34;elicitation,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    Extensions  <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]ClientExtensionCap <span style="color:#d14">`json:&#34;extensions,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ClientExtensionCap describes a client&#39;s support for a specific extension.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> ClientExtensionCap <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    MIMETypes []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;mimeTypes,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="uiextension-in-mcpkitui-sub-module">UIExtension (in mcpkit/ui sub-module) <a class="anchor" href="#uiextension-in-mcpkitui-sub-module">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">package</span> ui
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> <span style="color:#d14">&#34;github.com/panyam/mcpkit&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// UIExtension declares support for the MCP Apps extension.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> UIExtension <span style="color:#000;font-weight:bold">struct</span>{}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (UIExtension) <span style="color:#900;font-weight:bold">Extension</span>() mcpkit.Extension {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> mcpkit.Extension{
+</span></span><span style="display:flex;"><span>        ID:          <span style="color:#d14">&#34;io.modelcontextprotocol/ui&#34;</span>,
+</span></span><span style="display:flex;"><span>        SpecVersion: <span style="color:#d14">&#34;2026-01-26&#34;</span>,
+</span></span><span style="display:flex;"><span>        Stability:   mcpkit.Experimental,
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h2 id="protocol-flows">Protocol Flows <a class="anchor" href="#protocol-flows">¶</a></h2>
+<h3 id="flow-a-capability-negotiation-initialize">Flow A: Capability negotiation (initialize) <a class="anchor" href="#flow-a-capability-negotiation-initialize">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client
+    participant S as Server
+
+    C-&gt;&gt;S: initialize with UI extension support
+    Note over C: extensions - io.modelcontextprotocol/ui&lt;br/&gt;mimeTypes - text/html, profile=mcp-app
+    Note right of S: Store client extension caps&lt;br/&gt;ClientSupportsUI = true
+    S--&gt;&gt;C: initialize result with UI extension
+    Note over S: io.modelcontextprotocol/ui&lt;br/&gt;specVersion 2026-01-26&lt;br/&gt;stability experimental
+</code></pre>
+<h3 id="flow-b-tool-with-ui--full-lifecycle-host-perspective">Flow B: Tool with UI — full lifecycle (host perspective) <a class="anchor" href="#flow-b-tool-with-ui--full-lifecycle-host-perspective">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant User
+    participant Host as Host/LLM
+    participant Client as MCP Client
+    participant Server as MCP Server
+    participant App as iframe
+
+    User-&gt;&gt;Host: show slides
+    Host-&gt;&gt;Client: tools/list
+    Client-&gt;&gt;Server: tools/list
+    Server--&gt;&gt;Client: tools with _meta.ui.resourceUri
+
+    Note over Host: LLM decides to call build
+
+    par Parallel requests
+        Host-&gt;&gt;Client: tools/call build_deck
+        Client-&gt;&gt;Server: tools/call build_deck
+        Note right of Server: execute build
+    and
+        Host-&gt;&gt;Client: resources/read ui://decks/demo/view
+        Client-&gt;&gt;Server: resources/read
+        Server--&gt;&gt;Client: HTML content, mimeType text/html profile=mcp-app
+    end
+
+    Host-&gt;&gt;App: Render iframe with HTML
+    Server--&gt;&gt;Client: tool result
+    Client--&gt;&gt;Host: tool result
+    Host-&gt;&gt;App: postMessage ui/notifications/tool-result
+    App--&gt;&gt;User: Interactive slide deck renders
+</code></pre>
+<h3 id="flow-c-interactive-tool-call-from-iframe-bidirectional">Flow C: Interactive tool call from iframe (bidirectional) <a class="anchor" href="#flow-c-interactive-tool-call-from-iframe-bidirectional">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant User
+    participant Host
+    participant Client as MCP Client
+    participant Server as MCP Server
+    participant App as iframe
+
+    User-&gt;&gt;App: clicks Edit slide 3
+    App-&gt;&gt;Host: postMessage tools/call edit_slide pos=3
+    Host-&gt;&gt;Client: tools/call edit_slide
+    Client-&gt;&gt;Server: tools/call edit_slide
+    Note right of Server: execute edit
+    Server--&gt;&gt;Client: result
+    Client--&gt;&gt;Host: result
+    Host-&gt;&gt;App: postMessage tools/call result
+    Note right of App: App updates slide DOM
+    App--&gt;&gt;User: Slide 3 updated live
+</code></pre>
+<h3 id="flow-d-text-only-fallback-client-without-ui-support">Flow D: Text-only fallback (client without UI support) <a class="anchor" href="#flow-d-text-only-fallback-client-without-ui-support">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client - no UI
+    participant S as Server
+
+    C-&gt;&gt;S: initialize, capabilities empty, no extensions
+    Note right of S: No extensions field&lt;br/&gt;ClientSupportsUI = false
+    S--&gt;&gt;C: result, no UI extension advertised
+
+    C-&gt;&gt;S: tools/list
+    S--&gt;&gt;C: tools with _meta.ui.resourceUri still present
+    Note left of C: _meta.ui still present&lt;br/&gt;informational, client ignores
+
+    C-&gt;&gt;S: tools/call build_deck
+    S--&gt;&gt;C: text result - Built 8 slides
+    Note left of C: Client displays text only&lt;br/&gt;ignores _meta.ui
+</code></pre>
+<h3 id="flow-e-tool-visibility-filtering">Flow E: Tool visibility filtering <a class="anchor" href="#flow-e-tool-visibility-filtering">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as Host/LLM
+    participant S as Server
+    participant App as iframe
+
+    Host-&gt;&gt;S: tools/list
+    S--&gt;&gt;Host: Full unfiltered list&lt;br/&gt;build_deck visibility model+app&lt;br/&gt;edit_slide visibility model+app&lt;br/&gt;navigate_slide visibility app only&lt;br/&gt;get_theme_css visibility app only
+
+    Note over Host: Host filters for LLM -&lt;br/&gt;build_deck, edit_slide
+    Note over Host,App: Host allows app to call -&lt;br/&gt;build_deck, edit_slide,&lt;br/&gt;navigate_slide, get_theme_css
+</code></pre>
+<h2 id="observed-host-behavior-mcpjam-april-2026">Observed Host Behavior (MCPJam, April 2026) <a class="anchor" href="#observed-host-behavior-mcpjam-april-2026">¶</a></h2>
+<p>Testing slyds against MCPJam revealed important details about how hosts<br />
+actually implement the <code>_meta.ui.resourceUri</code> lifecycle. These behaviors<br />
+are not specified in the ext-apps spec and vary by host.</p>
+<h3 id="pre-fetch-timing">Pre-fetch timing <a class="anchor" href="#pre-fetch-timing">¶</a></h3>
+<p>MCPJam pre-fetches <code>resources/read</code> for <code>_meta.ui.resourceUri</code> <strong>immediately<br />
+before</strong> <code>tools/call</code> — not at connection time or <code>tools/list</code> time. The<br />
+pre-fetch and tool call happen in parallel (resource read ~300ms before tool<br />
+result arrives). The iframe boots from the pre-fetched HTML while the tool<br />
+executes.</p>
+<h3 id="template-uri-concrete-fallbacks">Template URI concrete fallbacks <a class="anchor" href="#template-uri-concrete-fallbacks">¶</a></h3>
+<p>Hosts (MCPJam, Claude Desktop, VS Code) do not substitute template variables<br />
+in <code>_meta.ui.resourceUri</code>. They fetch the URI literally. mcpkit&rsquo;s<br />
+<code>RegisterAppTool</code> generates a concrete fallback URI (e.g.,<br />
+<code>ui://slyds/preview_deck/latest</code>) and a wrapped handler that replays the<br />
+most recent tool-call params into the <code>TemplateHandler</code>.</p>
+<p><strong>Implication:</strong> The concrete fallback handler receives <code>resources/read</code><br />
+before any <code>tools/call</code> has set params. It must return a valid HTML document<br />
+(not an error), or the host will fail to boot the iframe entirely. mcpkit<br />
+returns a placeholder HTML in this case.</p>
+<h3 id="tool-results-flow-through-postmessage-not-resource-re-fetch">Tool results flow through postMessage, not resource re-fetch <a class="anchor" href="#tool-results-flow-through-postmessage-not-resource-re-fetch">¶</a></h3>
+<p>After <code>tools/call</code> completes, the host does <strong>not</strong> re-fetch <code>resources/read</code>.<br />
+Instead, it forwards the tool result to the already-loaded iframe via<br />
+<code>postMessage</code> (<code>ui/notifications/tool-result</code>). The iframe app is responsible<br />
+for updating its DOM based on the tool result.</p>
+<p>This means:</p>
+<ul>
+<li>The initial <code>resources/read</code> HTML is the <strong>app shell</strong> — it boots the<br />
+iframe and sets up the postMessage listener</li>
+<li>Tool results are delivered as structured data, not as new HTML</li>
+<li><code>notifications/resources/updated</code> does not trigger a resource re-fetch<br />
+in MCPJam (as of April 2026)</li>
+</ul>
+<h3 id="structuredcontent-must-be-a-json-object"><code>structuredContent</code> must be a JSON object <a class="anchor" href="#structuredcontent-must-be-a-json-object">¶</a></h3>
+<p>The MCP draft spec (schema) defines <code>structuredContent</code> in <code>CallToolResult</code><br />
+as <code>&quot;type&quot;: &quot;object&quot;</code>. MCPJam validates this and rejects arrays with:<br />
+<code>&quot;expected record, received array&quot;</code>. Tools returning lists must wrap them<br />
+in an object (e.g., <code>{&quot;decks&quot;: [...]}</code>).</p>
+<h3 id="spec-gaps-identified">Spec gaps identified <a class="anchor" href="#spec-gaps-identified">¶</a></h3>
+<ol>
+<li>
+<p><strong>No guidance on pre-fetch behavior.</strong> The spec does not define when<br />
+hosts should fetch <code>_meta.ui.resourceUri</code> relative to <code>tools/call</code>. In<br />
+practice, hosts pre-fetch in parallel with the tool call. Servers with<br />
+template URIs must handle <code>resources/read</code> before any tool has been<br />
+called (empty params).</p>
+</li>
+<li>
+<p><strong>No guidance on template URI substitution.</strong> The spec does not say<br />
+whether hosts should substitute template variables in<br />
+<code>_meta.ui.resourceUri</code> before fetching. Current hosts do not. This<br />
+forces the concrete-fallback pattern with param capture.</p>
+</li>
+<li>
+<p><strong>Unclear role of <code>notifications/resources/updated</code>.</strong> The spec defines<br />
+this notification for resource subscriptions, but its interaction with<br />
+MCP Apps iframes is unspecified. MCPJam ignores it for app resources —<br />
+tool results flow through <code>postMessage</code> instead.</p>
+</li>
+</ol>
+<p>These observations have been filed as feedback to the ext-apps spec:</p>
+<!-- TODO: add link to spec issue once filed -->
+<h2 id="edge-cases-and-challenges">Edge Cases and Challenges <a class="anchor" href="#edge-cases-and-challenges">¶</a></h2>
+<h3 id="1-html-size-limits">1. HTML Size Limits <a class="anchor" href="#1-html-size-limits">¶</a></h3>
+<p><strong>Problem:</strong> Self-contained HTML (with inlined CSS, JS, images) can be large. Slyds presentations with embedded images can exceed several MB. The MCP protocol has no explicit size limit, but:</p>
+<ul>
+<li>JSON-RPC messages transit as HTTP request/response bodies</li>
+<li>Some hosts may impose practical limits on resource content size</li>
+<li>Base64-encoded images inflate 33%</li>
+</ul>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li><code>ResourceReadContent.Blob</code> (base64) is available alongside <code>.Text</code> — hosts should accept both</li>
+<li>Servers SHOULD keep HTML under 5MB when possible (practical limit observed in Claude)</li>
+<li>For large assets, use <code>UICSPConfig.ResourceDomains</code> to allow loading from external CDN instead of inlining</li>
+<li>Document size guidance in API docs; don&rsquo;t enforce in the library (host limits vary)</li>
+</ul>
+<p><strong>Impact on slyds:</strong> <code>slyds build</code> already inlines everything. Add an <code>--mcp-app</code> build mode that uses external asset references (via CSP domains) instead of inlining when the deck exceeds a size threshold.</p>
+<h3 id="2-resource-caching-and-staleness">2. Resource Caching and Staleness <a class="anchor" href="#2-resource-caching-and-staleness">¶</a></h3>
+<p><strong>Problem:</strong> Hosts MAY cache <code>resources/read</code> responses. After a user edits a slide via <code>edit_slide</code>, the cached HTML is stale. The spec says dynamic metadata should go in <code>resources/read</code> (not <code>resources/list</code>), but there&rsquo;s no explicit cache invalidation protocol.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>Use <code>notifications/resources/list_changed</code> to signal the host that resources have changed (already supported by mcpkit)</li>
+<li>The tool result from <code>edit_slide</code> can include updated text content as a hint</li>
+<li>Hosts that support <code>list_changed</code> will re-fetch; others may show stale content</li>
+<li>For slyds: after any mutation, emit <code>list_changed</code> notification AND return the updated slide content in the tool result</li>
+</ul>
+<p><strong>mcpkit change:</strong> Add a helper <code>NotifyResourcesChanged(ctx)</code> that emits the notification. Tool handlers call this after mutations.</p>
+<h3 id="3-metadata-precedence-resourceslist-vs-resourcesread">3. Metadata Precedence (resources/list vs resources/read) <a class="anchor" href="#3-metadata-precedence-resourceslist-vs-resourcesread">¶</a></h3>
+<p><strong>Problem:</strong> <code>_meta.ui</code> can appear in both <code>resources/list</code> (static defaults) and <code>resources/read</code> (per-response overrides). The spec says <code>resources/read</code> takes precedence.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>mcpkit already separates <code>ResourceDef</code> (for list) and <code>ResourceReadContent</code> (for read)</li>
+<li>Both now get <code>_Meta</code> fields</li>
+<li>Document the precedence rule; don&rsquo;t merge them in the library (that&rsquo;s the host&rsquo;s job)</li>
+<li>Servers SHOULD put stable metadata in <code>ResourceDef._Meta</code> and dynamic overrides in <code>ResourceReadContent._Meta</code></li>
+</ul>
+<h3 id="4-deprecated-flat-metadata-format">4. Deprecated Flat Metadata Format <a class="anchor" href="#4-deprecated-flat-metadata-format">¶</a></h3>
+<p><strong>Problem:</strong> The spec mentions a deprecated flat format: <code>_meta[&quot;ui/resourceUri&quot;]</code> (string). The nested <code>_meta.ui.resourceUri</code> format is current. The old format &ldquo;will be removed before GA.&rdquo;</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>mcpkit implements only the current nested format</li>
+<li>Document that the deprecated format is not supported</li>
+<li>If conformance tests check the old format, we&rsquo;ll note it as intentional non-support of a deprecated path</li>
+</ul>
+<h3 id="5-tool-visibility-enforcement-server-vs-host">5. Tool Visibility Enforcement (Server vs Host) <a class="anchor" href="#5-tool-visibility-enforcement-server-vs-host">¶</a></h3>
+<p><strong>Problem:</strong> The spec says hosts &ldquo;MUST NOT include tools in the agent&rsquo;s tool list when visibility does not include &lsquo;model&rsquo;&rdquo;. This is host-side filtering. But what about servers?</p>
+<p><strong>Decision:</strong></p>
+<ul>
+<li>mcpkit <code>tools/list</code> returns ALL tools, including app-only ones (visibility metadata included)</li>
+<li>Hosts filter before presenting to the LLM</li>
+<li>mcpkit&rsquo;s Go client adds a <code>ListToolsForModel()</code> helper that filters locally (useful for testing)</li>
+<li>Server-side <code>tools/call</code> does NOT enforce visibility — any authenticated caller can invoke any tool. Visibility is a presentation concern, not an access control mechanism.</li>
+</ul>
+<p><strong>Rationale:</strong> The spec places enforcement responsibility on the host. Server-side enforcement would break legitimate use cases (automated testing, admin tools calling app-only tools directly).</p>
+<h3 id="6-csp-construction-is-host-side">6. CSP Construction is Host-Side <a class="anchor" href="#6-csp-construction-is-host-side">¶</a></h3>
+<p><strong>Problem:</strong> The <code>UICSPConfig</code> domains are declarations, not enforcement. The server says &ldquo;I need these domains&rdquo;; the host constructs and enforces the actual CSP header on the iframe.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>mcpkit just serializes the CSP config as metadata</li>
+<li>No CSP header generation in mcpkit (that&rsquo;s iframe/host responsibility)</li>
+<li>A future <code>mcpkit/ui.CSPBuilder</code> could generate CSP strings for testing/validation, but it&rsquo;s not needed for v1</li>
+</ul>
+<h3 id="7-ui-scheme-is-not-special-in-mcp-protocol">7. ui:// Scheme is Not Special in MCP Protocol <a class="anchor" href="#7-ui-scheme-is-not-special-in-mcp-protocol">¶</a></h3>
+<p><strong>Problem:</strong> <code>ui://</code> is a URI convention, not a protocol-level concept. <code>resources/read</code> works with any URI. A host could fetch <code>ui://foo</code> or <code>https://example.com/foo</code> — the scheme doesn&rsquo;t change the transport.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>mcpkit treats <code>ui://</code> URIs like any other — they&rsquo;re just strings matched against registered resources/templates</li>
+<li>Validation: <code>UIMetadata.ResourceUri</code> SHOULD start with <code>ui://</code> — emit a warning log if it doesn&rsquo;t, but don&rsquo;t reject</li>
+<li>Template matching already works: <code>ui://decks/{name}/view</code> matches <code>ui://decks/demo/view</code></li>
+</ul>
+<h3 id="8-blob-vs-text-content-delivery">8. Blob vs Text Content Delivery <a class="anchor" href="#8-blob-vs-text-content-delivery">¶</a></h3>
+<p><strong>Problem:</strong> HTML can be served as <code>text</code> (UTF-8 string) or <code>blob</code> (base64-encoded). The spec says both are valid. Large HTML with binary assets (e.g., embedded images in data URIs) may be more efficiently served as blob to avoid JSON string escaping overhead.</p>
+<p><strong>Decision:</strong></p>
+<ul>
+<li>Default to <code>text</code> for HTML resources (simpler, debuggable)</li>
+<li>Applications can use <code>blob</code> via <code>ResourceReadContent.Blob</code> for binary-heavy content</li>
+<li>mcpkit does not auto-convert between formats</li>
+</ul>
+<h3 id="9-streamable-http-required-sse-discouraged">9. Streamable HTTP Required, SSE Discouraged <a class="anchor" href="#9-streamable-http-required-sse-discouraged">¶</a></h3>
+<p><strong>Problem:</strong> MCP Apps require <code>resources/read</code> to fetch UI content. Both transports support this. However, the interactive phase (iframe calling tools back) requires the host to proxy <code>tools/call</code> from the iframe through the MCP client to the server. This works on both transports, but Streamable HTTP is the modern choice and what hosts test against.</p>
+<p><strong>Impact:</strong> No mcpkit changes needed. Both transports already support all required methods. Slyds already defaults to Streamable HTTP.</p>
+<h3 id="10-no-teardown-protocol-for-server">10. No Teardown Protocol for Server <a class="anchor" href="#10-no-teardown-protocol-for-server">¶</a></h3>
+<p><strong>Problem:</strong> The spec defines <code>ui/resource-teardown</code> as a host→iframe notification. There is no corresponding teardown notification from host to server. The server has no way to know when the iframe is closed.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>This is by design — the server is stateless with respect to UI rendering</li>
+<li>Tool handlers should not assume the UI is visible</li>
+<li>For slyds: slide builds are idempotent, no cleanup needed</li>
+</ul>
+<h3 id="11-auth--apps-interaction">11. Auth + Apps Interaction <a class="anchor" href="#11-auth--apps-interaction">¶</a></h3>
+<p><strong>Problem:</strong> If the server requires auth (mcpkit/auth), the host must include Bearer tokens in <code>resources/read</code> requests for <code>ui://</code> resources, same as any other MCP request.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>Already handled — <code>CheckAuth</code> runs on ALL requests including <code>resources/read</code></li>
+<li>No special auth bypass for <code>ui://</code> resources</li>
+<li>Document that auth tokens are required for UI resource fetches</li>
+</ul>
+<h3 id="12-multiple-uis-per-server">12. Multiple UIs per Server <a class="anchor" href="#12-multiple-uis-per-server">¶</a></h3>
+<p><strong>Problem:</strong> A server may expose multiple tools, each with a different UI. Each tool&rsquo;s <code>_meta.ui.resourceUri</code> points to a different <code>ui://</code> resource.</p>
+<p><strong>Mitigation:</strong></p>
+<ul>
+<li>Already supported — each tool has its own <code>_meta.ui.resourceUri</code></li>
+<li>Resource templates handle parameterized UIs (e.g., <code>ui://decks/{name}/view</code>)</li>
+<li>Each UI resource can have different CSP, permissions, and domain settings</li>
+</ul>
+<h3 id="13-host-doesnt-support-apps-extension">13. Host Doesn&rsquo;t Support Apps Extension <a class="anchor" href="#13-host-doesnt-support-apps-extension">¶</a></h3>
+<p><strong>Problem:</strong> If the host doesn&rsquo;t advertise <code>io.modelcontextprotocol/ui</code> in its client capabilities (or doesn&rsquo;t send an <code>extensions</code> field at all), the server&rsquo;s UI tools still work — they just return text content without the iframe rendering.</p>
+<p><strong>Decision:</strong></p>
+<ul>
+<li>Tools MUST always return useful text content in <code>ToolResult</code>, regardless of UI support</li>
+<li><code>_meta.ui</code> is informational — a bonus for capable hosts</li>
+<li>The server can check <code>ClientSupportsUI()</code> and conditionally add richer text output for non-UI clients (e.g., ASCII table of slide titles instead of rendered deck)</li>
+</ul>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// In tool handler:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">if</span> mcpkit.<span style="color:#900;font-weight:bold">ClientSupportsUI</span>(ctx) {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Host will render the iframe; minimal text is fine
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> mcpkit.<span style="color:#900;font-weight:bold">TextResult</span>(<span style="color:#d14">&#34;Deck built: 8 slides&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>} <span style="color:#000;font-weight:bold">else</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// No UI; return detailed text
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> mcpkit.<span style="color:#900;font-weight:bold">TextResult</span>(detailedSlideList), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h2 id="conformance-strategy">Conformance Strategy <a class="anchor" href="#conformance-strategy">¶</a></h2>
+<h3 id="server-conformance-tests">Server Conformance Tests <a class="anchor" href="#server-conformance-tests">¶</a></h3>
+<p>mcpkit adds conformance tests for the server-side Apps protocol surface. These validate metadata correctness and protocol behavior, not iframe rendering.</p>
+<h4 id="test-categories">Test Categories <a class="anchor" href="#test-categories">¶</a></h4>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Tests</th>
+<th>What&rsquo;s Validated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Capability negotiation</strong></td>
+<td>3</td>
+<td>Server advertises <code>io.modelcontextprotocol/ui</code> extension; client extensions parsed; extension absent when not registered</td>
+</tr>
+<tr>
+<td><strong>Tool metadata</strong></td>
+<td>5</td>
+<td><code>_meta.ui.resourceUri</code> present; visibility defaults; CSP serialization; permissions array; prefersBorder</td>
+</tr>
+<tr>
+<td><strong>Resource serving</strong></td>
+<td>4</td>
+<td><code>ui://</code> resource returns HTML; MIME type is <code>text/html;profile=mcp-app</code>; text and blob delivery; template matching for parameterized URIs</td>
+</tr>
+<tr>
+<td><strong>Metadata precedence</strong></td>
+<td>2</td>
+<td><code>_meta.ui</code> on <code>ResourceReadContent</code> overrides <code>ResourceDef</code>; absent <code>_meta</code> on read inherits from list</td>
+</tr>
+<tr>
+<td><strong>Visibility</strong></td>
+<td>3</td>
+<td>tools/list includes all tools; <code>ListToolsForModel()</code> filters app-only; app-only tools callable via tools/call</td>
+</tr>
+<tr>
+<td><strong>Text fallback</strong></td>
+<td>2</td>
+<td>Tools return text content alongside UI metadata; result is valid without UI rendering</td>
+</tr>
+<tr>
+<td><strong>Integration</strong></td>
+<td>2</td>
+<td>Auth + UI (token required for ui:// read); resource change notification after mutation</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Total: ~21 conformance scenarios</strong></p>
+<h4 id="conformance-test-structure">Conformance Test Structure <a class="anchor" href="#conformance-test-structure">¶</a></h4>
+<pre><code>mcpkit/
+  conformance/
+    baseline.yml              ← add apps: section
+  cmd/testserver/
+    main.go                   ← add UI tools + resources
+  tests/
+    apps/                     ← new: Apps conformance tests
+      go.mod                  ← separate module (like e2e)
+      apps_test.go            ← capability negotiation tests
+      tools_test.go           ← tool metadata tests
+      resources_test.go       ← resource serving tests
+      visibility_test.go      ← visibility filtering tests
+      testenv_test.go         ← test environment setup
+</code></pre>
+<h4 id="test-server-additions">Test Server Additions <a class="anchor" href="#test-server-additions">¶</a></h4>
+<p>The existing <code>cmd/testserver</code> gains UI-enabled tools:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Tool with UI resource
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(mcpkit.ToolDef{
+</span></span><span style="display:flex;"><span>    Name:        <span style="color:#d14">&#34;show-dashboard&#34;</span>,
+</span></span><span style="display:flex;"><span>    Description: <span style="color:#d14">&#34;Display an interactive dashboard&#34;</span>,
+</span></span><span style="display:flex;"><span>    InputSchema: <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;type&#34;</span>: <span style="color:#d14">&#34;object&#34;</span>},
+</span></span><span style="display:flex;"><span>    Meta: <span style="color:#000;font-weight:bold">&amp;</span>mcpkit.ToolMeta{
+</span></span><span style="display:flex;"><span>        UI: <span style="color:#000;font-weight:bold">&amp;</span>mcpkit.UIMetadata{
+</span></span><span style="display:flex;"><span>            ResourceUri: <span style="color:#d14">&#34;ui://dashboard/view&#34;</span>,
+</span></span><span style="display:flex;"><span>            Visibility:  []mcpkit.UIVisibility{mcpkit.UIVisibilityModel, mcpkit.UIVisibilityApp},
+</span></span><span style="display:flex;"><span>            CSP: <span style="color:#000;font-weight:bold">&amp;</span>mcpkit.UICSPConfig{
+</span></span><span style="display:flex;"><span>                ResourceDomains: []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;cdn.example.com&#34;</span>},
+</span></span><span style="display:flex;"><span>            },
+</span></span><span style="display:flex;"><span>            PrefersBorder: <span style="color:#900;font-weight:bold">boolPtr</span>(<span style="color:#000;font-weight:bold">false</span>),
+</span></span><span style="display:flex;"><span>        },
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>}, dashboardHandler)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// App-only tool (hidden from LLM)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(mcpkit.ToolDef{
+</span></span><span style="display:flex;"><span>    Name:        <span style="color:#d14">&#34;navigate-dashboard&#34;</span>,
+</span></span><span style="display:flex;"><span>    Description: <span style="color:#d14">&#34;Navigate to a specific dashboard tab&#34;</span>,
+</span></span><span style="display:flex;"><span>    InputSchema: <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#000;font-weight:bold">...</span>},
+</span></span><span style="display:flex;"><span>    Meta: <span style="color:#000;font-weight:bold">&amp;</span>mcpkit.ToolMeta{
+</span></span><span style="display:flex;"><span>        UI: <span style="color:#000;font-weight:bold">&amp;</span>mcpkit.UIMetadata{
+</span></span><span style="display:flex;"><span>            Visibility: []mcpkit.UIVisibility{mcpkit.UIVisibilityApp},
+</span></span><span style="display:flex;"><span>        },
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>}, navigateHandler)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// UI resource
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv.<span style="color:#900;font-weight:bold">RegisterResource</span>(mcpkit.ResourceDef{
+</span></span><span style="display:flex;"><span>    URI:      <span style="color:#d14">&#34;ui://dashboard/view&#34;</span>,
+</span></span><span style="display:flex;"><span>    Name:     <span style="color:#d14">&#34;Dashboard UI&#34;</span>,
+</span></span><span style="display:flex;"><span>    MimeType: mcpkit.AppMIMEType,
+</span></span><span style="display:flex;"><span>}, <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req mcpkit.ResourceRequest) (mcpkit.ResourceResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> mcpkit.ResourceResult{
+</span></span><span style="display:flex;"><span>        Contents: []mcpkit.ResourceReadContent{{
+</span></span><span style="display:flex;"><span>            URI:      <span style="color:#d14">&#34;ui://dashboard/view&#34;</span>,
+</span></span><span style="display:flex;"><span>            MimeType: mcpkit.AppMIMEType,
+</span></span><span style="display:flex;"><span>            Text:     dashboardHTML,
+</span></span><span style="display:flex;"><span>        }},
+</span></span><span style="display:flex;"><span>    }, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><h3 id="client-conformance">Client Conformance <a class="anchor" href="#client-conformance">¶</a></h3>
+<p>mcpkit&rsquo;s Go client gains:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Advertise UI support during initialize
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewClient</span>(url, info,
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithUIExtension</span>(),  <span style="color:#998;font-style:italic">// adds io.modelcontextprotocol/ui to client caps
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Check server support
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">if</span> client.<span style="color:#900;font-weight:bold">ServerSupportsUI</span>() { <span style="color:#000;font-weight:bold">...</span> }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Filter tools by visibility
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>modelTools <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">ListToolsForModel</span>()  <span style="color:#998;font-style:italic">// excludes app-only
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>allTools <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">ListTools</span>()             <span style="color:#998;font-style:italic">// includes all
+</span></span></span></code></pre><h3 id="external-conformance-ext-apps-test-suite">External Conformance (ext-apps test suite) <a class="anchor" href="#external-conformance-ext-apps-test-suite">¶</a></h3>
+<p>The ext-apps repo has Playwright-based e2e tests in <code>tests/e2e/</code>. These test the full stack (server + host + iframe). To validate mcpkit servers against these:</p>
+<ol>
+<li>Build a test server using mcpkit with UI tools</li>
+<li>Run the ext-apps Playwright suite against it</li>
+<li>Track results in <a href="https://github.com/panyam/mcpkit/blob/main/conformance/baseline.yml"><code>conformance/baseline.yml</code></a> under <code>apps:</code> section</li>
+</ol>
+<p>This is Phase 4 work — requires Node.js + Playwright + a basic host harness.</p>
+<h2 id="tracing-across-the-apps-bridge-sep-414-p6-issue-660">Tracing across the Apps Bridge (SEP-414 P6, issue 660) <a class="anchor" href="#tracing-across-the-apps-bridge-sep-414-p6-issue-660">¶</a></h2>
+<p>MCP Apps run an <code>iframe ↔ Bridge JS ↔ host ↔ server</code> loop. A user gesture in the iframe triggers a tool call. If the iframe has its own observability (browser OTel SDK, RUM), the trace <strong>starts in the browser</strong> — but without explicit propagation, the postMessage hop strips the W3C trace context and the backend tool-call span emitted by the MCP server can&rsquo;t stitch to its browser-side parent. Structurally this is the same &ldquo;non-MCP propagation hop&rdquo; as the events EventBus, just across the JS/Go boundary instead of replica/replica.</p>
+<p>mcpkit&rsquo;s Apps Bridge relays W3C trace context across the boundary by carrying <code>traceparent</code> / <code>tracestate</code> inside <code>params._meta</code> on the bridge envelope — the same shape SEP-414 uses on the MCP wire. The relay is <strong>off by default</strong> (no provider wired = no propagation, zero overhead); adopters opt in on each side independently.</p>
+<h3 id="iframe-side-ts-bridge">Iframe side (TS bridge) <a class="anchor" href="#iframe-side-ts-bridge">¶</a></h3>
+<p><code>MCPApp.setTraceContextProvider(fn)</code> registers a function the bridge calls before sending each outbound request and notification. The function returns <code>{traceparent?, tracestate?}</code> (or null to skip). When a traceparent is supplied, it merges into <code>params._meta</code> — caller-set <code>_meta.traceparent</code> wins (the provider is a fallback, never a clobber, mirroring Go-side <code>core.InjectTraceContextIntoParams</code>).</p>
+<p>Wiring against the OTel JS SDK (typical production setup):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> { propagation, context } <span style="color:#000;font-weight:bold">from</span> <span style="color:#d14">&#34;@opentelemetry/api&#34;</span>;
+</span></span><span style="display:flex;"><span>MCPApp.setTraceContextProvider(() <span style="color:#000;font-weight:bold">=&gt;</span> {
+</span></span><span style="display:flex;"><span>  <span style="color:#000;font-weight:bold">const</span> carrier: <span style="color:#458;font-weight:bold">Record</span>&lt;<span style="color:#000080">string</span><span style="color:#a61717;background-color:#e3d2d2">,</span> <span style="color:#008080">string</span>&gt; <span style="color:#000;font-weight:bold">=</span> {};
+</span></span><span style="display:flex;"><span>  propagation.inject(context.active(), carrier);
+</span></span><span style="display:flex;"><span>  <span style="color:#000;font-weight:bold">return</span> { traceparent: <span style="color:#458;font-weight:bold">carrier.traceparent</span>, tracestate: <span style="color:#458;font-weight:bold">carrier.tracestate</span> };
+</span></span><span style="display:flex;"><span>});
+</span></span></code></pre><p>Demo wiring (no OTel SDK; just to prove the relay works):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>MCPApp.setTraceContextProvider(() <span style="color:#000;font-weight:bold">=&gt;</span> ({
+</span></span><span style="display:flex;"><span>  traceparent<span style="color:#000;font-weight:bold">:</span> <span style="color:#d14">&#34;00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01&#34;</span>,
+</span></span><span style="display:flex;"><span>}));
+</span></span></code></pre><p>The hook ships dep-free — mcp-app-bridge.ts pulls no OTel JS dependency. Bundle size unchanged for adopters who don&rsquo;t wire the hook.</p>
+<h3 id="host-side-go-apphost">Host side (Go AppHost) <a class="anchor" href="#host-side-go-apphost">¶</a></h3>
+<p><code>ui.WithTracerProvider(tp core.TracerProvider)</code> on <code>AppHost</code> opts the forward path into instrumentation. When set, <code>handleAppRequest</code> extracts the bridge envelope&rsquo;s <code>params._meta.traceparent</code>, makes it the parent of an <code>apps.host.forward</code> span, and forwards the request to the MCP server. The outbound <code>client.Call</code> preserves the iframe&rsquo;s <code>_meta.traceparent</code> on the wire (SEP-414 P3&rsquo;s caller-set-wins contract), so the server&rsquo;s P2 trace middleware stitches the dispatch span as a child of the iframe&rsquo;s traceparent.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>host <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewAppHost</span>(c, bridge, ui.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(tp))
+</span></span></code></pre><p>End-to-end trace shape with both sides wired:</p>
+<pre><code>iframe-stamped traceparent      (browser OTel; the parent)
+└─ apps.host.forward             (ext/ui AppHost, this PR)
+   └─ server tools/call          (mcpkit server, SEP-414 P2)
+      └─ tool handler work
+</code></pre>
+<h3 id="open-should-the-apps-spec-mandate-this">Open: should the Apps spec mandate this? <a class="anchor" href="#open-should-the-apps-spec-mandate-this">¶</a></h3>
+<p>The Apps Bridge is a non-MCP transport. SEP-414 governs only the MCP wire. <strong>Whether <code>traceparent</code> rides the bridge envelope as a cross-SDK interop contract belongs in the ext-ui / Apps spec, not SEP-414.</strong> mcpkit ships the relay; if cross-SDK adopters need to interop, the Apps WG can lift this shape into the spec. Filed as a follow-up if upstream interest surfaces — for now, documented here and shipped per mcpkit&rsquo;s own design.</p>
+<h2 id="related-docs">Related Docs <a class="anchor" href="#related-docs">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Doc</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="/mcpkit/design/apps-onboarding/">APPS_ONBOARDING.md</a></td>
+<td>Step-by-step guide to ship your app as an MCP App</td>
+</tr>
+<tr>
+<td><a href="/mcpkit/design/apps-host/">APPS_HOST.md</a></td>
+<td>AppHost, AppBridge, ServerRegistry — building custom hosts</td>
+</tr>
+<tr>
+<td><a href="/mcpkit/guides/observability/">SEP_414_OTEL.md</a></td>
+<td>Trace context propagation across mcpkit — context for the bridge relay above</td>
+</tr>
+<tr>
+<td><code>ext/ui/</code> README</td>
+<td>Bridge JS API, typed app tools, embedding</td>
+</tr>
+<tr>
+<td><code>examples/apps/</code></td>
+<td>Working examples: vanilla, todolist, react</td>
+</tr>
+<tr>
+<td><code>tests/e2e/apps/</code> README</td>
+<td>Conformance test matrix with sequence diagrams</td>
+</tr>
+</tbody>
+</table>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

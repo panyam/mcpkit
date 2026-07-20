@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Opt-in scaffolding for tool-handler-side state — HandleStore[T] interface seam and typed default.">
+    <title>SEP-2567 — Handle Stores · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>SEP-2567 — Handle Stores</h1>
+        
+        <p class="lead">Opt-in scaffolding for tool-handler-side state — HandleStore[T] interface seam and typed default.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_2567_HANDLES.md"><code>docs/SEP_2567_HANDLES.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="sep-2567--explicit-state-handles-in-mcpkit">SEP-2567 — Explicit State Handles in mcpkit <a class="anchor" href="#sep-2567--explicit-state-handles-in-mcpkit">¶</a></h1>
+<p><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567">SEP-2567</a> (&ldquo;Sessionless MCP via Explicit State Handles&rdquo;) is the SEP-2575 stateless wire&rsquo;s <em>application-layer</em> counterpart: the wire removes session machinery; SEP-2567 explains how to model stateful flows <em>without</em> sessions, using explicit server-minted handles threaded through tool parameters.</p>
+<p><strong>SEP-2567 is design guidance — there is no wire contract and no upstream conformance suite.</strong> Any storage you can hand a tool handler satisfies it: Redis, SQL, an in-memory <code>sync.Map</code>, a custom RPC backend, whatever. The SEP cares about <em>behavior</em> (server-minted opaque ids, threaded through tool args, no implicit session state) — not about any specific Go API.</p>
+<p>mcpkit ships <code>server.HandleStore[T]</code> as <strong>opt-in scaffolding</strong> for the common case where you don&rsquo;t already have a store wired up. It handles opaque-id minting (collision-resistant base32), TTL/GC, and typed get/put/delete behind a small interface. Use it, replace it with your own store, or skip it entirely — all three are equally SEP-2567-compliant. The worked example in <code>examples/stateless/</code>&rsquo;s cart story uses <code>HandleStore</code> for the on-ramp; a production deployment would as likely call Redis directly.</p>
+<h2 id="the-pattern-in-one-example">The pattern in one example <a class="anchor" href="#the-pattern-in-one-example">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> Cart <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Items []Item
+</span></span><span style="display:flex;"><span>    Total <span style="color:#458;font-weight:bold">float64</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Server-side: one HandleStore per logical type.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>carts <span style="color:#000;font-weight:bold">:=</span> server.NewHandleStore[Cart]()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(core.ToolDef{Name: <span style="color:#d14">&#34;create_cart&#34;</span>}, <span style="color:#000;font-weight:bold">func</span>(_ core.ToolContext, _ core.ToolRequest) (core.ToolResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    id <span style="color:#000;font-weight:bold">:=</span> carts.<span style="color:#900;font-weight:bold">Mint</span>(Cart{}, <span style="color:#099">0</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">jsonResult</span>(<span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;cart_id&#34;</span>: id}), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(core.ToolDef{Name: <span style="color:#d14">&#34;add_item&#34;</span>}, <span style="color:#000;font-weight:bold">func</span>(_ core.ToolContext, req core.ToolRequest) (core.ToolResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">var</span> args <span style="color:#000;font-weight:bold">struct</span>{ CartID, SKU <span style="color:#458;font-weight:bold">string</span>; Quantity <span style="color:#458;font-weight:bold">int</span> }
+</span></span><span style="display:flex;"><span>    json.<span style="color:#900;font-weight:bold">Unmarshal</span>(req.Arguments, <span style="color:#000;font-weight:bold">&amp;</span>args)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    cart, ok <span style="color:#000;font-weight:bold">:=</span> carts.<span style="color:#900;font-weight:bold">Get</span>(args.CartID)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> !ok { <span style="color:#000;font-weight:bold">return</span> core.ToolResult{}, fmt.<span style="color:#900;font-weight:bold">Errorf</span>(<span style="color:#d14">&#34;unknown cart_id&#34;</span>) }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    cart.Items = <span style="color:#0086b3">append</span>(cart.Items, <span style="color:#900;font-weight:bold">lookupItem</span>(args.SKU, args.Quantity))
+</span></span><span style="display:flex;"><span>    cart.Total <span style="color:#000;font-weight:bold">+=</span> <span style="color:#998;font-style:italic">/* ... */</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Update-in-place under the same cart_id — the SEP-2567 happy path.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Client&#39;s handle stays valid across rounds.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    carts.<span style="color:#900;font-weight:bold">Put</span>(args.CartID, cart, <span style="color:#099">0</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">jsonResult</span>(<span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;cart_id&#34;</span>: args.CartID, <span style="color:#d14">&#34;total&#34;</span>: cart.Total}), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(core.ToolDef{Name: <span style="color:#d14">&#34;checkout&#34;</span>}, <span style="color:#000;font-weight:bold">func</span>(_ core.ToolContext, req core.ToolRequest) (core.ToolResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">var</span> args <span style="color:#000;font-weight:bold">struct</span>{ CartID <span style="color:#458;font-weight:bold">string</span> }
+</span></span><span style="display:flex;"><span>    json.<span style="color:#900;font-weight:bold">Unmarshal</span>(req.Arguments, <span style="color:#000;font-weight:bold">&amp;</span>args)
+</span></span><span style="display:flex;"><span>    cart, _ <span style="color:#000;font-weight:bold">:=</span> carts.<span style="color:#900;font-weight:bold">Get</span>(args.CartID)
+</span></span><span style="display:flex;"><span>    carts.<span style="color:#900;font-weight:bold">Delete</span>(args.CartID)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">jsonResult</span>(<span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;order_id&#34;</span>: <span style="color:#900;font-weight:bold">mintOrderID</span>(), <span style="color:#d14">&#34;total&#34;</span>: cart.Total}), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>The complete runnable version: <a href="https://github.com/panyam/mcpkit/blob/main/examples/stateless/main.go"><code>examples/stateless/main.go</code></a>.</p>
+<h2 id="api-reference">API reference <a class="anchor" href="#api-reference">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> HandleStore[T any] <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Mint</span>(v T, ttl time.Duration) <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Put</span>(id <span style="color:#458;font-weight:bold">string</span>, v T, ttl time.Duration) <span style="color:#458;font-weight:bold">bool</span>   <span style="color:#998;font-style:italic">// existed-already?
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#900;font-weight:bold">Get</span>(id <span style="color:#458;font-weight:bold">string</span>) (T, <span style="color:#458;font-weight:bold">bool</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Delete</span>(id <span style="color:#458;font-weight:bold">string</span>) <span style="color:#458;font-weight:bold">bool</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Len</span>() <span style="color:#458;font-weight:bold">int</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> NewHandleStore[T any](opts <span style="color:#000;font-weight:bold">...</span>HandleStoreOption) HandleStore[T]  <span style="color:#998;font-style:italic">// default: in-memory
+</span></span></span></code></pre><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WithHandleDefaultTTL(d)</code></td>
+<td><code>0</code></td>
+<td>Mint&rsquo;s <code>ttl=0</code> falls back to this; <code>0</code> here means &ldquo;no expiry&rdquo;</td>
+</tr>
+<tr>
+<td><code>WithHandleIDPrefix(&quot;cart&quot;)</code></td>
+<td><code>&quot;&quot;</code></td>
+<td>Minted ids become <code>cart-AB12CD...</code> for greppability</td>
+</tr>
+<tr>
+<td><code>WithHandleGCInterval(d)</code></td>
+<td><code>0</code></td>
+<td>Background sweep of expired entries; <code>0</code> = lazy-only</td>
+</tr>
+</tbody>
+</table>
+<p>TTL nuances:</p>
+<ul>
+<li><code>ttl &gt; 0</code> — per-handle TTL override.</li>
+<li><code>ttl == 0</code> — fall back to the store&rsquo;s <code>WithHandleDefaultTTL</code>.</li>
+<li><code>ttl &lt; 0</code> — force &ldquo;never expires&rdquo; even when a non-zero default is set.</li>
+</ul>
+<p>IDs are 128-bit crypto-random base32 (26 chars), prefixed if configured. Collision-resistant for any sane store size.</p>
+<h2 id="how-this-composes-with-sep-2575-stateless-wire">How this composes with SEP-2575 stateless wire <a class="anchor" href="#how-this-composes-with-sep-2575-stateless-wire">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>SEP-2575 (wire)</th>
+<th>SEP-2567 (application)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Per-request <code>_meta</code> envelope</td>
+<td>mandatory</td>
+<td>irrelevant — handles ride in tool args</td>
+</tr>
+<tr>
+<td>Sessions / <code>Mcp-Session-Id</code></td>
+<td>gone</td>
+<td>gone (handles replace)</td>
+</tr>
+<tr>
+<td><code>tools/list</code> / <code>prompts/list</code></td>
+<td>MUST NOT depend on session state</td>
+<td>trivially satisfied — handles aren&rsquo;t in those endpoints</td>
+</tr>
+<tr>
+<td>Cross-call state</td>
+<td>not handled (lost)</td>
+<td>use a handle</td>
+</tr>
+<tr>
+<td>Compose with SEP-2549 list TTLs</td>
+<td>yes — <code>_meta</code> envelope is per-request, lists cacheable at <code>(deployment, auth)</code> granularity</td>
+<td>yes — handle stores stay out of list endpoints, so lists remain cacheable</td>
+</tr>
+</tbody>
+</table>
+<p>A stateless mcpkit server using <code>HandleStore[T]</code> for cart-style tools is the canonical post-SEP-2575 server: zero session storage in the process, every tool call is independent, but tools that need cross-call state thread an opaque handle through arguments — and the wire shape stays cacheable.</p>
+<h2 id="when-not-to-use-a-handle">When <em>not</em> to use a handle <a class="anchor" href="#when-not-to-use-a-handle">¶</a></h2>
+<ul>
+<li>When the cross-call state is small enough to fit in the tool result (let the client carry it).</li>
+<li>When the state is genuinely per-user-and-persistent (use the real backing store, not an in-memory handle).</li>
+<li>When the tool is read-only and idempotent on its arguments (no state to hold).</li>
+</ul>
+<h2 id="persistent-backends">Persistent backends <a class="anchor" href="#persistent-backends">¶</a></h2>
+<p><code>InMemoryHandleStore[T]</code> is in-memory and process-local. For real stateless deployments behind a load balancer where Mint and Get might hash to different replicas:</p>
+<ul>
+<li>Persistent backends (Redis, etc.) tracked in <a href="https://github.com/panyam/mcpkit/issues/471">panyam/mcpkit#471</a>. Drop-in via the <code>HandleStore[T]</code> interface — no parent-package changes needed.</li>
+<li>Admin endpoints over the store (introspection, eviction) tracked in <a href="https://github.com/panyam/mcpkit/issues/472">panyam/mcpkit#472</a>.</li>
+</ul>
+<h2 id="when-to-migrate-existing-examples">When to migrate existing examples <a class="anchor" href="#when-to-migrate-existing-examples">¶</a></h2>
+<p>mcpkit&rsquo;s pre-SEP-2575 examples (<code>apps/</code>, <code>tasks/</code>, <code>elicitation/</code>, &hellip;) were written assuming session-scoped state. Each one is a candidate for the SEP-2567 handle pattern if its tools currently rely on session-keyed storage. The sweep is tracked in <a href="https://github.com/panyam/mcpkit/issues/470">panyam/mcpkit#470</a>; the dual-mode walkthrough audit (does the example <em>work</em> on both wires?) is <a href="https://github.com/panyam/mcpkit/issues/478">#478</a>.</p>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

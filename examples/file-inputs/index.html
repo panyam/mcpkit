@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="x-mcp-file schema marker and RFC 2397 data-URI encoding for file arguments. Experimental.">
+    <title>File inputs (SEP-2356) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>File inputs (SEP-2356)</h1>
+        
+        <p class="lead">x-mcp-file schema marker and RFC 2397 data-URI encoding for file arguments. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/file-inputs/README.md"><code>examples/file-inputs/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="sep-2356-file-inputs--data-uri-file-arguments">SEP-2356 File Inputs — Data URI File Arguments <a class="anchor" href="#sep-2356-file-inputs--data-uri-file-arguments">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2356">SEP-2356</a> (File Inputs), a draft SEP. Wire format may change.</p>
+</blockquote>
+<p>Demonstrates the <code>x-mcp-file</code> JSON Schema extension: a server marks string<br />
+properties of <code>format: &quot;uri&quot;</code> as file pickers, the client encodes the<br />
+selected file as an RFC 2397 base64 data URI<br />
+(<code>data:&lt;mediatype&gt;;name=&lt;pct-encoded-filename&gt;;base64,&lt;payload&gt;</code>), and the<br />
+server decodes the URI on the receiving end.</p>
+<p>Spec: modelcontextprotocol/specification PR 2356.</p>
+<h2 id="three-demo-tools">Three demo tools <a class="anchor" href="#three-demo-tools">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Schema marker</th>
+<th>Demonstrates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>upload_image</code></td>
+<td><code>image: FileInputProperty(image/*, max 5 MB)</code></td>
+<td>single-file picker with MIME wildcard + size cap</td>
+</tr>
+<tr>
+<td><code>analyze_documents</code></td>
+<td><code>documents: FileInputArrayProperty(application/pdf, .pdf)</code></td>
+<td>array of files (<code>items.x-mcp-file</code>)</td>
+</tr>
+<tr>
+<td><code>process_any_file</code></td>
+<td><code>file: FileInputProperty({})</code></td>
+<td>empty descriptor — any file, any size</td>
+</tr>
+</tbody>
+</table>
+<h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1 — start the MCP server</span>
+</span></span><span style="display:flex;"><span>just serve
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 2 — scripted walkthrough</span>
+</span></span><span style="display:flex;"><span>just demo
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># or for the interactive TUI:</span>
+</span></span><span style="display:flex;"><span>go run . --tui
+</span></span></code></pre><p>The walkthrough reads four embedded fixtures from<br />
+<a href="https://github.com/panyam/mcpkit/tree/main/examples/file-inputs/testdata"><code>testdata/</code></a> — <code>pixel.png</code> (a 24×24 gradient), <code>contract.pdf</code>,<br />
+<code>appendix.pdf</code>, <code>README.txt</code> — encodes each via <code>core.EncodeDataURI</code>, and<br />
+invokes every tool. Before each upload, the demo shows a small preview of<br />
+what&rsquo;s being sent: the <a href="https://iterm2.com/documentation-images.html">iTerm2 inline-image<br />
+protocol</a> for images<br />
+(rendered inline in iTerm2 / WezTerm / Mintty / Kitty; silently consumed<br />
+elsewhere), the first lines of text, and a hex preview for everything<br />
+else. See <a href="https://github.com/panyam/mcpkit/blob/main/examples/file-inputs/WALKTHROUGH.md">WALKTHROUGH.md</a> for the full sequence diagram<br />
+and step-by-step description.</p>
+<p>Run <code>just serve</code> in a second terminal to watch the server side too — it<br />
+streams colored <code>[mcp]</code> traces (<code>MCP tools/call ok [276µs]</code>, <code>[http] → POST /mcp</code>) for every request the walkthrough fires, matching the<br />
+elicitation / mrtr examples.</p>
+<p>The server also writes every received file to a fresh<br />
+<code>/tmp/file-inputs-demo-XXXX/</code> directory (announced at startup) so you can<br />
+<code>ls</code> the directory and <code>open pixel.png</code> to verify byte-for-byte that the<br />
+right payload arrived. The directory is <strong>not</strong> auto-cleaned — <code>rm -rf /tmp/file-inputs-demo-*</code> when you&rsquo;re done. The full path is also surfaced<br />
+in each tool&rsquo;s response so the demo client prints it inline (<code>saved as: /tmp/file-inputs-demo-…/pixel.png</code>).</p>
+<p>To upload a file from disk instead, pass <code>--file &lt;path&gt;</code> to the demo:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run . --file /path/to/photo.png
+</span></span></code></pre><p>That step is skipped silently when the flag is absent so the default run<br />
+stays hermetic.</p>
+<h2 id="connecting-an-external-mcp-host">Connecting an external MCP host <a class="anchor" href="#connecting-an-external-mcp-host">¶</a></h2>
+<p>Any MCP host can drive the running server.</p>
+<h3 id="vs-code-mcp-extension">VS Code (MCP extension) <a class="anchor" href="#vs-code-mcp-extension">¶</a></h3>
+<p>Add to your VS Code MCP settings (<code>Cmd+Shift+P</code> → <em>MCP: Edit User<br />
+Configuration</em>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;file-inputs-demo&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;streamable-http&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;http://localhost:8080/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Reload the MCP view; the three tools will appear under<br />
+<code>file-inputs-demo</code>. Until VS Code learns the SEP-2356 file-picker hint, it<br />
+shows the file argument as a plain string — paste a data URI manually<br />
+(<code>data:image/png;base64,iVBORw0K…</code>) or use a small helper to build one.</p>
+<h3 id="claude-code">Claude Code <a class="anchor" href="#claude-code">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>claude mcp add file-inputs --transport streamable-http http://localhost:8080/mcp
+</span></span></code></pre><h3 id="mcpjam">MCPJam <a class="anchor" href="#mcpjam">¶</a></h3>
+<ol>
+<li>Server URL: <code>http://localhost:8080/mcp</code></li>
+<li>Transport: Streamable HTTP</li>
+</ol>
+<h2 id="wire-format-cheatsheet">Wire format cheatsheet <a class="anchor" href="#wire-format-cheatsheet">¶</a></h2>
+<pre><code>data:image/png;name=pixel.png;base64,iVBORw0KGgoAAAANS...
+└─┬─┘└───┬──┘ └────┬────┘└─┬─┘└──────────┬──────────┘
+  │     │         │       │              │
+  scheme media-   filename encoding      payload
+        type     (pct-enc) marker        (base64)
+</code></pre>
+<ul>
+<li><code>core.EncodeDataURI(data, mediaType, filename)</code> builds the string.</li>
+<li><code>core.DecodeDataURI(uri)</code> returns <code>(data, mediaType, filename, error)</code><br />
+and rejects non-base64 forms with <code>ErrNonBase64DataURI</code>.</li>
+<li><code>core.IsDataURI(s)</code> is a cheap prefix check.</li>
+</ul>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Schema helpers</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/core/file_input.go"><code>core.FileInputProperty</code></a>, <code>FileInputArrayProperty</code>, <code>ExtractFileInputDescriptor</code></td>
+</tr>
+<tr>
+<td>Wire encoding</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/core/datauri.go"><code>core.EncodeDataURI</code></a>, <code>DecodeDataURI</code>, <code>IsDataURI</code></td>
+</tr>
+<tr>
+<td>Capability marker</td>
+<td><code>ClientCapabilities.FileInputs</code> (<a href="https://github.com/panyam/mcpkit/blob/main/core/protocol.go"><code>core/protocol.go</code></a>), <code>core.HasFileInputs(ctx)</code></td>
+</tr>
+<tr>
+<td>SEP plan</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_2356_FILE_INPUTS_PLAN.md"><code>docs/SEP_2356_FILE_INPUTS_PLAN.md</code></a></td>
+</tr>
+<tr>
+<td>Spec</td>
+<td>modelcontextprotocol/specification PR 2356</td>
+</tr>
+</tbody>
+</table>
+<h2 id="whats-still-pending">What&rsquo;s still pending <a class="anchor" href="#whats-still-pending">¶</a></h2>
+<p>This example exercises Phase 1.1 (types) + 1.2 (data URIs) + a starter<br />
+1.7 walkthrough. Subsequent phases will extend it:</p>
+<ul>
+<li><strong>1.4</strong> — <code>server.ValidateFileInput</code> for size/MIME enforcement (the<br />
+handlers will swap their inline checks for the shared validator).</li>
+<li><strong>1.5</strong> — strip <code>x-mcp-file</code> from <code>tools/list</code> when the client did not<br />
+declare <code>capabilities.fileInputs</code>.</li>
+<li><strong>1.6</strong> — <code>client.PrepareFileArg(path, descriptor)</code> so the host side of<br />
+the walkthrough can drop the manual <code>os.ReadFile</code> + <code>EncodeDataURI</code><br />
+boilerplate.</li>
+<li><strong>2.x</strong> — <code>mcp.selectFile()</code> in the MCP Apps bridge so an in-iframe app<br />
+can prompt the user for a file and forward the data URI to a tool.</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/elicitation/">Elicitation — another client-interaction flow</a></li>
+<li><a href="/mcpkit/examples/mrtr/">MRTR — the input_required round-trip</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/file-inputs/WALKTHROUGH.md"><code>examples/file-inputs/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-file-inputs-sep-2356--data-uri-file-arguments">MCP File Inputs (SEP-2356) — Data URI File Arguments <a class="anchor" href="#mcp-file-inputs-sep-2356--data-uri-file-arguments">¶</a></h1>
+<p>Walks through SEP-2356, which lets servers declare file-input properties on tool inputSchemas via the <code>x-mcp-file</code> JSON Schema extension. Clients render a file picker for those fields and pass selected files as RFC 2397 base64 data URIs (<code>data:&lt;mediatype&gt;;name=&lt;filename&gt;;base64,&lt;...&gt;</code>). The server decodes the URI, validates size/MIME, and processes the bytes.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Connect to the file-inputs server</strong> — <code>client.NewClient(...)</code> + <code>client.WithFileInputs()</code> + <code>Connect()</code>. The <code>WithFileInputs</code> option advertises <code>capabilities.fileInputs={}</code> on the wire — without it, the server would strip <code>x-mcp-file</code> from every tool&rsquo;s inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.</li>
+<li><strong>tools/list — extract file-input descriptors</strong> — <code>client.FileInputsFromTool(tool)</code> extracts the per-property descriptors a server advertised. Single-file properties land under their name (<code>&quot;image&quot;</code>); array-of-files shapes land under <code>name[]</code> (<code>&quot;documents[]&quot;</code>) so callers can disambiguate without re-walking the schema.</li>
+<li><strong>upload_image — encode + call with a real PNG</strong> — Read <code>testdata/pixel.png</code> (a 24×24 RGB gradient, embedded at build time), encode it via <code>core.EncodeDataURI</code>, and pass the resulting string as the <code>image</code> argument. The handler runs <code>core.DecodeDataURI</code> to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by <code>server.ValidateFileInput</code> once Phase 1.4 lands; today the handler trusts the input.</li>
+<li><strong>analyze_documents — array-of-files input</strong> — Demonstrates <code>core.FileInputArrayProperty</code> — the schema marks the <code>documents</code> array&rsquo;s <em>items</em> with <code>x-mcp-file</code>, so a host renders one picker per row. The walkthrough loads two embedded PDFs (<code>testdata/contract.pdf</code>, <code>testdata/appendix.pdf</code>) and sends both in one call.</li>
+<li><strong>process_any_file — no accept/maxSize filter</strong> — Empty <code>FileInputDescriptor{}</code> means &ldquo;any file, any size.&rdquo; Useful for ad-hoc inspection. The handler still decodes via <code>core.DecodeDataURI</code>, which rejects malformed or non-base64 URIs. The walkthrough reads <code>testdata/README.txt</code> so the payload is a real on-disk file.</li>
+<li><strong>Optional: send a file from disk via client.PrepareFileArg</strong> — Pass <code>--file &lt;path&gt;</code> on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn&rsquo;t set so the walkthrough stays hermetic. The encode path is now <code>client.PrepareFileArg(path, descriptor)</code> — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (<code>*core.FileTooLargeError</code>, <code>*core.FileTypeNotAcceptedError</code>) so callers can branch with <code>errors.As</code>.</li>
+<li><em><em>upload_image rejects wrong MIME (text/plain into image/</em> slot)</em>* — The descriptor declares <code>accept: [&quot;image/*&quot;]</code>. Sending a text/plain data URI hits the dispatcher&rsquo;s accept-pattern matcher (<code>core.FileMatchesAccept</code>), which fails before the handler runs. The error data carries <code>mediaType</code> (what we sent) and <code>accept</code> (what the server requires) so a client can render a useful message.</li>
+<li><strong>upload_image rejects oversized payload (6 MiB into 5 MiB cap)</strong> — Same descriptor declares <code>maxSize: 5_242_880</code> (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as <code>image/png</code>, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.</li>
+<li><strong>analyze_documents rejects per-element with field path tracking</strong> — Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher&rsquo;s array-items walker validates each element against <code>items.x-mcp-file</code> and surfaces the path of the offender — <code>data.field == &quot;documents[1]&quot;</code>. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+
+    Note over Host,Server: Step 1: Connect to the file-inputs server
+    Host-&gt;&gt;Server: POST /mcp — initialize (capabilities.fileInputs={})
+    Server--&gt;&gt;Host: serverInfo + capabilities
+
+    Note over Host,Server: Step 2: tools/list — extract file-input descriptors
+    Host-&gt;&gt;Server: tools/list
+    Server--&gt;&gt;Host: tools[] with x-mcp-file marked properties
+
+    Note over Host,Server: Step 3: upload_image — encode + call with a real PNG
+    Host-&gt;&gt;Server: tools/call upload_image { image: data:image/png;name=…;base64,… }
+    Server--&gt;&gt;Host: text result with size + media type
+
+    Note over Host,Server: Step 4: analyze_documents — array-of-files input
+    Host-&gt;&gt;Server: tools/call analyze_documents { documents: [data:application/pdf;…, data:application/pdf;…] }
+    Server--&gt;&gt;Host: summary line per document
+
+    Note over Host,Server: Step 5: process_any_file — no accept/maxSize filter
+    Host-&gt;&gt;Server: tools/call process_any_file { file: data:text/plain;name=README.txt;base64,… }
+    Server--&gt;&gt;Host: decoded media type + size
+
+    Note over Host,Server: Step 6: Optional: send a file from disk via client.PrepareFileArg
+    Host-&gt;&gt;Server: tools/call upload_image (from --file &lt;path&gt;)
+    Server--&gt;&gt;Host: decoded metadata of the on-disk file
+
+    Note over Host,Server: Step 7: upload_image rejects wrong MIME (text/plain into image/* slot)
+    Host-&gt;&gt;Server: tools/call upload_image { image: data:text/plain;… }
+    Server--&gt;&gt;Host: -32602 + data: {reason: file_type_not_accepted, mediaType, accept, field}
+
+    Note over Host,Server: Step 8: upload_image rejects oversized payload (6 MiB into 5 MiB cap)
+    Host-&gt;&gt;Server: tools/call upload_image { image: data:image/png;… 6 MiB }
+    Server--&gt;&gt;Host: -32602 + data: {reason: file_too_large, actualSize, maxSize, field}
+
+    Note over Host,Server: Step 9: analyze_documents rejects per-element with field path tracking
+    Host-&gt;&gt;Server: tools/call analyze_documents { documents: [valid pdf, text/plain] }
+    Server--&gt;&gt;Host: -32602 + data.field = &quot;documents[1]&quot;
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the MCP server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve         # file-inputs server on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
+</code></pre>
+<p>Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam). The walkthrough below acts as a scripted host that reads files from disk, encodes them as data URIs via <code>core.EncodeDataURI</code>, and calls the tools. See the README for VS Code config.</p>
+<h3 id="wire-format">Wire format <a class="anchor" href="#wire-format">¶</a></h3>
+<p>SEP-2356 reuses two well-understood pieces:</p>
+<ul>
+<li><strong>Schema marker</strong> — a string property of <code>format: &quot;uri&quot;</code> carries an extra <code>x-mcp-file</code> keyword whose value is a <code>FileInputDescriptor</code> (<code>accept</code> MIME patterns / extensions, optional <code>maxSize</code> in decoded bytes). Server-side helpers: <code>core.FileInputProperty(desc)</code> and <code>core.FileInputArrayProperty(desc)</code>.</li>
+<li><strong>Wire encoding</strong> — files travel as RFC 2397 base64 data URIs with an optional percent-encoded <code>name=</code> parameter: <code>data:image/png;name=photo.png;base64,iVBORw0…</code>. Helpers: <code>core.EncodeDataURI(data, mediaType, filename)</code> and <code>core.DecodeDataURI(uri)</code>.</li>
+</ul>
+<p>Capability negotiation: the client advertises <code>&quot;fileInputs&quot;: {}</code> inside <code>ClientCapabilities</code> during <code>initialize</code>. Servers MUST NOT include <code>x-mcp-file</code> in tool schemas if the client did not declare the capability — <code>core.HasFileInputs(ctx)</code> is the server-side check (gating ships in Phase 1.5 of the plan).</p>
+<h3 id="step-1-connect-to-the-file-inputs-server">Step 1: Connect to the file-inputs server <a class="anchor" href="#step-1-connect-to-the-file-inputs-server">¶</a></h3>
+<p><code>client.NewClient(...)</code> + <code>client.WithFileInputs()</code> + <code>Connect()</code>. The <code>WithFileInputs</code> option advertises <code>capabilities.fileInputs={}</code> on the wire — without it, the server would strip <code>x-mcp-file</code> from every tool&rsquo;s inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.</p>
+<h3 id="step-2-toolslist--extract-file-input-descriptors">Step 2: tools/list — extract file-input descriptors <a class="anchor" href="#step-2-toolslist--extract-file-input-descriptors">¶</a></h3>
+<p><code>client.FileInputsFromTool(tool)</code> extracts the per-property descriptors a server advertised. Single-file properties land under their name (<code>&quot;image&quot;</code>); array-of-files shapes land under <code>name[]</code> (<code>&quot;documents[]&quot;</code>) so callers can disambiguate without re-walking the schema.</p>
+<h3 id="step-3-upload-image--encode--call-with-a-real-png">Step 3: upload_image — encode + call with a real PNG <a class="anchor" href="#step-3-upload-image--encode--call-with-a-real-png">¶</a></h3>
+<p>Read <code>testdata/pixel.png</code> (a 24×24 RGB gradient, embedded at build time), encode it via <code>core.EncodeDataURI</code>, and pass the resulting string as the <code>image</code> argument. The handler runs <code>core.DecodeDataURI</code> to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by <code>server.ValidateFileInput</code> once Phase 1.4 lands; today the handler trusts the input.</p>
+<h3 id="step-4-analyze-documents--array-of-files-input">Step 4: analyze_documents — array-of-files input <a class="anchor" href="#step-4-analyze-documents--array-of-files-input">¶</a></h3>
+<p>Demonstrates <code>core.FileInputArrayProperty</code> — the schema marks the <code>documents</code> array&rsquo;s <em>items</em> with <code>x-mcp-file</code>, so a host renders one picker per row. The walkthrough loads two embedded PDFs (<code>testdata/contract.pdf</code>, <code>testdata/appendix.pdf</code>) and sends both in one call.</p>
+<h3 id="step-5-process-any-file--no-acceptmaxsize-filter">Step 5: process_any_file — no accept/maxSize filter <a class="anchor" href="#step-5-process-any-file--no-acceptmaxsize-filter">¶</a></h3>
+<p>Empty <code>FileInputDescriptor{}</code> means &ldquo;any file, any size.&rdquo; Useful for ad-hoc inspection. The handler still decodes via <code>core.DecodeDataURI</code>, which rejects malformed or non-base64 URIs. The walkthrough reads <code>testdata/README.txt</code> so the payload is a real on-disk file.</p>
+<h3 id="step-6-optional-send-a-file-from-disk-via-clientpreparefilearg">Step 6: Optional: send a file from disk via client.PrepareFileArg <a class="anchor" href="#step-6-optional-send-a-file-from-disk-via-clientpreparefilearg">¶</a></h3>
+<p>Pass <code>--file &lt;path&gt;</code> on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn&rsquo;t set so the walkthrough stays hermetic. The encode path is now <code>client.PrepareFileArg(path, descriptor)</code> — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (<code>*core.FileTooLargeError</code>, <code>*core.FileTypeNotAcceptedError</code>) so callers can branch with <code>errors.As</code>.</p>
+<h3 id="validation--server-rejects-non-conforming-uploads-phase-14">Validation — server rejects non-conforming uploads (Phase 1.4) <a class="anchor" href="#validation--server-rejects-non-conforming-uploads-phase-14">¶</a></h3>
+<p>The server is started with <code>server.WithFileInputValidation()</code> (see <a href="https://github.com/panyam/mcpkit/blob/main/examples/file-inputs/main.go"><code>examples/file-inputs/main.go</code></a>), so the dispatcher walks each tool&rsquo;s <code>inputSchema</code> for <code>x-mcp-file</code> properties and runs <code>core.ValidateFileInput</code> on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC <code>-32602</code> with a structured <code>data</code> payload — that exact shape is the contract pinned by the SEP-2356 conformance scenarios on the panyam/mcpconformance <code>pending</code> branch (<code>src/scenarios/server/file-inputs/</code>).</p>
+<p>The next three steps exercise all three failure modes the validator covers. They drive the server through the Go MCP client (<code>*client.Client</code>); the <code>client.RPCError</code> returned on rejection carries the same structured <code>data</code> field the wire emits. Each step prints <code>error.code</code>, <code>error.message</code>, and <code>error.data</code> so the rejection contract is visible in the demo output.</p>
+<p>Each step also attaches a copy-pasteable verbatim block with two variants (rendered via demokit <code>VerbatimVariants</code>): a <code>curl</code> form (the default — for validating from a non-Go SDK or sanity-checking the JSON shape directly) and a <code>go</code> form showing the equivalent <code>*client.Client</code> call. Pass <code>--variant=go</code> to render only the Go form.</p>
+<h3 id="step-7-upload-image-rejects-wrong-mime-textplain-into-image-slot">Step 7: upload_image rejects wrong MIME (text/plain into image/* slot) <a class="anchor" href="#step-7-upload-image-rejects-wrong-mime-textplain-into-image-slot">¶</a></h3>
+<p>The descriptor declares <code>accept: [&quot;image/*&quot;]</code>. Sending a text/plain data URI hits the dispatcher&rsquo;s accept-pattern matcher (<code>core.FileMatchesAccept</code>), which fails before the handler runs. The error data carries <code>mediaType</code> (what we sent) and <code>accept</code> (what the server requires) so a client can render a useful message.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a session</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{&#34;fileInputs&#34;:{}}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> -H <span style="color:#d14">&#34;Accept: application/json&#34;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Send a text/plain payload into upload_image&#39;s image/* slot</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">URI</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#39;data:text/plain;name=x.txt;base64,aGVsbG8=&#39;</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:1,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;upload_image\&#34;,\&#34;arguments\&#34;:{\&#34;image\&#34;:\&#34;</span><span style="color:#008080">$URI</span><span style="color:#d14">\&#34;}}}&#34;</span>
+</span></span></code></pre><h3 id="step-8-upload-image-rejects-oversized-payload-6-mib-into-5-mib-cap">Step 8: upload_image rejects oversized payload (6 MiB into 5 MiB cap) <a class="anchor" href="#step-8-upload-image-rejects-oversized-payload-6-mib-into-5-mib-cap">¶</a></h3>
+<p>Same descriptor declares <code>maxSize: 5_242_880</code> (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as <code>image/png</code>, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a session</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{&#34;fileInputs&#34;:{}}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> -H <span style="color:#d14">&#34;Accept: application/json&#34;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Generate a 6 MiB image/png payload (Python keeps the curl short)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">BIG</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>python3 -c <span style="color:#d14">&#39;import base64; print(&#34;data:image/png;name=big.png;base64,&#34; + base64.b64encode(b&#34;\x00&#34; * (6*1024*1024)).decode())&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:2,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;upload_image\&#34;,\&#34;arguments\&#34;:{\&#34;image\&#34;:\&#34;</span><span style="color:#008080">$BIG</span><span style="color:#d14">\&#34;}}}&#34;</span>
+</span></span></code></pre><h3 id="step-9-analyze-documents-rejects-per-element-with-field-path-tracking">Step 9: analyze_documents rejects per-element with field path tracking <a class="anchor" href="#step-9-analyze-documents-rejects-per-element-with-field-path-tracking">¶</a></h3>
+<p>Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher&rsquo;s array-items walker validates each element against <code>items.x-mcp-file</code> and surfaces the path of the offender — <code>data.field == &quot;documents[1]&quot;</code>. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a session</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{&#34;fileInputs&#34;:{}}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> -H <span style="color:#d14">&#34;Accept: application/json&#34;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Send 2 documents — index 0 valid PDF, index 1 wrong MIME</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">GOOD</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#39;data:application/pdf;name=ok.pdf;base64,JVBERi0xLjQKJSVFT0YK&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">BAD</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#39;data:text/plain;name=bad.txt;base64,aGVsbG8=&#39;</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:3,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;analyze_documents\&#34;,\&#34;arguments\&#34;:{\&#34;documents\&#34;:[\&#34;</span><span style="color:#008080">$GOOD</span><span style="color:#d14">\&#34;,\&#34;</span><span style="color:#008080">$BAD</span><span style="color:#d14">\&#34;]}}}&#34;</span>
+</span></span></code></pre><h3 id="mcp-apps-mode-phase-21">MCP Apps mode (Phase 2.1) <a class="anchor" href="#mcp-apps-mode-phase-21">¶</a></h3>
+<p>This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers — the human-in-the-loop case file-uploads-wg flagged as a gap:</p>
+<ul>
+<li><code>apps_upload_image</code> — <code>ui://file-inputs/upload-image</code> — single image picker (<code>mcp.selectFile</code>)</li>
+<li><code>apps_analyze_documents</code> — <code>ui://file-inputs/analyze-documents</code> — multi PDF picker (<code>mcp.selectFiles</code>)</li>
+</ul>
+<p>To exercise these, point a host that supports the MCP Apps extension (e.g. MCPJam) at this server and invoke either tool — the host renders the embedded HTML + bridge, the user clicks the picker, and the bridge encodes the chosen file(s) as data URI(s) before calling the regular tool. The walkthrough above doesn&rsquo;t drive these because demokit can&rsquo;t synthesize iframe user-gestures.</p>
+<h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
+<ul>
+<li>Schema helpers: <code>core.FileInputProperty</code> / <code>core.FileInputArrayProperty</code> / <code>core.ExtractFileInputDescriptor</code> — core/file_input.go</li>
+<li>Wire encoding: <code>core.EncodeDataURI</code> / <code>core.DecodeDataURI</code> / <code>core.IsDataURI</code> — core/datauri.go</li>
+<li>Capability marker: <code>ClientCapabilities.FileInputs</code> + <code>core.HasFileInputs(ctx)</code> — core/protocol.go, core/file_input.go</li>
+<li>Server validation (Phase 1.4): <code>server.ValidateFileInput</code> — pending</li>
+<li>Capability gating (Phase 1.5): strip <code>x-mcp-file</code> from tools/list when client lacks the cap — pending</li>
+<li>Client helpers (Phase 1.6): <code>client.FileInputsFromTool</code> / <code>client.PrepareFileArg</code> — pending</li>
+<li>Bridge <code>selectFile</code> / <code>selectFiles</code> (Phase 2.1): <a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/assets/file-picker.ts"><code>ext/ui/assets/file-picker.ts</code></a> — shipped</li>
+<li>Apps fixtures: <a href="https://github.com/panyam/mcpkit/blob/main/examples/file-inputs/apps/upload-image.html"><code>examples/file-inputs/apps/upload-image.html</code></a>, <code>analyze-documents.html</code></li>
+<li>SEP-2356 spec: modelcontextprotocol/specification PR 2356</li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/file-inputs/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/file-inputs/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

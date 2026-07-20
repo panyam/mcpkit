@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="URL-mode elicitation with consent approval. Experimental (tracks draft SEP-2643).">
+    <title>Elicitation · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Elicitation</h1>
+        
+        <p class="lead">URL-mode elicitation with consent approval. Experimental (tracks draft SEP-2643).</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/README.md"><code>examples/elicitation/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="url-elicitation--consent-approval-flow-uc1">URL Elicitation — Consent Approval Flow (UC1) <a class="anchor" href="#url-elicitation--consent-approval-flow-uc1">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — Tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643">SEP-2643</a> (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.</p>
+</blockquote>
+<p>A scripted MCP host walking through the <strong>UC1 consent approval flow</strong>: a tool call gets denied with a JSON-RPC <code>-32042</code> (URLElicitationRequired) carrying a consent URL; the host opens the URL in a browser; the user approves; the server pushes a <code>notifications/elicitation/complete</code> notification over SSE; the host auto-retries with the <code>authorizationContextId</code> and gets the result.</p>
+<h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1 — start the MCP server</span>
+</span></span><span style="display:flex;"><span>just serve
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 2 — run the scripted walkthrough</span>
+</span></span><span style="display:flex;"><span>just demo
+</span></span></code></pre><p>The walkthrough opens a browser to <code>http://localhost:8080/approve?ctx=...</code>. Click <strong>Approve</strong> there; the demo auto-retries and completes.</p>
+<p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/WALKTHROUGH.md">WALKTHROUGH.md</a> for the full sequence diagram and step-by-step description (regenerate via <code>just readme</code>).</p>
+<h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<ul>
+<li>The <strong><code>-32042</code> URLElicitationRequired</strong> denial shape — <code>error.code</code> + <code>error.data.authorization.authorizationContextId</code> + <code>error.data.elicitations[].url</code>.</li>
+<li>The <strong>GET SSE notification stream</strong> carrying <code>notifications/elicitation/complete</code> from server to host while the user interacts with the consent URL out-of-band.</li>
+<li>The <strong>auto-retry pattern</strong>: host parses the denial, opens the URL, waits for the SSE notification, then re-issues <code>tools/call</code> with <code>_meta.authorizationContextId</code> set to the captured value.</li>
+<li>The <strong>server-side consent middleware</strong> that intercepts <code>tools/call</code> for protected tools, mints a context, denies with the URL, persists approval state, and lets the retry through once approved.</li>
+<li><strong>CORS configuration</strong> for browser-based MCP hosts (MCPJam) — <code>Mcp-Session-Id</code> in both Allow-Headers and Expose-Headers, <code>DELETE</code> in allowed methods.</li>
+</ul>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<ul>
+<li>Walkthrough steps + denial parsing: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/main.go"><code>main.go</code></a> (the <code>runDemo</code> block)</li>
+<li>Consent middleware + store + <code>/approve</code> handler: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/main.go"><code>main.go</code></a> (after <code>serve()</code>)</li>
+<li>SEP-2643 wire constants: <a href="https://github.com/panyam/mcpkit/blob/main/core/authorization_denial_experimental.go"><code>core.MetaKeyAuthorizationContextID</code></a> and the <code>-32042</code> URLElicitationRequired error code</li>
+<li>Companion: <a href="/mcpkit/examples/fine-grained-auth/"><code>examples/fine-grained-auth/</code></a> — UC2 (scope step-up) + UC3 (RAR per-payment credentials)</li>
+</ul>
+<h2 id="notes">Notes <a class="anchor" href="#notes">¶</a></h2>
+<ul>
+<li>CORS is applied via <code>server.WithHandlerWrap(cors)</code> so it covers <code>/mcp</code> plus the <code>/approve</code> route registered through <code>server.WithMux</code>. Browser-based MCP hosts (MCPJam) need <code>Mcp-Session-Id</code> in both Allow- and Expose-Headers; the canonical CORS configuration lives in this example&rsquo;s <code>serve()</code> block.</li>
+<li>The walkthrough&rsquo;s &ldquo;Approve&rdquo; button click is a real human-in-the-loop step; CI runs would need either a headless browser or a synthetic <code>POST /approve?ctx=...</code>.</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/fine-grained-auth/">Fine-grained auth — UC2 + UC3 of the same SEP</a></li>
+<li><a href="/mcpkit/examples/mrtr/">MRTR — the underlying input_required round-trip</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/WALKTHROUGH.md"><code>examples/elicitation/WALKTHROUGH.md</code></a></p>
+
+<h1 id="url-elicitation--consent-approval-flow-uc1">URL Elicitation — Consent Approval Flow (UC1) <a class="anchor" href="#url-elicitation--consent-approval-flow-uc1">¶</a></h1>
+<p><strong>EXPERIMENTAL</strong> — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Connect to the MCP server and initialize session</strong> — Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.</li>
+<li><strong>Call access_protected_resource — denied with consent URL</strong> — The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.</li>
+<li><strong>Open consent URL → wait for approval notification → auto-retry</strong> — The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+    participant Browser as User Browser
+
+    Note over Host,Browser: Step 1: Connect to the MCP server and initialize session
+    Host-&gt;&gt;Server: POST /mcp — initialize
+    Server--&gt;&gt;Host: serverInfo + Mcp-Session-Id
+    Host-&gt;&gt;Server: GET /mcp — open SSE stream for notifications
+
+    Note over Host,Browser: Step 2: Call access_protected_resource — denied with consent URL
+    Host-&gt;&gt;Server: tools/call: access_protected_resource
+    Server--&gt;&gt;Host: error -32042 + consent URL + authzContextId
+
+    Note over Host,Browser: Step 3: Open consent URL → wait for approval notification → auto-retry
+    Host-&gt;&gt;Browser: open consent URL
+    Browser-&gt;&gt;Server: POST /approve?ctx=...
+    Server--&gt;&gt;Host: notifications/elicitation/complete (via SSE)
+    Host-&gt;&gt;Server: tools/call + _meta.authorizationContextId (auto-retry)
+    Server--&gt;&gt;Host: Access granted to resource
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Before running this demo, start the MCP server in a separate terminal:</p>
+<pre><code>Terminal 1:  just serve        # start the MCP server on :8080
+Terminal 2:  just run          # run this demo
+</code></pre>
+<h3 id="step-1-connect-to-the-mcp-server-and-initialize-session">Step 1: Connect to the MCP server and initialize session <a class="anchor" href="#step-1-connect-to-the-mcp-server-and-initialize-session">¶</a></h3>
+<p>Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Initialize an MCP session and capture the session id returned in the headers.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># In a SECOND terminal, open the SSE notification stream so the</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># notifications/elicitation/complete event in step 3 arrives there:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   curl -N http://localhost:8080/mcp \</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#        -H &#34;Mcp-Session-Id: $SID&#34; \</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#        -H &#39;Accept: text/event-stream&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Keep that terminal open. The notification will appear there once the user</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># clicks Approve in step 3.</span>
+</span></span></code></pre><h3 id="step-2-call-access-protected-resource--denied-with-consent-url">Step 2: Call access_protected_resource — denied with consent URL <a class="anchor" href="#step-2-call-access-protected-resource--denied-with-consent-url">¶</a></h3>
+<p>The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Call the protected tool. Response is JSON-RPC error -32042 carrying the</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># consent URL and the authorizationContextId you must echo on retry.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">RESP</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;c&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;access_protected_resource&#34;,&#34;arguments&#34;:{&#34;resourceId&#34;:&#34;my-doc&#34;}}}&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$RESP</span><span style="color:#d14">&#34;</span> | jq <span style="color:#d14">&#39;.error&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Capture the context id and the consent URL into shell vars for step 3.</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">CTX</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$RESP</span><span style="color:#d14">&#34;</span> | jq -r .error.data.authorization.authorizationContextId<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">APPROVE_URL</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$RESP</span><span style="color:#d14">&#34;</span> | jq -r <span style="color:#d14">&#39;.error.data.elicitations[0].url&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;CTX=</span><span style="color:#008080">$CTX</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;APPROVE_URL=</span><span style="color:#008080">$APPROVE_URL</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-3-open-consent-url--wait-for-approval-notification--auto-retry">Step 3: Open consent URL → wait for approval notification → auto-retry <a class="anchor" href="#step-3-open-consent-url--wait-for-approval-notification--auto-retry">¶</a></h3>
+<p>The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Approve the context. You can either click Approve in a browser at</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># $APPROVE_URL, or POST to it directly:</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$APPROVE_URL</span><span style="color:#d14">&#34;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># The SECOND terminal (running the SSE stream from step 1) should now print</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># something like:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   event: message</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/elicitation/complete&#34;,&#34;params&#34;:{&#34;elicitationId&#34;:&#34;...&#34;}}</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Retry tools/call with the context id echoed under the SEP-2643 _meta key.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># The server matches it against the approved context and lets the call through.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:\&#34;r\&#34;,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;access_protected_resource\&#34;,\&#34;arguments\&#34;:{\&#34;resourceId\&#34;:\&#34;my-doc\&#34;},\&#34;_meta\&#34;:{\&#34;io.modelcontextprotocol/authorization-context-id\&#34;:\&#34;</span><span style="color:#008080">$CTX</span><span style="color:#d14">\&#34;}}}&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq .
+</span></span></code></pre><h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/elicitation/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/elicitation/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

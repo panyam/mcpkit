@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ServerRegistry with three servers and name-collision resolution.">
+    <title>Host — multi-server · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Host — multi-server</h1>
+        
+        <p class="lead">ServerRegistry with three servers and name-collision resolution.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/host/02-multi-server/README.md"><code>examples/host/02-multi-server/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="multi-server-registry">Multi-Server Registry <a class="anchor" href="#multi-server-registry">¶</a></h1>
+<blockquote>
+<p><strong>Stable</strong> — MCP Apps host-side APIs (<code>ext/ui</code>: ServerRegistry).</p>
+</blockquote>
+<p>Demonstrates ServerRegistry managing 3 MCP servers with tool aggregation, collision resolution, and app bridge integration.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Create 3 MCP servers with overlapping tools</strong> — Weather and Calendar both have a &lsquo;get_info&rsquo; tool — this will cause a collision in the registry.</li>
+<li><strong>Create ServerRegistry with ToolResolver and CollisionHandler</strong> — The resolver picks a server based on args. The collision handler logs when ambiguity is detected.</li>
+<li><strong>Add all 3 servers — collision detected</strong> — When calendar is added, the registry detects that &lsquo;get_info&rsquo; now exists in both weather and calendar.</li>
+<li><strong>AllTools — aggregated tool list with routing metadata</strong> — Returns all tools from all servers. Each tool has clean name + ServerID metadata.</li>
+<li><strong>CallTool (unambiguous) — routes directly</strong> — get_forecast exists only in weather — no resolver needed, routes directly.</li>
+<li><strong>CallTool (ambiguous) — resolver invoked</strong> — get_info is ambiguous (weather + calendar). The resolver sees {source: &ldquo;calendar&rdquo;} and picks calendar.</li>
+<li><strong>CallToolOn — explicit routing bypasses resolver</strong> — CallToolOn routes directly to the specified server. No resolver involved.</li>
+<li><strong>Remove server — tools disappear from index</strong> — After removing clock, get_time is no longer available.</li>
+<li><strong>AddWithBridge — server with app-provided tools</strong> — Re-adds clock with an app bridge that provides an extra tool. Both server and app tools appear in AllTools.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Reg as ServerRegistry
+    participant W as Weather Server
+    participant C as Calendar Server
+    participant K as Clock Server
+    participant Br as App Bridge
+
+    Note over Reg,Br: Step 1: Create 3 MCP servers with overlapping tools
+    W-&gt;&gt;W: get_forecast, get_alerts, get_info
+    C-&gt;&gt;C: list_events, create_event, get_info
+    K-&gt;&gt;K: get_time
+
+    Note over Reg,Br: Step 2: Create ServerRegistry with ToolResolver and CollisionHandler
+    Reg-&gt;&gt;Reg: WithToolResolver(arg-based routing)
+    Reg-&gt;&gt;Reg: WithCollisionHandler(log collisions)
+
+    Note over Reg,Br: Step 3: Add all 3 servers — collision detected
+    Reg-&gt;&gt;W: Add(&quot;weather&quot;, weatherClient)
+    Reg-&gt;&gt;C: Add(&quot;calendar&quot;, calendarClient)
+    Reg-&gt;&gt;K: Add(&quot;clock&quot;, clockClient)
+
+    Note over Reg,Br: Step 4: AllTools — aggregated tool list with routing metadata
+    Reg-&gt;&gt;Reg: AllTools()
+
+    Note over Reg,Br: Step 5: CallTool (unambiguous) — routes directly
+    Reg-&gt;&gt;W: CallTool(&quot;get_forecast&quot;)
+    W--&gt;&gt;Reg: ToolResult
+
+    Note over Reg,Br: Step 6: CallTool (ambiguous) — resolver invoked
+    Reg-&gt;&gt;Reg: CallTool(&quot;get_info&quot;, {source: &quot;calendar&quot;})
+    Reg-&gt;&gt;Reg: Resolver picks calendar
+    Reg-&gt;&gt;C: tools/call
+    C--&gt;&gt;Reg: ToolResult
+
+    Note over Reg,Br: Step 7: CallToolOn — explicit routing bypasses resolver
+    Reg-&gt;&gt;W: CallToolOn(&quot;weather&quot;, &quot;get_info&quot;)
+    W--&gt;&gt;Reg: ToolResult
+
+    Note over Reg,Br: Step 8: Remove server — tools disappear from index
+    Reg-&gt;&gt;K: Remove(&quot;clock&quot;)
+
+    Note over Reg,Br: Step 9: AddWithBridge — server with app-provided tools
+    Reg-&gt;&gt;K: AddWithBridge(&quot;clock-v2&quot;, client, bridge)
+    Br-&gt;&gt;Br: RegisterTool(&quot;app_stopwatch&quot;)
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="step-1-create-3-mcp-servers-with-overlapping-tools">Step 1: Create 3 MCP servers with overlapping tools <a class="anchor" href="#step-1-create-3-mcp-servers-with-overlapping-tools">¶</a></h3>
+<blockquote>
+<p><strong>References:</strong> <a href="https://spec.modelcontextprotocol.io">MCP Specification</a></p>
+</blockquote>
+<p>Weather and Calendar both have a &lsquo;get_info&rsquo; tool — this will cause a collision in the registry.</p>
+<h3 id="step-2-create-serverregistry-with-toolresolver-and-collisionhandler">Step 2: Create ServerRegistry with ToolResolver and CollisionHandler <a class="anchor" href="#step-2-create-serverregistry-with-toolresolver-and-collisionhandler">¶</a></h3>
+<blockquote>
+<p><strong>References:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_HOST.md">mcpkit APPS_HOST.md</a></p>
+</blockquote>
+<p>The resolver picks a server based on args. The collision handler logs when ambiguity is detected.</p>
+<h3 id="step-3-add-all-3-servers--collision-detected">Step 3: Add all 3 servers — collision detected <a class="anchor" href="#step-3-add-all-3-servers--collision-detected">¶</a></h3>
+<p>When calendar is added, the registry detects that &lsquo;get_info&rsquo; now exists in both weather and calendar.</p>
+<h3 id="step-4-alltools--aggregated-tool-list-with-routing-metadata">Step 4: AllTools — aggregated tool list with routing metadata <a class="anchor" href="#step-4-alltools--aggregated-tool-list-with-routing-metadata">¶</a></h3>
+<p>Returns all tools from all servers. Each tool has clean name + ServerID metadata.</p>
+<h3 id="step-5-calltool-unambiguous--routes-directly">Step 5: CallTool (unambiguous) — routes directly <a class="anchor" href="#step-5-calltool-unambiguous--routes-directly">¶</a></h3>
+<p>get_forecast exists only in weather — no resolver needed, routes directly.</p>
+<h3 id="step-6-calltool-ambiguous--resolver-invoked">Step 6: CallTool (ambiguous) — resolver invoked <a class="anchor" href="#step-6-calltool-ambiguous--resolver-invoked">¶</a></h3>
+<p>get_info is ambiguous (weather + calendar). The resolver sees {source: &ldquo;calendar&rdquo;} and picks calendar.</p>
+<h3 id="step-7-calltoolon--explicit-routing-bypasses-resolver">Step 7: CallToolOn — explicit routing bypasses resolver <a class="anchor" href="#step-7-calltoolon--explicit-routing-bypasses-resolver">¶</a></h3>
+<p>CallToolOn routes directly to the specified server. No resolver involved.</p>
+<h3 id="step-8-remove-server--tools-disappear-from-index">Step 8: Remove server — tools disappear from index <a class="anchor" href="#step-8-remove-server--tools-disappear-from-index">¶</a></h3>
+<p>After removing clock, get_time is no longer available.</p>
+<h3 id="step-9-addwithbridge--server-with-app-provided-tools">Step 9: AddWithBridge — server with app-provided tools <a class="anchor" href="#step-9-addwithbridge--server-with-app-provided-tools">¶</a></h3>
+<blockquote>
+<p><strong>References:</strong> <a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps Extension</a></p>
+</blockquote>
+<p>Re-adds clock with an app bridge that provides an extra tool. Both server and app tools appear in AllTools.</p>
+<h2 id="references">References <a class="anchor" href="#references">¶</a></h2>
+<ul>
+<li><a href="https://spec.modelcontextprotocol.io">MCP Specification</a></li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_HOST.md">mcpkit APPS_HOST.md</a></li>
+<li><a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps Extension</a></li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/host/02-multi-server/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/host/02-multi-server/ --non-interactive
+</span></span></code></pre><h2 id="what-to-verify">What to verify <a class="anchor" href="#what-to-verify">¶</a></h2>
+<ul>
+<li><strong>Step 3</strong>: Collision handler prints <code>⚠ Collision detected: 'get_info' in servers [weather, calendar]</code></li>
+<li><strong>Step 4</strong>: AllTools lists 7 tools with ServerID metadata (get_info appears twice)</li>
+<li><strong>Step 5</strong>: Unambiguous call result includes <code>[weather]</code> prefix</li>
+<li><strong>Step 6</strong>: Ambiguous call with <code>{source: &quot;calendar&quot;}</code> routes to calendar (resolver works)</li>
+<li><strong>Step 7</strong>: CallToolOn routes to weather regardless of resolver</li>
+<li><strong>Step 8</strong>: After removing clock, <code>get_time</code> returns &ldquo;unknown tool&rdquo; error</li>
+<li><strong>Step 9</strong>: After AddWithBridge, 8 tools listed including <code>app_stopwatch</code> (source=app)</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/host/01-apphost/">AppHost basics</a></li>
+<li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

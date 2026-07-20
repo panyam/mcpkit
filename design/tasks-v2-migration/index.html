@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Migrating from server.RegisterTasksV1 (frozen) to ext/tasks (SEP-2663, canonical).">
+    <title>Tasks v2 Migration · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Tasks v2 Migration</h1>
+        
+        <p class="lead">Migrating from server.RegisterTasksV1 (frozen) to ext/tasks (SEP-2663, canonical).</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/TASKS_V2_MIGRATION.md"><code>docs/TASKS_V2_MIGRATION.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="tasks-v1--v2-migration-guide">Tasks v1 → v2 Migration Guide <a class="anchor" href="#tasks-v1--v2-migration-guide">¶</a></h1>
+<p>This guide explains how to move an mcpkit server or client from the v1 task surface (MCP spec 2025-11-25) to the v2 surface (SEP-2663 Tasks Extension), and how to keep both running on the same server during a rolling transition.</p>
+<blockquote>
+<p><strong>Status:</strong> SEP-2663 merged Final on 2026-05-15. The wire shapes documented below track the merged spec. v1 stays frozen and supported.</p>
+</blockquote>
+<h2 id="tldr">TL;DR <a class="anchor" href="#tldr">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>You are</th>
+<th>You want</th>
+<th>Do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Building a new server today</td>
+<td>v2 only</td>
+<td><code>tasks.Register(tasks.Config{Server: srv})</code> (import <code>github.com/panyam/mcpkit/ext/tasks</code>)</td>
+</tr>
+<tr>
+<td>Maintaining an existing v1 server</td>
+<td>Keep working v1 clients alive</td>
+<td><code>server.RegisterTasksV1(server.TasksConfigV1{Server: srv})</code> (no change — <code>RegisterTasks</code> was renamed)</td>
+</tr>
+<tr>
+<td>Migrating a v1 server to v2</td>
+<td>Both clients on one endpoint</td>
+<td>Register both independently: <code>server.RegisterTasksV1(...)</code> + <code>tasks.Register(...)</code>. The previous <code>RegisterTasksHybrid</code> was removed when v2 moved to <code>ext/tasks/</code>. Last-write-wins on <code>tasks/get</code> / <code>tasks/cancel</code> registration.</td>
+</tr>
+<tr>
+<td>Building a new v2 client</td>
+<td>–</td>
+<td><code>client.WithTasksExtension()</code> + <code>client.ToolCall</code> / <code>GetTask</code> / <code>UpdateTask</code> / <code>WaitForTask</code> / <code>CancelTask</code></td>
+</tr>
+<tr>
+<td>Maintaining a v1 client</td>
+<td>–</td>
+<td><code>client.ToolCallAsTaskV1</code> / <code>GetTaskV1</code> / etc. (renamed; behavior unchanged)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-changed">What changed <a class="anchor" href="#what-changed">¶</a></h2>
+<p>SEP-2663 evolves the v1 task surface in five ways. Each one has a wire-format diff and a code-shape diff.</p>
+<h3 id="1-tasks-is-now-an-extension-not-a-top-level-capability">1. Tasks is now an extension, not a top-level capability <a class="anchor" href="#1-tasks-is-now-an-extension-not-a-top-level-capability">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>v1</th>
+<th>v2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>initialize</code> advertisement</td>
+<td><code>capabilities.tasks</code></td>
+<td><code>capabilities.extensions[&quot;io.modelcontextprotocol/tasks&quot;]</code></td>
+</tr>
+<tr>
+<td>Client opt-in</td>
+<td>(none required for the basic flow)</td>
+<td><code>client.WithTasksExtension()</code> MUST be set</td>
+</tr>
+<tr>
+<td>Per-request opt-in</td>
+<td>n/a</td>
+<td>SEP-2575 <code>_meta.io.modelcontextprotocol/clientCapabilities</code></td>
+</tr>
+<tr>
+<td>Server gating</td>
+<td>none</td>
+<td><code>tasks/*</code> returns <code>-32601</code> if extension not negotiated; <code>tools/call</code> falls through to sync</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-toolscall-response-is-polymorphic-resulttype-discriminator">2. tools/call response is polymorphic (<code>resultType</code> discriminator) <a class="anchor" href="#2-toolscall-response-is-polymorphic-resulttype-discriminator">¶</a></h3>
+<p>v1 server decides based on whether the client sent a <code>task</code> hint. v2 server decides unilaterally — and the client doesn&rsquo;t send a hint. The response carries a <code>resultType</code> discriminator so the client knows which shape arrived.</p>
+<pre><code class="language-jsonc">// v1 — sync
+{ &quot;content&quot;: [...], &quot;isError&quot;: false }
+// v1 — task (when client sent params.task)
+{ &quot;task&quot;: { &quot;taskId&quot;: &quot;...&quot;, &quot;ttl&quot;: 60000, &quot;pollInterval&quot;: 1000, ... } }
+
+// v2 — sync
+{ &quot;content&quot;: [...], &quot;isError&quot;: false }
+// v2 — task (server elected; SEP-2663 flat shape: Result &amp; Task)
+{ &quot;resultType&quot;: &quot;task&quot;, &quot;taskId&quot;: &quot;...&quot;, &quot;status&quot;: &quot;working&quot;, &quot;ttlMs&quot;: 60000, &quot;pollIntervalMs&quot;: 1000 }
+</code></pre>
+<p>Client-side, use <code>client.ToolCall</code> (returns a polymorphic <code>*ToolCallResult</code>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>res, err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">ToolCall</span>(c, <span style="color:#d14">&#34;slow_compute&#34;</span>, args)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#000;font-weight:bold">...</span> }
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> res.<span style="color:#900;font-weight:bold">IsTask</span>() {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// poll res.Task.TaskID via client.WaitForTask / GetTask
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>} <span style="color:#000;font-weight:bold">else</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// res.Sync is a regular *core.ToolResult
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span></code></pre><h3 id="3-tasksget-returns-detailedtask-with-inlined-resulterrorinputrequests">3. tasks/get returns DetailedTask with inlined result/error/inputRequests <a class="anchor" href="#3-tasksget-returns-detailedtask-with-inlined-resulterrorinputrequests">¶</a></h3>
+<p>v1 needed two round-trips for a completed task: <code>tasks/get</code> for status, then <code>tasks/result</code> for the payload. v2 inlines everything on <code>tasks/get</code>:</p>
+<pre><code class="language-jsonc">// v2 tasks/get response (status: completed)
+{
+  &quot;taskId&quot;: &quot;task-abc&quot;,
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;createdAt&quot;: &quot;...&quot;,
+  &quot;lastUpdatedAt&quot;: &quot;...&quot;,
+  &quot;ttlMs&quot;: 60000,
+  &quot;pollIntervalMs&quot;: 1000,
+  &quot;result&quot;: { &quot;content&quot;: [...], &quot;isError&quot;: false },
+  &quot;requestState&quot;: &quot;opaque-token&quot;
+}
+</code></pre>
+<p><code>tasks/result</code> and <code>tasks/list</code> are removed in v2.</p>
+<h3 id="4-tasksupdate-is-the-new-mrtr-resume-path">4. tasks/update is the new MRTR resume path <a class="anchor" href="#4-tasksupdate-is-the-new-mrtr-resume-path">¶</a></h3>
+<p>When a v2 task transitions to <code>input_required</code>, <code>tasks/get</code> surfaces a map of pending input requests:</p>
+<pre><code class="language-jsonc">{ &quot;status&quot;: &quot;input_required&quot;, &quot;inputRequests&quot;: { &quot;elicit-1&quot;: { &quot;method&quot;: &quot;elicitation/create&quot;, &quot;params&quot;: {...} } } }
+</code></pre>
+<p>The client replies via <code>tasks/update</code> (returns an empty <code>{}</code> ack):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">UpdateTask</span>(c, core.UpdateTaskRequest{
+</span></span><span style="display:flex;"><span>    TaskID: taskID,
+</span></span><span style="display:flex;"><span>    InputResponses: core.InputResponses{
+</span></span><span style="display:flex;"><span>        <span style="color:#d14">&#34;elicit-1&#34;</span>: json.<span style="color:#900;font-weight:bold">RawMessage</span>(<span style="color:#d14">`{&#34;action&#34;:&#34;accept&#34;,&#34;content&#34;:{&#34;confirm&#34;:true}}`</span>),
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    RequestState: pending.RequestState, <span style="color:#998;font-style:italic">// SEP-2322 echo
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><p>Map keys are server-minted opaque strings. Clients MUST treat them as round-trip echo values.</p>
+<h3 id="5-taskscancel-is-ack-only-wire-fields-renamed">5. tasks/cancel is ack-only; wire fields renamed <a class="anchor" href="#5-taskscancel-is-ack-only-wire-fields-renamed">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>v1</th>
+<th>v2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks/cancel</code> response</td>
+<td><code>{taskId, status: cancelled, ...}</code></td>
+<td><code>{}</code> (empty ack)</td>
+</tr>
+<tr>
+<td>TTL field</td>
+<td><code>ttl</code> (ms by convention)</td>
+<td><code>ttlMs</code> (integer milliseconds, units in the name)</td>
+</tr>
+<tr>
+<td>Poll-interval field</td>
+<td><code>pollInterval</code></td>
+<td><code>pollIntervalMs</code> (integer milliseconds)</td>
+</tr>
+<tr>
+<td><code>parentTaskId</code></td>
+<td>present</td>
+<td>removed</td>
+</tr>
+<tr>
+<td>Mcp-Name HTTP header</td>
+<td>not set</td>
+<td>set on task-creating responses (SEP-2243)</td>
+</tr>
+</tbody>
+</table>
+<p>After <code>tasks/cancel</code>, observe the resulting <code>cancelled</code> status via the next <code>tasks/get</code>.</p>
+<h3 id="6-status-notification-method-renamed">6. Status notification method renamed <a class="anchor" href="#6-status-notification-method-renamed">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>v1</th>
+<th>v2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Status notification method</td>
+<td><code>notifications/tasks/status</code></td>
+<td><code>notifications/tasks</code></td>
+</tr>
+</tbody>
+</table>
+<p>Payload shape is unchanged on the v2 path (still a <code>DetailedTask</code> carrying the SEP-2322 <code>requestState</code>). Only the JSON-RPC method name moved. The v1 method name is preserved, so hybrid servers emit both names — v2 clients subscribe to <code>notifications/tasks</code>, v1 clients keep their existing <code>notifications/tasks/status</code> subscription. (Spec commit <code>1d3813ab</code> in PR 2663.)</p>
+<h2 id="server-migration-paths">Server migration paths <a class="anchor" href="#server-migration-paths">¶</a></h2>
+<h3 id="pure-v1-server-no-change-required">Pure v1 server (no change required) <a class="anchor" href="#pure-v1-server-no-change-required">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info)
+</span></span><span style="display:flex;"><span>server.<span style="color:#900;font-weight:bold">RegisterTasksV1</span>(server.TasksConfigV1{Server: srv})
+</span></span></code></pre><p>That&rsquo;s it. v1 stays where it always was — <a href="https://github.com/panyam/mcpkit/blob/main/server/tasks_v1.go"><code>server/tasks_v1.go</code></a>.</p>
+<h3 id="pure-v2-server">Pure v2 server <a class="anchor" href="#pure-v2-server">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/ext/tasks&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info)
+</span></span><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{Server: srv})
+</span></span></code></pre><p>The v2 task surface lives at <code>github.com/panyam/mcpkit/ext/tasks</code> (separate go.mod sub-module, mirrors <code>ext/auth</code> and <code>ext/ui</code>). v2 server gates <code>tools/call</code> task creation on the client declaring the <code>io.modelcontextprotocol/tasks</code> extension. v1 clients (no declaration) see synchronous <code>tools/call</code> responses; <code>tasks/*</code> returns <code>-32601</code>.</p>
+<h3 id="v1--v2-on-the-same-endpoint-no-longer-a-single-helper">v1 + v2 on the same endpoint (no longer a single helper) <a class="anchor" href="#v1--v2-on-the-same-endpoint-no-longer-a-single-helper">¶</a></h3>
+<p><code>RegisterTasksHybrid</code> was removed when v2 moved to <code>ext/tasks/</code>. The hybrid helper relied on access to v1&rsquo;s unexported internals (<code>taskMiddleware</code>, <code>makeGetHandler</code>, etc.), which would have required exporting them just for hybrid; the project chose not to.</p>
+<p>Servers needing both surfaces during a rolling upgrade window should register independently:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/ext/tasks&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info)
+</span></span><span style="display:flex;"><span>server.<span style="color:#900;font-weight:bold">RegisterTasksV1</span>(server.TasksConfigV1{Server: srv})
+</span></span><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{Server: srv})
+</span></span></code></pre><p>Caveat: <code>srv.HandleMethod</code> uses last-write-wins for <code>tasks/get</code> and <code>tasks/cancel</code> (both v1 and v2 register handlers for those slots). The example above registers v1 first and v2 second, so v2 wins. v1-only paths (<code>tasks/result</code>, <code>tasks/list</code>) continue to work. Per-request capability-aware dispatch (the old hybrid&rsquo;s behaviour) is not provided post-move; a v1 client sending a <code>task</code> hint to this server will hit the v2 handler, which doesn&rsquo;t know about the v1 <code>task</code> hint and falls through to sync execution. If your deployment needs per-request dispatch, do it at the transport / load-balancer layer instead.</p>
+<h2 id="client-migration-paths">Client migration paths <a class="anchor" href="#client-migration-paths">¶</a></h2>
+<h3 id="v1-client-no-change-required-just-rename">v1 client (no change required, just rename) <a class="anchor" href="#v1-client-no-change-required-just-rename">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Was: client.ToolCallAsTask, client.GetTask, client.WaitForTask, ...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>created, _ <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">ToolCallAsTaskV1</span>(c, <span style="color:#d14">&#34;tool&#34;</span>, args)
+</span></span><span style="display:flex;"><span>got, _    <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">GetTaskV1</span>(c, created.Task.TaskID)
+</span></span><span style="display:flex;"><span>final, _  <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">WaitForTaskV1</span>(ctx, c, created.Task.TaskID, <span style="color:#099">200</span><span style="color:#000;font-weight:bold">*</span>time.Millisecond)
+</span></span></code></pre><h3 id="v2-client-new-code">v2 client (new code) <a class="anchor" href="#v2-client-new-code">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url, info,
+</span></span><span style="display:flex;"><span>    client.<span style="color:#900;font-weight:bold">WithTasksExtension</span>(), <span style="color:#998;font-style:italic">// declare the extension during initialize
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> c.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>c.<span style="color:#900;font-weight:bold">Connect</span>()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Polymorphic tools/call
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>res, _ <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">ToolCall</span>(c, <span style="color:#d14">&#34;tool&#34;</span>, args)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> res.<span style="color:#900;font-weight:bold">IsTask</span>() {
+</span></span><span style="display:flex;"><span>    final, _ <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">WaitForTask</span>(ctx, c, res.Task.TaskID)
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// final.Result has the inlined ToolResult (or final.Error / final.InputRequests)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>} <span style="color:#000;font-weight:bold">else</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// res.Sync is the regular *core.ToolResult
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// MRTR resume
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client.<span style="color:#900;font-weight:bold">UpdateTask</span>(c, core.UpdateTaskRequest{
+</span></span><span style="display:flex;"><span>    TaskID: taskID,
+</span></span><span style="display:flex;"><span>    InputResponses: core.InputResponses{ <span style="color:#d14">&#34;elicit-1&#34;</span>: json.<span style="color:#900;font-weight:bold">RawMessage</span>(<span style="color:#d14">`{...}`</span>) },
+</span></span><span style="display:flex;"><span>    RequestState: requestState,
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Ack-only cancel; observe via WaitForTask
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client.<span style="color:#900;font-weight:bold">CancelTask</span>(c, taskID)
+</span></span></code></pre><p><code>WaitForTask</code> honors the server&rsquo;s <code>pollIntervalMs</code> hint (with a 1s floor and 30s ceiling), and threads <code>requestState</code> echo automatically across iterations. To abort the loop the moment you call <code>CancelTask</code>, derive a child context with <code>context.WithCancel</code>, pass it as the <code>ctx</code> argument, and cancel it after <code>CancelTask</code> returns. <code>WaitForTask</code> exits with <code>context.Canceled</code> rather than waiting for the server to surface <code>cancelled</code> status.</p>
+<h2 id="rolling-upgrade-recipe">Rolling-upgrade recipe <a class="anchor" href="#rolling-upgrade-recipe">¶</a></h2>
+<p>The expected flow for a deployment migrating from v1 to v2 without downtime:</p>
+<ol>
+<li><strong>Server</strong>: install both surfaces side-by-side. Call <code>server.RegisterTasksV1(...)</code> then <code>tasks.Register(...)</code>. v1 clients hit the v1 paths (<code>tasks/result</code>, <code>tasks/list</code>, and <code>tasks/get</code> if no extension is declared — though see the dispatch caveat in the &ldquo;v1 + v2 on the same endpoint&rdquo; section above).</li>
+<li><strong>Clients</strong>: roll out the v2-aware client one cohort at a time. Each upgraded client adds <code>client.WithTasksExtension()</code> and switches to the v2 helpers.</li>
+<li>Once the v1 client population is empty, drop the <code>server.RegisterTasksV1(...)</code> line. Only <code>tasks.Register(...)</code> remains.</li>
+</ol>
+<h2 id="known-behaviours-after-sep-2663-merge">Known behaviours after SEP-2663 merge <a class="anchor" href="#known-behaviours-after-sep-2663-merge">¶</a></h2>
+<p>SEP-2663 was merged Final at spec commit <code>c47bd846</code> on 2026-05-15. The merge picked up several normative clarifications that mcpkit had partially anticipated. The notes below capture how mcpkit lands against each.</p>
+<h3 id="schema-categories-removed-doc-site-only">Schema categories removed (doc-site only) <a class="anchor" href="#schema-categories-removed-doc-site-only">¶</a></h3>
+<p>The spec dropped a set of MDX <code>@category</code> markers (<code>notifications/tasks/status</code>, <code>tasks</code>, <code>tasks/get</code>, <code>tasks/result</code>, <code>tasks/list</code>, <code>tasks/cancel</code>, <code>tasks/input_response</code>) in spec commit <code>304aa7bf</code>. These were documentation-site-only constructs and never appeared as runtime constants in mcpkit. No-op for the implementation; <code>tasks/input_response</code> in particular was a never-shipped method name.</p>
+<h3 id="notificationscancelled-does-not-cancel-tasks">notifications/cancelled does not cancel tasks <a class="anchor" href="#notificationscancelled-does-not-cancel-tasks">¶</a></h3>
+<p>The spec clarified (commits <code>3f33c7d1</code> and <code>46394d21</code>) that <code>notifications/cancelled</code> applies to in-flight <code>tools/call</code> cancellation, not to task lifecycle. v2 task cancellation goes through <code>tasks/cancel</code> (<code>server/tasks_v2.go</code> <code>makeV2CancelHandler</code>); the existing <code>notifications/cancelled</code> handler in <a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a> does not mutate task state. No code change required.</p>
+<h3 id="notificationsprogress-and-notificationsmessage-disallowed-on-tasks">notifications/progress and notifications/message disallowed on tasks <a class="anchor" href="#notificationsprogress-and-notificationsmessage-disallowed-on-tasks">¶</a></h3>
+<p>The spec hardened (commit <code>2dba297b</code>) to: &ldquo;<code>notifications/progress</code> and <code>notifications/message</code> notifications MUST NOT be sent on the <code>subscriptions/listen</code> stream for a task, and are not supported on tasks in general.&rdquo; mcpkit enforces this at the session-notify boundary: the v2 task goroutine wraps its background context with <code>core.ApplySessionNotifyFilter</code> (defined in <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>core/background.go</code></a>) so a tool that calls <code>ToolContext.EmitProgress</code> or <code>BaseContext.EmitLog</code> while running as a task silently no-ops on those two methods. Tool authors do not need to know the rule; the framework drops the emissions.</p>
+<h3 id="tasksget-response-shapes-per-status">tasks/get response shapes per status <a class="anchor" href="#tasksget-response-shapes-per-status">¶</a></h3>
+<p>The spec added (commit <code>b15331ef</code>) five status-specific MUST rules for the <code>tasks/get</code> response shape: <code>working</code> returns the Task, <code>input_required</code> includes <code>inputRequests</code>, <code>completed</code> includes <code>result</code>, <code>cancelled</code> returns the Task, <code>failed</code> includes the error. mcpkit&rsquo;s <code>makeV2GetHandler</code> complies for the in-process execution path. External-backed tools (the planned <code>TaskCallbacks.OnInputResponse</code> extension point) are not yet wired and will need to surface the same fields once that path lands; tracked alongside the existing v2 callbacks work.</p>
+<h3 id="auth-binding-on-every-task-related-request">Auth binding on every task-related request <a class="anchor" href="#auth-binding-on-every-task-related-request">¶</a></h3>
+<p>The spec added (commit <code>527e5c5b</code>) the requirement that servers MUST authenticate and authorize each task-related request. mcpkit binds at two layers: the streamable transport&rsquo;s session-hijack protection binds <code>Claims.Subject</code> at session creation and re-verifies on each POST/GET/DELETE; the task handlers then scope every store lookup to the requesting session via <code>store.Get(taskID, sessionID)</code> / <code>store.Cancel(taskID, sessionID)</code>. Cross-session attempts surface as &ldquo;task not found&rdquo; rather than leaking task existence.</p>
+<h3 id="required-tasks-return--32021-instead-of-silently-downgrading-to-sync">Required-tasks return -32021 instead of silently downgrading to sync <a class="anchor" href="#required-tasks-return--32021-instead-of-silently-downgrading-to-sync">¶</a></h3>
+<p>The spec added the requirement that a server which cannot service a request without returning <code>CreateTaskResult</code> (i.e. a tool with <code>TaskSupport=required</code>) MUST return error <code>-32021</code> (Missing Required Client Capability) with a <code>data.requiredCapabilities</code> payload, rather than silently downgrading. mcpkit&rsquo;s <code>taskV2Middleware</code> now evaluates <code>TaskSupport</code> before checking extension declaration; required tools called by clients that have not declared <code>io.modelcontextprotocol/tasks</code> get <code>-32021</code> with a structured payload. <code>TaskSupport=optional</code> retains the sync-fallback behaviour because the server can still service those without a task. The new error code is exported as <code>core.ErrCodeMissingRequiredClientCapability</code>.</p>
+<h3 id="requeststate-removed-from-the-tasks-v2-wire">requestState removed from the tasks-v2 wire <a class="anchor" href="#requeststate-removed-from-the-tasks-v2-wire">¶</a></h3>
+<p>The merged SEP-2663 dropped the <code>requestState?: string</code> field from the <code>Task</code> base interface and removed the entire &ldquo;Request State Management&rdquo; section. mcpkit&rsquo;s <code>core.DetailedTask</code>, <code>core.UpdateTaskRequest</code>, <code>tasks/get</code> inline param struct, and <code>tasks/cancel</code> inline param struct no longer carry the field; the runtime helpers (<code>v2TaskRuntime.makeRequestState</code> / <code>verifyRequestState</code>) and per-registration signing config (<code>TasksConfig.RequestStateKey</code> / <code>RequestStateTTL</code>) are removed. The client surface drops <code>TaskOptions.RequestState</code>; <code>client.GetTask</code> and <code>client.CancelTask</code> simplify to <code>(c, taskID)</code> signatures, and <code>WaitForTask</code> no longer threads requestState through its poll loop.</p>
+<p>SEP-2322&rsquo;s <code>core.InputRequiredResult.RequestState</code> (the MRTR multi-round-trip surface) is unchanged. The server-wide <code>WithRequestStateSigning</code> option stays — MRTR&rsquo;s dispatcher still uses it via <code>s.dispatcher.mrtr</code> for signing the MRTR round state. The <code>core.SignRequestState</code> / <code>core.VerifyRequestState</code> helpers are retained because <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> reads legacy single-round MRTR tokens with the older payload shape for backward compatibility; that shim is removable once in-flight rounds rotate past.</p>
+<h2 id="reference">Reference <a class="anchor" href="#reference">¶</a></h2>
+<ul>
+<li>SEP-2663 (Tasks Extension): <a href="https://github.com/modelcontextprotocol/specification/pull/2663">https://github.com/modelcontextprotocol/specification/pull/2663</a></li>
+<li>SEP-2322 (MRTR base types): <a href="https://github.com/modelcontextprotocol/specification/pull/2322">https://github.com/modelcontextprotocol/specification/pull/2322</a></li>
+<li>SEP-2575 (per-request capabilities): pattern adopted from spec discussion</li>
+<li>SEP-2243 (Mcp-Name HTTP header): adopted from spec discussion</li>
+<li>Implementation plan + open questions: <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md"><code>SEP_2663_TASKS_CONFORMANCE_PLAN.md</code></a></li>
+<li>v2 example walkthrough: <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks-v2/WALKTHROUGH.md"><code>examples/tasks-v2/WALKTHROUGH.md</code></a></li>
+<li>v2 conformance suite: <a href="https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks">panyam/mcpconformance — <code>src/scenarios/server/tasks/</code></a> (8 ClientScenario classes / ~33 internal checks; upstream Draft PR modelcontextprotocol/conformance#262). Local sentinel for mcpkit-stricter scenarios: <a href="https://github.com/panyam/mcpkit/tree/main/conformance/tasks-v2"><code>conformance/tasks-v2/</code></a>.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

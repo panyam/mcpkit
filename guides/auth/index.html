@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="JWT/JWKS validation, Protected Resource Metadata, OAuth discovery, DCR, and scope step-up.">
+    <title>Auth · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Auth</h1>
+        
+        <p class="lead">JWT/JWKS validation, Protected Resource Metadata, OAuth discovery, DCR, and scope step-up.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/docs/DESIGN.md"><code>ext/auth/docs/DESIGN.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mcp-auth--experimental-features--design">MCP Auth + Experimental Features — Design <a class="anchor" href="#mcp-auth--experimental-features--design">¶</a></h1>
+<h2 id="overview">Overview <a class="anchor" href="#overview">¶</a></h2>
+<p>MCPKit implements the MCP Authorization specification (draft, based on OAuth 2.1 + RFC 9728) for enterprise deployment. This document covers the architecture, protocol flows, and extension/experimental marking system.</p>
+<h2 id="supported-spec-versions">Supported spec versions <a class="anchor" href="#supported-spec-versions">¶</a></h2>
+<p>mcpkit targets the <strong>2025-11-25 MCP Authorization spec</strong> and the in-flight <strong>2026-07-28</strong> draft. The auth-flow shapes from the <strong>2025-03-26 spec</strong> (rootless OAuth metadata, OAuth-endpoint root fallback when no metadata endpoints exist) are intentionally <strong>not supported</strong> — those shapes were removed by the spec itself in 2025-06-18, and implementing them would mean carrying deprecated code paths indefinitely for a tiny pool of servers that haven&rsquo;t tracked the spec for more than a year.</p>
+<p>Concretely:</p>
+<ul>
+<li>mcpkit&rsquo;s client <strong>requires a PRM endpoint</strong> (<code>/.well-known/oauth-protected-resource{path}</code> or <code>/.well-known/oauth-protected-resource</code>). If PRM is missing, <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/discovery.go"><code>ext/auth/discovery.go</code></a> returns a clear <code>PRM endpoint returned 404</code> error — that error is the actionable signal that the server is on the deprecated spec.</li>
+<li>The OAuth-endpoint root fallback (<code>/authorize</code>, <code>/token</code>, <code>/register</code> at server root without metadata discovery) is also unsupported. Same rationale: spec removed it; mcpkit doesn&rsquo;t carry it.</li>
+</ul>
+<p>The conformance audit&rsquo;s two <code>auth/2025-03-26-*</code> scenarios live in <a href="https://github.com/panyam/mcpkit/blob/main/conformance/baseline.yml"><code>conformance/baseline.yml</code></a> as expected-failures and in <a href="https://github.com/panyam/mcpkit/blob/main/conformance/known-gaps.yaml"><code>conformance/known-gaps.yaml</code></a> with this rationale + a tracking link to #451. The upstream audit report (<a href="https://github.com/panyam/mcpkit/blob/main/conformance/UPSTREAM_AUDIT.md"><code>conformance/UPSTREAM_AUDIT.md</code></a>) still shows them as <code>partial</code>; that&rsquo;s correct — we don&rsquo;t pass them, and that&rsquo;s intentional.</p>
+<p>Note: this is distinct from MCP <strong>protocol version</strong> negotiation. mcpkit&rsquo;s <code>server.supportedProtocolVersions</code> includes <code>2024-11-05</code>, <code>2025-03-26</code>, <code>2025-11-25</code>, and <code>2026-07-28</code> — clients on the older protocol version still negotiate successfully. The thing that&rsquo;s unsupported is the <em>auth-flow shape</em> the 2025-03-26 spec mandated, which is independent of the protocol version field.</p>
+<h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
+<ol>
+<li><strong>Core module stays zero-auth-deps</strong> — static bearer token validation works out of the box. JWT/OIDC/OAuth lives in <code>mcpkit/auth</code>, a separate Go sub-module that imports oneauth.</li>
+<li><strong>Additive extensions</strong> — auth is opt-in. Servers without auth config work exactly as before.</li>
+<li><strong>Interface in core, implementation in sub-module</strong> — the core defines contracts (<code>AuthValidator</code>, <code>ClaimsProvider</code>, <code>TokenSource</code>, <code>ExtensionProvider</code>); the auth sub-module provides concrete implementations.</li>
+<li><strong>Thin adapter over oneauth</strong> — <code>mcpkit/auth</code> wraps oneauth&rsquo;s generic OAuth/JWT/OIDC primitives rather than reimplementing them. Only MCP-specific protocol logic (WWW-Authenticate format, PRM orchestration) is implemented from scratch.</li>
+</ol>
+<h2 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  mcpkit (core module, zero auth deps)                           │
+│                                                                 │
+│  INTERFACES:                     TYPES:                         │
+│  ├─ AuthValidator                ├─ Claims                      │
+│  ├─ ClaimsProvider               ├─ AuthError                   │
+│  ├─ TokenSource                  ├─ Extension                   │
+│  └─ ExtensionProvider            └─ Stability (enum)            │
+│                                                                 │
+│  CONCRETE (zero-dep):                                           │
+│  └─ bearerTokenValidator         (existing, unchanged)          │
+├─────────────────────────────────────────────────────────────────┤
+│  mcpkit/auth (sub-module, depends on oneauth)                   │
+│                                                                 │
+│  IMPLEMENTATIONS:                                               │
+│  ├─ JWTValidator        → implements AuthValidator+ClaimsProvider│
+│  ├─ OAuthTokenSource    → implements TokenSource                │
+│  ├─ ClientCredSource    → alias for client.ClientCredentialsSource│
+│  └─ AuthExtension       → implements ExtensionProvider          │
+│                                                                 │
+│  ADAPTERS (wraps oneauth):                                      │
+│  ├─ MountAuth()         → oneauth ProtectedResourceHandler      │
+│  ├─ DiscoverMCPAuth()   → oneauth client.DiscoverAS             │
+│  ├─ RequireScope()      → oneauth core.ContainsScope            │
+│  ├─ RegisterClient      → re-export of client.RegisterClient    │
+│  └─ ValidatePKCES256()  → MCP-specific PKCE S256 check          │
+│                                                                 │
+│  MCP-SPECIFIC (not in oneauth):                                 │
+│  ├─ WWWAuth401/403()    → MCP resource_metadata parameter       │
+│  ├─ ParseWWWAuth()      → client-side header parsing            │
+│  └─ DefaultClientReg()  → MCP-specific DCR defaults             │
+├─────────────────────────────────────────────────────────────────┤
+│  oneauth (external module)                                      │
+│  apiauth.APIAuth, keys.JWKSKeyStore, client.DiscoverAS,         │
+│  client.LoginWithBrowser, client.ClientCredentialsToken,        │
+│  client.RegisterClient, client.ValidateHTTPS, client.ValidateCIMDURL,│
+│  client.ClientCredentialsSource, core.UnionScopes,              │
+│  core.ContainsScope, apiauth.ProtectedResourceHandler, etc.     │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="why-claimsclaimsprovider-live-in-mcpkit-core">Why Claims/ClaimsProvider live in mcpkit core <a class="anchor" href="#why-claimsclaimsprovider-live-in-mcpkit-core">¶</a></h3>
+<p>They&rsquo;re the contract between the transport layer and tool handlers. oneauth has its own scattered identity model (<code>userID</code>, <code>scopes</code>, <code>customClaims</code> in separate context keys). <code>mcpkit.Claims</code> is a unified struct that adapters map into. If it lived in oneauth, mcpkit core would depend on oneauth, violating the zero-deps principle.</p>
+<h3 id="authorization-vs-www-authenticate">Authorization vs WWW-Authenticate <a class="anchor" href="#authorization-vs-www-authenticate">¶</a></h3>
+<ul>
+<li><code>Authorization: Bearer &lt;token&gt;</code> — <strong>client → server</strong> header: &ldquo;here&rsquo;s my credential&rdquo;</li>
+<li><code>WWW-Authenticate: Bearer resource_metadata=&quot;...&quot;, scope=&quot;...&quot;</code> — <strong>server → client</strong> header on 401/403: &ldquo;you need auth, here&rsquo;s how to get it&rdquo;</li>
+</ul>
+<p>Standard <code>WWW-Authenticate: Bearer</code> is defined in RFC 6750. MCP adds a non-standard <code>resource_metadata=</code> parameter pointing to the Protected Resource Metadata endpoint — this is MCP protocol vocabulary. The builders in <code>mcpkit/auth</code> emit this MCP-specific format; the parser is also MCP-specific (extracts <code>resource_metadata</code>).</p>
+<h2 id="protocol-flows">Protocol Flows <a class="anchor" href="#protocol-flows">¶</a></h2>
+<h3 id="flow-a-server-side-jwt-validation-every-authenticated-request">Flow A: Server-side JWT validation (every authenticated request) <a class="anchor" href="#flow-a-server-side-jwt-validation-every-authenticated-request">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client
+    participant T as Transport Layer
+    participant CA as CheckAuth
+    participant JV as JWTValidator (mcpkit/auth)
+    participant OA as oneauth
+
+    C-&gt;&gt;T: POST /mcp, Authorization: Bearer jwt
+    T-&gt;&gt;CA: CheckAuth(r)
+    CA-&gt;&gt;JV: Validate(r)
+    JV-&gt;&gt;OA: jwt.Parse(jwt, jwksKeyFunc)
+    OA--&gt;&gt;JV: JWKS kid lookup, verify
+    Note right of JV: sig, iss, aud, exp OK&lt;br/&gt;check RequiredScopes&lt;br/&gt;(core.ContainsAllScopes)
+    JV--&gt;&gt;CA: nil (success)
+    CA-&gt;&gt;JV: Claims(r)
+    JV--&gt;&gt;CA: *Claims [Sub, Iss, Aud, Scopes]
+    CA--&gt;&gt;T: (*Claims, nil)
+    Note over T: contextWithSession(ctx, notify, logLevel, claims)&lt;br/&gt;dispatchWith(dispatcher, ctx, req)
+    Note over T: Tool handler can call:&lt;br/&gt;mcpkit.AuthClaims(ctx)&lt;br/&gt;mcpkit.HasScope(ctx, &quot;admin:write&quot;)&lt;br/&gt;auth.RequireScope(ctx, &quot;admin:write&quot;)
+</code></pre>
+<h3 id="flow-b-auth-failure-with-www-authenticate-401">Flow B: Auth failure with WWW-Authenticate (401) <a class="anchor" href="#flow-b-auth-failure-with-www-authenticate-401">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client
+    participant T as Transport Layer
+    participant CA as CheckAuth
+    participant JV as JWTValidator
+
+    C-&gt;&gt;T: POST /mcp (no token)
+    T-&gt;&gt;CA: CheckAuth(r)
+    CA-&gt;&gt;JV: Validate(r)
+    JV--&gt;&gt;CA: *AuthError (Code:401, WWWAuthenticate:&lt;br/&gt;Bearer resource_metadata=&quot;.../.well-known/oauth-protected-resource/mcp&quot;)
+    CA--&gt;&gt;T: (nil, *AuthError)
+    Note over T: writeAuthError(w, err)&lt;br/&gt;Set WWW-Authenticate header&lt;br/&gt;http.Error(w, 401)
+    T--&gt;&gt;C: HTTP 401&lt;br/&gt;WWW-Authenticate: Bearer resource_metadata=&quot;...&quot;
+</code></pre>
+<h3 id="flow-c-client-side-oauth-oauthtokensource-interactive">Flow C: Client-side OAuth (OAuthTokenSource, interactive) <a class="anchor" href="#flow-c-client-side-oauth-oauthtokensource-interactive">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant MC as MCP Client
+    participant OTS as OAuthTokenSource (mcpkit/auth)
+    participant OA as oneauth
+    participant AS as External AS
+
+    MC-&gt;&gt;OTS: Token()
+    Note right of OTS: no cached token; acquisition is LAZY —&lt;br/&gt;Token() returns core.ErrNoTokenYet until a&lt;br/&gt;401/403 challenge arms it via TokenForScopes&lt;br/&gt;(issue 818). The steps below run on the&lt;br/&gt;armed call, so the challenge scope wins.
+
+    rect rgb(240, 240, 255)
+        Note over OTS: DiscoverMCPAuth(serverURL)
+        Note over OTS: 1. GET PRM document -&gt; authorization_servers + scopes_supported&lt;br/&gt;(discovery resolves endpoints only; it no longer pins scope)
+    end
+
+    OTS-&gt;&gt;OA: client.DiscoverAS(issuerURL)
+    OA-&gt;&gt;AS: GET /.well-known/oauth-authorization-server
+    AS--&gt;&gt;OA: token_endpoint, authorization_endpoint, ...
+    OA--&gt;&gt;OTS: ASMetadata
+
+    OTS-&gt;&gt;OA: authClient.LoginWithBrowser(cfg)
+    Note right of OA: 1. Generate PKCE verifier&lt;br/&gt;2. Start localhost:PORT&lt;br/&gt;3. Open browser to AS /authorize
+    OA-&gt;&gt;AS: Browser redirect to /authorize
+    Note right of AS: 4. User authenticates
+    AS--&gt;&gt;OA: Redirect to localhost:PORT/callback?code=XYZ
+    OA-&gt;&gt;AS: POST /token (code + code_verifier + resource)
+    AS--&gt;&gt;OA: access_token, refresh_token
+    OA--&gt;&gt;OTS: ServerCredential
+
+    OTS--&gt;&gt;MC: &quot;Bearer access_token&quot;
+    Note over MC,OTS: Subsequent calls: cached token,&lt;br/&gt;refreshes if expired
+</code></pre>
+<h3 id="flow-d-client-credentials-clientcredentialssource-machine-to-machine">Flow D: Client Credentials (ClientCredentialsSource, machine-to-machine) <a class="anchor" href="#flow-d-client-credentials-clientcredentialssource-machine-to-machine">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant A as MCP Agent
+    participant CS as ClientCredSource (mcpkit/auth)
+    participant OA as oneauth
+    participant AS as External AS
+
+    A-&gt;&gt;CS: Token()
+    CS-&gt;&gt;OA: authClient.ClientCredentialsToken(id, secret, scopes)
+    OA-&gt;&gt;AS: POST /token&lt;br/&gt;grant_type=client_credentials&lt;br/&gt;client_id=..., client_secret=..., scope=...
+    AS--&gt;&gt;OA: access_token, expires_in
+    OA--&gt;&gt;CS: ServerCredential
+    CS--&gt;&gt;A: &quot;Bearer token&quot;
+</code></pre>
+<h3 id="flow-e-scope-step-up-403--re-auth-with-broader-scopes">Flow E: Scope step-up (403 → re-auth with broader scopes) <a class="anchor" href="#flow-e-scope-step-up-403--re-auth-with-broader-scopes">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client
+    participant S as MCP Server
+    participant TH as Tool Handler
+
+    C-&gt;&gt;S: tools/call &quot;admin-tool&quot;&lt;br/&gt;Authorization: Bearer (scope=read)
+    Note right of S: CheckAuth OK (token valid)
+    S-&gt;&gt;TH: dispatch to handler
+    Note right of TH: auth.RequireScope(ctx, &quot;admin:write&quot;)&lt;br/&gt;HasScope(ctx, &quot;admin:write&quot;) = false
+    TH--&gt;&gt;S: *AuthError (Code:403, WWWAuthenticate:&lt;br/&gt;Bearer error=&quot;insufficient_scope&quot;, scope=&quot;admin:write&quot;)
+    S--&gt;&gt;C: JSON-RPC result with isError:true&lt;br/&gt;ErrorResult(&quot;insufficient_scope: admin:write&quot;)
+    Note left of C: Client re-authenticates with&lt;br/&gt;scope=read+admin:write&lt;br/&gt;Retries with broader-scoped token
+</code></pre>
+<h2 id="extension-and-experimental-marking">Extension and Experimental Marking <a class="anchor" href="#extension-and-experimental-marking">¶</a></h2>
+<p>MCPKit uses a dual-layer system for marking feature maturity:</p>
+<h3 id="extension-level-in-initialize-response">Extension-level (in initialize response) <a class="anchor" href="#extension-level-in-initialize-response">¶</a></h3>
+<p>Extensions declare their spec version and stability:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> Extension <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    ID          <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;id&#34;`</span>          <span style="color:#998;font-style:italic">// e.g. &#34;io.mcpkit/auth&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    SpecVersion <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;specVersion&#34;`</span> <span style="color:#998;font-style:italic">// e.g. &#34;2025-06-18-draft&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Stability   Stability      <span style="color:#d14">`json:&#34;stability&#34;`</span>   <span style="color:#998;font-style:italic">// experimental, stable, deprecated
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Config      <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any <span style="color:#d14">`json:&#34;config,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Advertised in <code>initialize</code> response:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;capabilities&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;tools&#34;</span>: {},
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;extensions&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;io.mcpkit/auth&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#000080">&#34;specVersion&#34;</span>: <span style="color:#d14">&#34;2025-06-18-draft&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#000080">&#34;stability&#34;</span>: <span style="color:#d14">&#34;experimental&#34;</span>
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The <code>ExtensionProvider</code> interface allows sub-modules to declare their extension without the core module knowing about them:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ExtensionProvider <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Extension</span>() Extension
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="tool-level-in-toolslist-resourceslist-promptslist">Tool-level (in tools/list, resources/list, prompts/list) <a class="anchor" href="#tool-level-in-toolslist-resourceslist-promptslist">¶</a></h3>
+<p>Individual tools, resources, and prompts can be annotated:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ToolDef <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Name        <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;name&#34;`</span>
+</span></span><span style="display:flex;"><span>    Description <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;description&#34;`</span>
+</span></span><span style="display:flex;"><span>    InputSchema any            <span style="color:#d14">`json:&#34;inputSchema&#34;`</span>
+</span></span><span style="display:flex;"><span>    Annotations <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any <span style="color:#d14">`json:&#34;annotations,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Convention: <code>{&quot;experimental&quot;: true}</code> marks an individual item.</p>
+<h3 id="sub-module-advantage">Sub-module advantage <a class="anchor" href="#sub-module-advantage">¶</a></h3>
+<p><code>mcpkit/auth</code> is a separate Go module. It implements <code>ExtensionProvider</code> and declares its own stability. Users who <code>go get mcpkit/auth</code> explicitly opt into experimental auth. The extension metadata tells clients the spec version and stability level.</p>
+<h2 id="core-types">Core Types <a class="anchor" href="#core-types">¶</a></h2>
+<h3 id="interfaces-in-mcpkit-core">Interfaces (in mcpkit core) <a class="anchor" href="#interfaces-in-mcpkit-core">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// AuthValidator validates an HTTP request (existing, unchanged).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> AuthValidator <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Validate</span>(r <span style="color:#000;font-weight:bold">*</span>http.Request) <span style="color:#458;font-weight:bold">error</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ClaimsProvider is optionally implemented by AuthValidators that extract identity.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> ClaimsProvider <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Claims</span>(r <span style="color:#000;font-weight:bold">*</span>http.Request) <span style="color:#000;font-weight:bold">*</span>Claims
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// TokenSource provides access tokens for the MCP client.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> TokenSource <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Token</span>() (<span style="color:#458;font-weight:bold">string</span>, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ExtensionProvider declares a protocol extension with maturity metadata.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> ExtensionProvider <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Extension</span>() Extension
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="types-in-mcpkit-core">Types (in mcpkit core) <a class="anchor" href="#types-in-mcpkit-core">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> Claims <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Subject  <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;sub&#34;`</span>
+</span></span><span style="display:flex;"><span>    Issuer   <span style="color:#458;font-weight:bold">string</span>         <span style="color:#d14">`json:&#34;iss&#34;`</span>
+</span></span><span style="display:flex;"><span>    Audience []<span style="color:#458;font-weight:bold">string</span>       <span style="color:#d14">`json:&#34;aud&#34;`</span>
+</span></span><span style="display:flex;"><span>    Scopes   []<span style="color:#458;font-weight:bold">string</span>       <span style="color:#d14">`json:&#34;scope&#34;`</span>
+</span></span><span style="display:flex;"><span>    Extra    <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any <span style="color:#d14">`json:&#34;extra,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> AuthError <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Code            <span style="color:#458;font-weight:bold">int</span>
+</span></span><span style="display:flex;"><span>    Message         <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>    WWWAuthenticate <span style="color:#458;font-weight:bold">string</span> <span style="color:#998;font-style:italic">// optional WWW-Authenticate header value
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span></code></pre><h3 id="implementations-in-mcpkitauth">Implementations (in mcpkit/auth) <a class="anchor" href="#implementations-in-mcpkitauth">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Implements</th>
+<th>Wraps (oneauth)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JWTValidator</code></td>
+<td><code>AuthValidator</code> + <code>ClaimsProvider</code></td>
+<td><code>jwt.Parse</code> with JWKS keyfunc (<code>JWKSKeyStore.GetKeyByKid</code>)</td>
+</tr>
+<tr>
+<td><code>OAuthTokenSource</code></td>
+<td><code>TokenSource</code></td>
+<td><code>client.LoginWithBrowser</code> + <code>client.DiscoverAS</code></td>
+</tr>
+<tr>
+<td><code>ClientCredentialsTokenSource</code></td>
+<td><code>TokenSource</code> + <code>ScopeAwareTokenSource</code></td>
+<td><code>client.ClientCredentialsSource</code> (basic and <code>private_key_jwt</code> per SEP-1046)</td>
+</tr>
+<tr>
+<td><code>EnterpriseManagedTokenSource</code></td>
+<td><code>TokenSource</code> + <code>ScopeAwareTokenSource</code></td>
+<td><code>client.TokenExchange</code> (RFC 8693) → <code>client.JwtBearerGrant</code> (RFC 7523 §2.1), two-stage chain per SEP-990</td>
+</tr>
+<tr>
+<td><code>AuthExtension</code></td>
+<td><code>ExtensionProvider</code></td>
+<td>(none — declares MCP auth extension metadata)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="server-usage">Server Usage <a class="anchor" href="#server-usage">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/auth&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Create JWT validator
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>validator <span style="color:#000;font-weight:bold">:=</span> auth.<span style="color:#900;font-weight:bold">NewJWTValidator</span>(
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;https://auth.example.com/.well-known/jwks.json&#34;</span>,  <span style="color:#998;font-style:italic">// JWKS URL
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#d14">&#34;https://auth.example.com&#34;</span>,                         <span style="color:#998;font-style:italic">// expected issuer
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#d14">&#34;https://mcp.example.com&#34;</span>,                          <span style="color:#998;font-style:italic">// expected audience (RFC 8707)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#d14">&#34;https://mcp.example.com/.well-known/oauth-protected-resource/mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Create server with auth
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewServer</span>(
+</span></span><span style="display:flex;"><span>    mcpkit.ServerInfo{Name: <span style="color:#d14">&#34;my-mcp&#34;</span>, Version: <span style="color:#d14">&#34;1.0&#34;</span>},
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithAuth</span>(validator),
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithExtension</span>(auth.AuthExtension{}),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Mount MCP handler + auth endpoints
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>mux <span style="color:#000;font-weight:bold">:=</span> http.<span style="color:#900;font-weight:bold">NewServeMux</span>()
+</span></span><span style="display:flex;"><span>mux.<span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;/mcp&#34;</span>, srv.<span style="color:#900;font-weight:bold">Handler</span>(mcpkit.<span style="color:#900;font-weight:bold">WithStreamableHTTP</span>(<span style="color:#000;font-weight:bold">true</span>)))
+</span></span><span style="display:flex;"><span>auth.<span style="color:#900;font-weight:bold">MountAuth</span>(mux, auth.AuthConfig{
+</span></span><span style="display:flex;"><span>    ResourceURI:          <span style="color:#d14">&#34;https://mcp.example.com&#34;</span>,
+</span></span><span style="display:flex;"><span>    AuthorizationServers: []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;https://auth.example.com&#34;</span>},
+</span></span><span style="display:flex;"><span>    ScopesSupported:      []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;tools:read&#34;</span>, <span style="color:#d14">&#34;tools:call&#34;</span>, <span style="color:#d14">&#34;admin:write&#34;</span>},
+</span></span><span style="display:flex;"><span>    MCPPath:              <span style="color:#d14">&#34;/mcp&#34;</span>,
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><h2 id="client-usage">Client Usage <a class="anchor" href="#client-usage">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Static bearer token (simple)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewClient</span>(serverURL, info,
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithClientBearerToken</span>(<span style="color:#d14">&#34;my-token&#34;</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// OAuth interactive (browser-based)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewClient</span>(serverURL, info,
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithTokenSource</span>(auth.<span style="color:#900;font-weight:bold">NewOAuthTokenSource</span>(auth.OAuthConfig{
+</span></span><span style="display:flex;"><span>        ServerURL: serverURL,
+</span></span><span style="display:flex;"><span>        ClientID:  <span style="color:#d14">&#34;my-client&#34;</span>,
+</span></span><span style="display:flex;"><span>        Scopes:    []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;tools:call&#34;</span>},
+</span></span><span style="display:flex;"><span>    })),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Machine-to-machine (client credentials)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewClient</span>(serverURL, info,
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithTokenSource</span>(auth.<span style="color:#900;font-weight:bold">NewClientCredentialsSource</span>(auth.ClientCredConfig{
+</span></span><span style="display:flex;"><span>        TokenEndpoint: <span style="color:#d14">&#34;https://auth.example.com/token&#34;</span>,
+</span></span><span style="display:flex;"><span>        ClientID:      <span style="color:#d14">&#34;service-account&#34;</span>,
+</span></span><span style="display:flex;"><span>        ClientSecret:  <span style="color:#d14">&#34;secret&#34;</span>,
+</span></span><span style="display:flex;"><span>        Scopes:        []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;tools:call&#34;</span>},
+</span></span><span style="display:flex;"><span>    })),
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><h2 id="spec-compliance-checklist-mcp-2025-11-25">Spec Compliance Checklist (MCP 2025-11-25) <a class="anchor" href="#spec-compliance-checklist-mcp-2025-11-25">¶</a></h2>
+<p>Source: <a href="https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization">https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization</a></p>
+<h3 id="inline-spec-marker-convention-issue-504">Inline spec-marker convention (issue 504) <a class="anchor" href="#inline-spec-marker-convention-issue-504">¶</a></h3>
+<p>Every ext/auth site that implements a spec-mandated clause carries an inline<br />
+comment citing the clause, in one of three forms:</p>
+<ul>
+<li><code>// RFC NNNN §X.Y — …</code> for a consumed RFC (7591 DCR, 8414 AS metadata,<br />
+8707 resource indicators, 9068 JWT access tokens, 9207 iss, 9728 PRM, …)</li>
+<li><code>// MCP-Auth §X.Y — …</code> for the MCP authorization spec (§C6-style checklist<br />
+letters allowed)</li>
+<li><code>// SEP-NNNN — …</code> for an MCP SEP</li>
+</ul>
+<p>The markers travel with the code, so <code>grep -rE &quot;// (RFC|MCP-Auth|SEP-) [0-9]&quot; ext/auth/</code> reconstructs the clause→site mapping that<br />
+<a href="https://github.com/panyam/mcpkit/blob/main/conformance/AUTH_SPEC_COVERAGE.md"><code>conformance/AUTH_SPEC_COVERAGE.md</code></a><br />
+records by <code>file:line</code> (which drifts). <code>just check-auth-markers</code> asserts that<br />
+every matrix row citing an ext/auth site has its inline marker — so the matrix<br />
+stays honest as the code moves. When you add a matrix row, add the marker;<br />
+when you touch a spec-mandated site, cite the clause inline.</p>
+<h3 id="server-side-mcp-server-as-oauth-resource-server">Server-side (MCP server as OAuth resource server) <a class="anchor" href="#server-side-mcp-server-as-oauth-resource-server">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Requirement</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S1</td>
+<td>Implement OAuth 2.0 Protected Resource Metadata (RFC 9728)</td>
+<td>Phase 2</td>
+<td><code>MountAuth</code> via oneauth <code>NewProtectedResourceHandler</code></td>
+</tr>
+<tr>
+<td>S2</td>
+<td>PRM document MUST include <code>authorization_servers</code> field</td>
+<td>Phase 2</td>
+<td>Via <code>AuthConfig.AuthorizationServers</code></td>
+</tr>
+<tr>
+<td>S3</td>
+<td>Implement at least one PRM discovery: WWW-Authenticate header OR well-known URI</td>
+<td>Phase 2</td>
+<td>Both: <code>JWTValidator</code> returns WWW-Authenticate, <code>MountAuth</code> serves well-known</td>
+</tr>
+<tr>
+<td>S4</td>
+<td>SHOULD include <code>scope</code> in WWW-Authenticate header</td>
+<td>Phase 2</td>
+<td><code>WWWAuth401(url, scopes...)</code></td>
+</tr>
+<tr>
+<td>S5</td>
+<td>Validate access tokens per OAuth 2.1 Section 5.2</td>
+<td>Done</td>
+<td><code>JWTValidator</code> uses <code>jwt.Parse</code> with JWKS keyfunc for kid-based key lookup</td>
+</tr>
+<tr>
+<td>S6</td>
+<td>MUST validate tokens were issued specifically for this server (audience per RFC 8707)</td>
+<td>Phase 2</td>
+<td>oneauth <code>JWTAudience</code> field + <code>matchesAudience</code> (array-aware)</td>
+</tr>
+<tr>
+<td>S7</td>
+<td>Invalid/expired tokens → HTTP 401</td>
+<td>Done</td>
+<td><code>CheckAuth</code> + <code>writeAuthError</code></td>
+</tr>
+<tr>
+<td>S8</td>
+<td>MUST NOT accept or transit tokens from other issuers</td>
+<td>Phase 2</td>
+<td>Issuer check in <code>JWTValidator</code></td>
+</tr>
+<tr>
+<td>S9</td>
+<td>MUST NOT pass through client tokens to upstream services</td>
+<td>N/A</td>
+<td>Application responsibility</td>
+</tr>
+<tr>
+<td>S10</td>
+<td>Insufficient scope → HTTP 403 with <code>error=&quot;insufficient_scope&quot;</code></td>
+<td>Phase 2</td>
+<td><code>RequireScope</code> returns <code>AuthError{Code:403, WWWAuthenticate: WWWAuth403(...)}</code></td>
+</tr>
+<tr>
+<td>S11</td>
+<td>403 SHOULD include <code>scope</code>, <code>resource_metadata</code>, <code>error_description</code></td>
+<td>Phase 2</td>
+<td><code>WWWAuth403</code> builder</td>
+</tr>
+<tr>
+<td>S12</td>
+<td>MUST use <code>Authorization: Bearer</code> header (not query string)</td>
+<td>Done</td>
+<td><code>bearerTokenValidator</code> + <code>JWTValidator</code> read header only</td>
+</tr>
+<tr>
+<td>S13</td>
+<td>Auth MUST be included in every HTTP request (even same session)</td>
+<td>Done</td>
+<td>Both transports call <code>CheckAuth</code> on every request</td>
+</tr>
+</tbody>
+</table>
+<h3 id="client-side-mcp-client-as-oauth-client">Client-side (MCP client as OAuth client) <a class="anchor" href="#client-side-mcp-client-as-oauth-client">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Requirement</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td>MUST support PRM discovery via both WWW-Authenticate header and well-known URI</td>
+<td>Done</td>
+<td><code>DiscoverMCPAuth</code> — probes server, parses header, falls back to well-known</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>MUST use resource_metadata from WWW-Authenticate when present, fallback to well-known</td>
+<td>Done</td>
+<td><code>DiscoverMCPAuth</code> step 2-3</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>Well-known fallback: try path-based first, then root</td>
+<td>Done</td>
+<td><code>DiscoverMCPAuth</code> — <code>/.well-known/oauth-protected-resource/&lt;path&gt;</code> then root</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>MUST support both OAuth AS metadata (RFC 8414) and OIDC discovery</td>
+<td>Done</td>
+<td>oneauth <code>client.DiscoverAS</code> with full fallback chain</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>AS metadata fallback chain (3 URLs for path, 2 for no-path)</td>
+<td>Done</td>
+<td>oneauth <code>client.DiscoverAS</code></td>
+</tr>
+<tr>
+<td>C6</td>
+<td>Client registration priority: pre-registered &gt; CIMD &gt; DCR &gt; prompt user</td>
+<td>Done</td>
+<td><code>OAuthTokenSource.resolveClientID()</code></td>
+</tr>
+<tr>
+<td>C7</td>
+<td>SHOULD support Client ID Metadata Documents</td>
+<td>Done</td>
+<td><code>OAuthTokenSource.ClientMetadataURL</code> + <code>client.ValidateCIMDURL</code> (oneauth)</td>
+</tr>
+<tr>
+<td>C8</td>
+<td>CIMD: client_id URL MUST use https, contain path, match document URL</td>
+<td>Done</td>
+<td><code>client.ValidateCIMDURL</code> (oneauth/client/validation.go)</td>
+</tr>
+<tr>
+<td>C9</td>
+<td>MAY support Dynamic Client Registration (RFC 7591)</td>
+<td>Done</td>
+<td><code>client.RegisterClient</code> (oneauth) + <code>OAuthTokenSource.EnableDCR</code></td>
+</tr>
+<tr>
+<td>C10</td>
+<td>MUST implement PKCE with S256</td>
+<td>Done</td>
+<td>oneauth <code>LoginWithBrowser</code> uses S256 PKCE</td>
+</tr>
+<tr>
+<td>C11</td>
+<td>MUST verify PKCE support in AS metadata (<code>code_challenge_methods_supported</code>)</td>
+<td>Done</td>
+<td><code>ValidatePKCES256</code> in <code>token_source.go</code></td>
+</tr>
+<tr>
+<td>C12</td>
+<td>If <code>code_challenge_methods_supported</code> absent → MUST refuse to proceed</td>
+<td>Done</td>
+<td><code>ValidatePKCES256</code> returns error</td>
+</tr>
+<tr>
+<td>C13</td>
+<td>MUST include <code>resource</code> parameter in both auth and token requests (RFC 8707)</td>
+<td>Done</td>
+<td><code>BrowserLoginConfig.Resource = ServerURL</code></td>
+</tr>
+<tr>
+<td>C14</td>
+<td>MUST send <code>resource</code> parameter regardless of AS support</td>
+<td>Done</td>
+<td>Always set in <code>OAuthTokenSource.Token()</code></td>
+</tr>
+<tr>
+<td>C15</td>
+<td>MUST use <code>Authorization: Bearer</code> header (not query string)</td>
+<td>Done</td>
+<td><code>setAuthHeader</code> in client transports</td>
+</tr>
+<tr>
+<td>C16</td>
+<td>Auth MUST be included in every HTTP request</td>
+<td>Done</td>
+<td>Both client transports inject on every call/notify</td>
+</tr>
+<tr>
+<td>C17</td>
+<td>MUST NOT send tokens to servers other than the intended audience</td>
+<td>Done</td>
+<td>Token bound to specific <code>OAuthTokenSource.ServerURL</code></td>
+</tr>
+<tr>
+<td>C18</td>
+<td>Scope selection: use WWW-Authenticate scope &gt; scopes_supported &gt; omit</td>
+<td>Done</td>
+<td>Lazy acquisition (issue 818): <code>OAuthTokenSource.Token()</code> defers with <code>core.ErrNoTokenYet</code> until a 401/403 challenge arms it via <code>TokenForScopes</code>, so the per-operation challenge scope wins; falls back to <code>info.PRM.ScopesSupported</code> only when the challenge carries no <code>scope=</code>; omits when both empty</td>
+</tr>
+<tr>
+<td>C19</td>
+<td>SHOULD implement step-up auth (re-auth on 403 insufficient_scope)</td>
+<td>Done</td>
+<td><code>doWithAuthRetry</code> + <code>ScopeAwareTokenSource.TokenForScopes</code> in client transport</td>
+</tr>
+<tr>
+<td>C20</td>
+<td>SHOULD implement retry limits for scope step-up</td>
+<td>Done</td>
+<td>Max 1 retry per status code (401 + 403) in <code>doWithAuthRetry</code></td>
+</tr>
+<tr>
+<td>C21</td>
+<td>SHOULD use and verify state parameters</td>
+<td>Done</td>
+<td>oneauth <code>LoginWithBrowser</code> generates random state</td>
+</tr>
+<tr>
+<td>C22</td>
+<td>MUST have redirect URIs registered with AS</td>
+<td>Done</td>
+<td>Via CIMD or DCR</td>
+</tr>
+<tr>
+<td>C23</td>
+<td>Secure token storage</td>
+<td>Done</td>
+<td>oneauth <code>CredentialStore</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="security-requirements">Security requirements <a class="anchor" href="#security-requirements">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Requirement</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>X1</td>
+<td>All AS endpoints MUST be HTTPS</td>
+<td>Done</td>
+<td><code>client.ValidateHTTPS</code> (oneauth/client/validation.go, localhost exempt)</td>
+</tr>
+<tr>
+<td>X2</td>
+<td>Redirect URIs MUST be localhost or HTTPS</td>
+<td>Done</td>
+<td>oneauth <code>LoginWithBrowser</code> uses localhost</td>
+</tr>
+<tr>
+<td>X3</td>
+<td>Refresh token rotation for public clients</td>
+<td>Done</td>
+<td>AS responsibility, client stores new tokens via <code>CredentialStore</code></td>
+</tr>
+<tr>
+<td>X4</td>
+<td>Short-lived access tokens</td>
+<td>N/A</td>
+<td>AS configuration</td>
+</tr>
+<tr>
+<td>X5</td>
+<td>Secure token storage</td>
+<td>Done</td>
+<td>oneauth <code>CredentialStore</code> (filesystem)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="oneauth-integration-map">oneauth Integration Map <a class="anchor" href="#oneauth-integration-map">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>mcpkit/auth component</th>
+<th>oneauth function</th>
+<th>oneauth file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JWTValidator.Validate</td>
+<td><code>jwt.Parse</code> + <code>keys.JWKSKeyStore.GetKeyByKid</code></td>
+<td><code>keys/jwks_keystore.go</code></td>
+</tr>
+<tr>
+<td>JWTValidator (keys)</td>
+<td><code>keys.NewJWKSKeyStore</code></td>
+<td><code>keys/jwks_keystore.go</code></td>
+</tr>
+<tr>
+<td>MountAuth (PRM)</td>
+<td><code>apiauth.NewProtectedResourceHandler</code></td>
+<td><code>apiauth/protected_resource.go</code></td>
+</tr>
+<tr>
+<td>MountAuth (AS metadata)</td>
+<td><code>apiauth.NewASMetadataHandler</code></td>
+<td><code>apiauth/as_metadata.go</code></td>
+</tr>
+<tr>
+<td>RequireScope</td>
+<td><code>core.ContainsScope</code></td>
+<td><code>core/scopes.go</code></td>
+</tr>
+<tr>
+<td>OAuthTokenSource (discovery)</td>
+<td><code>client.DiscoverAS</code></td>
+<td><code>client/discovery.go</code></td>
+</tr>
+<tr>
+<td>OAuthTokenSource (auth)</td>
+<td><code>client.AuthClient.LoginWithBrowser</code></td>
+<td><code>client/browser_login.go</code></td>
+</tr>
+<tr>
+<td>ClientCredentialsSource</td>
+<td><code>client.AuthClient.ClientCredentialsToken</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client/client.go</code></a></td>
+</tr>
+<tr>
+<td>JWT minting (tests)</td>
+<td><code>apiauth.CreateAccessToken</code></td>
+<td><code>apiauth/auth.go</code></td>
+</tr>
+<tr>
+<td>Introspection (optional)</td>
+<td><code>apiauth.IntrospectionValidator</code></td>
+<td><code>apiauth/introspection_client.go</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="file-layout">File Layout <a class="anchor" href="#file-layout">¶</a></h2>
+<pre><code>mcpkit/
+  auth.go                   # Claims, ClaimsProvider, TokenSource, Extension, Stability, ExtensionProvider
+  server.go                 # AuthError (evolved), CheckAuth (evolved), writeAuthError, WithExtension
+  logging.go                # sessionCtx.claims, contextWithSession (evolved)
+  transport.go              # Auth check on SSE GET (gap fix)
+  streamable_transport.go   # Auth check on DELETE (gap fix)
+  dispatch.go               # Extensions in handleInitialize
+  tool.go                   # Annotations on ToolDef
+  resource.go               # Annotations on ResourceDef, ResourceTemplate
+  prompt.go                 # Annotations on PromptDef
+  client.go                 # TokenSource, WithClientBearerToken, WithTokenSource, header injection
+  auth/
+    go.mod                  # github.com/panyam/mcpkit/auth
+    extension.go            # AuthExtension (ExtensionProvider)
+    jwt_validator.go        # JWTValidator (AuthValidator + ClaimsProvider)
+    server_auth.go          # MountAuth, AuthConfig
+    www_authenticate.go     # WWWAuth401, WWWAuth403, ParseWWWAuthenticate
+    scopes.go               # RequireScope
+    token_source.go         # OAuthTokenSource, ClientCredentialsSource
+    discovery.go            # DiscoverMCPAuth, MCPAuthInfo
+  tests/
+    e2e/                    # E2E auth tests (separate Go module)
+      testenv_test.go       # TestEnv: oneauth TestAuthServer + mcpkit MCP server
+      jwt_validation_test.go # 8 tests: valid, expired, wrong iss/aud, tampered
+      transport_auth_test.go # 5 tests: Streamable + SSE auth enforcement
+      scope_test.go         # 4 tests: RequireScope allowed/denied
+      prm_test.go           # 3 tests: PRM well-known endpoints
+      www_authenticate_test.go # 3 tests: 401/403 header format
+    keycloak/               # Keycloak interop tests (separate Go module)
+      realm.json            # mcpkit-test realm (RS256, 2 clients, test user)
+      interop_test.go       # 7 tests: Keycloak JWT → mcpkit JWTValidator
+</code></pre>
+<h2 id="testing">Testing <a class="anchor" href="#testing">¶</a></h2>
+<p>Auth is tested at three levels:</p>
+<ol>
+<li><strong>Unit tests</strong> (<code>auth_test.go</code>, <code>auth/www_authenticate_test.go</code>) — mock validators, claims propagation, header format</li>
+<li><strong>E2E tests</strong> (<code>tests/e2e/</code>) — real oneauth AS (in-process via <code>testutil.TestAuthServer</code>) + real mcpkit MCP server with JWTValidator. RS256 JWTs validated through JWKS. 22 tests covering JWT validation, transport auth, scopes, PRM, WWW-Authenticate.</li>
+<li><strong>Keycloak interop</strong> (<code>tests/keycloak/</code>) — real Keycloak instance (Docker) issuing tokens validated by mcpkit. 7 tests. Skips gracefully without Docker.</li>
+</ol>
+<h3 id="scope-format-compatibility">Scope format compatibility <a class="anchor" href="#scope-format-compatibility">¶</a></h3>
+<p>JWTValidator reads scopes from both formats:</p>
+<ul>
+<li><code>&quot;scopes&quot;: [&quot;read&quot;, &quot;write&quot;]</code> — oneauth array format</li>
+<li><code>&quot;scope&quot;: &quot;read write&quot;</code> — Keycloak/RFC 6749 space-delimited string</li>
+</ul>
+<p>This was discovered during Keycloak interop testing (oneauth#68).</p>
+<h3 id="jwt-algorithm-performance">JWT algorithm performance <a class="anchor" href="#jwt-algorithm-performance">¶</a></h3>
+<p>MCPKit&rsquo;s JWTValidator supports any algorithm the JWKS key store provides (RS256, ES256, EdDSA, etc.). For new deployments, <strong>ES256 (ECDSA P-256) is recommended</strong> over RS256 (RSA-2048) for three reasons:</p>
+<ol>
+<li>
+<p><strong>Verification speed</strong>: ES256 verification is roughly 10x faster than RS256 on modern hardware (~0.01ms vs ~0.1ms per verify). In MCP agent loops with rapid sequential tool calls, this compounds — at 1000 RPS with 10 tool calls per agent turn, RS256 burns ~100ms/s of CPU on signature verification vs ~10ms/s for ES256.</p>
+</li>
+<li>
+<p><strong>Key size</strong>: ES256 public keys are 64 bytes vs 256 bytes for RSA-2048. Smaller JWKS responses, faster key rotation.</p>
+</li>
+<li>
+<p><strong>Token size</strong>: ES256 signatures are 64 bytes vs 256 bytes for RS256. Smaller JWTs mean smaller <code>Authorization</code> headers on every request.</p>
+</li>
+</ol>
+<p>The validated-token cache (<code>JWTValidator.CacheTTL</code>) mitigates verification cost for repeated tokens in steady-state. But cold starts, cache misses, and high-cardinality token scenarios (many distinct users) still hit the verification path, where ES256 has a clear advantage.</p>
+<p><strong>Caveat</strong>: RS256 remains the default signing algorithm in most identity providers (including Keycloak, as configured in our test realm). Switching to ES256 requires explicit authorization server configuration. Consult your IdP documentation for key generation and algorithm settings.</p>
+<h2 id="tracing-sep-414-p6-issue-658">Tracing (SEP-414 P6, issue 658) <a class="anchor" href="#tracing-sep-414-p6-issue-658">¶</a></h2>
+<p><code>JWTConfig.TracerProvider</code> opts the validator into SEP-414 instrumentation. Nil (or <code>core.NoopTracerProvider{}</code>, the default) means zero spans, zero attributes, zero allocation added — and zero compile-time dependency on <code>ext/otel</code>; the validator codes against <code>core.TracerProvider</code> only.</p>
+<p>What&rsquo;s emitted when a <code>TracerProvider</code> is wired:</p>
+<ul>
+<li>
+<p><strong><code>auth.jwks_lookup</code> sub-span</strong> — wraps each <code>JWKSKeyStore.GetKeyByKid</code> call from <code>jwksKeyFuncCtx</code>. Carries the <code>mcp.auth.jwks.kid</code> attribute. Surfaces both cache-hit and cache-miss latency through the OTel adapter — oneauth&rsquo;s <code>JWKSKeyStore</code> owns the internal HTTP fetch decision, so we measure the call to the store (where <code>ext/auth</code>&rsquo;s responsibility ends), not the fetch itself.</p>
+</li>
+<li>
+<p><strong><code>mcp.auth.*</code> attributes on the active dispatch span</strong> (the outer span the SEP-414 P2 trace middleware started; reached via <code>core.SpanFromContext(r.Context())</code>):</p>
+<ul>
+<li><code>mcp.auth.method = &quot;jwt&quot;</code> — set unconditionally at the top of <code>Validate</code>, even on failure paths, so a failed auth still shows up as &ldquo;we attempted JWT validation here&rdquo;.</li>
+<li><code>mcp.auth.subject</code> — the <code>sub</code> claim of the validated JWT.</li>
+<li><code>mcp.auth.issuer</code> — the <code>iss</code> claim.</li>
+<li><code>mcp.auth.scopes</code> — comma-joined granted scopes (one searchable attribute in Tempo&rsquo;s TraceQL; per-element indexing reserved for if/when consumers ask).</li>
+<li><code>mcp.auth.cache_hit</code> — <code>&quot;true&quot;</code> on token-cache fast-path hits, <code>&quot;false&quot;</code> after a full validation. Both branches emit so cache effectiveness is visible without a separate metric.</li>
+</ul>
+</li>
+</ul>
+<p>When no active dispatch span is present (auth running outside a traced path), <code>core.SpanFromContext</code> returns a no-op span and every <code>SetAttribute</code> is a no-op — no nil-checking required at the call site.</p>
+<h3 id="oneauth-side-tracing-v0114">oneauth-side tracing (v0.1.14+) <a class="anchor" href="#oneauth-side-tracing-v0114">¶</a></h3>
+<p><code>JWTConfig.OneauthTracerProvider</code> opts oneauth&rsquo;s own internal work (JWKS HTTP fetch, refresh, key parsing, signature verify) into emitting spans via the OTel SDK <code>TracerProvider</code> you supply. Threads through <code>keys.WithTracerProvider</code> on the <code>JWKSKeyStore</code> constructor (oneauth v0.1.14 added the option). Nil keeps oneauth&rsquo;s internal work opaque — <code>ext/auth</code> still emits its own <code>auth.jwks_lookup</code> span, just without child spans showing what oneauth was doing inside.</p>
+<p>Typical wiring against the standard examples telemetry helper:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tp, shutdown, err <span style="color:#000;font-weight:bold">:=</span> commonotel.<span style="color:#900;font-weight:bold">SetupTelemetry</span>(ctx, <span style="color:#000;font-weight:bold">...</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> <span style="color:#900;font-weight:bold">shutdown</span>(ctx)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>validator <span style="color:#000;font-weight:bold">:=</span> auth.<span style="color:#900;font-weight:bold">NewJWTValidator</span>(auth.JWTConfig{
+</span></span><span style="display:flex;"><span>    JWKSURL:               jwksURL,
+</span></span><span style="display:flex;"><span>    Issuer:                issuer,
+</span></span><span style="display:flex;"><span>    TracerProvider:        tp,                                  <span style="color:#998;font-style:italic">// ext/auth&#39;s own spans
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    OneauthTracerProvider: commonotel.<span style="color:#900;font-weight:bold">UnderlyingOTelTP</span>(tp),     <span style="color:#998;font-style:italic">// oneauth&#39;s spans, same OTel pipeline
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><p><code>commonotel.UnderlyingOTelTP</code> extracts the OTel <code>TracerProvider</code> that <code>SetupTelemetry</code> constructed internally — needed because oneauth&rsquo;s API takes the OTel SDK type directly, not mcpkit&rsquo;s <code>core.TracerProvider</code> abstraction. When <code>tp</code> is the Noop provider (EXPORTER=&quot;&quot;), <code>UnderlyingOTelTP</code> returns nil and oneauth&rsquo;s options no-op cleanly.</p>
+<p>End-to-end trace shape with both wired:</p>
+<pre><code>client.tools/call          (mcpkit/client)
+└─ server.tools/call       (mcpkit/server, parent via _meta.traceparent)
+   ├─ auth.jwks_lookup     (ext/auth, child of dispatch span)
+   │  └─ oneauth.jwks.refresh
+   │     └─ oneauth.jwks.key_lookup
+   └─ tool handler work
+</code></pre>
+<p>Tracked in panyam/oneauth#254 (closed by oneauth PR 256, released as v0.1.14).</p>
+<h3 id="documented-limitation-transport-level-401-is-not-traced">Documented limitation: transport-level 401 is not traced <a class="anchor" href="#documented-limitation-transport-level-401-is-not-traced">¶</a></h3>
+<p>If the streamable transport rejects a request before the dispatch span starts (e.g., a malformed <code>Authorization</code> header caught at transport setup), the rejection happens <strong>before</strong> the SEP-414 P2 trace middleware runs, so there&rsquo;s no active span to decorate and no parent for an <code>auth.*</code> sub-span. That 401 is invisible in trace data today. Adding a transport-level span purely for rejected auth would change the spine semantics of &ldquo;one inbound span per JSON-RPC dispatch&rdquo; — deferred until a real adopter reports it as a missing signal.</p>
+<h3 id="whats-deliberately-deferred">What&rsquo;s deliberately deferred <a class="anchor" href="#whats-deliberately-deferred">¶</a></h3>
+<ul>
+<li><strong><code>auth.introspect</code> sub-span (RFC 7662 token introspection)</strong> — no introspection validator exists in <code>ext/auth</code> today. Will land when that surface does.</li>
+<li><strong><code>auth.oauth_exchange</code> sub-span</strong> — outbound OAuth token-exchange flow (<code>client_credentials.go</code> / <code>enterprise_managed.go</code>) is a client-side <code>TokenSource</code> path with its own instrumentation arc.</li>
+<li><strong>Outbound <code>traceparent</code> HTTP header on the JWKS fetch</strong> — <code>keys.JWKSKeyStore</code> (in oneauth) owns the HTTP call, so ext/auth can&rsquo;t inject <code>traceparent</code> without an oneauth-side option. Tracked as a separate oneauth ticket; once landed, oneauth-internal work appears as a child of the <code>auth.jwks_lookup</code> span we already emit.</li>
+<li><strong><code>scope_middleware.go</code> (<code>auth.NewToolScopeMiddleware</code>)</strong> — scope enforcement is a separate concern from token validation; a follow-up ticket can decorate its decision points with <code>mcp.auth.scope.required</code> / <code>mcp.auth.scope.granted</code> attributes.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

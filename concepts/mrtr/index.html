@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The InputRequiredResult envelope, signed requestState, and the client auto-loop.">
+    <title>MRTR internals · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>MRTR internals</h1>
+        
+        <p class="lead">The InputRequiredResult envelope, signed requestState, and the client auto-loop.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/mrtr.md"><code>tutorials/walkthrough/mrtr.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mrtr--multi-round-trip-requests-sep-2322">MRTR — Multi Round-Trip Requests (SEP-2322) <a class="anchor" href="#mrtr--multi-round-trip-requests-sep-2322">¶</a></h1>
+<p>How a <code>tools/call</code> pauses for input <em>without</em> holding the call open. Six questions.</p>
+<blockquote>
+<p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a><br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a> Next-to-read, <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a> Next-to-read<br />
+<strong>Branches into:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">tasks</a> <em>(stub, root)</em><br />
+<strong>Spec:</strong> SEP-2322 (landed) · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> <em>(<code>RequestInput</code>, <code>NewToolContextWithMRTR</code>, <code>InputResponses</code> accessor)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/core/tool.go"><code>core/tool.go</code></a> <em>(<code>ToolResult.IsInputRequired</code>)</em> · <a href="https://github.com/panyam/mcpkit/blob/main/core/task_v2.go"><code>core/task_v2.go</code></a> <em>(<code>InputRequiredResult</code>, <code>InputRequest</code>/<code>InputRequests</code>/<code>InputResponses</code>, <code>MRTRRoundState</code>, sign helpers)</em></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<ul>
+<li>You understand how a <code>tools/call</code> dispatches and what the handler context provides. → If not, read <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a>.</li>
+<li>You know what <code>_meta</code> and method-namespace extensions are. → If not, read <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a>.</li>
+<li><em>(Helpful but not required)</em> You know the reverse-call pattern (sampling, elicitation, roots) — MRTR is the contrast. See <a href="/mcpkit/concepts/reverse-call/">reverse-call</a>.</li>
+</ul>
+<h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
+<p>A tool needs information from the user mid-execution: a confirmation, a credential, an LLM completion. The natural shape is a <em>reverse call</em> — the server-side handler synchronously invokes <code>elicitation/create</code> (or <code>sampling/createMessage</code>, or <code>roots/list</code>) and waits for the response. That works, but it forces the server to keep the request alive in memory for as long as the user takes to type, and a transport drop while waiting strands the call.</p>
+<p><strong>MRTR</strong> (Multi Round-Trip Requests, <a href="#">SEP-2322</a>) gives the server an alternative: instead of awaiting reverse calls, the handler returns <code>InputRequiredResult</code> with a list of <em>input requests</em> + an opaque <code>requestState</code> token. The client resolves the inputs, retries the same <code>tools/call</code> with <code>inputResponses</code> + the echoed token, and the server completes (or asks for another round). <strong>The server keeps no per-round state</strong> — the token is the round handle.</p>
+<p>mcpkit&rsquo;s default client-side <code>InputHandler</code> routes MRTR&rsquo;s input requests through the <em>same</em> dispatch path as real reverse calls, so a host that already supports <code>elicitation/create</code> / <code>sampling/createMessage</code> / <code>roots/list</code> gets MRTR for free.</p>
+<h2 id="q1--what-problem-does-mrtr-solve-that-reverse-calls-dont">Q1 — What problem does MRTR solve that reverse calls don&rsquo;t? <a class="anchor" href="#q1--what-problem-does-mrtr-solve-that-reverse-calls-dont">¶</a></h2>
+<p>Reverse calls and MRTR can both deliver &ldquo;server gets data from client mid-call.&rdquo; They make different tradeoffs.</p>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Reverse call (synchronous)</th>
+<th>MRTR (round-trip)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Server-side state during wait</strong></td>
+<td>Handler is parked, holding goroutine + handler context + open transport channel</td>
+<td>None. Handler returns; the request finishes.</td>
+</tr>
+<tr>
+<td><strong>Transport drop while waiting</strong></td>
+<td>Strands the call. Handler context dies; reverse-call response has nowhere to go.</td>
+<td>Survives. Client reconnects, retries the same <code>tools/call</code> with the same <code>requestState</code> token.</td>
+</tr>
+<tr>
+<td><strong>Latency for fast inputs</strong></td>
+<td>Single round-trip per reverse call (request → response, in-process await)</td>
+<td>Multi-round-trip (return InputRequiredResult, dispatch input methods on client, retry)</td>
+</tr>
+<tr>
+<td><strong>Idempotent retries</strong></td>
+<td>Tricky — the server has handler state</td>
+<td>Trivial — client just retries with the same token</td>
+</tr>
+<tr>
+<td><strong>Pause indefinitely</strong></td>
+<td>Bad — server holds resources for the duration</td>
+<td>Fine — token-bound, no server resources between rounds</td>
+</tr>
+<tr>
+<td><strong>Mental model</strong></td>
+<td>&ldquo;Function call from inside the handler&rdquo;</td>
+<td>&ldquo;Conversation: server says &lsquo;I need X&rsquo;, client provides X, retry&rdquo;</td>
+</tr>
+</tbody>
+</table>
+<p>The decision rule: <strong>if the handler can complete quickly given the inputs, reverse calls are simpler and lower-latency. If the wait might be long, the request can be detached, or the call needs to survive disconnects, MRTR is the right shape.</strong> Tasks v2 (SEP-2663) leans on the same <code>InputRequiredResult</code> shape for the same reasons applied to long-running operations — see <a href="#q6--composition-with-tasks-v2">Q6</a>.</p>
+<h2 id="q2--worked-example-a-deploy-tool-that-needs-user-confirmation">Q2 — Worked example: a deploy tool that needs user confirmation <a class="anchor" href="#q2--worked-example-a-deploy-tool-that-needs-user-confirmation">¶</a></h2>
+<p>A <code>deploy_to_aws</code> tool needs two pieces of user input before it can proceed: a yes/no confirmation and an IAM role ARN. Two rounds total.</p>
+<p><strong>Round 1 — initial call.</strong> Client invokes the tool with the basic args:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">→ tools/call
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 7,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;method&#34;: &#34;tools/call&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;params&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;name&#34;: &#34;deploy_to_aws&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;arguments&#34;: { &#34;stack&#34;: &#34;prod-api&#34; }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p>Server dispatches the handler. The handler decides it needs input, calls <code>ctx.RequestInput(...)</code> (see <a href="#q3--server-side-returning-inputrequiredresult-from-a-handler">Q3</a>), and dispatch reshapes the response into an <code>InputRequiredResult</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">← response
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 7,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;result&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;resultType&#34;: &#34;input_required&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;inputRequests&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">      &#34;confirm&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">        &#34;method&#34;: &#34;elicitation/create&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">        &#34;params&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">          &#34;message&#34;: &#34;Deploy stack &#39;prod-api&#39; to AWS production?&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">          &#34;requestedSchema&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">            &#34;type&#34;: &#34;object&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">            &#34;properties&#34;: { &#34;confirmed&#34;: { &#34;type&#34;: &#34;boolean&#34; } },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">            &#34;required&#34;: [&#34;confirmed&#34;]
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">          }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">        }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">      },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">      &#34;role-arn&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">        &#34;method&#34;: &#34;elicitation/create&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">        &#34;params&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">          &#34;message&#34;: &#34;Provide the IAM role ARN to assume:&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">          &#34;requestedSchema&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">            &#34;type&#34;: &#34;object&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">            &#34;properties&#34;: { &#34;arn&#34;: { &#34;type&#34;: &#34;string&#34;, &#34;pattern&#34;: &#34;^arn:aws:iam::&#34; } },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">            &#34;required&#34;: [&#34;arn&#34;]
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">          }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">        }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">      }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;requestState&#34;: &#34;&lt;signed-token-1&gt;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p>The keys (<code>&quot;confirm&quot;</code>, <code>&quot;role-arn&quot;</code>) are server-chosen identifiers. The client must echo them verbatim in the next round.</p>
+<p><strong>Client resolves the inputs.</strong> mcpkit&rsquo;s <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>CallToolWithInputs</code></a> sees <code>resultType: &quot;input_required&quot;</code> and calls the registered <code>InputHandler</code> (typically <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>DefaultInputHandler</code></a>) with the <code>InputRequests</code> map. The default handler iterates entries and routes each one through the same dispatcher the transport uses for <em>real</em> server-initiated requests — see <a href="#q4--client-side-calltoolwithinputs-and-defaultinputhandler">Q4</a> for why this matters. The host&rsquo;s existing <code>elicitation/create</code> handler shows two forms; the user fills them in.</p>
+<p><strong>Round 2 — retry with <code>inputResponses</code> + the echoed <code>requestState</code>:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">→ tools/call
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 8,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;method&#34;: &#34;tools/call&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;params&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;name&#34;: &#34;deploy_to_aws&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;arguments&#34;: { &#34;stack&#34;: &#34;prod-api&#34; },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;inputResponses&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">      &#34;confirm&#34;:  { &#34;confirmed&#34;: true },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">      &#34;role-arn&#34;: { &#34;arn&#34;: &#34;arn:aws:iam::123456789012:role/Deploy&#34; }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    },
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;requestState&#34;: &#34;&lt;echoed-token-1&gt;&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p>Server verifies <code>requestState</code> (HMAC, expiry, tool-name match — see <a href="#q5--requeststate-signing-contents-replay-defenses">Q5</a>), merges <code>inputResponses</code> into the accumulated answered map, dispatches the handler again. This time <code>ctx.HasInputResponses()</code> returns true, the handler reads <code>ctx.InputResponse(&quot;confirm&quot;)</code> / <code>ctx.InputResponse(&quot;role-arn&quot;)</code>, and runs the deploy:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">← response
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 8,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;result&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;resultType&#34;: &#34;complete&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">    &#34;content&#34;: [{ &#34;type&#34;: &#34;text&#34;, &#34;text&#34;: &#34;Deployed prod-api successfully&#34; }]
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  }
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p>Two HTTP requests, two JSON-RPC <code>tools/call</code> invocations, two rounds. The server held no state between them — the second <code>tools/call</code> is a fresh dispatch that reconstructs the round context from the verified token.</p>
+<p><strong>Three things to internalize from this example:</strong></p>
+<ul>
+<li><strong>Same method name, same arguments on retry.</strong> The retry isn&rsquo;t &ldquo;send the answers&rdquo;; it&rsquo;s &ldquo;do the call again, here are the answers I have now.&rdquo; A handler that&rsquo;s safely idempotent in <code>arguments</code> is naturally idempotent under MRTR retries.</li>
+<li><strong>Server-chosen keys round-trip verbatim.</strong> <code>&quot;confirm&quot;</code> and <code>&quot;role-arn&quot;</code> are arbitrary tags chosen by the server. The client doesn&rsquo;t interpret them; it just echoes them paired with the answers.</li>
+<li><strong><code>requestState</code> is opaque to the client.</strong> It&rsquo;s a server-minted token; the client treats it as a string and echoes it. Tampering breaks the HMAC verification on round N+1.</li>
+</ul>
+<h2 id="q3--server-side-returning-inputrequiredresult-from-a-handler">Q3 — Server side: returning InputRequiredResult from a handler <a class="anchor" href="#q3--server-side-returning-inputrequiredresult-from-a-handler">¶</a></h2>
+<p>Handlers don&rsquo;t construct <code>InputRequiredResult</code> directly. They call <code>ctx.RequestInput(...)</code> and the dispatch layer reshapes the response.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">deployHandler</span>(ctx core.ToolContext, args DeployArgs) (core.ToolResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// First call has no inputResponses; we need confirmation + creds.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">if</span> !ctx.<span style="color:#900;font-weight:bold">HasInputResponses</span>() {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(core.InputRequests{
+</span></span><span style="display:flex;"><span>            <span style="color:#d14">&#34;confirm&#34;</span>: {
+</span></span><span style="display:flex;"><span>                Method: <span style="color:#d14">&#34;elicitation/create&#34;</span>,
+</span></span><span style="display:flex;"><span>                Params: <span style="color:#900;font-weight:bold">mustMarshal</span>(elicitationParams{
+</span></span><span style="display:flex;"><span>                    Message: fmt.<span style="color:#900;font-weight:bold">Sprintf</span>(<span style="color:#d14">&#34;Deploy stack %q to AWS production?&#34;</span>, args.Stack),
+</span></span><span style="display:flex;"><span>                    RequestedSchema: confirmSchema,
+</span></span><span style="display:flex;"><span>                }),
+</span></span><span style="display:flex;"><span>            },
+</span></span><span style="display:flex;"><span>            <span style="color:#d14">&#34;role-arn&#34;</span>: {
+</span></span><span style="display:flex;"><span>                Method: <span style="color:#d14">&#34;elicitation/create&#34;</span>,
+</span></span><span style="display:flex;"><span>                Params: <span style="color:#900;font-weight:bold">mustMarshal</span>(elicitationParams{
+</span></span><span style="display:flex;"><span>                    Message:         <span style="color:#d14">&#34;Provide the IAM role ARN to assume:&#34;</span>,
+</span></span><span style="display:flex;"><span>                    RequestedSchema: arnSchema,
+</span></span><span style="display:flex;"><span>                }),
+</span></span><span style="display:flex;"><span>            },
+</span></span><span style="display:flex;"><span>        })
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Round 2+: read the answers and proceed.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">var</span> confirm <span style="color:#000;font-weight:bold">struct</span>{ Confirmed <span style="color:#458;font-weight:bold">bool</span> }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">var</span> creds <span style="color:#000;font-weight:bold">struct</span>{ ARN <span style="color:#458;font-weight:bold">string</span> }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">:=</span> ctx.<span style="color:#900;font-weight:bold">InputResponseAs</span>(<span style="color:#d14">&#34;confirm&#34;</span>, <span style="color:#000;font-weight:bold">&amp;</span>confirm); err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">errResult</span>(err), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">:=</span> ctx.<span style="color:#900;font-weight:bold">InputResponseAs</span>(<span style="color:#d14">&#34;role-arn&#34;</span>, <span style="color:#000;font-weight:bold">&amp;</span>creds); err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">errResult</span>(err), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> !confirm.Confirmed {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">textResult</span>(<span style="color:#d14">&#34;Deploy cancelled by user.&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Actually deploy with creds.ARN ...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">textResult</span>(<span style="color:#d14">&#34;Deployed &#34;</span> <span style="color:#000;font-weight:bold">+</span> args.Stack <span style="color:#000;font-weight:bold">+</span> <span style="color:#d14">&#34; successfully&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p><strong>What <code>ctx.RequestInput</code> does</strong> (<a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a>): builds a <code>ToolResult</code> with <code>IsInputRequired = true</code> and <code>InputRequests</code> populated. Returns it as a normal Go value. The flag is in-process plumbing only — never serialized.</p>
+<p><strong>What dispatch does</strong> when it sees <code>IsInputRequired = true</code>:</p>
+<ol>
+<li>Calls <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>mintRequestState</code></a> on the server&rsquo;s <code>mrtrRuntime</code> — produces a fresh <code>requestState</code> token wrapping the accumulated <code>inputResponses</code> and the tool name. Signs with HMAC if a key is configured (see <a href="#q5--requeststate-signing-contents-replay-defenses">Q5</a>).</li>
+<li>Reshapes the <code>ToolResult</code> into an <code>InputRequiredResult</code> envelope with <code>resultType: &quot;input_required&quot;</code>, the <code>inputRequests</code>, and the freshly-minted <code>requestState</code>.</li>
+<li>Returns to the transport.</li>
+</ol>
+<p><strong>On retry</strong>, dispatch goes the other direction:</p>
+<ol>
+<li>Parses the <code>tools/call</code> request envelope (<a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>toolsCallEnvelope</code></a>) — <code>inputResponses</code> and <code>requestState</code> live alongside <code>arguments</code> at the <code>params</code> top level, not nested under <code>arguments</code>.</li>
+<li>Calls <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>verifyRequestState</code></a> — checks HMAC + TTL + tool-name match. Errors propagate as JSON-RPC errors (<code>ErrRequestStateInvalidSignature</code>, <code>ErrRequestStateExpired</code>, <code>ErrRequestStateMalformed</code>).</li>
+<li>Calls <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>mergeInputResponses</code></a> — current round&rsquo;s responses overlay the previous-round responses encoded in the verified token. Current wins on key collision (so a client can correct an earlier answer by re-sending it under the same key).</li>
+<li>Builds a new handler context with the merged <code>inputResponses</code> (<a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>NewToolContextWithMRTR</code></a>) and dispatches the handler again. The handler sees <code>ctx.HasInputResponses() == true</code> and proceeds.</li>
+</ol>
+<p>The handler is the <strong>same function</strong>, called with the <strong>same arguments</strong>, possibly multiple times, with progressively more answers in <code>ctx.InputResponses()</code>. Idempotence in <code>arguments</code> makes this safe.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+The handler doesn&rsquo;t see the <code>requestState</code> token directly (well, <code>ctx.RequestState()</code> exposes it for advanced cases). It also doesn&rsquo;t choose when to mint a new one. Dispatch handles the round bookkeeping; the handler just decides &ldquo;do I have what I need? if not, ask for more.&rdquo;</p>
+</blockquote>
+<h2 id="q4--client-side-calltoolwithinputs-and-defaultinputhandler">Q4 — Client side: CallToolWithInputs and DefaultInputHandler <a class="anchor" href="#q4--client-side-calltoolwithinputs-and-defaultinputhandler">¶</a></h2>
+<p><a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>CallToolWithInputs</code></a> is the client-side retry loop. Pseudocode:</p>
+<pre><code>res ← Call(&quot;tools/call&quot;, { name, arguments })
+while res.IsInputRequired():
+    if rounds &gt;= maxRounds: return ErrMRTRMaxRounds
+    responses ← InputHandler(res.InputRequired.InputRequests)
+    res ← Call(&quot;tools/call&quot;, { name, arguments, inputResponses, requestState: res.InputRequired.RequestState })
+return res
+</code></pre>
+<p>Default <code>maxRounds</code> is <strong>16</strong>. Override with <code>WithMaxMRTRRounds(n)</code>. Hitting the cap returns <code>ErrMRTRMaxRounds</code> (wrappable via <code>errors.Is</code>) — almost always indicates a server-side bug (the handler keeps asking and never settles).</p>
+<p><strong><code>DefaultInputHandler(c)</code></strong> (<a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a>) is the standard input resolver. It walks the <code>InputRequests</code> map and dispatches each entry through <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>dispatchMRTRInputRequest</code></a>, which:</p>
+<ol>
+<li>Synthesizes a <code>core.Request</code> with the input request&rsquo;s <code>method</code> and <code>params</code>.</li>
+<li>Routes it through <a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>Client.HandleServerRequestWithContext</code></a> — <strong>the same dispatcher the transport uses for real server-initiated requests</strong>.</li>
+<li>Reads the response and packages it as the corresponding <code>InputResponses</code> entry.</li>
+</ol>
+<p><strong>This routing choice is the key value-add.</strong> A host that has already wired up <code>samplingHandler</code>, <code>elicitationHandler</code>, <code>rootsHandler</code> for normal reverse calls gets MRTR support automatically — same code paths, same UI, same authorization gating, same middleware. URL-mode elicitation gating, host-approval flows, and any future client-side middleware all apply uniformly to both real reverse calls and MRTR-synthesized ones.</p>
+<p><strong>Customizing the handler.</strong> <code>DefaultInputHandler</code> is a starting point. Wrap or replace it for:</p>
+<ul>
+<li><strong>Custom input methods</strong> — extensions can introduce new <code>InputRequest.Method</code> values; teach the handler to dispatch them.</li>
+<li><strong>Alternative routing</strong> — a CLI client might route <code>elicitation/create</code> to a TUI form instead of the host&rsquo;s normal handler.</li>
+<li><strong>Test injection</strong> — return canned responses without invoking the real elicitation UI; useful for end-to-end tests of MRTR-using tools.</li>
+<li><strong>Decline patterns</strong> — a policy layer might decline certain input requests up-front (return an error from the handler, which propagates through <code>CallToolWithInputs</code> and aborts the loop).</li>
+</ul>
+<h2 id="q5--requeststate-signing-contents-replay-defenses">Q5 — requestState: signing, contents, replay defenses <a class="anchor" href="#q5--requeststate-signing-contents-replay-defenses">¶</a></h2>
+<p><code>requestState</code> is an opaque token from the client&rsquo;s perspective. From the server&rsquo;s, it&rsquo;s the round handle.</p>
+<p><strong>What&rsquo;s inside.</strong> Server-side, dispatch builds a <a href="https://github.com/panyam/mcpkit/blob/main/core/task_v2.go"><code>MRTRRoundState</code></a>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> MRTRRoundState <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Tool     <span style="color:#458;font-weight:bold">string</span>                       <span style="color:#998;font-style:italic">// tool name; replay-prevention check
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Answered <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]json.RawMessage   <span style="color:#998;font-style:italic">// accumulated inputResponses across rounds
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Exp      <span style="color:#458;font-weight:bold">int64</span>                        <span style="color:#998;font-style:italic">// unix expiry
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span></code></pre><p>The state is encoded one of two ways:</p>
+<ul>
+<li><strong>Signed</strong> (<a href="https://github.com/panyam/mcpkit/blob/main/core/task_v2.go"><code>SignMRTRState</code></a>) — HMAC-SHA256 over the encoded payload using the configured key. Production deployments use this. Configure once via <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>WithRequestStateSigning(key, ttl)</code></a> — the same option also covers SEP-2663 task signing, so one HMAC config covers both surfaces.</li>
+<li><strong>Plaintext</strong> (<a href="https://github.com/panyam/mcpkit/blob/main/core/task_v2.go"><code>EncodeMRTRStatePlaintext</code></a>) — base64url-encoded JSON, <strong>no integrity guarantee</strong>. Used only when no signing key is configured. The spec is explicit: servers MUST treat <code>requestState</code> as attacker-controlled, so plaintext mode is for development only.</li>
+</ul>
+<p><strong>Three defenses the signed mode buys you:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Defense</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Tampering</strong></td>
+<td>HMAC mismatch → <code>ErrRequestStateInvalidSignature</code>. Attacker can&rsquo;t forge a token claiming arbitrary <code>Answered</code> data.</td>
+</tr>
+<tr>
+<td><strong>Cross-tool replay</strong></td>
+<td><code>Tool</code> in the payload is checked on verify. A token issued for tool A replayed against tool B fails (<code>ErrRequestStateInvalidSignature</code>).</td>
+</tr>
+<tr>
+<td><strong>Stale tokens</strong></td>
+<td><code>Exp</code> is embedded; verify checks expiry against the configured TTL (default 24h, override in <code>WithRequestStateSigning</code>). Token past expiry → <code>ErrRequestStateExpired</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Plaintext mode still checks tool-name match.</strong> Even without integrity, swapping tool names mid-round is a programmer error worth catching. So <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>verifyRequestState</code></a> checks <code>state.Tool == toolName</code> regardless of mode.</p>
+<blockquote>
+<p>[!CAUTION]<br />
+Plaintext mode is <code>WithRequestStateSigning</code> <em>not configured</em>. The server still works, but <code>requestState</code> is a 128-bit random nonce with no integrity. Any client-fabricated token decodes successfully and the embedded answer map gets handed to the handler. <strong>Do not run plaintext-mode MRTR in production.</strong></p>
+</blockquote>
+<p><strong>Backward compatibility.</strong> Earlier mcpkit shipped a single-round token shape that lived in the signed payload&rsquo;s <code>taskID</code> slot, prefixed with <code>&quot;mrtr:&quot;</code>. <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>verifyRequestState</code></a> has a fallback path that recognizes those tokens during the rollover so in-flight rounds aren&rsquo;t broken by deploys. Removable once no in-flight tokens predate the Phase 4 deploy.</p>
+<h2 id="q6--composition-with-tasks-v2">Q6 — Composition with tasks (v2) <a class="anchor" href="#q6--composition-with-tasks-v2">¶</a></h2>
+<p>Tasks v2 (<a href="https://modelcontextprotocol.io/specification/2025-06-18">SEP-2663</a>) reuses the same <code>InputRequiredResult</code>-shaped pattern for long-running operations. A task can be in the <code>input_required</code> state with <code>inputRequests</code> and <code>requestState</code> populated; the client supplies inputs via the task&rsquo;s update path, and the task resumes.</p>
+<p>Two consequences worth noting:</p>
+<ul>
+<li><strong>One signing key for MRTR.</strong> <code>WithRequestStateSigning(key, ttl)</code> configures the HMAC for ephemeral MRTR (<code>tools/call</code> round-trips). SEP-2663 removed <code>requestState</code> from the tasks-v2 wire, so the v2 task surface no longer signs anything; the server-wide option is MRTR-only.</li>
+<li><strong>The <code>DefaultInputHandler</code> bridge applies to tasks too.</strong> Whether the input request originated from a <code>tools/call</code> InputRequiredResult or a task in <code>input_required</code> state, the client-side handler dispatches it through the same Client-level dispatcher. The host doesn&rsquo;t write task-specific input handling.</li>
+</ul>
+<p>The deeper task story — lifecycle, store, queue, detach/resume, the side-by-side v1+v2 registration pattern (the prior <code>RegisterTasksHybrid</code> was removed when v2 moved to <code>ext/tasks/</code>) — lives in <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">tasks</a> <em>(stub)</em>.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Mental model: MRTR is the wire mechanism, tasks is one place it gets used.</strong> &ldquo;Ephemeral&rdquo; MRTR (the <code>tools/call</code> flow) and tasks v2 are different <em>surfaces</em> that share the same <code>InputRequiredResult</code> envelope, the same <code>InputRequest</code>/<code>InputResponses</code> types, and the same signing infrastructure. Read MRTR first; tasks builds on it.</p>
+</blockquote>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<p>After reading this page, downstream pages can assume:</p>
+<ul>
+<li>You know the <strong><code>InputRequiredResult</code> envelope</strong> — <code>resultType: &quot;input_required&quot;</code>, the <code>inputRequests</code> map (server-chosen keys → method+params), the <code>requestState</code> token.</li>
+<li>You know the <strong>retry shape</strong> — same <code>tools/call</code> with <code>inputResponses</code> (matching keys) + echoed <code>requestState</code>. The server keeps no state between rounds.</li>
+<li>You know <strong><code>ctx.RequestInput(reqs)</code></strong> is the handler-side primitive, and dispatch reshapes the result into an <code>InputRequiredResult</code> envelope. The handler is the same function called with the same arguments; idempotence in <code>arguments</code> is the prerequisite.</li>
+<li>You know <strong><code>CallToolWithInputs</code></strong> runs the loop client-side, capped at <code>maxRounds</code> (default 16), and <strong><code>DefaultInputHandler</code></strong> routes input requests through the same dispatcher real reverse calls use — so the host&rsquo;s existing sampling/elicitation/roots handlers serve MRTR for free.</li>
+<li>You know <strong>signed <code>requestState</code></strong> (HMAC-SHA256, TTL-bounded, tool-name-pinned) is the production mode; plaintext mode is dev-only with no integrity.</li>
+<li>You know <strong>MRTR vs reverse calls</strong> is a tradeoff between server-side state (RC: held; MRTR: none), transport-drop survival (RC: lost; MRTR: survives via token), and latency (RC: lower; MRTR: extra round-trips). The two end up at the same client-side handlers when <code>DefaultInputHandler</code> is used; the difference is <em>server-side</em>.</li>
+<li>You know <strong>tasks v2 reuses the same envelope and signing</strong>; the deep task story is its own page.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">Tasks</a></strong> <em>(stub, root)</em> — long-running operations; tasks in <code>input_required</code> state use the same <code>InputRequiredResult</code>-shaped pattern. The deeper task lifecycle, store, queue, and detach/resume story.</li>
+<li><strong><a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a></strong> — the synchronous-during-handler alternative; understanding the contrast clarifies when to use which.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/cancellation.md">Cancellation deep-dive</a></strong> <em>(stub, leaf)</em> — how cancellation interacts with mid-MRTR-round state (the call across rounds is <em>not</em> one in-flight call from the cancel-id perspective, since each round is its own JSON-RPC request id).</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

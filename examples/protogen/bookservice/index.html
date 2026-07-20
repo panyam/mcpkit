@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Proto annotations compiled to MCP tools, resources, and prompts.">
+    <title>Protogen · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Protogen</h1>
+        
+        <p class="lead">Proto annotations compiled to MCP tools, resources, and prompts.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/protogen/bookservice/README.md"><code>examples/protogen/bookservice/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="bookservice--protoc-gen-go-mcp-example">BookService — protoc-gen-go-mcp Example <a class="anchor" href="#bookservice--protoc-gen-go-mcp-example">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — build-time codegen (<code>experimental/ext/protogen</code>), not a wire protocol.</p>
+</blockquote>
+<p>End-to-end example demonstrating all three MCP primitives generated from proto annotations.</p>
+<h2 id="mcpkit-features-used">MCPKit Features Used <a class="anchor" href="#mcpkit-features-used">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core</td>
+<td><code>core.ToolContext</code>, <code>core.ResourceContext</code>, <code>core.PromptContext</code>, <code>core.CompletionRef</code></td>
+</tr>
+<tr>
+<td>Experimental</td>
+<td><code>experimental/ext/protogen</code> — <code>protoc-gen-go-mcp</code> code generator</td>
+</tr>
+<tr>
+<td>MCP primitives</td>
+<td>Tools, Resources (templates), Prompts, Completions, Sampling, Elicitation</td>
+</tr>
+<tr>
+<td>Proto annotations</td>
+<td><code>mcp_tool</code>, <code>mcp_resource</code>, <code>mcp_prompt</code>, <code>mcp_service</code>, <code>mcp_sample</code>, <code>mcp_elicit</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="what-it-shows">What it shows <a class="anchor" href="#what-it-shows">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Proto annotation</th>
+<th>MCP primitive</th>
+<th>Generated names</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mcp_tool</code></td>
+<td>Tool</td>
+<td><code>books_search</code> (with result summary + structured output)</td>
+</tr>
+<tr>
+<td><code>mcp_resource</code></td>
+<td>Resource template</td>
+<td><code>book://{book_id}</code>, <code>author://{author_id}/books</code></td>
+</tr>
+<tr>
+<td><code>mcp_prompt</code></td>
+<td>Prompt</td>
+<td><code>books_summarize</code>, <code>books_recommend_books</code></td>
+</tr>
+<tr>
+<td><code>mcp_service</code></td>
+<td>Namespace</td>
+<td>All names prefixed with <code>books_</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="quick-start">Quick start <a class="anchor" href="#quick-start">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just generate   <span style="color:#998;font-style:italic"># Generate Go code from protos</span>
+</span></span><span style="display:flex;"><span>just run        <span style="color:#998;font-style:italic"># Start MCP server on :8080</span>
+</span></span></code></pre><h2 id="testing">Testing <a class="anchor" href="#testing">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go <span style="color:#0086b3">test</span> -v .    <span style="color:#998;font-style:italic"># Run e2e tests (tool calls, resource reads, prompt listing)</span>
+</span></span></code></pre><h2 id="prompts-to-try">Prompts to try <a class="anchor" href="#prompts-to-try">¶</a></h2>
+<ul>
+<li>&ldquo;Search for books about Go programming&rdquo; — calls <code>books_search</code> tool</li>
+<li>&ldquo;Tell me about book 1&rdquo; — reads <code>book://{book_id}</code> resource</li>
+<li>&ldquo;What books has author 1 written?&rdquo; — reads <code>author://{author_id}/books</code> resource</li>
+<li>&ldquo;Summarize the book collection&rdquo; — uses <code>books_summarize</code> prompt</li>
+<li>&ldquo;Recommend books for someone learning distributed systems&rdquo; — uses <code>books_recommend_books</code> prompt</li>
+</ul>
+<h2 id="add-to-claude-desktop">Add to Claude Desktop <a class="anchor" href="#add-to-claude-desktop">¶</a></h2>
+<p>Add this to your <code>claude_desktop_config.json</code> (or VS Code MCP settings):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;bookservice&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;command&#34;</span>: <span style="color:#d14">&#34;go&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;args&#34;</span>: [<span style="color:#d14">&#34;run&#34;</span>, <span style="color:#d14">&#34;.&#34;</span>],
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;cwd&#34;</span>: <span style="color:#d14">&#34;/path/to/mcpkit/examples/protogen/bookservice&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;transport&#34;</span>: <span style="color:#d14">&#34;streamable-http&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;http://localhost:8080/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Or if you&rsquo;ve built the binary:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;bookservice&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;command&#34;</span>: <span style="color:#d14">&#34;/path/to/mcpkit/examples/protogen/bookservice/bin/bookservice&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;transport&#34;</span>: <span style="color:#d14">&#34;streamable-http&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;http://localhost:8080/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h2 id="screenshots">Screenshots <a class="anchor" href="#screenshots">¶</a></h2>
+<h3 id="tools-resources-and-prompts-generated-from-proto-annotations">Tools, resources, and prompts generated from proto annotations <a class="anchor" href="#tools-resources-and-prompts-generated-from-proto-annotations">¶</a></h3>
+<p><img src="https://raw.githubusercontent.com/panyam/mcpkit/main/examples/protogen/bookservice/screenshots/bookservice-tools.png" alt="BookService Tools" /></p>
+<h3 id="search-results-for-go-programming">Search results for &ldquo;Go programming&rdquo; <a class="anchor" href="#search-results-for-go-programming">¶</a></h3>
+<p><img src="https://raw.githubusercontent.com/panyam/mcpkit/main/examples/protogen/bookservice/screenshots/search-results.png" alt="Search Results" /></p>
+<h2 id="add-to-claude-code">Add to Claude Code <a class="anchor" href="#add-to-claude-code">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>claude mcp add bookservice --transport streamable-http http://localhost:8080/mcp
+</span></span></code></pre><p>Or in <code>.claude/settings.json</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;bookservice&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;streamable-http&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;http://localhost:8080/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/tree/main/examples/getting-started">Getting started</a></li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/protogen/docs/DESIGN.md">protogen design</a></li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

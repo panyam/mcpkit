@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="SEP-414 OpenTelemetry tracing across the server, client, tasks, events, and the Apps bridge.">
+    <title>Observability · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Observability</h1>
+        
+        <p class="lead">SEP-414 OpenTelemetry tracing across the server, client, tasks, events, and the Apps bridge.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md"><code>docs/SEP_414_OTEL.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="sep-414-opentelemetry-trace-context-propagation">SEP-414: OpenTelemetry Trace Context Propagation <a class="anchor" href="#sep-414-opentelemetry-trace-context-propagation">¶</a></h1>
+<p>Status: <strong>Phases 1, 2, 3, and 4 landed.</strong> Polished walkthroughs (Phase 5)<br />
+and the conformance suite (issue 429) still to come.</p>
+<p>This document is the wiring guide for mcpkit&rsquo;s OpenTelemetry surface. It<br />
+covers what the shipped phases give you, what to expect once you wire a<br />
+real <code>TracerProvider</code>, and where the remaining work lives on<br />
+<a href="https://github.com/panyam/mcpkit/issues/312">issue 312</a>.</p>
+<h2 id="what-phase-1-ships">What Phase 1 ships <a class="anchor" href="#what-phase-1-ships">¶</a></h2>
+<p>Phase 1 lands the dependency-free contract surface in <code>core/</code>:</p>
+<ul>
+<li><code>core.TracerProvider</code>, <code>core.Span</code>, <code>core.Attribute</code> — the minimal<br />
+tracing seam mcpkit components consume. The default,<br />
+<code>core.NoopTracerProvider</code>, performs no allocation and emits no spans.</li>
+<li><code>core.TraceContext</code> — the W3C <code>traceparent</code> / <code>tracestate</code> pair as<br />
+propagated on the MCP wire.</li>
+<li><code>core.ExtractTraceContext</code> / <code>core.InjectTraceContext</code> — read/write<br />
+W3C Trace Context from/to an MCP <code>_meta</code> map, with strict<br />
+W3C-version-00 validation on extract.</li>
+<li><code>core.WithTraceContext</code> / <code>core.TraceContextFromContext</code> —<br />
+<code>context.Context</code> plumbing.</li>
+<li><code>core.BaseContext.TraceContext()</code> — accessor exposed on every typed<br />
+handler context (<code>ToolContext</code>, <code>PromptContext</code>, <code>ResourceContext</code>,<br />
+<code>MethodContext</code>) so handlers can read the active trace context<br />
+without import gymnastics.</li>
+</ul>
+<p>The <code>MetaKeyTraceparent</code> / <code>MetaKeyTracestate</code> constants pin the wire<br />
+keys (bare <code>traceparent</code> and <code>tracestate</code>, matching W3C HTTP header<br />
+names — not under the <code>io.modelcontextprotocol/</code> namespace, which is<br />
+reserved for MCP-defined fields).</p>
+<p>Phase 1 introduces <strong>no behavior change</strong>: nothing in mcpkit calls<br />
+<code>TracerProvider.StartSpan</code> yet, and no transport reads or writes the<br />
+<code>_meta</code> trace keys. The surface exists so downstream work can be<br />
+written and reviewed against a stable contract.</p>
+<h2 id="what-phase-2-ships">What Phase 2 ships <a class="anchor" href="#what-phase-2-ships">¶</a></h2>
+<p>Phase 2 wires the server-side propagation surface:</p>
+<ul>
+<li><code>server.WithTracerProvider(tp core.TracerProvider) Option</code> — install a<br />
+tracer. Default and <code>core.NoopTracerProvider{}</code> both skip the trace<br />
+middleware entirely so the zero-overhead path stays untouched.</li>
+<li>An internal <code>traceMiddleware</code> wraps every JSON-RPC dispatch in an<br />
+inbound span, positioned OUTERMOST so user-registered middleware<br />
+contributes to the recorded latency. Span attributes:
+<ul>
+<li><code>mcp.method</code> on every span</li>
+<li><code>mcp.tool.name</code> on <code>tools/call</code></li>
+<li><code>mcp.session.id</code> when a session is attached</li>
+<li><code>mcp.error.code</code> + <code>Span.RecordError</code> on JSON-RPC errors</li>
+<li><code>mcp.tool.is_error=&quot;true&quot;</code> on <code>tools/call</code> results carrying <code>IsError</code></li>
+</ul>
+</li>
+<li>Inbound trace context resolution: <code>params._meta.traceparent</code> wins<br />
+over the out-of-band TraceContext bridged through <code>context.Context</code>.<br />
+Malformed traceparent values are dropped per the W3C &ldquo;MUST NOT<br />
+forward&rdquo; rule — the span still emits with no parent.</li>
+<li>The streamable HTTP transport bridges the W3C <code>traceparent</code> /<br />
+<code>tracestate</code> HTTP headers (SEP-2028) into <code>context.Context</code> once at<br />
+the POST entry point. All downstream dispatch paths (sync JSON, SSE,<br />
+batch, stateless, initialize) inherit the bridge.</li>
+<li>Outbound <code>_meta.traceparent</code> / <code>_meta.tracestate</code> are injected on<br />
+every server-to-client message — notifications (logging, progress,<br />
+resource updates, custom) and server-to-client requests (legacy push<br />
+for sampling/elicitation/roots). The wrap sits OUTSIDE any<br />
+user-registered <code>NotifyInterceptor</code> / <code>RequestInterceptor</code>, so those<br />
+interceptors observe the same wire form the client receives.</li>
+</ul>
+<p>Wiring is a single line in your server bootstrap:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info,
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ...your other options...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    server.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(myTracerProvider),
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p><code>myTracerProvider</code> must implement <code>core.TracerProvider</code>. Until the<br />
+Phase 4 <code>ext/otel/</code> adapter ships, the only options that emit spans are<br />
+custom implementations — the in-tree <code>core.NoopTracerProvider</code><br />
+intentionally treats &ldquo;spans&rdquo; as no-ops.</p>
+<h2 id="what-phase-4-ships">What Phase 4 ships <a class="anchor" href="#what-phase-4-ships">¶</a></h2>
+<p>Phase 4 lands the OpenTelemetry SDK adapter as a new sub-module under<br />
+<code>ext/otel/</code> (separate <code>go.mod</code>, mirroring <code>ext/auth/</code> / <code>ext/tasks/</code> /<br />
+<code>ext/ui/</code>). Wire it in with one line:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    sdktrace <span style="color:#d14">&#34;go.opentelemetry.io/otel/sdk/trace&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;go.opentelemetry.io/otel/exporters/stdout/stdouttrace&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    mcpotel <span style="color:#d14">&#34;github.com/panyam/mcpkit/ext/otel&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>exp, _ <span style="color:#000;font-weight:bold">:=</span> stdouttrace.<span style="color:#900;font-weight:bold">New</span>()
+</span></span><span style="display:flex;"><span>otelTP <span style="color:#000;font-weight:bold">:=</span> sdktrace.<span style="color:#900;font-weight:bold">NewTracerProvider</span>(sdktrace.<span style="color:#900;font-weight:bold">WithBatcher</span>(exp))
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> otelTP.<span style="color:#900;font-weight:bold">Shutdown</span>(ctx)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info,
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(mcpotel.<span style="color:#900;font-weight:bold">NewProvider</span>(otelTP)),
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p>Behavior:</p>
+<ul>
+<li>The adapter parses <code>core.TraceContext</code> from ctx into an OTel<br />
+<code>SpanContext</code> so the inbound parent flows into the SDK&rsquo;s standard<br />
+parent-tracking machinery.</li>
+<li>After <code>StartSpan</code>, it formats the new span&rsquo;s <code>SpanContext</code> as a W3C<br />
+<code>traceparent</code> and re-attaches via <code>core.WithTraceContext</code>, so the<br />
+Phase 2 outbound <code>_meta</code> injection wraps stamp every server-to-client<br />
+message with the <strong>child</strong> span&rsquo;s traceparent (not the inbound<br />
+parent&rsquo;s).</li>
+<li><code>core.Attribute{Key, Value string}</code> maps to <code>attribute.String(...)</code>;<br />
+<code>RecordError(err)</code> emits an OTel &ldquo;exception&rdquo; event AND sets the span<br />
+status to <code>codes.Error</code>; <code>End()</code> is idempotent.</li>
+<li><code>WithInstrumentationName(...)</code> overrides the default<br />
+instrumentation library name (<code>&quot;github.com/panyam/mcpkit/server&quot;</code>).</li>
+</ul>
+<p>Verification:</p>
+<ul>
+<li><code>just test-otel</code> — adapter unit tests run against the real OTel SDK<br />
+in-memory exporter; reads back <code>sdktrace.ReadOnlySpan</code> shapes.</li>
+<li><code>just test-otel-example</code> — smoke test for <code>examples/otel/stdout/</code><br />
+asserting the exporter actually prints the expected span set.</li>
+<li><code>go run examples/otel/stdout/...</code> — runnable demo, prints spans as<br />
+JSON on stdout. No collector required.</li>
+</ul>
+<p>See <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/README.md"><code>ext/otel/README.md</code></a> for the API reference<br />
+and <a href="https://github.com/panyam/mcpkit/blob/main/examples/otel/stdout/README.md"><code>examples/otel/stdout/README.md</code></a><br />
+for the walkthrough.</p>
+<h2 id="what-phase-3-ships">What Phase 3 ships <a class="anchor" href="#what-phase-3-ships">¶</a></h2>
+<p>Phase 3 lands the symmetric client-side surface:</p>
+<ul>
+<li><code>client.WithTracerProvider(tp core.TracerProvider)</code> — install a<br />
+tracer. Default and <code>core.NoopTracerProvider{}</code> both skip the install<br />
+(zero overhead on the unconfigured path).</li>
+<li>Outbound <code>Client.Call</code> is wrapped in a span via a <code>ClientMiddleware</code><br />
+installed as the OUTERMOST entry — user middleware (auth retry,<br />
+header injection) runs inside the span so its latency is captured.<br />
+Span attributes:
+<ul>
+<li><code>mcp.method</code> on every span</li>
+<li><code>mcp.tool.name</code> on <code>tools/call</code></li>
+<li><code>mcp.client.session.id</code> when a session exists (note <code>client.</code><br />
+namespace — operators want to filter by client- vs<br />
+server-emitted)</li>
+<li><code>mcp.error.code</code> + <code>Span.RecordError</code> on <code>*RPCError</code></li>
+</ul>
+</li>
+<li>Outbound params gain <code>_meta.traceparent</code> / <code>_meta.tracestate</code><br />
+derived from the active span via <code>core.InjectTraceContextIntoParams</code><br />
+(promoted from the server-internal helper so both wires apply the<br />
+same precedence rule — explicit caller-set values win).</li>
+<li>Inbound server-to-client requests<br />
+(<code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>):<br />
+<code>params._meta.traceparent</code> is extracted via<br />
+<code>core.ExtractTraceContextFromParams</code>, attached to ctx via<br />
+<code>core.WithTraceContext</code>, and a wrap span named after the request<br />
+method is emitted with the inbound trace context as parent. The<br />
+handler observes the inbound TC via <code>core.TraceContextFromContext(ctx)</code><br />
+and can use it as a parent for its own spans.</li>
+</ul>
+<p>Wiring is a single line in your client bootstrap:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url, info,
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ...your other options...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    client.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(myTracerProvider),
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p><code>myTracerProvider</code> is the same <code>core.TracerProvider</code> you&rsquo;d hand the<br />
+server side via <code>server.WithTracerProvider</code>. The Phase 4 <code>ext/otel/</code><br />
+adapter (PR 652) is the in-tree implementation.</p>
+<h2 id="what-comes-next">What comes next <a class="anchor" href="#what-comes-next">¶</a></h2>
+<p>Tracked phases on <a href="https://github.com/panyam/mcpkit/issues/312">issue 312</a>:</p>
+<ul>
+<li><strong>P5 — polished examples.</strong> <code>examples/otel/jaeger/</code> +<br />
+<code>examples/otel/otlp/</code> end-to-end walkthroughs with collector and UI<br />
+screenshots. The minimal <code>examples/otel/stdout/</code> already covers<br />
+smoke-verification.</li>
+<li><strong>Conformance suite <code>testconf-otel</code></strong> — issue 429.</li>
+<li><strong>P6 — tracing across surfaces.</strong> Umbrella <a href="https://github.com/panyam/mcpkit/issues/663">issue 663</a>. See below.</li>
+</ul>
+<h2 id="adjacent-w3c-baggage-propagation--http-forward-helper-issue-739">Adjacent: W3C Baggage propagation + HTTP forward helper (issue 739) <a class="anchor" href="#adjacent-w3c-baggage-propagation--http-forward-helper-issue-739">¶</a></h2>
+<p>W3C <strong>Baggage</strong> is a separate W3C standard from W3C Trace Context<br />
+(<code>traceparent</code> / <code>tracestate</code>) that propagates arbitrary <code>key=value</code><br />
+pairs alongside trace identity — operators typically use it for<br />
+tenant_id, user_id, feature flags, A/B-test buckets. mcpkit<br />
+propagates it symmetrically to the trace context surface so handlers<br />
+can <code>ctx.Baggage()</code> and stamp it onto outbound work without<br />
+re-implementing the W3C parsing rules.</p>
+<p><code>core.HTTPForwardTransport(base http.RoundTripper)</code> wraps an<br />
+<code>http.Client</code>&rsquo;s <code>Transport</code> so a tool handler&rsquo;s downstream HTTP<br />
+calls automatically carry the active <code>traceparent</code> / <code>tracestate</code> /<br />
+<code>baggage</code> headers. This closes the end-to-end observability loop for<br />
+handlers that call third-party APIs — without it, the trace stops at<br />
+the MCP boundary and resumes on the downstream side as a fresh<br />
+trace.</p>
+<p>These features ship independently of upstream <strong>SEP-2028</strong> (which<br />
+adds a configurable <code>headerGroups</code> API on top of this same<br />
+foundation). Tracking the upstream spec on issue 739; the W3C<br />
+standards themselves are stable and ship today.</p>
+<h2 id="adjacent-metrics-seam-issue-7">Adjacent: metrics seam (issue 7) <a class="anchor" href="#adjacent-metrics-seam-issue-7">¶</a></h2>
+<p>The <code>core.MeterProvider</code> seam mirrors the SEP-414 <code>core.TracerProvider</code><br />
+shape for metrics. Metrics don&rsquo;t cross the wire, so no SEP — but the<br />
+library still needs a dependency-free seam so the base module can emit<br />
+measurements without dragging the OTel metrics SDK in. Wire it via<br />
+<code>server.WithMeterProvider</code>; the OTel adapter lives at<br />
+<code>mcpotel.NewMeterProvider(otelMP)</code>. Canonical instruments emitted from<br />
+the server dispatch path (<code>mcp.tool.calls</code>, <code>mcp.jsonrpc.errors</code>,<br />
+<code>mcp.tool.duration</code>, <code>mcp.sessions.active</code>) share the same attribute<br />
+vocabulary as the SEP-414 spans, and exemplars are wired by default so<br />
+Grafana&rsquo;s metric → trace pivot works without per-call configuration.<br />
+See <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/README.md"><code>ext/otel/README.md</code></a> § Metrics for the wiring snippet and<br />
+<a href="https://github.com/panyam/mcpkit/blob/main/server/metrics_middleware.go"><code>server/metrics_middleware.go</code></a> for the dispatch-side instrumentation.</p>
+<h2 id="p6--tracing-across-surfaces-auth--tasks--apps">P6 — tracing across surfaces (auth / tasks / apps) <a class="anchor" href="#p6--tracing-across-surfaces-auth--tasks--apps">¶</a></h2>
+<p>P1–P5 instrumented the <strong>dispatch spine</strong>: every JSON-RPC method gets one<br />
+inbound span plus W3C wire propagation, for free. P6 extends tracing into<br />
+the work each surface does that the single dispatch span doesn&rsquo;t cover.</p>
+<p><strong>Is this a SEP-414 gap? No.</strong> Separate three layers:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Owner</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wire contract (the <code>_meta</code> keys, format, precedence, SEP-2028 bridge)</td>
+<td>SEP-414 — normative, for cross-SDK interop</td>
+<td>complete</td>
+</tr>
+<tr>
+<td>Local span richness (count, names, attributes, links)</td>
+<td>the SDK — latitude; invisible to the peer</td>
+<td>mcpkit-completeness work (P6)</td>
+</tr>
+<tr>
+<td>Adjacent-transport hops (events bus, apps Bridge)</td>
+<td>mostly the SDK; the Apps Bridge <em>may</em> belong in the Apps spec</td>
+<td>open</td>
+</tr>
+</tbody>
+</table>
+<p>Span richness never crosses the wire, so a SEP can&rsquo;t (and shouldn&rsquo;t)<br />
+mandate it. The one genuine spec question is the <strong>apps Bridge</strong><br />
+(<code>postMessage</code>): if cross-SDK app-tracing interop is a goal, whether<br />
+<code>traceparent</code> rides the bridge envelope belongs in the <strong>ext-ui / Apps<br />
+spec</strong>, not SEP-414.</p>
+<p>Two categories of &ldquo;work the spine misses&rdquo;:</p>
+<ul>
+<li><strong>(a) escapes the span</strong> — async / out-of-band on a non-MCP transport:<br />
+tasks background execution (<a href="https://github.com/panyam/mcpkit/issues/659">#659</a>), events cross-replica bus<br />
+(<a href="https://github.com/panyam/mcpkit/issues/642">#642</a> / <a href="https://github.com/panyam/mcpkit/issues/629">#629</a>).</li>
+<li><strong>(b) inside the span, not broken out / enriched</strong> — auth validation<br />
+sub-spans + principal attributes (<a href="https://github.com/panyam/mcpkit/issues/658">#658</a>).</li>
+</ul>
+<p>The two categories map cleanly onto the contract:</p>
+<ul>
+<li><strong>New propagation surfaces need no new contract</strong> — <code>core.ExtractTraceContext</code><br />
+/ <code>InjectTraceContext</code> already operate on any <code>map[string]any</code>, so the<br />
+apps Bridge (<a href="https://github.com/panyam/mcpkit/issues/660">#660</a>) and the events bus reuse them verbatim.</li>
+<li><strong>Enrichment surfaces reveal the only two P1 gaps</strong>, neither of which the<br />
+spine needed: <code>core.SpanFromContext</code> (active-span accessor, <a href="https://github.com/panyam/mcpkit/issues/661">#661</a>;<br />
+unblocks auth attributes) and <strong>span links</strong> on <code>core.Span</code> (<a href="https://github.com/panyam/mcpkit/issues/662">#662</a>;<br />
+unblocks task lifecycle).</li>
+</ul>
+<h3 id="active-span-accessor--landed-issue-661">Active-span accessor — landed (issue 661) <a class="anchor" href="#active-span-accessor--landed-issue-661">¶</a></h3>
+<p>The first contract gap is closed: <code>core.SpanFromContext(ctx) core.Span</code><br />
+returns the currently-active mcpkit Span (or a no-op Span when none is<br />
+attached). Sibling helper <code>core.WithActiveSpan(ctx, span) Context</code> is what<br />
+TracerProvider adapters call after <code>StartSpan</code> to publish the span. The<br />
+in-tree <code>NoopTracerProvider</code> and the <code>ext/otel</code> adapter both follow the<br />
+pattern, so the contract holds regardless of which provider is wired.</p>
+<p>The intended use is <strong>decorating the dispatch span</strong>, not nesting a child:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// inside a middleware or handler, no ext/otel import needed:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>span <span style="color:#000;font-weight:bold">:=</span> core.<span style="color:#900;font-weight:bold">SpanFromContext</span>(ctx)
+</span></span><span style="display:flex;"><span>span.<span style="color:#900;font-weight:bold">SetAttribute</span>(<span style="color:#d14">&#34;mcp.auth.principal&#34;</span>, claims.Subject)
+</span></span><span style="display:flex;"><span>span.<span style="color:#900;font-weight:bold">SetAttribute</span>(<span style="color:#d14">&#34;mcp.auth.method&#34;</span>, <span style="color:#d14">&#34;jwt&#34;</span>)
+</span></span></code></pre><p>Typed handler contexts gain a <code>Span()</code> accessor that delegates to<br />
+<code>SpanFromContext</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">myTool</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    ctx.<span style="color:#900;font-weight:bold">Span</span>().<span style="color:#900;font-weight:bold">SetAttribute</span>(<span style="color:#d14">&#34;mcp.tool.cache.hit&#34;</span>, <span style="color:#d14">&#34;true&#34;</span>)
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span></code></pre><p>The accessor never returns nil — call sites that always-decorate work<br />
+correctly whether or not a TracerProvider is configured. Issue 658<br />
+(<code>ext/auth</code> attributes) and any future &ldquo;enrich the active span&rdquo; use case<br />
+consume this surface without crossing the <code>core/</code>-only boundary.</p>
+<h3 id="span-links--landed-issue-662">Span links — landed (issue 662) <a class="anchor" href="#span-links--landed-issue-662">¶</a></h3>
+<p>The second contract gap is closed: span links are now expressible<br />
+dep-free, with the OTel-aligned shape that includes per-link<br />
+attributes. Two entry points:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Option at start (call site knows all links upfront):
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>links <span style="color:#000;font-weight:bold">:=</span> []core.Link{
+</span></span><span style="display:flex;"><span>    {TraceContext: tc1, Attributes: []core.Attribute{{Key: <span style="color:#d14">&#34;link.kind&#34;</span>, Value: <span style="color:#d14">&#34;originated-from&#34;</span>}}},
+</span></span><span style="display:flex;"><span>    core.<span style="color:#900;font-weight:bold">LinkFromTraceContext</span>(tc2),
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>ctx, span <span style="color:#000;font-weight:bold">:=</span> core.<span style="color:#900;font-weight:bold">StartSpanLinked</span>(tp, ctx, <span style="color:#d14">&#34;task.execute&#34;</span>, links, attrs<span style="color:#000;font-weight:bold">...</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Mid-flight (links discovered during span execution):
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>span <span style="color:#000;font-weight:bold">:=</span> core.<span style="color:#900;font-weight:bold">SpanFromContext</span>(ctx)
+</span></span><span style="display:flex;"><span>span.<span style="color:#900;font-weight:bold">AddLink</span>(core.Link{TraceContext: tc, Attributes: <span style="color:#000;font-weight:bold">...</span>})
+</span></span></code></pre><p><code>core.Link</code> mirrors the OpenTelemetry spec <code>Link</code> definition: a<br />
+TraceContext (the upstream identity, same shape carried on the MCP<br />
+wire via <code>_meta</code>) plus optional per-link attributes. Per-link<br />
+attributes are how observability backends render the link UI —<br />
+Jaeger / Tempo / Honeycomb all show <code>link.kind=...</code> semantically<br />
+rather than as generic span attributes.</p>
+<p><strong>Capability widening pattern:</strong> <code>core.LinkedTracerProvider</code> is a<br />
+sibling of <code>TracerProvider</code> that adds the <code>StartSpanLinked</code> method;<br />
+the <code>core.StartSpanLinked(tp, ...)</code> package-level helper type-asserts<br />
+and falls back to plain <code>StartSpan</code> when the provider doesn&rsquo;t<br />
+implement the wider interface — links silently dropped, span emitted.<br />
+This kept the base <code>TracerProvider</code> interface unchanged so non-tracing<br />
+test fakes and the default <code>NoopTracerProvider</code> didn&rsquo;t need any<br />
+churn. The <code>ext/otel</code> adapter implements both interfaces and maps<br />
+each <code>core.Link</code> to an OTel <code>trace.Link</code> via the existing<br />
+<code>traceContextToSpanContext</code> helper.</p>
+<p><strong>Invalid links are silently dropped</strong> — both at <code>StartSpanLinked</code><br />
+(filtered before passing to the OTel SDK) and at <code>Span.AddLink</code><br />
+(short-circuited inside the wrapper). Defensive call sites can build<br />
+link slices from raw inputs (e.g., <code>core.ExtractTraceContext</code> outputs<br />
+that might be zero) without pre-filtering. Calling <code>AddLink</code> after<br />
+<code>End</code> is a no-op, matching every other Span method&rsquo;s contract.</p>
+<p>Unblocks issue 659 (<code>ext/tasks</code> task lifecycle linking — landed in<br />
+PR 719) and the detached edge of issue 664 (server outbound<br />
+reverse-call spans linked to the originating client request).</p>
+<h3 id="new-root-span-marker--landed-issue-659-pr-719">New-root-span marker — landed (issue 659; PR 719) <a class="anchor" href="#new-root-span-marker--landed-issue-659-pr-719">¶</a></h3>
+<p>Third small contract helper, added alongside the <code>ext/tasks</code> consumer<br />
+work: <code>core.WithNewRootSpan(ctx) Context</code> and<br />
+<code>core.IsNewRootSpanRequested(ctx) bool</code>. Marks ctx so the next<br />
+TracerProvider.StartSpan / StartSpanLinked call produces a span with<br />
+no parent — even when ctx carries an inherited parent (a<br />
+<code>core.TraceContext</code> attached upstream, or the adapter&rsquo;s own internal<br />
+span context, e.g. the OTel <code>trace.SpanContext</code> installed by a<br />
+previous StartSpan).</p>
+<p>The motivation is async surfaces whose spanned work conceptually<br />
+outlives the originating request: a long-running <code>task.execute</code><br />
+nested under a few-ms create span renders as a multi-hour child of an<br />
+already-ended parent in observability backends. Pair with<br />
+<code>StartSpanLinked</code> plus a <code>Link</code> back to the originating span so the<br />
+lifecycle stays navigable across the boundary:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>bgCtx = core.<span style="color:#900;font-weight:bold">WithNewRootSpan</span>(bgCtx)
+</span></span><span style="display:flex;"><span>bgCtx, span <span style="color:#000;font-weight:bold">:=</span> core.<span style="color:#900;font-weight:bold">StartSpanLinked</span>(tp, bgCtx, <span style="color:#d14">&#34;task.execute&#34;</span>,
+</span></span><span style="display:flex;"><span>    []core.Link{core.<span style="color:#900;font-weight:bold">LinkFromTraceContext</span>(originatingTC)},
+</span></span><span style="display:flex;"><span>    core.Attribute{Key: <span style="color:#d14">&#34;mcp.task.id&#34;</span>, Value: taskID},
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p>The <code>ext/otel</code> adapter honors the marker by stripping any OTel span<br />
+context already on ctx before calling <code>tracer.Start</code>. Adapters that<br />
+don&rsquo;t honor the marker (or <code>NoopTracerProvider</code>) silently ignore it —<br />
+the spawned span starts under whatever parent ctx happened to carry,<br />
+which degrades to the same trace tree the unmarked path would<br />
+produce. Best-effort by design.</p>
+<h3 id="mcpotelnewtracerprovider-helper--landed-issue-674"><code>mcpotel.NewTracerProvider</code> helper — landed (issue 674) <a class="anchor" href="#mcpotelnewtracerprovider-helper--landed-issue-674">¶</a></h3>
+<p>Examples and surface integrations no longer have to import<br />
+<code>go.opentelemetry.io/otel/sdk/resource</code> + <code>.../semconv</code> just to set a<br />
+<code>service.name</code> on their TracerProvider. <code>mcpotel.NewTracerProvider</code><br />
+is a thin functional-options wrapper around <code>sdktrace.NewTracerProvider</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>otelTP <span style="color:#000;font-weight:bold">:=</span> mcpotel.<span style="color:#900;font-weight:bold">NewTracerProvider</span>(exp,
+</span></span><span style="display:flex;"><span>    mcpotel.<span style="color:#900;font-weight:bold">WithServiceName</span>(<span style="color:#d14">&#34;my-server&#34;</span>),
+</span></span><span style="display:flex;"><span>    mcpotel.<span style="color:#900;font-weight:bold">WithSyncer</span>(),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>mcpotel.<span style="color:#900;font-weight:bold">NewProvider</span>(otelTP)
+</span></span></code></pre><p>Options today:</p>
+<ul>
+<li><code>mcpotel.WithServiceName(name)</code> — bakes the value into an OTel<br />
+<code>Resource</code> with <code>semconv.ServiceName(...)</code>. Empty name is a no-op<br />
+so defensive callers can pass through config values without<br />
+branching.</li>
+<li><code>mcpotel.WithSyncer()</code> — switches the default Batcher to a sync<br />
+span processor. Right for teaching demos and tests; production<br />
+servers should stay on the batched default and handle SIGTERM with<br />
+explicit <code>ForceFlush</code> + <code>Shutdown</code>.</li>
+</ul>
+<p><code>NewTracerProvider(nil)</code> panics — silently constructing a<br />
+TracerProvider that emits no spans loses signals without surfacing<br />
+the misconfig. Matches <code>NewProvider(nil)</code>&rsquo;s fail-fast.</p>
+<p>Future options (<code>WithDeploymentEnvironment</code>, <code>WithServiceVersion</code>,<br />
+<code>WithResource(*resource.Resource)</code> escape hatch) compose against the<br />
+same internal config — file when a consumer asks. The<br />
+<code>examples/common/otel/</code> sub-package already migrated to consume this<br />
+helper; future P6 surface examples (issues 658 / 659 / 660 / 664)<br />
+inherit the cleanup without any extra plumbing.</p>
+<p>The pattern is identical across all five: each <code>ext/</code> surface optionally<br />
+accepts a <code>core.TracerProvider</code> and instruments its own work, depending on<br />
+the <strong><code>core</code> abstraction only</strong> — never <code>ext/otel</code>. Same composition shape<br />
+<code>ext/events</code> uses for <code>core.Claims</code>. <code>Noop</code> / nil = zero overhead.</p>
+<h3 id="examplescommonotelsetuptelemetry--landed-issue-666-pr-684--pr-689"><code>examples/common/otel.SetupTelemetry</code> — landed (issue 666; PR 684 + PR 689) <a class="anchor" href="#examplescommonotelsetuptelemetry--landed-issue-666-pr-684--pr-689">¶</a></h3>
+<p>The example layer now ships a uniform, env-gated observability<br />
+surface so every example presents the same <code>--exporter</code> / <code>--otlp-endpoint</code><br />
+flag pair regardless of which SEP it demos. <a href="https://github.com/panyam/mcpkit/blob/main/examples/common/otel/setup.go"><code>examples/common/otel/setup.go</code></a>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tp, shutdown, err <span style="color:#000;font-weight:bold">:=</span> commonotel.<span style="color:#900;font-weight:bold">SetupTelemetry</span>(ctx,
+</span></span><span style="display:flex;"><span>    commonotel.<span style="color:#900;font-weight:bold">WithExporter</span>(<span style="color:#000;font-weight:bold">*</span>tel.Exporter),
+</span></span><span style="display:flex;"><span>    commonotel.<span style="color:#900;font-weight:bold">WithOTLPEndpoint</span>(<span style="color:#000;font-weight:bold">*</span>tel.OTLPEndpoint),
+</span></span><span style="display:flex;"><span>    commonotel.<span style="color:#900;font-weight:bold">WithServiceName</span>(<span style="color:#d14">&#34;my-example&#34;</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> <span style="color:#900;font-weight:bold">shutdown</span>(context.<span style="color:#900;font-weight:bold">Background</span>())
+</span></span><span style="display:flex;"><span>common.<span style="color:#900;font-weight:bold">RunServer</span>(common.ServerConfig{TracerProvider: tp, <span style="color:#000;font-weight:bold">...</span>})
+</span></span></code></pre><p>The <code>EXPORTER</code> selector is four-valued:</p>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&quot;&quot;</code> (default)</td>
+<td><code>core.NoopTracerProvider{}</code> + no-op shutdown. Zero overhead.</td>
+</tr>
+<tr>
+<td><code>&quot;stdout&quot;</code></td>
+<td><code>stdouttrace</code> exporter (sync). Demo / teaching mode.</td>
+</tr>
+<tr>
+<td><code>&quot;otlp&quot;</code></td>
+<td>TCP-probe the endpoint; on success, <code>otlptracegrpc</code> exporter. On failure: Noop <strong>with warning log</strong>.</td>
+</tr>
+<tr>
+<td><code>&quot;auto&quot;</code></td>
+<td>TCP-probe the endpoint; on success, <code>otlptracegrpc</code> exporter. On failure: Noop <strong>silently</strong> (operator opted into maybe-on-maybe-off semantics).</td>
+</tr>
+</tbody>
+</table>
+<p>Three load-bearing details:</p>
+<ul>
+<li><strong>TCP probe gates OTLP.</strong> <code>otlptracegrpc.New</code> is lazy and returns a<br />
+non-nil exporter even when the endpoint refuses; without the<br />
+500ms TCP probe in <code>probeOTLPEndpoint</code>, the &ldquo;dial-failure → Noop&rdquo;<br />
+contract wouldn&rsquo;t fire (failures would surface later on first<br />
+Export, way past <code>just demo</code> startup).</li>
+<li><strong>Service-name convention.</strong> Server side uses <code>&lt;example-name&gt;</code>;<br />
+walkthrough (client) side uses <code>&lt;example-name&gt;-host</code>. Grafana&rsquo;s<br />
+service filter distinguishes the two halves of each stitched trace.</li>
+<li><strong><code>examples/otel/stdout/</code> is the documented carve-out.</strong> Its<br />
+<code>defaultExporter = &quot;stdout&quot;</code> because the demo&rsquo;s whole purpose is<br />
+showing spans. Every other example defaults to <code>&quot;&quot;</code>.</li>
+</ul>
+<p>Client-side counterpart:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tel <span style="color:#000;font-weight:bold">:=</span> common.<span style="color:#900;font-weight:bold">ExporterFromArgs</span>()  <span style="color:#998;font-style:italic">// os.Args scan, mirrors common.ServerURL pattern
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>tp, shutdown, err <span style="color:#000;font-weight:bold">:=</span> commonotel.<span style="color:#900;font-weight:bold">SetupClientTelemetry</span>(ctx,
+</span></span><span style="display:flex;"><span>    commonotel.<span style="color:#900;font-weight:bold">WithExporter</span>(<span style="color:#000;font-weight:bold">*</span>tel.Exporter),
+</span></span><span style="display:flex;"><span>    commonotel.<span style="color:#900;font-weight:bold">WithOTLPEndpoint</span>(<span style="color:#000;font-weight:bold">*</span>tel.OTLPEndpoint),
+</span></span><span style="display:flex;"><span>    commonotel.<span style="color:#900;font-weight:bold">WithServiceName</span>(<span style="color:#d14">&#34;my-example-host&#34;</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> <span style="color:#900;font-weight:bold">shutdown</span>(context.<span style="color:#900;font-weight:bold">Background</span>())
+</span></span><span style="display:flex;"><span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url, info, client.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(tp))
+</span></span></code></pre><p><code>SetupClientTelemetry</code> pre-sets<br />
+<code>WithInstrumentationName(&quot;github.com/panyam/mcpkit/client&quot;)</code> so spans<br />
+group correctly by library in OTel backends.</p>
+<p>PR 684 adopted across 10 example servers (auth, elicitation,<br />
+file-inputs, fine-grained-auth, list-ttl, mrtr, skills, stateless,<br />
+tasks, tasks-v2); PR 689 followed with the same uniform wiring across<br />
+9 walkthroughs. Pattern documented in <a href="https://github.com/panyam/mcpkit/blob/main/examples/CONVENTIONS.md"><code>examples/CONVENTIONS.md</code></a><br />
+§Telemetry wiring.</p>
+<h3 id="extauth-jwt-validator-instrumentation--landed-issue-658-pr-694"><code>ext/auth</code> JWT validator instrumentation — landed (issue 658; PR 694) <a class="anchor" href="#extauth-jwt-validator-instrumentation--landed-issue-658-pr-694">¶</a></h3>
+<p>First P6 surface child to land on the spine. <code>JWTConfig.TracerProvider core.TracerProvider</code> opts the validator into instrumentation:</p>
+<ul>
+<li><code>auth.jwks_lookup</code> sub-span wraps each <code>JWKSKeyStore.GetKeyByKid</code> call (with <code>mcp.auth.jwks.kid</code> attribute; records error on lookup failure). Surfaces both cache-hit and cache-miss latency.</li>
+<li><code>mcp.auth.*</code> attributes on the active dispatch span (via <code>core.SpanFromContext</code>): <code>mcp.auth.method = &quot;jwt&quot;</code> stamped early (failure paths included), <code>mcp.auth.subject</code> / <code>issuer</code> / <code>scopes</code> / <code>cache_hit</code> set after claims extraction.</li>
+</ul>
+<p>ext/auth depends on <code>core.TracerProvider</code> only for its own spans — no compile-time dependency on <code>ext/otel</code>. Nil and <code>core.NoopTracerProvider{}</code> both produce zero spans, zero attributes, zero allocation. Documented in <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/docs/DESIGN.md"><code>ext/auth/docs/DESIGN.md</code></a> § Tracing.</p>
+<h3 id="oneauth-v0117-wiring--landed-pr-699"><code>oneauth</code> v0.1.17 wiring — landed (PR 699) <a class="anchor" href="#oneauth-v0117-wiring--landed-pr-699">¶</a></h3>
+<p>Threads oneauth&rsquo;s own internal spans through ext/auth so an end-to-end auth trace shows the inside of the JWKS call too. Three layered helpers enable this without abstraction leakage:</p>
+<ul>
+<li><code>ext/otel.Provider.OTelTracerProvider() trace.TracerProvider</code> — Provider stashes the underlying OTel TP and exposes it. Use when a downstream library needs the OTel SDK type directly.</li>
+<li><code>examples/common/otel.UnderlyingOTelTP(tp core.TracerProvider) trace.TracerProvider</code> — type-asserts to <code>*mcpotel.Provider</code>; returns nil for Noop or non-mcpotel providers (oneauth&rsquo;s options no-op cleanly on nil).</li>
+<li><code>ext/auth.JWTConfig.OneauthTracerProvider trace.TracerProvider</code> — when set, threaded via <code>keys.WithTracerProvider</code> on the JWKSKeyStore so oneauth&rsquo;s internal HTTP / parsing / signature-verify work emits spans on the same OTel pipeline.</li>
+</ul>
+<p>End-to-end trace shape (when both <code>TracerProvider</code> AND <code>OneauthTracerProvider</code> are wired):</p>
+<pre><code>client.tools/call          (mcpkit/client)
+└─ server.tools/call       (mcpkit/server, parent via _meta.traceparent)
+   ├─ auth.jwks_lookup     (ext/auth)
+   │  └─ oneauth.jwks.refresh
+   │     └─ oneauth.jwks.key_lookup
+   └─ tool handler work
+</code></pre>
+<p>Tracked in panyam/oneauth#254 (closed in oneauth v0.1.14; mcpkit ext/auth on v0.1.17 after a CI fix that swept all 8 oneauth-using modules in lock-step). Adopter pattern shipped in <a href="https://github.com/panyam/mcpkit/blob/main/examples/auth/common/setup.go"><code>examples/auth/common/setup.go</code></a> via <code>WithMCPTracerProvider</code> / <code>WithOneauthTracerProvider</code> variadic options on <code>Env.NewValidator</code>. Demo wires both in <a href="https://github.com/panyam/mcpkit/blob/main/examples/auth/main.go"><code>examples/auth/main.go</code></a>.</p>
+<h3 id="apps-bridge-trace-context-relay--landed-issue-660-pr-702">Apps Bridge trace context relay — landed (issue 660; PR 702) <a class="anchor" href="#apps-bridge-trace-context-relay--landed-issue-660-pr-702">¶</a></h3>
+<p>Bidirectional W3C trace context propagation across the iframe ↔ host postMessage boundary so a browser-side trace (browser OTel SDK / RUM / hard-coded demo traceparent) stitches with the backend tool-call span. Off by default on both sides; adopters opt in independently per side.</p>
+<p><strong>TS bridge (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/assets/mcp-app-bridge.ts"><code>ext/ui/assets/mcp-app-bridge.ts</code></a>):</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>MCPApp.setTraceContextProvider(() <span style="color:#000;font-weight:bold">=&gt;</span> ({
+</span></span><span style="display:flex;"><span>  traceparent<span style="color:#000;font-weight:bold">:</span> <span style="color:#d14">&#34;00-...-...-01&#34;</span>,
+</span></span><span style="display:flex;"><span>  tracestate<span style="color:#000;font-weight:bold">:</span> <span style="color:#d14">&#34;vendor=val&#34;</span>,  <span style="color:#998;font-style:italic">// optional
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}));
+</span></span></code></pre><p>The provider is called before every outbound <code>request()</code> / <code>notify()</code>. Result merges into <code>params._meta.traceparent</code> / <code>_meta.tracestate</code>. Caller-set <code>_meta</code> wins (provider is a fallback). Provider throws are caught and logged; the request still sends without propagation. dep-free — no OTel JS dependency.</p>
+<p><strong>Go AppHost (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/app_host.go"><code>ext/ui/app_host.go</code></a>):</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>host <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewAppHost</span>(c, bridge, ui.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(tp))
+</span></span></code></pre><p><code>handleAppRequest</code> extracts inbound <code>params._meta.traceparent</code> via <code>core.ExtractTraceContextFromParams</code>, wraps the forward to the MCP server in an <code>apps.host.forward</code> span parented by the iframe&rsquo;s traceparent. The outbound <code>client.Call</code> preserves the iframe&rsquo;s <code>_meta.traceparent</code> on the wire (SEP-414 P3&rsquo;s caller-set-wins contract) so the server&rsquo;s P2 dispatch span stitches as a child.</p>
+<p>End-to-end trace shape:</p>
+<pre><code>iframe traceparent          (browser-side OTel; demo: hard-coded random)
+└─ apps.host.forward        (ext/ui AppHost)
+   └─ server tools/call     (mcpkit server, SEP-414 P2)
+      └─ tool handler work
+</code></pre>
+<p>Demo wiring in <a href="https://github.com/panyam/mcpkit/blob/main/examples/apps/vanilla/dice.html"><code>examples/apps/vanilla/dice.html</code></a> (per-page-load random traceparent + <code>window.__MCPAPP_DEMO_TRACEPARENT__</code> for on-page TraceID copy). Host wiring in <a href="https://github.com/panyam/mcpkit/blob/main/examples/host/01-apphost/main.go"><code>examples/host/01-apphost/main.go</code></a>. Design doc: <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_DESIGN.md"><code>docs/APPS_DESIGN.md</code></a> § Tracing across the Apps Bridge.</p>
+<p><strong>Open spec question:</strong> the Apps Bridge is a non-MCP transport; whether the relay belongs in the Apps spec for cross-SDK interop is open. mcpkit ships the relay; upstream note filed only if working-group interest surfaces.</p>
+<h3 id="events-bus-trace-context-relay--landed-issue-683-pr-712--pr-714">Events bus trace context relay — landed (issue 683; PR 712 + PR 714) <a class="anchor" href="#events-bus-trace-context-relay--landed-issue-683-pr-712--pr-714">¶</a></h3>
+<p>W3C Trace Context propagates across every gate in the events lifecycle so a yield on replica A and a downstream webhook delivery (or a poll-side replay on replica B) appear in Tempo as one stitched trace. Sister to the Apps Bridge relay — same &ldquo;non-MCP propagation hop&rdquo; pattern across a different boundary topology.</p>
+<p><strong>Four gates, three carriers, one consistent rule.</strong> Each gate picks the carrier appropriate to its boundary:</p>
+<table>
+<thead>
+<tr>
+<th>Gate</th>
+<th>Carrier</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. <code>yield(ctx, data)</code></td>
+<td><code>event.Meta.traceparent</code> (persistent) + <code>ctx</code> (in-process)</td>
+<td><code>YieldingSource.yield</code> stamps <code>Meta</code> from <code>ctx</code>; emit hook receives the same <code>ctx</code></td>
+</tr>
+<tr>
+<td>2. emit hook → <code>Emitter.Emit(ctx, event)</code></td>
+<td><code>ctx</code></td>
+<td><code>Register</code> passes the hook&rsquo;s <code>ctx</code> straight to the configured Emitter</td>
+</tr>
+<tr>
+<td>3. <code>WebhookRegistry.Deliver(ctx, event)</code> → outbound HTTP</td>
+<td>HTTP <code>traceparent</code> header</td>
+<td><code>deliver()</code> extracts from <code>ctx</code> (preferred) or <code>event.Meta</code> (fallback for replayed events), stamps the header before <code>client.Do</code></td>
+</tr>
+<tr>
+<td>4. <code>HTTPSource.serveInject</code> (receiving replica)</td>
+<td>inbound HTTP header → <code>ctx</code> → <code>event.Meta</code></td>
+<td>Handler reads the <code>traceparent</code> header, builds <code>core.TraceContext</code>, attaches via <code>core.WithTraceContext</code>, calls <code>s.yield(ctx, data)</code> — closes the round-trip</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Caller-preserves rule.</strong> If <code>SetMetaFunc</code> pre-stamps <code>event.Meta.traceparent</code>, the yield-time auto-injection is skipped — uniform with <code>core.InjectTraceContextIntoParams</code> and the TS-side Apps Bridge relay.</p>
+<p><strong><code>events.webhook.deliver</code> span (PR 714).</strong> <code>WebhookRegistry.WithWebhookTracerProvider(tp)</code> opts the registry into emitting a span around each retry loop. Attributes: <code>webhook.target.id</code>, <code>webhook.url</code>, <code>mcp.event.name</code>, <code>http.method</code>, <code>http.response.status_code</code>, <code>webhook.retry.attempts</code>. <code>RecordError</code> fires on retries-exhausted with the categorical bucket. Nil = Noop, zero overhead. <strong>Live-verified</strong> against the LGTM stack: span landed with all attributes set, 4 attempts counted, <code>STATUS_CODE_ERROR</code> on the failure path, duration matched the 0.5s + 1s + 2s backoff schedule exactly.</p>
+<p><strong><code>Server.Broadcast(ctx, ...)</code> (PR 714 signature; PR 722 body).</strong> PR 714 widened the signature; PR 722 (issue 715) made the body actually consume ctx — when ctx carries a non-zero <code>core.TraceContext</code>, the inbound traceparent / tracestate are injected into notification params under <code>_meta</code> (via <code>core.InjectTraceContextIntoParams</code>) before fan-out. Existing caller-set <code>_meta.traceparent</code> wins. Per-transport broadcast callbacks gained ctx as a forward-compat seam — unused inside today because the per-request <code>trace_middleware.go</code> wrap (<code>core.WrapSessionNotifyFunc</code>) targets <code>sc.notify</code> (the handler-facing notify on a per-request <code>SessionCtx</code>), not the transport-level base notifyFunc dispatchers expose to broadcasts. Injecting once at the Server level keeps tracing concerns out of the transport-level loops while still stitching SSE-pushed notifications into the originating trace.</p>
+<p>End-to-end trace shape (multi-replica with webhook fanout):</p>
+<pre><code>yield(ctx, data) on replica A
+└─ event.Meta.traceparent stamped
+   └─ emit hook (ctx) → LocalEmitter → WebhookRegistry.Deliver(ctx, event)
+      └─ events.webhook.deliver span (PR 714)
+         └─ HTTP POST to replica B with traceparent header
+            └─ replica B HTTPSource.serveInject reads header
+               └─ yield(ctx, data) on replica B (same TraceID)
+</code></pre>
+<p>Demo wiring lives in <a href="https://github.com/panyam/mcpkit/blob/main/examples/whole-enchilada/events/event-server/main.go"><code>examples/whole-enchilada/events/event-server/main.go</code></a> (<code>events.WithWebhookTracerProvider(tp)</code> threaded against the existing <code>commonotel.SetupTelemetry</code> TP). Adopter sweep (PR 714) updated <code>examples/events/discord</code> and <code>examples/events/telegram</code> to the new <code>yield(ctx, ...)</code> / <code>SetMetaFunc(ctx, ...)</code> signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.</p>
+<h3 id="events-fanout-span-emission--landed-issue-724-pr-730">Events fanout span emission — landed (issue 724; PR 730) <a class="anchor" href="#events-fanout-span-emission--landed-issue-724-pr-730">¶</a></h3>
+<p>Companion to the bus-relay work above. While 683/712/714 handled <em>propagation</em> (trace context flowing across the lifecycle gates), 724 handles <em>emission</em> on the per-yield fanout itself. Adopters opt in via <code>events.Config.TracerProvider core.TracerProvider</code> — Register threads it onto every Source implementing the new <code>TracerProviderInstaller</code> interface (<code>YieldingSource</code> does; TypedSource authors can implement it identically).</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>events.<span style="color:#900;font-weight:bold">Register</span>(events.Config{
+</span></span><span style="display:flex;"><span>    Server:         srv,
+</span></span><span style="display:flex;"><span>    Sources:        []events.EventSource{chatSrc, alertSrc},
+</span></span><span style="display:flex;"><span>    Webhooks:       webhooks,
+</span></span><span style="display:flex;"><span>    TracerProvider: tp, <span style="color:#998;font-style:italic">// ← new in PR 730
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><p><strong>Span shape</strong>: one <code>events.fanout</code> span per emitted event (NOT per subscriber), parented by the yield ctx. Attributes:</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mcp.event.name</code></td>
+<td>the EventDef.Name</td>
+</tr>
+<tr>
+<td><code>mcp.event.id</code></td>
+<td>the assigned EventID (cross-referencing)</td>
+</tr>
+<tr>
+<td><code>events.subscribers.total</code></td>
+<td>snapshot subscriber count at fanout time</td>
+</tr>
+<tr>
+<td><code>events.subscribers.delivered</code></td>
+<td>count that passed Match</td>
+</tr>
+<tr>
+<td><code>events.subscribers.dropped_by_match</code></td>
+<td>count where Match returned false</td>
+</tr>
+<tr>
+<td><code>events.transforms.applied</code></td>
+<td>count where Transform actually modified the event</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Design call locked in</strong>: one span per yield, NOT per subscriber. Option (a) from the original issue body (<code>events.match</code> / <code>events.transform</code> per Match/Transform invocation) was deliberately NOT shipped — would scale linearly with subs × events and need sampling design. The aggregate counts are the diagnosable shape; operators see &ldquo;this yield went to 10 subs, 7 dropped by Match&rdquo; without span-volume risk. If per-subscriber detail ever becomes load-bearing, option (a) can land as a separate opt-in on the same TracerProvider seam.</p>
+<p><strong>Two load-bearing optimizations</strong> on the hot path:</p>
+<ul>
+<li><strong>Zero-subscriber guard.</strong> <code>len(subs) == 0</code> skips span emission entirely. Idle sources (feeders with no subscribers registered yet) are dominant — emitting empty fanout spans every feeder tick would flood Tempo with noise.</li>
+<li><strong>Noop short-circuit.</strong> <code>tp.(core.NoopTracerProvider)</code> type-assertion avoids the StartSpan call entirely on the unconfigured path. Per-yield cost on the unconfigured path is one type-assertion.</li>
+</ul>
+<p><strong>NOT in scope</strong> (deferred to future PRs if anyone asks): webhook-side Match/Transform attributes on the existing <code>events.webhook.deliver</code> span (PR 714); poll-side Match/Transform aggregate attributes on the events/poll dispatch span. Both are covered by existing spans; decorating with more attributes is drive-by.</p>
+<p><strong>Test pattern</strong>: reuses the <code>fakeTP</code> recording machinery from <code>webhook_span_test.go</code> so the assertion style stays consistent across event-surface span tests. Tests cover attribute shape, drop-by-Match, transforms-applied, zero-subscriber skip, parent stitching, Noop overhead, and the Register install path.</p>
+<p>End-to-end trace shape:</p>
+<pre><code>tools/call (dispatch, SEP-414 P2)
+└─ events.fanout (PR 730 — one span per yield, parented here)
+   ├─ events.subscribers.total = 10
+   ├─ events.subscribers.delivered = 3
+   ├─ events.subscribers.dropped_by_match = 7
+   └─ events.transforms.applied = 3
+   └─ events.webhook.deliver (PR 714 — per webhook target, sibling span via existing seam)
+</code></pre>
+<p>Doc: <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/README.md</code></a> § Tracing across the events bus + <a href="https://github.com/panyam/mcpkit/blob/main/examples/events/kitchen-sink/README.md"><code>examples/events/kitchen-sink/README.md</code></a> § Tracing.</p>
+<h3 id="exttasks-task-lifecycle-spans--landed-issue-659-pr-719"><code>ext/tasks</code> task lifecycle spans — landed (issue 659; PR 719) <a class="anchor" href="#exttasks-task-lifecycle-spans--landed-issue-659-pr-719">¶</a></h3>
+<p>Final P6 surface child. A <code>tools/call</code> that creates a task spawns a background goroutine whose work outlives the create span — parent-child doesn&rsquo;t fit, so the tasks runtime uses <strong>span links</strong> instead. The dispatch span for the <code>tools/call</code> ends in a few ms; <code>task.execute</code> runs as a NEW root trace (potentially for hours) with a Link back to the create span. Every later <code>tasks/get</code> / <code>tasks/update</code> / <code>tasks/cancel</code> dispatch span gets an <code>AddLink</code> back to the same create span so a backend can pivot from any poll into the whole lifecycle.</p>
+<p><strong>Wiring:</strong> <code>tasks.Config.TracerProvider core.TracerProvider</code>. Nil or <code>core.NoopTracerProvider{}</code> (the default) skips the install — zero overhead, no spans, no allocation. ext/tasks depends on the core abstraction only; no compile-time dep on ext/otel.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{
+</span></span><span style="display:flex;"><span>    Server:         srv,
+</span></span><span style="display:flex;"><span>    TracerProvider: mcpotel.<span style="color:#900;font-weight:bold">NewProvider</span>(otelTP),
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p><strong>Span shape:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Span</th>
+<th>Lifecycle</th>
+<th>Parent</th>
+<th>Links</th>
+<th>Attributes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tools/call</code> (dispatch)</td>
+<td>request scope</td>
+<td>inbound <code>_meta.traceparent</code></td>
+<td>—</td>
+<td>SEP-414 P2 dispatch attrs</td>
+</tr>
+<tr>
+<td><code>task.execute</code></td>
+<td>goroutine lifetime</td>
+<td><strong>none</strong> (new root via <code>WithNewRootSpan</code>)</td>
+<td>→ <code>tools/call</code> create span</td>
+<td><code>mcp.task.id</code>, <code>mcp.task.status</code> (stamped at End)</td>
+</tr>
+<tr>
+<td><code>tasks/get</code> / <code>tasks/update</code> / <code>tasks/cancel</code></td>
+<td>request scope</td>
+<td>inbound <code>_meta.traceparent</code></td>
+<td>→ <code>tools/call</code> create span (AddLink)</td>
+<td>SEP-414 P2 dispatch attrs</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Status stamping:</strong> the goroutine&rsquo;s defer reads the final status from the store and stamps <code>mcp.task.status</code> (<code>completed</code> / <code>failed</code> / <code>cancelled</code> / <code>input_required</code>) on the span, then <code>End</code>s. SEP-2663 semantics: handler-returned errors (<code>(nil, err)</code>) map to <code>completed</code> with <code>IsError=true</code> on the inner <code>ToolResult</code> — <code>RecordError</code> on the span is reserved for protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover).</p>
+<p><strong>Sync-as-completed path is deliberately silent.</strong> <code>wrapSyncAsCompletedTask</code> (a sync-returning handler under <code>TaskSupport=optional/required</code>) runs inside the create span — emitting a zero-duration <code>task.execute</code> for the wire-uniformity wrapper would be noise. Only the GoAsync path (the work that actually escapes the request span) gets <code>task.execute</code>.</p>
+<p><strong>Lifetime of <code>originTC</code></strong> (the runtime map that stashes the create-span TraceContext per taskID): outlives the <code>activeTask</code> entry. Polls landing on a terminal task still get the AddLink back to the create span. Matches the existing pattern for <code>taskErrors</code> / <code>creatorToolForTask</code>.</p>
+<p>End-to-end trace shape:</p>
+<pre><code>tools/call (dispatch)                         (mcpkit/server, SEP-414 P2)
+└─ [link] task.execute  ────────────────►     (root trace, ext/tasks goroutine, mcp.task.id, mcp.task.status)
+                                              (tool handler work runs inside task.execute)
+
+tasks/get (dispatch, link → original tools/call create span)
+tasks/update (dispatch, link → original tools/call create span)
+tasks/cancel (dispatch, link → original tools/call create span)
+</code></pre>
+<p>End-to-end materialization is proven by <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/provider_test.go"><code>ext/otel/provider_test.go</code></a>&rsquo;s coverage of the <code>WithNewRootSpan</code> scrub + <code>StartSpanLinked</code> + <code>AddLink</code> paths against a real OTel SDK exporter. <a href="https://github.com/panyam/mcpkit/blob/main/ext/tasks/trace_test.go"><code>ext/tasks/trace_test.go</code></a> uses a recording fake <code>core.TracerProvider</code> + <code>core.LinkedTracerProvider</code> to prove ext/tasks calls the contract correctly without dragging ext/otel into its module graph.</p>
+<h3 id="mrtr-multi-round-trace-stitching--landed-issue-682-pr-forthcoming">MRTR multi-round trace stitching — landed (issue 682; PR forthcoming) <a class="anchor" href="#mrtr-multi-round-trace-stitching--landed-issue-682-pr-forthcoming">¶</a></h3>
+<p>SEP-2322 MRTR splits one logical operation across N JSON-RPC dispatches (round 1: server returns <code>InputRequiredResult</code> → client gathers input → round 2: client retries with <code>inputResponses</code>). Each round&rsquo;s <code>tools/call</code> mints its own span on each side, so without intervention an MRTR operation produces N unrelated traces — an operator looking at the final ToolResult&rsquo;s trace cannot navigate to the input-gathering work that produced it.</p>
+<p>This is fundamental once stateless (SEP-2575) replaces stateful as the default wire — stateful&rsquo;s <code>ctx.Sample</code> / <code>ctx.Elicit</code> are deprecated per SEP-2577 and will go away in v0.4. MRTR becomes the canonical input-gathering pattern; the trace story has to follow.</p>
+<p><strong>Wire shape</strong>: rounds 2+ carry the round-1 traceparent in a new <code>_meta.io.modelcontextprotocol/tracelink</code> field. The server&rsquo;s trace middleware reads it and calls <code>core.SpanFromContext(ctx).AddLink(...)</code> on the round-N dispatch span, stitching the operation across separate W3C traces.</p>
+<pre><code>Round 1:                              Round 2 (and beyond):
+client.Call(&quot;tools/call&quot;, args)       client.Call(&quot;tools/call&quot;, args+inputResponses)
+  ↓                                     ↓
+_meta: {                              _meta: {
+  traceparent: T1                       traceparent: T2,
+}                                       io.modelcontextprotocol/tracelink: T1,  ← NEW (issue 682)
+                                      }
+  ↓                                     ↓
+server span (TraceID T1)              server span (TraceID T2)
+                                        AddLink → T1  ← server stitches the operation
+</code></pre>
+<p><strong>Star semantic</strong> — rounds 2, 3, 4… all link back to round 1, NOT the immediately-previous round. Backends show round 1 as the anchor regardless of how deep the MRTR loop goes. One click navigates from any round to the originating request.</p>
+<p><strong>Vendor-namespaced field</strong>: <code>_meta.io.modelcontextprotocol/tracelink</code> (not bare <code>_meta.tracelink</code>) because W3C doesn&rsquo;t define a <code>tracelink</code> field — bare names are reserved for W3C-defined keys. mcpkit-specific until upstream WG agrees on a cross-SDK shape.</p>
+<p><strong>Client-side identity capture</strong>: <code>CallToolWithInputs</code> uses the new <code>core.WithCapturedTraceContext</code> ctx-holder primitive. The client trace middleware writes round-1&rsquo;s outbound TraceContext into the holder; <code>CallToolWithInputs</code> snapshots it and stamps it onto every subsequent round&rsquo;s params via <code>core.InjectTraceLinkIntoParams</code>. Tracestate is intentionally NOT part of the link payload — link is identity-only, not full propagation context. <code>Client.callImpl(ctx, ...)</code> (a ctx-aware refactor of <code>Client.Call</code>) is what threads the holder through the middleware chain; <code>Client.Call</code> itself stays ctx-free for back-compat by passing <code>context.Background()</code>.</p>
+<p><strong>Considered alternatives</strong>:</p>
+<ul>
+<li><strong>Embed traceparent in <code>requestState</code></strong> — works, but <code>requestState</code> was designed as opaque from the client&rsquo;s perspective. Baking tracing semantics into it muddies the contract.</li>
+<li><strong>Continue an outer span across rounds on the client side</strong> — simpler (no wire change), but the outer span&rsquo;s duration would include user-paced gather-input time, which can be minutes. Distorts span duration semantics. Rejected.</li>
+</ul>
+<p><strong>Spec engagement TBD</strong>: this lands as mcpkit-internal first; the field name + semantic could be a candidate for upstream MCP WG standardization for cross-SDK interop. See the PR description for the working-group post draft.</p>
+<p>End-to-end correctness proof: <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/mrtr_tracelink_e2e_test.go"><code>ext/otel/mrtr_tracelink_e2e_test.go</code></a> drives a real <code>CallToolWithInputs</code> against a real OTel-SDK-backed server + client, then asserts the recorded round-2 server span has an OTel Link whose TraceID matches round-1&rsquo;s.</p>
+<h3 id="skills-observability--landed-issue-748-pr-forthcoming">Skills observability — landed (issue 748; PR forthcoming) <a class="anchor" href="#skills-observability--landed-issue-748-pr-forthcoming">¶</a></h3>
+<p>Tool calls have natural telemetry: every <code>tools/call</code> is one wire event → one server-side dispatch span. Skills (SEP-2640) don&rsquo;t — the host fetches a manifest once via <code>resources/read</code>, caches it client-side, then <strong>activates</strong> it N times invisibly. Without intervention, post-cache activation is unobservable to either side.</p>
+<p>Issue 748 closes the gap in two layers.</p>
+<p><strong>Layer 1 — server dispatch span enrichment.</strong> <a href="https://github.com/panyam/mcpkit/blob/main/server/trace_middleware.go"><code>server/trace_middleware.go</code></a> now stamps the <code>resources/read</code> span with <code>mcp.resource.uri</code> (always, for any URI) plus <code>mcp.skill.uri</code> / <code>mcp.skill.path</code> / <code>mcp.skill.file</code> when the URI uses the <code>skill://</code> scheme. Mirrors the existing <code>tools/call → mcp.tool.name</code> pattern. Server-side dashboards can now chart fetch volume + error rate per skill.</p>
+<p><code>mcp.skill.path</code> and <code>mcp.skill.file</code> only populate for SEP-2640 <strong>manifest URIs</strong> (terminal <code>/SKILL.md</code>) where the path/file boundary is unambiguous from the URI alone. Non-manifest URIs (e.g. <code>skill://pdf-processing/references/FORMS.md</code>) surface as <code>mcp.skill.uri</code> only — SEP-2640 documents that the boundary in those cases requires external knowledge from the discovery index or a prior manifest read.</p>
+<p><strong>Layer 2 — client-side <code>ext/skills.Client</code> instrumentation.</strong> <code>NewClient(mcp, opts...)</code> is variadic; new <code>WithTracerProvider(tp)</code> option wraps the read-path methods in spans:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Span name</th>
+<th>Attributes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ListSkills</code></td>
+<td><code>skills.list</code></td>
+<td><code>mcp.skill.uri</code> (index URI), <code>mcp.skill.count</code> on success</td>
+</tr>
+<tr>
+<td><code>ReadSkillURI</code></td>
+<td><code>skills.read</code></td>
+<td><code>mcp.skill.uri</code></td>
+</tr>
+<tr>
+<td><code>ReadSkillManifest</code></td>
+<td><code>skills.read_manifest</code></td>
+<td><code>mcp.skill.uri</code>, <code>mcp.skill.path</code>, <code>mcp.skill.name</code></td>
+</tr>
+<tr>
+<td><code>ReadAndVerify</code></td>
+<td><code>skills.read_and_verify</code></td>
+<td><code>mcp.skill.uri</code>, <code>mcp.skill.expected_digest</code>, <code>mcp.skill.digest_verified</code></td>
+</tr>
+</tbody>
+</table>
+<p>Stitching is automatic: the client read span runs inside ctx that already carries <code>_meta.traceparent</code> from the existing W3C trace context propagation (PR 644 / PR 649 / PR 652), so the server-side dispatch span (now enriched per Layer 1) lands as a child of the client wrapping span in the same trace.</p>
+<p><strong>The activation hook — purely SDK-side, no wire change.</strong> <code>Client.Activate(ctx, uri, opts...) ActivationEvent</code> is the answer to the &ldquo;skill used&rdquo; telemetry the wire can&rsquo;t capture. Hosts call it at the point in the agent loop where the skill enters model context. Side effects:</p>
+<ul>
+<li>Emits an instant <code>skills.activate</code> span (Start + End back-to-back — activation is point-in-time, not a duration) carrying <code>mcp.skill.uri</code>, <code>mcp.skill.path</code> (when the URI parses as a manifest URI), and <code>mcp.skill.activation.reason</code> when <code>WithReason(...)</code> is supplied.</li>
+<li>Invokes the optional <code>WithActivationHook(fn)</code> callback synchronously, so non-OTel hosts can feed their own telemetry pipeline (structured logging, internal counters, alternate tracing) without configuring a TracerProvider.</li>
+<li>Returns the <code>ActivationEvent{URI, Reason, Timestamp}</code> to the caller for pull-style stamping.</li>
+</ul>
+<p><code>Activate</code> accepts any string URI — it never blocks dispatch or validates input. Designed for the agent-loop case where the URI may be a manifest URI, a sub-file URI, or even an opaque identifier the host minted for an in-process bundle.</p>
+<p><strong>Considered alternatives</strong>:</p>
+<ul>
+<li><strong>Wire-level <code>notifications/...skills/activated</code></strong> — a cross-process notification carrying <code>{uri, digest, reason, _meta.traceparent}</code> so the server can record activation events from connected clients. Tractable but cross-cuts SEP-2640 spec territory and requires WG engagement before minting the method name. Tracked as issue 749 — a separable opt-in extension on <code>ext/skills</code> that can ride atop <code>Client.Activate</code> without breaking callers when (if) the upstream method name lands.</li>
+<li><strong>Provider-side activation telemetry</strong> — N/A. The provider handles resource reads; activation is a client/host concept.</li>
+<li><strong>Activation counter on the issue 735 MeterProvider seam</strong> — useful follow-up. The TracerProvider half ships in 748; counter wiring can land cleanly in a small follow-up PR.</li>
+</ul>
+<p>Coverage:</p>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/server/trace_middleware_test.go"><code>server/trace_middleware_test.go</code></a> — three tests pin Layer 1: skill manifest URI emits all four attrs; non-skill URI emits <code>mcp.resource.uri</code> only; non-manifest skill URI emits <code>mcp.skill.uri</code> only.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/ext/skills/client_trace_test.go"><code>ext/skills/client_trace_test.go</code></a> — eight tests pin Layer 2: each wrapped method emits the right span + attrs; <code>Activate</code> fires hook + span; <code>Activate</code> omits the reason attr when not supplied; hook fires independently of tracer install; zero-overhead path (no <code>WithTracerProvider</code>) emits no observable spans.</li>
+<li>End-to-end trace context propagation across <code>resources/read</code> is the same code path the MRTR e2e already exercises for <code>tools/call</code> (<code>_meta.traceparent</code> injection in dispatch is method-agnostic). A skills-specific real-SDK e2e is deliberately omitted — it would require either inverting the <code>ext/otel</code>-doesn&rsquo;t-import-<code>ext/skills</code> layering or adding the real OTel SDK as a test-only dep on <code>ext/skills</code>.</li>
+</ul>
+<p><strong>Runnable demo</strong>: <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills/walkthrough.go"><code>examples/skills/walkthrough.go</code></a> exercises the wrap span + Activate path with the <code>--exporter=stdout</code> (or <code>--exporter=otlp</code>) flag pair. Run with <code>EXPORTER=stdout just serve</code> + <code>EXPORTER=stdout just demo</code>.</p>
+<h2 id="downstream-consumers-of-the-phase-1-contract">Downstream consumers of the Phase 1 contract <a class="anchor" href="#downstream-consumers-of-the-phase-1-contract">¶</a></h2>
+<ul>
+<li><strong><code>experimental/ext/events/</code> cross-replica bus (issue #629).</strong> The<br />
+EventBus envelope will carry <code>traceparent</code> / <code>tracestate</code> using the<br />
+<code>core.MetaKey*</code> constants, so a trace started on replica A and<br />
+delivered from replica B stitches together once an OTel adapter is<br />
+wired. The seam consumes <code>core.TracerProvider</code> directly — no<br />
+<code>ext/otel</code> import in the base events module, mirroring how events<br />
+already consumes <code>core.Claims</code> without depending on <code>ext/auth</code>.</li>
+<li><strong><code>server/</code> topology preflight (issue #642).</strong> The capability<br />
+contract declares whether a configured seam supports trace<br />
+propagation; the declaration uses the <code>core.TracerProvider</code><br />
+interface to keep the contract dep-free.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

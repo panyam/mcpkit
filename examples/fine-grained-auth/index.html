@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Authorization denial with scope step-up and per-payment ephemeral credentials. Experimental.">
+    <title>Fine-grained auth · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Fine-grained auth</h1>
+        
+        <p class="lead">Authorization denial with scope step-up and per-payment ephemeral credentials. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/README.md"><code>examples/fine-grained-auth/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3) <a class="anchor" href="#fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — Tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643">SEP-2643</a> (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end. Wire format may change as the SEP evolves.</p>
+</blockquote>
+<p>A scripted MCP host walking through two of the SEP-2643 use cases:</p>
+<ul>
+<li><strong>UC2 — Scope step-up</strong> — server returns <code>HTTP 403 + WWW-Authenticate: Bearer scope=&quot;...&quot;</code> when a tool requires a scope the bearer token lacks; the host parses the required scopes per RFC 6750 and re-authorizes with the union.</li>
+<li><strong>UC3 — Ephemeral credentials (RFC 9396 RAR)</strong> — server returns a JSON-RPC error carrying a <code>remediationHint</code> of type <code>oauth_authorization_details</code>; the host uses those details <em>verbatim</em> in a token request to mint a transaction-bound credential.</li>
+</ul>
+<p>The MCP server runs an in-process <a href="https://github.com/panyam/oneauth">oneauth</a> Authorization Server in a goroutine because Keycloak does not yet support RFC 9396 RAR. Tokens are RS256-signed; the MCP server validates them via the AS&rsquo;s JWKS endpoint.</p>
+<h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1 — start the MCP server + in-process AS</span>
+</span></span><span style="display:flex;"><span>just serve
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 2 — run the scripted walkthrough</span>
+</span></span><span style="display:flex;"><span>just demo
+</span></span></code></pre><p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/WALKTHROUGH.md">WALKTHROUGH.md</a> for the full sequence diagram and step-by-step description (regenerate via <code>just readme</code>).</p>
+<h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<ul>
+<li><strong>HTTP 403 + WWW-Authenticate per RFC 6750</strong> for scope-step-up denials. <code>auth.NewToolScopeMiddleware</code> rejects pre-handler when <code>core.ToolDef.RequiredScopes</code> aren&rsquo;t satisfied; the mcpkit client surfaces it as <code>*client.ClientAuthError</code> with parsed <code>RequiredScopes</code>.</li>
+<li><strong>OAuth 2.0 client_credentials</strong> grant against the in-process AS to mint scoped access tokens (RS256, validated by the MCP server via JWKS).</li>
+<li><strong>Auto-step-up flow</strong>: the host parses the WWW-Authenticate scopes verbatim and requests a broader token containing the union (read + write), then retries — the smart-host pattern the spec encodes.</li>
+<li><strong>JSON-RPC <code>remediationHint</code> envelope</strong> for UC3 — <code>error.data.authorization.remediationHints[].type = &quot;oauth_authorization_details&quot;</code> with RFC 9396 detail object describing the required authorization (<code>{type: &quot;payment_initiation&quot;, amount, currency, payee, ...}</code>).</li>
+<li><strong>RFC 9396 Rich Authorization Requests</strong> — host echoes the detail object back to the AS at <code>POST /token</code>; the AS embeds the resulting <code>authorization_details</code> claim in the issued JWT.</li>
+<li><strong>Server-side enforcement</strong> of <code>authorization_details</code> via <code>paymentAuthorizationMiddleware</code> — reads the claim from the JWT and validates that a <code>payment_initiation</code> entry matches the request before letting <code>initiate_payment</code> execute.</li>
+<li><strong>CORS configuration</strong> for browser-based MCP hosts (MCPJam) — <code>Mcp-Session-Id</code> in both Allow-Headers and Expose-Headers; <code>DELETE</code> in allowed methods.</li>
+</ul>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<ul>
+<li>Walkthrough steps + auto-step-up + RAR token request: <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/main.go"><code>main.go</code></a> (the <code>runDemo</code> block + <code>requestToken</code> helper)</li>
+<li>In-process oneauth AS bootstrap (token endpoint, JWKS, dynamic client registration): <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/main.go"><code>main.go</code></a> (<code>startInProcessAS</code>)</li>
+<li>Tool registration + <code>paymentAuthorizationMiddleware</code>: <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/main.go"><code>main.go</code></a> (<code>registerTools</code>, <code>paymentAuthorizationMiddleware</code>)</li>
+<li>Scope-step-up middleware: <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/scope_middleware.go"><code>ext/auth/scope_middleware.go</code></a> (<code>auth.NewToolScopeMiddleware</code>)</li>
+<li>JWT validator: <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/jwt_validator.go"><code>ext/auth/jwt_validator.go</code></a></li>
+<li>Companion: <a href="/mcpkit/examples/elicitation/"><code>examples/elicitation/</code></a> — UC1 (URL elicitation / consent approval flow)</li>
+</ul>
+<h2 id="notes">Notes <a class="anchor" href="#notes">¶</a></h2>
+<ul>
+<li>CORS for browser-based MCP hosts is applied via <code>server.WithHandlerWrap(cors)</code> so it covers <code>/mcp</code> plus the <code>auth.MountAuth</code> routes plus <code>/demo/bootstrap</code> uniformly. Same pattern as <code>examples/elicitation/</code>.</li>
+<li>The walkthrough&rsquo;s &ldquo;no user interaction&rdquo; assumption is <strong>demo only</strong>. A real banking host would prompt the user to confirm the payment amount/payee before requesting the RAR-bound token.</li>
+<li>The custom <code>isError=true</code> and <code>tool=</code> color rules on the demo server logger are passed as variadic extras to <code>common.NewMCPLogger</code> — they layer on top of the canonical 5-rule set without re-declaring it.</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/elicitation/">Elicitation — UC1 of the same SEP</a></li>
+<li><a href="/mcpkit/examples/auth/">Auth basics</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/WALKTHROUGH.md"><code>examples/fine-grained-auth/WALKTHROUGH.md</code></a></p>
+
+<h1 id="fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3) <a class="anchor" href="#fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">¶</a></h1>
+<p><strong>EXPERIMENTAL</strong> — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Discover the in-process AS bootstrap from the MCP server</strong> — The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.</li>
+<li><strong>Get a read-only token (scope: tools-read)</strong> — Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS&rsquo;s JWKS endpoint.</li>
+<li><strong>Connect to MCP server with read-only token</strong> — JWT validation against the AS&rsquo;s JWKS endpoint succeeds — token is valid, just limited in scope.</li>
+<li><strong>Call read_document — succeeds (tools-read is sufficient)</strong> — The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.</li>
+<li><strong>Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)</strong> — Per SEP-2643 (FineGrainedAuth UC2): the server&rsquo;s auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).</li>
+<li><strong>Auto-step-up: re-authorize with scopes from WWW-Authenticate</strong> — Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).</li>
+<li><strong>Retry update_document with broader token — SUCCEEDS</strong> — New session with the broader token. update_document succeeds because the token includes tools-call.</li>
+<li><strong>Call initiate_payment — DENIED with RAR authorization_details (UC3)</strong> — The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.</li>
+<li><strong>Request an RAR-bound payment token from the AS</strong> — The host uses the authorization_details from the remediationHint <em>verbatim</em> in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.</li>
+<li><strong>Retry initiate_payment with RAR-bound token — SUCCEEDS</strong> — The server&rsquo;s initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+    participant AS as Auth Server (in-process oneauth)
+
+    Note over Host,AS: Step 1: Discover the in-process AS bootstrap from the MCP server
+    Host-&gt;&gt;Server: GET /demo/bootstrap
+    Server--&gt;&gt;Host: {as_url, client_id, client_secret}
+
+    Note over Host,AS: Step 2: Get a read-only token (scope: tools-read)
+    Host-&gt;&gt;AS: POST /token — grant_type=client_credentials, scope=tools-read
+    AS--&gt;&gt;Host: access_token (tools-read only)
+
+    Note over Host,AS: Step 3: Connect to MCP server with read-only token
+    Host-&gt;&gt;Server: POST /mcp — initialize + Authorization: Bearer &lt;read-token&gt;
+    Server--&gt;&gt;Host: serverInfo + Mcp-Session-Id
+
+    Note over Host,AS: Step 4: Call read_document — succeeds (tools-read is sufficient)
+    Host-&gt;&gt;Server: tools/call: read_document {docId: &quot;doc-123&quot;}
+    Server--&gt;&gt;Host: Document content
+
+    Note over Host,AS: Step 5: Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)
+    Host-&gt;&gt;Server: tools/call: update_document {docId: &quot;doc-123&quot;}
+    Server--&gt;&gt;Host: HTTP 403 + WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;tools-call&quot;
+
+    Note over Host,AS: Step 6: Auto-step-up: re-authorize with scopes from WWW-Authenticate
+    Host-&gt;&gt;AS: POST /token — scope=&lt;from WWW-Authenticate&gt;
+    AS--&gt;&gt;Host: access_token with broader scopes
+
+    Note over Host,AS: Step 7: Retry update_document with broader token — SUCCEEDS
+    Host-&gt;&gt;Server: POST /mcp — initialize + Bearer (broader token)
+    Server--&gt;&gt;Host: new session
+    Host-&gt;&gt;Server: tools/call: update_document
+    Server--&gt;&gt;Host: Document updated successfully
+
+    Note over Host,AS: Step 8: Call initiate_payment — DENIED with RAR authorization_details (UC3)
+    Host-&gt;&gt;Server: tools/call: initiate_payment {amount: 150 EUR, payee: ACME}
+    Server--&gt;&gt;Host: JSON-RPC error + credentialDisposition: additional + payment_initiation RAR
+
+    Note over Host,AS: Step 9: Request an RAR-bound payment token from the AS
+    Host-&gt;&gt;AS: POST /token — authorization_details=[payment_initiation, ...]
+    AS--&gt;&gt;Host: access_token with authorization_details claim
+
+    Note over Host,AS: Step 10: Retry initiate_payment with RAR-bound token — SUCCEEDS
+    Host-&gt;&gt;Server: POST /mcp — initialize + Bearer (RAR token)
+    Server--&gt;&gt;Host: new session
+    Host-&gt;&gt;Server: tools/call: initiate_payment {amount: 150 EUR, payee: ACME}
+    Server--&gt;&gt;Host: Payment initiated
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>This example uses an in-process oneauth Authorization Server because<br />
+Keycloak does not support RFC 9396 Rich Authorization Requests (RAR).<br />
+The MCP server starts the AS in a goroutine, registers a confidential<br />
+client for the demo, and exposes the client_id+secret + AS URL for the<br />
+host to discover.</p>
+<p>Start the MCP server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve        # MCP server + in-process AS on :8080
+Terminal 2:  just run          # this demo
+</code></pre>
+<h3 id="uc1-vs-uc2uc3--when-does-the-host-react">UC1 vs UC2/UC3 — When does the host react? <a class="anchor" href="#uc1-vs-uc2uc3--when-does-the-host-react">¶</a></h3>
+<p>UC1 (elicitation): the denial points to an out-of-band action (user clicks Approve).<br />
+The host can&rsquo;t proceed until it receives <code>notifications/elicitation/complete</code>.</p>
+<p>UC2/UC3: the denial is a transport-level signal — UC2 is HTTP 403 + WWW-Authenticate,<br />
+UC3 is a JSON-RPC error with an RFC 9396 remediationHint. The host parses it and reacts<br />
+immediately by re-authorizing — no user interaction in this demo (a real banking host<br />
+would prompt the user to confirm the payment first).</p>
+<h3 id="step-1-discover-the-in-process-as-bootstrap-from-the-mcp-server">Step 1: Discover the in-process AS bootstrap from the MCP server <a class="anchor" href="#step-1-discover-the-in-process-as-bootstrap-from-the-mcp-server">¶</a></h3>
+<p>The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Fetch the in-process AS bootstrap into shell vars used by every step below.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">BS</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s http://localhost:8080/demo/bootstrap<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">AS_URL</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BS</span><span style="color:#d14">&#34;</span> | jq -r .as_url<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TOKEN_ENDPT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BS</span><span style="color:#d14">&#34;</span> | jq -r .token_endpoint<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">JWKS_URL</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BS</span><span style="color:#d14">&#34;</span> | jq -r .jwks_url<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">CLIENT_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BS</span><span style="color:#d14">&#34;</span> | jq -r .client_id<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">CLIENT_SECRET</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BS</span><span style="color:#d14">&#34;</span> | jq -r .client_secret<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;AS=</span><span style="color:#008080">$AS_URL</span><span style="color:#d14">  client_id=</span><span style="color:#008080">$CLIENT_ID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-2-get-a-read-only-token-scope-tools-read">Step 2: Get a read-only token (scope: tools-read) <a class="anchor" href="#step-2-get-a-read-only-token-scope-tools-read">¶</a></h3>
+<p>Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS&rsquo;s JWKS endpoint.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a token with scope=tools-read. (oneauth&#39;s token endpoint accepts a JSON body</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># in this demo, hence the application/json content type.)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TOK_READ</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$TOKEN_ENDPT</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;grant_type\&#34;:\&#34;client_credentials\&#34;,\&#34;client_id\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_ID</span><span style="color:#d14">\&#34;,\&#34;client_secret\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_SECRET</span><span style="color:#d14">\&#34;,\&#34;scope\&#34;:\&#34;tools-read\&#34;}&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r .access_token<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TOK_READ=</span><span style="color:#d14">${</span><span style="color:#008080">TOK_READ</span>:<span style="color:#008080">0</span>:<span style="color:#008080">30</span><span style="color:#d14">}</span><span style="color:#d14">...&#34;</span>
+</span></span></code></pre><h3 id="step-3-connect-to-mcp-server-with-read-only-token">Step 3: Connect to MCP server with read-only token <a class="anchor" href="#step-3-connect-to-mcp-server-with-read-only-token">¶</a></h3>
+<p>JWT validation against the AS&rsquo;s JWKS endpoint succeeds — token is valid, just limited in scope.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Initialize an MCP session with the read-only token. The Mcp-Session-Id</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># returned in the response headers is what every subsequent call must echo.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-4-call-read-document--succeeds-tools-read-is-sufficient">Step 4: Call read_document — succeeds (tools-read is sufficient) <a class="anchor" href="#step-4-call-read-document--succeeds-tools-read-is-sufficient">¶</a></h3>
+<p>The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.</p>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Read a document. Succeeds because tools-read is enough.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;r&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;read_document&#34;,&#34;arguments&#34;:{&#34;docId&#34;:&#34;doc-123&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq .
+</span></span></code></pre><h3 id="step-5-call-update-document--denied-uc2-http-403--www-authenticate">Step 5: Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate) <a class="anchor" href="#step-5-call-update-document--denied-uc2-http-403--www-authenticate">¶</a></h3>
+<p>Per SEP-2643 (FineGrainedAuth UC2): the server&rsquo;s auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).</p>
+<h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Try update_document with the read-only token. -i shows response headers</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># so the WWW-Authenticate scope-step-up signal is visible.</span>
+</span></span><span style="display:flex;"><span>curl -i -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;u&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;update_document&#34;,&#34;arguments&#34;:{&#34;docId&#34;:&#34;doc-123&#34;,&#34;content&#34;:&#34;new content&#34;}}}&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Look for:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   HTTP/1.1 403 Forbidden</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   WWW-Authenticate: Bearer error=&#34;insufficient_scope&#34;, scope=&#34;tools-call&#34;</span>
+</span></span></code></pre><h3 id="step-6-auto-step-up-re-authorize-with-scopes-from-www-authenticate">Step 6: Auto-step-up: re-authorize with scopes from WWW-Authenticate <a class="anchor" href="#step-6-auto-step-up-re-authorize-with-scopes-from-www-authenticate">¶</a></h3>
+<p>Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).</p>
+<h4 id="reproduce-on-the-wire-5">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-5">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a broader token with both scopes (the union, not a replacement).</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TOK_CALL</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$TOKEN_ENDPT</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;grant_type\&#34;:\&#34;client_credentials\&#34;,\&#34;client_id\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_ID</span><span style="color:#d14">\&#34;,\&#34;client_secret\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_SECRET</span><span style="color:#d14">\&#34;,\&#34;scope\&#34;:\&#34;tools-read tools-call\&#34;}&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r .access_token<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TOK_CALL=</span><span style="color:#d14">${</span><span style="color:#008080">TOK_CALL</span>:<span style="color:#008080">0</span>:<span style="color:#008080">30</span><span style="color:#d14">}</span><span style="color:#d14">...&#34;</span>
+</span></span></code></pre><h3 id="step-7-retry-update-document-with-broader-token--succeeds">Step 7: Retry update_document with broader token — SUCCEEDS <a class="anchor" href="#step-7-retry-update-document-with-broader-token--succeeds">¶</a></h3>
+<p>New session with the broader token. update_document succeeds because the token includes tools-call.</p>
+<h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># New session with the broader token, then repeat update_document.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID2</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_CALL</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_CALL</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID2</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_CALL</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID2</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;u&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;update_document&#34;,&#34;arguments&#34;:{&#34;docId&#34;:&#34;doc-123&#34;,&#34;content&#34;:&#34;new content&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq .
+</span></span></code></pre><h3 id="uc3-per-operation-ephemeral-credential">UC3: Per-Operation Ephemeral Credential <a class="anchor" href="#uc3-per-operation-ephemeral-credential">¶</a></h3>
+<p>UC3 is a different pattern: the host needs an <em>additional</em> token for a<br />
+specific operation (payment), while keeping the original token for other<br />
+operations. The denial carries credentialDisposition: &ldquo;additional&rdquo; and<br />
+RFC 9396 authorization_details bound to the specific transaction.</p>
+<h3 id="step-8-call-initiate-payment--denied-with-rar-authorization-details-uc3">Step 8: Call initiate_payment — DENIED with RAR authorization_details (UC3) <a class="anchor" href="#step-8-call-initiate-payment--denied-with-rar-authorization-details-uc3">¶</a></h3>
+<p>The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.</p>
+<h4 id="reproduce-on-the-wire-7">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-7">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Try initiate_payment with the broader token. The token has tools-call scope</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># but no payment-bound RAR claim, so the server returns the SEP-2643 envelope.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># jq surfaces just the authorization block so you can see the remediation hint.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_CALL</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID2</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;p&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;initiate_payment&#34;,&#34;arguments&#34;:{&#34;amount&#34;:&#34;150.00&#34;,&#34;currency&#34;:&#34;EUR&#34;,&#34;payee&#34;:&#34;ACME Corp&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.error.data.authorization&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Inspect:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   credentialDisposition: &#34;additional&#34;  (keep the original token)</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   remediationHints[].type: &#34;oauth_authorization_details&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   remediationHints[].authorization_details: [{type:&#34;payment_initiation&#34;, ...}]</span>
+</span></span></code></pre><h3 id="step-9-request-an-rar-bound-payment-token-from-the-as">Step 9: Request an RAR-bound payment token from the AS <a class="anchor" href="#step-9-request-an-rar-bound-payment-token-from-the-as">¶</a></h3>
+<p>The host uses the authorization_details from the remediationHint <em>verbatim</em> in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.</p>
+<h4 id="reproduce-on-the-wire-8">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-8">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Echo the authorization_details from step 8 verbatim into a token request.</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TOK_PAY</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$TOKEN_ENDPT</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;grant_type\&#34;:\&#34;client_credentials\&#34;,\&#34;client_id\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_ID</span><span style="color:#d14">\&#34;,\&#34;client_secret\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_SECRET</span><span style="color:#d14">\&#34;,\&#34;authorization_details\&#34;:[{\&#34;type\&#34;:\&#34;payment_initiation\&#34;,\&#34;actions\&#34;:[\&#34;initiate\&#34;],\&#34;instructedAmount\&#34;:{\&#34;currency\&#34;:\&#34;EUR\&#34;,\&#34;amount\&#34;:\&#34;150.00\&#34;},\&#34;creditorName\&#34;:\&#34;ACME Corp\&#34;}]}&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r .access_token<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TOK_PAY=</span><span style="color:#d14">${</span><span style="color:#008080">TOK_PAY</span>:<span style="color:#008080">0</span>:<span style="color:#008080">30</span><span style="color:#d14">}</span><span style="color:#d14">...&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Decode the JWT payload. The authorization_details claim is embedded directly,</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># which is what makes the token &#34;self-describing&#34; for the RS to validate.</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$TOK_PAY</span><span style="color:#d14">&#34;</span> | cut -d. -f2 | base64 -d 2&gt;/dev/null | jq
+</span></span></code></pre><h3 id="step-10-retry-initiate-payment-with-rar-bound-token--succeeds">Step 10: Retry initiate_payment with RAR-bound token — SUCCEEDS <a class="anchor" href="#step-10-retry-initiate-payment-with-rar-bound-token--succeeds">¶</a></h3>
+<p>The server&rsquo;s initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.</p>
+<h4 id="reproduce-on-the-wire-9">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-9">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># New session with the RAR-bound token, then retry initiate_payment.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID3</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_PAY</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_PAY</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID3</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_PAY</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID3</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;p&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;initiate_payment&#34;,&#34;arguments&#34;:{&#34;amount&#34;:&#34;150.00&#34;,&#34;currency&#34;:&#34;EUR&#34;,&#34;payee&#34;:&#34;ACME Corp&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq .
+</span></span></code></pre><h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/fine-grained-auth/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/fine-grained-auth/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

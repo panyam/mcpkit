@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The experimental cross-replica events bus: push, poll, webhooks, and trace propagation.">
+    <title>Events · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Events</h1>
+        
+        <p class="lead">The experimental cross-replica events bus: push, poll, webhooks, and trace propagation.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events.md"><code>tutorials/walkthrough/events.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="events">Events <a class="anchor" href="#events">¶</a></h1>
+<p>How a server tells a client &ldquo;this domain thing happened&rdquo; — events as a first-class extension, beyond the raw SSE-event-id replay that streamable HTTP gives you for free.</p>
+<blockquote>
+<p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/bringup/">bring-up</a>, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a>, <a href="/mcpkit/concepts/notifications/">notifications</a>, <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a><br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a> Next-to-read + Q5 case-study row, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a> &ldquo;events as first-class&rdquo; branch<br />
+<strong>Branches into:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-ssrf.md">events SSRF deep dive</a> <em>(stub, leaf)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-hmac.md">HMAC + Standard Webhooks deep dive</a> <em>(stub, leaf)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-identity.md">subscription identity tuple proof</a> <em>(stub, leaf)</em><br />
+<strong>Spec:</strong> <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md">triggers-events WG design sketch</a> (canonical reference — branch <code>pja/design-sketch</code> of <code>experimental-ext-triggers-events</code>; citations below resolve to section anchors via reference-style links) · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/events.go"><code>experimental/ext/events/events.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go"><code>yield.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/webhook.go"><code>webhook.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/stream.go"><code>stream.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/control.go"><code>control.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/identity.go"><code>identity.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/headers.go"><code>headers.go</code></a></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<ul>
+<li>Live MCP session — capabilities negotiated, <code>initialized</code> sent. → If not, read <a href="/mcpkit/concepts/bringup/">bring-up</a>.</li>
+<li>You can read JSON-RPC + SSE off the wire and follow the per-direction id model. → If not, read <a href="/mcpkit/concepts/transport-mechanics/">transport mechanics</a>.</li>
+<li>Notifications model — events/stream&rsquo;s wire surface IS notifications, gated by capability. → If not, read <a href="/mcpkit/concepts/notifications/">notifications</a>.</li>
+<li>You know what handler context, registries, and middleware are — the events handlers receive a <code>core.MethodContext</code> and notify via <code>ctx.Notify(...)</code>. → If not, read <a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a>.</li>
+<li>Extension surface vocabulary — what <code>experimental.events</code> means as a capability, why this lives in <code>experimental/ext/</code>, what graduation looks like. → If not, read <a href="/mcpkit/concepts/extension-mechanisms/">extension mechanisms</a>.</li>
+</ul>
+<h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
+<p><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a> classified events at one row of its case-study table: &ldquo;experimental, target-shape, <code>experimental.events</code> capability.&rdquo; This page opens that row up. The interesting questions are: how does events use the four extension knobs (Q1)? what does a client <em>do</em> with events — three delivery modes, pick by use case (Q2)? what stays stable across modes — subscription identity, source abstraction (Q3-Q4)? what does push delivery look like on the wire (Q5)? when an event is yielded, <em>who</em> gets it (Q6)? what does webhook delivery look like (Q7)? how do upstream failures bubble out as first-class signals (Q8)? and once subscriptions exist, how does an author shape per-subscription delivery — filter, transform, lifecycle hooks, quotas (Q9)?</p>
+<p>We are NOT re-explaining what <code>experimental.&lt;name&gt;</code> means, how the SEP process works, or why extensions get their own <code>go.mod</code>. That all lives in extension-mechanisms.md. This page assumes you know the vocabulary; it shows the worked example.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Spec is a living draft.</strong> The triggers-events WG iterates on the <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md">design sketch</a> in the open. Citations on this page link to <strong>section anchors</strong> in the spec — <code>#subscription-identity</code>, <code>#webhook-security</code>, etc. — which are auto-generated from heading text and stable across revisions. Earlier drafts of this page used line numbers (<code>#L363</code>); we moved off them because they rotted every time the spec was edited. Section anchors only break if a heading is renamed.</p>
+<p>All spec citation URLs are defined as reference-style links at the bottom of this file. To repoint at a different branch or repo, find-replace the URL prefix in that block once.</p>
+</blockquote>
+<h2 id="q1--how-does-events-dial-the-four-extension-knobs">Q1 — How does events dial the four extension knobs? <a class="anchor" href="#q1--how-does-events-dial-the-four-extension-knobs">¶</a></h2>
+<p>Per <a href="/mcpkit/concepts/extension-mechanisms/#q1--what-counts-as-an-extension-in-mcp">extension-mechanisms Q1</a>, every MCP extension picks which of four knobs to turn: <strong>method namespace</strong>, <strong>capability flags</strong>, <strong>notification methods</strong>, <strong><code>_meta</code> fields</strong>. Events turns <em>all four</em>.</p>
+<table>
+<thead>
+<tr>
+<th>Knob</th>
+<th>What events adds</th>
+<th>Code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Method namespace</strong></td>
+<td><code>events/list</code>, <code>events/poll</code>, <code>events/stream</code>, <code>events/subscribe</code>, <code>events/unsubscribe</code> — five methods under the <code>events/</code> prefix</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/events.go"><code>experimental/ext/events/events.go</code></a> (registerList, registerPoll, registerSubscribe, registerUnsubscribe), <code>stream.go</code> (registerStream)</td>
+</tr>
+<tr>
+<td><strong>Capability flag</strong></td>
+<td><code>experimental.events</code> declared by the server. Per the experimental-namespace contract from <a href="/mcpkit/concepts/extension-mechanisms/#q2--how-does-a-new-capability-get-declared-and-negotiated">extension-mechanisms Q2</a>, receivers MUST ignore unrecognized experimentals; clients that do recognize it can call the methods above.</td>
+<td>server&rsquo;s <code>initialize</code> response <code>capabilities.experimental</code></td>
+</tr>
+<tr>
+<td><strong>Notification methods</strong></td>
+<td>Five push frames (<code>notifications/events/active</code>, <code>…/event</code>, <code>…/heartbeat</code>, <code>…/error</code>, <code>…/terminated</code>) ride the events/stream POST per Q5 below. Two webhook control envelopes (<code>type:gap</code>, <code>type:terminated</code>) ride outbound HTTP per Q7.</td>
+<td><code>stream.go</code> (notification frames), <code>control.go</code> (control envelopes)</td>
+</tr>
+<tr>
+<td><strong><code>_meta</code> field</strong></td>
+<td>Optional <code>_meta</code> on every <code>Event</code> envelope (per-occurrence metadata) and on every <code>EventDef</code> (per-event-type metadata). Same convention as <code>_meta</code> on Tool / Resource / Prompt in base MCP — opaque, app-defined.</td>
+<td><code>events.go</code> <code>Event.Meta</code>, <code>EventDef.Meta</code> (spec follow-on commit d4faef9, 2026-05-01)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="events-versus-notifications">Events versus notifications <a class="anchor" href="#events-versus-notifications">¶</a></h3>
+<p>If events ship over notification frames (Q5), why aren&rsquo;t they just notifications?</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Notification</th>
+<th>Event</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Originates in</strong></td>
+<td>MCP session state — the session itself changed</td>
+<td>Domain logic — something happened in the world the server represents</td>
+</tr>
+<tr>
+<td><strong>Examples</strong></td>
+<td><code>notifications/tools/list_changed</code>, <code>notifications/cancelled</code>, <code>notifications/progress</code></td>
+<td>&ldquo;Discord message arrived&rdquo;, &ldquo;incident filed&rdquo;, &ldquo;telegram typing indicator&rdquo;</td>
+</tr>
+<tr>
+<td><strong>Identity</strong></td>
+<td>Method name; payload is a hint or pairing key</td>
+<td>Server-assigned <code>eventId</code>; payload is the domain object</td>
+</tr>
+<tr>
+<td><strong>Replayable</strong></td>
+<td>No — refetch is the protocol (<a href="/mcpkit/concepts/notifications/#q2--how-does-the-server-tell-the-client-its-tools-list-changed">notifications Q2</a>)</td>
+<td>Yes (when cursored) — a buffered ring + cursor lets the client backfill</td>
+</tr>
+<tr>
+<td><strong>Subscription needed?</strong></td>
+<td>Capability gate at bring-up; no per-call setup</td>
+<td><code>events/subscribe</code> (webhook) or <code>events/stream</code> (push) — explicit</td>
+</tr>
+<tr>
+<td><strong>Survives reconnect?</strong></td>
+<td>Cache invalidation does</td>
+<td>Cursor + replay does, up to retention/maxAge</td>
+</tr>
+</tbody>
+</table>
+<p>Events ride the <strong>notifications surface</strong> (knob #3) because that&rsquo;s the existing wire-level fire-and-forget channel — but events are a domain abstraction <em>built on top of</em> notifications, not a kind of notification. Q5 makes this concrete: a single events/stream call wraps five distinct notification methods plus a typed final response.</p>
+<h2 id="q2--three-delivery-modes-poll-push-webhook--which-to-use-when">Q2 — Three delivery modes: poll, push, webhook — which to use when? <a class="anchor" href="#q2--three-delivery-modes-poll-push-webhook--which-to-use-when">¶</a></h2>
+<p>All three modes are method-namespace extensions per Q1; what differs is the conversation shape. Pick by who initiates, what network reachability you have, and how much state you can hold.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Method</th>
+<th>Who initiates</th>
+<th>Wire shape</th>
+<th>Reachability needed</th>
+<th>Latency</th>
+<th>Statefulness</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Poll</strong></td>
+<td><code>events/poll</code></td>
+<td>Client (each call)</td>
+<td>One-shot JSON-RPC request; response carries <code>events[]</code>, fresh <code>cursor</code>, <code>nextPollSeconds</code> hint</td>
+<td>None beyond MCP transport</td>
+<td>Bounded by poll interval</td>
+<td>Client persists <code>cursor</code>; server is idempotent on re-poll. Server also holds an ephemeral <em>poll lease</em> keyed on <code>(principal, name, params)</code> so lifecycle hooks can fire consistently with push + webhook — see <a href="#q9--how-does-an-author-shape-per-subscription-delivery">Q9</a>.</td>
+</tr>
+<tr>
+<td><strong>Push</strong></td>
+<td><code>events/stream</code></td>
+<td>Client (one long-lived call)</td>
+<td>Long-lived JSON-RPC request returning SSE; events arrive as <code>notifications/events/event</code> frames; final empty <code>StreamEventsResult</code> on close</td>
+<td>Client must hold the request open (HTTP) or the pipe (stdio)</td>
+<td>Server-push; bounded by handler latency</td>
+<td>Server holds per-call state for the open stream</td>
+</tr>
+<tr>
+<td><strong>Webhook</strong></td>
+<td><code>events/subscribe</code></td>
+<td>Client (subscribe), Server (delivery)</td>
+<td>Subscribe is one-shot JSON-RPC with TTL; deliveries are HMAC-signed POSTs from server to a callback URL</td>
+<td><strong>Server must be able to dial the client&rsquo;s callback URL</strong></td>
+<td>Server-push; bounded by webhook handler retries</td>
+<td>Server holds subscription registry; client refreshes by-tuple before TTL expiry</td>
+</tr>
+</tbody>
+</table>
+<p>The picking rule:</p>
+<ul>
+<li><strong>Pure remote, low-latency, client-can-stay-online</strong> → push. The client SDK opens one events/stream and the events flow until either side closes. Cheapest for both sides on a hot path.</li>
+<li><strong>Polling fits the workload</strong> (rare events, batch processing, audit-log-style backfill) → poll. No long-lived call to manage; client just remembers the cursor.</li>
+<li><strong>Client cannot stay online but has a public callback URL</strong> (third-party apps, automations, integrations whose process restarts often) → webhook. The server delivers when there&rsquo;s something to deliver; the client just needs to handle the POST.</li>
+</ul>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Webhook reachability flips the topology.</strong> Push and poll work over the same MCP transport the session was bring-up&rsquo;d on — the server only ever responds to client-initiated requests. Webhook is the one mode where the <em>server</em> dials <em>out</em> to a URL the client supplies. That&rsquo;s why webhook is the only mode that ships with an SSRF guard (Q7) and an authentication requirement on subscribe (Q3): the URL is server-controllable input, and a misconfigured server is a confused-deputy waiting to happen.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+The three modes are not mutually exclusive per event source. The same <code>EventSource</code> can serve poll, push, and webhook simultaneously — <code>EventDef.Delivery</code> advertises which subset is offered. The library wires fanout once: a single <code>yield(data)</code> call inside the source goroutine reaches every push subscriber AND every webhook target AND becomes available to the next <code>events/poll</code>.</p>
+</blockquote>
+<h2 id="q3--what-identifies-a-subscription">Q3 — What identifies a subscription? <a class="anchor" href="#q3--what-identifies-a-subscription">¶</a></h2>
+<p>Per <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#subscription-identity">spec §&ldquo;Subscription Identity&rdquo;</a>, a webhook subscription is identified by the <strong>canonical tuple</strong>:</p>
+<pre><code>(principal, delivery.url, name, arguments)
+</code></pre>
+<p>where <code>principal</code> is the authenticated subject (<code>claims.Subject</code>), <code>delivery.url</code> is the callback URL, <code>name</code> is the event-type name, and <code>arguments</code> is the canonical-JSON encoding of the subscription arguments object (sorted keys for stability). The server derives a routing handle:</p>
+<pre><code>id = &quot;sub_&quot; + base64(SHA256(canonical)[:16])     // experimental/ext/events/identity.go
+</code></pre>
+<p>…and surfaces it on every delivery POST as <code>X-MCP-Subscription-Id</code>. The id is <strong>non-load-bearing for security</strong> — knowing another tenant&rsquo;s id grants no operations, because every call resolves on the canonical tuple, not on the id.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Four rules fall out of the tuple immediately.</strong> Each is enforced in <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/events.go"><code>experimental/ext/events/events.go</code></a>:</p>
+<ol>
+<li><strong>No client-supplied id.</strong> A subscribe request that includes an <code>id</code> field is rejected with <code>-32602 InvalidParams</code>. The id is server-derived; accepting one would let clients alias subscriptions and break tenant isolation. (<code>registerSubscribe</code>, the <code>req.ID != &quot;&quot;</code> guard.)</li>
+<li><strong>Authentication required on subscribe and unsubscribe.</strong> Without <code>claims.Subject</code> the principal is undefined and the canonical tuple is uncomputable; the handler returns <code>-32012 Unauthorized</code>. The <code>UnsafeAnonymousPrincipal</code> config field is a deliberate spec deviation for demos — gated by an <code>Unsafe</code> prefix and a startup warning. (<code>resolvePrincipal</code>.)</li>
+<li><strong>Secret is client-supplied and required.</strong> <code>delivery.secret</code> must be <code>whsec_&lt;base64 of 24-64 random bytes&gt;</code> per Standard Webhooks. Server-generated secrets would let anyone subscribe with <code>url=&lt;victim&gt;</code> and have the server happily POST signed events to the victim — HMAC would prove &ldquo;the MCP server sent this,&rdquo; not &ldquo;the URL owner asked for it.&rdquo; Client-supplied flips that. (<code>validateClientSecret</code>.)</li>
+<li><strong><code>TooManySubscriptions</code> enforced before <code>OnSubscribe</code> fires.</strong> When a <code>Quota</code> is configured (<code>events.NewQuota(events.WithMaxSubscriptionsPerPrincipal(name, n))</code>) and a principal hits cap on a given event type, the next subscribe is rejected with <code>-32013 TooManySubscriptions</code> <em>before</em> the author&rsquo;s <code>OnSubscribe</code> hook runs — so a rejected subscription never provisions upstream resources. Same enforcement on push (<code>events/stream</code>) and poll (<code>events/poll</code>). See <a href="#q9--how-does-an-author-shape-per-subscription-delivery">Q9</a>. (<code>registerSubscribe</code>&rsquo;s <code>quota.Reserve</code> call.)</li>
+</ol>
+</blockquote>
+<h3 id="worked-example-refresh-vs-distinct-subscription">Worked example: refresh vs. distinct subscription <a class="anchor" href="#worked-example-refresh-vs-distinct-subscription">¶</a></h3>
+<p>Two subscribes with <strong>identical</strong> canonical bytes → same subscription, TTL refreshed in place:</p>
+<pre><code class="language-jsonc">// Call 1
+{&quot;method&quot;: &quot;events/subscribe&quot;, &quot;params&quot;: {
+  &quot;name&quot;: &quot;discord.message&quot;,
+  &quot;arguments&quot;: {&quot;channel&quot;: &quot;alerts&quot;},
+  &quot;delivery&quot;: {&quot;mode&quot;: &quot;webhook&quot;, &quot;url&quot;: &quot;https://hook.example/recv&quot;, &quot;secret&quot;: &quot;whsec_AAAA...&quot;}
+}}
+// → response.id = &quot;sub_xR9vK...&quot;
+
+// Call 2 (a few seconds later, same caller)
+{&quot;method&quot;: &quot;events/subscribe&quot;, &quot;params&quot;: { /* identical to Call 1 */ }}
+// → response.id = &quot;sub_xR9vK...&quot;   ← same id, refreshed expiry
+</code></pre>
+<p>Two subscribes with <strong>different arguments</strong> (or different url, name, or principal) → distinct subscriptions:</p>
+<pre><code class="language-jsonc">// Call 3 — arguments differ
+{&quot;method&quot;: &quot;events/subscribe&quot;, &quot;params&quot;: {
+  &quot;name&quot;: &quot;discord.message&quot;,
+  &quot;arguments&quot;: {&quot;channel&quot;: &quot;general&quot;},     // ← different
+  &quot;delivery&quot;: {&quot;mode&quot;: &quot;webhook&quot;, &quot;url&quot;: &quot;https://hook.example/recv&quot;, &quot;secret&quot;: &quot;whsec_BBBB...&quot;}
+}}
+// → response.id = &quot;sub_zP4cM...&quot;   ← different id
+</code></pre>
+<p><code>webhooks.Register(canonicalKey, derivedID, ...)</code> is keyed on <code>string(canonicalKey)</code>; second call with the same key updates expiry + secret in place, second call with a different key creates a fresh entry. Cross-tenant isolation is by construction — different <code>principal</code> → different canonical bytes → different id.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-identity.md">subscription identity tuple proof</a> <em>(stub, leaf)</em> — formal walk-through of why the four-tuple is necessary and sufficient: the cross-tenant isolation argument, the secret-rotation flow under multi-signature, and what changes if a deployment maps multiple OAuth principals to one subject.</p>
+</blockquote>
+<h2 id="q4--whats-a-source">Q4 — What&rsquo;s a source? <a class="anchor" href="#q4--whats-a-source">¶</a></h2>
+<p>A <strong>source</strong> is the thing that produces events. Two abstractions in <code>experimental/ext/events/</code>:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>YieldingSource[Data]</code> (recommended)</th>
+<th><code>TypedSource[Data]</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Who owns the buffer</strong></td>
+<td>Library — bounded ring, default 1000 events</td>
+<td>Caller — your DB, event log, external queue</td>
+</tr>
+<tr>
+<td><strong>Construction</strong></td>
+<td><code>events.NewYieldingSource[Data](def)</code> returns <code>(*source, yield func(Data) error)</code></td>
+<td><code>events.TypedSource[Data](def, poll, latest)</code></td>
+</tr>
+<tr>
+<td><strong>How events get in</strong></td>
+<td>Call <code>yield(data)</code> from wherever you produce events (bot callback, channel reader, HTTP handler)</td>
+<td>Server calls your <code>Poll(cursor, limit)</code> / <code>Latest()</code> callbacks</td>
+</tr>
+<tr>
+<td><strong>Push fanout</strong></td>
+<td>Library — <code>yield()</code> automatically fans out to push subscribers + webhook targets via the <code>SetEmitHook</code> wiring in <code>events.Register</code></td>
+<td>You — call <code>events.Emit(srv, e)</code> and <code>events.EmitToWebhooks(wh, e)</code> from your write path</td>
+</tr>
+<tr>
+<td><strong>Per-subscription hooks</strong></td>
+<td><code>Match</code> / <code>Transform</code> fire automatically per subscriber on every <code>yield()</code> fanout; <code>OnSubscribe</code> / <code>OnUnsubscribe</code> fire from the SDK lifecycle wiring across all three modes (see <a href="#q9--how-does-an-author-shape-per-subscription-delivery">Q9</a>)</td>
+<td>None on the SDK side — apply filtering inside your <code>Poll</code> callback yourself, where you have direct access to your storage and per-event control. Hooks are deliberately not plumbed on <code>TypedSource</code> (would duplicate logic the author is better positioned to write).</td>
+</tr>
+<tr>
+<td><strong>Cursorless option</strong></td>
+<td><code>events.WithoutCursors()</code> — events emit with <code>cursor: null</code>, no buffer, poll always empty</td>
+<td>Return <code>&quot;&quot;</code> from <code>Latest()</code> and the wire layer handles the rest</td>
+</tr>
+<tr>
+<td><strong>Code</strong></td>
+<td><code>yield.go</code></td>
+<td><code>events.go</code> <code>TypedSource</code> + <code>typedSource</code> struct</td>
+</tr>
+</tbody>
+</table>
+<p>Pick <code>YieldingSource</code> when the source pushes at the library; pick <code>TypedSource</code> when the source already owns its storage and prefers to be polled.</p>
+<h3 id="cursored-versus-cursorless">Cursored versus cursorless <a class="anchor" href="#cursored-versus-cursorless">¶</a></h3>
+<p><strong>Who decides:</strong> the server, at source-registration time. <code>EventDef.Cursorless = true</code> opts a source out of cursors entirely; default is cursored. The choice is <strong>per-source</strong> (a server can have a cursored <code>alert.fired</code> alongside a cursorless <code>typing.indicator</code>), <strong>fixed for the source&rsquo;s lifetime</strong>, and <strong>advertised on <code>events/list</code></strong> so clients plan accordingly. Clients don&rsquo;t pick — they adapt to what the source declares.</p>
+<p><strong>Why bother with the option:</strong> replayability is expensive. A cursored source maintains an internal ring buffer (<code>WithMaxSize(N)</code>), keeps events long enough for late subscribers / reconnects to backfill, and assigns a monotonic cursor on every emission. That&rsquo;s the right tradeoff for messages, alerts, audit logs — anything where missing an event is bad. For typing indicators, presence, current sensor readings — anything where the <em>current</em> state is what matters and a missed value is meaningless — the buffer is wasted space and replay is misleading. Cursorless says &ldquo;fire-and-forget, replay isn&rsquo;t a thing here.&rdquo;</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Cursored (default)</th>
+<th>Cursorless</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Set by</td>
+<td><code>EventDef.Cursorless = false</code> (default)</td>
+<td><code>EventDef.Cursorless = true</code></td>
+</tr>
+<tr>
+<td>Advertised to client</td>
+<td>yes — on <code>events/list</code></td>
+<td>yes — on <code>events/list</code></td>
+</tr>
+<tr>
+<td><code>Event.cursor</code> on the wire</td>
+<td>string (monotonic int by default in <code>YieldingSource</code>)</td>
+<td><code>null</code></td>
+</tr>
+<tr>
+<td>Internal buffer</td>
+<td>yes — <code>WithMaxSize(N)</code> caps the ring</td>
+<td>no — events emitted and forgotten</td>
+</tr>
+<tr>
+<td><code>events/poll</code></td>
+<td>returns events since the supplied cursor</td>
+<td>always returns empty + <code>cursor: null</code></td>
+</tr>
+<tr>
+<td><code>events/subscribe</code> with <code>cursor: null</code></td>
+<td>resolves to <code>source.Latest()</code> (&ldquo;from now&rdquo;)</td>
+<td>stays null</td>
+</tr>
+<tr>
+<td>Push (<code>events/stream</code>)</td>
+<td>events carry their cursor; replay possible via <code>Recent(n)</code> / <code>ByCursor(c)</code></td>
+<td>events carry <code>cursor: null</code>; no replay</td>
+</tr>
+<tr>
+<td>Webhook</td>
+<td>events carry their cursor in the body</td>
+<td>events carry <code>cursor: null</code></td>
+</tr>
+<tr>
+<td>When to pick</td>
+<td>messages, alerts, audit logs — anything where missing an event is bad</td>
+<td>typing indicators, presence, current readings — ephemeral state where replay is meaningless</td>
+</tr>
+</tbody>
+</table>
+<p>The worked example below uses the cursored default — you&rsquo;ll see <code>cursor</code> strings (<code>&quot;137&quot;</code>, <code>&quot;138&quot;</code>, <code>&quot;139&quot;</code>) on every emitted frame. A cursorless source&rsquo;s frames look identical except <code>&quot;cursor&quot;:null</code> everywhere; nothing else on the wire changes.</p>
+<h3 id="worked-example">Worked example <a class="anchor" href="#worked-example">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// One source, one yield function.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>source, yield <span style="color:#000;font-weight:bold">:=</span> events.NewYieldingSource[AlertData](events.EventDef{
+</span></span><span style="display:flex;"><span>    Name:        <span style="color:#d14">&#34;alert.fired&#34;</span>,
+</span></span><span style="display:flex;"><span>    Description: <span style="color:#d14">&#34;Fires when a new alert is triggered&#34;</span>,
+</span></span><span style="display:flex;"><span>    Delivery:    []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;push&#34;</span>, <span style="color:#d14">&#34;poll&#34;</span>, <span style="color:#d14">&#34;webhook&#34;</span>},
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Register it. The library installs the push + webhook fanout hook.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>events.<span style="color:#900;font-weight:bold">Register</span>(events.Config{
+</span></span><span style="display:flex;"><span>    Sources:  []events.EventSource{source},
+</span></span><span style="display:flex;"><span>    Webhooks: webhooks,
+</span></span><span style="display:flex;"><span>    Server:   srv,
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Yield from your domain code. One call → live push subscribers, webhook
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// targets, and the next events/poll all see it.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">go</span> <span style="color:#900;font-weight:bold">alertWatcher</span>(<span style="color:#000;font-weight:bold">func</span>(a AlertData) { _ = <span style="color:#900;font-weight:bold">yield</span>(a) })
+</span></span></code></pre><p><code>yield.go</code>&rsquo;s <code>yield()</code> does, in order: marshal Data → assign monotonic cursor → append to ring (cursored only) → fanout to live <code>Subscribe()</code> channels under lock (drop-with-truncated-flag on a full subscriber buffer) → call the registered <code>emitHook</code> (which Emits to push and to webhooks). The author writes no fanout code.</p>
+<h2 id="q5--push-delivery-walkthrough-what-does-eventsstream-look-like-on-the-wire">Q5 — Push delivery walkthrough: what does <code>events/stream</code> look like on the wire? <a class="anchor" href="#q5--push-delivery-walkthrough-what-does-eventsstream-look-like-on-the-wire">¶</a></h2>
+<p>These are the notifications surface from the four-knob table (Q1); capability gate is <code>experimental.events</code>. The shape is &ldquo;long-lived JSON-RPC POST returning SSE&rdquo; — same pattern as a <code>tools/call</code> whose response upgrades to SSE for progress (see <a href="/mcpkit/concepts/transport-mechanics/#worked-example-a-tool-call-with-progress-plus-an-unrelated-push">transport-mechanics worked example</a>) — except the SSE stream stays open as long as the subscription is live, the events are domain-scoped, and the final response is an empty typed <code>StreamEventsResult</code>.</p>
+<p><strong>Setup assumed:</strong></p>
+<ul>
+<li>Session <code>abc123</code> is live.</li>
+<li>Bring-up negotiated <code>experimental.events</code> on the server side.</li>
+<li>The server has registered an <code>alert.fired</code> source via <code>events.Register</code> (cursored, since that&rsquo;s the default — see <a href="#cursored-versus-cursorless">cursored vs cursorless</a>).</li>
+</ul>
+<p><strong>Step 1 — client opens the stream.</strong> One POST, one JSON-RPC request:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">POST /mcp HTTP/1.1                                   ← HTTP request #N (events/stream POST)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Mcp-Session-Id: abc123
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Accept: application/json, text/event-stream
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:42,&#34;method&#34;:&#34;events/stream&#34;,&#34;params&#34;:{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;name&#34;:&#34;alert.fired&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;cursor&#34;:null
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}}
+</span></span></span></code></pre><p><strong>Step 2 — server upgrades to SSE and emits the confirmation frame</strong> (<code>notifications/events/active</code>, <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#request-eventsstream">spec §&ldquo;Request: events/stream&rdquo;</a>). <code>requestId: 42</code> echoes the originating request id so a stdio client can demux when push and other traffic interleave on the same pipe; <code>cursor</code> resolves <code>null</code> → <code>source.Latest()</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">HTTP</span><span style="color:#000;font-weight:bold">/</span><span style="color:#099">1.1</span> <span style="color:#099">200</span> <span style="color:#900;font-weight:bold">OK                                      ← still HTTP request #N</span>
+</span></span><span style="display:flex;"><span>Content-Type<span style="color:#000;font-weight:bold">:</span> text/event-stream
+</span></span><span style="display:flex;"><span>Mcp-Session-Id<span style="color:#000;font-weight:bold">:</span> abc123
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>id: 1
+</span></span><span style="display:flex;"><span>data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/events/active&#34;,&#34;params&#34;:{
+</span></span><span style="display:flex;"><span>  &#34;requestId&#34;:42,&#34;cursor&#34;:&#34;137&#34;
+</span></span><span style="display:flex;"><span>}}
+</span></span></code></pre><p><strong>Step 3 — events arrive.</strong> Each <code>yield()</code> in the source becomes one SSE event carrying <code>notifications/events/event</code> (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#event-delivery">spec §&ldquo;Event Delivery&rdquo;</a>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">id: 2
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/events/event&#34;,&#34;params&#34;:{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;requestId&#34;:42,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;eventId&#34;:&#34;evt_138&#34;,&#34;name&#34;:&#34;alert.fired&#34;,&#34;timestamp&#34;:&#34;2026-05-04T10:42:00Z&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;data&#34;:{&#34;severity&#34;:&#34;P1&#34;,&#34;service&#34;:&#34;checkout&#34;,&#34;message&#34;:&#34;5xx spike&#34;},
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;cursor&#34;:&#34;138&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}}
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">id: 3
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/events/event&#34;,&#34;params&#34;:{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;requestId&#34;:42,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;eventId&#34;:&#34;evt_139&#34;,&#34;name&#34;:&#34;alert.fired&#34;,&#34;timestamp&#34;:&#34;2026-05-04T10:42:07Z&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;data&#34;:{...}, &#34;cursor&#34;:&#34;139&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}}
+</span></span></span></code></pre><p><strong>Step 4 — heartbeat during quiet periods</strong> (<code>notifications/events/heartbeat</code>, <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#lifecycle">spec §&ldquo;Lifecycle&rdquo;</a>, default every 30s; <code>Config.StreamHeartbeatInterval</code> overrides). Cursor carries the source&rsquo;s <em>current</em> head so the client&rsquo;s persisted cursor advances even with no event traffic — useful for clients that want to see the watermark move:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">id: 4
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/events/heartbeat&#34;,&#34;params&#34;:{
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;requestId&#34;:42,&#34;cursor&#34;:&#34;139&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}}
+</span></span></span></code></pre><p><strong>Step 5 — close.</strong> When the client disconnects (or <code>notifications/cancelled</code> arrives over stdio), the handler returns the typed final frame (<code>StreamEventsResult{Meta: {}}</code>, <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#lifecycle">spec §&ldquo;Lifecycle&rdquo;</a>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">id: 5
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:42,&#34;result&#34;:{&#34;_meta&#34;:{}}}
+</span></span></span></code></pre><p>Stream closes. HTTP request #N is now complete.</p>
+<p><strong>Things to notice:</strong></p>
+<ul>
+<li><strong>Five distinct notification methods, one stream.</strong> active (open), event (each delivery), heartbeat (idle), error (transient — Q8), terminated (terminal — Q8). Plus the typed result frame on close. The wire shape in <code>stream.go</code> <code>registerStream</code> is exactly this select loop: <code>evCh / ticker.C / ctx.Done</code>.</li>
+<li><strong><code>requestId</code> echo on every notification.</strong> The notifications carry the originating events/stream request id in their params. On stdio (one pipe, multiplexed traffic) this is how a client demuxes events for <em>this</em> stream from notifications for some other in-flight call. On streamable HTTP, the SSE upgrade scopes the notifications to the POST already, but the field stays for stdio symmetry — same wire shape both transports.</li>
+<li><strong>Cursor flows through the event payload.</strong> Unlike <code>notifications/progress</code> where the pairing key is <code>progressToken</code> in <code>_meta</code>, events carry <code>cursor</code> as a top-level field on the notification params. Persist it client-side; pass it back on reconnect to replay missed events (cursored sources only).</li>
+<li><strong><code>Truncated</code> is a back-pressure signal.</strong> If <code>yield()</code> finds a subscriber&rsquo;s channel full, it drops the event for that subscriber and sets <code>pendingTruncated</code>. The next successful send carries <code>truncated:true</code> on a fresh <code>notifications/events/active</code> frame (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#event-delivery">spec §&ldquo;Event Delivery&rdquo;</a>) before the resumed event — the client knows it missed events and can re-fetch authoritative state if it cares. Riding the marker on the next event (rather than a separate frame) keeps channel order trivially correct under any buffer size; see <code>yield.go</code> <code>SubscriberEvent</code> discriminator commentary.</li>
+</ul>
+<h2 id="q6--subscription-routing-when-yield-fires-who-gets-the-event">Q6 — Subscription routing: when <code>yield()</code> fires, who gets the event? <a class="anchor" href="#q6--subscription-routing-when-yield-fires-who-gets-the-event">¶</a></h2>
+<p>Q5 walked one push subscriber receiving events. The webhook walkthrough below walks one webhook target receiving events. In real systems, a source has <em>many</em> subscribers across <em>many</em> delivery modes, and the obvious questions are:</p>
+<ul>
+<li>When the source author calls <code>yield(data)</code>, who exactly does that event reach?</li>
+<li>Can two clients subscribed to the same source name see different events?</li>
+<li>How are events scoped to a tenant / room / topic?</li>
+</ul>
+<p>Routing happens at three layers, with one rule per layer.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>When it fires</th>
+<th>Decided by</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Authorization</strong></td>
+<td>subscription time (<code>events/subscribe</code>)</td>
+<td>server&rsquo;s auth check</td>
+<td>rejected requests never reach fan-out</td>
+</tr>
+<tr>
+<td><strong>Fan-out matching</strong></td>
+<td>yield time (each <code>yield()</code>)</td>
+<td>source-name match, default broadcast within source</td>
+<td>every active subscription registered against this source name receives the event</td>
+</tr>
+<tr>
+<td><strong>Per-target liveness</strong></td>
+<td>delivery time</td>
+<td>server&rsquo;s transport state</td>
+<td>matched subscriptions that aren&rsquo;t deliverable (closed SSE, suspended webhook) are skipped silently</td>
+</tr>
+</tbody>
+</table>
+<h3 id="layer-1--authorization-subscription-time">Layer 1 — Authorization (subscription time) <a class="anchor" href="#layer-1--authorization-subscription-time">¶</a></h3>
+<p>When <code>events/subscribe</code> arrives:</p>
+<ol>
+<li>Server checks the principal is allowed to subscribe (auth — <code>ext/auth/</code>&rsquo;s fine-grained-auth-per-source if configured, otherwise plain <code>experimental.events</code> capability).</li>
+<li>Server checks <code>name</code> is advertised on <code>events/list</code> (unknown source → reject).</li>
+<li>Server validates <code>params</code> against <code>EventDef.ParamsSchema</code> if one is defined.</li>
+<li>Server derives the subscription id from the canonical tuple <code>(principal, delivery.url, name, params)</code> (see <a href="#q3--what-identifies-a-subscription">Q3</a>).</li>
+<li>Subscription is registered; identity returned.</li>
+</ol>
+<p>A request that fails any check never reaches yield-time fan-out.</p>
+<h3 id="layer-2--fan-out-yield-time">Layer 2 — Fan-out (yield time) <a class="anchor" href="#layer-2--fan-out-yield-time">¶</a></h3>
+<p><code>yield(data)</code> runs in the source author&rsquo;s goroutine. mcpkit&rsquo;s <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go"><code>YieldingSource</code></a> does, in order:</p>
+<ol>
+<li><strong>Match by source name.</strong> Only subscriptions registered against <em>this</em> source receive the event. The spec calls this <em>per-stream isolation</em> (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#event-delivery">spec §&ldquo;Event Delivery&rdquo;</a>): yields on source A surface only on streams subscribed to A, never on streams subscribed to B.</li>
+<li><strong>Broadcast within the source.</strong> <em>Every</em> matching subscription receives the event. mcpkit&rsquo;s default fan-out does <strong>not</strong> filter by <code>params</code> — even though <code>params</code> is part of subscription identity (Q3), it&rsquo;s a routing <em>key</em> (different params = different subscription) but <strong>not</strong> a built-in routing <em>filter</em> at emit time.</li>
+<li><strong>Dispatch per delivery mode</strong> (a single yield can hit all three):
+<ul>
+<li><strong>Push</strong> subscriptions → SSE event on the live <code>events/stream</code> channel.</li>
+<li><strong>Webhook</strong> subscriptions → enqueued HTTP POST to the registered <code>delivery.url</code>.</li>
+<li><strong>Poll</strong> — no fan-out at yield; events go into the cursored ring buffer, read on the next <code>events/poll</code>.</li>
+</ul>
+</li>
+<li><strong>Mark <code>Truncated</code></strong> if a push subscriber&rsquo;s channel is full (Q5 back-pressure signal).</li>
+</ol>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>mcpkit&rsquo;s default fan-out is broadcast within source name, but per-subscriber filtering is opt-in.</strong> If two clients subscribe to <code>chat.message</code> with <code>room_id: &quot;abc&quot;</code> and <code>room_id: &quot;xyz&quot;</code> respectively, <em>both</em> receive every yield by default — <code>params</code> makes them distinct subscriptions but doesn&rsquo;t restrict delivery automatically. Three clean ways to filter:</p>
+<ol>
+<li><strong>Set <code>EventDef.Match</code></strong> — a per-subscriber filter that fires on every emit. The hook receives the subscriber&rsquo;s <code>params</code> plus the event; return <code>false</code> to skip this subscriber. See <a href="#q9--how-does-an-author-shape-per-subscription-delivery">Q9</a>. Cleanest for &ldquo;deliver only when <code>params.severity</code> matches <code>event.data.severity</code>&rdquo; style filters.</li>
+<li><strong>Many narrow sources</strong> — register <code>chat.message.abc</code> and <code>chat.message.xyz</code> as separate sources. Source-name match does the routing. Simplest when the topic space is finite.</li>
+<li><strong>Manual filtering at the source</strong> — use <code>TypedSource</code> (caller-owned storage) and call <code>events.Emit(srv, e)</code> / <code>events.EmitToWebhooks(wh, e)</code> selectively per event. The author owns the routing logic. Right tool when filtering depends on source-side state rather than per-subscriber params.</li>
+</ol>
+</blockquote>
+<h3 id="layer-3--per-target-liveness-delivery-time">Layer 3 — Per-target liveness (delivery time) <a class="anchor" href="#layer-3--per-target-liveness-delivery-time">¶</a></h3>
+<p>A &ldquo;matched&rdquo; subscription doesn&rsquo;t guarantee delivery:</p>
+<ul>
+<li><strong>Push</strong> subscriptions are alive only while the client&rsquo;s <code>events/stream</code> SSE is open. If the client disconnected, push is a no-op until they reconnect (with <code>cursor</code> for replay if cursored — Q4).</li>
+<li><strong>Webhook</strong> subscriptions can be <strong>suspended</strong> after N consecutive failures (<code>Status.Active = false</code>, default 5 failures in a 10-minute window). Suspended targets are excluded from <code>Targets()</code> and never receive new events until the subscription is refreshed (Q7).</li>
+<li><strong>Poll</strong> has no liveness — events accumulate in the buffer and are read on the next call.</li>
+</ul>
+<h3 id="multi-tenant-isolation-is-structural">Multi-tenant isolation is structural <a class="anchor" href="#multi-tenant-isolation-is-structural">¶</a></h3>
+<p>The canonical tuple includes <code>principal</code>. Same <code>name</code> + same <code>delivery.url</code> + same <code>params</code> from a <em>different</em> principal is a <em>different</em> subscription. Routing never crosses principals — a subscription&rsquo;s events go only to that principal&rsquo;s delivery target. There&rsquo;s no cross-tenant pushing built into the protocol; isolation falls out of the identity model in <a href="#q3--what-identifies-a-subscription">Q3</a>.</p>
+<h3 id="two-line-decision-tree">Two-line decision tree <a class="anchor" href="#two-line-decision-tree">¶</a></h3>
+<p>A simpler way to remember it:</p>
+<ul>
+<li><strong>&ldquo;Will subscriber S receive event E?&rdquo;</strong> — yes if S&rsquo;s source name matches E&rsquo;s source AND S&rsquo;s delivery target is live. That&rsquo;s it.</li>
+<li><strong>&ldquo;Can I filter by topic / room / tenant?&rdquo;</strong> — not via <code>params</code> alone; either split into more sources, or move to <code>TypedSource</code> and decide at emit.</li>
+</ul>
+<h2 id="q7--webhook-delivery-walkthrough-hmac-retries-suspend-control-envelopes">Q7 — Webhook delivery walkthrough: HMAC, retries, suspend, control envelopes <a class="anchor" href="#q7--webhook-delivery-walkthrough-hmac-retries-suspend-control-envelopes">¶</a></h2>
+<p>Per the <a href="/mcpkit/concepts/extension-mechanisms/#q1--what-counts-as-an-extension-in-mcp">extension-mechanisms Q1</a> styles table, webhook delivery is <em>not</em> a method-namespace extension at the wire layer — <code>events/subscribe</code> is, but the deliveries themselves are outbound HTTP-with-HMAC. That makes webhook-the-delivery-loop a closer analog of the <strong>bring-up extension</strong> style (auth&rsquo;s WWW-Authenticate / OAuth dance): it extends a layer below MCP, not the JSON-RPC message exchange.</p>
+<p>The subscribe call (Q3) registers <code>(canonicalKey, derivedID, url, secret, ttl)</code> in <code>WebhookRegistry</code>. After that, every <code>yield()</code> in the source fans out to <code>Deliver(event)</code> which fires one <code>deliver(target)</code> goroutine per non-expired non-suspended target.</p>
+<p><strong>The signed POST</strong> (Standard Webhooks scheme, <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-event-delivery">spec §&ldquo;Webhook Event Delivery&rdquo;</a>, default <code>WithWebhookHeaderMode(StandardWebhooks)</code>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">POST /recv HTTP/1.1                                  ← server → callback URL
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Host: hook.example
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Content-Type: application/json
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-id: evt_138                                  ← stable across retries; receiver dedups on this
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-timestamp: 1714814520
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">webhook-signature: v1,5HxN...base64...               ← HMAC-SHA256(secret, id + &#34;.&#34; + ts + &#34;.&#34; + body)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">X-MCP-Subscription-Id: sub_xR9vK...                  ← MCP-specific; lets receiver pick the right secret
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{&#34;eventId&#34;:&#34;evt_138&#34;,&#34;name&#34;:&#34;alert.fired&#34;,&#34;timestamp&#34;:&#34;2026-05-04T10:42:00Z&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2"> &#34;data&#34;:{&#34;severity&#34;:&#34;P1&#34;,&#34;service&#34;:&#34;checkout&#34;,&#34;message&#34;:&#34;5xx spike&#34;},&#34;cursor&#34;:&#34;138&#34;}
+</span></span></span></code></pre><p>Receiver verifies signature → looks up secret by <code>X-MCP-Subscription-Id</code> → checks <code>webhook-timestamp</code> is not stale (&gt;5 min old per <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-event-delivery">spec §&ldquo;Webhook Event Delivery&rdquo;</a>) → dedups on <code>webhook-id</code> → processes.</p>
+<h3 id="the-hardened-delivery-loop">The hardened delivery loop <a class="anchor" href="#the-hardened-delivery-loop">¶</a></h3>
+<p><code>webhook.go</code> <code>deliver()</code> is short but each guard is load-bearing:</p>
+<table>
+<thead>
+<tr>
+<th>Guard</th>
+<th>What</th>
+<th>Why</th>
+<th>Code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>SSRF — dial-time</strong></td>
+<td><code>net.Dialer.Control</code> callback rejects loopback, RFC1918 private, link-local (incl. AWS metadata), IPv6 ULA, multicast, broadcast, IPv4-mapped forms of all of the above</td>
+<td>DNS rebinding: a hostname resolved at subscribe-time can resolve elsewhere at delivery-time. Dial-time check is TOCTOU-safe; the address passed to <code>Control</code> is exactly the one <code>connect(2)</code> will use. Per <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-security">spec §&ldquo;Webhook Security&rdquo;</a>.</td>
+<td><code>webhook.go</code> <code>dialContext</code>, <code>isBlockedIP</code></td>
+</tr>
+<tr>
+<td><strong>No redirect-following</strong></td>
+<td><code>http.Client.CheckRedirect</code> returns <code>ErrUseLastResponse</code></td>
+<td>A receiver returning 3xx to an internal address would otherwise bypass the dial-time guard via Go&rsquo;s redirect chain. Treat 3xx as terminal <code>http_3xx_redirect</code>.</td>
+<td><code>NewWebhookRegistry</code></td>
+</tr>
+<tr>
+<td><strong>Body cap</strong></td>
+<td>256 KiB default (<code>WithWebhookMaxBodyBytes</code>); REJECT mode, not TRUNCATE</td>
+<td>Truncation would corrupt the HMAC signature and silently drop event content. Retrying won&rsquo;t shrink the body — terminal for the event. Per <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-security">spec §&ldquo;Webhook Security&rdquo;</a>.</td>
+<td><code>Deliver()</code> <code>len(body) &gt; r.maxBodyBytes</code></td>
+</tr>
+<tr>
+<td><strong>413 non-retryable</strong></td>
+<td><code>StatusRequestEntityTooLarge</code> short-circuits the retry loop</td>
+<td>Receiver rejects our payload size; retrying won&rsquo;t change that.</td>
+<td><code>deliver()</code> switch</td>
+</tr>
+<tr>
+<td><strong>5xx retry, exponential backoff</strong></td>
+<td>4 attempts (1 initial + 3 retries), 500ms → 1s → 2s → 5s cap</td>
+<td>Standard webhook convention; matches Stripe / GitHub / Standard Webhooks spec.</td>
+<td><code>deliver()</code> <code>for attempt := 0; ...</code></td>
+</tr>
+<tr>
+<td><strong>Suspend after N consecutive failures</strong></td>
+<td>Default 5 failures within a 10-minute sliding window flips <code>Status.Active = false</code>; suspended targets are excluded from <code>Targets()</code> until refresh</td>
+<td>A dead receiver shouldn&rsquo;t keep getting retry traffic forever. Per <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-delivery-status">spec §&ldquo;Webhook Delivery Status&rdquo;</a> (&ldquo;after repeated failures the server SHOULD set active: false&rdquo;).</td>
+<td><code>recordDeliveryFailure</code>, <code>Targets()</code></td>
+</tr>
+<tr>
+<td><strong>Auto-PostTerminated on suspend transition</strong></td>
+<td>On the <code>true → false</code> transition, automatically POST a <code>{type:terminated}</code> control envelope (Q8 below) so the receiver learns the subscription died courtesy-style</td>
+<td>Receiver may otherwise discover via a polled refresh — auto-post is a hint that the next refresh is needed.</td>
+<td><code>recordDeliveryFailure</code> (auto-PostTerminated block)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>The dial-time SSRF guard runs on every connect, including retries and redirect-target dials.</strong> A subscribe-time URL check (<code>ValidateWebhookURL</code>) catches obvious mistakes — bad scheme, literal <code>localhost</code> — but is not the load-bearing protection. Only the dialer&rsquo;s <code>Control</code> callback is TOCTOU-safe under DNS rebinding. The <code>WithWebhookAllowPrivateNetworks(true)</code> option bypasses both for demos against local httptest servers; <strong>never enable it in production</strong>.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-ssrf.md">events SSRF deep dive</a> <em>(stub, leaf)</em> — full IP blocklist matrix with worked CIDR examples, the dial-time vs subscribe-time decomposition argument, and a DNS-rebinding attack walkthrough showing why the subscribe-time check alone fails.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-hmac.md">HMAC + Standard Webhooks deep dive</a> <em>(stub, leaf)</em> — <code>webhook-id</code> semantics across event vs control deliveries, the multi-signature secret-rotation grace window, the <code>MCPHeaders</code> opt-in mode, and full receiver verification examples in Go and Python.</p>
+</blockquote>
+<h3 id="control-envelopes--non-event-webhook-bodies">Control envelopes — non-event webhook bodies <a class="anchor" href="#control-envelopes--non-event-webhook-bodies">¶</a></h3>
+<p>Two cases break the &ldquo;every POST body is an event&rdquo; pattern (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#non-event-webhook-bodies">spec §&ldquo;Non-event webhook bodies&rdquo;</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Envelope</th>
+<th>Purpose</th>
+<th>When emitted</th>
+<th>webhook-id format</th>
+<th>Removes registry entry?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>{type:&quot;gap&quot;, cursor:&quot;&lt;fresh&gt;&quot;}</code></td>
+<td>Tell the receiver to reset its persisted cursor — a gap was detected (yield queue overflowed, retention boundary crossed)</td>
+<td>Server-initiated when the source detects it can&rsquo;t backfill from the receiver&rsquo;s last-known position</td>
+<td><code>msg_gap_&lt;random&gt;</code></td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>{type:&quot;terminated&quot;, error:{code,message}}</code></td>
+<td>The subscription has ended (auth revoked, source terminated, suspend-transition courtesy)</td>
+<td>Manual <code>PostTerminated</code>, OR auto-emitted by <code>postTerminatedSilent</code> on suspend transition</td>
+<td><code>msg_terminated_&lt;random&gt;</code></td>
+<td><code>PostTerminated</code> removes; <code>postTerminatedSilent</code> does NOT (target stays observable as <code>Active=false</code> so refresh-reactivation still works)</td>
+</tr>
+</tbody>
+</table>
+<p>Same Standard Webhooks signature scheme as event deliveries; same <code>X-MCP-Subscription-Id</code> header. The <code>webhook-id</code> prefix lets receivers distinguish control from event in their dedup table.</p>
+<h3 id="deliverystatus-on-subscribe-refresh"><code>deliveryStatus</code> on subscribe refresh <a class="anchor" href="#deliverystatus-on-subscribe-refresh">¶</a></h3>
+<p>Per <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#webhook-delivery-status">spec §&ldquo;Webhook Delivery Status&rdquo;</a>, <code>events/subscribe</code> refresh responses carry a <code>deliveryStatus</code> block when the target has prior delivery attempts:</p>
+<pre><code class="language-jsonc">{
+  &quot;id&quot;: &quot;sub_xR9vK...&quot;,
+  &quot;cursor&quot;: &quot;139&quot;,
+  &quot;refreshBefore&quot;: &quot;2026-05-04T11:00:00Z&quot;,
+  &quot;deliveryStatus&quot;: {
+    &quot;active&quot;: true,                          // false after suspend; refresh reactivates
+    &quot;lastDeliveryAt&quot;: &quot;2026-05-04T10:42:00Z&quot;,
+    &quot;lastError&quot;: &quot;http_5xx&quot;,                 // categorical bucket; spec forbids raw response content
+    &quot;failedSince&quot;: &quot;2026-05-04T10:30:00Z&quot;
+  }
+}
+</code></pre>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong><code>lastError</code> is a closed categorical set</strong> (<code>connection_refused</code>, <code>timeout</code>, <code>tls_error</code>, <code>http_3xx_redirect</code>, <code>http_4xx</code>, <code>http_5xx</code>, <code>challenge_failed</code>). The spec explicitly forbids raw response bodies, headers, or status lines because the subscribe response is visible to the subscriber and arbitrary receiver responses must not become a data oracle. <code>classifyTransportError</code> and <code>recordDeliveryFailure</code> enforce this — <code>lastError</code> only ever takes a value from <code>DeliveryErrorBucket</code>.</p>
+</blockquote>
+<p>Successful refresh of a suspended subscription (<code>Active=false</code> → refresh) reactivates it: clears <code>failureCount</code>, resets <code>LastError</code> and <code>FailedSince</code>, flips <code>Active=true</code>. Pending events do <strong>not</strong> auto-replay (would re-flood a recovering receiver); the client signals replay intent by passing the persisted cursor on the refresh.</p>
+<h2 id="q8--source-health-signals">Q8 — Source health signals <a class="anchor" href="#q8--source-health-signals">¶</a></h2>
+<p>Domain sources fail. The upstream Discord gateway disconnects, the database driver stops returning rows, an auth token expires. The library surfaces these as <strong>first-class signals on the subscriber channel</strong>, with explicit transient-vs-terminal semantics. (<code>yield.go</code> <code>SubscriberEvent</code> discriminator.)</p>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Source-side call</th>
+<th>Subscriber channel field</th>
+<th>Stream wire mapping</th>
+<th>Webhook wire mapping</th>
+<th>Stream stays open?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Event</strong></td>
+<td><code>yield(data)</code></td>
+<td><code>Event</code> populated</td>
+<td><code>notifications/events/event</code> (Q5 step 3)</td>
+<td>Standard Webhooks POST (Q7)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>Truncated</strong> (back-pressure)</td>
+<td>implicit — set when <code>yield</code> drops on a full subscriber buffer</td>
+<td><code>Truncated:true</code> riding next successful send</td>
+<td>fresh <code>notifications/events/active{truncated:true, cursor:source.Latest()}</code> precedes the event</td>
+<td>n/a (webhook delivery is independent — no per-subscriber back-pressure)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>Transient error</strong></td>
+<td><code>source.YieldError(EventDeliveryError{Code, Message})</code></td>
+<td><code>Error</code> populated</td>
+<td><code>notifications/events/error{requestId, error{code,message}}</code> (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#event-delivery">spec §&ldquo;Event Delivery&rdquo;</a>)</td>
+<td>n/a (errors are upstream-side, not delivery-side)</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><strong>Terminal</strong></td>
+<td><code>source.YieldTerminated(EventDeliveryError{Code, Message})</code></td>
+<td><code>Terminated</code> populated; subscriber chan closed</td>
+<td><code>notifications/events/terminated{requestId, error{code,message}}</code> (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#lifecycle">spec §&ldquo;Lifecycle&rdquo;</a>) → handler returns <code>StreamEventsResult{Meta:{}}</code></td>
+<td>auto-emitted <code>{type:terminated}</code> control envelope to every webhook target on this source — see <code>postTerminatedSilent</code></td>
+<td><strong>no</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>YieldError</code> is repeatable; <code>YieldTerminated</code> is <strong>one-shot</strong> — subsequent yields on the same source are silent no-ops, and <code>Poll()</code> returns empty. The terminated source is dead; recovery requires re-subscribing against a fresh source (typically after the host restarts the upstream connection).</p>
+<h3 id="worked-example-with-the-discord-demo">Worked example with the discord demo <a class="anchor" href="#worked-example-with-the-discord-demo">¶</a></h3>
+<p><a href="https://github.com/panyam/mcpkit/blob/main/examples/events/discord/Makefile"><code>examples/events/discord/Makefile</code></a> ships injection targets that exercise the signal paths end-to-end:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Inject a transient upstream error — stream stays open, webhook unaffected</span>
+</span></span><span style="display:flex;"><span>make inject-error <span style="color:#008080">CODE</span><span style="color:#000;font-weight:bold">=</span>-32603 <span style="color:#008080">MESSAGE</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;upstream gateway disconnected&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Inject a terminal — stream closes; webhook targets get an auto control envelope</span>
+</span></span><span style="display:flex;"><span>make inject-terminate <span style="color:#008080">CODE</span><span style="color:#000;font-weight:bold">=</span>-32012 <span style="color:#008080">MESSAGE</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;auth token revoked&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Normal event for comparison</span>
+</span></span><span style="display:flex;"><span>make inject <span style="color:#008080">TEXT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;hello from make inject&#34;</span>
+</span></span></code></pre><p>Run a <code>just webhook</code> receiver alongside and you&rsquo;ll see the control envelope POST land on the same callback URL as event deliveries, distinguishable only by the <code>webhook-id: msg_terminated_...</code> prefix and the <code>{type:&quot;terminated&quot;, error:...}</code> body.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>The drop policy on the Error variant is intentional.</strong> Like event drops, error fanout is non-blocking — a slow consumer that backs up doesn&rsquo;t block the source. Unlike event drops, errors don&rsquo;t carry recovery semantics, so missing one is acceptable; future events still get the <code>Truncated</code> flag if any actual events were dropped. See <code>fanoutLocked</code> commentary.</p>
+</blockquote>
+<h2 id="q9--how-does-an-author-shape-per-subscription-delivery">Q9 — How does an author shape per-subscription delivery? <a class="anchor" href="#q9--how-does-an-author-shape-per-subscription-delivery">¶</a></h2>
+<p><a href="#q6--subscription-routing-when-yield-fires-who-gets-the-event">Q6</a> said the default fan-out is broadcast within source name. mcpkit also exposes per-subscription <strong>author hooks</strong> on <code>EventDef</code> so you can filter / shape / lifecycle each subscription without dropping to <code>TypedSource</code>. Per spec <a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#server-sdk-guidance">§&ldquo;Server SDK Guidance&rdquo;</a>.</p>
+<p>Four hooks, all nil-friendly (nil = baseline behavior; configure only what you need):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Signature</th>
+<th>Fires when</th>
+<th>Default if nil</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Match</code></td>
+<td><code>func(HookContext, Event, params) bool</code></td>
+<td>per subscriber on every emit</td>
+<td>deliver to all matching-name subscribers</td>
+</tr>
+<tr>
+<td><code>Transform</code></td>
+<td><code>func(HookContext, Event, params) (Event, bool)</code></td>
+<td>per subscriber on every emit, after <code>Match</code> passes</td>
+<td>reuse the original event; second return is <code>false</code> (passthrough)</td>
+</tr>
+<tr>
+<td><code>OnSubscribe</code></td>
+<td><code>func(HookContext, params) error</code></td>
+<td>once when a subscription becomes live</td>
+<td>no-op</td>
+</tr>
+<tr>
+<td><code>OnUnsubscribe</code></td>
+<td><code>func(HookContext, params)</code></td>
+<td>once when a subscription is actually torn down</td>
+<td>no-op</td>
+</tr>
+</tbody>
+</table>
+<p><code>HookContext</code> carries the per-invocation context:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Context()</code></td>
+<td>underlying <code>context.Context</code> for cancellation / deadlines from blocking I/O inside the hook</td>
+</tr>
+<tr>
+<td><code>Principal()</code></td>
+<td>the resolved subscription principal (post-<code>UnsafeAnonymousPrincipal</code> fallback)</td>
+</tr>
+<tr>
+<td><code>SubscriptionID()</code></td>
+<td>server-derived <code>sub_&lt;base64&gt;</code> for webhook + push (non-empty); empty for poll (the lease tuple is the routing identity, not an id)</td>
+</tr>
+<tr>
+<td><code>Mode()</code></td>
+<td><code>DeliveryModePoll</code> / <code>DeliveryModePush</code> / <code>DeliveryModeWebhook</code> so authors can branch on delivery mode if needed</td>
+</tr>
+</tbody>
+</table>
+<h3 id="when-each-hook-fires-per-delivery-mode">When each hook fires per delivery mode <a class="anchor" href="#when-each-hook-fires-per-delivery-mode">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th><code>OnSubscribe</code> fires when</th>
+<th><code>OnUnsubscribe</code> fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Webhook</strong></td>
+<td>First <code>Register</code> call for a (principal, url, name, params) tuple. NOT on refresh — refresh is renewal of the same subscription.</td>
+<td>Explicit <code>Unregister</code>, TTL prune, or server-initiated <code>PostTerminated</code>. NOT on suspend (Active=true→false from delivery failures) — see callout below.</td>
+</tr>
+<tr>
+<td><strong>Push</strong></td>
+<td>Stream open, after <code>sub.Subscribe(ctx)</code> succeeds.</td>
+<td>Stream close — every return path (ctx.Done, evCh closed, terminated frame, panic).</td>
+</tr>
+<tr>
+<td><strong>Poll</strong></td>
+<td>First poll for a <code>(principal-or-anon, name, paramsHash)</code> lease tuple. The poll-lease table tracks soft state for lifecycle parity with webhook + push (5 minute default TTL).</td>
+<td>Lease expiry — the background sweeper drives this when no poll renews the lease within the TTL window.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Suspend ≠ unsubscribe.</strong> When a webhook target&rsquo;s delivery loop accumulates N consecutive failures (Q7), the registry flips <code>Status.Active = false</code> but keeps the target in place — <code>OnUnsubscribe</code> does NOT fire. The subscription is paused, not removed; a successful subscribe-refresh (<a href="#q3--what-identifies-a-subscription">Q3</a>) reactivates it without re-firing <code>OnSubscribe</code>. This is intentional: receivers with intermittent connectivity shouldn&rsquo;t churn upstream resources every time their callback flaps. The <code>OnUnsubscribe</code> hook fires only on actual registry deletion (explicit Unregister, TTL prune, server-initiated <code>PostTerminated</code>).</p>
+</blockquote>
+<h3 id="worked-example--author-side-wiring">Worked example — author-side wiring <a class="anchor" href="#worked-example--author-side-wiring">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> AlertParams <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Severity   <span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;severity&#34;`</span>
+</span></span><span style="display:flex;"><span>    RedactPII  <span style="color:#458;font-weight:bold">bool</span>   <span style="color:#d14">`json:&#34;redact_pii&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>def <span style="color:#000;font-weight:bold">:=</span> events.EventDef{
+</span></span><span style="display:flex;"><span>    Name:        <span style="color:#d14">&#34;alert.fired&#34;</span>,
+</span></span><span style="display:flex;"><span>    Description: <span style="color:#d14">&#34;Fires when a new alert is triggered&#34;</span>,
+</span></span><span style="display:flex;"><span>    Delivery:    []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;push&#34;</span>, <span style="color:#d14">&#34;poll&#34;</span>, <span style="color:#d14">&#34;webhook&#34;</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Filter: deliver only when subscriber&#39;s params.severity matches the event&#39;s severity
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// (or when params.severity is unset — default broadcast).
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Match: <span style="color:#000;font-weight:bold">func</span>(_ events.HookContext, e events.Event, params <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any) <span style="color:#458;font-weight:bold">bool</span> {
+</span></span><span style="display:flex;"><span>        want, _ <span style="color:#000;font-weight:bold">:=</span> params[<span style="color:#d14">&#34;severity&#34;</span>].(<span style="color:#458;font-weight:bold">string</span>)
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">if</span> want <span style="color:#000;font-weight:bold">==</span> <span style="color:#d14">&#34;&#34;</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">return</span> <span style="color:#000;font-weight:bold">true</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">var</span> p AlertData
+</span></span><span style="display:flex;"><span>        _ = json.<span style="color:#900;font-weight:bold">Unmarshal</span>(e.Data, <span style="color:#000;font-weight:bold">&amp;</span>p)
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> p.Severity <span style="color:#000;font-weight:bold">==</span> want
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Transform: redact reporter when the subscriber asked for PII redaction.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Return (event, true) to signal &#34;I modified it; re-marshal&#34;; (event, false)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// is the passthrough path that skips per-subscriber re-marshal cost.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Transform: <span style="color:#000;font-weight:bold">func</span>(_ events.HookContext, e events.Event, params <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any) (events.Event, <span style="color:#458;font-weight:bold">bool</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">if</span> v, _ <span style="color:#000;font-weight:bold">:=</span> params[<span style="color:#d14">&#34;redact_pii&#34;</span>].(<span style="color:#458;font-weight:bold">bool</span>); !v {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">return</span> e, <span style="color:#000;font-weight:bold">false</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">var</span> p AlertData
+</span></span><span style="display:flex;"><span>        _ = json.<span style="color:#900;font-weight:bold">Unmarshal</span>(e.Data, <span style="color:#000;font-weight:bold">&amp;</span>p)
+</span></span><span style="display:flex;"><span>        p.Reporter = <span style="color:#d14">&#34;&#34;</span>
+</span></span><span style="display:flex;"><span>        raw, _ <span style="color:#000;font-weight:bold">:=</span> json.<span style="color:#900;font-weight:bold">Marshal</span>(p)
+</span></span><span style="display:flex;"><span>        e.Data = raw
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> e, <span style="color:#000;font-weight:bold">true</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Lifecycle: provision an upstream listener per subscription.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    OnSubscribe: <span style="color:#000;font-weight:bold">func</span>(hc events.HookContext, params <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any) <span style="color:#458;font-weight:bold">error</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> upstream.<span style="color:#900;font-weight:bold">JoinChannel</span>(hc.<span style="color:#900;font-weight:bold">Principal</span>(), params[<span style="color:#d14">&#34;channel_id&#34;</span>].(<span style="color:#458;font-weight:bold">string</span>))
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    OnUnsubscribe: <span style="color:#000;font-weight:bold">func</span>(hc events.HookContext, params <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any) {
+</span></span><span style="display:flex;"><span>        upstream.<span style="color:#900;font-weight:bold">LeaveChannel</span>(hc.<span style="color:#900;font-weight:bold">Principal</span>(), params[<span style="color:#d14">&#34;channel_id&#34;</span>].(<span style="color:#458;font-weight:bold">string</span>))
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>src, yield <span style="color:#000;font-weight:bold">:=</span> events.NewYieldingSource[AlertData](def)
+</span></span></code></pre><h3 id="targeted-emit--when-the-author-already-knows-the-recipient">Targeted emit — when the author already knows the recipient <a class="anchor" href="#targeted-emit--when-the-author-already-knows-the-recipient">¶</a></h3>
+<p>Sometimes <code>OnSubscribe</code> provisions a per-subscription upstream listener (joined a Slack channel, opened a database cursor) and the upstream events arrive tagged with the originating subscription. In that case the broadcast-and-Match-filter dance is wasted work — the author already knows which subscription the event is for. Use <code>EmitToSubscription</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Inside the per-subscription upstream handler that OnSubscribe wired up.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">onSlackMessage</span>(msg slack.Message, subID <span style="color:#458;font-weight:bold">string</span>) {
+</span></span><span style="display:flex;"><span>    e <span style="color:#000;font-weight:bold">:=</span> events.<span style="color:#900;font-weight:bold">MakeEvent</span>(<span style="color:#000;font-weight:bold">...</span>)
+</span></span><span style="display:flex;"><span>    events.<span style="color:#900;font-weight:bold">EmitToSubscription</span>(idx, e, subID)  <span style="color:#998;font-style:italic">// routes to exactly this subscription
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span></code></pre><p><code>EmitToSubscription</code> skips both <code>Match</code> and <code>Transform</code> (per spec — the author has already shaped the event for this specific subscription). Bypasses fan-out; routes via the SDK&rsquo;s <code>SubscriptionIndex</code> (populated automatically by the lifecycle wiring). Unknown sub id is a no-op drop with a debug log — racing <code>EmitToSubscription</code> against teardown is normal, not an error. Push gets a fresh random sub id per stream open (concurrent streams from the same principal are distinct subscriptions); webhook reuses the spec&rsquo;s derived id (refresh keeps the same id, so the index entry stays put).</p>
+<h3 id="hot-path-discipline">Hot-path discipline <a class="anchor" href="#hot-path-discipline">¶</a></h3>
+<p><code>Match</code> and <code>Transform</code> fire <strong>per subscriber, per emit</strong>. They&rsquo;re on the source&rsquo;s hot path. Three rules:</p>
+<ol>
+<li><strong>Sync.</strong> Hook signatures are sync <code>func(...)</code> rather than goroutine-spawning. Authors who need I/O inside <code>Match</code> should pre-compute or cache; the <code>HookContext.Context()</code> is available for cancellation.</li>
+<li><strong>Panic-recovering.</strong> Each hook invocation is wrapped in defer/recover. A panicking <code>Match</code> is treated as <code>false</code> (skip the subscriber); a panicking <code>Transform</code> is treated as passthrough (use the original event); panicking <code>OnSubscribe</code> / <code>OnUnsubscribe</code> log + swallow. A buggy hook can&rsquo;t take down the fanout.</li>
+<li><strong>Snapshot-and-drop-lock.</strong> mcpkit snapshots the subscriber list under the source&rsquo;s mutex, drops the lock, then iterates and invokes hooks per slot. Otherwise a slow author callback would serialize the whole source.</li>
+</ol>
+<h3 id="quota--toomanysubscriptions">Quota — <code>TooManySubscriptions</code> <a class="anchor" href="#quota--toomanysubscriptions">¶</a></h3>
+<p>Authors can cap how many subscriptions a single principal can have to a given event type. Configure via:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>quota <span style="color:#000;font-weight:bold">:=</span> events.<span style="color:#900;font-weight:bold">NewQuota</span>(
+</span></span><span style="display:flex;"><span>    events.<span style="color:#900;font-weight:bold">WithMaxSubscriptionsPerPrincipal</span>(<span style="color:#d14">&#34;alert.fired&#34;</span>, <span style="color:#099">10</span>),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>events.<span style="color:#900;font-weight:bold">Register</span>(events.Config{
+</span></span><span style="display:flex;"><span>    Sources:  <span style="color:#000;font-weight:bold">...</span>,
+</span></span><span style="display:flex;"><span>    Webhooks: <span style="color:#000;font-weight:bold">...</span>,
+</span></span><span style="display:flex;"><span>    Server:   srv,
+</span></span><span style="display:flex;"><span>    Quota:    quota,
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>The N+1th subscribe (in any mode) returns <code>-32013 TooManySubscriptions</code> <em>before</em> <code>OnSubscribe</code> runs, so a rejected subscription never provisions upstream resources. Caps are per-event-type per-principal; cross-event-type and cross-principal counts are isolated. Enforcement is mode-uniform — webhook subscribe, push stream open, and poll first-touch all go through the same <code>quota.Reserve</code> call. Backed by <code>golang.org/x/sync/semaphore.Weighted</code>; release pairs 1:1 with the lifecycle (<code>Unregister</code> / TTL prune / <code>PostTerminated</code> / stream close / lease expiry).</p>
+<h3 id="typedsource-doesnt-get-hook-plumbing"><code>TypedSource</code> doesn&rsquo;t get hook plumbing <a class="anchor" href="#typedsource-doesnt-get-hook-plumbing">¶</a></h3>
+<p>Hooks are wired only on the <code>YieldingSource</code> path. <code>TypedSource</code> authors own their <code>Poll(cursor, limit)</code> callback; per-subscription filtering belongs <em>inside</em> that callback, where the author has direct access to the source&rsquo;s storage and can decide per-event whether to return it. Adding hook plumbing to <code>TypedSource</code> would duplicate logic the author is better positioned to write themselves. Use <code>YieldingSource</code> if you want the hooks; use <code>TypedSource</code> if you want the simpler &ldquo;I own everything&rdquo; story.</p>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<p>After reading this page, downstream pages can assume:</p>
+<ul>
+<li><strong>Events dial all four extension knobs.</strong> Method namespace (<code>events/*</code>), capability (<code>experimental.events</code>), notifications (5 push frames + 2 control envelopes), and <code>_meta</code> (on <code>Event</code> and <code>EventDef</code>).</li>
+<li><strong>Events ≠ notifications.</strong> Events are domain-defined and replayable; notifications are session-state-change and idempotent-on-refetch. Events ride the notifications surface but are a domain abstraction layered on top.</li>
+<li><strong>Three delivery modes</strong> — poll, push, webhook — all method-namespace extensions, picked by topology and statefulness, NOT mutually exclusive per source. Webhook is the only mode where the server dials the client.</li>
+<li><strong>Subscription identity is the canonical tuple</strong> <code>(principal, delivery.url, name, params)</code>. The id is server-derived (<code>sub_&lt;base64&gt;</code>), non-load-bearing for security; idempotent refresh on the same tuple, distinct subscriptions on any tuple difference, cross-tenant isolation by construction.</li>
+<li><strong>Three rules from the tuple:</strong> no client-supplied id; auth required on subscribe/unsubscribe; client-supplied required <code>whsec_</code> secret.</li>
+<li><strong><code>YieldingSource</code> is the default abstraction</strong> (library owns the buffer; one <code>yield()</code> reaches push + webhook + future poll). <code>TypedSource</code> is for caller-owned stores. Cursored vs cursorless is a per-source choice advertised on <code>events/list</code>.</li>
+<li><strong>Push delivery</strong> is a long-lived <code>events/stream</code> POST returning SSE with five distinct notifications (<code>active</code>/<code>event</code>/<code>heartbeat</code>/<code>error</code>/<code>terminated</code>) plus a typed empty <code>StreamEventsResult</code> on close. <code>requestId</code> echoes on every notification for stdio demux.</li>
+<li><strong>Webhook delivery</strong> is HMAC-signed Standard Webhooks with a hardened delivery loop: dial-time SSRF guard (TOCTOU-safe under DNS rebinding), no redirects, 256 KiB body cap (REJECT not TRUNCATE), 413 non-retryable, exponential backoff on 5xx, suspend after N failures in a sliding window, auto-PostTerminated on the suspend transition.</li>
+<li><strong><code>deliveryStatus</code></strong> rides subscribe-refresh responses with a categorical <code>lastError</code> (closed set; spec forbids raw receiver content). Refresh of a suspended subscription reactivates it.</li>
+<li><strong>Source health signals are first-class:</strong> <code>YieldError</code> (transient — stream stays) and <code>YieldTerminated</code> (terminal one-shot — stream closes, control envelopes posted to webhooks).</li>
+<li><strong>Per-subscription filtering and lifecycle are first-class.</strong> <code>Match</code> / <code>Transform</code> filter and shape per subscriber on every emit; <code>OnSubscribe</code> / <code>OnUnsubscribe</code> fire on per-subscription lifecycle (with suspend-≠-unsubscribe semantics). All four are nil-friendly fields on <code>EventDef</code>. <code>EmitToSubscription</code> is the targeted-delivery shortcut when the author already knows the recipient. Per-event-type subscription caps via <code>events.NewQuota</code>. The poll path holds an ephemeral lease so lifecycle hooks fire consistently with push and webhook.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-ssrf.md">events SSRF deep dive</a></strong> <em>(stub, leaf)</em> — full IP blocklist matrix with worked CIDR examples, dial-time vs subscribe-time decomposition, DNS rebinding attack walkthrough.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-hmac.md">HMAC + Standard Webhooks deep dive</a></strong> <em>(stub, leaf)</em> — <code>webhook-id</code> semantics across event/control deliveries, multi-signature secret-rotation grace window, <code>MCPHeaders</code> opt-in mode, receiver verification in Go and Python.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/events-identity.md">subscription identity tuple proof</a></strong> <em>(stub, leaf)</em> — formal walk-through of why the four-tuple is necessary and sufficient: cross-tenant isolation, secret rotation, principal-mapping edge cases.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">Tasks v1/v2/hybrid</a></strong> <em>(planned, root)</em> — another method-namespace extension on the same maturity curve; useful contrast for what graduation from <code>experimental/ext/</code> to <code>ext/</code> looks like.</li>
+<li><strong><a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a></strong> <em>(planned, root)</em> — server-originated requests against a handler context; relevant if you ever want to push back at the model from inside an event-driven flow.</li>
+</ul>
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Spec citation links — all anchors against:
+       https://github.com/modelcontextprotocol/experimental-ext-triggers-events
+       branch: pja/design-sketch
+       file:   docs/design-sketch-proposal.md
+     If the spec moves, find-replace the URL prefix in every [spec-*] line below.
+     Anchors are GitHub auto-generated from heading text in the spec — stable
+     as long as heading text doesn't change. Far less volatile than the line
+     numbers we used to cite.
+     ───────────────────────────────────────────────────────────────────────── -->
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

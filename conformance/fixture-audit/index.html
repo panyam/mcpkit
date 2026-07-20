@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Grading of mcpkit&#39;s conformance fixtures, drivers, and scripts against the public API surface real users are taught to use.">
+    <title>Fixture Parity Audit · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Fixture Parity Audit</h1>
+        
+        <p class="lead">Grading of mcpkit&#39;s conformance fixtures, drivers, and scripts against the public API surface real users are taught to use.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/conformance/FIXTURE_AUDIT.md"><code>conformance/FIXTURE_AUDIT.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="fixture-audit">Fixture Audit <a class="anchor" href="#fixture-audit">¶</a></h1>
+<p>Snapshot of every fixture / driver / script behind mcpkit&rsquo;s conformance program, graded against the API paths a documented mcpkit user would reach for. Companion artifact to <a href="/mcpkit/conformance/upstream-audit/"><code>UPSTREAM_AUDIT.md</code></a>: that file grades mcpkit against the upstream test set, this file grades mcpkit against itself — whether the surfaces we use to <em>pass</em> those tests are the same surfaces we <em>recommend</em> to users.</p>
+<p>Driven by <a href="https://github.com/panyam/mcpkit/issues/456">issue 456</a>. The audit was triggered after PR 455 surfaced that the SEP-1613 testserver fixture had been using a raw <code>server.Tool{}</code> struct registration — a public-but-undocumented path. We added <code>core.WithInputSchemaOverride</code> to give the same capability through <code>TypedTool</code>, then asked: how often else have we cut a similar corner?</p>
+<h2 id="verdict-legend">Verdict legend <a class="anchor" href="#verdict-legend">¶</a></h2>
+<ul>
+<li><strong>PASS</strong> — uses a documented public API path. No action.</li>
+<li><strong>PROMOTE</strong> — uses an internal or undocumented path; ought to be promoted to first-class API. Follow-up issue filed.</li>
+<li><strong>MIGRATE</strong> — public alternative exists; switch the fixture. Done here or in a sub-PR.</li>
+<li><strong>JUSTIFIED</strong> — internal / lower-level path used deliberately for a test-only reason; rationale documented inline.</li>
+</ul>
+<h2 id="summary">Summary <a class="anchor" href="#summary">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Verdict</th>
+<th align="right">Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PASS</td>
+<td align="right">13</td>
+</tr>
+<tr>
+<td>JUSTIFIED</td>
+<td align="right">3</td>
+</tr>
+<tr>
+<td>PROMOTE (resolved)</td>
+<td align="right">1 — <a href="https://github.com/panyam/mcpkit/issues/457">#457</a> landed <code>core.WithToolExecution</code>; affected examples migrated</td>
+</tr>
+<tr>
+<td>MIGRATE</td>
+<td align="right">0</td>
+</tr>
+</tbody>
+</table>
+<p>No surface uses an undocumented path. All deviations from the typed-helper happy path are either canonical (<code>RegisterTool</code> / <code>RegisterResource</code> / <code>RegisterPrompt</code> are documented public methods), justified (TaskCallbacks needs <code>server.Tool{}</code> for architectural reasons), or resolved by a follow-up.</p>
+<h2 id="per-surface-verdicts">Per-surface verdicts <a class="anchor" href="#per-surface-verdicts">¶</a></h2>
+<h3 id="cmdtestserverconformance-toolsgo--pass"><a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/conformance_tools.go"><code>cmd/testserver/conformance_tools.go</code></a> — PASS <a class="anchor" href="#cmdtestserverconformance-toolsgo--pass">¶</a></h3>
+<p>Every tool registered via <code>core.TextTool[In]</code> / <code>core.TypedTool[In, Out]</code>. The one previous outlier (<code>json_schema_2020_12_tool</code>) was migrated in PR 455 to <code>core.TypedTool + core.WithInputSchemaOverride</code>. Evidence: <code>conformance_tools.go</code> lines 23, 30, 37, 51, 65, 86, 102, 114, 132, 151, 172, 200, 255, 271, 281, 304, 318+ — every <code>srv.Register(...)</code> call wraps a <code>core.TextTool</code> / <code>core.TypedTool</code> invocation.</p>
+<h3 id="cmdtestserverconformance-resourcesgo--pass"><a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/conformance_resources.go"><code>cmd/testserver/conformance_resources.go</code></a> — PASS <a class="anchor" href="#cmdtestserverconformance-resourcesgo--pass">¶</a></h3>
+<p>Uses <code>srv.RegisterResource(core.ResourceDef{...}, handler)</code> and <code>srv.RegisterResourceTemplate(core.ResourceTemplate{...}, handler)</code>. Both are documented public methods on <code>*Server</code>. No <code>core.TextResource</code> / <code>core.TypedResource</code> typed-helper exists; the def+handler pattern IS the canonical user path. Evidence: lines 17, 36, 56.</p>
+<h3 id="cmdtestserverconformance-promptsgo--pass"><a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/conformance_prompts.go"><code>cmd/testserver/conformance_prompts.go</code></a> — PASS <a class="anchor" href="#cmdtestserverconformance-promptsgo--pass">¶</a></h3>
+<p>Uses <code>srv.RegisterPrompt(core.PromptDef{...}, handler)</code> and <code>srv.RegisterCompletion(...)</code>. Both documented public methods. No typed-helper exists for prompts; def+handler is canonical. Evidence: lines 18, 35, 58, 86, 110.</p>
+<h3 id="cmdtestserverconformance-appsgo--justified"><a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/conformance_apps.go"><code>cmd/testserver/conformance_apps.go</code></a> — JUSTIFIED <a class="anchor" href="#cmdtestserverconformance-appsgo--justified">¶</a></h3>
+<p>Tool registrations use <code>core.TextTool</code> / <code>core.TypedTool + core.WithToolMeta(&amp;core.ToolMeta{UI: ...})</code> — canonical. Two deliberate deviations, both documented inline:</p>
+<ol>
+<li><code>testUIExtension{}</code> is inlined as a local type (line 16) rather than imported from <code>ext/ui</code>. Rationale (inline comment): <em>&ldquo;to avoid the root module depending on ext/ui.&rdquo;</em> The root testserver lives in the root go.mod; depending on <code>ext/ui</code> (separate go.mod) is a deliberate-no.</li>
+<li><code>request-fullscreen</code> tool uses <code>ctx.Notify(&quot;notifications/ui/displayMode&quot;, ...)</code> directly rather than <code>ui.RequestDisplayMode(ctx)</code> helper (line 97). Same rationale, same inline comment.</li>
+</ol>
+<p>A real <code>ext/ui</code> user would import the package and use <code>ui.RequestDisplayMode</code>. The testserver intentionally trades that ergonomics for module-graph cleanliness. Both deviations are tagged with explanatory comments at the use site.</p>
+<h3 id="cmdtestservermaingo--pass"><a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/main.go"><code>cmd/testserver/main.go</code></a> — PASS <a class="anchor" href="#cmdtestservermaingo--pass">¶</a></h3>
+<p>Server constructed via <code>server.NewServer(core.ServerInfo{...}, server.WithListen, server.WithToolTimeout, server.WithSubscriptions, server.WithExtension, server.WithRequestLogging)</code>. All public option helpers. Self-test mode uses <code>server.NewInProcessTransport</code> + <code>core.LoggingTransport</code> — both public. Evidence: lines 47-65.</p>
+<h3 id="cmdtestclientmaingo--pass"><a href="https://github.com/panyam/mcpkit/blob/main/cmd/testclient/main.go"><code>cmd/testclient/main.go</code></a> — PASS <a class="anchor" href="#cmdtestclientmaingo--pass">¶</a></h3>
+<p>OAuth driver uses <code>client.NewClient(...)</code>, <code>client.WithClientLogging</code>, <code>client.WithTokenSource</code>, <code>auth.OAuthTokenSource{...}</code>, and <code>oneauthclient.FollowRedirects(nil)</code> for headless OAuth. All public APIs; PR 454 (SEP-837) work was on this same surface. Evidence: lines 47, 77, 88. No bypass of discovery / PKCE / DCR — the full <code>OAuthTokenSource</code> flow is exercised exactly as <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/docs/DESIGN.md"><code>ext/auth/docs/DESIGN.md</code></a> describes.</p>
+<h3 id="examplesauth--pass"><code>examples/auth/</code> — PASS <a class="anchor" href="#examplesauth--pass">¶</a></h3>
+<p>Uses <code>server.NewServer</code> with documented option helpers. Tools registered via canonical paths (no raw <code>server.Tool{}</code> found in grep). Documentation block at <code>main.go:1-14</code> explicitly covers the two-process architecture from <a href="https://github.com/panyam/mcpkit/blob/main/examples/CONVENTIONS.md"><code>examples/CONVENTIONS.md</code></a>.</p>
+<h3 id="examplestasks-v2--justified"><code>examples/tasks-v2/</code> — JUSTIFIED <a class="anchor" href="#examplestasks-v2--justified">¶</a></h3>
+<p>One raw <code>server.Tool{}</code> usage at <code>main.go</code> for <code>external_job</code> — needed because the tool registers <code>TaskCallbacks: &amp;server.TaskCallbacks{GetTask: ..., GetResult: ...}</code> for the external-proxy pattern. <code>TaskCallbacks</code> is a <code>server.Tool</code> field that <code>core.TypedTool</code> cannot expose without creating a <code>core → server</code> import (wrong direction). <strong>JUSTIFIED with no in-scope migration.</strong></p>
+<p>All other tools (<code>slow_compute</code>, <code>failing_job</code>, <code>confirm_delete</code>, <code>multi_input</code>, <code>protocol_error_job</code>) migrated to <code>srv.Register(core.TypedTool[...](..., core.WithInputSchemaOverride(...), core.WithToolExecution(...)))</code> per <a href="https://github.com/panyam/mcpkit/issues/457">#457</a> resolution. The typed-helper path now covers every tool with <code>Execution</code> set.</p>
+<h3 id="examplesmrtr--justified"><code>examples/mrtr/</code> — JUSTIFIED <a class="anchor" href="#examplesmrtr--justified">¶</a></h3>
+<p>All 7 MRTR tools register via <code>srv.RegisterTool(def, handler)</code> with the named-handler <code>func(ctx, req) (ToolResult, error)</code> shape. The handlers need raw <code>req.Arguments</code> access to inspect <code>inputResponses</code> and <code>requestState</code> for the SEP-2322 MRTR round-trip protocol — <code>TypedTool</code>&rsquo;s typed handler signature (<code>func(ctx, In) (Out, error)</code>) does not expose the raw <code>ToolRequest</code>, so migration is not feasible without a new typed-helper API for MRTR-style stateful tools. <strong>JUSTIFIED</strong> — rationale is the handler-signature requirement, not <code>Execution</code>. None of the MRTR tools set <code>Execution</code>; they&rsquo;re driven by the MRTR helpers, not the v2 tasks protocol.</p>
+<h3 id="exampleslist-ttl--pass"><code>examples/list-ttl/</code> — PASS <a class="anchor" href="#exampleslist-ttl--pass">¶</a></h3>
+<p><code>srv.RegisterTool</code> / <code>RegisterResource</code> / <code>RegisterResourceTemplate</code> / <code>RegisterPrompt</code> — all documented public methods. Server constructed via <code>server.NewServer</code> with <code>server.WithListTTLMs(...)</code> option (SEP-2549). No raw struct usage.</p>
+<h3 id="examplesfile-inputs--pass"><code>examples/file-inputs/</code> — PASS <a class="anchor" href="#examplesfile-inputs--pass">¶</a></h3>
+<p>Imports <code>ext/ui</code> and uses <code>ui.RequestDisplayMode</code> / <code>ui.FileInputAnnotation</code> helpers (the documented <code>ext/ui</code> surface). <code>srv.RegisterTool</code> for SEP-2356 file-input tools. No raw struct usage.</p>
+<h3 id="examplestasks--justified"><code>examples/tasks/</code> — JUSTIFIED <a class="anchor" href="#examplestasks--justified">¶</a></h3>
+<p>Same shape as <code>examples/tasks-v2/</code>: one raw <code>server.Tool{TaskCallbacks: ...}</code> for the <code>external_job</code> proxy pattern (JUSTIFIED, same reason). All other tools (<code>slow_compute</code>, <code>failing_job</code>, <code>confirm_delete</code>, <code>write_haiku</code>) migrated to <code>core.TypedTool</code> + <code>WithInputSchemaOverride</code> + <code>WithToolExecution</code> per <a href="https://github.com/panyam/mcpkit/issues/457">#457</a> resolution.</p>
+<h3 id="scriptsconformance-auditsh--pass"><a href="https://github.com/panyam/mcpkit/blob/main/scripts/conformance-audit.sh"><code>scripts/conformance-audit.sh</code></a> — PASS <a class="anchor" href="#scriptsconformance-auditsh--pass">¶</a></h3>
+<p>Spawns <code>cmd/testserver</code> via <code>STREAMABLE=1 PORT=$AUDIT_PORT</code> — exactly the env-var pattern <a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/main.go"><code>cmd/testserver/main.go</code></a>&rsquo;s header documents (<code>STREAMABLE=1 go run ./cmd/testserver</code>). Builds <code>cmd/testclient</code> via standard <code>go build</code>. Drives the upstream CLI from a real source checkout. No internal flags.</p>
+<h3 id="scriptsconformance-testsh--pass"><a href="https://github.com/panyam/mcpkit/blob/main/scripts/conformance-test.sh"><code>scripts/conformance-test.sh</code></a> — PASS <a class="anchor" href="#scriptsconformance-testsh--pass">¶</a></h3>
+<p>Same <code>STREAMABLE=1 PORT=$PORT go run ./cmd/testserver</code> spawn pattern. Documented surface.</p>
+<h3 id="scriptsconformance-auth-testsh--pass"><a href="https://github.com/panyam/mcpkit/blob/main/scripts/conformance-auth-test.sh"><code>scripts/conformance-auth-test.sh</code></a> — PASS <a class="anchor" href="#scriptsconformance-auth-testsh--pass">¶</a></h3>
+<p>Builds <code>cmd/testclient</code> via <code>go build -buildvcs=false</code>. Invokes upstream CLI&rsquo;s <code>client --suite auth --command</code> with the built binary. testclient itself was audited above as PASS.</p>
+<h2 id="taskcallbacks-documentation-gap-note-not-a-verdict">TaskCallbacks documentation gap (note, not a verdict) <a class="anchor" href="#taskcallbacks-documentation-gap-note-not-a-verdict">¶</a></h2>
+<p><code>server.Tool{TaskCallbacks: ...}</code> is the only path for tools that need per-tool <code>GetTask</code> / <code>GetResult</code> overrides (external-job proxy pattern). It&rsquo;s documented in <a href="https://github.com/panyam/mcpkit/blob/main/server/registration.go"><code>server/registration.go</code></a>&rsquo;s <code>Tool</code> struct comment, but a <a href="https://github.com/panyam/mcpkit/blob/main/core/README.md"><code>core/README.md</code></a> (or <a href="https://github.com/panyam/mcpkit/blob/main/server/README.md"><code>server/README.md</code></a>) &ldquo;When to reach for <code>server.Tool{}</code> directly&rdquo; section would surface the pattern more discoverably. Optional follow-up; not filing as PROMOTE since the API is correct, only discoverability is at issue.</p>
+<h2 id="re-audit-triggers">Re-audit triggers <a class="anchor" href="#re-audit-triggers">¶</a></h2>
+<p><code>FIXTURE_AUDIT.md</code> is a point-in-time snapshot, not auto-regenerated. Re-audit when:</p>
+<ul>
+<li>A new fixture binary lands under <code>examples/</code>.</li>
+<li>A new typed helper lands in <code>core/</code> that obsoletes a JUSTIFIED entry (e.g., when <a href="https://github.com/panyam/mcpkit/issues/457">#457</a> lands, the <code>examples/tasks*</code> <code>RegisterTool</code> JUSTIFIED entries graduate to MIGRATE → PASS).</li>
+<li>Before each major release.</li>
+<li>Any time a new conformance suite (testconf-*) wires up a new fixture binary.</li>
+</ul>
+<p>Optional automation: a static-analysis Go test that greps for <code>server.Tool{</code> / <code>server.Resource{</code> literal usage in <code>cmd/testserver/</code> and <code>examples/</code> and fails on unexpected matches, with an allowlist for the documented JUSTIFIED cases. Tracked as a follow-up if drift becomes an issue.</p>
+<h2 id="methodology">Methodology <a class="anchor" href="#methodology">¶</a></h2>
+<p>For each surface: identify the registration / setup / driver pattern, compare against the canonical pattern a documented mcpkit user would reach for (per <code>README.md</code>, per-package <code>README.md</code>, <a href="https://github.com/panyam/mcpkit/blob/main/examples/CONVENTIONS.md"><code>examples/CONVENTIONS.md</code></a>, public exported helpers), and assign one of the four verdicts.</p>
+<p>Canonical paths used as reference:</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Canonical pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tool registration</td>
+<td><code>srv.Register(core.TextTool[In](...))</code> / <code>srv.Register(core.TypedTool[In, Out](..., opts...))</code></td>
+</tr>
+<tr>
+<td>Tool with raw 2020-12 schema</td>
+<td><code>core.TypedTool[In, Out](..., core.WithInputSchemaOverride(schema))</code> (post PR 455)</td>
+</tr>
+<tr>
+<td>Tool with <code>Execution</code></td>
+<td><code>srv.Register(core.TypedTool[In, Out](..., core.WithToolExecution(...)))</code> (post <a href="https://github.com/panyam/mcpkit/issues/457">#457</a>)</td>
+</tr>
+<tr>
+<td>Tool with <code>TaskCallbacks</code></td>
+<td><code>srv.Register(server.Tool{ToolDef, Handler, TaskCallbacks})</code> (no typed helper — server-level concept)</td>
+</tr>
+<tr>
+<td>Resource registration</td>
+<td><code>srv.RegisterResource(core.ResourceDef{...}, handler)</code></td>
+</tr>
+<tr>
+<td>Resource template</td>
+<td><code>srv.RegisterResourceTemplate(core.ResourceTemplate{...}, handler)</code></td>
+</tr>
+<tr>
+<td>Prompt registration</td>
+<td><code>srv.RegisterPrompt(core.PromptDef{...}, handler)</code></td>
+</tr>
+<tr>
+<td>Server construction</td>
+<td><code>server.NewServer(core.ServerInfo{...}, server.With...())</code></td>
+</tr>
+<tr>
+<td>Client construction</td>
+<td><code>client.NewClient(url, core.ClientInfo{...}, client.With...())</code></td>
+</tr>
+<tr>
+<td>OAuth client driver</td>
+<td><code>auth.OAuthTokenSource{...}</code> from <code>ext/auth</code></td>
+</tr>
+<tr>
+<td>Spawn flags in scripts</td>
+<td><code>STREAMABLE=1</code> / <code>STDIO=1</code> / <code>BOTH=1</code> / <code>PORT</code> (per <a href="https://github.com/panyam/mcpkit/blob/main/cmd/testserver/main.go"><code>cmd/testserver/main.go</code></a> header docs)</td>
+</tr>
+</tbody>
+</table>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

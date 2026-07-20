@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Per-fixture parity of mcpkit-Go drop-ins vs upstream&#39;s modelcontextprotocol/ext-apps Playwright suite.">
+    <title>Apps Compat · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Apps Compat</h1>
+        
+        <p class="lead">Per-fixture parity of mcpkit-Go drop-ins vs upstream&#39;s modelcontextprotocol/ext-apps Playwright suite.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/conformance/apps/COMPAT.md"><code>conformance/apps/COMPAT.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="apps-compat--mcpkit--ext-apps">Apps Compat — mcpkit ⇄ ext-apps <a class="anchor" href="#apps-compat--mcpkit--ext-apps">¶</a></h1>
+<p>mcpkit-Go drop-in replacements for upstream&rsquo;s<br />
+<a href="https://github.com/modelcontextprotocol/ext-apps"><code>modelcontextprotocol/ext-apps</code></a><br />
+Playwright suite. Each fixture under <code>examples/apps/compat/&lt;name&gt;/</code><br />
+exposes the same MCP tool surface as the upstream TypeScript example,<br />
+serves upstream&rsquo;s verbatim <code>dist/mcp-app.html</code>, and is verified<br />
+end-to-end by upstream&rsquo;s own Playwright tests run against the Go<br />
+binary via <code>basic-host</code>.</p>
+<h2 id="coverage">Coverage <a class="anchor" href="#coverage">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total upstream examples</td>
+<td>25</td>
+</tr>
+<tr>
+<td>Drift-strict parity (OK)</td>
+<td>21</td>
+</tr>
+<tr>
+<td>In progress (WIP / PROT)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Skipped by upstream&rsquo;s test set</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Not yet implemented</td>
+<td>0</td>
+</tr>
+<tr>
+<td>Pass rate over implemented</td>
+<td>21 / 21 (100%)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="per-fixture-status">Per-fixture status <a class="anchor" href="#per-fixture-status">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Fixture</th>
+<th>Status</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>basic-server-vanillajs</td>
+<td>✅ OK</td>
+<td>2/2 pass against mcpkit-local baseline. Resolution: PR 534</td>
+</tr>
+<tr>
+<td>2</td>
+<td>basic-server-preact</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 540</td>
+</tr>
+<tr>
+<td>3</td>
+<td>basic-server-react</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 540</td>
+</tr>
+<tr>
+<td>4</td>
+<td>basic-server-solid</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 540</td>
+</tr>
+<tr>
+<td>5</td>
+<td>basic-server-svelte</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 540</td>
+</tr>
+<tr>
+<td>6</td>
+<td>basic-server-vue</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 540</td>
+</tr>
+<tr>
+<td>7</td>
+<td>budget-allocator-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. Rich nested output (config + analytics with maps); standard struct tags + Go maps reflect cleanly. PR 553</td>
+</tr>
+<tr>
+<td>8</td>
+<td>cohort-heatmap-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 549 (float64 numerics workaround for int-vs-number gap, see 548)</td>
+</tr>
+<tr>
+<td>9</td>
+<td>customer-segmentation-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 549</td>
+</tr>
+<tr>
+<td>10</td>
+<td>debug-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. 3 tools (debug-tool/refresh/log). PR 549 (uses InputSchemaOverride for the <code>payload: any</code> field — gap 2 in issue 548)</td>
+</tr>
+<tr>
+<td>11</td>
+<td>integration-server</td>
+<td>✅ OK</td>
+<td>5/5 pass (2 standard + 3 interaction: Send Message, Send Log, Open Link). Drift strict OK. PR 549</td>
+</tr>
+<tr>
+<td>12</td>
+<td>lazy-auth-server</td>
+<td>⏭ SKIP</td>
+<td>Not in upstream&rsquo;s servers.spec.ts. Auth-flow specific; no default Playwright test</td>
+</tr>
+<tr>
+<td>13</td>
+<td>map-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. 2 tools (show-map + geocode). PR 552</td>
+</tr>
+<tr>
+<td>14</td>
+<td>pdf-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK (4 tools — list_pdfs / read_pdf_bytes / display_pdf / save_pdf, matching upstream&rsquo;s default-without-<code>--enable-interact</code> surface). The 4 additional pdf-*.spec.ts files (annotations, annotations-api, incremental-load, viewer-zoom) drive the <code>--enable-interact</code> surface and need the interact command-queue + long-poll backend; deferred to follow-up issue 554. PR 555</td>
+</tr>
+<tr>
+<td>15</td>
+<td>qr-server</td>
+<td>⏭ SKIP</td>
+<td>Upstream SKIP_SERVERS</td>
+</tr>
+<tr>
+<td>16</td>
+<td>quickstart</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 543 (tsx-fallback for upstream servers without dist/index.js)</td>
+</tr>
+<tr>
+<td>17</td>
+<td>say-server</td>
+<td>⏭ SKIP</td>
+<td>Upstream SKIP_SERVERS (HuggingFace TTS download)</td>
+</tr>
+<tr>
+<td>18</td>
+<td>scenario-modeler-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK via OutputSchemaOverride (nullable <code>breakEvenMonth</code>). PR 553</td>
+</tr>
+<tr>
+<td>19</td>
+<td>shadertoy-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK via InputSchemaOverride (multi-line GLSL default). PR 552</td>
+</tr>
+<tr>
+<td>20</td>
+<td>sheet-music-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK via TypedAppToolConfig.InputSchemaOverride. PR 545 (closes 542)</td>
+</tr>
+<tr>
+<td>21</td>
+<td>system-monitor-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. 2 tools (info + app-only stats). PR 549</td>
+</tr>
+<tr>
+<td>22</td>
+<td>threejs-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK via InputSchemaOverride (multi-line code default). 2 tools (show_threejs_scene + learn_threejs). PR 552</td>
+</tr>
+<tr>
+<td>23</td>
+<td>transcript-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK. PR 543</td>
+</tr>
+<tr>
+<td>24</td>
+<td>video-resource-server</td>
+<td>⏭ SKIP</td>
+<td>Not in upstream&rsquo;s servers.spec.ts; only in generate-grid-screenshots.spec.ts which is excluded from default test runs. No Playwright test to satisfy.</td>
+</tr>
+<tr>
+<td>25</td>
+<td>wiki-explorer-server</td>
+<td>✅ OK</td>
+<td>2/2 pass + drift strict OK via new OutputSchemaOverride (nullable <code>error</code> field — PR 552 adds the library symbol)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="legend">Legend <a class="anchor" href="#legend">¶</a></h2>
+<ul>
+<li><strong>✅ OK</strong> — <code>loads app UI</code> + <code>screenshot matches golden</code> Playwright<br />
+tests pass, and the <code>tools/list</code> parity check matches upstream&rsquo;s TS<br />
+server byte-for-byte under DOCKER mode<br />
+(<code>mcr.microsoft.com/playwright:v1.57.0-noble</code>, the same image upstream<br />
+uses for <code>test:e2e:docker</code>).</li>
+<li><strong>🟡 WIP / PROT</strong> — surface working; visual baseline or interaction<br />
+tests pending.</li>
+<li><strong>⏭ SKIP</strong> — upstream&rsquo;s <code>servers.spec.ts</code> deliberately omits this<br />
+example (special build-time dependency or not in the default test<br />
+matrix).</li>
+<li><strong>⬜ NOT</strong> — not yet implemented as an mcpkit drop-in.</li>
+</ul>
+<h2 id="how-parity-is-verified">How parity is verified <a class="anchor" href="#how-parity-is-verified">¶</a></h2>
+<p>Each fixture runs through <code>scripts/apps-playwright-test.sh</code> in two<br />
+modes:</p>
+<ol>
+<li><strong>Native</strong> (host OS) — fast <code>loads app UI</code> iteration. The visual<br />
+screenshot test is Docker-pinned and is expected to fail on<br />
+non-Linux hosts; that gap is intentional.</li>
+<li><strong>DOCKER</strong> — runs the upstream Playwright image with the fixture as<br />
+the MCP server. The committed baseline is a single canonical<br />
+Linux PNG per fixture (matching upstream&rsquo;s own pinning convention).<br />
+This mode also runs a <strong>strict <code>tools/list</code> parity check</strong> that<br />
+spins up upstream&rsquo;s TypeScript reference server on a side port,<br />
+fetches <code>tools/list</code> from both, JSON-diffs them, and fails on any<br />
+schema drift outside a small filter for SDK-emit differences<br />
+(<code>$schema</code>, <code>additionalProperties</code>, <code>propertyNames</code>, plus an<br />
+<code>integer</code> ⇄ <code>number</code> subtype normalization). Drift fails the gate.</li>
+</ol>
+<h2 id="how-this-report-is-generated">How this report is generated <a class="anchor" href="#how-this-report-is-generated">¶</a></h2>
+<p><a href="https://github.com/panyam/mcpkit/blob/main/tools/compat-reports/src/apps.ts"><code>tools/compat-reports/src/apps.ts</code></a> fetches the body of umbrella<br />
+tracking issue <code>panyam/mcpkit#533</code> and renders its<br />
+status table as this Markdown file. The umbrella issue is the<br />
+hand-maintained source of truth — every fixture PR updates the row<br />
+along with the code. The script is deterministic: re-running on an<br />
+unchanged umbrella body produces a byte-identical file.</p>
+<p>To refresh:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just refresh-apps-compat-report
+</span></span></code></pre><p>The CI <code>check-apps-compat-stale</code> gate enforces that PRs touching<br />
+<code>examples/apps/compat/**</code> re-run the refresh and commit any diff.</p>
+<h2 id="see-also">See also <a class="anchor" href="#see-also">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/conformance/">Conformance Coverage</a> — MCP spec compliance matrix</li>
+<li><a href="/mcpkit/conformance/upstream-audit/">Upstream Conformance Audit</a> — scenario-level grading vs upstream&rsquo;s conformance suite</li>
+<li><a href="/mcpkit/conformance/fixture-audit/">Fixture Parity Audit</a> — public-API discipline check on conformance fixtures</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/apps/compat/README.md"><code>examples/apps/compat/README.md</code></a> — drop-in fixture pattern + the wrapper script</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

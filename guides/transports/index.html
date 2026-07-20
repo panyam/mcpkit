@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Streamable HTTP, SSE, stdio, and subprocess transports — how mcpkit moves MCP over the wire.">
+    <title>Transports · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Transports</h1>
+        
+        <p class="lead">Streamable HTTP, SSE, stdio, and subprocess transports — how mcpkit moves MCP over the wire.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/ARCHITECTURE.md"><code>docs/ARCHITECTURE.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h1>
+<h2 id="overview">Overview <a class="anchor" href="#overview">¶</a></h2>
+<p>MCPKit is a Go library for building production-grade MCP (Model Context Protocol) servers. It provides the transport, middleware, and operational infrastructure so that application code only needs to register tools and handle requests.</p>
+<pre><code>┌──────────────────────────────────────────────────┐
+│                   Application                     │
+│    (registers tools/resources/prompts, handles)   │
+├──────────────────────────────────────────────────┤
+│                    MCPKit                          │
+│  ┌────────────┐  ┌─────────────────┐  ┌──────────┐│
+│  │  Transport  │  │ MCP Middleware   │  │ Dispatch ││
+│  │ HTTP+SSE    │  │ Auth (bearer)    │  │tools/list││
+│  │ Streamable  │  │ Tool timeout     │  │tools/call││
+│  │  HTTP       │  │ Allowed-roots    │  │initialize││
+│  │ stdio       │  │ Tool authz       │  │resources/││
+│  └────────────┘  │ MCP metrics      │  │ prompts/ ││
+│                  └─────────────────┘  │ logging/ ││
+│  ┌────────────────────────────────┐   └──────────┘│
+│  │ Notifications (logging.go)     │               │
+│  │ NotifyFunc, EmitLog, LogLevel  │               │
+│  │ Context-based session injection│               │
+│  └────────────────────────────────┘               │
+│  ┌─────────────────────────────────────────────┐  │
+│  │ servicekit (v0.0.22)                         │  │
+│  │ SSEConn, SSEHub, ListenAndServeGraceful,     │  │
+│  │ StreamableServe, CORS, RateLimiter, Logger   │  │
+│  └─────────────────────────────────────────────┘  │
+├──────────────────────────────────────────────────┤
+│     Sub-module: mcpkit/auth (separate go.mod)     │
+│     Imports oneauth for JWT, OIDC                 │
+└──────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
+<ol>
+<li>
+<p><strong>Transport is not protocol</strong> — HTTP+SSE and Streamable HTTP are transports. JSON-RPC dispatch is shared. Adding a transport means adding a handler, not changing dispatch.</p>
+</li>
+<li>
+<p><strong>Generic infrastructure from servicekit, MCP-specific here</strong> — SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting come from servicekit. mcpkit only implements MCP-specific logic: tool timeout, allowed-roots, tool authz.</p>
+</li>
+<li>
+<p><strong>Sub-module for heavy auth</strong> — The core module ships <code>BearerTokenValidator</code> (constant-time compare, zero deps). JWT/OIDC lives in <code>mcpkit/auth</code>, a separate Go module that imports oneauth.</p>
+</li>
+<li>
+<p><strong>Tools are the app&rsquo;s job</strong> — MCPKit handles transport, security, and operations. The application registers tool handlers.</p>
+</li>
+<li>
+<p><strong>Safe defaults</strong> — Constant-time token comparison, initialization gating, SSE keepalive are on by default.</p>
+</li>
+</ol>
+<h2 id="actual-package-structure">Actual Package Structure <a class="anchor" href="#actual-package-structure">¶</a></h2>
+<pre><code>mcpkit/                          # module: github.com/panyam/mcpkit
+├── go.mod                       # servicekit v0.0.22
+├── core/                        # Protocol types + tool-handler APIs
+│   ├── jsonrpc.go               # Request, Response, Error, ErrCode*
+│   ├── tool.go                  # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
+│   ├── resource.go              # ResourceDef, ResourceTemplate, ResourceHandler
+│   ├── prompt.go                # PromptDef, PromptHandler
+│   ├── completion.go            # CompletionHandler, CompletionRef, CompletionResult
+│   ├── auth.go                  # Claims, TokenSource, AuthValidator, AuthError, Extension
+│   ├── logging.go               # LogLevel, NotifyFunc, EmitLog, ContextWithSession
+│   ├── progress.go              # EmitProgress
+│   ├── sampling.go              # CreateMessageRequest/Result, Sample()
+│   ├── elicitation.go           # ElicitationRequest/Result, Elicit()
+│   ├── request.go               # RequestFunc, ErrNoRequestFunc
+│   ├── protocol.go              # ServerInfo, ClientInfo, ClientCapabilities
+│   ├── interfaces.go            # Transport, ServerRequestHandler, NotificationHandler
+│   ├── ui.go                    # UIMetadata, UICSPConfig, UIVisibility, AppMIMEType, ToolMeta, ResourceContentMeta
+│   └── www_authenticate.go      # ParseWWWAuthenticate
+├── server/                      # Server + Dispatcher + transports
+│   ├── server.go                # Server, NewServer, options, Handler(), Run()
+│   ├── dispatch.go              # Dispatcher, routing, handlers, subscriptions
+│   ├── transport.go             # SSE server transport
+│   ├── streamable_transport.go  # Streamable HTTP transport
+│   ├── stdio_transport.go       # Stdio transport (Content-Length framed JSON-RPC)
+│   ├── memory_transport.go      # InProcessTransport (core.Transport)
+│   ├── request.go               # sendServerRequest, routeServerResponse
+│   ├── middleware.go            # Middleware, LoggingMiddleware
+│   └── pagination.go            # cursor-based pagination
+├── client/                      # Client + transports
+│   ├── client.go                # Client, NewClient, Connect, ToolCall, WithTransport
+│   ├── stdio_transport.go       # StdioTransport, NewStdioTransport, WithStdioTransport
+│   ├── client_logging.go        # loggingTransport, WithClientLogging
+│   └── client_reconnect.go      # WithMaxRetries, WithReconnectBackoff
+├── ext/auth/                    # SEPARATE module (github.com/panyam/mcpkit/ext/auth)
+│   ├── go.mod                   # depends on mcpkit + oneauth
+│   ├── discovery.go             # DiscoverMCPAuth (PRM + AS metadata)
+│   ├── token_source.go          # OAuthTokenSource, ValidatePKCES256 (MCP-specific)
+│   ├── dcr.go                   # DefaultClientRegistration (MCP defaults), type aliases for oneauth
+│   ├── jwt_validator.go         # JWTValidator (JWKS-based)
+│   ├── server_auth.go           # MountAuth (PRM endpoints)
+│   ├── scopes.go                # RequireScope
+│   └── docs/DESIGN.md           # Auth architecture, spec compliance
+│   NOTE: Generic OAuth (RegisterClient, ClientCredentialsSource, ValidateHTTPS,
+│         ValidateCIMDURL, mergeScopes) pushed to oneauth (#158). Type aliases preserved.
+├── ext/ui/                      # SEPARATE module (github.com/panyam/mcpkit/ext/ui)
+│   ├── go.mod                   # depends on mcpkit only (zero external deps)
+│   └── extension.go             # UIExtension (ExtensionProvider + RefValidator), RegisterAppTool
+├── testutil/testclient.go       # TestClient wrapper for e2e testing
+├── cmd/testserver/              # Conformance test server
+├── cmd/testclient/              # Headless OAuth conformance client
+├── conformance/baseline.yml     # Expected failures: 0 server + 1 auth (warning)
+├── scripts/                     # smoke-test.sh, conformance-test.sh
+├── docs/                        # ARCHITECTURE.md, APPS_DESIGN.md, GATEWAY_DESIGN.md
+├── tests/e2e/                   # E2E auth tests (separate module)
+│   └── (22 tests: JWT, transport, scope, PRM, WWW-Authenticate)
+└── tests/keycloak/              # Keycloak interop (separate module, needs Docker)
+    └── (7 tests: Keycloak JWT → mcpkit JWTValidator)
+</code></pre>
+<h2 id="two-transports">Two Transports <a class="anchor" href="#two-transports">¶</a></h2>
+<h3 id="sse-transport-mcp-2024-11-05--transportgo">SSE Transport (MCP 2024-11-05) — <code>transport.go</code> <a class="anchor" href="#sse-transport-mcp-2024-11-05--transportgo">¶</a></h3>
+<ul>
+<li><code>GET /mcp/sse</code> → long-lived SSE stream, sends <code>endpoint</code> event with POST URL</li>
+<li><code>POST /mcp/message?sessionId=&lt;id&gt;</code> → JSON-RPC dispatch, response pushed on SSE</li>
+<li>Session lifetime = SSE connection lifetime (cleanup on disconnect)</li>
+<li>Uses servicekit <code>BaseSSEConn[SSEData]</code> + <code>SSEHub[SSEData]</code></li>
+<li><code>SSEData</code> union type: <code>SSEText(url)</code> for raw text, <code>SSEJSON(bytes)</code> for JSON-RPC</li>
+</ul>
+<h3 id="streamable-http-mcp-2025-03-26--streamable-transportgo">Streamable HTTP (MCP 2025-03-26) — <code>streamable_transport.go</code> <a class="anchor" href="#streamable-http-mcp-2025-03-26--streamable-transportgo">¶</a></h3>
+<ul>
+<li><code>POST /mcp</code> → JSON-RPC dispatch, response in HTTP body (synchronous)</li>
+<li><code>DELETE /mcp</code> → terminate session</li>
+<li>Session tracked via <code>Mcp-Session-Id</code> header (created on initialize)</li>
+<li>No long-lived connections — each request is independent HTTP</li>
+<li><code>MCP-Protocol-Version</code> header validated if present</li>
+</ul>
+<h3 id="dual-transport-mode">Dual Transport Mode <a class="anchor" href="#dual-transport-mode">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">Handler</span>(<span style="color:#900;font-weight:bold">WithStreamableHTTP</span>(<span style="color:#000;font-weight:bold">true</span>), <span style="color:#900;font-weight:bold">WithSSE</span>(<span style="color:#000;font-weight:bold">true</span>))
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// SSE at /mcp/sse + /mcp/message, Streamable HTTP at /mcp
+</span></span></span></code></pre><h2 id="key-types">Key Types <a class="anchor" href="#key-types">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ToolHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req ToolRequest) (ToolResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> AuthValidator <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Validate</span>(r <span style="color:#000;font-weight:bold">*</span>http.Request) <span style="color:#458;font-weight:bold">error</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Optional: validators that also implement ClaimsProvider
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// propagate identity to tool handlers via context.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> ClaimsProvider <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Claims</span>(r <span style="color:#000;font-weight:bold">*</span>http.Request) <span style="color:#000;font-weight:bold">*</span>Claims
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> TokenSource <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Token</span>() (<span style="color:#458;font-weight:bold">string</span>, <span style="color:#458;font-weight:bold">error</span>) <span style="color:#998;font-style:italic">// for client-side auth
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ExtensionProvider <span style="color:#000;font-weight:bold">interface</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Extension</span>() Extension <span style="color:#998;font-style:italic">// sub-modules declare their extension metadata
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ServerInfo <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Name, Version                          <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>    Title, Description, Instructions       <span style="color:#458;font-weight:bold">string</span> <span style="color:#998;font-style:italic">// optional
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    WebsiteURL                             <span style="color:#458;font-weight:bold">string</span> <span style="color:#998;font-style:italic">// optional
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ClientInfo <span style="color:#000;font-weight:bold">struct</span> { Name, Version <span style="color:#458;font-weight:bold">string</span> }
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ClientCapabilities <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Sampling, Elicitation <span style="color:#000;font-weight:bold">*</span><span style="color:#000;font-weight:bold">struct</span>{}
+</span></span><span style="display:flex;"><span>    Roots                 <span style="color:#000;font-weight:bold">*</span>RootsCap
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> Content <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Type     <span style="color:#458;font-weight:bold">string</span>           <span style="color:#998;font-style:italic">// &#34;text&#34;, &#34;image&#34;, &#34;audio&#34;, &#34;resource&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Text     <span style="color:#458;font-weight:bold">string</span>           <span style="color:#998;font-style:italic">// for text
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    MimeType <span style="color:#458;font-weight:bold">string</span>           <span style="color:#998;font-style:italic">// for image/audio
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Data     <span style="color:#458;font-weight:bold">string</span>           <span style="color:#998;font-style:italic">// base64 for image/audio
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    Resource <span style="color:#000;font-weight:bold">*</span>ResourceContent <span style="color:#998;font-style:italic">// for embedded resources
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> PromptArgument <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Name, Description <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>    Required          <span style="color:#458;font-weight:bold">bool</span>
+</span></span><span style="display:flex;"><span>    Schema            any <span style="color:#998;font-style:italic">// optional JSON Schema (#87)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> PromptRequest <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Name      <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>    Arguments <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any <span style="color:#998;font-style:italic">// pre-decoded JSON values; handlers type-assert (#87)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ResourceHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req ResourceRequest) (ResourceResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> TemplateHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, uri <span style="color:#458;font-weight:bold">string</span>, params <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]<span style="color:#458;font-weight:bold">string</span>) (ResourceResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> PromptHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req PromptRequest) (PromptResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span></code></pre><h3 id="content-cardinality-tolerance-81">Content Cardinality Tolerance (#81) <a class="anchor" href="#content-cardinality-tolerance-81">¶</a></h3>
+<p>Several message types have a <code>content</code> field whose JSON cardinality varies in<br />
+the wild. MCPKit defensively accepts both forms on read and always emits<br />
+spec-canonical shape on write:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Spec</th>
+<th>Read tolerance</th>
+<th>Write</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PromptMessage.content</code></td>
+<td>single</td>
+<td>object or array (first element)</td>
+<td>object</td>
+</tr>
+<tr>
+<td><code>SamplingMessage.content</code></td>
+<td>single</td>
+<td>object or array (first element)</td>
+<td>object</td>
+</tr>
+<tr>
+<td><code>CreateMessageResult.content</code></td>
+<td>single</td>
+<td>object or array (first element)</td>
+<td>object</td>
+</tr>
+<tr>
+<td><code>Content.resource</code></td>
+<td>single</td>
+<td>object or array (first element)</td>
+<td>object</td>
+</tr>
+<tr>
+<td><code>ToolResult.content</code></td>
+<td>array</td>
+<td>object (wrapped) or array</td>
+<td>array</td>
+</tr>
+<tr>
+<td><code>ResourceResult.contents</code></td>
+<td>array</td>
+<td>object (wrapped) or array</td>
+<td>array</td>
+</tr>
+</tbody>
+</table>
+<p>Logic lives in <a href="https://github.com/panyam/mcpkit/blob/main/core/cardinality.go"><code>core/cardinality.go</code></a>. Widening (e.g., #141 multi-part sampling)<br />
+replaces a call to <code>decodeContentSingle</code> with <code>decodeContentSlice</code> at the<br />
+UnmarshalJSON call site — the helper semantics do not change.</p>
+<h2 id="protocol-version-negotiation">Protocol Version Negotiation <a class="anchor" href="#protocol-version-negotiation">¶</a></h2>
+<p>Supports <code>2025-11-25</code> and <code>2024-11-05</code>. During <code>initialize</code>, server checks if client&rsquo;s version is in supported list. If not → JSON-RPC error <code>-32602</code> with <code>{&quot;supported&quot;: [...]}</code>.</p>
+<h2 id="initialization-lifecycle">Initialization Lifecycle <a class="anchor" href="#initialization-lifecycle">¶</a></h2>
+<ol>
+<li>Client sends <code>initialize</code> → server responds with capabilities and negotiated version</li>
+<li>Client sends <code>notifications/initialized</code> → server marks session as ready</li>
+<li>Only after step 2 does the server accept <code>tools/list</code>, <code>tools/call</code>, etc.</li>
+<li><code>ping</code> is exempt — allowed at any time</li>
+</ol>
+<h2 id="server-to-client-notifications">Server-to-Client Notifications <a class="anchor" href="#server-to-client-notifications">¶</a></h2>
+<p>MCPKit supports server-initiated notifications via <code>NotifyFunc</code>, a generic <code>func(method string, params any)</code> callback. This is the foundation for logging, progress, and list-changed notifications.</p>
+<h3 id="how-it-works">How it works <a class="anchor" href="#how-it-works">¶</a></h3>
+<ol>
+<li>Transport creates a session dispatcher and sets <code>dispatcher.SetNotifyFunc()</code> to a transport-specific sender</li>
+<li><code>Server.dispatchWith</code> injects the notify func, log level, and auth claims into the context via <code>contextWithSession</code></li>
+<li>Tool handlers call <code>EmitLog(ctx, level, logger, data)</code> which checks the session&rsquo;s log level and calls the notify func</li>
+<li>SSE transport: <code>notifyFunc</code> pushes via <code>hub.SendEvent</code> (real-time delivery)</li>
+<li>Streamable HTTP POST: when client sends <code>Accept: text/event-stream</code>, <code>handlePostSSE</code> passes a request-scoped notifyFunc via <code>dispatchWithNotify</code> (no shared state mutation)</li>
+<li>Streamable HTTP GET: client opens <code>GET /mcp</code> with <code>Mcp-Session-Id</code> header, server wires <code>dispatcher.SetNotifyFunc()</code> to push via SSEHub. Client enables this via <code>WithGetSSEStream()</code> — notifications arrive on the background GET stream</li>
+</ol>
+<h3 id="logging">Logging <a class="anchor" href="#logging">¶</a></h3>
+<ul>
+<li>Client sends <code>logging/setLevel</code> → dispatcher stores minimum level per-session via <code>atomic.Pointer[LogLevel]</code></li>
+<li>Tool handler calls <code>EmitLog(ctx, LogInfo, &quot;logger&quot;, &quot;message&quot;)</code> → filtered by level → pushed as <code>notifications/message</code></li>
+<li>Thread-safe: atomic read of log level from tool goroutines while <code>logging/setLevel</code> writes</li>
+</ul>
+<h3 id="resource-subscriptions">Resource Subscriptions <a class="anchor" href="#resource-subscriptions">¶</a></h3>
+<p>Clients can subscribe to resource URIs and receive <code>notifications/resources/updated</code> when the resource changes. Requires <code>WithSubscriptions()</code> server option.</p>
+<p><strong>Architecture:</strong></p>
+<ul>
+<li><code>subscriptionRegistry</code> on <code>Server</code> maps URI → sessionID → <code>*Dispatcher</code></li>
+<li>Per-session <code>Dispatcher</code> holds <code>sessionID</code> and <code>subManager</code> (pointer to Server&rsquo;s registry)</li>
+<li><code>resources/subscribe</code> handler registers the session&rsquo;s Dispatcher under the URI</li>
+<li><code>resources/unsubscribe</code> handler removes it</li>
+<li><code>Server.NotifyResourceUpdated(uri)</code> iterates subscribers under read lock, copies dispatcher list, then calls each <code>d.getNotifyFunc()</code> outside the lock</li>
+<li><code>Server.Broadcast(method, params)</code> fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses <code>sessionBroadcasters</code> — each transport registers a closure that iterates its session map. Pattern mirrors <code>CloseAllSessions</code>.</li>
+<li>Transport <code>OnClose</code> / <code>closeSession</code> calls <code>subManager.unsubscribeAll(sessionID)</code> to clean up</li>
+</ul>
+<p><strong>Why store <code>*Dispatcher</code> not <code>NotifyFunc</code>:</strong> The <code>notifyFunc</code> on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading <code>d.getNotifyFunc()</code> at notification time handles this correctly. Access to <code>notifyFunc</code> is protected by <code>notifyMu</code> (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.</p>
+<p><strong>Session cleanup:</strong> All per-session teardown is centralized in <code>Dispatcher.Close()</code>. Transports call it in their disconnect path (SSE <code>OnClose</code>, Streamable <code>handleDelete</code>/<code>closeSession</code>, memory <code>close</code>). New per-session state should add its cleanup to <code>Close()</code> — not to each transport individually.</p>
+<h2 id="notification-delivery-order-guarantees">Notification Delivery Order Guarantees <a class="anchor" href="#notification-delivery-order-guarantees">¶</a></h2>
+<p>Notifications emitted during a tool call (logging, progress) are delivered to the client <strong>before</strong> the tool result. The ordering guarantee is per-transport:</p>
+<table>
+<thead>
+<tr>
+<th>Transport</th>
+<th>Guarantee</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Streamable HTTP POST</strong> (SSE streaming)</td>
+<td>Notifications arrive on the <strong>same POST response stream</strong> as the tool result, in emission order, before the result.</td>
+<td><code>handlePostSSE</code> creates a request-scoped <code>requestNotify</code> closure. Notifications and the final response share a mutex-protected <code>writeSSE</code> function. The response is written last.</td>
+</tr>
+<tr>
+<td><strong>Streamable HTTP GET</strong> (opt-in)</td>
+<td>Server-initiated notifications arrive on the background GET SSE stream. Ordering relative to POST responses is not guaranteed.</td>
+<td>Client opens <code>GET /mcp</code> via <code>WithGetSSEStream()</code>. Server wires <code>dispatcher.notifyFunc</code> to SSEHub. <code>backgroundGetReader</code> dispatches events to <code>notifyHandler</code>.</td>
+</tr>
+<tr>
+<td><strong>SSE</strong></td>
+<td>Notifications arrive on the shared SSE stream in emission order. The background reader delivers them to <code>notifyHandler</code> before routing the response to the pending call channel.</td>
+<td>Single <code>backgroundReader</code> goroutine processes events sequentially: notification delivery completes before the response is sent to the blocked <code>call()</code>.</td>
+</tr>
+<tr>
+<td><strong>In-memory</strong></td>
+<td>Fully synchronous — notifications are delivered inline during <code>call()</code>, before the response is returned.</td>
+<td><code>dispatchWithNotifyAndRequest</code> calls <code>notifyFunc</code> synchronously within the tool handler.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cross-request isolation (Streamable HTTP):</strong> Each POST gets its own <code>requestNotify</code> closure. Notifications from concurrent tool calls never leak to other requests&rsquo; response streams.</p>
+<p><strong>Client-side delivery:</strong> <code>WithNotificationCallback(fn)</code> works across all transports. The handler receives <code>(method string, params any)</code> where params is always <code>map[string]any</code> (JSON-roundtripped for consistency, including in-memory). When <code>WithGetSSEStream()</code> is enabled, notifications may arrive concurrently from the GET stream and POST SSE responses — the callback must be goroutine-safe.</p>
+<h2 id="tool-error-semantics">Tool Error Semantics <a class="anchor" href="#tool-error-semantics">¶</a></h2>
+<ul>
+<li><strong>Handler returns <code>error</code></strong> → JSON-RPC success with <code>isError: true</code> in tool result</li>
+<li><strong>Protocol failure</strong> (bad params, unknown tool) → JSON-RPC error response</li>
+</ul>
+<h2 id="graceful-shutdown">Graceful Shutdown <a class="anchor" href="#graceful-shutdown">¶</a></h2>
+<p>Uses servicekit&rsquo;s <code>ListenAndServeGraceful</code>:</p>
+<ol>
+<li>SIGTERM/SIGINT → stops accepting new connections</li>
+<li><code>OnShutdown</code> callback calls <code>SSEHub.CloseAll()</code> for SSE sessions</li>
+<li>Waits for in-flight requests (configurable drain timeout)</li>
+<li>Exit</li>
+</ol>
+<h2 id="mcp-apps-extension">MCP Apps Extension <a class="anchor" href="#mcp-apps-extension">¶</a></h2>
+<p>MCPKit supports the <a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps extension</a> (<code>io.modelcontextprotocol/ui</code>), enabling servers to return interactive HTML UIs that render inline in host conversations.</p>
+<p><strong>mcpkit&rsquo;s scope:</strong> capability negotiation, <code>_meta.ui</code> metadata on tools/resources, <code>ui://</code> resource serving, visibility filtering, text-only fallback. The iframe rendering and <code>postMessage</code> bridge are the host&rsquo;s responsibility.</p>
+<p><strong>Package split:</strong></p>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/core/ui.go"><code>core/ui.go</code></a> — Protocol types (<code>UIMetadata</code>, <code>UICSPConfig</code>, <code>UIVisibility</code>, <code>AppMIMEType</code>, <code>ToolMeta</code>, <code>ResourceContentMeta</code>) and context helpers (<code>ClientSupportsUI</code>, <code>NotifyResourcesChanged</code>)</li>
+<li><code>ext/ui/</code> — Extension implementation (<code>UIExtension</code>, <code>RegisterAppTool</code>, <code>RefValidator</code>)</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client/client.go</code></a> — <code>WithExtension</code>, <code>WithUIExtension</code>, <code>ServerSupportsUI</code>, <code>ListToolsForModel</code></li>
+</ul>
+<p>See <a href="/mcpkit/packages/ext-ui/">docs/APPS_DESIGN.md</a> for the full design: protocol flows, edge cases, conformance strategy, and slyds reference integration.</p>
+<h2 id="mcp-tasks-experimental">MCP Tasks (Experimental) <a class="anchor" href="#mcp-tasks-experimental">¶</a></h2>
+<p>MCPKit supports the MCP Tasks protocol (spec 2025-11-25) in <code>server/task_*.go</code> and <code>server/tasks_experimental.go</code>. Client helpers are in <a href="https://github.com/panyam/mcpkit/blob/main/client/tasks.go"><code>client/tasks.go</code></a>. Tasks enable &ldquo;call-now, fetch-later&rdquo; async tool execution.</p>
+<p><strong>Architecture:</strong> Tasks are implemented as a middleware + custom method handlers in the server package. <code>server.RegisterTasks(TasksConfig)</code> hooks everything up:</p>
+<ol>
+<li><strong>Middleware</strong> intercepts <code>tools/call</code> — when the client includes <code>_meta.task</code> and the tool doesn&rsquo;t forbid it, the middleware creates a task, runs the tool in a detached goroutine, and returns <code>CreateTaskResult</code> immediately.</li>
+<li><strong>Method handlers</strong> for <code>tasks/get</code>, <code>tasks/result</code>, <code>tasks/list</code>, <code>tasks/cancel</code> are registered via <code>Server.HandleMethod()</code>.</li>
+<li><strong>TaskStore interface</strong> abstracts state persistence. <code>InMemoryTaskStore</code> shipped as default; interface exists for multi-node scenarios (e.g., Redis-backed).</li>
+<li><strong>Capability advertisement</strong> via <code>Server.SetTasksCap()</code> — the <code>tasks</code> field appears in the initialize response.</li>
+</ol>
+<p><strong>Per-tool control:</strong> <code>ToolDef.Execution.TaskSupport</code> declares <code>required</code> (must use tasks), <code>optional</code> (client&rsquo;s choice), or <code>forbidden</code> (always sync). The middleware enforces these semantics.</p>
+<p><strong>Why middleware, not core:</strong> Tasks are optional and experimental. The middleware pattern keeps the dispatcher simple and lets the feature evolve without touching core dispatch logic. The <code>InMemoryTaskStore</code> uses <code>sync.Cond</code> for <code>WaitForResult</code> blocking — this is task-lifecycle-specific and not a generic store pattern.</p>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

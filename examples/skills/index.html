@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Archives, remote sources, and fsnotify on top of the minimal skills shape. Experimental.">
+    <title>Skills — full (SEP-2640) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Skills — full (SEP-2640)</h1>
+        
+        <p class="lead">Archives, remote sources, and fsnotify on top of the minimal skills shape. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills/README.md"><code>examples/skills/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="examplesskills">examples/skills <a class="anchor" href="#examplesskills">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental</strong> — tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640</a> (Skills), a draft SEP. Wire format may change.</p>
+</blockquote>
+<p>End-to-end example for SEP-2640 (Skills extension): a mcpkit server that<br />
+exposes Agent Skills under the <code>skill://</code> URI scheme, plus a demokit<br />
+walkthrough that drives a host against it.</p>
+<blockquote>
+<p><strong>Looking for the minimal shape?</strong> This example is the <strong>full</strong> surface —<br />
+archives (<code>.tar.gz</code> / <code>.zip</code>), remote source adapters (GitHub, archive<br />
+directories, multi-source mounts), and fsnotify-driven invalidation. For the<br />
+scoped-down core the WG blessed on 2026-06-30 (a skills file + tool handling,<br />
+load-on-demand, no archives), start with <a href="/mcpkit/examples/skills-core/"><code>examples/skills-core</code></a>.</p>
+</blockquote>
+<p>The walkthrough exercises the SEP&rsquo;s wire shape step by step:<br />
+capability declaration, the discovery index, SHA-256 digest<br />
+verification, and reading both single-segment and nested-prefix skills.<br />
+Full step-by-step is in <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills/WALKTHROUGH.md">WALKTHROUGH.md</a> (regenerate<br />
+via <code>just readme</code>).</p>
+<h2 id="running">Running <a class="anchor" href="#running">¶</a></h2>
+<h3 id="two-terminal-walkthrough-recommended">Two-terminal walkthrough (recommended) <a class="anchor" href="#two-terminal-walkthrough-recommended">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1: start the server</span>
+</span></span><span style="display:flex;"><span>just serve
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 2: drive the walkthrough</span>
+</span></span><span style="display:flex;"><span>just demo        <span style="color:#998;font-style:italic"># text mode (non-interactive)</span>
+</span></span><span style="display:flex;"><span>just tui         <span style="color:#998;font-style:italic"># interactive TUI (paginated, key-driven)</span>
+</span></span><span style="display:flex;"><span>just note        <span style="color:#998;font-style:italic"># notebook mode (Bubble Tea cells)</span>
+</span></span></code></pre><h3 id="agent-mode">Agent mode <a class="anchor" href="#agent-mode">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just agent                                  <span style="color:#998;font-style:italic"># scripted agent, no LLM (also the golden test via just agent-test)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">MODEL</span><span style="color:#000;font-weight:bold">=</span>qwen2.5-7b-instruct just agent-live   <span style="color:#998;font-style:italic"># a live model improvising against the same server</span>
+</span></span></code></pre><p><code>just agent</code> runs a scripted agent (mcpkit&rsquo;s host layer plus a deterministic<br />
+<code>StubProvider</code>) against an in-process copy of this server, so it needs no second<br />
+terminal and no model. It shows what skills are <em>for</em> on the agent side: the<br />
+host discovers the server&rsquo;s skills, digest-verifies them, and injects them into<br />
+the model&rsquo;s system instructions before the first turn. The agent then answers a<br />
+git question by the team&rsquo;s <code>git-workflow</code> conventions and a PDF question by the<br />
+<code>pdf-processing</code> skill, with no tool call. The knowledge rides in the prompt.<br />
+The whole run is deterministic, so it doubles as a golden-transcript test<br />
+(<code>agent_scenario_test.go</code>). With <code>MODEL=... just agent-live</code> a real model derives the same<br />
+answers from the injected blocks instead of reciting scripted ones.</p>
+<h3 id="other-server-modes">Other server modes <a class="anchor" href="#other-server-modes">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve-archive   <span style="color:#998;font-style:italic"># publishes each skill as one .tar.gz resource</span>
+</span></span><span style="display:flex;"><span>just serve-zip       <span style="color:#998;font-style:italic"># publishes each skill as one .zip resource</span>
+</span></span></code></pre><p>In archive mode <code>resources/list</code> returns one URI per skill (e.g.<br />
+<code>skill://pdf-processing.tar.gz</code>) instead of N URIs per file. The<br />
+post-unpack virtual namespace hosts see is identical either way — that&rsquo;s<br />
+SEP-2640&rsquo;s whole-skill atomic-delivery story.</p>
+<h3 id="custom-port-or-skills-directory">Custom port or skills directory <a class="anchor" href="#custom-port-or-skills-directory">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run . --serve --addr<span style="color:#000;font-weight:bold">=</span>:9090 --skills<span style="color:#000;font-weight:bold">=</span>./some-other-skills
+</span></span></code></pre><h2 id="bundled-fixture">Bundled fixture <a class="anchor" href="#bundled-fixture">¶</a></h2>
+<p>Three skills under <code>skills/</code> mirror the SEP-2640 Examples table:</p>
+<table>
+<thead>
+<tr>
+<th>Skill path</th>
+<th>Files</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>git-workflow</code></td>
+<td><code>SKILL.md</code></td>
+</tr>
+<tr>
+<td><code>pdf-processing</code></td>
+<td><code>SKILL.md</code>, <code>references/FORMS.md</code>, <code>scripts/extract.py</code></td>
+</tr>
+<tr>
+<td><code>acme/billing/refunds</code></td>
+<td><code>SKILL.md</code>, <code>templates/email.md</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>pdf-processing/SKILL.md</code> carries Extra frontmatter (<code>version</code>, <code>tags</code>)<br />
+to exercise the <code>Annotations</code> surface that surfaces extras under the<br />
+<code>io.modelcontextprotocol.skills/</code> reverse-domain prefix.</p>
+<h2 id="adding-a-real-world-skill-anthropicsskills-docx">Adding a real-world skill (anthropics/skills docx) <a class="anchor" href="#adding-a-real-world-skill-anthropicsskills-docx">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just fetch-docx
+</span></span><span style="display:flex;"><span>just serve
+</span></span></code></pre><p><code>just fetch-docx</code> clones the public <a href="https://github.com/anthropics/skills"><code>anthropics/skills</code></a> repo<br />
+to <code>/tmp/anthropics-skills-cache</code> (override via <code>ANTHROPIC_SKILLS_CACHE</code>),<br />
+copies the <code>docx</code> skill into <code>skills/docx</code>, and warns if the upstream<br />
+frontmatter <code>name</code> does not match the staged path (SEP-2640 requires<br />
+them to be equal). Re-running is idempotent.</p>
+<p>The fetch-at-run-time pattern keeps this repo&rsquo;s history small and side-steps<br />
+licence ambiguity around vendoring third-party skill bundles. Same shape<br />
+as <code>scripts/apps-playwright-test.sh</code>.</p>
+<h2 id="what-the-walkthrough-proves">What the walkthrough proves <a class="anchor" href="#what-the-walkthrough-proves">¶</a></h2>
+<ul>
+<li>The <code>io.modelcontextprotocol/skills</code> capability appears under<br />
+<code>capabilities.extensions</code> in the <code>initialize</code> response (object, not<br />
+array).</li>
+<li><code>skill://index.json</code> round-trips and parses against the<br />
+<code>https://schemas.agentskills.io/discovery/0.2.0/schema.json</code> shape.</li>
+<li>Every <code>skill-md</code> index entry&rsquo;s <code>digest</code> is <code>sha256:[a-f0-9]{64}</code> and<br />
+matches <code>sha256.Sum256</code> of the served bytes — satisfies the SEP-2640<br />
+MUST that hosts verify retrieved content against the digest.</li>
+<li>Resources/read works for both single-segment skills (<code>git-workflow</code>)<br />
+and nested-prefix skills (<code>acme/billing/refunds</code>), confirming the<br />
+prefix-segment routing is uniform.</li>
+<li>Relative references inside a skill (e.g. <code>templates/email.md</code> from<br />
+<code>acme/billing/refunds/SKILL.md</code>) resolve via<br />
+<code>skills.ResolveRelative(skillRoot, ref)</code>.</li>
+</ul>
+<h2 id="conformance">Conformance <a class="anchor" href="#conformance">¶</a></h2>
+<p>This server also doubles as the fixture for the SEP-2640 conformance<br />
+suite:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># from repo root</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">MCPCONFORMANCE_SKILLS_PATH</span><span style="color:#000;font-weight:bold">=</span><span style="color:#008080">$HOME</span>/newstack/mcpkit/conf-skills just testconf-skills
+</span></span></code></pre><p>The Makefile target spawns this binary in <code>--serve</code> mode on <code>:18099</code><br />
+before invoking the fork-side scenario runner. The fork-side Scenario<br />
+classes are tracked under mcpkit#567.</p>
+<h2 id="spec-reference">Spec reference <a class="anchor" href="#spec-reference">¶</a></h2>
+<ul>
+<li>SEP-2640: <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640</a></li>
+<li>Agent Skills specification: <a href="https://agentskills.io/specification">https://agentskills.io/specification</a></li>
+<li>Working group: skills-over-mcp-wg</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/skills-core/">Skills — the minimal core shape</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills/WALKTHROUGH.md"><code>examples/skills/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-skills-extension-sep-2640--reference-walkthrough">MCP Skills Extension (SEP-2640) — Reference Walkthrough <a class="anchor" href="#mcp-skills-extension-sep-2640--reference-walkthrough">¶</a></h1>
+<p>SEP-2640 serves Agent Skills over MCP&rsquo;s Resources primitive: each file under a skill directory is a <code>skill://</code> URI; <code>skill://index.json</code> enumerates them with SHA-256 digests.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Choose the client wire mode</strong> — Adaptive (default) probes server/discover and falls back to the initialize handshake on -32601. Stateless forces server/discover and errors if the server cannot answer. Legacy skips the probe and goes straight to initialize.</li>
+<li><strong>Connect to the skills server</strong> — Construct the client with the chosen wire mode, then connect. After the call returns, inspect the new accessor to see which wire engaged. The curl chain below uses the legacy wire and mints a session id reused by every subsequent step; the stateless wire skips that — each call posts directly to /mcp with no Mcp-Session-Id header.</li>
+<li><strong>resources/list returns every cataloged skill URI</strong> — In file mode the list has N entries per skill (one for SKILL.md, one per supporting file) plus the index. In archive mode it&rsquo;s one entry per skill plus the index.</li>
+<li><strong>Read skill://index.json</strong> — The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk — mcpkit generates it from the live provider catalog on each cache miss.</li>
+<li><strong>Detect server distribution mode from the index</strong> — In file mode every entry&rsquo;s type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry&rsquo;s type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.</li>
+<li><strong>Verify digest by re-fetching git-workflow&rsquo;s canonical artifact</strong> — Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode — the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.</li>
+<li><strong>Read the pdf-processing SKILL.md</strong> — This skill&rsquo;s frontmatter carries version and tags Extra fields. mcpkit surfaces those under ResourceDef.Annotations keyed by the io.modelcontextprotocol.skills/ reverse-domain prefix.</li>
+<li><strong>Read a supporting file via skill:// (references/FORMS.md)</strong> — Relative reference resolution: references/FORMS.md from inside pdf-processing/SKILL.md resolves to this full URI via the SDK helper that walks the skill root.</li>
+<li><strong>Read a nested-prefix skill (acme/billing/refunds)</strong> — Demonstrates that the prefix-segment routing works end-to-end. The skill name is refunds; the acme/billing/ prefix is server-chosen and is opaque to the skill&rsquo;s own frontmatter.</li>
+<li><strong>Read a supporting file in the nested skill (templates/email.md)</strong> — Same relative-reference resolution as the pdf-processing example, this time across a multi-segment prefix.</li>
+<li><strong>Read a skill via the archive sub-mount (proves auto-wrap end-to-end)</strong> — <code>just serve</code> packs the bundled <code>git-workflow</code> skill into a tempfile tar.gz and mounts it under the <code>archived/</code> sub-mount. <code>OpenArchive</code> auto-wraps the archive&rsquo;s root-level SKILL.md under <code>git-workflow/</code> (matching the frontmatter name), so the served URI is <code>skill://archived/git-workflow/SKILL.md</code>. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.</li>
+<li><strong>Discover and read a skill via the github sub-mount</strong> — Robust against changes in the upstream repo: instead of hardcoding a github URI, we enumerate <code>resources/list</code>, pick the first entry under the <code>github/</code> prefix, and read it. Proves the entire FetchGitHubArchive → MountFS sub-mount → resources/read chain — server reaches out to GitHub at boot, the bytes flow through the same MCP wire as everything else.</li>
+<li><strong>Read the version, refresh, observe it bump</strong> — The version field lives under <code>_meta</code> with the reverse-domain key <code>io.modelcontextprotocol.skills/version</code>, matching mcpkit&rsquo;s existing convention for extension metadata. The dual-wire story: subscribed stateful clients get the push notification; stateless clients see the same change by re-reading and comparing the version.</li>
+<li><strong>Observe an fsnotify-driven broadcast</strong> — In <code>--non-interactive</code> mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal — the notification arrives as soon as your editor flushes the save.</li>
+<li><strong>List a directory inside a skill and recurse into a subdirectory</strong> — Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.</li>
+<li><strong>Wrap reads in skills.NewClient(&hellip;) and call Client.Activate</strong> — Activate is intra-process — no wire traffic. Run with <code>just serve EXPORTER=stdout</code> + <code>just demo EXPORTER=stdout</code> to see spans.</li>
+<li><strong>Read pdf-processing archive, verify digest, unpack, list recovered files</strong> — Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve, file mode by default)
+
+    Note over Host,Server: Step 1: Choose the client wire mode
+
+    Note over Host,Server: Step 2: Connect to the skills server
+    Host-&gt;&gt;Server: POST /mcp — server/discover (stateless) OR initialize (legacy)
+    Server--&gt;&gt;Host: serverInfo + capabilities (with extensions.skills)
+
+    Note over Host,Server: Step 3: resources/list returns every cataloged skill URI
+    Host-&gt;&gt;Server: resources/list
+    Server--&gt;&gt;Host: resources[] including skill://index.json + each SKILL.md
+
+    Note over Host,Server: Step 4: Read skill://index.json
+    Host-&gt;&gt;Server: resources/read uri=skill://index.json
+    Server--&gt;&gt;Host: { $schema, skills: [...] }
+
+    Note over Host,Server: Step 5: Detect server distribution mode from the index
+
+    Note over Host,Server: Step 6: Verify digest by re-fetching git-workflow's canonical artifact
+    Host-&gt;&gt;Server: resources/read uri=skill://git-workflow{/SKILL.md | .tar.gz | .zip}
+    Server--&gt;&gt;Host: text/markdown body (file mode) OR archive bytes (archive mode)
+
+    Note over Host,Server: Step 7: Read the pdf-processing SKILL.md
+    Host-&gt;&gt;Server: resources/read uri=skill://pdf-processing/SKILL.md
+    Server--&gt;&gt;Host: text/markdown body
+
+    Note over Host,Server: Step 8: Read a supporting file via skill:// (references/FORMS.md)
+    Host-&gt;&gt;Server: resources/read uri=skill://pdf-processing/references/FORMS.md
+    Server--&gt;&gt;Host: text/markdown body
+
+    Note over Host,Server: Step 9: Read a nested-prefix skill (acme/billing/refunds)
+    Host-&gt;&gt;Server: resources/read uri=skill://acme/billing/refunds/SKILL.md
+    Server--&gt;&gt;Host: text/markdown body
+
+    Note over Host,Server: Step 10: Read a supporting file in the nested skill (templates/email.md)
+    Host-&gt;&gt;Server: resources/read uri=skill://acme/billing/refunds/templates/email.md
+    Server--&gt;&gt;Host: text/markdown body
+
+    Note over Host,Server: Step 11: Read a skill via the archive sub-mount (proves auto-wrap end-to-end)
+    Host-&gt;&gt;Server: resources/read uri=skill://archived/git-workflow/SKILL.md
+    Server--&gt;&gt;Host: text/markdown body (same content as skill://git-workflow/SKILL.md)
+
+    Note over Host,Server: Step 12: Discover and read a skill via the github sub-mount
+    Host-&gt;&gt;Server: resources/list (filter for skill://github/...)
+    Host-&gt;&gt;Server: resources/read uri=&lt;first github URI&gt;
+    Server--&gt;&gt;Host: content fetched from anthropics/skills at server boot
+
+    Note over Host,Server: Step 13: Read the version, refresh, observe it bump
+    Host-&gt;&gt;Server: resources/read uri=skill://index.json (capture _meta version)
+    Host-&gt;&gt;Server: tools/call name=_demo/refresh (server calls Provider.Refresh())
+    Server--&gt;&gt;Host: notifications/resources/list_changed (stateful wire only)
+    Host-&gt;&gt;Server: resources/read uri=skill://index.json (observe version bumped)
+
+    Note over Host,Server: Step 14: Observe an fsnotify-driven broadcast
+    Detector-&gt;&gt;Server: fsnotify Write event on skills/git-workflow/SKILL.md
+    Server-&gt;&gt;Server: Provider.NotifyChangedEvents (mapped from fsnotify.Op)
+    Server--&gt;&gt;Host: notifications/resources/list_changed (after 200ms coalesce)
+
+    Note over Host,Server: Step 15: List a directory inside a skill and recurse into a subdirectory
+    Host-&gt;&gt;Server: resources/directory/read uri=skill://acme/billing/refunds/templates
+    Server--&gt;&gt;Host: 2 files + 1 subdirectory (`regional`, inode/directory)
+    Host-&gt;&gt;Server: resources/directory/read uri=skill://acme/billing/refunds/templates/regional
+    Server--&gt;&gt;Host: 1 file (eu.md)
+
+    Note over Host,Server: Step 16: Wrap reads in skills.NewClient(...) and call Client.Activate
+    Host-&gt;&gt;Server: resources/read via sc.ReadAndVerify (span: skills.read_and_verify)
+    Server--&gt;&gt;Host: bytes + digest match
+
+    Note over Host,Server: Step 17: Read pdf-processing archive, verify digest, unpack, list recovered files
+    Host-&gt;&gt;Server: resources/read uri=skill://pdf-processing.tar.gz (or .zip)
+    Server--&gt;&gt;Host: application/gzip OR application/zip blob
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<pre><code>Terminal 1:  just serve         # default (file mode, :8080)
+             just serve-archive # one .tar.gz per skill
+             just serve-zip     # one .zip per skill
+Terminal 2:  just demo          # this walkthrough (--tui interactive)
+</code></pre>
+<p>This walkthrough auto-detects which of the three distribution modes the server is serving. The mode-aware section near the bottom shows the archive read-and-unpack flow; the file-mode read steps in the middle SKIP cleanly when archive mode is in effect (and vice versa).</p>
+<h3 id="uri-shape">URI shape <a class="anchor" href="#uri-shape">¶</a></h3>
+<p><code>skill://&lt;path&gt;/&lt;file&gt;</code>. Final path segment = the skill&rsquo;s frontmatter <code>name</code>. Prefix segments (e.g. <code>acme/billing/</code>) are an optional server-chosen namespace. Walkthrough exercises <code>git-workflow</code>, <code>pdf-processing</code>, and <code>acme/billing/refunds</code>.</p>
+<h3 id="capability-declaration">Capability declaration <a class="anchor" href="#capability-declaration">¶</a></h3>
+<p>Server advertises <code>io.modelcontextprotocol/skills</code> under <code>capabilities.extensions</code> (always <code>{}</code>, never an array). <code>Provider.RegisterWith(srv)</code> wires it automatically.</p>
+<h3 id="wire-mode-sep-2575-dual-wire">Wire mode (SEP-2575 dual-wire) <a class="anchor" href="#wire-mode-sep-2575-dual-wire">¶</a></h3>
+<p>mcpkit&rsquo;s server defaults to <code>ModeDual</code> — every URL serves both the legacy <code>initialize</code> handshake and the SEP-2575 <code>server/discover</code> probe. Pick which wire the client should use; the rest of the walkthrough works identically either way.</p>
+<h3 id="step-1-choose-the-client-wire-mode">Step 1: Choose the client wire mode <a class="anchor" href="#step-1-choose-the-client-wire-mode">¶</a></h3>
+<p>Adaptive (default) probes server/discover and falls back to the initialize handshake on -32601. Stateless forces server/discover and errors if the server cannot answer. Legacy skips the probe and goes straight to initialize.</p>
+<h3 id="step-2-connect-to-the-skills-server">Step 2: Connect to the skills server <a class="anchor" href="#step-2-connect-to-the-skills-server">¶</a></h3>
+<p>Construct the client with the chosen wire mode, then connect. After the call returns, inspect the new accessor to see which wire engaged. The curl chain below uses the legacy wire and mints a session id reused by every subsequent step; the stateless wire skips that — each call posts directly to /mcp with no Mcp-Session-Id header.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Legacy wire: initialize handshake mints the session id for downstream steps.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;skills-host&#34;,&#34;version&#34;:&#34;1.0&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Stateless wire alternative — no session id, just probe server/discover:</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   curl -s -X POST http://localhost:8080/mcp \</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#     -H &#39;Content-Type: application/json&#39; -H &#39;Accept: application/json, text/event-stream&#39; \</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#     -d &#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;d&#34;,&#34;method&#34;:&#34;server/discover&#34;,&#34;params&#34;:{}}&#39; | jq &#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-3-resourceslist-returns-every-cataloged-skill-uri">Step 3: resources/list returns every cataloged skill URI <a class="anchor" href="#step-3-resourceslist-returns-every-cataloged-skill-uri">¶</a></h3>
+<p>In file mode the list has N entries per skill (one for SKILL.md, one per supporting file) plus the index. In archive mode it&rsquo;s one entry per skill plus the index.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;resources/list&#34;}&#39;</span> | jq <span style="color:#d14">&#39;.result.resources[] | &#34;\(.uri)  [\(.mimeType)]&#34;&#39;</span>
+</span></span></code></pre><h3 id="discovery-index">Discovery index <a class="anchor" href="#discovery-index">¶</a></h3>
+<p><code>skill://index.json</code> enumerates skills with <code>{$schema, skills:[{type, name, description, url, digest}]}</code>. Optional in the SEP; mcpkit auto-registers unless <code>WithoutIndex()</code>.</p>
+<h3 id="step-4-read-skillindexjson">Step 4: Read skill://index.json <a class="anchor" href="#step-4-read-skillindexjson">¶</a></h3>
+<p>The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk — mcpkit generates it from the live provider catalog on each cache miss.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://index.json&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> | jq <span style="color:#d14">&#39;.&#39;</span>
+</span></span></code></pre><h3 id="distribution-mode">Distribution mode <a class="anchor" href="#distribution-mode">¶</a></h3>
+<p>SEP-2640 lets a server publish each skill as either individual files (<code>type:skill-md</code>) or one packed archive per skill (<code>type:archive</code> with <code>.tar.gz</code> / <code>.zip</code> suffix). The shape is visible on the index entries — the walkthrough sniffs it once and threads the result through the rest of the steps so the file-mode and archive-mode narratives stay tidy.</p>
+<h3 id="step-5-detect-server-distribution-mode-from-the-index">Step 5: Detect server distribution mode from the index <a class="anchor" href="#step-5-detect-server-distribution-mode-from-the-index">¶</a></h3>
+<p>In file mode every entry&rsquo;s type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry&rsquo;s type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.</p>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Distinct types appearing in the index — &#34;skill-md&#34; or &#34;archive&#34;.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:11,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://index.json&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;[.skills[].type] | unique | join(&#34;,&#34;)&#39;</span>
+</span></span></code></pre><h3 id="digest-contract">Digest contract <a class="anchor" href="#digest-contract">¶</a></h3>
+<p>Each entry carries <code>sha256:{64hex}</code> over the raw artifact bytes (SKILL.md for skill-md, packed archive for archive). Hosts MUST verify before use.</p>
+<h3 id="step-6-verify-digest-by-re-fetching-git-workflows-canonical-artifact">Step 6: Verify digest by re-fetching git-workflow&rsquo;s canonical artifact <a class="anchor" href="#step-6-verify-digest-by-re-fetching-git-workflows-canonical-artifact">¶</a></h3>
+<p>Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode — the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.</p>
+<h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># File mode — re-read SKILL.md, recompute sha256, compare against the index entry&#39;s digest.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">WANT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:3,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://index.json&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.skills[] | select(.url==&#34;skill://git-workflow/SKILL.md&#34;) | .digest&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">GOT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;sha256:</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:4,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://git-workflow/SKILL.md&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> | shasum -a <span style="color:#099">256</span> | awk <span style="color:#d14">&#39;{print $1}&#39;</span><span style="color:#000;font-weight:bold">)</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">[</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$WANT</span><span style="color:#d14">&#34;</span> <span style="color:#000;font-weight:bold">=</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$GOT</span><span style="color:#d14">&#34;</span> <span style="color:#000;font-weight:bold">]</span> <span style="color:#000;font-weight:bold">&amp;&amp;</span> <span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;verified&#34;</span> <span style="color:#000;font-weight:bold">||</span> <span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;MISMATCH&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Archive mode — swap the URI; the body is base64-encoded under .contents[0].blob.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   uri=skill://git-workflow.tar.gz     # or skill://git-workflow.zip</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#   jq -r &#39;.result.contents[0].blob&#39; | base64 -d | shasum -a 256</span>
+</span></span></code></pre><h3 id="reading-skill-files">Reading skill files <a class="anchor" href="#reading-skill-files">¶</a></h3>
+<p>Manifest body may reference supporting files via relative paths. <code>skills.ResolveRelative(skillRoot, ref)</code> resolves them filesystem-style; <code>..</code> escapes are rejected.</p>
+<h3 id="step-7-read-the-pdf-processing-skillmd">Step 7: Read the pdf-processing SKILL.md <a class="anchor" href="#step-7-read-the-pdf-processing-skillmd">¶</a></h3>
+<p>This skill&rsquo;s frontmatter carries version and tags Extra fields. mcpkit surfaces those under ResourceDef.Annotations keyed by the io.modelcontextprotocol.skills/ reverse-domain prefix.</p>
+<h4 id="reproduce-on-the-wire-5">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-5">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:5,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://pdf-processing/SKILL.md&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span>
+</span></span></code></pre><h3 id="step-8-read-a-supporting-file-via-skill-referencesformsmd">Step 8: Read a supporting file via skill:// (references/FORMS.md) <a class="anchor" href="#step-8-read-a-supporting-file-via-skill-referencesformsmd">¶</a></h3>
+<p>Relative reference resolution: references/FORMS.md from inside pdf-processing/SKILL.md resolves to this full URI via the SDK helper that walks the skill root.</p>
+<h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:6,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://pdf-processing/references/FORMS.md&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span>
+</span></span></code></pre><h3 id="step-9-read-a-nested-prefix-skill-acmebillingrefunds">Step 9: Read a nested-prefix skill (acme/billing/refunds) <a class="anchor" href="#step-9-read-a-nested-prefix-skill-acmebillingrefunds">¶</a></h3>
+<p>Demonstrates that the prefix-segment routing works end-to-end. The skill name is refunds; the acme/billing/ prefix is server-chosen and is opaque to the skill&rsquo;s own frontmatter.</p>
+<h4 id="reproduce-on-the-wire-7">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-7">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:7,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://acme/billing/refunds/SKILL.md&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span>
+</span></span></code></pre><h3 id="step-10-read-a-supporting-file-in-the-nested-skill-templatesemailmd">Step 10: Read a supporting file in the nested skill (templates/email.md) <a class="anchor" href="#step-10-read-a-supporting-file-in-the-nested-skill-templatesemailmd">¶</a></h3>
+<p>Same relative-reference resolution as the pdf-processing example, this time across a multi-segment prefix.</p>
+<h4 id="reproduce-on-the-wire-8">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-8">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:8,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://acme/billing/refunds/templates/email.md&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span>
+</span></span></code></pre><h3 id="cross-source-reads-issues-797--808">Cross-source reads (issues #797 + #808) <a class="anchor" href="#cross-source-reads-issues-797--808">¶</a></h3>
+<p><code>just serve</code> composes multiple sources into one catalog via <code>fsutil.NewMountFS</code>: bundled local skills at the FS root + an <code>archived/</code> sub-mount (a <code>.tar.gz</code> packed from one bundled skill, auto-wrapped by frontmatter name) + a <code>github/</code> sub-mount (fetched from anthropics/skills). The previous read steps exercised the local layer. These two steps probe the sub-mounts so the cross-source story is visible in the demo, not just in resource counts. Both steps gracefully skip when running against <code>--source=dir</code> (no sub-mounts present).</p>
+<h3 id="step-11-read-a-skill-via-the-archive-sub-mount-proves-auto-wrap-end-to-end">Step 11: Read a skill via the archive sub-mount (proves auto-wrap end-to-end) <a class="anchor" href="#step-11-read-a-skill-via-the-archive-sub-mount-proves-auto-wrap-end-to-end">¶</a></h3>
+<p><code>just serve</code> packs the bundled <code>git-workflow</code> skill into a tempfile tar.gz and mounts it under the <code>archived/</code> sub-mount. <code>OpenArchive</code> auto-wraps the archive&rsquo;s root-level SKILL.md under <code>git-workflow/</code> (matching the frontmatter name), so the served URI is <code>skill://archived/git-workflow/SKILL.md</code>. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.</p>
+<h4 id="reproduce-on-the-wire-9">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-9">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:15,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://archived/git-workflow/SKILL.md&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span>
+</span></span></code></pre><h3 id="step-12-discover-and-read-a-skill-via-the-github-sub-mount">Step 12: Discover and read a skill via the github sub-mount <a class="anchor" href="#step-12-discover-and-read-a-skill-via-the-github-sub-mount">¶</a></h3>
+<p>Robust against changes in the upstream repo: instead of hardcoding a github URI, we enumerate <code>resources/list</code>, pick the first entry under the <code>github/</code> prefix, and read it. Proves the entire FetchGitHubArchive → MountFS sub-mount → resources/read chain — server reaches out to GitHub at boot, the bytes flow through the same MCP wire as everything else.</p>
+<h4 id="reproduce-on-the-wire-10">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-10">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Find the first github URI in the catalog.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">GH</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:16,&#34;method&#34;:&#34;resources/list&#34;}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.resources[].uri&#39;</span> | grep <span style="color:#d14">&#39;^skill://github/&#39;</span> | head -1<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$GH</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Read it.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:17,\&#34;method\&#34;:\&#34;resources/read\&#34;,\&#34;params\&#34;:{\&#34;uri\&#34;:\&#34;</span><span style="color:#008080">$GH</span><span style="color:#d14">\&#34;}}&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> | head -20
+</span></span></code></pre><h3 id="push-based-invalidation-issue-795">Push-based invalidation (issue #795) <a class="anchor" href="#push-based-invalidation-issue-795">¶</a></h3>
+<p><code>skill://index.json</code> carries <code>_meta.io.modelcontextprotocol.skills/version</code> — a monotonic counter the server bumps whenever skill content changes. Stateful clients also receive <code>notifications/resources/list_changed</code> when the bump happens. Stateless clients (no persistent push channel) detect the change by polling the index and observing the field. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable; this walkthrough uses a demo-only <code>_demo/refresh</code> tool that calls <code>Provider.Refresh()</code> directly.</p>
+<h3 id="step-13-read-the-version-refresh-observe-it-bump">Step 13: Read the version, refresh, observe it bump <a class="anchor" href="#step-13-read-the-version-refresh-observe-it-bump">¶</a></h3>
+<p>The version field lives under <code>_meta</code> with the reverse-domain key <code>io.modelcontextprotocol.skills/version</code>, matching mcpkit&rsquo;s existing convention for extension metadata. The dual-wire story: subscribed stateful clients get the push notification; stateless clients see the same change by re-reading and comparing the version.</p>
+<h4 id="reproduce-on-the-wire-11">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-11">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Read once, capture version.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">V1</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:20,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://index.json&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;._meta[&#34;io.modelcontextprotocol.skills/version&#34;]&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Refresh.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:21,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;_demo/refresh&#34;,&#34;arguments&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.content[0].text&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Read again, observe bump.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">V2</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:22,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://index.json&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].text&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;._meta[&#34;io.modelcontextprotocol.skills/version&#34;]&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;before=</span><span style="color:#008080">$V1</span><span style="color:#d14"> after=</span><span style="color:#008080">$V2</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="fsnotify-driven-invalidation-issue-800">fsnotify-driven invalidation (issue #800) <a class="anchor" href="#fsnotify-driven-invalidation-issue-800">¶</a></h3>
+<p>The previous step called <code>Provider.Refresh()</code> synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. <code>just serve</code> with <code>--watch</code> enables <code>skills.WithFSWatcher</code> + a 200ms coalesce window. Edit any file under <code>skills/</code> in another terminal and the server emits one <code>notifications/resources/list_changed</code> per logical change.</p>
+<h3 id="step-14-observe-an-fsnotify-driven-broadcast">Step 14: Observe an fsnotify-driven broadcast <a class="anchor" href="#step-14-observe-an-fsnotify-driven-broadcast">¶</a></h3>
+<p>In <code>--non-interactive</code> mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal — the notification arrives as soon as your editor flushes the save.</p>
+<h4 id="reproduce-on-the-wire-12">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-12">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># In one terminal:</span>
+</span></span><span style="display:flex;"><span>just serve  <span style="color:#998;font-style:italic"># opt-in fsnotify:</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#998;font-style:italic"># (edit Makefile to add --watch to the serve target, or run directly:)</span>
+</span></span><span style="display:flex;"><span>            <span style="color:#998;font-style:italic"># go run . --serve --watch</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># In another terminal: subscribe + listen.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;watcher&#34;,&#34;version&#34;:&#34;1.0&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -N http://localhost:8080/mcp -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream&#39;</span> &amp;
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Edit a SKILL.md and watch the SSE stream emit list_changed within 200ms.</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;---&#34;</span> &gt;&gt; skills/git-workflow/SKILL.md
+</span></span></code></pre><h3 id="sep-2640-directoryread--scoped-subtree-navigation">SEP-2640 directoryRead — scoped subtree navigation <a class="anchor" href="#sep-2640-directoryread--scoped-subtree-navigation">¶</a></h3>
+<p>SEP commit <code>2e04c48d</code> (2026-06-09) added <code>resources/directory/read</code> for listing a directory&rsquo;s direct children without enumerating the server&rsquo;s entire resource space. Capability-gated via <code>io.modelcontextprotocol/skills.directoryRead</code>. mcpkit&rsquo;s Provider auto-supports it (#781).</p>
+<h3 id="step-15-list-a-directory-inside-a-skill-and-recurse-into-a-subdirectory">Step 15: List a directory inside a skill and recurse into a subdirectory <a class="anchor" href="#step-15-list-a-directory-inside-a-skill-and-recurse-into-a-subdirectory">¶</a></h3>
+<p>Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.</p>
+<h4 id="reproduce-on-the-wire-13">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-13">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Level 1: list the templates/ subtree of the refunds skill.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:9,&#34;method&#34;:&#34;resources/directory/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://acme/billing/refunds/templates&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result.resources[] | {uri, mimeType}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Level 2: descend into the regional/ subdirectory the first call returned.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:10,&#34;method&#34;:&#34;resources/directory/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://acme/billing/refunds/templates/regional&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result.resources[] | {uri, mimeType}&#39;</span>
+</span></span></code></pre><h3 id="sep-414-p7--skills-observability">SEP-414 P7 — Skills observability <a class="anchor" href="#sep-414-p7--skills-observability">¶</a></h3>
+<p>Fetch ≠ activation. Server <code>resources/read</code> spans now carry <code>mcp.skill.*</code> attrs (#748). Client <code>ext/skills.Client</code> emits <code>skills.read*</code> spans + <code>Activate(ctx, uri)</code> for post-cache use the wire can&rsquo;t see (SDK-only — no spec change).</p>
+<h3 id="step-16-wrap-reads-in-skillsnewclient-and-call-clientactivate">Step 16: Wrap reads in skills.NewClient(&hellip;) and call Client.Activate <a class="anchor" href="#step-16-wrap-reads-in-skillsnewclient-and-call-clientactivate">¶</a></h3>
+<p>Activate is intra-process — no wire traffic. Run with <code>just serve EXPORTER=stdout</code> + <code>just demo EXPORTER=stdout</code> to see spans.</p>
+<h3 id="archive-mode--atomic-delivery--in-process-unpack">Archive mode — atomic delivery + in-process unpack <a class="anchor" href="#archive-mode--atomic-delivery--in-process-unpack">¶</a></h3>
+<p>In archive mode every skill is delivered as a single <code>.tar.gz</code> or <code>.zip</code> resource. The host hashes the archive bytes against the index digest, then unpacks in-memory to recover the post-unpack virtual namespace — same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.</p>
+<h3 id="step-17-read-pdf-processing-archive-verify-digest-unpack-list-recovered-files">Step 17: Read pdf-processing archive, verify digest, unpack, list recovered files <a class="anchor" href="#step-17-read-pdf-processing-archive-verify-digest-unpack-list-recovered-files">¶</a></h3>
+<p>Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.</p>
+<h4 id="reproduce-on-the-wire-14">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-14">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Fetch the archive blob (base64-encoded under .contents[0].blob in archive mode).</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:12,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;skill://pdf-processing.tar.gz&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r <span style="color:#d14">&#39;.result.contents[0].blob&#39;</span> | base64 -d &gt; /tmp/pdf.tgz
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Verify and list:</span>
+</span></span><span style="display:flex;"><span>shasum -a <span style="color:#099">256</span> /tmp/pdf.tgz                 <span style="color:#998;font-style:italic"># compare against index entry digest</span>
+</span></span><span style="display:flex;"><span>tar -tzf /tmp/pdf.tgz                      <span style="color:#998;font-style:italic"># recovered file tree</span>
+</span></span></code></pre><h3 id="wrap-up">Wrap-up <a class="anchor" href="#wrap-up">¶</a></h3>
+<p>Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), and exercised the mode-specific read flow. The same client code paths served both — only the URI shape and the post-fetch unpack step differ.</p>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/skills/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/skills/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

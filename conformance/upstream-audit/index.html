@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Scenario-level grading of mcpkit against modelcontextprotocol/conformance@main.">
+    <title>Upstream Conformance Audit · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Upstream Conformance Audit</h1>
+        
+        <p class="lead">Scenario-level grading of mcpkit against modelcontextprotocol/conformance@main.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/conformance/UPSTREAM_AUDIT.md"><code>conformance/UPSTREAM_AUDIT.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="upstream-conformance-audit">Upstream Conformance Audit <a class="anchor" href="#upstream-conformance-audit">¶</a></h1>
+<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@794dcab</code> — <em>chore: bump version to 0.2.0-alpha.9 (#377)</em>.</p>
+<p><strong>mcpkit HEAD:</strong> <code>794dcab</code><br />
+<strong>Driver:</strong> <code>cmd/testserver</code> (server scenarios) + <code>cmd/testclient</code> (client scenarios). SEP-2663 <code>tasks-*</code> server scenarios are graded against <code>examples/tasks-v2</code> instead, which wires <code>ext/tasks</code> in its own module (keeping the root module free of that dependency) — mirroring how <code>testconf-stateless</code> uses <code>examples/stateless</code>.</p>
+<p>Informational report — not a CI gate. Regenerate via <code>just testconf-upstream-audit</code>.</p>
+<p>Status legend: <strong>pass</strong> = no FAILURE checks · <strong>partial</strong> = at least one SUCCESS and one FAILURE · <strong>fail</strong> = all checks FAILURE · <strong>harness-gap</strong> = no <code>checks.json</code> produced (driver missing) · <strong>fork-covered</strong> = same surface graded by an existing <code>testconf-*</code> SEP fork target.</p>
+<h2 id="summary">Summary <a class="anchor" href="#summary">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th align="right">Scenarios</th>
+<th align="right">Checks</th>
+<th align="right">Pass</th>
+<th align="right">Fail</th>
+<th align="right">Warn</th>
+<th align="right">Info</th>
+<th align="right">Skipped</th>
+<th align="right">Harness-gap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Server</td>
+<td align="right">61</td>
+<td align="right">175</td>
+<td align="right">149</td>
+<td align="right">11</td>
+<td align="right">8</td>
+<td align="right">6</td>
+<td align="right">1</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td>Client</td>
+<td align="right">40</td>
+<td align="right">1263</td>
+<td align="right">449</td>
+<td align="right">9</td>
+<td align="right">2</td>
+<td align="right">801</td>
+<td align="right">2</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td align="right"><strong>101</strong></td>
+<td align="right"><strong>1438</strong></td>
+<td align="right"><strong>598</strong></td>
+<td align="right"><strong>20</strong></td>
+<td align="right"><strong>10</strong></td>
+<td align="right"><strong>807</strong></td>
+<td align="right"><strong>3</strong></td>
+<td align="right"><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="harness-gaps">Harness gaps <a class="anchor" href="#harness-gaps">¶</a></h2>
+<p><em>None — every scenario produced results.</em></p>
+<h2 id="by-sep">By SEP <a class="anchor" href="#by-sep">¶</a></h2>
+<h3 id="core--unattributed-53-scenarios">Core / Unattributed (53 scenarios) <a class="anchor" href="#core--unattributed-53-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tools_call</code></td>
+<td>client</td>
+<td>fail</td>
+<td>1 fail</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/2025-03-26-oauth-endpoint-fallback</code></td>
+<td>client</td>
+<td>partial</td>
+<td>3 fail / 10 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/2025-03-26-oauth-metadata-backcompat</code></td>
+<td>client</td>
+<td>partial</td>
+<td>4 fail / 10 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/authorization-server-migration</code></td>
+<td>client</td>
+<td>partial</td>
+<td>2 pass / 1 fail / 4 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/basic-cimd</code></td>
+<td>client</td>
+<td>pass</td>
+<td>17 pass / 1 warn / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/iss-normalized</code></td>
+<td>client</td>
+<td>pass</td>
+<td>8 pass / 14 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/iss-not-advertised</code></td>
+<td>client</td>
+<td>pass</td>
+<td>12 pass / 18 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/iss-supported</code></td>
+<td>client</td>
+<td>pass</td>
+<td>12 pass / 18 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/iss-supported-missing</code></td>
+<td>client</td>
+<td>pass</td>
+<td>8 pass / 14 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/iss-unexpected</code></td>
+<td>client</td>
+<td>pass</td>
+<td>8 pass / 14 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/iss-wrong-issuer</code></td>
+<td>client</td>
+<td>pass</td>
+<td>8 pass / 14 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/metadata-default</code></td>
+<td>client</td>
+<td>pass</td>
+<td>17 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/metadata-issuer-mismatch</code></td>
+<td>client</td>
+<td>pass</td>
+<td>3 pass / 10 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/metadata-var1</code></td>
+<td>client</td>
+<td>pass</td>
+<td>17 pass / 36 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/metadata-var2</code></td>
+<td>client</td>
+<td>pass</td>
+<td>17 pass / 36 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/metadata-var3</code></td>
+<td>client</td>
+<td>pass</td>
+<td>17 pass / 36 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/pre-registration</code></td>
+<td>client</td>
+<td>pass</td>
+<td>19 pass / 38 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/resource-mismatch</code></td>
+<td>client</td>
+<td>pass</td>
+<td>2 pass / 8 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/scope-from-scopes-supported</code></td>
+<td>client</td>
+<td>pass</td>
+<td>18 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/scope-from-www-authenticate</code></td>
+<td>client</td>
+<td>pass</td>
+<td>18 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/scope-omitted-when-undefined</code></td>
+<td>client</td>
+<td>pass</td>
+<td>18 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/scope-retry-limit</code></td>
+<td>client</td>
+<td>pass</td>
+<td>16 pass / 38 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/scope-step-up</code></td>
+<td>client</td>
+<td>pass</td>
+<td>24 pass / 46 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/token-endpoint-auth-basic</code></td>
+<td>client</td>
+<td>pass</td>
+<td>22 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/token-endpoint-auth-none</code></td>
+<td>client</td>
+<td>pass</td>
+<td>22 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/token-endpoint-auth-post</code></td>
+<td>client</td>
+<td>pass</td>
+<td>22 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>completion-complete</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>dns-rebinding-protection</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>initialize</code></td>
+<td>client</td>
+<td>pass</td>
+<td>1 pass / 1 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>logging-set-level</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ping</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>prompts-get-embedded-resource</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>prompts-get-simple</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>prompts-get-with-args</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>prompts-get-with-image</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>prompts-list</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources-list</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources-read-binary</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources-read-text</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources-subscribe</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources-templates-read</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>resources-unsubscribe</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>server-initialize</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-audio</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-elicitation</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-embedded-resource</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-error</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-image</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-mixed-content</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-sampling</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-simple-text</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-with-logging</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tools-call-with-progress</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-986httpsgithubcommodelcontextprotocolmodelcontextprotocolissues986-1-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986">SEP-986</a> (1 scenarios) <a class="anchor" href="#sep-986httpsgithubcommodelcontextprotocolmodelcontextprotocolissues986-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tools-list</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-990-enterprise-managed-oauthhttpsgithubcommodelcontextprotocolext-authblobmainspecificationdraftenterprise-managed-authorizationmdx-1-scenarios"><a href="https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/enterprise-managed-authorization.mdx">SEP-990-ENTERPRISE-MANAGED-OAUTH</a> (1 scenarios) <a class="anchor" href="#sep-990-enterprise-managed-oauthhttpsgithubcommodelcontextprotocolext-authblobmainspecificationdraftenterprise-managed-authorizationmdx-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth/enterprise-managed-authorization</code></td>
+<td>client</td>
+<td>pass</td>
+<td>13 pass / 28 info</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-1034httpsgithubcommodelcontextprotocolmodelcontextprotocolissues1034-2-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1034">SEP-1034</a> (2 scenarios) <a class="anchor" href="#sep-1034httpsgithubcommodelcontextprotocolmodelcontextprotocolissues1034-2-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>elicitation-sep1034-client-defaults</code></td>
+<td>client</td>
+<td>pass</td>
+<td>5 pass / 20 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>elicitation-sep1034-defaults</code></td>
+<td>server</td>
+<td>pass</td>
+<td>5 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-1046-client-credentialshttpsgithubcommodelcontextprotocolext-authblobmainspecificationdraftoauth-client-credentialsmdx-2-scenarios"><a href="https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/oauth-client-credentials.mdx">SEP-1046-CLIENT-CREDENTIALS</a> (2 scenarios) <a class="anchor" href="#sep-1046-client-credentialshttpsgithubcommodelcontextprotocolext-authblobmainspecificationdraftoauth-client-credentialsmdx-2-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth/client-credentials-basic</code></td>
+<td>client</td>
+<td>pass</td>
+<td>14 pass / 34 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/client-credentials-jwt</code></td>
+<td>client</td>
+<td>pass</td>
+<td>12 pass / 28 info</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-1330httpsgithubcommodelcontextprotocolmodelcontextprotocolissues1330-1-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1330">SEP-1330</a> (1 scenarios) <a class="anchor" href="#sep-1330httpsgithubcommodelcontextprotocolmodelcontextprotocolissues1330-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>elicitation-sep1330-enums</code></td>
+<td>server</td>
+<td>pass</td>
+<td>5 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-1613httpsgithubcommodelcontextprotocolspecificationpull655-1-scenarios"><a href="https://github.com/modelcontextprotocol/specification/pull/655">SEP-1613</a> (1 scenarios) <a class="anchor" href="#sep-1613httpsgithubcommodelcontextprotocolspecificationpull655-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>json-schema-2020-12</code></td>
+<td>server</td>
+<td>pass</td>
+<td>7 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-1699httpsgithubcommodelcontextprotocolmodelcontextprotocolissues1699-3-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1699">SEP-1699</a> (3 scenarios) <a class="anchor" href="#sep-1699httpsgithubcommodelcontextprotocolmodelcontextprotocolissues1699-3-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server-sse-multiple-streams</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>server-sse-polling</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 warn / 6 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>sse-retry</code></td>
+<td>client</td>
+<td>pass</td>
+<td>3 pass / 17 info</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2106httpsmodelcontextprotocolioseps2106-json-schema-2020-12security-implications-1-scenarios"><a href="https://modelcontextprotocol.io/seps/2106-json-schema-2020-12#security-implications">SEP-2106</a> (1 scenarios) <a class="anchor" href="#sep-2106httpsmodelcontextprotocolioseps2106-json-schema-2020-12security-implications-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>json-schema-ref-no-deref</code></td>
+<td>client</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2164httpsmodelcontextprotocoliospecificationdraftserverresourceserror-handling-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/server/resources#error-handling">SEP-2164</a> (1 scenarios) <a class="anchor" href="#sep-2164httpsmodelcontextprotocoliospecificationdraftserverresourceserror-handling-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sep-2164-resource-not-found</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass / 1 warn</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2207-refresh-token-guidancehttpsgithubcommodelcontextprotocolmodelcontextprotocolpull2207-2-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2207">SEP-2207-REFRESH-TOKEN-GUIDANCE</a> (2 scenarios) <a class="anchor" href="#sep-2207-refresh-token-guidancehttpsgithubcommodelcontextprotocolmodelcontextprotocolpull2207-2-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auth/offline-access-not-supported</code></td>
+<td>client</td>
+<td>pass</td>
+<td>12 pass / 18 info</td>
+<td></td>
+</tr>
+<tr>
+<td><code>auth/offline-access-scope</code></td>
+<td>client</td>
+<td>pass</td>
+<td>11 pass / 1 warn / 19 info</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2243-custom-headershttpsmodelcontextprotocoliospecificationdraftbasictransportsserver-behavior-for-custom-headers-2-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/transports#server-behavior-for-custom-headers">SEP-2243-CUSTOM-HEADERS</a> (2 scenarios) <a class="anchor" href="#sep-2243-custom-headershttpsmodelcontextprotocoliospecificationdraftbasictransportsserver-behavior-for-custom-headers-2-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http-custom-header-server-validation</code></td>
+<td>server</td>
+<td>fail</td>
+<td>5 fail</td>
+<td><code>Not testable: server exposes no tool with x-mcp-header annotations, so none of the custom-header val…</code></td>
+</tr>
+<tr>
+<td><code>http-custom-headers</code></td>
+<td>client</td>
+<td>pass</td>
+<td>18 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2243-server-validationhttpsmodelcontextprotocoliospecificationdraftbasictransportsserver-validation-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/transports#server-validation">SEP-2243-SERVER-VALIDATION</a> (1 scenarios) <a class="anchor" href="#sep-2243-server-validationhttpsmodelcontextprotocoliospecificationdraftbasictransportsserver-validation-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http-header-validation</code></td>
+<td>server</td>
+<td>partial</td>
+<td>11 pass / 1 fail / 1 warn</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2243httpsmodelcontextprotocolioseps2243-http-standardization-1-scenarios"><a href="https://modelcontextprotocol.io/seps/2243-http-standardization">SEP-2243</a> (1 scenarios) <a class="anchor" href="#sep-2243httpsmodelcontextprotocolioseps2243-http-standardization-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks-request-headers</code></td>
+<td>server</td>
+<td>pass</td>
+<td>4 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2243-x-mcp-headerhttpsmodelcontextprotocoliospecificationdraftservertoolsx-mcp-header-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header">SEP-2243-X-MCP-HEADER</a> (1 scenarios) <a class="anchor" href="#sep-2243-x-mcp-headerhttpsmodelcontextprotocoliospecificationdraftservertoolsx-mcp-header-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http-invalid-tool-headers</code></td>
+<td>client</td>
+<td>pass</td>
+<td>11 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2243-standard-headershttpsmodelcontextprotocoliospecificationdraftbasictransportsstandard-mcp-request-headers-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/transports#standard-mcp-request-headers">SEP-2243-STANDARD-HEADERS</a> (1 scenarios) <a class="anchor" href="#sep-2243-standard-headershttpsmodelcontextprotocoliospecificationdraftbasictransportsstandard-mcp-request-headers-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http-standard-headers</code></td>
+<td>client</td>
+<td>pass</td>
+<td>11 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2322httpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-16-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr">SEP-2322</a> (16 scenarios) <a class="anchor" href="#sep-2322httpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-16-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>input-required-result-basic-elicitation</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-basic-list-roots</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-basic-sampling</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-capability-check</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-ignore-extra-params</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-missing-input-response</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-multi-round</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-multiple-input-requests</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-non-tool-request</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-request-state</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-result-type</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-tampered-state</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-unsupported-methods</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input-required-result-validate-input</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass / 1 warn</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-mrtr-composition</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-mrtr-input</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2322-mrtrhttpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-1-scenarios"><a href="https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr">SEP-2322-MRTR</a> (1 scenarios) <a class="anchor" href="#sep-2322-mrtrhttpsmodelcontextprotocoliospecificationdraftbasicutilitiesmrtr-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sep-2322-client-request-state</code></td>
+<td>client</td>
+<td>pass</td>
+<td>5 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2549httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2549-1-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549">SEP-2549</a> (1 scenarios) <a class="anchor" href="#sep-2549httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2549-1-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>caching</code></td>
+<td>server</td>
+<td>pass</td>
+<td>7 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2575httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2575-3-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575">SEP-2575</a> (3 scenarios) <a class="anchor" href="#sep-2575httpsgithubcommodelcontextprotocolmodelcontextprotocolpull2575-3-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server-stateless</code></td>
+<td>server</td>
+<td>fork-covered</td>
+<td>23 pass / 5 fail / 2 warn</td>
+<td>Also graded by <code>testconf-stateless</code></td>
+</tr>
+<tr>
+<td><code>request-metadata</code></td>
+<td>client</td>
+<td>pass</td>
+<td>5 pass / 2 skip</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-required-task-error</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sep-2663httpsmodelcontextprotocolioseps2663-tasks-extension-6-scenarios"><a href="https://modelcontextprotocol.io/seps/2663-tasks-extension">SEP-2663</a> (6 scenarios) <a class="anchor" href="#sep-2663httpsmodelcontextprotocolioseps2663-tasks-extension-6-scenarios">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Surface</th>
+<th>Status</th>
+<th>Checks</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks-capability-negotiation</code></td>
+<td>server</td>
+<td>pass</td>
+<td>4 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-dispatch-and-envelope</code></td>
+<td>server</td>
+<td>pass</td>
+<td>8 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-lifecycle</code></td>
+<td>server</td>
+<td>pass</td>
+<td>8 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-request-state-removal</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-status-notifications</code></td>
+<td>server</td>
+<td>pass</td>
+<td>1 skip</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-wire-fields</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 pass</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="methodology">Methodology <a class="anchor" href="#methodology">¶</a></h2>
+<ul>
+<li><code>just testconf-upstream-audit</code> spawns <code>cmd/testserver</code> (Streamable HTTP on port 18099), builds <code>cmd/testclient</code>, then drives upstream&rsquo;s CLI: <code>node dist/index.js server --url ... --suite all</code> once, and <code>... client --command ... --scenario &lt;name&gt;</code> per scenario in a loop (sequentially — upstream&rsquo;s parallel <code>--suite all</code> mode is flaky on the client side). The <code>tasks-*</code> server scenarios are then re-graded against <code>examples/tasks-v2</code> on a second port (port 18101), replacing the bulk-sweep results.</li>
+<li>Upstream&rsquo;s CLI writes one <code>&lt;scenario&gt;/checks.json</code> per scenario; this report aggregates by <code>specReferences[]</code> (first matching <code>SEP-NNNN</code> wins as primary group).</li>
+<li>Scenarios with no <code>checks.json</code> are tagged <code>harness-gap</code> — they require driver work in <code>cmd/testclient</code> (or a dedicated client harness) before the upstream runner can invoke them.</li>
+<li><code>also-covered-by-fork</code> is hand-maintained in <a href="https://github.com/panyam/mcpkit/blob/main/scripts/conformance-audit-report.ts"><code>scripts/conformance-audit-report.ts</code></a> (<code>FORK_OVERLAP</code> map). Update there as SEP-fork targets land coverage.</li>
+<li>Raw per-check JSON lives in <code>${AUDIT_OUT:-/tmp/conf-audit}/</code> — inspect there for failure details beyond the first 100 chars shown above.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

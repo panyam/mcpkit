@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="JWT/JWKS validation, public discovery, scope step-up (403 &#43; WWW-Authenticate), session-hijacking prevention.">
+    <title>Auth · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Auth</h1>
+        
+        <p class="lead">JWT/JWKS validation, public discovery, scope step-up (403 &#43; WWW-Authenticate), session-hijacking prevention.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/auth/README.md"><code>examples/auth/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="auth-examples">Auth Examples <a class="anchor" href="#auth-examples">¶</a></h1>
+<blockquote>
+<p><strong>Stable</strong> — MCP authorization (base spec): JWT/JWKS validation, Protected Resource Metadata, OAuth discovery, DCR.</p>
+</blockquote>
+<p>MCP servers demonstrating mcpkit&rsquo;s auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.</p>
+<blockquote>
+<p><strong>🚀 <a href="https://github.com/panyam/mcpkit/blob/main/examples/auth/WALKTHROUGH.md">Skip to the guided walkthrough →</a></strong> — 8-step demokit walkthrough with sequence diagram covering public discovery, JWT/JWKS, scope step-up (403 + WWW-Authenticate), and session binding. Run it with <code>just serve</code> + <code>just demo</code>.</p>
+</blockquote>
+<h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
+<p>Start with the <a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/unified">unified example</a> — one server, all four auth patterns layered together:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> examples/auth
+</span></span><span style="display:flex;"><span>go run ./unified
+</span></span></code></pre><p>The server prints tokens and a step-by-step exercise walkthrough. Connect your MCP host to <code>http://localhost:8080/mcp</code> (Streamable HTTP).</p>
+<h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<ul>
+<li><strong>Public discovery</strong> — <code>tools/list</code> works without a token (per spec, capability discovery should be permitted pre-auth). Configured via <code>server.WithPublicMethods(...)</code>.</li>
+<li><strong>JWT/JWKS validation</strong> — protected methods require <code>Authorization: Bearer &lt;RS256 JWT&gt;</code>; the MCP server fetches the AS&rsquo;s JWKS and validates signatures via <code>auth.NewJWTValidator</code>.</li>
+<li><strong>Per-tool scope enforcement</strong> — <code>core.ToolDef.RequiredScopes</code> + <code>auth.NewToolScopeMiddleware</code> reject calls with insufficient scope. Spec-compliant <code>HTTP 403</code> + <code>WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;</code> for client-driven step-up.</li>
+<li><strong>Session binding</strong> — once a session is established with one user&rsquo;s token, swapping tokens mid-session is rejected to prevent session hijacking. Subject captured at session creation; enforced in the streamable HTTP transport.</li>
+<li><strong>Layered usage</strong> — the unified example shows all four patterns running on a single server; the per-pattern sub-binaries (bearer/jwt/scopes/session-binding/public-discovery) are stripped-down fixtures for understanding each pattern in isolation.</li>
+</ul>
+<h2 id="examples">Examples <a class="anchor" href="#examples">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th align="center">Port</th>
+<th>Example</th>
+<th>Auth Pattern</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center">8080</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/unified"><strong>unified/</strong></a></td>
+<td><strong>Start here</strong> — JWT + public discovery + scopes + session binding</td>
+</tr>
+<tr>
+<td align="center">8081</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/bearer">bearer/</a></td>
+<td>Static bearer token (simplest possible)</td>
+</tr>
+<tr>
+<td align="center">8082</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/jwt">jwt/</a></td>
+<td>RS256 JWT validation via JWKS</td>
+</tr>
+<tr>
+<td align="center">8083</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/scopes">scopes/</a></td>
+<td>Scope-based access control</td>
+</tr>
+<tr>
+<td align="center">8084</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/session-binding">session-binding/</a></td>
+<td>Session hijacking prevention</td>
+</tr>
+<tr>
+<td align="center">8085</td>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/auth/public-discovery">public-discovery/</a></td>
+<td>Pre-auth tool discovery</td>
+</tr>
+</tbody>
+</table>
+<p>Each sub-directory has its own README with setup, exercises, and copy-pasteable prompts.</p>
+<h2 id="shared-infrastructure">Shared Infrastructure <a class="anchor" href="#shared-infrastructure">¶</a></h2>
+<p>The <code>common/</code> package provides the auth building blocks all examples use:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>common.NewEnv(scopes)</code></td>
+<td>Spins up an in-process authorization server with JWKS + token endpoint</td>
+</tr>
+<tr>
+<td><code>env.NewValidator(audience)</code></td>
+<td>Creates a <code>JWTValidator</code> pointed at the AS</td>
+</tr>
+<tr>
+<td><code>env.MintToken(subject, scopes)</code></td>
+<td>Mints a valid RS256 JWT</td>
+</tr>
+<tr>
+<td><code>common.RegisterEchoTools(srv)</code></td>
+<td>Registers <code>echo</code>, <code>write-tool</code>, <code>admin-tool</code> with scope checks</td>
+</tr>
+</tbody>
+</table>
+<h2 id="mcp-host-configuration">MCP Host Configuration <a class="anchor" href="#mcp-host-configuration">¶</a></h2>
+<p>See <code>mcp.json</code> for a ready-to-use multi-server configuration, or for the unified example:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;mcpServers&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;auth-unified&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;streamable-http&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;http://localhost:8080/mcp&#34;</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/docs/DESIGN.md"><code>ext/auth/docs/DESIGN.md</code></a> — Auth architecture</li>
+<li><code>tests/e2e/</code> — E2E auth integration tests</li>
+<li><code>tests/keycloak/</code> — Keycloak interop tests (real OIDC)</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/fine-grained-auth/">Fine-grained authorization (scope step-up, RAR)</a></li>
+<li><a href="/mcpkit/packages/ext-auth/">Auth design &amp; spec compliance</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/auth/WALKTHROUGH.md"><code>examples/auth/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-auth--public-discovery--jwt--scopes--session-binding">MCP Auth — Public Discovery + JWT + Scopes + Session Binding <a class="anchor" href="#mcp-auth--public-discovery--jwt--scopes--session-binding">¶</a></h1>
+<p>Walks through auth patterns layered on a single mcpkit server: public method allowlist, JWT/JWKS validation, per-tool scope enforcement, and session hijacking prevention.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Discover server URL + minted tokens</strong> — The server pre-mints four tokens for the demo and exposes them via a non-standard /demo/bootstrap endpoint. In production a host would do OAuth (or accept tokens via mcp.json config); this shortcut keeps the demo focused on auth behavior.</li>
+<li><strong>Public discovery: tools/list without a token</strong> — The server is configured with WithPublicMethods(&ldquo;initialize&rdquo;, &ldquo;notifications/initialized&rdquo;, &ldquo;tools/list&rdquo;, &ldquo;prompts/list&rdquo;, &ldquo;ping&rdquo;). These bypass the auth check so an unauthenticated client can discover what&rsquo;s available before requesting a token.</li>
+<li><strong>Protected method without a token → 401</strong> — tools/call is NOT in the public allowlist. The mcpkit client surfaces this as *client.ClientAuthError. A real MCP host would use this to trigger an OAuth flow.</li>
+<li><strong>Call echo with alice&rsquo;s read-only token (JWT validated via JWKS)</strong> — The mcpkit JWTValidator fetches the AS&rsquo;s JWKS, verifies the RS256 signature using kid lookup, and exposes the claims to handlers via core.AuthClaims(ctx). echo is a no-scope tool that reflects the authenticated identity back, so we can see the validated claims.</li>
+<li><strong>Call write-tool with read-only token → 403 + insufficient_scope</strong> — write-tool declares RequiredScopes: [&ldquo;write&rdquo;] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client&rsquo;s RFC 6750 parser auto-populates RequiredScopes.</li>
+<li><strong>Reconnect with read+write token → write-tool succeeds</strong> — New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.</li>
+<li><strong>admin-tool with read+write token → 403 (needs admin)</strong> — admin-tool requires &ldquo;admin&rdquo; scope. The same scope-enforcement middleware returns 403 + WWW-Authenticate with the missing scope.</li>
+<li><strong>Session binding: bob&rsquo;s token on alice&rsquo;s session → rejected</strong> — mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob&rsquo;s token is independently valid (correct signature, fresh, has all scopes), it doesn&rsquo;t match alice&rsquo;s bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+    participant AS as Auth Server (in-process)
+
+    Note over Host,AS: Step 1: Discover server URL + minted tokens
+    Host-&gt;&gt;Server: GET /demo/bootstrap
+    Server--&gt;&gt;Host: {mcp_url, tok_read, tok_read_write, tok_all, tok_bob}
+
+    Note over Host,AS: Step 2: Public discovery: tools/list without a token
+    Host-&gt;&gt;Server: POST /mcp — initialize + tools/list (no Authorization header)
+    Server--&gt;&gt;Host: tool list (3 tools, even without auth)
+
+    Note over Host,AS: Step 3: Protected method without a token → 401
+    Host-&gt;&gt;Server: tools/call: echo  (no Authorization header)
+    Server--&gt;&gt;Host: HTTP 401 + WWW-Authenticate
+
+    Note over Host,AS: Step 4: Call echo with alice's read-only token (JWT validated via JWKS)
+    Host-&gt;&gt;Server: tools/call: echo + Bearer alice/[read]
+    Server--&gt;&gt;Host: echo + claims (subject=alice, scopes=[read])
+
+    Note over Host,AS: Step 5: Call write-tool with read-only token → 403 + insufficient_scope
+    Host-&gt;&gt;Server: tools/call: write-tool + Bearer alice/[read]
+    Server--&gt;&gt;Host: HTTP 403 + WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;write&quot;
+
+    Note over Host,AS: Step 6: Reconnect with read+write token → write-tool succeeds
+    Host-&gt;&gt;Server: POST /mcp — initialize + Bearer alice/[read write]
+    Server--&gt;&gt;Host: new session
+    Host-&gt;&gt;Server: tools/call: write-tool
+    Server--&gt;&gt;Host: ok
+
+    Note over Host,AS: Step 7: admin-tool with read+write token → 403 (needs admin)
+    Host-&gt;&gt;Server: tools/call: admin-tool + Bearer alice/[read write]
+    Server--&gt;&gt;Host: HTTP 403 + WWW-Authenticate: scope=&quot;admin&quot;
+
+    Note over Host,AS: Step 8: Session binding: bob's token on alice's session → rejected
+    Host-&gt;&gt;Server: tools/call: echo + Mcp-Session-Id=&lt;alice's&gt; + Bearer bob/[all]
+    Server--&gt;&gt;Host: HTTP 403 (subject mismatch)
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the MCP server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve        # MCP server + in-process AS on :8080
+Terminal 2:  just run          # this demo
+</code></pre>
+<h3 id="auth-patterns-covered">Auth patterns covered <a class="anchor" href="#auth-patterns-covered">¶</a></h3>
+<ol>
+<li><strong>Public discovery</strong> — <code>tools/list</code> works <em>without</em> a token (per spec, capability discovery should be permitted pre-auth).</li>
+<li><strong>JWT authentication</strong> — protected methods require <code>Authorization: Bearer &lt;RS256 JWT&gt;</code>. The MCP server fetches the AS&rsquo;s JWKS and validates signatures.</li>
+<li><strong>Scope enforcement</strong> — <code>write-tool</code> requires <code>write</code> scope; <code>admin-tool</code> requires <code>admin</code>. Missing scopes → HTTP 403 + <code>WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;</code>.</li>
+<li><strong>Session binding</strong> — once a session is established with one user&rsquo;s token, requests on that session must come from the same subject. Swapping tokens mid-session is rejected to prevent session hijacking.</li>
+</ol>
+<h3 id="step-1-discover-server-url--minted-tokens">Step 1: Discover server URL + minted tokens <a class="anchor" href="#step-1-discover-server-url--minted-tokens">¶</a></h3>
+<p>The server pre-mints four tokens for the demo and exposes them via a non-standard /demo/bootstrap endpoint. In production a host would do OAuth (or accept tokens via mcp.json config); this shortcut keeps the demo focused on auth behavior.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># The demo server pre-mints tokens and serves them at /demo/bootstrap.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Capture the MCP URL and tokens into shell vars used by every step below.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">BOOT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s http://localhost:8080/demo/bootstrap<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">MCP</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BOOT</span><span style="color:#d14">&#34;</span> | jq -r .mcp_url<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TOK_READ</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BOOT</span><span style="color:#d14">&#34;</span> | jq -r .tok_read<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TOK_RW</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BOOT</span><span style="color:#d14">&#34;</span> | jq -r .tok_read_write<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TOK_BOB</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$BOOT</span><span style="color:#d14">&#34;</span> | jq -r .tok_bob<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;MCP=</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-2-public-discovery-toolslist-without-a-token">Step 2: Public discovery: tools/list without a token <a class="anchor" href="#step-2-public-discovery-toolslist-without-a-token">¶</a></h3>
+<p>The server is configured with WithPublicMethods(&ldquo;initialize&rdquo;, &ldquo;notifications/initialized&rdquo;, &ldquo;tools/list&rdquo;, &ldquo;prompts/list&rdquo;, &ldquo;ping&rdquo;). These bypass the auth check so an unauthenticated client can discover what&rsquo;s available before requesting a token.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a session (no Authorization header — initialize is public) and capture</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># the session id, then call the public tools/list.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/list&#34;,&#34;params&#34;:{}}&#39;</span> | jq <span style="color:#d14">&#39;.result.tools | length&#39;</span>
+</span></span></code></pre><h3 id="step-3-protected-method-without-a-token--401">Step 3: Protected method without a token → 401 <a class="anchor" href="#step-3-protected-method-without-a-token--401">¶</a></h3>
+<p>tools/call is NOT in the public allowlist. The mcpkit client surfaces this as *client.ClientAuthError. A real MCP host would use this to trigger an OAuth flow.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Same unauthenticated session ($SID from the previous step). tools/call is</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># NOT public, so the server replies 401 + WWW-Authenticate. -i shows headers.</span>
+</span></span><span style="display:flex;"><span>curl -s -i -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;echo&#34;,&#34;arguments&#34;:{&#34;message&#34;:&#34;hi&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | grep -iE <span style="color:#d14">&#39;HTTP/|www-authenticate&#39;</span>
+</span></span></code></pre><h3 id="step-4-call-echo-with-alices-read-only-token-jwt-validated-via-jwks">Step 4: Call echo with alice&rsquo;s read-only token (JWT validated via JWKS) <a class="anchor" href="#step-4-call-echo-with-alices-read-only-token-jwt-validated-via-jwks">¶</a></h3>
+<p>The mcpkit JWTValidator fetches the AS&rsquo;s JWKS, verifies the RS256 signature using kid lookup, and exposes the claims to handlers via core.AuthClaims(ctx). echo is a no-scope tool that reflects the authenticated identity back, so we can see the validated claims.</p>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Mint a fresh session carrying alice&#39;s read token, then call echo (no scope</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># required). The server validates the RS256 JWT against the AS&#39;s JWKS.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;echo&#34;,&#34;arguments&#34;:{&#34;message&#34;:&#34;hello&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-5-call-write-tool-with-read-only-token--403--insufficient-scope">Step 5: Call write-tool with read-only token → 403 + insufficient_scope <a class="anchor" href="#step-5-call-write-tool-with-read-only-token--403--insufficient-scope">¶</a></h3>
+<p>write-tool declares RequiredScopes: [&ldquo;write&rdquo;] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client&rsquo;s RFC 6750 parser auto-populates RequiredScopes.</p>
+<h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Same read-token session ($SID). write-tool needs the &#34;write&#34; scope the token</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># lacks → 403 + WWW-Authenticate: Bearer error=&#34;insufficient_scope&#34;, scope=&#34;write&#34;.</span>
+</span></span><span style="display:flex;"><span>curl -s -i -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_READ</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;write-tool&#34;,&#34;arguments&#34;:{&#34;data&#34;:&#34;x&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | grep -iE <span style="color:#d14">&#39;HTTP/|www-authenticate&#39;</span>
+</span></span></code></pre><h3 id="step-6-reconnect-with-readwrite-token--write-tool-succeeds">Step 6: Reconnect with read+write token → write-tool succeeds <a class="anchor" href="#step-6-reconnect-with-readwrite-token--write-tool-succeeds">¶</a></h3>
+<p>New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.</p>
+<h4 id="reproduce-on-the-wire-5">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-5">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># New session with the read+write token; now write-tool succeeds.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID_RW</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_RW</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID_RW</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_RW</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span>curl -s -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID_RW</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_RW</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;write-tool&#34;,&#34;arguments&#34;:{&#34;data&#34;:&#34;hello write&#34;}}}&#39;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-7-admin-tool-with-readwrite-token--403-needs-admin">Step 7: admin-tool with read+write token → 403 (needs admin) <a class="anchor" href="#step-7-admin-tool-with-readwrite-token--403-needs-admin">¶</a></h3>
+<p>admin-tool requires &ldquo;admin&rdquo; scope. The same scope-enforcement middleware returns 403 + WWW-Authenticate with the missing scope.</p>
+<h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Same read+write session ($SID_RW). admin-tool needs &#34;admin&#34; → 403 +</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># WWW-Authenticate: Bearer error=&#34;insufficient_scope&#34;, scope=&#34;admin&#34;.</span>
+</span></span><span style="display:flex;"><span>curl -s -i -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID_RW</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_RW</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;admin-tool&#34;,&#34;arguments&#34;:{&#34;action&#34;:&#34;rotate&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | grep -iE <span style="color:#d14">&#39;HTTP/|www-authenticate&#39;</span>
+</span></span></code></pre><h3 id="step-8-session-binding-bobs-token-on-alices-session--rejected">Step 8: Session binding: bob&rsquo;s token on alice&rsquo;s session → rejected <a class="anchor" href="#step-8-session-binding-bobs-token-on-alices-session--rejected">¶</a></h3>
+<p>mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob&rsquo;s token is independently valid (correct signature, fresh, has all scopes), it doesn&rsquo;t match alice&rsquo;s bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.</p>
+<h4 id="reproduce-on-the-wire-7">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-7">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Replay alice&#39;s session id ($SID) but with bob&#39;s (independently valid) token.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># The session is bound to alice&#39;s subject, so the swap is rejected with 403.</span>
+</span></span><span style="display:flex;"><span>curl -s -i -X POST <span style="color:#d14">&#34;</span><span style="color:#008080">$MCP</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> -H <span style="color:#d14">&#34;Authorization: Bearer </span><span style="color:#008080">$TOK_BOB</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;echo&#34;,&#34;arguments&#34;:{&#34;message&#34;:&#34;hijack attempt&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | grep -iE <span style="color:#d14">&#39;HTTP/&#39;</span>
+</span></span></code></pre><h3 id="where-each-pattern-lives-in-the-code">Where each pattern lives in the code <a class="anchor" href="#where-each-pattern-lives-in-the-code">¶</a></h3>
+<ul>
+<li>Public methods: <code>server.WithPublicMethods(...)</code></li>
+<li>JWT/JWKS validation: <code>auth.NewJWTValidator(JWTConfig{JWKSURL: ...})</code> — <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/jwt_validator.go"><code>ext/auth/jwt_validator.go</code></a></li>
+<li>Per-tool scopes: <code>core.ToolDef.RequiredScopes</code> + <code>auth.NewToolScopeMiddleware(reg)</code> — <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/scope_middleware.go"><code>ext/auth/scope_middleware.go</code></a></li>
+<li>Session binding: enforced in <a href="https://github.com/panyam/mcpkit/blob/main/server/streamable_transport.go"><code>server/streamable_transport.go</code></a> (verifyPrincipal); subject is captured at session creation</li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/auth/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/auth/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

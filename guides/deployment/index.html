@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Running mcpkit servers across multiple replicas and behind a gateway.">
+    <title>Deployment · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Deployment</h1>
+        
+        <p class="lead">Running mcpkit servers across multiple replicas and behind a gateway.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/MULTI_REPLICA.md"><code>docs/MULTI_REPLICA.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="multi-replica-notification-delivery">Multi-replica notification delivery <a class="anchor" href="#multi-replica-notification-delivery">¶</a></h1>
+<p>This document describes how mcpkit fans server-pushed notifications across an N-replica deployment, and how adopters wire each notification surface to work correctly at N&gt;1.</p>
+<p>If you run mcpkit at N=1 (single server process), this doc is informational — nothing here is required. If you run N&gt;1 (multiple replicas behind a load balancer or service mesh), <strong>the surfaces enumerated here do not work without explicit wiring</strong>, and a session connected to one replica will silently miss notifications generated on another.</p>
+<p>The architecture lifted from issue 755 (PR A <code>#757</code>, PR B1 <code>#759</code>, PR B2 <code>#768</code>, PR B3 this doc).</p>
+<h2 id="the-problem-at-n1">The problem at N&gt;1 <a class="anchor" href="#the-problem-at-n1">¶</a></h2>
+<p>Every server-pushed notification mcpkit emits today reaches only the clients connected to the replica that generated it:</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Trigger</th>
+<th>Affected at N&gt;1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>notifications/tools/list_changed</code></td>
+<td><code>Registry.AddTool</code> / <code>RemoveTool</code></td>
+<td>✗ Only origin replica&rsquo;s clients hear</td>
+</tr>
+<tr>
+<td><code>notifications/resources/list_changed</code></td>
+<td><code>Registry.AddResource</code> / <code>RemoveResource</code> / <code>AddResourceTemplate</code> / <code>RemoveResourceTemplate</code></td>
+<td>✗ Same</td>
+</tr>
+<tr>
+<td><code>notifications/prompts/list_changed</code></td>
+<td><code>Registry.AddPrompt</code> / <code>RemovePrompt</code></td>
+<td>✗ Same</td>
+</tr>
+<tr>
+<td><code>notifications/resources/updated</code></td>
+<td><code>Server.NotifyResourceUpdated</code></td>
+<td>✗ Only origin&rsquo;s clients subscribed via <code>resources/subscribe</code> hear</td>
+</tr>
+<tr>
+<td><code>notifications/events/event</code></td>
+<td><code>YieldingSource.yield</code> (events SDK)</td>
+<td>✗ Only origin&rsquo;s stream subscribers hear (unless a Pattern B <code>Bus</code> is wired)</td>
+</tr>
+</tbody>
+</table>
+<p>Without coordination, adopters running N&gt;1 either (a) avoid these notifications, (b) use sticky sessions to dodge the issue, or (c) build a custom cross-replica gossip layer.</p>
+<h2 id="pattern-b-as-the-recommended-architecture">Pattern B as the recommended architecture <a class="anchor" href="#pattern-b-as-the-recommended-architecture">¶</a></h2>
+<p>Each replica runs a publisher + subscriber pair against a shared pub/sub transport (Redis pubsub today; Kafka / NATS / SNS in principle). Notifications generated on replica K are:</p>
+<ol>
+<li>Delivered locally to K&rsquo;s own connected clients (current behavior, unchanged).</li>
+<li>Published outward through the transport.</li>
+<li>Received on every other replica K′, which routes them through its local delivery machinery — applying its per-replica subscription filters as if the notification had been generated there.</li>
+</ol>
+<p>Self-publish dedup happens inside the transport adapter, invisibly: each publisher carries a process-unique origin marker; the colocated subscriber drops messages carrying its own marker before invoking the receiver.</p>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph Replica K
+        K_Trigger[&quot;Notification trigger&lt;br/&gt;(Registry.OnChange,&lt;br/&gt;NotifyResourceUpdated,&lt;br/&gt;YieldingSource.yield)&quot;]
+        K_Local[&quot;Local delivery&lt;br/&gt;(BroadcastToSessions,&lt;br/&gt;notifyLocal, slot fanout)&quot;]
+        K_Publish[&quot;NotificationRelay /&lt;br/&gt;events.Emitter&quot;]
+        K_Clients[&quot;Local clients&quot;]
+    end
+    subgraph Replica K'
+        Kp_Receive[&quot;Bus subscriber&lt;br/&gt;(drops self-publishes)&quot;]
+        Kp_Receiver[&quot;NotificationRelayReceiver&lt;br/&gt;(NotificationRouter by method)&quot;]
+        Kp_Local[&quot;Local delivery&lt;br/&gt;(BroadcastToSessions,&lt;br/&gt;notifyLocal, slot fanout)&quot;]
+        Kp_Clients[&quot;Local clients&quot;]
+    end
+    Transport[(&quot;Shared transport&lt;br/&gt;(Redis pubsub)&quot;)]
+
+    K_Trigger --&gt; K_Local --&gt; K_Clients
+    K_Trigger --&gt; K_Publish --&gt; Transport
+    Transport --&gt; Kp_Receive --&gt; Kp_Receiver --&gt; Kp_Local --&gt; Kp_Clients
+</code></pre>
+<h2 id="two-routing-categories">Two routing categories <a class="anchor" href="#two-routing-categories">¶</a></h2>
+<p>Every notification mcpkit emits falls into one of two categories, determined by whether each client needs an independent per-subscription filter on receive.</p>
+<h3 id="capability-shaped">Capability-shaped <a class="anchor" href="#capability-shaped">¶</a></h3>
+<p>No per-client filter. Every connected client that declared the capability sees the notification. The receiver fires <code>Server.BroadcastToSessions</code> on each receiving replica; the per-transport session machinery fans out to every session.</p>
+<p>Surfaces:</p>
+<ul>
+<li><code>notifications/tools/list_changed</code></li>
+<li><code>notifications/resources/list_changed</code></li>
+<li><code>notifications/prompts/list_changed</code></li>
+</ul>
+<p>Reference receiver: <code>server.CapabilityBroadcastReceiver</code>.</p>
+<h3 id="subscription-shaped">Subscription-shaped <a class="anchor" href="#subscription-shaped">¶</a></h3>
+<p>Each replica applies a per-subscription filter on receive. The notification reaches every replica via the transport; each replica decides which of its locally-subscribed clients hear it.</p>
+<p>Surfaces and their per-replica filters:</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Per-replica filter</th>
+<th>Reference receiver</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>notifications/resources/updated</code></td>
+<td>URI prefix match against <code>resources/subscribe</code> set</td>
+<td><code>server.ResourcesUpdatedReceiver</code></td>
+</tr>
+<tr>
+<td><code>notifications/events/event</code></td>
+<td><code>EventDef.Match</code> per subscriber slot (tenant scoping, role-based, custom)</td>
+<td><code>events.YieldingSource</code> itself (implements <code>NotificationRelayReceiver</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="decision-table-per-surface">Decision table per surface <a class="anchor" href="#decision-table-per-surface">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Category</th>
+<th>Per-replica filter</th>
+<th>Receiver to install</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tools/list_changed</code></td>
+<td>Capability</td>
+<td>none</td>
+<td><code>CapabilityBroadcastReceiver</code></td>
+</tr>
+<tr>
+<td><code>resources/list_changed</code></td>
+<td>Capability</td>
+<td>none</td>
+<td><code>CapabilityBroadcastReceiver</code></td>
+</tr>
+<tr>
+<td><code>prompts/list_changed</code></td>
+<td>Capability</td>
+<td>none</td>
+<td><code>CapabilityBroadcastReceiver</code></td>
+</tr>
+<tr>
+<td><code>resources/updated</code></td>
+<td>Subscription</td>
+<td>URI prefix</td>
+<td><code>ResourcesUpdatedReceiver</code></td>
+</tr>
+<tr>
+<td><code>events/event</code></td>
+<td>Subscription</td>
+<td><code>EventDef.Match</code> per slot</td>
+<td><code>YieldingSource</code> (as receiver)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="component-overview">Component overview <a class="anchor" href="#component-overview">¶</a></h2>
+<h3 id="server-level-seams">Server-level seams <a class="anchor" href="#server-level-seams">¶</a></h3>
+<pre><code class="language-mermaid">classDiagram
+    class NotificationRelay {
+        &lt;&lt;interface&gt;&gt;
+        +Publish(ctx, method, params)
+    }
+    class NotificationRelayReceiver {
+        &lt;&lt;interface&gt;&gt;
+        +Receive(ctx, method, params)
+    }
+    class CapabilityBroadcastReceiver {
+        -srv: *Server
+        +Receive() calls srv.BroadcastToSessions
+    }
+    class ResourcesUpdatedReceiver {
+        -srv: *Server
+        +Receive() calls srv.NotifyResourceUpdatedLocal
+    }
+    class NotificationRouter {
+        -handlers: map[method]Receiver
+        +Handle(method, receiver)
+        +Receive() routes by method
+    }
+    class YieldingSource {
+        +Receive() calls LocalDeliver (per-slot Match)
+    }
+    NotificationRelayReceiver &lt;|.. CapabilityBroadcastReceiver
+    NotificationRelayReceiver &lt;|.. ResourcesUpdatedReceiver
+    NotificationRelayReceiver &lt;|.. NotificationRouter
+    NotificationRelayReceiver &lt;|.. YieldingSource
+</code></pre>
+<h3 id="transport-adapters">Transport adapters <a class="anchor" href="#transport-adapters">¶</a></h3>
+<pre><code class="language-mermaid">classDiagram
+    class CapabilityBus {
+        +Publish() PUBLISH to Redis
+        +Subscribe(methods...)
+        +Run(ctx) receive loop
+        +Close()
+    }
+    class EventsBus {
+        +Emit(ctx, event) PUBLISH to Redis
+        +Subscribe(eventNames...)
+        +Run(ctx) receive loop
+        +Close()
+    }
+    class MemoryBus {
+        +Emit(ctx, event) shared Hub
+        +Subscribe(eventNames...)
+        +Run(ctx) receive loop
+    }
+    NotificationRelay &lt;|.. CapabilityBus
+    Emitter &lt;|.. EventsBus
+    Emitter &lt;|.. MemoryBus
+    note for CapabilityBus &quot;redisstore.CapabilityBus&lt;br/&gt;capability-shaped + sub-shaped&lt;br/&gt;over per-method channels&quot;
+    note for EventsBus &quot;redisstore.Bus&lt;br/&gt;events-typed&lt;br/&gt;over per-event-name channels&quot;
+    note for MemoryBus &quot;memorystore.Bus&lt;br/&gt;chan-based, test-only&quot;
+</code></pre>
+<h2 id="per-component-flows">Per-component flows <a class="anchor" href="#per-component-flows">¶</a></h2>
+<h3 id="serverbroadcast--the-dispatch-fork"><code>Server.Broadcast</code> — the dispatch fork <a class="anchor" href="#serverbroadcast--the-dispatch-fork">¶</a></h3>
+<pre><code class="language-mermaid">flowchart TB
+    Broadcast[&quot;Server.Broadcast(ctx, method, params)&quot;]
+    HasRelay{Has&lt;br/&gt;NotificationRelay?}
+    Publish[&quot;relay.Publish(ctx, method, params)&quot;]
+    BroadcastToSessions[&quot;Server.BroadcastToSessions&quot;]
+    Sessions[&quot;Local session broadcasters&quot;]
+
+    Broadcast --&gt; HasRelay
+    HasRelay --&gt;|yes| Publish
+    HasRelay --&gt;|no / yes| BroadcastToSessions
+    BroadcastToSessions --&gt; Sessions
+</code></pre>
+<p><code>Broadcast</code> always fires <code>BroadcastToSessions</code>. The relay&rsquo;s <code>Publish</code> runs ALSO when a relay is installed. There&rsquo;s no else branch — local fan-out is universal.</p>
+<p><code>BroadcastToSessions</code> is the <strong>local-only</strong> path. The receive side of Pattern B calls this (NOT <code>Broadcast</code>) so a cross-replica relay receive doesn&rsquo;t re-publish through the relay and loop.</p>
+<h3 id="notificationrelay--publish-side"><code>NotificationRelay</code> — publish side <a class="anchor" href="#notificationrelay--publish-side">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant H as Handler
+    participant S as Server
+    participant R as NotificationRelay
+    participant T as Transport
+
+    H-&gt;&gt;S: Broadcast(method, params)
+    S-&gt;&gt;R: Publish(method, params)
+    R-&gt;&gt;T: encode + send
+    Note over R,T: Origin marker stamped&lt;br/&gt;inside transport adapter
+    S-&gt;&gt;S: BroadcastToSessions(method, params)
+    Note right of S: local delivery happens regardless&lt;br/&gt;of relay errors (fire-and-forget)
+</code></pre>
+<p><code>NotificationRelay</code> is fire-and-forget — errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.</p>
+<h3 id="notificationrelayreceiver--receive-side"><code>NotificationRelayReceiver</code> — receive side <a class="anchor" href="#notificationrelayreceiver--receive-side">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant T as Transport subscriber
+    participant Recv as NotificationRelayReceiver
+    participant Local as Local delivery
+
+    Note over T: Decode message,&lt;br/&gt;check origin marker,&lt;br/&gt;drop if self-publish
+    T-&gt;&gt;Recv: Receive(method, params)
+    Recv-&gt;&gt;Local: domain-specific routing&lt;br/&gt;(BroadcastToSessions / notifyLocal / LocalDeliver)
+</code></pre>
+<p>The receiver is the <strong>routing decision</strong> for cross-replica notifications. The transport handles dedup; the receiver decides what to do with each message destined for this replica.</p>
+<h3 id="notificationrouter--per-method-dispatch"><code>NotificationRouter</code> — per-method dispatch <a class="anchor" href="#notificationrouter--per-method-dispatch">¶</a></h3>
+<pre><code class="language-mermaid">flowchart TB
+    Receive[&quot;Receive(ctx, method, params)&quot;]
+    Lookup{handlers&lt;br/&gt;contains&lt;br/&gt;method?}
+    Drop[&quot;drop silently&quot;]
+    Forward[&quot;handler.Receive(ctx, method, params)&quot;]
+
+    Receive --&gt; Lookup
+    Lookup --&gt;|no| Drop
+    Lookup --&gt;|yes| Forward
+</code></pre>
+<p>Multiplexer adopters wire one Bus + one multiplexer + multiple per-method receivers:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>mux <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewNotificationRouter</span>().
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/tools/list_changed&#34;</span>,        server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/resources/list_changed&#34;</span>,    server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/prompts/list_changed&#34;</span>,      server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/resources/updated&#34;</span>,         server.<span style="color:#900;font-weight:bold">NewResourcesUpdatedReceiver</span>(srv))
+</span></span><span style="display:flex;"><span>bus, _ <span style="color:#000;font-weight:bold">:=</span> redisstore.<span style="color:#900;font-weight:bold">NewCapabilityBus</span>(opts, mux)
+</span></span></code></pre><h3 id="capabilitybroadcastreceiver--capability-shaped-routing"><code>CapabilityBroadcastReceiver</code> — capability-shaped routing <a class="anchor" href="#capabilitybroadcastreceiver--capability-shaped-routing">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Bus as Bus subscriber
+    participant Recv as CapabilityBroadcastReceiver
+    participant Srv as Server
+    participant Sess as Local sessions
+
+    Bus-&gt;&gt;Recv: Receive(method, params)
+    Recv-&gt;&gt;Srv: BroadcastToSessions(method, params)
+    Srv-&gt;&gt;Sess: notify(method, params)
+    Note over Recv,Srv: BroadcastToSessions, NOT Broadcast&lt;br/&gt;(would loop through the relay)
+</code></pre>
+<h3 id="resourcesupdatedreceiver--subscription-shaped-routing-for-uris"><code>ResourcesUpdatedReceiver</code> — subscription-shaped routing for URIs <a class="anchor" href="#resourcesupdatedreceiver--subscription-shaped-routing-for-uris">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Bus as Bus subscriber
+    participant Recv as ResourcesUpdatedReceiver
+    participant Srv as Server
+    participant Reg as subscriptionRegistry
+    participant Sub as Subscribed sessions
+
+    Bus-&gt;&gt;Recv: Receive(&quot;notifications/resources/updated&quot;, params)
+    Note right of Recv: extract URI from params&lt;br/&gt;(typed or map shape)
+    Recv-&gt;&gt;Srv: NotifyResourceUpdatedLocal(uri)
+    Srv-&gt;&gt;Reg: notifyLocal(uri)
+    Reg-&gt;&gt;Sub: fire each subscriber whose&lt;br/&gt;resources/subscribe matches uri
+    Note over Reg,Sub: notifyLocal does NOT re-publish&lt;br/&gt;via the relay (no loop)
+</code></pre>
+<h3 id="yieldingsourcereceive--subscription-shaped-routing-for-events"><code>YieldingSource.Receive</code> — subscription-shaped routing for events <a class="anchor" href="#yieldingsourcereceive--subscription-shaped-routing-for-events">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Bus as Bus subscriber
+    participant Src as YieldingSource
+    participant Slots as Local subscriber slots
+
+    Bus-&gt;&gt;Src: Receive(&quot;notifications/events/event&quot;, event)
+    Note right of Src: params.(Event) type-assert&lt;br/&gt;defensive guard
+    Src-&gt;&gt;Src: LocalDeliver(ctx, event)
+    loop for each slot
+        Src-&gt;&gt;Slots: EventDef.Match(slot, event)?
+        alt match
+            Slots-&gt;&gt;Slots: deliver to slot channel
+        else no match
+            Slots-&gt;&gt;Slots: skip
+        end
+    end
+</code></pre>
+<p><code>YieldingSource.Receive</code> is a thin adapter; <code>LocalDeliver</code> is the work — runs the per-slot fanout loop without firing the configured <code>Emitter</code> (so no re-publish).</p>
+<h3 id="redisstorecapabilitybus--capability-shaped-pattern-b"><code>redisstore.CapabilityBus</code> — capability-shaped Pattern B <a class="anchor" href="#redisstorecapabilitybus--capability-shaped-pattern-b">¶</a></h3>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph &quot;Publish (origin)&quot;
+        P1[method + params]
+        P2[&quot;envelope: {origin, params}&quot;]
+        P3[Codec.Encode]
+        P4[&quot;PUBLISH prefix.broadcast.method&quot;]
+        P1 --&gt; P2 --&gt; P3 --&gt; P4
+    end
+    P4 --&gt;|Redis| S1
+    subgraph &quot;Run loop (every replica)&quot;
+        S1[receive message]
+        S2[Codec.Decode envelope]
+        S3{origin == self?}
+        S4[drop]
+        S5[receiver.Receive]
+        S1 --&gt; S2 --&gt; S3
+        S3 --&gt;|yes| S4
+        S3 --&gt;|no| S5
+    end
+</code></pre>
+<p>Wire format: per-method channel <code>&lt;ChannelPrefix&gt;.broadcast.&lt;method&gt;</code>. Payload is a JSON envelope <code>{&quot;origin&quot;: &quot;&lt;uuid&gt;&quot;, &quot;params&quot;: &lt;json&gt;}</code>. Origin lives in the envelope, NOT in <code>params._meta</code> — capability-shaped notifications often have <code>nil params</code>, so the marker can&rsquo;t live there.</p>
+<h3 id="redisstorebus--events-typed-pattern-b"><code>redisstore.Bus</code> — events-typed Pattern B <a class="anchor" href="#redisstorebus--events-typed-pattern-b">¶</a></h3>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph &quot;Emit (origin)&quot;
+        P1[&quot;events.Event&quot;]
+        P2[&quot;event.Meta[origin] = marker&quot;]
+        P3[Codec.Encode]
+        P4[&quot;PUBLISH prefix.event_name&quot;]
+        P1 --&gt; P2 --&gt; P3 --&gt; P4
+    end
+    P4 --&gt;|Redis| S1
+    subgraph &quot;Run loop (every replica)&quot;
+        S1[receive message]
+        S2[Codec.Decode events.Event]
+        S3{&quot;event.Meta[origin] == self?&quot;}
+        S4[drop]
+        S5[&quot;strip origin marker from Meta&quot;]
+        S6[&quot;receiver.Receive(method, event)&quot;]
+        S1 --&gt; S2 --&gt; S3
+        S3 --&gt;|yes| S4
+        S3 --&gt;|no| S5 --&gt; S6
+    end
+</code></pre>
+<p>Wire format: per-event-name channel <code>&lt;ChannelPrefix&gt;.&lt;event.Name&gt;</code>. Payload is the <code>Codec</code>-encoded <code>events.Event</code> with the origin marker stamped on <code>event.Meta</code> (stripped before deliver so consumers never see it).</p>
+<h3 id="memorystorebus--in-process-test-transport"><code>memorystore.Bus</code> — in-process test transport <a class="anchor" href="#memorystorebus--in-process-test-transport">¶</a></h3>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph Bus_A
+        Emit_A[Emit] --&gt; Pub_A[hub.publish]
+        Run_A[Run loop] --&gt; Recv_A[Receive]
+    end
+    subgraph Bus_B
+        Emit_B[Emit] --&gt; Pub_B[hub.publish]
+        Run_B[Run loop] --&gt; Recv_B[Receive]
+    end
+    Hub[(memorystore.Hub&lt;br/&gt;shared chan-based bus)]
+    Pub_A --&gt; Hub
+    Pub_B --&gt; Hub
+    Hub --&gt; Run_A
+    Hub --&gt; Run_B
+    Note[&quot;Each Bus drops messages tagged&lt;br/&gt;with its own origin marker&quot;]
+</code></pre>
+<p>Test-only — same shape as <code>redisstore.Bus</code> but uses goroutines + channels in the same process. Lets the events SDK be exercised in multi-replica mode without standing up Redis.</p>
+<h2 id="per-surface-end-to-end-flows">Per-surface end-to-end flows <a class="anchor" href="#per-surface-end-to-end-flows">¶</a></h2>
+<h3 id="notificationstoolslist-changed"><code>notifications/tools/list_changed</code> <a class="anchor" href="#notificationstoolslist-changed">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as Application code
+    participant Reg as Registry
+    participant Srv as Server (K1)
+    participant Bus as CapabilityBus (K1)
+    participant Redis as Redis pubsub
+    participant Bus2 as CapabilityBus (K2)
+    participant Mux as NotificationRouter (K2)
+    participant Cap as CapabilityBroadcastReceiver (K2)
+    participant Srv2 as Server (K2)
+    participant Cli2 as Client on K2
+
+    App-&gt;&gt;Reg: AddTool(...)
+    Reg-&gt;&gt;Srv: OnChange(&quot;notifications/tools/list_changed&quot;)
+    Srv-&gt;&gt;Bus: Publish(method, nil)
+    Bus-&gt;&gt;Redis: PUBLISH (envelope with K1 origin)
+    Srv-&gt;&gt;Srv: BroadcastToSessions (K1 local clients hear)
+
+    Redis-&gt;&gt;Bus2: deliver message
+    Note over Bus2: origin == K2's marker? no — proceed
+    Bus2-&gt;&gt;Mux: Receive(method, nil)
+    Mux-&gt;&gt;Cap: handlers[&quot;...list_changed&quot;].Receive
+    Cap-&gt;&gt;Srv2: BroadcastToSessions(method, nil)
+    Srv2-&gt;&gt;Cli2: notify(&quot;notifications/tools/list_changed&quot;, nil)
+</code></pre>
+<p>Same flow for <code>resources/list_changed</code> and <code>prompts/list_changed</code> — only the method name changes.</p>
+<h3 id="notificationsresourcesupdated"><code>notifications/resources/updated</code> <a class="anchor" href="#notificationsresourcesupdated">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as Application code
+    participant Srv as Server (K1)
+    participant SubReg as subscriptionRegistry (K1)
+    participant Bus as CapabilityBus (K1)
+    participant Redis as Redis pubsub
+    participant Bus2 as CapabilityBus (K2)
+    participant Mux as NotificationRouter (K2)
+    participant Rur as ResourcesUpdatedReceiver (K2)
+    participant Srv2 as Server (K2)
+    participant SubReg2 as subscriptionRegistry (K2)
+    participant Cli2 as Subscribed client on K2
+
+    App-&gt;&gt;Srv: NotifyResourceUpdated(&quot;file:///x&quot;)
+    Srv-&gt;&gt;SubReg: notify(&quot;file:///x&quot;)
+    SubReg-&gt;&gt;SubReg: notifyLocal(&quot;file:///x&quot;)&lt;br/&gt;(K1 local subscribers hear)
+    SubReg-&gt;&gt;Bus: Publish(method, ResourceUpdatedNotification{URI:&quot;file:///x&quot;})
+    Bus-&gt;&gt;Redis: PUBLISH (envelope with K1 origin)
+
+    Redis-&gt;&gt;Bus2: deliver message
+    Bus2-&gt;&gt;Mux: Receive(method, params)
+    Mux-&gt;&gt;Rur: handlers[&quot;resources/updated&quot;].Receive
+    Rur-&gt;&gt;Rur: extract URI from params
+    Rur-&gt;&gt;Srv2: NotifyResourceUpdatedLocal(&quot;file:///x&quot;)
+    Srv2-&gt;&gt;SubReg2: notifyLocal(&quot;file:///x&quot;)
+    SubReg2-&gt;&gt;Cli2: notify(&quot;notifications/resources/updated&quot;, ...)
+    Note over SubReg2,Cli2: filter: only sessions subscribed&lt;br/&gt;to &quot;file:///x&quot; on K2 fire
+</code></pre>
+<h3 id="notificationseventsevent"><code>notifications/events/event</code> <a class="anchor" href="#notificationseventsevent">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as Application / driver
+    participant Src as YieldingSource (K1)
+    participant Slots1 as Local slots (K1)
+    participant Bus as Bus (K1, events)
+    participant Redis as Redis pubsub
+    participant Bus2 as Bus (K2, events)
+    participant Src2 as YieldingSource (K2)
+    participant Slots2 as Local slots (K2)
+    participant Cli2 as Stream client on K2
+
+    App-&gt;&gt;Src: yield(payload)
+    Src-&gt;&gt;Slots1: per-slot Match → deliver to matching K1 slots
+    Src-&gt;&gt;Bus: Emit(ctx, event)
+    Bus-&gt;&gt;Redis: PUBLISH (Meta-stamped with K1 origin)
+
+    Redis-&gt;&gt;Bus2: deliver message
+    Note over Bus2: origin == K2's marker? no — proceed&lt;br/&gt;strip origin marker from Meta
+    Bus2-&gt;&gt;Src2: Receive(&quot;notifications/events/event&quot;, event)
+    Src2-&gt;&gt;Src2: LocalDeliver(ctx, event)
+    loop for each K2 slot
+        Src2-&gt;&gt;Slots2: EventDef.Match(slot, event)?
+        alt match
+            Slots2-&gt;&gt;Cli2: deliver via slot channel&lt;br/&gt;stream handler frames as notification
+        else no match
+            Slots2-&gt;&gt;Slots2: skip
+        end
+    end
+</code></pre>
+<p>Per-slot <code>Match</code> runs on every replica that holds a matching subscriber. The transport sprays to all replicas; each replica filters its own slots independently.</p>
+<h2 id="life-of-a-notification--function-by-function">Life of a notification — function-by-function <a class="anchor" href="#life-of-a-notification--function-by-function">¶</a></h2>
+<p>The per-surface sequence diagrams above show the high-level flow. Below are the literal callstacks adopters and reviewers can correlate against the code. Read top-down; each indent level is one function call into a callee.</p>
+<h3 id="life-of-notificationstoolslist-changed-capability-shaped-n3">Life of <code>notifications/tools/list_changed</code> (capability-shaped, N=3) <a class="anchor" href="#life-of-notificationstoolslist-changed-capability-shaped-n3">¶</a></h3>
+<p>Setup: replica K1 has <code>WithNotificationRelay(busK1)</code> installed; replica K2 has <code>WithNotificationRelay(busK2)</code>. Both Buses subscribed to <code>notifications/tools/list_changed</code>. A client <code>cliK2</code> is connected to K2 via Streamable HTTP. App code on K1 calls <code>srv.RegisterTool</code>.</p>
+<pre><code>[K1]  app: srv.RegisterTool(def, handler)                                 server.go:649
+        s.dispatcher.RegisterTool(def, handler)                            dispatch.go:298
+          s.dispatcher.Reg.AddTool(def, handler)                           registry.go:105
+            r.tools[name] = entry  (state mutation)                        registry.go:112
+            r.notify(&quot;notifications/tools/list_changed&quot;)                   registry.go:117
+              r.OnChange(&quot;notifications/tools/list_changed&quot;)               registry.go:55
+                (closure installed in NewServer wires OnChange →)
+                s.Broadcast(ctx, &quot;notifications/tools/list_changed&quot;, nil)  server.go:562
+                  if relay != nil:
+                    relay.Publish(ctx, method, nil)               server.go:1007
+                      ──&gt; redisstore.CapabilityBus.Publish        capability_bus.go:132
+                            encodeCapabilityEnvelope(b.originID, params)   capability_bus.go:225
+                              json.Marshal({&quot;origin&quot;: &quot;&lt;K1&gt;&quot;, &quot;params&quot;: null})
+                            b.client.Publish(ctx, channel, body)           ──&gt; Redis
+                  s.BroadcastToSessions(ctx, method, nil)                  server.go:1009
+                    for bc in s.sessionBroadcasters:
+                      bc(ctx, method, nil)                                 server.go:1036
+                        ──&gt; streamableTransport.broadcast                  streamable_transport.go:915
+                              t.sessions.Range(...):
+                                for each connected K1 session:
+                                  fn := d.getNotifyFunc()
+                                  fn(method, nil)
+                                    ──&gt; session SSE writer
+                                          ── frame as JSON-RPC notification
+                                          ── write to SSE response stream
+                                          ──&gt; (K1 clients, if any, receive here)
+
+[Redis]   PUBLISH &quot;mcpkit.broadcast.notifications/tools/list_changed&quot; → fanout to all SUBSCRIBE'd clients
+
+[K2]  redisstore.CapabilityBus.Run goroutine reading pubsub channel       capability_bus.go:175
+        decodeCapabilityEnvelope(msg.Payload)                              capability_bus.go:241
+          json.Unmarshal → envelope{origin: &quot;&lt;K1&gt;&quot;, params: nil}
+        if envelope.origin == b.originID (== &quot;&lt;K2&gt;&quot;): drop  ── NOT self    capability_bus.go:209
+        receiver.Receive(ctx, method, nil)                            capability_bus.go:188
+          ──&gt; NotificationRouter.Receive                          relay.go:240
+                h := handlers[&quot;notifications/tools/list_changed&quot;]
+                h.Receive(ctx, method, nil)
+                  ──&gt; CapabilityBroadcastReceiver.Receive             relay.go:141
+                        srv.BroadcastToSessions(ctx, method, nil)          relay.go:142
+                          ── NOTE: BroadcastToSessions, NOT Broadcast
+                          ── (otherwise would re-fire relay and loop)
+                        for bc in s.sessionBroadcasters:
+                          bc(ctx, method, nil)
+                            ──&gt; streamableTransport.broadcast              streamable_transport.go:915
+                                  for each connected K2 session (incl. cliK2):
+                                    fn := d.getNotifyFunc()
+                                    fn(method, nil)
+                                      ──&gt; session SSE writer
+                                            ── frame as JSON-RPC notification
+                                            ── write to SSE response stream
+
+[K2]  cliK2.transport reads SSE frame ──&gt; client-side notification handler fires
+</code></pre>
+<p>Key landmarks:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What it does</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>r.notify</code> → <code>OnChange</code> → <code>s.Broadcast</code></td>
+<td>Registry mutation triggers Broadcast</td>
+<td><code>server.go:562</code> (wired in <code>NewServer</code>)</td>
+</tr>
+<tr>
+<td><code>s.Broadcast</code> forks publish + local</td>
+<td>Single call, two paths</td>
+<td><code>server.go:1007</code>, <code>:1009</code></td>
+</tr>
+<tr>
+<td><code>relay.Publish</code></td>
+<td>Outbound transport hop</td>
+<td><code>capability_bus.go:132</code></td>
+</tr>
+<tr>
+<td>Self-publish drop on receive</td>
+<td><code>envelope.origin == b.originID</code></td>
+<td><code>capability_bus.go:209</code></td>
+</tr>
+<tr>
+<td>Receiver routes by method</td>
+<td><code>NotificationRouter.handlers[method]</code></td>
+<td><code>relay.go:240</code></td>
+</tr>
+<tr>
+<td>Final hop: receiver → <code>BroadcastToSessions</code></td>
+<td><strong>Not</strong> <code>Broadcast</code> (recursion guard)</td>
+<td><code>relay.go:142</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="life-of-notificationseventsevent-subscription-shaped-n3-tenant-scoping">Life of <code>notifications/events/event</code> (subscription-shaped, N=3, tenant scoping) <a class="anchor" href="#life-of-notificationseventsevent-subscription-shaped-n3-tenant-scoping">¶</a></h3>
+<p>Setup: 3 replicas wired with a <code>redisstore.Bus</code> per replica (separate from the capability bus). A YieldingSource for <code>chat.message</code> registered on each replica with <code>EventDef.Match = tenantMatch</code>. Stream subscriber <code>alice@asgard</code> is on K1; <code>bob@babylon</code> is on K2; the inject hits K3. The asgard event must reach K1&rsquo;s alice but NOT K2&rsquo;s bob, even though both are subscribed to <code>chat.message</code>.</p>
+<pre><code>[K3]  app: yield(ctx, payload{tenant: &quot;asgard&quot;, text: &quot;hi&quot;})               yield.go:632
+        build Event{Name:&quot;chat.message&quot;, Data: json, Cursor: N, EventID: ...}
+        s.mu.Lock()
+        s.entries = append(...)  (in-memory ring)                          yield.go:696
+        if s.bufferStore != nil:
+          s.bufferStore.Append(...)  (Postgres EventBufferStore)            yield.go:710
+        subs := snapshot(s.subscribers)                                    yield.go:727
+        hook := s.emitHook  (← cfg.Emitter.Emit, installed by events.Register)
+        matchFn := s.def.Match  (tenantMatch)
+        s.mu.Unlock()
+
+        for sub in subs:                                                   yield.go:754
+          s.deliverEventToSlot(sub, event, matchFn, transformFn)           yield.go:756
+            matched := matchFn(HookContext{Principal: sub.principal}, event, sub.params)
+            ── K3 happens to have NO stream subscribers; for-loop is empty
+            (if it had any, matched ones would receive via slot.ch)
+
+        hook(ctx, event)                                                   yield.go:772
+          ──&gt; redisstore.Bus.Emit(ctx, event)                              bus.go:90
+                p.opts.Codec.Encode(event)
+                  event.Meta = stampOriginIDOnMeta(event.Meta, &quot;&lt;K3&gt;&quot;)     origin.go:55
+                  body = json.Marshal(event)
+                p.opts.Client.Publish(ctx, &quot;mcpkit.events.chat.message&quot;, body)  ──&gt; Redis
+
+[Redis]   PUBLISH &quot;mcpkit.events.chat.message&quot; → fanout to K1, K2, K3 subscribers
+
+[K1]  redisstore.Subscriber.Run goroutine reading pubsub channel           subscriber.go:107
+        Codec.Decode(msg.Payload) → event
+        if originIDFromMeta(event.Meta) == s.opts.skipOriginID:  drop      subscriber.go:147
+          ── K1's marker is &quot;&lt;K1&gt;&quot;, envelope's origin is &quot;&lt;K3&gt;&quot; → proceed
+        event.Meta = stripOriginIDFromMeta(event.Meta)                     subscriber.go:156
+        s.deliver(msgCtx, event)
+          ──&gt; Bus's wrapper that calls receiver.Receive               bus.go:78
+                receiver.Receive(ctx, &quot;notifications/events/event&quot;, event)
+                  ──&gt; chatSrc.Receive  (YieldingSource[payload])       yield.go:454
+                        if method != &quot;notifications/events/event&quot;: return
+                        ev, ok := params.(Event)
+                        if !ok: return
+                        s.LocalDeliver(ctx, event)                          yield.go:476
+                          subs := snapshot(s.subscribers)                   yield.go:439
+                          matchFn := s.def.Match
+                          s.mu.Unlock()
+                          for sub in subs:
+                            s.deliverEventToSlot(sub, event, matchFn, transformFn)
+                              ── sub.principal = &quot;asgard&quot; (alice's claims)
+                              ── matched := tenantMatch(ctx, event, ...)
+                                   ↳ payload.tenant (&quot;asgard&quot;) == ctx.Principal() (&quot;asgard&quot;) → TRUE
+                              ── matched: write to sub.ch (slot.deliverEvent)
+
+[K1]  events/stream handler's reader goroutine                            stream.go:331
+        select { case se := &lt;-evCh: ...
+        framePushed := wireSubscriberEvent(se, slotState)
+        ctx.Notify(&quot;notifications/events/event&quot;, payload)                  stream.go:404
+          ──&gt; stream POST response writer
+                ── frame as JSON-RPC notification with requestId + cursor
+                ── write SSE event to alice's open POST response stream
+                ──&gt; alice's stream client receives the event
+
+[K2]  redisstore.Subscriber.Run goroutine reading pubsub channel           subscriber.go:107
+        Codec.Decode(msg.Payload) → event (origin &quot;&lt;K3&gt;&quot;)
+        skipOriginID is &quot;&lt;K2&gt;&quot; → proceed
+        strip origin marker
+        receiver.Receive → chatSrc.Receive → s.LocalDeliver
+          for sub in subs:
+            ── sub.principal = &quot;babylon&quot; (bob's claims)
+            ── matched := tenantMatch(ctx, event, ...)
+                 ↳ payload.tenant (&quot;asgard&quot;) != ctx.Principal() (&quot;babylon&quot;) → FALSE
+            ── matched=false: drop (no delivery to bob's slot)
+
+[K2]  events/stream handler for bob: select sees no incoming on evCh — silent
+        ── bob NEVER hears the asgard event ─ tenant scoping holds
+</code></pre>
+<p>Key landmarks:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What it does</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>yield</code> builds Event + buffer append</td>
+<td>Origin replica&rsquo;s local fanout</td>
+<td><code>yield.go:632, :696, :710</code></td>
+</tr>
+<tr>
+<td><code>yield</code> for-loop on local slots</td>
+<td>per-slot Match runs HERE (origin replica)</td>
+<td><code>yield.go:754, :756</code></td>
+</tr>
+<tr>
+<td><code>hook(ctx, event)</code> = <code>cfg.Emitter.Emit</code></td>
+<td>Publish to transport</td>
+<td><code>yield.go:772</code></td>
+</tr>
+<tr>
+<td>Origin marker stamped onto <code>event.Meta</code></td>
+<td>Self-publish dedup mechanism</td>
+<td><code>origin.go:55</code></td>
+</tr>
+<tr>
+<td>Self-publish drop on receive (origin == self)</td>
+<td>Origin replica&rsquo;s own Subscriber drops</td>
+<td><code>subscriber.go:147</code></td>
+</tr>
+<tr>
+<td>Strip origin marker</td>
+<td>Adopters never see it</td>
+<td><code>subscriber.go:156</code></td>
+</tr>
+<tr>
+<td><code>chatSrc.Receive</code> → <code>LocalDeliver</code></td>
+<td>Cross-replica → local fanout entry</td>
+<td><code>yield.go:454, :476</code></td>
+</tr>
+<tr>
+<td><code>LocalDeliver</code> for-loop on local slots</td>
+<td>per-slot Match runs HERE (receiving replica) too</td>
+<td><code>yield.go:439</code> (mirror of origin&rsquo;s path)</td>
+</tr>
+<tr>
+<td><code>tenantMatch</code> per slot</td>
+<td>The filter that drops babylon for asgard event</td>
+<td>adopter&rsquo;s <code>EventDef.Match</code></td>
+</tr>
+<tr>
+<td>Stream handler reads slot channel + <code>ctx.Notify</code></td>
+<td>SSE frame to client</td>
+<td><code>stream.go:331, :404</code></td>
+</tr>
+</tbody>
+</table>
+<p>The key insight from this trace: <strong><code>EventDef.Match</code> runs once per slot on EVERY replica that holds a matching slot.</strong> The transport just sprays; each replica&rsquo;s <code>LocalDeliver</code> independently filters. There&rsquo;s no central routing decision and no cross-replica subscription registry — each replica owns its own subscriber state and applies its own filter.</p>
+<h2 id="scenario-walkthroughs">Scenario walkthroughs <a class="anchor" href="#scenario-walkthroughs">¶</a></h2>
+<h3 id="single-replica-yield-n1-no-relay">Single-replica yield (N=1, no relay) <a class="anchor" href="#single-replica-yield-n1-no-relay">¶</a></h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as App
+    participant Src as YieldingSource
+    participant Slot as Local slot
+    participant Cli as Stream client
+
+    App-&gt;&gt;Src: yield(payload)
+    Src-&gt;&gt;Slot: per-slot Match
+    Slot-&gt;&gt;Cli: deliver
+    Note over Src: cfg.Emitter not configured&lt;br/&gt;(no Bus) — no publish, no relay
+</code></pre>
+<p>At N=1, adopters don&rsquo;t need any Pattern B wiring. The yield → for-loop → local slot path is the entire story. Configure a Bus only when adding a second replica.</p>
+<h3 id="cross-replica-yield-n3-with-relay">Cross-replica yield (N=3, with relay) <a class="anchor" href="#cross-replica-yield-n3-with-relay">¶</a></h3>
+<p>This is the headline path. App calls <code>yield</code> on K3; K1&rsquo;s stream subscriber (subscribed to the same event type) receives the event:</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as App on K3
+    participant Src3 as YieldingSource (K3)
+    participant Bus3 as Bus (K3)
+    participant Redis as Redis
+    participant Bus1 as Bus (K1)
+    participant Src1 as YieldingSource (K1)
+    participant Cli1 as Stream client (K1)
+
+    App-&gt;&gt;Src3: yield(payload)
+    Src3-&gt;&gt;Src3: for-loop on K3 slots&lt;br/&gt;(no local subscriber → no delivery)
+    Src3-&gt;&gt;Bus3: Emit(ctx, event)
+    Bus3-&gt;&gt;Redis: PUBLISH
+    Redis-&gt;&gt;Bus1: deliver
+    Bus1-&gt;&gt;Src1: Receive → LocalDeliver
+    Src1-&gt;&gt;Cli1: deliver (Match passes)
+</code></pre>
+<h3 id="self-publish-dedup">Self-publish dedup <a class="anchor" href="#self-publish-dedup">¶</a></h3>
+<p>K1&rsquo;s own Bus subscriber receives the K1-published message. Without the dedup, K1&rsquo;s slot would fire twice (once via the yield&rsquo;s for-loop, once via the round-trip).</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant Src as YieldingSource (K1)
+    participant Bus as Bus (K1)
+    participant Redis as Redis
+
+    Src-&gt;&gt;Src: yield → local for-loop fires K1 slots (once)
+    Src-&gt;&gt;Bus: Emit (Meta-stamped with K1's origin)
+    Bus-&gt;&gt;Redis: PUBLISH
+    Redis-&gt;&gt;Bus: deliver back to K1
+    Note over Bus: origin == K1's own marker — DROP
+    Note over Bus: receiver NOT invoked → no double-fire
+</code></pre>
+<h3 id="tenant-scoping-cross-replica">Tenant scoping cross-replica <a class="anchor" href="#tenant-scoping-cross-replica">¶</a></h3>
+<p>The bug that motivated issue 755: an asgard event reaches babylon&rsquo;s streamer because the cross-replica broadcast bypassed per-slot <code>Match</code>. With the fix (<code>LocalDeliver</code> routes through the slot system on every replica), <code>Match</code> runs per-slot per-replica and tenant scoping holds.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant App as App on K3
+    participant Src3 as YieldingSource (K3)
+    participant Bus3 as Bus (K3)
+    participant Redis as Redis
+    participant Bus1 as Bus (K1)
+    participant Bus2 as Bus (K2)
+    participant SrcA as YieldingSource (K1, asgard streamer)
+    participant SrcB as YieldingSource (K2, babylon streamer)
+
+    App-&gt;&gt;Src3: yield(payload tagged &quot;asgard&quot;)
+    Src3-&gt;&gt;Bus3: Emit
+    Bus3-&gt;&gt;Redis: PUBLISH
+    par K1 receives
+        Redis-&gt;&gt;Bus1: deliver
+        Bus1-&gt;&gt;SrcA: Receive → LocalDeliver
+        Note over SrcA: per-slot Match: principal=&quot;asgard&quot;&lt;br/&gt;vs payload.tenant=&quot;asgard&quot; → MATCH
+        SrcA-&gt;&gt;SrcA: deliver to asgard streamer
+    and K2 receives
+        Redis-&gt;&gt;Bus2: deliver
+        Bus2-&gt;&gt;SrcB: Receive → LocalDeliver
+        Note over SrcB: per-slot Match: principal=&quot;babylon&quot;&lt;br/&gt;vs payload.tenant=&quot;asgard&quot; → DROP
+    end
+</code></pre>
+<h3 id="slow-subscriber--drop-policy">Slow subscriber — drop policy <a class="anchor" href="#slow-subscriber--drop-policy">¶</a></h3>
+<p>When a Bus&rsquo;s incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry — adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.</p>
+<p>In Pattern B with Redis pubsub specifically:</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Slow client backs up the receive loop</td>
+<td>client&rsquo;s session notify channel buffered too small</td>
+<td>increase session buffer in transport options</td>
+</tr>
+<tr>
+<td>Bus&rsquo;s <code>incoming</code> queue fills</td>
+<td>adopter&rsquo;s receiver does slow I/O inline</td>
+<td>adopter&rsquo;s receiver should do work in a goroutine and return quickly</td>
+</tr>
+<tr>
+<td>Redis pubsub backpressure to publisher</td>
+<td>should never happen on pubsub</td>
+<td>switch to a persistent transport (Redis Streams) if at-least-once is required</td>
+</tr>
+</tbody>
+</table>
+<h3 id="replica-join-mid-flight">Replica join mid-flight <a class="anchor" href="#replica-join-mid-flight">¶</a></h3>
+<p>A new replica K4 attaches to the shared transport. Notifications generated AFTER K4&rsquo;s <code>Subscribe + Run</code> reach K4; notifications generated BEFORE do not (pubsub is fire-and-forget; K4 missed them).</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant K1 as Replica K1
+    participant Redis as Redis
+    participant K4 as New replica K4
+
+    K1-&gt;&gt;Redis: PUBLISH event-A
+    Note over K4: K4 not yet attached → misses event-A
+    K4-&gt;&gt;Redis: SUBSCRIBE
+    K1-&gt;&gt;Redis: PUBLISH event-B
+    Redis-&gt;&gt;K4: deliver event-B
+</code></pre>
+<p>For adopter use cases needing replay (a new replica needs to catch up on missed list_changed notifications), the standard mitigation is for K4 to fetch the current catalog (<code>tools/list</code>, <code>resources/list</code>, <code>prompts/list</code>) on startup. Events/event has an explicit cursor + <code>events/poll</code> path for the same purpose; capability-shaped surfaces have no cursor and rely on the &ldquo;fetch on startup&rdquo; pattern.</p>
+<h3 id="replica-leave-mid-flight">Replica leave mid-flight <a class="anchor" href="#replica-leave-mid-flight">¶</a></h3>
+<p>A replica&rsquo;s <code>Bus.Close()</code> detaches it from the Hub / pubsub channel. Other replicas keep publishing and receiving; the departed replica&rsquo;s clients (if any disconnected with it) get the disconnection signal from the transport.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant K1 as K1
+    participant Redis as Redis
+    participant K2 as K2 (closing)
+
+    K2-&gt;&gt;K2: Bus.Close()
+    K2-&gt;&gt;Redis: UNSUBSCRIBE
+    K1-&gt;&gt;Redis: PUBLISH event-C
+    Note over K2: no longer receives — Close detached the subscriber
+    Note over K1: K1 continues normally
+</code></pre>
+<h2 id="configuration-recipes">Configuration recipes <a class="anchor" href="#configuration-recipes">¶</a></h2>
+<h3 id="capability-shaped-only-toolsresourcesprompts-list-changed">Capability-shaped only (tools/resources/prompts list_changed) <a class="anchor" href="#capability-shaped-only-toolsresourcesprompts-list-changed">¶</a></h3>
+<p>When your server emits only catalog-mutation notifications and you don&rsquo;t use <code>resources/updated</code> or the events SDK:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    redisstore <span style="color:#d14">&#34;github.com/panyam/mcpkit/stores/redis&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>bus, err <span style="color:#000;font-weight:bold">:=</span> redisstore.<span style="color:#900;font-weight:bold">NewCapabilityBus</span>(
+</span></span><span style="display:flex;"><span>    redisstore.CapabilityBusOptions{Client: redisClient},
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#998;font-style:italic">/* handle */</span> }
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> bus.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>ctx, cancel <span style="color:#000;font-weight:bold">:=</span> context.<span style="color:#900;font-weight:bold">WithCancel</span>(context.<span style="color:#900;font-weight:bold">Background</span>())
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> <span style="color:#900;font-weight:bold">cancel</span>()
+</span></span><span style="display:flex;"><span>_ = bus.<span style="color:#900;font-weight:bold">Subscribe</span>(ctx,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/tools/list_changed&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/resources/list_changed&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/prompts/list_changed&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">go</span> bus.<span style="color:#900;font-weight:bold">Run</span>(ctx)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Now srv.Broadcast / Registry.OnChange notifications fan across replicas.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info, server.<span style="color:#900;font-weight:bold">WithNotificationRelay</span>(bus))
+</span></span></code></pre><h3 id="events-sdk-only-eventsevent">Events SDK only (events/event) <a class="anchor" href="#events-sdk-only-eventsevent">¶</a></h3>
+<p>When you use the events SDK but not the catalog notifications:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/experimental/ext/events&#34;</span>
+</span></span><span style="display:flex;"><span>    redisstore <span style="color:#d14">&#34;github.com/panyam/mcpkit/experimental/ext/events/stores/redis&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>eventsBus, err <span style="color:#000;font-weight:bold">:=</span> redisstore.<span style="color:#900;font-weight:bold">NewBus</span>(opts, mySource)  <span style="color:#998;font-style:italic">// mySource is the receiver
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">defer</span> eventsBus.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>eventsBus.<span style="color:#900;font-weight:bold">Subscribe</span>(ctx, <span style="color:#d14">&#34;chat.message&#34;</span>, <span style="color:#d14">&#34;presence.changed&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">go</span> eventsBus.<span style="color:#900;font-weight:bold">Run</span>(ctx)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>cfg.Emitter = eventsBus
+</span></span><span style="display:flex;"><span>events.<span style="color:#900;font-weight:bold">Register</span>(cfg)
+</span></span></code></pre><h3 id="mixed--all-5-surfaces">Mixed — all 5 surfaces <a class="anchor" href="#mixed--all-5-surfaces">¶</a></h3>
+<p>When your server uses both catalog notifications AND <code>resources/updated</code> AND events. CapabilityBus (root <code>stores/redis/</code>) handles capability + subscription-shaped notifications via one <code>NotificationRouter</code>. Events get their own Bus (events SDK <code>experimental/ext/events/stores/redis/</code>) because the wire format is events-typed:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    rootredis <span style="color:#d14">&#34;github.com/panyam/mcpkit/stores/redis&#34;</span>
+</span></span><span style="display:flex;"><span>    eventsredis <span style="color:#d14">&#34;github.com/panyam/mcpkit/experimental/ext/events/stores/redis&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Server-side capability + subscription-shaped (3 list_changed + resources/updated)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>mux <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewNotificationRouter</span>().
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/tools/list_changed&#34;</span>,     server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/resources/list_changed&#34;</span>, server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/prompts/list_changed&#34;</span>,   server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
+</span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/resources/updated&#34;</span>,      server.<span style="color:#900;font-weight:bold">NewResourcesUpdatedReceiver</span>(srv))
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>capBus, _ <span style="color:#000;font-weight:bold">:=</span> rootredis.<span style="color:#900;font-weight:bold">NewCapabilityBus</span>(rootredis.CapabilityBusOptions{Client: cli}, mux)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> capBus.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>_ = capBus.<span style="color:#900;font-weight:bold">Subscribe</span>(ctx,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/tools/list_changed&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/resources/list_changed&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/prompts/list_changed&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/resources/updated&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">go</span> capBus.<span style="color:#900;font-weight:bold">Run</span>(ctx)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Events (separate Bus, separate wire format)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>eventsBus, _ <span style="color:#000;font-weight:bold">:=</span> eventsredis.<span style="color:#900;font-weight:bold">NewBus</span>(eventsredis.Options{Client: cli}, mySource)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> eventsBus.<span style="color:#900;font-weight:bold">Close</span>()
+</span></span><span style="display:flex;"><span>_ = eventsBus.<span style="color:#900;font-weight:bold">Subscribe</span>(ctx, <span style="color:#d14">&#34;chat.message&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">go</span> eventsBus.<span style="color:#900;font-weight:bold">Run</span>(ctx)
+</span></span><span style="display:flex;"><span>cfg.Emitter = eventsBus
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info, server.<span style="color:#900;font-weight:bold">WithNotificationRelay</span>(capBus))
+</span></span><span style="display:flex;"><span>events.<span style="color:#900;font-weight:bold">Register</span>(cfg)
+</span></span></code></pre><h3 id="custom-transport-adapter">Custom transport adapter <a class="anchor" href="#custom-transport-adapter">¶</a></h3>
+<p>For Kafka / NATS / SNS adopters writing their own transport:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Implement server.NotificationRelay for the publish side:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">type</span> MyKafkaBus <span style="color:#000;font-weight:bold">struct</span>{ <span style="color:#000;font-weight:bold">...</span> }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (b <span style="color:#000;font-weight:bold">*</span>MyKafkaBus) <span style="color:#900;font-weight:bold">Publish</span>(ctx context.Context, method <span style="color:#458;font-weight:bold">string</span>, params any) {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// 1. Encode (method, params) into your wire format with origin marker
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// 2. Publish to Kafka topic
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// 3. Errors are fire-and-forget — log internally
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Implement the receive loop that calls server.NotificationRelayReceiver:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> (b <span style="color:#000;font-weight:bold">*</span>MyKafkaBus) <span style="color:#900;font-weight:bold">Run</span>(ctx context.Context) <span style="color:#458;font-weight:bold">error</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">for</span> msg <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">range</span> b.consumer.<span style="color:#900;font-weight:bold">Consume</span>(ctx) {
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// 1. Decode message
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#998;font-style:italic">// 2. Check origin marker — drop if matches b.originID
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#998;font-style:italic">// 3. b.receiver.Receive(ctx, method, params)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The two interface implementations are independent — same struct can satisfy both, or separate publisher/subscriber types. Reference impls: <code>redisstore.CapabilityBus</code> (catalog-shaped) and <code>redisstore.Bus</code> (events-shaped).</p>
+<h2 id="trade-offs-and-gotchas">Trade-offs and gotchas <a class="anchor" href="#trade-offs-and-gotchas">¶</a></h2>
+<h3 id="eventual-consistency">Eventual consistency <a class="anchor" href="#eventual-consistency">¶</a></h3>
+<p>Pattern B is asynchronous. A <code>tools/list_changed</code> fired on K1 reaches K2&rsquo;s clients with some latency (Redis pubsub roundtrip — typically single-digit milliseconds, but adversarial network conditions can extend this).</p>
+<p>For applications that need synchronous cross-replica state, mcpkit&rsquo;s catalog mutations are NOT a synchronization primitive — the catalog itself remains per-replica. If K1 adds a tool and K2 doesn&rsquo;t acknowledge before a client on K2 calls <code>tools/list</code>, the call returns K2&rsquo;s view (pre-add).</p>
+<p>For most adopters this is fine: list_changed notifications are advisory; the next <code>tools/list</code> call on K2 (potentially triggered by the notification) reflects K2&rsquo;s updated state after K2 picks up the new tool via its own registration path.</p>
+<h3 id="not-at-least-once">Not at-least-once <a class="anchor" href="#not-at-least-once">¶</a></h3>
+<p>Redis pubsub does NOT persist messages. A replica that&rsquo;s offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups) — the <code>NotificationRelay</code> + <code>NotificationRelayReceiver</code> shapes accommodate either, but the reference <code>redisstore.CapabilityBus</code> uses pubsub specifically.</p>
+<p>For events, the <code>EventBufferStore</code> + <code>events/poll</code> path gives at-least-once for clients that opt in.</p>
+<h3 id="subscribe-state-stays-per-replica">Subscribe state stays per-replica <a class="anchor" href="#subscribe-state-stays-per-replica">¶</a></h3>
+<p>A client subscribed to <code>resources/subscribe(file:///x)</code> on K1 is subscribed ON K1 ONLY. The cross-replica <code>notifications/resources/updated</code> reaches K2; if a client on K2 ALSO subscribed to <code>file:///x</code>, K2&rsquo;s <code>subscriptionRegistry</code> fires that client. There&rsquo;s no cross-replica subscription registry — each replica filters its own local set.</p>
+<p>This means: clients DO NOT roam between replicas mid-session. If your deployment moves a client from K1 to K2 (load balancer reroutes, replica restart), the new connection re-subscribes from scratch.</p>
+<h3 id="origin-marker-is-transport-internal">Origin marker is transport-internal <a class="anchor" href="#origin-marker-is-transport-internal">¶</a></h3>
+<p>Adopters never see origin markers. Transport adapters handle them internally:</p>
+<table>
+<thead>
+<tr>
+<th>Transport</th>
+<th>Where origin lives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>redisstore.Bus</code> (events)</td>
+<td><code>event.Meta[_mcpkit_redisstore_origin]</code>, stripped before deliver</td>
+</tr>
+<tr>
+<td><code>redisstore.CapabilityBus</code> (notifications)</td>
+<td>JSON envelope <code>{&quot;origin&quot;: &quot;...&quot;}</code>, never seen by receiver</td>
+</tr>
+<tr>
+<td><code>memorystore.Bus</code> (test)</td>
+<td>per-frame <code>origin</code> field, never seen by receiver</td>
+</tr>
+<tr>
+<td>Your custom transport</td>
+<td>wherever your wire format puts it; never on receiver-facing params</td>
+</tr>
+</tbody>
+</table>
+<p>If you&rsquo;re writing a custom transport, follow this rule. Adopters who depend on origin markers leaking into receiver code create coupling that breaks when transports change.</p>
+<h3 id="broadcasttosessions-vs-broadcast"><code>BroadcastToSessions</code> vs <code>Broadcast</code> <a class="anchor" href="#broadcasttosessions-vs-broadcast">¶</a></h3>
+<p>Two-method API on <code>Server</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Fires relay?</th>
+<th>Fires local sessions?</th>
+<th>Who calls it?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Broadcast</code></td>
+<td>yes (if installed)</td>
+<td>yes</td>
+<td>application code, <code>Registry.OnChange</code></td>
+</tr>
+<tr>
+<td><code>BroadcastToSessions</code></td>
+<td>no</td>
+<td>yes</td>
+<td><code>CapabilityBroadcastReceiver.Receive</code> (the receive side of Pattern B)</td>
+</tr>
+</tbody>
+</table>
+<p>The split exists to break the recursion that would happen if the receive side called <code>Broadcast</code> (which would re-publish via the relay → receive again → publish again → loop). If you&rsquo;re writing a custom capability-shaped receiver, you MUST call <code>BroadcastToSessions</code>, not <code>Broadcast</code>.</p>
+<p>Symmetric split exists on <code>subscriptionRegistry</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Fires relay?</th>
+<th>Fires local subscribers?</th>
+<th>Who calls it?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>notify</code></td>
+<td>yes (if installed)</td>
+<td>yes (via <code>notifyLocal</code>)</td>
+<td><code>Server.NotifyResourceUpdated</code>, internal callers</td>
+</tr>
+<tr>
+<td><code>notifyLocal</code></td>
+<td>no</td>
+<td>yes</td>
+<td><code>ResourcesUpdatedReceiver.Receive</code>, <code>Server.NotifyResourceUpdatedLocal</code></td>
+</tr>
+</tbody>
+</table>
+<p>Same recursion guard. Custom subscription-shaped receivers call <code>notifyLocal</code> (via <code>Server.NotifyResourceUpdatedLocal</code>), not <code>notify</code>.</p>
+<h2 id="where-to-look-in-code">Where to look in code <a class="anchor" href="#where-to-look-in-code">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NotificationRelay</code> interface</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay.go"><code>server/relay.go</code></a></td>
+</tr>
+<tr>
+<td><code>NotificationRelayReceiver</code> interface</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay.go"><code>server/relay.go</code></a></td>
+</tr>
+<tr>
+<td><code>CapabilityBroadcastReceiver</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay.go"><code>server/relay.go</code></a></td>
+</tr>
+<tr>
+<td><code>ResourcesUpdatedReceiver</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay.go"><code>server/relay.go</code></a></td>
+</tr>
+<tr>
+<td><code>NotificationRouter</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay.go"><code>server/relay.go</code></a></td>
+</tr>
+<tr>
+<td><code>Server.Broadcast</code> / <code>BroadcastToSessions</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/server.go"><code>server/server.go</code></a></td>
+</tr>
+<tr>
+<td><code>subscriptionRegistry.notify</code> / <code>notifyLocal</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/server.go"><code>server/server.go</code></a></td>
+</tr>
+<tr>
+<td><code>WithNotificationRelay</code> option</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay.go"><code>server/relay.go</code></a></td>
+</tr>
+<tr>
+<td><code>redisstore.CapabilityBus</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/stores/redis/capability_bus.go"><code>stores/redis/capability_bus.go</code></a></td>
+</tr>
+<tr>
+<td><code>redisstore.Bus</code> (events SDK)</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/stores/redis/bus.go"><code>experimental/ext/events/stores/redis/bus.go</code></a></td>
+</tr>
+<tr>
+<td><code>memorystore.Bus</code> + <code>Hub</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/stores/memory/bus.go"><code>experimental/ext/events/stores/memory/bus.go</code></a></td>
+</tr>
+<tr>
+<td><code>YieldingSource.LocalDeliver</code> / <code>Receive</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/yield.go"><code>experimental/ext/events/yield.go</code></a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="test-coverage">Test coverage <a class="anchor" href="#test-coverage">¶</a></h2>
+<p>Pattern B&rsquo;s contracts are covered by <code>-race</code>-clean tests at every layer. Reference them when changing this code:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Tests</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Server-level primitives</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay_test.go"><code>server/relay_test.go</code></a> (15 tests covering <code>CapabilityBroadcastReceiver</code>, <code>ResourcesUpdatedReceiver</code>, <code>NotificationRouter</code>, subscriptionRegistry split)</td>
+</tr>
+<tr>
+<td>In-memory broadcast harness</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/relay_inmemory_test.go"><code>server/relay_inmemory_test.go</code></a> (5 tests: split semantics, fan-out, self-publish dedup, no-relay backwards compat, N×T matrix)</td>
+</tr>
+<tr>
+<td>Wiring for 5 surfaces</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/listchanged_relay_test.go"><code>server/listchanged_relay_test.go</code></a> (3 tests covering all 4 list_changed paths + resources/updated end-to-end)</td>
+</tr>
+<tr>
+<td>Events multi-replica</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/stores/memory/multi_replica_test.go"><code>experimental/ext/events/stores/memory/multi_replica_test.go</code></a> (5 tests: tenant scoping, self-publish dedup, N×T×M matrix, leave-mid-flight, high concurrency stress)</td>
+</tr>
+<tr>
+<td>Redis CapabilityBus round-trip</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/stores/redis/capability_bus_test.go"><code>stores/redis/capability_bus_test.go</code></a> (3 tests: cross-replica round-trip, single-bus self-dedup, full WithNotificationRelay end-to-end via miniredis)</td>
+</tr>
+</tbody>
+</table>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

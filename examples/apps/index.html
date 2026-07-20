@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Server-defined HTML/JS UIs in a host iframe (vanilla, todolist, react, interactive, dashboard).">
+    <title>MCP Apps · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>MCP Apps</h1>
+        
+        <p class="lead">Server-defined HTML/JS UIs in a host iframe (vanilla, todolist, react, interactive, dashboard).</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/apps/README.md"><code>examples/apps/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="mcp-apps-examples">MCP Apps Examples <a class="anchor" href="#mcp-apps-examples">¶</a></h1>
+<blockquote>
+<p><strong>Stable</strong> — MCP Apps extension (<code>ext/ui</code>). Needs a host with Apps/iframe support (see below).</p>
+</blockquote>
+<p>Servers exposing <strong>MCP Apps</strong> — interactive HTML/JS UIs that an MCP host renders inside an iframe. The host and app communicate bidirectionally via the App Bridge (postMessage protocol).</p>
+<blockquote>
+<p>⚠ <strong>MCP Apps require a host that supports the Apps extension.</strong> <a href="https://mcpjam.com">MCPJam</a> is the easiest way to test these locally — it&rsquo;s a browser-based MCP host with iframe support. Claude Desktop / VS Code do not yet render MCP Apps.</p>
+</blockquote>
+<h2 id="examples-at-a-glance">Examples at a Glance <a class="anchor" href="#examples-at-a-glance">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Example</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/vanilla">vanilla/</a></td>
+<td>Minimal MCP App — plain JS, no build step</td>
+</tr>
+<tr>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/todolist">todolist/</a></td>
+<td>Server-rendered MCP App — bridge events, inline JS, elicitation + sampling</td>
+</tr>
+<tr>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/react">react/</a></td>
+<td>React 19 MCP App — hooks, Vite, TypeScript</td>
+</tr>
+<tr>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/interactive">interactive/</a></td>
+<td>Tic-tac-toe — bidirectional app-provided tools (model can call tools the app exposes)</td>
+</tr>
+<tr>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/dashboard">dashboard/</a></td>
+<td>Dashboard — tool lifecycle (enable/disable/remove at runtime)</td>
+</tr>
+</tbody>
+</table>
+<p>All apps run on port <code>:8080</code> with an MCP endpoint at <code>/mcp</code> (Streamable HTTP).</p>
+<h2 id="running">Running <a class="anchor" href="#running">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Vanilla JS — simplest possible app, no build step</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">cd</span> vanilla
+</span></span><span style="display:flex;"><span>go run . -addr :8080
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Todo List — server-rendered with elicitation + sampling</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">cd</span> todolist
+</span></span><span style="display:flex;"><span>go run . -addr :8080
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># React — requires a frontend build first</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">cd</span> react
+</span></span><span style="display:flex;"><span>pnpm install <span style="color:#000;font-weight:bold">&amp;&amp;</span> pnpm build
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">cd</span> server
+</span></span><span style="display:flex;"><span>go run . -addr :8080
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Interactive tic-tac-toe — model + app share the tool list</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">cd</span> interactive
+</span></span><span style="display:flex;"><span>go run . -addr :8080
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Dashboard — runtime tool registration/unregistration</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">cd</span> dashboard
+</span></span><span style="display:flex;"><span>go run . -addr :8080
+</span></span></code></pre><p>Then point an Apps-capable host at <code>http://localhost:8080/mcp</code>:</p>
+<ul>
+<li><strong>MCPJam</strong>: open <a href="https://mcpjam.com">https://mcpjam.com</a>, add server URL <code>http://localhost:8080/mcp</code>, transport: Streamable HTTP. The app UI renders in MCPJam&rsquo;s app pane.</li>
+</ul>
+<h2 id="what-mcp-apps-offer">What MCP Apps offer <a class="anchor" href="#what-mcp-apps-offer">¶</a></h2>
+<ul>
+<li><strong>Server-defined UI</strong>: tool authors ship the rendering, not just the data. The host gives the app a sandboxed iframe.</li>
+<li><strong>Bidirectional tools</strong>: the app can register tools the model can call, and the model&rsquo;s tool calls can target either the server or the app.</li>
+<li><strong>Bridge events</strong>: a small JS API (<code>MCPApp.callTool</code>, <code>MCPApp.on('event', ...)</code>) handles host ↔ app messaging.</li>
+</ul>
+<p>See <a href="/mcpkit/packages/ext-ui/"><code>docs/APPS_DESIGN.md</code></a> for the full architecture.</p>
+<h2 id="troubleshooting">Troubleshooting <a class="anchor" href="#troubleshooting">¶</a></h2>
+<ul>
+<li><strong>React app shows blank page</strong> — run <code>pnpm build</code> in <code>react/</code> before starting the Go server.</li>
+<li><strong>Port already in use</strong> — another example is still running. Kill it or pass a different <code>-addr</code>.</li>
+<li><strong>App pane is empty in MCPJam</strong> — check the MCPJam network tab; the app should fetch its HTML from the <code>ui://</code> resource the server registers. If <code>tools/list</code> shows tools but no <code>_meta.ui</code> is present on a tool, that tool won&rsquo;t render an app.</li>
+</ul>
+<h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
+<ul>
+<li><a href="https://github.com/panyam/mcpkit/tree/main/ext/ui/assets">App Bridge JS source</a> — the JS shipped to the app iframe</li>
+<li><a href="/mcpkit/design/apps-host/"><code>docs/APPS_HOST.md</code></a> — implementing your own MCP App host</li>
+<li><a href="/mcpkit/examples/host/01-apphost/"><code>examples/host/01-apphost</code></a> — <code>AppHost</code> walkthrough (Go-side host implementation)</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/host/01-apphost/">Host-side AppHost APIs</a></li>
+<li><a href="/mcpkit/packages/ext-ui/">MCP Apps design</a></li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Server-emitted cache-freshness hints on every list endpoint; three-state ttlMs encoding.">
+    <title>List TTL (SEP-2549) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>List TTL (SEP-2549)</h1>
+        
+        <p class="lead">Server-emitted cache-freshness hints on every list endpoint; three-state ttlMs encoding.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/list-ttl/README.md"><code>examples/list-ttl/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="sep-2549-list-ttl--cache-hints-on-list-and-read-results">SEP-2549 List TTL — Cache Hints on List and Read Results <a class="anchor" href="#sep-2549-list-ttl--cache-hints-on-list-and-read-results">¶</a></h1>
+<blockquote>
+<p><strong>Stable</strong> — implements <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549">SEP-2549</a> (List TTL), merged into the MCP spec.</p>
+</blockquote>
+<p>Demonstrates the SEP-2549 cache hints — <code>ttlMs</code> (integer milliseconds) and<br />
+<code>cacheScope</code> (<code>public</code>/<code>private</code>) — that an MCP server attaches to every<br />
+paginated list response (<code>tools/list</code>, <code>prompts/list</code>, <code>resources/list</code>,<br />
+<code>resources/templates/list</code>) and to <code>resources/read</code>. Clients use them to<br />
+cache the registered surface between <code>notifications/list_changed</code> instead<br />
+of re-fetching on every poll.</p>
+<p>Spec: <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549">SEP-2549</a>.<br />
+Migration notes: <a href="/mcpkit/design/list-ttl-migration/">docs/LIST_TTL_MIGRATION.md</a>.</p>
+<h2 id="ttlms-contract">ttlMs contract <a class="anchor" href="#ttlms-contract">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Wire shape</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Immediately stale</strong></td>
+<td>field absent, or <code>&quot;ttlMs&quot;: 0</code></td>
+<td>client MAY re-fetch every time the result is needed</td>
+</tr>
+<tr>
+<td><strong>Fresh for N</strong></td>
+<td><code>&quot;ttlMs&quot;: &lt;positive int&gt;</code></td>
+<td>client SHOULD cache for N milliseconds; invalidate on <code>list_changed</code></td>
+</tr>
+</tbody>
+</table>
+<p>The merged spec treats an absent <code>ttlMs</code> the same as <code>0</code>. mcpkit still<br />
+encodes the field as <code>*int</code> + <code>omitempty</code> so a server can emit an explicit<br />
+<code>&quot;ttlMs&quot;: 0</code> distinct from omitting it — clients behave identically either<br />
+way, but the explicit form states the intent on the wire.</p>
+<h2 id="cachescope-contract">cacheScope contract <a class="anchor" href="#cachescope-contract">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Wire shape</th>
+<th>Semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Public</strong></td>
+<td><code>&quot;cacheScope&quot;: &quot;public&quot;</code></td>
+<td>any client or shared proxy MAY cache and serve to any user</td>
+</tr>
+<tr>
+<td><strong>Private</strong></td>
+<td><code>&quot;cacheScope&quot;: &quot;private&quot;</code></td>
+<td>cache only within one authorization context; never share across access tokens</td>
+</tr>
+<tr>
+<td><strong>Absent</strong></td>
+<td>field omitted</td>
+<td>clients default to <code>public</code></td>
+</tr>
+</tbody>
+</table>
+<p>A server whose response varies per caller MUST set <code>private</code> explicitly —<br />
+see the security note in the migration guide.</p>
+<h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1 — start the MCP server (ttlMs=60000)</span>
+</span></span><span style="display:flex;"><span>just serve
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 2 — scripted walkthrough</span>
+</span></span><span style="display:flex;"><span>just demo
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Or for the interactive TUI:</span>
+</span></span><span style="display:flex;"><span>go run . --tui
+</span></span></code></pre><h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<ul>
+<li>The <code>ttlMs</code> and <code>cacheScope</code> fields surfacing on every paginated list response and on <code>resources/read</code>.</li>
+<li>The <code>ttlMs</code> contract on the wire: absent / <code>&quot;ttlMs&quot;: 0</code> (both immediately stale) and <code>&quot;ttlMs&quot;: &lt;positive&gt;</code> (fresh for N ms).</li>
+<li>Server-side configuration via <code>server.WithListCacheControl(ttlMs, scope)</code> and <code>server.WithReadResourceCacheControl(ttlMs, scope)</code> — uniform across endpoints, with negative <code>ttlMs</code> omitting the field.</li>
+<li>Client-side typed helpers — <code>client.ListToolsPage</code>, <code>ListPromptsPage</code>, <code>ListResourcesPage</code>, <code>ListResourceTemplatesPage</code>, <code>ReadResourceFull</code> — that return the result envelope so callers can read <code>TTLMs</code> and <code>CacheScope</code>.</li>
+<li>Direct raw-JSON inspection to confirm the wire shape (<code>ttlMs</code> is a JSON number, <code>cacheScope</code> a string).</li>
+</ul>
+<p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/list-ttl/WALKTHROUGH.md">WALKTHROUGH.md</a> for the full sequence diagram and<br />
+step-by-step description.</p>
+<h2 id="other-states">Other states <a class="anchor" href="#other-states">¶</a></h2>
+<p>The default <code>just serve</code> runs with <code>ttlMs=60000</code> (the &ldquo;fresh for 60s&rdquo;<br />
+state). To exercise the other modes:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Mode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>go run . --serve --ttl-ms=0</code></td>
+<td>immediately stale — emits <code>&quot;ttlMs&quot;: 0</code></td>
+</tr>
+<tr>
+<td><code>go run . --serve --ttl-ms=-1</code></td>
+<td>unset — <code>ttlMs</code> field omitted entirely</td>
+</tr>
+<tr>
+<td><code>go run . --serve</code> <em>(no <code>--ttl-ms</code>)</em></td>
+<td>unset (same as <code>--ttl-ms=-1</code>)</td>
+</tr>
+<tr>
+<td><code>go run . --serve --ttl-ms=60000 --cache-scope=private</code></td>
+<td>fresh for 60s, <code>cacheScope: private</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>=</code> form is required because Go&rsquo;s <code>flag</code> package treats <code>--ttl-ms -1</code><br />
+as <code>--ttl-ms</code> followed by an unknown flag <code>-1</code> — Makefile recipes spawning<br />
+this fixture should always use <code>--ttl-ms=N</code> (or omit the flag entirely for<br />
+the unset default).</p>
+<h2 id="conformance-fixture">Conformance fixture <a class="anchor" href="#conformance-fixture">¶</a></h2>
+<p>The same binary is reused as the fixture for the SEP-2549 conformance<br />
+suite on the <a href="https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl">panyam/mcpconformance <code>pending</code> branch</a>.<br />
+The runner spawns three independent processes (one per <code>ttlMs</code> state) in<br />
+parallel so all the wire shapes flow through a real dispatcher in a single<br />
+test run. The dedicated <code>testconf-list-ttl</code> target was retired when SEP-2549<br />
+coverage moved to upstream&rsquo;s <code>CachingScenario</code> — it now runs as part of the<br />
+default <code>just testconf</code> suite.</p>
+<h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Server options</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/server.go"><code>server.WithListTTLMs</code> / <code>WithListCacheControl</code> / <code>WithReadResourceCacheControl</code></a></td>
+</tr>
+<tr>
+<td>Wire types</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/core/tool.go"><code>core.ToolsListResult</code></a>, <code>PromptsListResult</code> (<a href="https://github.com/panyam/mcpkit/blob/main/core/prompt.go"><code>core/prompt.go</code></a>), <code>ResourcesListResult</code> / <code>ResourceTemplatesListResult</code> / <code>ResourceResult</code> (<a href="https://github.com/panyam/mcpkit/blob/main/core/resource.go"><code>core/resource.go</code></a>), <code>CacheScope*</code> constants (<a href="https://github.com/panyam/mcpkit/blob/main/core/cache.go"><code>core/cache.go</code></a>)</td>
+</tr>
+<tr>
+<td>Client helpers</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/client/iterators.go"><code>client.ListToolsPage</code></a> and siblings, <a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client.ReadResourceFull</code></a></td>
+</tr>
+<tr>
+<td>Migration guide</td>
+<td><a href="/mcpkit/design/list-ttl-migration/"><code>docs/LIST_TTL_MIGRATION.md</code></a></td>
+</tr>
+<tr>
+<td>Conformance</td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl">SEP-2549 scenarios on panyam/mcpconformance <code>pending</code></a> — superseded by upstream&rsquo;s <code>CachingScenario</code>, covered by <code>just testconf</code></td>
+</tr>
+<tr>
+<td>SEP</td>
+<td><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549">SEP-2549 spec PR</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration notes</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/list-ttl/WALKTHROUGH.md"><code>examples/list-ttl/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-list-ttl-sep-2549--cache-hints-on-list-and-read-results">MCP List TTL (SEP-2549) — Cache Hints on List and Read Results <a class="anchor" href="#mcp-list-ttl-sep-2549--cache-hints-on-list-and-read-results">¶</a></h1>
+<p>Walks through SEP-2549, which adds two cache hints — <code>ttlMs</code> (integer milliseconds) and <code>cacheScope</code> (<code>public</code>/<code>private</code>) — to every paginated list response (tools/list, prompts/list, resources/list, resources/templates/list) and to resources/read. Clients use them to cache the registered surface between <code>notifications/list_changed</code> instead of re-fetching on every poll.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Connect to the list-ttl server</strong> — <code>client.NewClient(...)</code> + <code>Connect()</code>. SEP-2549 is purely a server-side concern; the client doesn&rsquo;t negotiate anything special.</li>
+<li><strong>tools/list — cache hints surface on the list response</strong> — <code>client.ListToolsPage(&quot;&quot;)</code> returns the full envelope including <code>TTLMs *int</code> and <code>CacheScope string</code>.</li>
+<li><strong>prompts/list / resources/list / resources/templates/list</strong> — SEP-2549 applies to every paginated list response. <code>WithListTTLMs</code> / <code>WithListCacheControl</code> configure the values uniformly — there&rsquo;s no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.</li>
+<li><strong>resources/read — cache hints on a read response</strong> — SEP-2549 added resources/read to the cacheable coverage mid-cycle. <code>client.ReadResourceFull</code> returns <code>core.ResourceResult</code>, which carries the same <code>TTLMs</code> / <code>CacheScope</code> fields. A read handler MAY override either per-read; otherwise the <code>WithReadResourceCacheControl</code> server default applies.</li>
+<li><strong>Inspect the raw JSON-RPC envelope</strong> — Bypass the typed helper and decode the raw response body to verify the wire shape — <code>&quot;ttlMs&quot;: 60000</code> as a JSON number and <code>&quot;cacheScope&quot;</code> as a string, sitting alongside <code>&quot;tools&quot;</code> and (when paginated) <code>&quot;nextCursor&quot;</code>.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve, WithListTTLMs(60000))
+
+    Note over Host,Server: Step 1: Connect to the list-ttl server
+    Host-&gt;&gt;Server: POST /mcp — initialize
+    Server--&gt;&gt;Host: serverInfo + capabilities
+
+    Note over Host,Server: Step 2: tools/list — cache hints surface on the list response
+    Host-&gt;&gt;Server: tools/list
+    Server--&gt;&gt;Host: { tools: [...], ttlMs: 60000 }
+
+    Note over Host,Server: Step 3: prompts/list / resources/list / resources/templates/list
+    Host-&gt;&gt;Server: (same cache-hint contract on all four list endpoints)
+
+    Note over Host,Server: Step 4: resources/read — cache hints on a read response
+    Host-&gt;&gt;Server: resources/read file:///fixture
+    Server--&gt;&gt;Host: { contents: [...], ttlMs: 60000 }
+
+    Note over Host,Server: Step 5: Inspect the raw JSON-RPC envelope
+    Host-&gt;&gt;Server: tools/list (raw)
+    Server--&gt;&gt;Host: raw JSON: ttlMs + cacheScope wire-format check
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the MCP server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve         # list-ttl server on :8080 with WithListTTLMs(60000)
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
+</code></pre>
+<h3 id="the-ttlms-cache-hint">The ttlMs cache hint <a class="anchor" href="#the-ttlms-cache-hint">¶</a></h3>
+<p>The <code>ttlMs</code> field is an integer-milliseconds freshness hint. Per the merged SEP-2549 spec it has two client-visible behaviors:</p>
+<ul>
+<li><strong>absent or <code>&quot;ttlMs&quot;: 0</code></strong> — the response is immediately stale; the client MAY re-fetch every time the list is needed. An absent field is the &ldquo;older server / not configured&rdquo; case; clients treat it the same as 0.</li>
+<li><strong><code>&quot;ttlMs&quot;: &lt;positive int&gt;</code></strong> — fresh for N milliseconds from receipt; the client SHOULD NOT re-fetch before it expires unless it receives <code>list_changed</code>.</li>
+</ul>
+<p>Server-side, <code>mcpkit.WithListTTLMs(ms)</code> configures the value uniformly for all four list endpoints. Negative values are treated as &ldquo;unset&rdquo; so the wire field is omitted. mcpkit keeps <code>TTLMs</code> a <code>*int</code>: that lets a server emit an explicit <code>&quot;ttlMs&quot;: 0</code> distinct from omitting the field, even though clients treat the two the same.</p>
+<p>Client-side, <code>mcpkit/client.ListToolsPage(cursor)</code> and its three siblings (<code>ListPromptsPage</code>, <code>ListResourcesPage</code>, <code>ListResourceTemplatesPage</code>) return the typed result envelope so callers can read <code>TTLMs</code> and <code>CacheScope</code> alongside <code>NextCursor</code>. The pre-existing zero-arg <code>ListTools()</code> and the auto-paginating <code>Tools(ctx)</code> iterator drop the envelope — use the <code>*Page</code> helpers when the cache hints matter.</p>
+<h3 id="the-cachescope-hint">The cacheScope hint <a class="anchor" href="#the-cachescope-hint">¶</a></h3>
+<p>The <code>cacheScope</code> field controls who may serve a cached copy of a response, mirroring HTTP <code>Cache-Control: public</code> vs <code>private</code>:</p>
+<ul>
+<li><strong><code>&quot;public&quot;</code></strong> — no caller-specific data; any client, shared gateway, or caching proxy MAY store the response and serve it to any user.</li>
+<li><strong><code>&quot;private&quot;</code></strong> — caller-specific data; a cache MAY be reused only within the same authorization context and MUST NOT be shared across access tokens.</li>
+</ul>
+<p>When <code>cacheScope</code> is absent clients default to <code>&quot;public&quot;</code>, so a server whose response varies per caller MUST set <code>private</code> explicitly. Set both hints in one call with <code>server.WithListCacheControl(ttlMs, scope)</code>.</p>
+<h3 id="step-1-connect-to-the-list-ttl-server">Step 1: Connect to the list-ttl server <a class="anchor" href="#step-1-connect-to-the-list-ttl-server">¶</a></h3>
+<p><code>client.NewClient(...)</code> + <code>Connect()</code>. SEP-2549 is purely a server-side concern; the client doesn&rsquo;t negotiate anything special.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Initialize a session and capture the session id. SEP-2549 negotiates</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># nothing special — a plain initialize is enough.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-2-toolslist--cache-hints-surface-on-the-list-response">Step 2: tools/list — cache hints surface on the list response <a class="anchor" href="#step-2-toolslist--cache-hints-surface-on-the-list-response">¶</a></h3>
+<p><code>client.ListToolsPage(&quot;&quot;)</code> returns the full envelope including <code>TTLMs *int</code> and <code>CacheScope string</code>.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tools/list — the cache hints ride alongside &#34;tools&#34; in the result.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/list&#34;,&#34;params&#34;:{}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;{ttlMs: .result.ttlMs, cacheScope: .result.cacheScope, count: (.result.tools | length)}&#39;</span>
+</span></span></code></pre><h3 id="step-3-promptslist--resourceslist--resourcestemplateslist">Step 3: prompts/list / resources/list / resources/templates/list <a class="anchor" href="#step-3-promptslist--resourceslist--resourcestemplateslist">¶</a></h3>
+<p>SEP-2549 applies to every paginated list response. <code>WithListTTLMs</code> / <code>WithListCacheControl</code> configure the values uniformly — there&rsquo;s no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Same cache-hint contract on the other three list endpoints.</span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">for</span> M in prompts/list resources/list resources/templates/list; <span style="color:#000;font-weight:bold">do</span>
+</span></span><span style="display:flex;"><span>  curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>    -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>    -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:1,\&#34;method\&#34;:\&#34;</span><span style="color:#008080">$M</span><span style="color:#d14">\&#34;,\&#34;params\&#34;:{}}&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>    | jq <span style="color:#d14">&#34;{method: \&#34;</span><span style="color:#008080">$M</span><span style="color:#d14">\&#34;, ttlMs: .result.ttlMs, cacheScope: .result.cacheScope}&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">done</span>
+</span></span></code></pre><h3 id="step-4-resourcesread--cache-hints-on-a-read-response">Step 4: resources/read — cache hints on a read response <a class="anchor" href="#step-4-resourcesread--cache-hints-on-a-read-response">¶</a></h3>
+<p>SEP-2549 added resources/read to the cacheable coverage mid-cycle. <code>client.ReadResourceFull</code> returns <code>core.ResourceResult</code>, which carries the same <code>TTLMs</code> / <code>CacheScope</code> fields. A read handler MAY override either per-read; otherwise the <code>WithReadResourceCacheControl</code> server default applies.</p>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># resources/read carries the same hints (SEP-2549 added it mid-cycle).</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;resources/read&#34;,&#34;params&#34;:{&#34;uri&#34;:&#34;file:///fixture&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;{ttlMs: .result.ttlMs, cacheScope: .result.cacheScope, contents: (.result.contents | length)}&#39;</span>
+</span></span></code></pre><h3 id="step-5-inspect-the-raw-json-rpc-envelope">Step 5: Inspect the raw JSON-RPC envelope <a class="anchor" href="#step-5-inspect-the-raw-json-rpc-envelope">¶</a></h3>
+<p>Bypass the typed helper and decode the raw response body to verify the wire shape — <code>&quot;ttlMs&quot;: 60000</code> as a JSON number and <code>&quot;cacheScope&quot;</code> as a string, sitting alongside <code>&quot;tools&quot;</code> and (when paginated) <code>&quot;nextCursor&quot;</code>.</p>
+<h3 id="caching-pattern">Caching pattern <a class="anchor" href="#caching-pattern">¶</a></h3>
+<p>A typical client integrates the hints like this:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>page, err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ListToolsPage</span>(<span style="color:#d14">&#34;&#34;</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#998;font-style:italic">/* ... */</span> }
+</span></span><span style="display:flex;"><span>cache.Tools = page.Tools
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> page.TTLMs <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> <span style="color:#000;font-weight:bold">&amp;&amp;</span> <span style="color:#000;font-weight:bold">*</span>page.TTLMs &gt; <span style="color:#099">0</span> {
+</span></span><span style="display:flex;"><span>    cache.ToolsExpiresAt = time.<span style="color:#900;font-weight:bold">Now</span>().<span style="color:#900;font-weight:bold">Add</span>(time.<span style="color:#900;font-weight:bold">Duration</span>(<span style="color:#000;font-weight:bold">*</span>page.TTLMs) <span style="color:#000;font-weight:bold">*</span> time.Millisecond)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Subsequent reads check cache.ToolsExpiresAt; on miss, re-fetch.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// On notifications/list_changed, invalidate immediately regardless of TTL.
+</span></span></span></code></pre><p>An absent <code>TTLMs</code> and <code>*page.TTLMs == 0</code> both mean &ldquo;immediately stale — do not rely on this response being fresh&rdquo;. A <code>private</code> cacheScope means the entry MUST NOT be reused across authorization contexts; key any shared cache by access token.</p>
+<h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
+<ul>
+<li>Server options: <code>server.WithListTTLMs</code> / <code>WithListCacheControl</code> / <code>WithReadResourceCacheControl</code> — server/server.go</li>
+<li>Wire types: <code>core.ToolsListResult</code> / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult / ResourceResult — core/{tool,prompt,resource}.go; <code>core.CacheScopePublic</code> / <code>CacheScopePrivate</code> — core/cache.go</li>
+<li>Client typed helpers: <code>client.ListToolsPage</code> / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage / ReadResource — client/iterators.go</li>
+<li>Migration guide: docs/LIST_TTL_MIGRATION.md</li>
+<li>Conformance: SEP-2549 scenarios on panyam/mcpconformance <code>pending</code> (<code>src/scenarios/server/list-ttl/</code>) — originally driven by a dedicated <code>testconf-list-ttl</code> suite, now folded into <code>just testconf</code></li>
+<li>SEP-2549 spec: <a href="https://github.com/modelcontextprotocol/specification/pull/2549">https://github.com/modelcontextprotocol/specification/pull/2549</a></li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/list-ttl/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/list-ttl/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

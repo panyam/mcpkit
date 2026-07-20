@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Host vs session vs HTTP request vs SSE event vs JSON-RPC message — the wire model per transport.">
+    <title>Transport mechanics · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Transport mechanics</h1>
+        
+        <p class="lead">Host vs session vs HTTP request vs SSE event vs JSON-RPC message — the wire model per transport.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/transport-mechanics.md"><code>tutorials/walkthrough/transport-mechanics.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="transport-mechanics-stdio-vs-streamable-http">Transport mechanics: stdio vs. streamable HTTP <a class="anchor" href="#transport-mechanics-stdio-vs-streamable-http">¶</a></h1>
+<p>What the wire actually looks like, how server→client traffic flows on each transport, and how messages get correlated.</p>
+<blockquote>
+<p><strong>Kind:</strong> root · <strong>Prerequisites:</strong> nothing (foundational)<br />
+<strong>Reachable from:</strong> <a href="/mcpkit/concepts/bringup/">bring-up</a> phase 2–3, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a><br />
+<strong>Branches into:</strong> <a href="/mcpkit/concepts/reverse-call/">reverse-call mechanics</a>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/sse-resumption.md">SSE resumption</a> <em>(stub)</em>, batching<br />
+<strong>Spec:</strong> <a href="https://modelcontextprotocol.io/specification/2025-06-18">Base protocol</a> · <a href="https://modelcontextprotocol.io/specification/2025-06-18">Transports</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go"><code>core/jsonrpc.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/server/stdio_transport.go"><code>server/stdio_transport.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/server/streamable_transport.go"><code>server/streamable_transport.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/server/event_ids.go"><code>server/event_ids.go</code></a></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<p><strong>None — this is a foundational page.</strong> A reader needs general familiarity with HTTP, SSE, and JSON-RPC at a vocabulary level. No other pages required.</p>
+<h2 id="what-both-transports-share">What both transports share <a class="anchor" href="#what-both-transports-share">¶</a></h2>
+<p>JSON-RPC 2.0. Three message shapes — request, response, notification — covered in the <a href="#correlation-json-rpc-20-transport-agnostic">Correlation</a> section below. Transports differ only on <strong>framing</strong> and on <strong>how server→client traffic gets back to the client</strong>. The message model is identical.</p>
+<h2 id="sessions-connections-and-tool-calls">Sessions, connections, and tool calls <a class="anchor" href="#sessions-connections-and-tool-calls">¶</a></h2>
+<p>Before getting into wire details, three layers worth keeping distinct:</p>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Scope</th>
+<th>Lifetime owner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Host process</strong></td>
+<td>the user&rsquo;s chat session, possibly hours</td>
+<td>host (e.g. Claude Desktop, an agent runtime)</td>
+</tr>
+<tr>
+<td><strong>MCP session</strong></td>
+<td>one client ↔ one server, established by <code>initialize</code></td>
+<td>host&rsquo;s MCP client + server</td>
+</tr>
+<tr>
+<td><strong>Transport transaction</strong></td>
+<td>a single TCP/HTTP exchange — one POST, one GET, …</td>
+<td>transport library, mostly invisible</td>
+</tr>
+</tbody>
+</table>
+<p>An MCP session is <strong>not per-tool-call.</strong> It&rsquo;s per-server-per-host, kept alive as long as the host wants it. A typical chat:</p>
+<ol>
+<li>Host reads its server config — say Jira, Slack, Glean.</li>
+<li>Host opens <strong>one MCP client per server.</strong> Each runs <a href="/mcpkit/concepts/bringup/"><code>initialize</code></a> and discovers tools via <code>tools/list</code>. Three concurrent sessions, possibly over different transports.</li>
+<li>Host advertises a <strong>flat namespace of tools</strong> (<code>jira_search</code>, <code>slack_post</code>, <code>glean_lookup</code>, …) to the model, knowing per tool which session owns it.</li>
+<li>When the model calls <code>jira_search</code>, the host routes that one call to the Jira session as a single POST (HTTP) or one message on the pipe (stdio). The session is reused for every subsequent call.</li>
+</ol>
+<pre><code class="language-mermaid">graph LR
+    h[host] --&gt; cj[client → Jira]
+    h --&gt; cs[client → Slack]
+    h --&gt; cg[client → Glean]
+    cj --&gt;|MCP session A| j[Jira server]
+    cs --&gt;|MCP session B| s[Slack server]
+    cg --&gt;|MCP session C| g[Glean server]
+</code></pre>
+<p>Sessions over hours are normal — the protocol is built for them. Host policy choices the spec doesn&rsquo;t mandate: eager-vs-lazy connect, pooling, when to tear down. mcpkit (and most hosts) default to &ldquo;open on first use, keep alive for chat duration.&rdquo;</p>
+<blockquote>
+<p>[!NOTE]<br />
+Even though every tool call is its own POST, an HTTP MCP &ldquo;session&rdquo; isn&rsquo;t a stateless request/response API. The <code>Mcp-Session-Id</code> ties many POSTs and the standing-GET back-channel together as one logical conversation. The bring-up cost (auth, <code>initialize</code>, <code>tools/list</code>) is paid once.</p>
+</blockquote>
+<h2 id="stdio">stdio <a class="anchor" href="#stdio">¶</a></h2>
+<pre><code class="language-mermaid">graph LR
+    H[host process] -- spawns --&gt; S[server process]
+    H -- &quot;stdin (newline-delimited JSON)&quot; --&gt; S
+    S -- &quot;stdout (newline-delimited JSON)&quot; --&gt; H
+    S -- &quot;stderr (opaque logs, NOT protocol)&quot; --&gt; H
+</code></pre>
+<ul>
+<li><strong>Bring-up:</strong> fork/exec the configured command. Hook stdin/stdout/stderr. Done.</li>
+<li><strong>Framing:</strong> newline-delimited JSON. Each message is one line, terminated by <code>\n</code>. Both sides treat every newline as a frame boundary.</li>
+<li><strong>Direction:</strong> full-duplex from t=0. No upgrade, no negotiation, no headers, no session id.</li>
+<li><strong>Server→client traffic:</strong> just appears on stdout, interleaved with responses. Notifications, reverse requests, responses — all the same channel.</li>
+<li><strong>stderr:</strong> for the server&rsquo;s host-side logs. Not protocol traffic. The host may surface it to the user or drop it.</li>
+</ul>
+<blockquote>
+<p>[!NOTE]<br />
+&ldquo;Connection up&rdquo; on stdio = &ldquo;process running.&rdquo; There&rsquo;s no handshake at the transport level. The protocol-level <a href="/mcpkit/concepts/bringup/#4--initialize-handshake-transport-agnostic-protocol-level"><code>initialize</code></a> handshake is the only handshake.</p>
+</blockquote>
+<h2 id="streamable-http">Streamable HTTP <a class="anchor" href="#streamable-http">¶</a></h2>
+<p>A single endpoint URL, three HTTP methods used together to simulate full-duplex:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Direction</th>
+<th>Lifetime</th>
+<th>Carries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>POST</strong></td>
+<td>client → server</td>
+<td>short — one operation, then closes (or stays open as SSE for that operation&rsquo;s response stream)</td>
+<td>client-initiated messages: tool calls, prompts, etc. Plus the response (and any messages tied to that operation) on the way back.</td>
+</tr>
+<tr>
+<td><strong>GET</strong></td>
+<td>server → client (one-way)</td>
+<td>long — opened once after <code>initialize</code>, stays up for the session</td>
+<td>unsolicited server→client messages: notifications, server-initiated requests not tied to a pending POST.</td>
+</tr>
+<tr>
+<td><strong>DELETE</strong></td>
+<td>client → server</td>
+<td>one-shot</td>
+<td>explicit session termination (optional — connection close also works).</td>
+</tr>
+</tbody>
+</table>
+<p>The two information directions HTTP-MCP cares about therefore have <em>different</em> mechanisms:</p>
+<ul>
+<li><strong>Client → server</strong>: always a fresh POST, one per operation.</li>
+<li><strong>Server → client</strong>: arrives <strong>either</strong> on the SSE stream of an in-flight POST (response, plus messages tied to that operation), <strong>or</strong> on the standing GET (unsolicited / out-of-band).</li>
+</ul>
+<h3 id="vocabulary-what-counts-as-one-of-what">Vocabulary: what counts as one of what <a class="anchor" href="#vocabulary-what-counts-as-one-of-what">¶</a></h3>
+<p>Streamable HTTP layers four concepts that are easy to conflate. Worth getting distinct before reading the rest of this section:</p>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Identifier</th>
+<th>Multiplicity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MCP session</strong></td>
+<td><code>Mcp-Session-Id</code> (HTTP header)</td>
+<td>exactly 1 between this client and this server, lasts hours</td>
+</tr>
+<tr>
+<td><strong>HTTP request</strong></td>
+<td>the HTTP transaction itself (one POST / GET / DELETE)</td>
+<td>many per session</td>
+</tr>
+<tr>
+<td><strong>SSE event</strong></td>
+<td>SSE <code>id:</code> line in the event-stream body</td>
+<td>many per stream (used for <code>Last-Event-ID</code> replay)</td>
+</tr>
+<tr>
+<td><strong>JSON-RPC message</strong></td>
+<td>JSON-RPC <code>id</code> field (on requests and responses; notifications have none)</td>
+<td>many per session</td>
+</tr>
+</tbody>
+</table>
+<p>How they nest:</p>
+<ul>
+<li>One <strong>session</strong> spans many <strong>HTTP requests</strong> over its lifetime — POSTs for client→server traffic, GETs for the back-channel, an optional terminating DELETE.</li>
+<li>One <strong>HTTP request</strong> carries either a single JSON body (one message, or a batch — an array of messages) <strong>or</strong> a long-lived <strong>SSE event stream</strong> of many events arriving over time (when a POST response upgrades to SSE, or for the standing GET). The stream stays open inside the same one HTTP request; the server emits events as needed; no &ldquo;new HTTP request&rdquo; opens for each event.</li>
+<li>One <strong>SSE event</strong> carries exactly one <strong>JSON-RPC message</strong> in MCP&rsquo;s framing.</li>
+<li>One <strong>JSON-RPC message</strong> is one request, response, or notification — the unit JSON-RPC actually defines.</li>
+</ul>
+<blockquote>
+<p>[!IMPORTANT]<br />
+When the rest of this page says &ldquo;the server sends a message,&rdquo; that&rsquo;s a <strong>JSON-RPC message</strong> (a request, response, or notification) — <em>not</em> an HTTP request. The server doesn&rsquo;t initiate HTTP requests; it sends JSON-RPC messages over channels the client opened. The <code>Mcp-Session-Id</code> lives at the <strong>HTTP-request layer</strong> (one per HTTP request, identifying the session); it does <strong>not</strong> appear inside individual messages. If a server emits N messages over a single SSE stream, they all share the one session id on the HTTP request that opened that stream.</p>
+</blockquote>
+<h3 id="worked-example-a-tool-call-with-progress-plus-an-unrelated-push">Worked example: a tool call with progress, plus an unrelated push <a class="anchor" href="#worked-example-a-tool-call-with-progress-plus-an-unrelated-push">¶</a></h3>
+<p>Concrete scenario to anchor every layer at once.</p>
+<p><strong>Setup — what brought the session to this moment.</strong> Earlier in the chat (could have been seconds or hours ago):</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client
+    participant S as Server
+    Note over C,S: HTTP request #1 — initialize handshake
+    C-&gt;&gt;S: POST · {id:1, method:&quot;initialize&quot;, params:{caps,...}}
+    S--&gt;&gt;C: 200 OK · Mcp-Session-Id: abc123&lt;br/&gt;{id:1, result:{caps, serverInfo,...}}
+    Note over C,S: HTTP request #2 — barrier
+    C-&gt;&gt;S: POST · {method:&quot;notifications/initialized&quot;}
+    S--&gt;&gt;C: 202 Accepted (no body)
+    Note over C,S: HTTP request #3 — discovery
+    C-&gt;&gt;S: POST · {id:2, method:&quot;tools/list&quot;}
+    S--&gt;&gt;C: 200 OK · {id:2, result:{tools:[..., jira_search, ...]}}
+    Note over C,S: HTTP request #4 — open standing back-channel
+    C-&gt;&gt;S: GET · Accept: text/event-stream
+    S--&gt;&gt;C: 200 OK · Content-Type: text/event-stream&lt;br/&gt;(stream stays open)
+</code></pre>
+<p>Three POSTs and one GET so far. The session is live, the tools catalog is cached on the host, and the standing GET (HTTP request #4) is open and mostly idle — listening, with occasional pushes as things change on the server. Time passes. The user types something; the model decides to call <code>jira_search</code>.</p>
+<p><strong>The live moment — HTTP request #5 starts.</strong> Client → Server, one HTTP request (POST), one JSON-RPC message in the body:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">POST /mcp HTTP/1.1                                ← HTTP request #5 (POST tools/call)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Mcp-Session-Id: abc123                            ← session layer
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Accept: application/json, text/event-stream
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{                                                  ← JSON-RPC message (request, client&#39;s id space)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;jsonrpc&#34;: &#34;2.0&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;id&#34;: 7,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;method&#34;: &#34;tools/call&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">  &#34;params&#34;: {&#34;name&#34;: &#34;jira_search&#34;, &#34;arguments&#34;: {...}}
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">}
+</span></span></span></code></pre><p><strong>Server → Client, on the same HTTP request</strong> — response upgrades to SSE; the handler emits two progress notifications, then the final response:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">HTTP</span><span style="color:#000;font-weight:bold">/</span><span style="color:#099">1.1</span> <span style="color:#099">200</span> <span style="color:#900;font-weight:bold">OK                                   ← still HTTP request #5, response side</span>
+</span></span><span style="display:flex;"><span>Content-Type<span style="color:#000;font-weight:bold">:</span> text/event-stream
+</span></span><span style="display:flex;"><span>Mcp-Session-Id<span style="color:#000;font-weight:bold">:</span> abc123
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>id: 1                                              ← SSE event #1 (this stream&#39;s counter)
+</span></span><span style="display:flex;"><span>data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/progress&#34;,&#34;params&#34;:{...}}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>id: 2                                              ← SSE event #2
+</span></span><span style="display:flex;"><span>data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/progress&#34;,&#34;params&#34;:{...}}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>id: 3                                              ← SSE event #3
+</span></span><span style="display:flex;"><span>data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:7,&#34;result&#34;:{...}}     ← JSON-RPC response, id 7 matches request
+</span></span></code></pre><p>Stream closes after event 3. HTTP request #5 is now complete.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>No new HTTP request opens in the next step.</strong> The standing GET (HTTP request #4) was opened back during bring-up and is still running — its response is a long-lived SSE stream that&rsquo;s been open the whole time, mostly idle. What &ldquo;happens&rdquo; next is just another SSE event arriving on that already-open stream.</p>
+<p>One HTTP request, one long-lived response stream, many messages over time. The POST #5 SSE upgrade above worked the same way: three events on one HTTP request, not three HTTP requests.</p>
+</blockquote>
+<p><strong>Meanwhile, on the standing GET (HTTP request #4 — the same GET opened in bring-up).</strong> Its response stream emits another SSE event — a JSON-RPC <code>notifications/resources/list_changed</code> because some resource changed on the server&rsquo;s end:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">                                                   ← HTTP request #4 (the GET, still open)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">id: 42                                             ← SSE event id on this stream&#39;s own counter
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/resources/list_changed&#34;,&#34;params&#34;:{}}
+</span></span></span></code></pre><p>The GET keeps running; the next push will be event 43.</p>
+<p><strong>Reading the layers off this scenario:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Count (session so far)</th>
+<th>Identifiers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MCP session</td>
+<td>1</td>
+<td><code>abc123</code> (on every HTTP request header from #2 onward; #1 is the request that <em>issues</em> it)</td>
+</tr>
+<tr>
+<td>HTTP request</td>
+<td>5 total · 2 active in the live moment</td>
+<td>#1 initialize POST (closed) · #2 initialized POST (closed) · #3 tools/list POST (closed) · #4 standing GET (open) · #5 tool-call POST (open until SSE closes)</td>
+</tr>
+<tr>
+<td>SSE event</td>
+<td>4 in the live moment</td>
+<td>POST #5 stream: 1, 2, 3 · GET #4 stream: 42 — independent counters per stream</td>
+</tr>
+<tr>
+<td>JSON-RPC message</td>
+<td>10 since session start, 5 in the live moment</td>
+<td>Setup: initialize req+resp <code>id=1</code>, initialized notif, tools/list req+resp <code>id=2</code>. Live: tool-call req <code>id=7</code>, 2 progress notifs, tool-call resp <code>id=7</code>, list_changed notif.</td>
+</tr>
+</tbody>
+</table>
+<p>Things to notice:</p>
+<ul>
+<li><strong><code>Mcp-Session-Id: abc123</code></strong> appears on each HTTP request header exactly once, on #2 onward — #1 is the request that <em>issues</em> it. Never inside a JSON-RPC message body.</li>
+<li><strong>JSON-RPC ids restart per direction, not per HTTP request.</strong> The client used <code>id=1</code>, <code>id=2</code> during setup, then jumped to <code>id=7</code> for the tool call (other client-originated work in the gap, or just non-monotonic allocation — the client picks; gaps are fine). Notifications carry no <code>id</code>.</li>
+<li><strong>SSE <code>id:</code> lines</strong> are independent counters per stream. The POST #5 stream&rsquo;s &ldquo;1, 2, 3&rdquo; and the GET #4 stream&rsquo;s &ldquo;42&rdquo; don&rsquo;t relate. They exist solely for <code>Last-Event-ID</code> replay if the stream drops.</li>
+<li><strong>One HTTP request can carry many JSON-RPC messages.</strong> The upgraded POST #5 carried four (the tool-call request that opened it, plus three from the server). Still one HTTP request.</li>
+<li><strong>Five HTTP requests on the same session, and counting.</strong> A real chat might run for hours and accumulate dozens or hundreds — every tool call is its own POST, the standing GET runs through all of it, eventually a DELETE closes the session (or the host just walks away).</li>
+</ul>
+<h3 id="post-clientserver-with-optional-streaming-response">POST: client→server (with optional streaming response) <a class="anchor" href="#post-clientserver-with-optional-streaming-response">¶</a></h3>
+<pre><code>POST /mcp HTTP/1.1
+Host: example.com
+Content-Type: application/json
+Accept: application/json, text/event-stream
+Mcp-Session-Id: abc123                    (after first response, if server uses sessions)
+Authorization: Bearer eyJ...              (if auth required)
+
+{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;tools/call&quot;,&quot;params&quot;:{...}}
+</code></pre>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<code>Accept: application/json, text/event-stream</code> is required — <strong>both</strong> types must be listed. This is the client telling the server &ldquo;I can take either type of response.&rdquo; Servers may reject POSTs that omit one.</p>
+</blockquote>
+<p><strong>One POST per client-initiated operation.</strong> A tool call is one POST containing one JSON-RPC request. Same for <code>prompts/get</code>, <code>resources/read</code>, etc. — one logical operation, one POST, one request body. JSON-RPC batches (an array of messages in one body) are allowed by the spec but uncommon in practice; a typical mcpkit client/server doesn&rsquo;t use them. The session is reused across many such POSTs over its lifetime, but each POST is its own HTTP transaction.</p>
+<p>Server response options:</p>
+<ul>
+<li><strong>Body has only responses/notifications (no requests inside):</strong> <code>202 Accepted</code>, no body.</li>
+<li><strong>Body has at least one request:</strong> server picks one of two response styles —
+<ul>
+<li><code>Content-Type: application/json</code> + JSON-RPC response in the body. Connection closes. Used when no streaming is needed.</li>
+<li><code>Content-Type: text/event-stream</code> + SSE event stream — the &ldquo;upgrade.&rdquo; Used when the server wants to interleave notifications, progress, or server-initiated requests with the eventual response.</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>[!NOTE]<br />
+The &ldquo;upgrade&rdquo; is <strong>not</strong> a WebSocket-style handshake. It&rsquo;s just <em>which Content-Type the server picks on the response</em>. Same endpoint, same POST, server decides per-request.</p>
+</blockquote>
+<p>When the server picks SSE for a POST, the stream stays open until the server has nothing more to send for <em>this request</em>. During that window the server may emit:</p>
+<ul>
+<li>Notifications related to this call (e.g., <code>notifications/progress</code>)</li>
+<li>Server-initiated requests originated by the handler (e.g., <code>sampling/createMessage</code>, <code>elicitation/create</code>)</li>
+<li>The final JSON-RPC response</li>
+</ul>
+<p>Then the stream closes.</p>
+<h3 id="get-long-lived-serverclient-back-channel">GET: long-lived server→client back-channel <a class="anchor" href="#get-long-lived-serverclient-back-channel">¶</a></h3>
+<p>The client opens a long-lived GET against the same endpoint <strong>after <code>initialize</code> has succeeded</strong> (so the client has the session id, if any). It&rsquo;s opened <strong>proactively</strong> — the client doesn&rsquo;t wait for the server to &ldquo;have a message ready&rdquo;; the GET is just the standing channel for any unsolicited server→client traffic that may arrive at any time. <strong>The stream may sit completely idle</strong> (zero events) for long stretches if the server has nothing to push, and that&rsquo;s fine — keep-alive frames or HTTP-level pings keep the TCP alive. It only gets used when the server has something to send that isn&rsquo;t tied to an in-flight POST.</p>
+<pre><code>GET /mcp HTTP/1.1
+Accept: text/event-stream
+Mcp-Session-Id: abc123                    (mandatory if the server issued one)
+Last-Event-ID: 42                         (optional, for resumption after reconnect)
+</code></pre>
+<p>Server returns <code>Content-Type: text/event-stream</code> and keeps it open. Each SSE event has an <code>id:</code> line so the client can resume with <code>Last-Event-ID</code> after a network blip. mcpkit: <a href="https://github.com/panyam/mcpkit/blob/main/server/event_ids.go"><code>server/event_ids.go</code></a>.</p>
+<p><strong>The GET is independent of any POST.</strong> It&rsquo;s typically opened once per session, right after <code>initialize</code>, and stays up regardless of what&rsquo;s happening on the POST side. POSTs come and go; the GET is the steady channel for unsolicited server→client traffic. <em>Q: if a POST upgraded to SSE for session X and that POST&rsquo;s stream then closes, does the GET on the same session close?</em> No — they are separate HTTP transactions over the same logical session. The session ends only on <code>DELETE</code>, on session-id invalidation by the server, or on host shutdown. POSTs ending is just transactions ending.</p>
+<blockquote>
+<p>[!NOTE]<br />
+mcpkit&rsquo;s runtime models this directly. A handler&rsquo;s <code>requestFunc</code>/<code>notifyFunc</code> bound to a POST scope dies when that POST&rsquo;s response is sent. Background goroutines that need to outlive the POST must call <code>core.DetachForBackground(ctx)</code> to attach to the <strong>session-level persistent push</strong> — i.e., the standing GET back-channel. (See <a href="https://github.com/panyam/mcpkit/blob/main/CLAUDE.md">CLAUDE.md → Gotchas → Background goroutines</a>.)</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/sse-resumption.md">SSE resumption</a> <em>(stub)</em>. The <code>Last-Event-ID</code> mechanic, what the server has to remember for replay, and how mcpkit&rsquo;s event store handles in-flight responses across reconnects.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/</code></a> — mcpkit&rsquo;s MCP Events protocol exploration. Treats events as a first-class concept beyond raw SSE event-id replay. Out-of-scope here; visit if you&rsquo;re tracking where the protocol is heading.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+So there are really <strong>two SSE patterns</strong> on streamable HTTP:</p>
+<ol>
+<li><strong>Per-call SSE</strong> — a POST&rsquo;s response upgrades to SSE for that one request&rsquo;s lifetime.</li>
+<li><strong>Standing GET SSE</strong> — long-lived back-channel for unsolicited server-initiated traffic.</li>
+</ol>
+<p>Same wire format, different lifecycles. Different journeys touch different ones.</p>
+</blockquote>
+<h3 id="mcp-session-id"><code>Mcp-Session-Id</code> <a class="anchor" href="#mcp-session-id">¶</a></h3>
+<p><strong>Generated by the server, not the client.</strong> On the first response from the server (typically the response to the client&rsquo;s <code>initialize</code> POST), the server includes an <code>Mcp-Session-Id: &lt;id&gt;</code> header. The client stores it and echoes it on every subsequent POST, GET, and DELETE for the lifetime of the session. So the timeline is:</p>
+<ol>
+<li>Client POSTs <code>initialize</code> (no <code>Mcp-Session-Id</code> yet — there isn&rsquo;t one).</li>
+<li>Server responds; the response carries <code>Mcp-Session-Id: abc123</code>.</li>
+<li>From now on, every POST/GET/DELETE from this client carries <code>Mcp-Session-Id: abc123</code>.</li>
+<li>The standing GET (opened by the client after step 2) also carries it.</li>
+</ol>
+<p>Servers MAY operate stateless (no session id at all) — many won&rsquo;t. Where there&rsquo;s no session id, there&rsquo;s no standing GET back-channel either; server-initiated traffic can only flow during a per-call SSE upgrade.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>The session id is a routing key on the server, not a filter applied by the client.</strong> The server holds per-session state — capabilities, pending-id tables, the open SSE streams for that session — and routes each outbound message to the right stream by session id. The server cannot &ldquo;push to an arbitrary session id&rdquo;; it pushes only to sessions it has established and currently has push channels open for. If a session has no open push stream (no in-flight POST in SSE mode and no standing GET), the server has nowhere to send unsolicited messages and must wait until the client opens one.</p>
+<p><strong>Multiple GETs on the same session?</strong> The spec allows it but requires the server to deliver each message on <strong>exactly one</strong> stream — no fan-out, no duplication. Most implementations (mcpkit included) expect a single standing GET per session and treat extras as redundant.</p>
+<p><strong>GETs on different session ids?</strong> Those are different sessions entirely. Each has its own push channel; messages for session X go only to session X&rsquo;s GET. There&rsquo;s no cross-session pushing — sessions are isolated conversations even on the same server process.</p>
+</blockquote>
+<blockquote>
+<p>[!CAUTION]<br />
+<strong>Target-incompatible (replacement):</strong> the <a href="https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future/">Dec-2025 transport WG post</a> moves toward a stateless transport with sessions elevated to the data layer. Transport-level <code>Mcp-Session-Id</code> is on the chopping block. Code that pins behavior to the header will need to migrate.</p>
+</blockquote>
+<h3 id="why-http-needs-all-this-scaffolding-and-stdio-doesnt">Why HTTP needs all this scaffolding and stdio doesn&rsquo;t <a class="anchor" href="#why-http-needs-all-this-scaffolding-and-stdio-doesnt">¶</a></h3>
+<p>HTTP is request/response by nature; full-duplex isn&rsquo;t free. Three pieces — POST, GET, <code>Mcp-Session-Id</code> — work together to recover what stdio gets for free from a bidirectional pipe.</p>
+<h2 id="correlation-json-rpc-20-transport-agnostic">Correlation: JSON-RPC 2.0 (transport-agnostic) <a class="anchor" href="#correlation-json-rpc-20-transport-agnostic">¶</a></h2>
+<h3 id="layering">Layering <a class="anchor" href="#layering">¶</a></h3>
+<p>MCP layers cleanly:</p>
+<pre><code>+----------------------------+
+| MCP semantics              |   tools, prompts, resources, sampling, …
++----------------------------+
+| JSON-RPC 2.0 message model |   request / response / notification, id correlation
++----------------------------+
+| Transport framing          |   newline-delimited JSON (stdio) | HTTP body / SSE event (HTTP)
++----------------------------+
+| Transport bytes            |   pipe (stdio) | TCP+TLS (HTTP)
++----------------------------+
+</code></pre>
+<p>The <strong>JSON-RPC payload format is transport-agnostic.</strong> Both stdio and streamable HTTP carry the same JSON-RPC payloads — they only differ on framing and on how the receiver gets bytes off the channel. JSON-RPC could in principle be replaced (Connect, gRPC, MessagePack, CBOR, …) without changing the MCP semantics on top — but that would be a <em>spec-level</em> change, not a transport choice. As of the <a href="https://modelcontextprotocol.io/specification/2025-06-18">2025-06-18 spec</a>, JSON-RPC 2.0 is normative.</p>
+<blockquote>
+<p>[!NOTE]<br />
+gRPC specifically would be an awkward fit — it has a different model (strongly-typed services, streaming as first-class, no real &ldquo;notification&rdquo;). Connect (Buf&rsquo;s HTTP/JSON-friendly cousin) maps more naturally. None are on the spec roadmap today.</p>
+</blockquote>
+<h3 id="wire-shapes">Wire shapes <a class="anchor" href="#wire-shapes">¶</a></h3>
+<p>Three:</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Has <code>id</code>?</th>
+<th>Has <code>method</code>?</th>
+<th>Has <code>result</code>/<code>error</code>?</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Request</td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+<td>I expect a response with the same <code>id</code></td>
+</tr>
+<tr>
+<td>Response</td>
+<td>yes</td>
+<td>no</td>
+<td>yes (exactly one of)</td>
+<td>Reply to a request with that <code>id</code></td>
+</tr>
+<tr>
+<td>Notification</td>
+<td>no</td>
+<td>yes</td>
+<td>no</td>
+<td>Fire-and-forget</td>
+</tr>
+</tbody>
+</table>
+<p>(Plus batches — a JSON array of any of the above. mcpkit handles them.)</p>
+<h3 id="per-direction-id-space">Per-direction ID space <a class="anchor" href="#per-direction-id-space">¶</a></h3>
+<p>Each side allocates IDs <strong>independently</strong>. Client&rsquo;s <code>id=5</code> and server&rsquo;s <code>id=5</code> are different things — they belong to different pending-request tables.</p>
+<p>When a message arrives, the receiver dispatches by shape:</p>
+<ul>
+<li>Has <code>id</code> + <code>result</code>/<code>error</code> → response to a request <em>I</em> sent → look up my pending table by <code>id</code>, resolve the waiting caller.</li>
+<li>Has <code>id</code> + <code>method</code> → request <em>from the peer</em> → dispatch to a handler, eventually send a response with the same <code>id</code>.</li>
+<li>No <code>id</code> + <code>method</code> → notification → dispatch to a handler, no response.</li>
+</ul>
+<p>mcpkit: type definitions in <a href="https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go"><code>core/jsonrpc.go</code></a>; correlation tables in <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a> and <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a>.</p>
+<h3 id="reverse-call-origination">Reverse-call origination <a class="anchor" href="#reverse-call-origination">¶</a></h3>
+<p>When a server originates a request to a client (e.g., <code>sampling/createMessage</code>), the request uses a <strong>new id from the server&rsquo;s id space</strong> — not a child or extension of the client&rsquo;s forward-request id.</p>
+<p>The spec requires server-initiated requests to be <em>&ldquo;in association with an originating client request&rdquo;</em> — but <strong>this association is not on the wire.</strong> There is no <code>parent</code> field in JSON-RPC. The wire just sees a fresh request from the server with a new id. So how is the constraint enforced?</p>
+<p><strong>Via the server&rsquo;s handler context, not the pending-id table.</strong> When the server dispatches a forward request, it builds a <em>handler context</em> that knows &ldquo;I am inside the handling of forward request id=N.&rdquo; A reverse call is only originatable through this context — and you can only get a context inside a forward call. So a reverse request that hits the wire is <em>necessarily</em> tied to a forward call by construction, even though nothing on the wire says so.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant CC as client caller
+    participant CL as client mrtr
+    participant SV as server mrtr
+    participant HC as handler context
+    participant H as handler
+
+    CC-&gt;&gt;CL: Call(&quot;tools/call&quot;, args)
+    CL-&gt;&gt;SV: { id: 10, method: &quot;tools/call&quot;, params }
+    Note over CL: client.pending[10]&lt;br/&gt;= caller continuation
+    SV-&gt;&gt;HC: build context bound to fwd-id=10
+    HC-&gt;&gt;H: dispatch handler
+    H-&gt;&gt;HC: originate reverse call
+    Note over HC: alloc server id=42&lt;br/&gt;record (42 originated-by 10)
+    HC-&gt;&gt;SV: send { id: 42, method: &quot;sampling/createMessage&quot;, params }
+    SV-&gt;&gt;CL: same on the wire (no parent field)
+    Note over SV: server.pending[42]&lt;br/&gt;= handler-resume continuation
+    CL-&gt;&gt;CC: dispatch sampling locally
+    CC-&gt;&gt;CL: { id: 42, result }
+    CL-&gt;&gt;SV: same on the wire
+    SV-&gt;&gt;HC: pending[42] resolves, resume handler
+    HC-&gt;&gt;H: return reverse-call result
+    H-&gt;&gt;HC: tool result
+    HC-&gt;&gt;SV: { id: 10, result }
+    SV-&gt;&gt;CL: forward response
+    CL-&gt;&gt;CC: resolve the original Call
+</code></pre>
+<p>So there are <strong>two distinct things at play</strong>:</p>
+<ol>
+<li><strong>The pending-id table</strong> (one per direction) maps <code>id → continuation</code>. It&rsquo;s flat — no tree structure, no parent links visible to it. Its job is to resolve incoming responses to the right waiter.</li>
+<li><strong>The handler context</strong> (server-side, built per forward request) carries &ldquo;what forward call am I inside of?&rdquo; It&rsquo;s how reverse calls get originated, and it carries enough state to propagate cancellation: if forward id=10 is cancelled, the context can find and cancel its outstanding reverse calls (e.g., id=42) by the back-pointer it recorded when originating them.</li>
+</ol>
+<p>mcpkit&rsquo;s <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> is where both concerns meet — it&rsquo;s the handle through which user-written handlers issue reverse calls, and it&rsquo;s where the forward-id-to-reverse-id relationship is recorded for cancellation propagation. Nothing of this leaks onto the wire.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+A reverse call attempted <em>outside</em> a handler context — e.g., from a background goroutine that has escaped its forward-request scope — is a programming error and a spec violation if it escapes onto the wire. mcpkit&rsquo;s <code>core.DetachForBackground(ctx)</code> is the supported way to keep using the session-level push channel from background work; see the GET section above.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a>. Walks <code>tools/call → elicitation/create</code> end-to-end, with code references to <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> and the mrtr origination path.</p>
+</blockquote>
+<h3 id="order-of-arrival--order-of-sending">Order of arrival ≠ order of sending <a class="anchor" href="#order-of-arrival--order-of-sending">¶</a></h3>
+<p>On a full-duplex transport (stdio, or SSE-streamed HTTP), either side may have many concurrent outstanding requests. Responses can arrive in any order. The pending-id table is what makes correlation work; FIFO assumptions will bite.</p>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<p>After reading this page, downstream pages can assume:</p>
+<ul>
+<li>You distinguish <strong>host process / MCP session / transport transaction</strong> as three different lifetimes. A session is per-server-per-host, may live for hours, and is reused across many tool calls.</li>
+<li>You can read a JSON-RPC message off the wire for either transport and tell whether it&rsquo;s a request, response, or notification.</li>
+<li>You understand the <strong>layering</strong>: MCP semantics &gt; JSON-RPC message model &gt; transport framing &gt; transport bytes. Payload format is transport-agnostic.</li>
+<li>You distinguish <strong>MCP session vs. HTTP request vs. SSE event vs. JSON-RPC message</strong> and know how they nest. &ldquo;Message&rdquo; means JSON-RPC message; HTTP requests are the transport units that carry them.</li>
+<li>You know how server→client messages reach the client on each transport: always-open pipe (stdio), per-call SSE upgrade (HTTP POST), or standing GET SSE (HTTP back-channel — independent of any POST, opened proactively after <code>initialize</code>, may sit idle).</li>
+<li>You know <code>Mcp-Session-Id</code> is server-issued (returned on the response to <code>initialize</code>), mandatory on all subsequent client requests if issued, and acts as a <strong>routing key on the server</strong> — not a filter on the client. Sessions are isolated; servers can&rsquo;t push to sessions they don&rsquo;t have state for.</li>
+<li>You know IDs are per-direction and that the pending-request table is what makes correlation work — flat, no parent links.</li>
+<li>You know reverse-call origination is gated by <strong>handler context</strong> (not the pending-id table, not anything on the wire). The handler context records the forward→reverse association for cancellation propagation.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="/mcpkit/concepts/notifications/">Notifications</a></strong> — the session&rsquo;s state-change channel; uses the no-id JSON-RPC shape from this page, flows over the channels established here.</li>
+<li><strong><a href="/mcpkit/concepts/request-anatomy/">Per-request anatomy</a></strong> — uses the wire model and correlation tables from this page to walk the dispatch journey.</li>
+<li><strong><a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a></strong> <em>(stub)</em> — concretizes the parent-handler-context constraint with a real <code>tools/call → elicitation/create</code> example.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/sse-resumption.md">SSE resumption</a></strong> <em>(stub, leaf)</em> — <code>Last-Event-ID</code> replay, the server&rsquo;s event store, in-flight response recovery.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/</code></a></strong> <em>(branch, target-shape)</em> — mcpkit&rsquo;s exploration of events as a first-class concept beyond raw SSE event-id replay.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

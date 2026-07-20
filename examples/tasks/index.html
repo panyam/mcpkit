@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Async tool lifecycle: sync calls, optional async, polling, progress notifications, cancellation.">
+    <title>Tasks (v1) · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Tasks (v1)</h1>
+        
+        <p class="lead">Async tool lifecycle: sync calls, optional async, polling, progress notifications, cancellation.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/README.md"><code>examples/tasks/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="tasks-example-server">Tasks Example Server <a class="anchor" href="#tasks-example-server">¶</a></h1>
+<blockquote>
+<p><strong>Stable (frozen)</strong> — MCP Tasks v1 (spec 2025-11-25). Superseded by <a href="/mcpkit/examples/tasks-v2/">tasks-v2</a> (<a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663">SEP-2663</a>) for new work.</p>
+</blockquote>
+<blockquote>
+<p><strong>SEP-2577 deprecation note</strong>: this example demonstrates <code>TaskContext.TaskSample(...)</code>, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See <a href="/mcpkit/design/sep-2577-deprecations/"><code>docs/SEP_2577_DEPRECATIONS.md</code></a> for the migration story.</p>
+</blockquote>
+<p>Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.</p>
+<blockquote>
+<p><strong>🚀 <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/WALKTHROUGH.md">Skip to the guided walkthrough →</a></strong> — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with <code>just serve</code> + <code>just demo</code>.</p>
+</blockquote>
+<h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
+<ul>
+<li>The three task-support modes on <code>core.ToolDef.Execution</code>: sync-only (no Execution), optional (client picks sync vs async), required (must be async).</li>
+<li>Task lifecycle states (<code>queued</code> → <code>running</code> → <code>completed</code> / <code>failed</code> / <code>cancelled</code>) and the polling pattern via <code>tasks/get</code>.</li>
+<li>Progress notifications streamed over the GET SSE channel while a task runs.</li>
+<li>Elicitation from a background task (<code>TaskContext.TaskElicit</code>) — pausing a task to ask the user a question.</li>
+<li>Sampling from a background task (<code>TaskContext.TaskSample</code>) — pausing a task to query an LLM.</li>
+<li>Cancellation propagation via <code>tasks/cancel</code>, including verifying the work actually stops.</li>
+<li>TTL enforcement (tasks expire) and session isolation (cross-session task access denied).</li>
+<li>The external-proxy pattern via <code>server.TaskCallbacks</code> — per-tool <code>GetTask</code> / <code>GetResult</code> overrides for tasks living in an external system (Step Functions, etc.).</li>
+</ul>
+<h2 id="mcpkit-features-used">MCPKit Features Used <a class="anchor" href="#mcpkit-features-used">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Feature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core</td>
+<td><code>core.ToolDef.Execution</code>, <code>core.TaskSupportOptional</code>, <code>core.TaskSupportRequired</code>, <code>core.DetachForBackground</code></td>
+</tr>
+<tr>
+<td>Server</td>
+<td><code>server.RegisterTasks</code>, <code>server.TasksConfig</code>, <code>server.TaskContext</code>, <code>server.GetTaskContext</code></td>
+</tr>
+<tr>
+<td>Side-channel</td>
+<td><code>TaskContext.TaskElicit</code> (elicitation from background task), <code>TaskContext.TaskSample</code> (sampling from background task)</td>
+</tr>
+<tr>
+<td>Callbacks</td>
+<td><code>server.TaskCallbacks</code> (per-tool <code>GetTask</code>/<code>GetResult</code> overrides for external proxy pattern)</td>
+</tr>
+<tr>
+<td>MCP methods</td>
+<td><code>tasks/get</code>, <code>tasks/result</code>, <code>tasks/cancel</code>, <code>tasks/list</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="setup">Setup <a class="anchor" href="#setup">¶</a></h2>
+<h3 id="go-server-mcpkit">Go server (mcpkit) <a class="anchor" href="#go-server-mcpkit">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> examples/tasks
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">PORT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#099">8080</span>
+</span></span><span style="display:flex;"><span>go run . -addr :<span style="color:#008080">$PORT</span>
+</span></span></code></pre><h3 id="ts-sdk-reference-server-for-comparison">TS SDK reference server (for comparison) <a class="anchor" href="#ts-sdk-reference-server-for-comparison">¶</a></h3>
+<p>A TypeScript reference server with the same 6 tools is included for side-by-side wire format comparison. It imports the official <a href="https://github.com/modelcontextprotocol/typescript-sdk">MCP TypeScript SDK</a> as a dependency:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> examples/tasks
+</span></span><span style="display:flex;"><span>npm install              <span style="color:#998;font-style:italic"># first time only</span>
+</span></span><span style="display:flex;"><span>node ts-reference-server.mjs   <span style="color:#998;font-style:italic"># default port 8080</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">PORT</span><span style="color:#000;font-weight:bold">=</span><span style="color:#099">8090</span> node ts-reference-server.mjs   <span style="color:#998;font-style:italic"># custom port</span>
+</span></span></code></pre><p>All curl exercises below produce identical responses from both servers (except task IDs and timestamps). Use <code>test-side-by-side.sh</code> for automated comparison.</p>
+<h2 id="connect-a-host">Connect a Host <a class="anchor" href="#connect-a-host">¶</a></h2>
+<p>MCPJam, VS Code, or any MCP client: <code>http://localhost:$PORT/mcp</code></p>
+<h2 id="tools">Tools <a class="anchor" href="#tools">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Task Support</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>greet</code></td>
+<td>forbidden (absent)</td>
+<td>Sync-only. Returns greeting immediately.</td>
+</tr>
+<tr>
+<td><code>slow_compute</code></td>
+<td>optional</td>
+<td>Sleeps N seconds. Sync without hint, async with hint.</td>
+</tr>
+<tr>
+<td><code>failing_job</code></td>
+<td>required</td>
+<td>Always fails after 1s. Must be called as a task.</td>
+</tr>
+<tr>
+<td><code>confirm_delete</code></td>
+<td>required + elicitation</td>
+<td>Asks user for confirmation before deleting.</td>
+</tr>
+<tr>
+<td><code>write_haiku</code></td>
+<td>required + sampling</td>
+<td>Asks the LLM to write a haiku on a topic.</td>
+</tr>
+<tr>
+<td><code>external_job</code></td>
+<td>required + TaskCallbacks</td>
+<td>Simulates proxying an external job system.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="important-host-support-required">Important: Host Support Required <a class="anchor" href="#important-host-support-required">¶</a></h2>
+<p>MCP Tasks is an experimental protocol extension (spec 2025-11-25). <strong>Most MCP hosts don&rsquo;t support it yet</strong> — they will call tools synchronously and ignore the task hints.</p>
+<p>Until your host supports tasks, use the curl commands in each exercise below, or run the automated walkthrough:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Start a server (Go or TS)</span>
+</span></span><span style="display:flex;"><span>go run . -addr :8080 &amp;
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># OR: node ts-reference-server.mjs &amp;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Run all exercises automatically</span>
+</span></span><span style="display:flex;"><span>bash run-exercises.sh <span style="color:#099">8080</span>
+</span></span></code></pre><p>The script runs exercises 1–9, prints each command and its result with sorted JSON keys for easy comparison between Go and TS servers.</p>
+<hr />
+<h2 id="curl-prerequisites">Curl Prerequisites <a class="anchor" href="#curl-prerequisites">¶</a></h2>
+<p>All curl commands below use <code>$SESSION_ID</code> and <code>$TASK_ID</code> env vars so you can copy-paste without manual replacement. Requires <a href="https://jqlang.github.io/jq/"><code>jq</code></a>.</p>
+<p>The server may return SSE (<code>data: {...}</code>) or plain JSON depending on the method. The helper function below handles both formats:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Helper: extract JSON from SSE or plain response, pretty-print, and save to /tmp/mcp-body.json</span>
+</span></span><span style="display:flex;"><span>mcp<span style="color:#000;font-weight:bold">()</span> <span style="color:#000;font-weight:bold">{</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#0086b3">local</span> raw
+</span></span><span style="display:flex;"><span>  <span style="color:#008080">raw</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s <span style="color:#d14">&#34;</span><span style="color:#008080">$@</span><span style="color:#d14">&#34;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#0086b3">local</span> json
+</span></span><span style="display:flex;"><span>  <span style="color:#008080">json</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$raw</span><span style="color:#d14">&#34;</span> | grep <span style="color:#d14">&#39;^data: &#39;</span> | tail -1 | sed <span style="color:#d14">&#39;s/^data: //&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#000;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">[</span> -z <span style="color:#d14">&#34;</span><span style="color:#008080">$json</span><span style="color:#d14">&#34;</span> <span style="color:#000;font-weight:bold">]</span>; <span style="color:#000;font-weight:bold">then</span> <span style="color:#008080">json</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;</span><span style="color:#008080">$raw</span><span style="color:#d14">&#34;</span>; <span style="color:#000;font-weight:bold">fi</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$json</span><span style="color:#d14">&#34;</span> | tee /tmp/mcp-body.json | jq .
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">}</span>
+</span></span></code></pre><p><strong>Note:</strong> <code>confirm_delete</code> and <code>write_haiku</code> cannot be fully tested with curl because they use the side-channel pattern — the server sends elicitation/sampling requests back to the client during <code>tasks/result</code>, which requires a client that can handle server-initiated requests. Use the Go test suite (<code>go test ./...</code>) for those.</p>
+<p>Initialize a session before running any curl exercises:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Step 1: Initialize — prints response and captures SESSION_ID</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Note: Go server returns plain JSON, TS server returns SSE. This handles both.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">RAW</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -D /tmp/mcp-headers.txt http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-03-26&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;test&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">JSON</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$RAW</span><span style="color:#d14">&#34;</span> | grep <span style="color:#d14">&#39;^data: &#39;</span> | tail -1 | sed <span style="color:#d14">&#39;s/^data: //&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">[</span> -z <span style="color:#d14">&#34;</span><span style="color:#008080">$JSON</span><span style="color:#d14">&#34;</span> <span style="color:#000;font-weight:bold">]</span>; <span style="color:#000;font-weight:bold">then</span> <span style="color:#008080">JSON</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;</span><span style="color:#008080">$RAW</span><span style="color:#d14">&#34;</span>; <span style="color:#000;font-weight:bold">fi</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$JSON</span><span style="color:#d14">&#34;</span> | jq .
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">SESSION_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>grep -i mcp-session-id /tmp/mcp-headers.txt | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SESSION_ID=</span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Step 2: Send initialized notification</span>
+</span></span><span style="display:flex;"><span>curl -s http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;,&#34;params&#34;:{}}&#39;</span>
+</span></span></code></pre><hr />
+<h2 id="phase-1-core-task-lifecycle-">Phase 1: Core Task Lifecycle ✅ <a class="anchor" href="#phase-1-core-task-lifecycle-">¶</a></h2>
+<p>These exercises work today. Each shows the <strong>prompt</strong> (for MCP hosts) and the <strong>curl</strong> equivalent.</p>
+<h3 id="1-sync-tool-call">1. Sync tool call <a class="anchor" href="#1-sync-tool-call">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Greet World</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;greet&#34;,&#34;arguments&#34;:{&#34;name&#34;:&#34;World&#34;}}}&#39;</span>
+</span></span></code></pre><p>Returns immediately: <code>Hello, World!</code></p>
+<h3 id="2-async-computation">2. Async computation <a class="anchor" href="#2-async-computation">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Run a slow computation for 5 seconds labeled &quot;pi&quot;</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:3,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:5,&#34;label&#34;:&#34;pi&#34;},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><p>Returns a task ID immediately. The computation runs in the background.</p>
+<h3 id="3-check-on-a-running-task">3. Check on a running task <a class="anchor" href="#3-check-on-a-running-task">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>What's the status of my computation?</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:4,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p>The host polls <code>tasks/get</code> — status transitions from <code>working</code> to <code>completed</code>.</p>
+<h3 id="4-failing-job">4. Failing job <a class="anchor" href="#4-failing-job">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Run the failing job</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:5,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;failing_job&#34;,&#34;arguments&#34;:{},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Wait 2s, then check status</span>
+</span></span><span style="display:flex;"><span>sleep <span style="color:#099">2</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:6,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p>This tool <em>requires</em> task invocation. The job starts, then fails after 1 second — status transitions to <code>failed</code>.</p>
+<h3 id="5-elicitation-from-a-task-confirm-delete">5. Elicitation from a task (confirm_delete) <a class="anchor" href="#5-elicitation-from-a-task-confirm-delete">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Delete the file important.txt</code></td>
+<td>See below (partial — curl can&rsquo;t respond to elicitation)</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Create the task</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:10,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;confirm_delete&#34;,&#34;arguments&#34;:{&#34;filename&#34;:&#34;important.txt&#34;},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Poll status — should show &#34;input_required&#34; (task is waiting for your confirmation)</span>
+</span></span><span style="display:flex;"><span>sleep <span style="color:#099">1</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:11,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p>The task transitions to <code>input_required</code> while waiting for the elicitation response. With curl, the task stays stuck here — the server sent an elicitation request via SSE but curl can&rsquo;t respond to it.</p>
+<p><strong>To complete the flow</strong>, use the Go test suite which has a mock elicitation handler:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> server <span style="color:#000;font-weight:bold">&amp;&amp;</span> go <span style="color:#0086b3">test</span> -run TestTaskElicitE2E -v
+</span></span></code></pre><h3 id="6-sampling-from-a-task-write-haiku">6. Sampling from a task (write_haiku) <a class="anchor" href="#6-sampling-from-a-task-write-haiku">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Write a haiku about the ocean</code></td>
+<td>See below (partial — curl can&rsquo;t respond to sampling)</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Create the task</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:12,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;write_haiku&#34;,&#34;arguments&#34;:{&#34;topic&#34;:&#34;ocean&#34;},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Poll status — should show &#34;input_required&#34; (task is waiting for LLM response)</span>
+</span></span><span style="display:flex;"><span>sleep <span style="color:#099">1</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:13,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p>Same as confirm_delete — the task transitions to <code>input_required</code> while the server waits for a sampling response. Curl can&rsquo;t provide one.</p>
+<p><strong>To complete the flow:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> server <span style="color:#000;font-weight:bold">&amp;&amp;</span> go <span style="color:#0086b3">test</span> -run TestTaskSampleE2E -v
+</span></span></code></pre><h3 id="7-cancel-a-running-task">7. Cancel a running task <a class="anchor" href="#7-cancel-a-running-task">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Run a slow computation for 30 seconds, then cancel it</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Start a long computation</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:7,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:30,&#34;label&#34;:&#34;long&#34;},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Cancel it</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:8,\&#34;method\&#34;:\&#34;tasks/cancel\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p>Start a long computation, then cancel before it finishes. Status transitions to <code>cancelled</code>.</p>
+<h3 id="8-list-all-tasks">8. List all tasks <a class="anchor" href="#8-list-all-tasks">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>List all tasks</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:9,&#34;method&#34;:&#34;tasks/list&#34;,&#34;params&#34;:{}}&#39;</span>
+</span></span></code></pre><p>Shows all tasks with their current status.</p>
+<hr />
+<h2 id="phase-2-ttl-enforcement-">Phase 2: TTL Enforcement ✅ <a class="anchor" href="#phase-2-ttl-enforcement-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Implemented. Tasks are automatically cleaned up after TTL expires.</p>
+</blockquote>
+<h3 id="9-task-expires-after-ttl">9. Task expires after TTL <a class="anchor" href="#9-task-expires-after-ttl">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(curl-only — needs custom TTL param)</em></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Create a task with short TTL (5 seconds)</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:10,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:2,&#34;label&#34;:&#34;short&#34;},&#34;task&#34;:{&#34;ttl&#34;:5000}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Wait for TTL to expire</span>
+</span></span><span style="display:flex;"><span>sleep <span style="color:#099">7</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Poll — should be gone</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:11,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p><strong>Expected:</strong> Task not found — it was cleaned up after TTL expired.<br />
+<strong>Behavior:</strong> Timer resets on result storage and cancellation, so the TTL window starts fresh from the last state change.</p>
+<hr />
+<h2 id="phase-3-session-isolation-">Phase 3: Session Isolation ✅ <a class="anchor" href="#phase-3-session-isolation-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Implemented. Tasks are scoped to the session that created them.</p>
+</blockquote>
+<h3 id="10-cross-session-task-access-denied">10. Cross-session task access denied <a class="anchor" href="#10-cross-session-task-access-denied">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(curl-only — needs two sessions)</em></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Initialize session A</span>
+</span></span><span style="display:flex;"><span>curl -s -D /tmp/mcp-headers-a.txt http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-03-26&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;session-a&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | grep <span style="color:#d14">&#39;^data: &#39;</span> | sed <span style="color:#d14">&#39;s/^data: //&#39;</span> | jq .
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">SESSION_A</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>grep -i mcp-session-id /tmp/mcp-headers-a.txt | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SESSION_A=</span><span style="color:#008080">$SESSION_A</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl -s http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_A</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;,&#34;params&#34;:{}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Create a task in session A</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_A</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:30,&#34;label&#34;:&#34;secret&#34;},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Initialize session B</span>
+</span></span><span style="display:flex;"><span>curl -s -D /tmp/mcp-headers-b.txt http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-03-26&#34;,&#34;capabilities&#34;:{},&#34;clientInfo&#34;:{&#34;name&#34;:&#34;session-b&#34;,&#34;version&#34;:&#34;1.0&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | grep <span style="color:#d14">&#39;^data: &#39;</span> | sed <span style="color:#d14">&#39;s/^data: //&#39;</span> | jq .
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">SESSION_B</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>grep -i mcp-session-id /tmp/mcp-headers-b.txt | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SESSION_B=</span><span style="color:#008080">$SESSION_B</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>curl -s http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_B</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;,&#34;params&#34;:{}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Try to access session A&#39;s task from session B</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_B</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:3,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p><strong>Expected:</strong> Task not found — session B can&rsquo;t see session A&rsquo;s tasks.<br />
+<strong>Behavior:</strong> Empty sessionID (backward compat) allows access to all tasks.</p>
+<hr />
+<h2 id="phase-4-store-api-alignment-">Phase 4: Store API Alignment ✅ <a class="anchor" href="#phase-4-store-api-alignment-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Implemented. Atomic <code>StoreTerminalResult</code> with terminal guard.</p>
+</blockquote>
+<h3 id="11-double-complete-is-rejected">11. Double-complete is rejected <a class="anchor" href="#11-double-complete-is-rejected">¶</a></h3>
+<p>Complete a task, then try to store another result (internal API — no curl equivalent).</p>
+<p><strong>Expected:</strong> Error — can&rsquo;t store result for terminal task. Second <code>StoreTerminalResult</code> is rejected.<br />
+<strong>Behavior:</strong> Terminal guard prevents cancel→completed race and double-completion.</p>
+<hr />
+<h2 id="phase-5-cancellation-propagation-">Phase 5: Cancellation Propagation ✅ <a class="anchor" href="#phase-5-cancellation-propagation-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Implemented. Cancel stops the background goroutine via context cancellation.</p>
+</blockquote>
+<h3 id="12-cancel-actually-stops-the-work">12. Cancel actually stops the work <a class="anchor" href="#12-cancel-actually-stops-the-work">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Run a slow computation for 60 seconds, then cancel it</code></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Start a 60-second computation</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:20,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:60,&#34;label&#34;:&#34;long&#34;},&#34;task&#34;:{}}}&#39;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">export</span> <span style="color:#008080">TASK_ID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>jq -r <span style="color:#d14">&#39;.result.task.taskId&#39;</span> /tmp/mcp-body.json<span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TASK_ID=</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Cancel it</span>
+</span></span><span style="display:flex;"><span>mcp http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:21,\&#34;method\&#34;:\&#34;tasks/cancel\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
+</span></span></code></pre><p><strong>Expected:</strong> Server log shows <code>[slow_compute] cancelled &quot;long&quot; at N/60</code>. Goroutine exits immediately.<br />
+<strong>Behavior:</strong> <code>context.WithCancel</code> propagates to the tool handler&rsquo;s <code>ctx.Done()</code> channel.</p>
+<hr />
+<h2 id="phase-6-status-notifications-">Phase 6: Status Notifications ✅ <a class="anchor" href="#phase-6-status-notifications-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Implemented. Status notifications sent via cancel handler and tasks/result handler.</p>
+</blockquote>
+<h3 id="13-receive-status-change-notifications">13. Receive status change notifications <a class="anchor" href="#13-receive-status-change-notifications">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(host auto-receives notifications)</em></td>
+<td>See below</td>
+</tr>
+</tbody>
+</table>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1: open GET SSE stream</span>
+</span></span><span style="display:flex;"><span>curl -N http://localhost:<span style="color:#008080">$PORT</span>/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SESSION_ID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: text/event-stream&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 2: create a task (same as exercise 2)</span>
+</span></span></code></pre><p><strong>Expected (after Phase 6):</strong> The GET SSE stream receives <code>notifications/tasks/status</code> events as the task transitions: <code>working</code> → <code>completed</code>.<br />
+<strong>Today:</strong> No notifications. The SSE stream is silent. Clients must poll <code>tasks/get</code>.</p>
+<hr />
+<h2 id="phase-7-progress-notifications-">Phase 7: Progress Notifications ✅ <a class="anchor" href="#phase-7-progress-notifications-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Implemented. Progress from background tasks uses client&rsquo;s <code>_meta.progressToken</code>.</p>
+</blockquote>
+<h3 id="14-progress-notifications-flow-through-tasks">14. Progress notifications flow through tasks <a class="anchor" href="#14-progress-notifications-flow-through-tasks">¶</a></h3>
+<p>Create a task and send progress notifications from the tool handler.</p>
+<p><strong>Expected (after Phase 7):</strong> Progress notifications from the tool handler are associated with the task and delivered to the client.<br />
+<strong>Today:</strong> Progress token from the original <code>tools/call</code> is lost when the task is created.</p>
+<hr />
+<h2 id="phase-8-sub-task-threading-">Phase 8: Sub-Task Threading 🔲 <a class="anchor" href="#phase-8-sub-task-threading-">¶</a></h2>
+<blockquote>
+<p><strong>Status</strong>: Not yet implemented. Tracked in #281.</p>
+</blockquote>
+<h3 id="15-fan-out--join-with-sub-tasks">15. Fan-out / join with sub-tasks <a class="anchor" href="#15-fan-out--join-with-sub-tasks">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Deploy the app (build + test in parallel, then push)</code></td>
+<td><em>(not yet implemented)</em></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Expected (after Phase 8):</strong></p>
+<ul>
+<li>Parent task &ldquo;deploy&rdquo; created</li>
+<li>Child tasks &ldquo;build&rdquo; and &ldquo;test&rdquo; created with <code>parentTaskId</code> pointing to deploy</li>
+<li>Both children run in parallel</li>
+<li>Parent waits for both to complete (join)</li>
+<li>Parent continues with &ldquo;push&rdquo;</li>
+<li><code>tasks/list</code> shows the full tree</li>
+</ul>
+<p><strong>Today:</strong> No sub-task support. The deploy tool would have to run everything sequentially in one goroutine.</p>
+<h3 id="16-cascade-cancel">16. Cascade cancel <a class="anchor" href="#16-cascade-cancel">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Curl</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Deploy the app, then cancel the deployment</code></td>
+<td><em>(not yet implemented)</em></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Expected (after Phase 8):</strong> Cancelling the parent task cascades to all children — build and test are also cancelled.<br />
+<strong>Today:</strong> No cascade. Only the parent task is cancelled.</p>
+<h2 id="screenshots">Screenshots <a class="anchor" href="#screenshots">¶</a></h2>
+<h3 id="async-tool-returns-a-task-id-immediately">Async tool returns a task ID immediately <a class="anchor" href="#async-tool-returns-a-task-id-immediately">¶</a></h3>
+<h3 id="polling-tasksget--status-transitions-to-completed">Polling tasks/get — status transitions to completed <a class="anchor" href="#polling-tasksget--status-transitions-to-completed">¶</a></h3>
+<h3 id="failing-job--task-transitions-to-failed-after-1-second">failing_job — task transitions to failed after 1 second <a class="anchor" href="#failing-job--task-transitions-to-failed-after-1-second">¶</a></h3>
+<h2 id="key-files">Key Files <a class="anchor" href="#key-files">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>main.go</code></td>
+<td>Go server: 6 tools, <code>server.RegisterTasks()</code></td>
+</tr>
+<tr>
+<td><code>ts-reference-server.mjs</code></td>
+<td>TS SDK reference server: same 6 tools, for comparison</td>
+</tr>
+<tr>
+<td><code>run-exercises.sh</code></td>
+<td>Runs all README exercises against a running server (Go or TS)</td>
+</tr>
+<tr>
+<td><code>test-side-by-side.sh</code></td>
+<td>Starts both servers, compares wire format side-by-side</td>
+</tr>
+<tr>
+<td><code>package.json</code></td>
+<td>TS SDK dependencies for the reference server</td>
+</tr>
+<tr>
+<td><code>../../server/tasks_v1.go</code></td>
+<td>v1 tasks middleware, handlers, RegisterTasksV1</td>
+</tr>
+<tr>
+<td><code>../../server/task_callbacks.go</code></td>
+<td>TaskCallbacks struct (per-tool GetTask/GetResult overrides)</td>
+</tr>
+<tr>
+<td><code>../../server/task_store.go</code></td>
+<td>TaskStore interface + InMemoryTaskStore</td>
+</tr>
+<tr>
+<td><code>../../server/task_session.go</code></td>
+<td>TaskContext, TaskElicit, TaskSample</td>
+</tr>
+<tr>
+<td><code>../../client/tasks_v1.go</code></td>
+<td>v1 client helpers: GetTaskV1, ToolCallAsTaskV1, etc.</td>
+</tr>
+<tr>
+<td><code>../../docs/TASKS_V2_MIGRATION.md</code></td>
+<td>v1 → v2 migration guide (current canonical doc)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/tasks-v2/">Tasks v2 — the canonical async model</a></li>
+<li><a href="/mcpkit/design/tasks-v2-migration/">v1 → v2 migration</a></li>
+</ul>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/WALKTHROUGH.md"><code>examples/tasks/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-tasks--async-tool-execution-lifecycle">MCP Tasks — Async Tool Execution Lifecycle <a class="anchor" href="#mcp-tasks--async-tool-execution-lifecycle">¶</a></h1>
+<p>Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Connect to the MCP server</strong> — The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.</li>
+<li><strong>Sync call: greet (taskSupport=forbidden)</strong> — greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.</li>
+<li><strong>Optional task: slow_compute as task → CreateTaskResult</strong> — slow_compute has taskSupport=optional. Sending the <code>task</code> hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.</li>
+<li><strong>Poll tasks/get until terminal — receive notifications/progress</strong> — The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches <code>completed</code>, the polling stops.</li>
+<li><strong>Fetch the result payload via tasks/result</strong> — tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.</li>
+<li><strong>Required task: failing_job — sync call returns an error</strong> — failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.</li>
+<li><strong>Invoke failing_job as task → terminal status: failed</strong> — Errors from required-task tools surface as a terminal status of <code>failed</code>. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.</li>
+<li><strong>Cancel a long-running task mid-flight</strong> — Tasks support cooperative cancellation. The server cancels the goroutine&rsquo;s context; tools that select on ctx.Done() exit cleanly. Status transitions to <code>cancelled</code>. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn&rsquo;t overwrite the cancelled status.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this client)
+    participant Server as MCP Server (just serve)
+
+    Note over Host,Server: Step 1: Connect to the MCP server
+    Host-&gt;&gt;Server: POST /mcp — initialize
+    Server--&gt;&gt;Host: serverInfo + Mcp-Session-Id + tasks capability
+
+    Note over Host,Server: Step 2: Sync call: greet (taskSupport=forbidden)
+    Host-&gt;&gt;Server: tools/call: greet {name: &quot;world&quot;}  (no task hint)
+    Server--&gt;&gt;Host: ToolResult immediately
+
+    Note over Host,Server: Step 3: Optional task: slow_compute as task → CreateTaskResult
+    Host-&gt;&gt;Server: tools/call: slow_compute {seconds:3} + task: {ttl: 60s}
+    Server--&gt;&gt;Host: {taskId, status: working, ttl, pollInterval}
+
+    Note over Host,Server: Step 4: Poll tasks/get until terminal — receive notifications/progress
+    Host-&gt;&gt;Server: tasks/get {taskId}  (polled every pollInterval)
+    Server--&gt;&gt;Host: notifications/progress (1/3, 2/3, 3/3) via SSE
+    Server--&gt;&gt;Host: {status: completed} on terminal poll
+
+    Note over Host,Server: Step 5: Fetch the result payload via tasks/result
+    Host-&gt;&gt;Server: tasks/result {taskId}
+    Server--&gt;&gt;Host: ToolResult
+
+    Note over Host,Server: Step 6: Required task: failing_job — sync call returns an error
+    Host-&gt;&gt;Server: tools/call: failing_job  (no task hint)
+    Server--&gt;&gt;Host: JSON-RPC error (taskSupport=required)
+
+    Note over Host,Server: Step 7: Invoke failing_job as task → terminal status: failed
+    Host-&gt;&gt;Server: tools/call: failing_job + task hint
+    Server--&gt;&gt;Host: {taskId, status: working}
+    Host-&gt;&gt;Server: tasks/get (polled)
+    Server--&gt;&gt;Host: {status: failed, error: &quot;simulated failure&quot;}
+
+    Note over Host,Server: Step 8: Cancel a long-running task mid-flight
+    Host-&gt;&gt;Server: tools/call: slow_compute {seconds: 10} + task hint
+    Server--&gt;&gt;Host: {taskId, status: working}
+    Host-&gt;&gt;Server: tasks/cancel {taskId}
+    Server--&gt;&gt;Host: ack
+    Host-&gt;&gt;Server: tasks/get (final)
+    Server--&gt;&gt;Host: {status: cancelled}
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the MCP server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve        # tasks server on :8080
+Terminal 2:  just run          # this demo
+</code></pre>
+<h3 id="how-tasks-work">How tasks work <a class="anchor" href="#how-tasks-work">¶</a></h3>
+<p>Each tool&rsquo;s <code>Execution.TaskSupport</code> declares whether it can run as a task:</p>
+<ul>
+<li><strong>forbidden</strong> (or absent): sync-only. Calling with a <code>task</code> hint returns an error.</li>
+<li><strong>optional</strong>: client chooses. <code>tools/call</code> blocks for the result; <code>tools/call</code> with <code>task</code> hint returns a <code>CreateTaskResult</code> immediately.</li>
+<li><strong>required</strong>: must be invoked as a task. Direct sync calls return an error.</li>
+</ul>
+<p>For task invocations, the server responds with <code>{taskId, ttl, pollInterval}</code>. The host polls <code>tasks/get</code> until the status is terminal (<code>completed</code>, <code>failed</code>, or <code>cancelled</code>), then fetches the result via <code>tasks/result</code>. Progress notifications stream over the session&rsquo;s GET SSE channel.</p>
+<h3 id="step-1-connect-to-the-mcp-server">Step 1: Connect to the MCP server <a class="anchor" href="#step-1-connect-to-the-mcp-server">¶</a></h3>
+<p>The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.</p>
+<h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># initialize: capture the Mcp-Session-Id response header into $SID</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># notifications/initialized: complete the handshake (no response body)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span></code></pre><h3 id="step-2-sync-call-greet-tasksupportforbidden">Step 2: Sync call: greet (taskSupport=forbidden) <a class="anchor" href="#step-2-sync-call-greet-tasksupportforbidden">¶</a></h3>
+<p>greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.</p>
+<h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tools/call with no task hint: result returns inline under .result</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;greet&#34;,&#34;arguments&#34;:{&#34;name&#34;:&#34;world&#34;}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-3-optional-task-slow-compute-as-task--createtaskresult">Step 3: Optional task: slow_compute as task → CreateTaskResult <a class="anchor" href="#step-3-optional-task-slow-compute-as-task--createtaskresult">¶</a></h3>
+<p>slow_compute has taskSupport=optional. Sending the <code>task</code> hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.</p>
+<h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># SEP-1036: the task hint is a sibling of name+arguments under params.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Response carries {taskId, status, pollInterval, ttl} under .result.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Capture the taskId for the poll/result steps below.</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">R</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:3,&#34;label&#34;:&#34;demo&#34;},&#34;task&#34;:{&#34;ttl&#34;:60000}}}&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R</span><span style="color:#d14">&#34;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R</span><span style="color:#d14">&#34;</span> | jq -r <span style="color:#d14">&#39;.result.taskId&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span></code></pre><h3 id="step-4-poll-tasksget-until-terminal--receive-notificationsprogress">Step 4: Poll tasks/get until terminal — receive notifications/progress <a class="anchor" href="#step-4-poll-tasksget-until-terminal--receive-notificationsprogress">¶</a></h3>
+<p>The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches <code>completed</code>, the polling stops.</p>
+<h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tasks/get returns task status only; poll it every pollInterval until terminal.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># progress notifications (1/3, 2/3, 3/3) arrive separately over the GET SSE channel.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:3,&#34;method&#34;:&#34;tasks/get&#34;,&#34;params&#34;:{&#34;taskId&#34;:&#34;&#39;</span><span style="color:#d14">&#34;</span><span style="color:#008080">$TID</span><span style="color:#d14">&#34;</span><span style="color:#d14">&#39;&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-5-fetch-the-result-payload-via-tasksresult">Step 5: Fetch the result payload via tasks/result <a class="anchor" href="#step-5-fetch-the-result-payload-via-tasksresult">¶</a></h3>
+<p>tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.</p>
+<h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tasks/result returns the actual ToolResult (content blocks, isError, structured)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:4,&#34;method&#34;:&#34;tasks/result&#34;,&#34;params&#34;:{&#34;taskId&#34;:&#34;&#39;</span><span style="color:#d14">&#34;</span><span style="color:#008080">$TID</span><span style="color:#d14">&#34;</span><span style="color:#d14">&#39;&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-6-required-task-failing-job--sync-call-returns-an-error">Step 6: Required task: failing_job — sync call returns an error <a class="anchor" href="#step-6-required-task-failing-job--sync-call-returns-an-error">¶</a></h3>
+<p>failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.</p>
+<h4 id="reproduce-on-the-wire-5">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-5">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tools/call with no task hint on a required-task tool: response carries a</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># JSON-RPC .error telling the host to retry with a task hint.</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:5,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;failing_job&#34;,&#34;arguments&#34;:{}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.error&#39;</span>
+</span></span></code></pre><h3 id="step-7-invoke-failing-job-as-task--terminal-status-failed">Step 7: Invoke failing_job as task → terminal status: failed <a class="anchor" href="#step-7-invoke-failing-job-as-task--terminal-status-failed">¶</a></h3>
+<p>Errors from required-task tools surface as a terminal status of <code>failed</code>. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.</p>
+<h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># create the task (task hint sibling under params), capture taskId</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">R</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:6,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;failing_job&#34;,&#34;arguments&#34;:{},&#34;task&#34;:{&#34;ttl&#34;:60000}}}&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R</span><span style="color:#d14">&#34;</span> | jq -r <span style="color:#d14">&#39;.result.taskId&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># poll tasks/get: the error surfaces as a terminal status: failed (not a JSON-RPC error)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:7,&#34;method&#34;:&#34;tasks/get&#34;,&#34;params&#34;:{&#34;taskId&#34;:&#34;&#39;</span><span style="color:#d14">&#34;</span><span style="color:#008080">$TID</span><span style="color:#d14">&#34;</span><span style="color:#d14">&#39;&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="step-8-cancel-a-long-running-task-mid-flight">Step 8: Cancel a long-running task mid-flight <a class="anchor" href="#step-8-cancel-a-long-running-task-mid-flight">¶</a></h3>
+<p>Tasks support cooperative cancellation. The server cancels the goroutine&rsquo;s context; tools that select on ctx.Done() exit cleanly. Status transitions to <code>cancelled</code>. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn&rsquo;t overwrite the cancelled status.</p>
+<h4 id="reproduce-on-the-wire-7">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-7">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># start a long task, capture taskId</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">R</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:8,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:10,&#34;label&#34;:&#34;to-cancel&#34;},&#34;task&#34;:{&#34;ttl&#34;:60000}}}&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#008080">TID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R</span><span style="color:#d14">&#34;</span> | jq -r <span style="color:#d14">&#39;.result.taskId&#39;</span><span style="color:#000;font-weight:bold">)</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tasks/cancel: server cancels the goroutine&#39;s context (cooperative)</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:9,&#34;method&#34;:&#34;tasks/cancel&#34;,&#34;params&#34;:{&#34;taskId&#34;:&#34;&#39;</span><span style="color:#d14">&#34;</span><span style="color:#008080">$TID</span><span style="color:#d14">&#34;</span><span style="color:#d14">&#39;&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># final tasks/get shows status: cancelled</span>
+</span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:10,&#34;method&#34;:&#34;tasks/get&#34;,&#34;params&#34;:{&#34;taskId&#34;:&#34;&#39;</span><span style="color:#d14">&#34;</span><span style="color:#008080">$TID</span><span style="color:#d14">&#34;</span><span style="color:#d14">&#39;&#34;}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
+</span></span></code></pre><h3 id="where-each-piece-lives-in-mcpkit">Where each piece lives in mcpkit <a class="anchor" href="#where-each-piece-lives-in-mcpkit">¶</a></h3>
+<ul>
+<li>Tasks server library: <code>server/task_*.go</code>, <code>server/tasks_experimental.go</code></li>
+<li>TaskContext (used by required-task tools): <code>core.TaskContext</code> — <a href="https://github.com/panyam/mcpkit/blob/main/core/task.go"><code>core/task.go</code></a></li>
+<li>Client helpers: <a href="https://github.com/panyam/mcpkit/blob/main/client/tasks.go"><code>client/tasks.go</code></a> — <code>ToolCallAsTask</code>, <code>WaitForTask</code>, <code>GetTask</code>, <code>GetTaskPayload</code>, <code>CancelTask</code></li>
+<li>Tool declares task support via <code>core.ToolDef.Execution.TaskSupport</code> (<code>forbidden</code> | <code>optional</code> | <code>required</code>)</li>
+</ul>
+<p>For elicitation/sampling from inside a task (the <code>confirm_delete</code> and <code>write_haiku</code> tools also registered on this server), see <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/run-exercises.sh"><code>examples/tasks/run-exercises.sh</code></a>.</p>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/tasks/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/tasks/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

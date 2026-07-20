@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The six notification families, direction and capability gates, and per-session fan-out.">
+    <title>Notifications · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Notifications</h1>
+        
+        <p class="lead">The six notification families, direction and capability gates, and per-session fan-out.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/notifications.md"><code>tutorials/walkthrough/notifications.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="notifications">Notifications <a class="anchor" href="#notifications">¶</a></h1>
+<p>The session&rsquo;s state-change channel. Seven common questions answered end-to-end.</p>
+<blockquote>
+<p><strong>Kind:</strong> root · <strong>Assumes:</strong> <a href="/mcpkit/concepts/bringup/">bring-up</a>, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a><br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/bringup/">bring-up</a> Leads-to, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a> Leads-to<br />
+<strong>Branches into:</strong> <a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a> <em>(stub)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">tasks</a> <em>(stub)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/cancellation.md">cancellation deep-dive</a> <em>(stub, leaf)</em><br />
+<strong>Spec:</strong> <a href="https://modelcontextprotocol.io/specification/2025-06-18">Base protocol — notifications</a> · <a href="https://modelcontextprotocol.io/specification/2025-06-18">Cancellation</a> · <a href="https://modelcontextprotocol.io/specification/2025-06-18">Progress</a> · <a href="https://modelcontextprotocol.io/specification/2025-06-18">Logging</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go"><code>core/jsonrpc.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/core/progress.go"><code>core/progress.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/core/logging.go"><code>core/logging.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/core/resource_notify.go"><code>core/resource_notify.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<ul>
+<li>You have a live MCP session — capabilities are negotiated, the transport is chosen, <code>initialized</code> has been sent. → If not, read <a href="/mcpkit/concepts/bringup/">bring-up</a>.</li>
+<li>You can read a JSON-RPC message off the wire and know that a notification has no <code>id</code>, gets no response, and uses the same channels as requests. → If not, read <a href="/mcpkit/concepts/transport-mechanics/">transport mechanics</a>.</li>
+</ul>
+<h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
+<p>Notifications are the <strong>state-change channel of a session</strong>. They&rsquo;re capability-gated by what was negotiated at bring-up, coupled to session-local namespaces (<code>progressToken</code>, request id), and the way most cross-cutting MCP features — cancellation, progress, list invalidation, resource updates, logging — actually move information through the system.</p>
+<h2 id="q1--what-kinds-of-notifications-exist-and-who-can-send-what">Q1 — What kinds of notifications exist, and who can send what? <a class="anchor" href="#q1--what-kinds-of-notifications-exist-and-who-can-send-what">¶</a></h2>
+<p>Seven families — six from core MCP and one added by the tasks extension. Each has a direction, a capability gate (or none), and a coupling to other session state.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Method</th>
+<th>Direction</th>
+<th>Capability gate</th>
+<th>Coupled to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Lifecycle</strong></td>
+<td><code>notifications/initialized</code></td>
+<td>client → server</td>
+<td>none (part of bring-up itself)</td>
+<td>session bring-up barrier</td>
+</tr>
+<tr>
+<td><strong>Cancellation</strong></td>
+<td><code>notifications/cancelled</code></td>
+<td>either</td>
+<td>none (always allowed)</td>
+<td>targets a pending request id (params: <code>requestId</code>, <code>reason</code>)</td>
+</tr>
+<tr>
+<td><strong>Progress</strong></td>
+<td><code>notifications/progress</code></td>
+<td>either</td>
+<td>none (always allowed); receiver opts in per-request</td>
+<td><code>progressToken</code> carried in originating request&rsquo;s <code>_meta</code></td>
+</tr>
+<tr>
+<td><strong>List-changed</strong> <em>(catalogs)</em></td>
+<td><code>notifications/tools/list_changed</code><br/><code>notifications/prompts/list_changed</code><br/><code>notifications/resources/list_changed</code></td>
+<td>server → client</td>
+<td><code>&lt;area&gt;.listChanged</code> declared by server</td>
+<td>invalidates client&rsquo;s cached catalog for that area</td>
+</tr>
+<tr>
+<td><strong>List-changed</strong> <em>(roots)</em></td>
+<td><code>notifications/roots/list_changed</code></td>
+<td>client → server</td>
+<td><code>roots.listChanged</code> declared by client</td>
+<td>invalidates server&rsquo;s cached roots</td>
+</tr>
+<tr>
+<td><strong>Resource updates</strong></td>
+<td><code>notifications/resources/updated</code></td>
+<td>server → client</td>
+<td><code>resources.subscribe</code> + an active subscription</td>
+<td>one specific subscribed resource (params: <code>uri</code>)</td>
+</tr>
+<tr>
+<td><strong>Logging</strong></td>
+<td><code>notifications/message</code></td>
+<td>server → client</td>
+<td><code>logging</code> declared by server (level optionally set via <code>logging/setLevel</code> request)</td>
+<td>log entry; host surfaces to user</td>
+</tr>
+<tr>
+<td><strong>Task status</strong> <em>(extension)</em></td>
+<td><code>notifications/tasks/status</code></td>
+<td>server → client</td>
+<td>tasks extension declared at session <strong>or</strong> per-request (SEP-2575)</td>
+<td>task lifecycle transition; carries <code>DetailedTask</code> + <code>requestState</code> (<a href="#q7--how-do-tasks-fit-in-notificationstaskstatus-vs-subscriptionlisten-patterns">Q7</a>)</td>
+</tr>
+</tbody>
+</table>
+<p>Three categories on the gate column:</p>
+<ul>
+<li><strong>None</strong> — base protocol; both sides should always handle. Lifecycle, cancellation, progress.</li>
+<li><strong>Capability declared by emitter</strong> — emitter says &ldquo;I will send these&rdquo;; receiver may choose how to react. List-changed family, logging.</li>
+<li><strong>Per-call opt-in</strong> — receiver says &ldquo;I want updates for this specific call&rdquo; via the request itself. Progress&rsquo;s <code>progressToken</code>, resource subscribe&rsquo;s <code>resources/subscribe</code>, SEP-2575&rsquo;s per-request <code>_meta.io.modelcontextprotocol/clientCapabilities</code> (<a href="#q6--per-request-capability-declaration-sep-2575-and-stateless-servers">Q6</a>).</li>
+</ul>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Session-level</strong> capability gating is set at bring-up and does not change mid-session. If the server didn&rsquo;t declare <code>tools.listChanged</code> at <code>initialize</code>, it cannot emit <code>notifications/tools/list_changed</code> at any point in this session — that gate is locked.</p>
+<p><strong>There is a second layer.</strong> <a href="#q6--per-request-capability-declaration-sep-2575-and-stateless-servers">SEP-2575</a> (landed) lets a client declare capabilities <strong>per-request</strong> via <code>_meta.io.modelcontextprotocol/clientCapabilities</code>. The override is <em>additive</em> (it cannot revoke a session-level declaration) and only applies for the duration of that one request. It&rsquo;s the mechanism that makes stateless servers and capability-shim deployments work. Per-request overrides affect <strong>request-bound</strong> notifications (progress, task status) — they do <strong>not</strong> affect unsolicited server-initiated notifications like <code>list_changed</code>. See <a href="#q6--per-request-capability-declaration-sep-2575-and-stateless-servers">Q6</a> for the full story.</p>
+</blockquote>
+<h2 id="q2--how-does-the-server-tell-the-client-its-tools-list-changed">Q2 — How does the server tell the client its tools list changed? <a class="anchor" href="#q2--how-does-the-server-tell-the-client-its-tools-list-changed">¶</a></h2>
+<p>The worked example. Anchors the list-changed family in real wire bytes.</p>
+<p><strong>Setup assumed:</strong> session <code>abc123</code> is live; bring-up negotiated <code>capabilities.tools.listChanged: true</code> on the server side; the standing GET (HTTP request #4 from the <a href="/mcpkit/concepts/bringup/">bringup walkthrough</a>) is open and idle.</p>
+<p><strong>Step 1 — server-side state changes.</strong> A tool plugin loads, an admin toggles a permission, whatever. The server&rsquo;s tool catalog is now different from what the client last saw via <code>tools/list</code>.</p>
+<p><strong>Step 2 — server emits the notification on the standing GET.</strong> No payload beyond the method name — the notification is a hint, not a diff:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">                                                   ← still HTTP request #4 (the standing GET)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">id: 17                                             ← SSE event id, the GET stream&#39;s own counter
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/tools/list_changed&#34;}
+</span></span></span></code></pre><p>That&rsquo;s it. No <code>id</code> (notifications don&rsquo;t get one), no params (the spec doesn&rsquo;t pass a diff — the contract is &ldquo;refetch when you care&rdquo;).</p>
+<p><strong>Step 3 — client invalidates its cached catalog.</strong> The MCP client&rsquo;s notification dispatcher routes <code>notifications/tools/list_changed</code> to its handler. Handler marks the cached tools catalog stale. mcpkit example: the client&rsquo;s per-area cache flips a &ldquo;needs refetch&rdquo; flag.</p>
+<p><strong>Step 4 — next use triggers a refetch.</strong> Sometime later (could be milliseconds, could be never if no tool is needed), the host wants to know what tools are available. Cache is stale, so the client refetches:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">POST /mcp HTTP/1.1                                 ← HTTP request #N (a fresh POST)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Mcp-Session-Id: abc123
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">Accept: application/json, text/event-stream
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:11,&#34;method&#34;:&#34;tools/list&#34;}
+</span></span></span></code></pre><p><strong>Step 5 — server returns the new list:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">HTTP</span><span style="color:#000;font-weight:bold">/</span><span style="color:#099">1.1</span> <span style="color:#099">200</span> <span style="color:#900;font-weight:bold">OK</span>
+</span></span><span style="display:flex;"><span>Content-Type<span style="color:#000;font-weight:bold">:</span> application/json
+</span></span><span style="display:flex;"><span>Mcp-Session-Id<span style="color:#000;font-weight:bold">:</span> abc123
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>{<span style="color:#000080">&#34;jsonrpc&#34;</span>:<span style="color:#d14">&#34;2.0&#34;</span>,<span style="color:#000080">&#34;id&#34;</span>:<span style="color:#099">11</span>,<span style="color:#000080">&#34;result&#34;</span>:{<span style="color:#000080">&#34;tools&#34;</span>:[<span style="color:#a61717;background-color:#e3d2d2">...new</span> <span style="color:#a61717;background-color:#e3d2d2">catalog...</span>]}}
+</span></span></code></pre><p>Catalog is fresh again. Client&rsquo;s cache is repopulated.</p>
+<p><strong>Things to notice:</strong></p>
+<ul>
+<li><strong>No diff is transmitted.</strong> The notification carries only &ldquo;something changed in this area.&rdquo; Refetch is the protocol. Saves bandwidth, simplifies semantics, no schema for diffs to maintain.</li>
+<li><strong>Refetch is lazy on the client.</strong> Spec doesn&rsquo;t mandate immediate refetch. Most clients invalidate cache + refetch on next access. mcpkit&rsquo;s pattern matches this.</li>
+<li><strong>Receiver-side action is up to the client.</strong> A client that doesn&rsquo;t cache catalogs may simply ignore list_changed. The notification is informational, not commanded.</li>
+<li><strong>Same pattern applies to prompts/resources.</strong> <code>notifications/prompts/list_changed</code> and <code>notifications/resources/list_changed</code> are identical mechanically — different area, same flow.</li>
+<li><strong>The notification could equally arrive on a per-call SSE upgrade.</strong> If the server happens to be in the middle of streaming a tool-call response when the catalog changes, the same notification can ride that POST&rsquo;s SSE stream. The standing GET is the channel for <em>unsolicited</em> pushes; per-call SSE is for <em>call-tied</em> pushes; either can carry list_changed because list_changed isn&rsquo;t tied to a specific call.</li>
+</ul>
+<h3 id="multi-client-fan-out">Multi-client fan-out <a class="anchor" href="#multi-client-fan-out">¶</a></h3>
+<p>The example above showed one client. If a server has 5 clients connected, each has its own session id (<code>abc123</code>, <code>def456</code>, …) and its own standing GET — and the protocol has <strong>no broadcast primitive</strong>. The server emits the notification <em>once per session</em>, walking its session map.</p>
+<p>For <code>notifications/tools/list_changed</code> specifically, the loop is:</p>
+<ol>
+<li>Iterate over live sessions.</li>
+<li>For each, check whether that session negotiated <code>tools.listChanged</code> at bring-up.</li>
+<li>For sessions that did, write the notification onto that session&rsquo;s GET stream.</li>
+</ol>
+<p>So a 5-client scenario can have anywhere from 0 to 5 actual emissions depending on per-session capability negotiation. Wire-level, each emission is an independent SSE write:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">                                                   ← session abc123&#39;s GET, sse id 17
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/tools/list_changed&#34;}
+</span></span></span></code></pre><pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">                                                   ← session def456&#39;s GET, sse id 9 (independent counter)
+</span></span></span><span style="display:flex;"><span><span style="color:#a61717;background-color:#e3d2d2">data: {&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/tools/list_changed&#34;}
+</span></span></span></code></pre><p>Same JSON-RPC body, different streams, independent SSE-id counters per stream. (See <a href="/mcpkit/concepts/transport-mechanics/#mcp-session-id">transport-mechanics → Mcp-Session-Id</a> — sessions are isolated and the server can only push to sessions it has state for.)</p>
+<p>The <strong>fan-out audience</strong> depends on the notification kind:</p>
+<table>
+<thead>
+<tr>
+<th>Notification</th>
+<th>Goes to which sessions</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>notifications/&lt;area&gt;/list_changed</code> (server-emitted)</td>
+<td>every session that negotiated <code>&lt;area&gt;.listChanged</code> at bring-up</td>
+</tr>
+<tr>
+<td><code>notifications/resources/updated</code></td>
+<td>only sessions that called <code>resources/subscribe</code> for that specific URI</td>
+</tr>
+<tr>
+<td><code>notifications/message</code> (logging)</td>
+<td>every session that negotiated <code>logging</code> (subject to per-session log level set via <code>logging/setLevel</code>)</td>
+</tr>
+<tr>
+<td><code>notifications/cancelled</code></td>
+<td>the <strong>specific session</strong> whose request is being cancelled — not fan-out</td>
+</tr>
+<tr>
+<td><code>notifications/progress</code></td>
+<td>the <strong>specific session</strong> whose request opted in via <code>progressToken</code> — not fan-out</td>
+</tr>
+</tbody>
+</table>
+<p>In short: <strong>server-state-change</strong> notifications fan out per-session; <strong>call-targeted</strong> notifications go to exactly the one session that originated that call. Two distinct routing patterns, one wire format.</p>
+<blockquote>
+<p>[!NOTE]<br />
+The lack of a broadcast primitive is deliberate. Each session has its own capability set, its own auth context, its own subscription state. Treating every client as an independent conversation keeps these isolated; the cost is more iterations on the server when state changes, which is cheap compared to the simplicity gain.</p>
+</blockquote>
+<p>mcpkit&rsquo;s runtime maintains the session map and dispatches accordingly. Servers built from scratch on top of <code>core/</code> need to do the same bookkeeping.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/list-ttl.md">List-TTL (SEP-2549)</a> <em>(stub)</em> — mcpkit&rsquo;s <a href="https://github.com/panyam/mcpkit/blob/main/core/list_ttl_test.go"><code>core/list_ttl_test.go</code></a> exercises a three-state TTL hint (<code>nil</code> / <code>&amp;0</code> / <code>&amp;N&gt;0</code>) the server can attach to list responses to let clients cache more aggressively when notifications can&rsquo;t be relied on. Out-of-scope here; relevant if you care about cache lifetime semantics beyond list_changed.</p>
+</blockquote>
+<h2 id="q3--how-does-cancellation-work-given-the-request-being-cancelled-has-its-own-id">Q3 — How does cancellation work given the request being cancelled has its own id? <a class="anchor" href="#q3--how-does-cancellation-work-given-the-request-being-cancelled-has-its-own-id">¶</a></h2>
+<p><code>notifications/cancelled</code> carries the <strong>request id</strong> of the call to cancel. The receiver looks the id up in its pending table and triggers cancellation locally.</p>
+<p><strong>Wire shape:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;notifications/cancelled&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;requestId&#34;</span>: <span style="color:#099">7</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;reason&#34;</span>: <span style="color:#d14">&#34;User aborted&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The <code>requestId</code> is <em>the id from the original request</em> — i.e., from the <strong>sender&rsquo;s</strong> id-space (the side that originated the request being cancelled). Either side may cancel a request it sent.</p>
+<p><strong>What the receiver does:</strong></p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant A as Originator (e.g. client)
+    participant B as Responder (e.g. server)
+
+    A-&gt;&gt;B: { id:7, method:&quot;tools/call&quot;, params:{...} }
+    Note over B: B.pending[7] = handler&lt;br/&gt;handler running, e.g. long DB query
+    A-&gt;&gt;B: { method:&quot;notifications/cancelled&quot;, params:{requestId:7} }
+    Note over B: lookup pending[7]&lt;br/&gt;cancel handler context&lt;br/&gt;remove pending[7]
+    B--xA: (no response sent for id=7)
+</code></pre>
+<p>If <code>pending[7]</code> exists when the cancel arrives → trigger handler cancellation (in mcpkit: the handler&rsquo;s <code>ctx.Done()</code> fires) and drop the entry. The handler may have already started writing partial output (progress notifications, etc.); those that already shipped have shipped, the rest are abandoned.</p>
+<p>If <code>pending[7]</code> doesn&rsquo;t exist → the request already completed. The cancellation is a silent no-op.</p>
+<p><strong>The race is real and unavoidable:</strong></p>
+<ul>
+<li>A cancels id=7. B has <em>already</em> finished and put the response on the wire.</li>
+<li>A receives the response after sending the cancel. A&rsquo;s pending table still has the entry (or doesn&rsquo;t — depends on whether A removed it on send-cancel; mcpkit removes it).</li>
+<li>A processes the late response normally. The local caller may already have moved on (timeout, abort) — that&rsquo;s a layer above the protocol.</li>
+</ul>
+<blockquote>
+<p>[!IMPORTANT]<br />
+Both sides MUST handle the race gracefully. The spec is explicit: cancellation is <strong>best-effort</strong>. A response that crosses a cancellation in flight is not an error.</p>
+</blockquote>
+<p><strong>Cancellation propagation through reverse calls.</strong> If the cancelled request was a forward call whose handler had outstanding reverse calls (e.g., the handler was awaiting an <code>elicitation/create</code> response), the handler context&rsquo;s cleanup must cancel those too. This is exactly the back-pointer machinery from the <a href="/mcpkit/concepts/transport-mechanics/#reverse-call-origination">reverse-call origination section of transport-mechanics</a>: <code>pending[42] → originated-by → 7</code> lets the runtime find and cancel the reverse calls when 7 is cancelled.</p>
+<p><strong>One specific prohibition:</strong> the spec forbids cancelling the <code>initialize</code> request. It&rsquo;s the bring-up barrier; cancelling it would leave the session in an undefined state.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/cancellation.md">Cancellation deep-dive</a> <em>(stub, leaf)</em> — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit&rsquo;s <code>ctx.Done()</code> propagation paths.</p>
+</blockquote>
+<h2 id="q4--how-does-the-client-tie-a-progress-notification-back-to-the-right-in-flight-call">Q4 — How does the client tie a progress notification back to the right in-flight call? <a class="anchor" href="#q4--how-does-the-client-tie-a-progress-notification-back-to-the-right-in-flight-call">¶</a></h2>
+<p>Via a <strong><code>progressToken</code></strong> the requester puts in the request&rsquo;s <code>_meta</code> field. The handler, when emitting <code>notifications/progress</code>, includes the same token. The requester maps token → original call.</p>
+<p><strong>Request — opting in:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;id&#34;</span>: <span style="color:#099">7</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;tools/call&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;long_running_search&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;arguments&#34;</span>: {<span style="color:#a61717;background-color:#e3d2d2">...</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;_meta&#34;</span>: {<span style="color:#000080">&#34;progressToken&#34;</span>: <span style="color:#d14">&#34;search-job-42&#34;</span>}
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p><strong>Progress notification — paired by token:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;notifications/progress&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;progressToken&#34;</span>: <span style="color:#d14">&#34;search-job-42&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;progress&#34;</span>: <span style="color:#099">0.3</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;total&#34;</span>: <span style="color:#099">1.0</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;message&#34;</span>: <span style="color:#d14">&#34;scanning Q3 backlog&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p><strong>Crucially, progress is opt-in by the requester, not capability-gated.</strong> If the request didn&rsquo;t include <code>_meta.progressToken</code>, the responder MUST NOT emit progress for it — there&rsquo;s no token to address. mcpkit&rsquo;s handler API surfaces this: the handler context exposes a &ldquo;progress emitter&rdquo; only when the originating request opted in; otherwise emitting is a no-op.</p>
+<p><strong>Token format.</strong> Spec allows string or integer. The requester picks the value; uniqueness requirements are local — the requester just needs to map it back. mcpkit conventionally uses strings.</p>
+<p><strong>Where the progress notifications travel.</strong> Same answer as for any notification tied to an in-flight call:</p>
+<ul>
+<li>If the call&rsquo;s POST upgraded to SSE, progress flows on <strong>that POST&rsquo;s SSE stream</strong> (per-call SSE).</li>
+<li>If it didn&rsquo;t upgrade (rare for long-running calls, but possible), progress flows on the <strong>standing GET</strong> back-channel.</li>
+<li>For stdio, &ldquo;everything on the same pipe&rdquo; — no choice to make.</li>
+</ul>
+<p>The receiver doesn&rsquo;t care which channel it arrived on; the dispatch is by <code>progressToken</code>.</p>
+<p><strong>Three fields, semantics-wise:</strong></p>
+<ul>
+<li><code>progress</code> — current value. Spec just says it must be increasing.</li>
+<li><code>total</code> <em>(optional)</em> — the maximum value. If absent, the receiver shows indeterminate progress.</li>
+<li><code>message</code> <em>(optional)</em> — human-readable status string. Hosts surface it in the UI.</li>
+</ul>
+<h3 id="progress-is-the-precursor-pattern-to-sep-2575">Progress is the precursor pattern to SEP-2575 <a class="anchor" href="#progress-is-the-precursor-pattern-to-sep-2575">¶</a></h3>
+<p>Long before per-request capability declaration existed, progress used the same <code>_meta</code> channel to carry a <strong>per-request opt-in</strong> (<code>progressToken</code>). The shape — &ldquo;a request-scoped knob in <code>_meta</code> that toggles a behavior for the duration of this one request&rdquo; — is exactly the shape <a href="#q6--per-request-capability-declaration-sep-2575-and-stateless-servers">SEP-2575</a> later generalized to full capability declarations. Different payload (an opt-in token vs. a <code>ClientCapabilities</code> blob); same delivery mechanism.</p>
+<p>So if you understand <code>_meta.progressToken</code>, you understand SEP-2575&rsquo;s <code>_meta.io.modelcontextprotocol/clientCapabilities</code>. Both ride per-request <code>_meta</code>; both are additive (the request can introduce them, the absence of them is the no-op default).</p>
+<p>The deeper integration story — how tasks layer their own <code>notifications/tasks/status</code> channel <em>on top of</em> progress — is in <a href="#q7--how-do-tasks-fit-in-notificationstaskstatus-vs-subscriptionlisten-patterns">Q7</a>.</p>
+<h2 id="q5--what-happens-if-a-server-emits-a-notification-the-client-never-advertised-support-for">Q5 — What happens if a server emits a notification the client never advertised support for? <a class="anchor" href="#q5--what-happens-if-a-server-emits-a-notification-the-client-never-advertised-support-for">¶</a></h2>
+<p>Two sub-cases.</p>
+<p><strong>Case A: the notification is in a capability-gated family but the gate wasn&rsquo;t negotiated.</strong> Example: server emits <code>notifications/tools/list_changed</code> even though it didn&rsquo;t declare <code>tools.listChanged</code> at bring-up. This is a spec violation by the server. Client behavior:</p>
+<ul>
+<li><strong>Drop</strong> the notification (it has no contract to handle it).</li>
+<li><strong>Optionally log</strong> at warning level for debugging.</li>
+<li><strong>Do not respond</strong> — notifications never get responses, so there&rsquo;s no error reply.</li>
+</ul>
+<p><strong>Case B: the notification&rsquo;s method is unknown to the receiver.</strong> Future spec versions will add new notification methods; older clients won&rsquo;t know them. JSON-RPC convention is <strong>silent ignore for unknown notifications</strong> — exactly to enable forward-compatibility:</p>
+<ul>
+<li>Drop silently.</li>
+<li>Optionally log at debug level.</li>
+<li>Do not respond.</li>
+</ul>
+<p>mcpkit&rsquo;s notification dispatcher (in <a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a> and the symmetric client side) is registry-based: only registered methods get handlers. Unregistered methods are dropped with a debug log. No errors propagate.</p>
+<p><strong>Why this works.</strong> Notifications are fire-and-forget by design — the sender has no way to know whether the receiver acted, and the spec doesn&rsquo;t promise anything stronger. So an unrecognized notification is functionally equivalent to one that arrived after the receiver had already taken its action; in both cases nothing observable happens. New notifications can be added to the protocol without breaking older clients.</p>
+<p><strong>The contrast with requests</strong> is sharp:</p>
+<ul>
+<li>Unknown <strong>request</strong> method → must respond with JSON-RPC error <code>-32601</code> (&ldquo;Method not found&rdquo;). The sender finds out.</li>
+<li>Unknown <strong>notification</strong> method → drop silently. The sender doesn&rsquo;t find out, and that&rsquo;s intentional.</li>
+</ul>
+<blockquote>
+<p>[!NOTE]<br />
+A server that emits notifications it didn&rsquo;t gate-on is a bug, but it&rsquo;s the server&rsquo;s bug — the client doesn&rsquo;t pay for it. This asymmetry is what lets the protocol evolve without coordinated upgrades.</p>
+</blockquote>
+<h2 id="q6--per-request-capability-declaration-sep-2575-and-stateless-servers">Q6 — Per-request capability declaration (SEP-2575) and stateless servers <a class="anchor" href="#q6--per-request-capability-declaration-sep-2575-and-stateless-servers">¶</a></h2>
+<p>Session-level capabilities (<a href="#q1--what-kinds-of-notifications-exist-and-who-can-send-what">Q1</a>) are negotiated once at <code>initialize</code> and locked for the session. <strong>SEP-2575</strong> (landed) adds a second layer: a client can declare capabilities <strong>per-request</strong> by attaching a <code>ClientCapabilities</code>-shaped blob to <code>_meta.io.modelcontextprotocol/clientCapabilities</code>.</p>
+<p><strong>Wire shape — request with per-request capability override:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;id&#34;</span>: <span style="color:#099">7</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;tools/call&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;do_work&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;arguments&#34;</span>: {<span style="color:#a61717;background-color:#e3d2d2">...</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;_meta&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;io.modelcontextprotocol/clientCapabilities&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#000080">&#34;extensions&#34;</span>: {
+</span></span><span style="display:flex;"><span>          <span style="color:#000080">&#34;io.modelcontextprotocol/tasks&#34;</span>: {}
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The server merges this additively with the session-level capabilities for the duration of this request. mcpkit&rsquo;s API surface (<a href="https://github.com/panyam/mcpkit/blob/main/core/session.go"><code>core/session.go</code></a>):</p>
+<ul>
+<li><code>core.PerRequestClientCapsKey</code> — the <code>_meta</code> key (<code>io.modelcontextprotocol/clientCapabilities</code>)</li>
+<li><code>core.PerRequestClientCaps(raw)</code> — decodes the blob, returns <code>*ClientCapabilities</code> or nil</li>
+<li><code>core.ClientSupportsExtensionForRequest(ctx, extensionID, requestCapsRaw)</code> — checks session-level OR per-request</li>
+</ul>
+<p><strong>Additive, not subtractive.</strong> A per-request declaration cannot revoke a session-level capability. If the client declared <code>extensions[&quot;io.modelcontextprotocol/tasks&quot;]</code> at <code>initialize</code>, every subsequent request acts as if the client supports tasks regardless of what&rsquo;s in <code>_meta</code>. The per-request override is for <em>opting in</em>, not for opting out.</p>
+<h3 id="why-this-matters-stateless-servers">Why this matters: stateless servers <a class="anchor" href="#why-this-matters-stateless-servers">¶</a></h3>
+<p>A &ldquo;stateless&rdquo; MCP server (enabled in mcpkit via <a href="https://github.com/panyam/mcpkit/blob/main/server/server.go"><code>WithStateless(true)</code></a>) doesn&rsquo;t track sessions at all — every HTTP request gets a fresh dispatcher, no <code>Mcp-Session-Id</code>, no per-session state on the server. The initialize handshake is auto-performed per request.</p>
+<p>For such a server, <strong>the session-level capability declaration doesn&rsquo;t survive between requests</strong> — each request looks fresh. Per-request <code>_meta</code> caps are the only way for the client to say &ldquo;for this request, treat me as if I support extension X.&rdquo; Without SEP-2575, a stateless deployment couldn&rsquo;t gate any extension on client support.</p>
+<p>Use cases: serverless edge servers, single-tool API wrappers, CLI servers that spin up per invocation, brand-neutral conformance fixtures.</p>
+<h3 id="where-it-applies-to-notifications">Where it applies to notifications <a class="anchor" href="#where-it-applies-to-notifications">¶</a></h3>
+<p>SEP-2575 directly affects <strong>request-bound notifications</strong> — notifications emitted <em>during</em> the lifecycle of a specific request the client just sent:</p>
+<ul>
+<li><strong>Progress notifications</strong> during the request&rsquo;s handler — the per-request opt-in via <code>progressToken</code> was already the precursor pattern (see <a href="#progress-is-the-precursor-pattern-to-sep-2575">Q4</a>); SEP-2575 generalises it to full capability declarations.</li>
+<li><strong>Task status notifications</strong> for a task created during the request — tasks v2 middleware gates task creation on <code>ClientSupportsExtensionForRequest</code>, so tasks (and their status notifications) work even on a stateless server when the client declares the extension per-request.</li>
+<li><strong>Reverse-call-emitted notifications</strong> as side effects of a server→client request inside a handler — the originating forward request&rsquo;s <code>_meta</code> is the gate.</li>
+</ul>
+<h3 id="where-it-does-not-apply">Where it does NOT apply <a class="anchor" href="#where-it-does-not-apply">¶</a></h3>
+<p><strong>Unsolicited server-initiated notifications</strong> are not affected:</p>
+<ul>
+<li><code>notifications/&lt;area&gt;/list_changed</code> — emitted when the server&rsquo;s catalog changes. There&rsquo;s no triggering client request, so no <code>_meta</code> to consult. Only session-level capabilities gate it.</li>
+<li><code>notifications/resources/updated</code> — same; requires <code>resources.subscribe</code> declared at the session level.</li>
+<li><code>notifications/message</code> (logging) — same; requires <code>logging</code> declared at the session level.</li>
+</ul>
+<p>For unsolicited notifications, the session-level rule from <a href="#q1--what-kinds-of-notifications-exist-and-who-can-send-what">Q1</a> stands: <strong>the gate is locked at bring-up</strong>. SEP-2575 doesn&rsquo;t open a per-request escape hatch here because there&rsquo;s no request to attach the override to.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+<strong>Mental model: per-request <code>_meta</code> caps are for client→server opt-ins on request-bound features.</strong> They have nothing to do with unsolicited server→client notifications. When authoring a SEP that introduces a new server-emitted notification, decide up front whether it&rsquo;s session-bound (gate via core capability + <code>capabilities.extensions</code> — see <a href="/mcpkit/concepts/extension-mechanisms/#q2--how-does-a-new-capability-get-declared-and-negotiated">extension-mechanisms Q2</a>) or request-bound (gate via <code>ClientSupportsExtensionForRequest</code> checking the request&rsquo;s <code>_meta</code>).</p>
+</blockquote>
+<h3 id="pattern-for-sep-authors">Pattern for SEP authors <a class="anchor" href="#pattern-for-sep-authors">¶</a></h3>
+<p>mcpkit&rsquo;s tasks v2 (<a href="https://github.com/panyam/mcpkit/blob/main/server/tasks_v2.go"><code>server/tasks_v2.go</code></a>) is the template for any SEP introducing a request-bound capability. The middleware checks <code>ClientSupportsExtensionForRequest(ctx, TasksExtensionID, requestCaps)</code> before creating a task. If the client either declared the extension at <code>initialize</code> OR included it in <code>_meta.io.modelcontextprotocol/clientCapabilities</code> for this request, task creation proceeds.</p>
+<p>For SEPs introducing unsolicited notification types, per-request override doesn&rsquo;t apply — the gate stays session-level via <code>capabilities.extensions</code>.</p>
+<h2 id="q7--how-do-tasks-fit-in-notificationstasksstatus-vs-subscriptionlisten-patterns">Q7 — How do tasks fit in? <code>notifications/tasks/status</code> vs subscription/listen patterns <a class="anchor" href="#q7--how-do-tasks-fit-in-notificationstasksstatus-vs-subscriptionlisten-patterns">¶</a></h2>
+<p>Tasks (<a href="/mcpkit/concepts/extension-mechanisms/#worked-example-tasks-moved-from-core-to-extension">SEP-2663</a>) introduce a new notification method: <strong><code>notifications/tasks/status</code></strong>. It carries the full <code>DetailedTask</code> payload (TaskInfoV2 + result/error + <code>requestState</code>) on every status transition (<code>running</code>, <code>completed</code>, <code>failed</code>, <code>cancelled</code>, <code>input_required</code>). This is the &ldquo;tell the client what the task is doing&rdquo; channel.</p>
+<p><strong>Wire shape — task status notification:</strong></p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;notifications/tasks/status&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;taskId&#34;</span>: <span style="color:#d14">&#34;abc123&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;status&#34;</span>: <span style="color:#d14">&#34;completed&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;createdAt&#34;</span>: <span style="color:#d14">&#34;...&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;completedAt&#34;</span>: <span style="color:#d14">&#34;...&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;ttlMs&#34;</span>: <span style="color:#099">30000</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;pollIntervalMs&#34;</span>: <span style="color:#099">1000</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;result&#34;</span>: { <span style="color:#000080">&#34;resultType&#34;</span>: <span style="color:#d14">&#34;complete&#34;</span>, <span style="color:#000080">&#34;content&#34;</span>: [<span style="color:#a61717;background-color:#e3d2d2">...</span>] },
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;requestState&#34;</span>: <span style="color:#d14">&#34;&lt;signed-token&gt;&#34;</span>
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Two things make this notification special:</p>
+<ul>
+<li><strong>It carries <code>requestState</code></strong> (<a href="/mcpkit/concepts/mrtr/">SEP-2322</a>) — the same token the next <code>tasks/get</code> would mint. Clients update their tracked <code>requestState</code> directly from the notification and pick the conversation back up <em>without</em> an extra <code>tasks/get</code> round-trip. This is what makes stateless deployments practical for tasks: even when no session storage exists on the server, the client can chain task updates via the token.</li>
+<li><strong>It carries the inlined <code>result</code> / <code>error</code></strong> — the client doesn&rsquo;t need a follow-up <code>tasks/get</code> to read the final value. SEP-2663 designed this notification to be the one-shot delivery mechanism for both progress <em>and</em> completion.</li>
+</ul>
+<h3 id="routing-session-level-get-vs-hold-open-tasksget">Routing: session-level GET vs. hold-open <code>tasks/get</code> <a class="anchor" href="#routing-session-level-get-vs-hold-open-tasksget">¶</a></h3>
+<p>Where does <code>notifications/tasks/status</code> flow on the wire? Two designs are in tension:</p>
+<p><strong>Current mcpkit behavior</strong> (what the v2-18 conformance suite allows): notifications fan out on the <strong>session-level GET SSE</strong> — the standing back-channel from <a href="/mcpkit/concepts/transport-mechanics/#get-long-lived-serverclient-back-channel">transport-mechanics § GET</a>. The implementation uses <a href="https://github.com/panyam/mcpkit/blob/main/core/background.go"><code>core.DetachForBackground</code></a> to swap the dying POST-scoped <code>notifyFunc</code> for the session-level one, so notifications fire after the original <code>tools/call</code> POST has returned. Pros: simple; the client listens on its already-open GET, no per-task subscription bookkeeping. Cons: not strictly what the post-2026-04-30 spec language requires.</p>
+<p><strong>Stricter spec reading</strong>: <em>&ldquo;MUST send it on an SSE stream associated with a <code>tasks/get</code> request.&rdquo;</em> This would require holding the <code>tasks/get</code> POST SSE open per task, with a per-task SSE-stream registry on the server. Pros: matches the spec literally; gives the client an explicit per-task delivery channel. Cons: substantial transport change, per-task connection bookkeeping, doesn&rsquo;t compose cleanly with stateless servers (no long-lived stream to hold on a per-request transport).</p>
+<blockquote>
+<p>[!WARNING]<br />
+<strong>Target-shape gap (under discussion).</strong> Tracked as mcpkit issue #346. Current behavior is sufficient for the v2-18 conformance suite the upstream fork ships; the strict-spec hold-open semantics is the open design question. If the spec lands hold-open requirements as binding, mcpkit will need a per-task SSE-stream registry — a real transport change.</p>
+</blockquote>
+<h3 id="the-contrast-notifications-vs-explicit-subscriptions">The contrast: notifications vs. explicit subscriptions <a class="anchor" href="#the-contrast-notifications-vs-explicit-subscriptions">¶</a></h3>
+<p>Tasks use the <strong>notification pattern</strong> for status updates: server emits unsolicited, client listens on the shared session-level channel, no per-task subscribe step. The <a href="/mcpkit/concepts/events/">events extension</a> takes a different approach — explicit <strong>subscriptions</strong> (<code>events/subscribe</code>, <code>events/stream</code>) with per-subscription delivery channels.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Notification pattern (tasks)</th>
+<th>Subscription pattern (events)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Setup</strong></td>
+<td>implicit — task creation triggers status emission</td>
+<td>explicit — <code>events/subscribe</code> or <code>events/stream</code></td>
+</tr>
+<tr>
+<td><strong>Channel</strong></td>
+<td>session-level (shared with everything else)</td>
+<td>per-subscription (dedicated stream or webhook URL)</td>
+</tr>
+<tr>
+<td><strong>Filtering</strong></td>
+<td>client filters by <code>taskId</code> on every notification</td>
+<td>server filters by subscription identity at emit time</td>
+</tr>
+<tr>
+<td><strong>Multi-subscriber</strong></td>
+<td>every session listening sees every task&rsquo;s status</td>
+<td>each subscription is its own <code>(principal, url, name, params)</code> tuple</td>
+</tr>
+<tr>
+<td><strong>Lifecycle</strong></td>
+<td>tied to the originating request (task created, eventually settled)</td>
+<td>explicit subscribe / unsubscribe, can long outlive any request</td>
+</tr>
+<tr>
+<td><strong>When to pick</strong></td>
+<td>a few long-running ops, each tied to a specific request</td>
+<td>many sources, multiple subscribers per source, explicit lifecycle</td>
+</tr>
+</tbody>
+</table>
+<p>Tasks chose notifications because the relationship to in-flight work is <strong>intrinsic</strong> — every task was created by a request the client just made. There&rsquo;s no need to subscribe; the existence of the task implies interest. Events chose subscriptions because sources are <strong>independent of any specific request</strong>, can have many subscribers, and need explicit lifecycle management.</p>
+<p>If you find yourself wanting &ldquo;subscribe to all tasks created by this principal&rdquo; semantics, you&rsquo;re outside the current task design — that&rsquo;s a subscription-pattern feature, and the natural home would be a domain-specific event source, not the task surface.</p>
+<h3 id="progress-within-a-task-layered-not-replaced">Progress <em>within</em> a task: layered, not replaced <a class="anchor" href="#progress-within-a-task-layered-not-replaced">¶</a></h3>
+<p>Tasks don&rsquo;t replace progress. A long-running task can still emit <code>notifications/progress</code> (Q4) during execution — fine-grained &ldquo;I&rsquo;m 30% through&rdquo; updates. The <code>progressToken</code> pairing carries through: the task-handler&rsquo;s progress emission reuses the same <code>_meta.progressToken</code> mechanism the client opted into on the original <code>tools/call</code>.</p>
+<p>So a single task can produce <strong>two notification streams</strong>:</p>
+<ul>
+<li><strong><code>notifications/progress</code></strong> — fine-grained, per-<code>progressToken</code>, emitted from inside the handler (Q4 mechanics).</li>
+<li><strong><code>notifications/tasks/status</code></strong> — coarse-grained, per-<code>taskId</code>, emitted on status transitions (this Q).</li>
+</ul>
+<p>Both flow on the same session-level SSE channel. The client demuxes by <code>progressToken</code> (for progress) and by <code>taskId</code> (for status). They&rsquo;re complementary, not alternatives — a UI typically shows progress as the bar within a row whose status is the task&rsquo;s lifecycle marker.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">tasks</a> <em>(stub)</em> — full v1↔v2 wire detail, the task store, detach/resume, hybrid coexistence, the <code>RegisterTasks</code> / <code>RegisterTasksHybrid</code> migration patterns. This Q only previews the notification side; tasks.md will own the deep walk.</p>
+</blockquote>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<p>After reading this page, downstream pages can assume:</p>
+<ul>
+<li>You know the <strong>seven notification families</strong> (lifecycle, cancellation, progress, list-changed, resource updates, logging, task status), their <strong>direction</strong>, and what <strong>capability gate</strong> (if any) controls each.</li>
+<li>You know <strong>session-level</strong> gates are fixed at bring-up; <strong>SEP-2575</strong> adds an additive <strong>per-request</strong> capability override via <code>_meta.io.modelcontextprotocol/clientCapabilities</code>, scoped to one request, and <code>core.ClientSupportsExtensionForRequest</code> is the canonical check.</li>
+<li>You know SEP-2575 affects <strong>request-bound</strong> notifications (progress, task status, side-effect emissions from a handler) but <strong>not</strong> unsolicited server-initiated ones (list_changed, resource updates, logging) — those stay session-level.</li>
+<li>You know <strong>list_changed is a hint, not a diff</strong> — the client refetches when it cares.</li>
+<li>You know <strong>server-state-change notifications fan out per-session</strong> (no protocol-level broadcast); the audience depends on the kind (capability for list_changed, subscription for resources/updated, capability + level for logging); <strong>call-targeted notifications</strong> (cancel, progress, task status) go to exactly the one originating session.</li>
+<li>You know <code>notifications/cancelled</code> carries the <strong>request id of the call to cancel</strong>, looked up in the receiver&rsquo;s pending table; cancellation is <strong>best-effort</strong> with a real race; the <code>initialize</code> request is the one prohibition.</li>
+<li>You know progress is <strong>opt-in per request via <code>_meta.progressToken</code></strong> (not capability-gated), and that the responder must not emit progress when no token was provided. You know <code>progressToken</code> was the <strong>precursor pattern</strong> to SEP-2575&rsquo;s per-request <code>_meta</code> caps — same shape, different payload.</li>
+<li>You know <strong><code>notifications/tasks/status</code></strong> is the task-update channel — carries the full <code>DetailedTask</code> (TaskInfoV2 + result/error + <code>requestState</code>); flows on the session-level GET SSE in current mcpkit (issue #346 tracks the strict-spec hold-open-<code>tasks/get</code> question); and is the <strong>notification pattern</strong> for long-running progress, contrasted with the <strong>subscription pattern</strong> the events extension uses.</li>
+<li>You know progress and task status are <strong>layered, not alternatives</strong> — one task can emit both, demuxed by <code>progressToken</code> (per call) and <code>taskId</code> (per task).</li>
+<li>You know <strong>unknown / un-gated notifications get dropped silently</strong> by the receiver — the asymmetry vs. unknown requests is what enables forward-compatibility.</li>
+<li>You know progress notifications flow on whichever channel makes sense (per-call SSE if the request&rsquo;s POST upgraded, standing GET otherwise) and dispatch is by <code>progressToken</code>, not by channel.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="/mcpkit/concepts/request-anatomy/">Per-request anatomy</a></strong> <em>(root)</em> — folds notification dispatch into the broader picture: notifications travel through receiving middleware, hit a notification-specific dispatcher, and (unlike requests) never enter the pending-id table on the receive side.</li>
+<li><strong><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></strong> <em>(root)</em> — pins the vocabulary for &ldquo;what counts as an extension.&rdquo; Some notification additions (e.g. <code>notifications/resources/updated</code>, <code>notifications/tasks/status</code>) are themselves extensions; that page explains the <code>capabilities.extensions</code> map and how new gates land. See specifically <a href="/mcpkit/concepts/extension-mechanisms/#worked-example-tasks-moved-from-core-to-extension">Q2 → &ldquo;tasks moved from core to extension&rdquo;</a> for how the tasks notification family arrived as an extension.</li>
+<li><strong><a href="/mcpkit/concepts/mrtr/">MRTR</a></strong> <em>(root)</em> — Multi Round-Trip Requests; explains <code>requestState</code>, the same token that <code>notifications/tasks/status</code> carries so stateless deployments can chain task updates without an extra <code>tasks/get</code>.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">Tasks v1/v2/hybrid</a></strong> <em>(stub, root)</em> — long-running operations as a first-class concept. Heavy user of progress notifications and <code>notifications/tasks/status</code>; introduces detach/resume semantics that flat notifications don&rsquo;t cover. Q7 here previews the notification side; tasks.md will own the deep walk.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/cancellation.md">Cancellation deep-dive</a></strong> <em>(stub, leaf)</em> — race scenarios, partial-state handling, timeout-vs-cancel distinction, mcpkit&rsquo;s <code>ctx.Done()</code> propagation paths.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/list-ttl.md">List-TTL (SEP-2549)</a></strong> <em>(stub, leaf)</em> — three-state cache-lifetime hint orthogonal to list_changed; relevant when notifications aren&rsquo;t reliable.</li>
+<li><strong><a href="/mcpkit/concepts/events/">Events</a></strong> <em>(root)</em> — the <strong>subscription pattern</strong> for long-running pushes; contrast point in Q7 for &ldquo;when do you use notifications vs. explicit subscriptions for status updates?&rdquo;</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

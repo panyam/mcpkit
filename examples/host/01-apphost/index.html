@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The AppHost mediator: host-side app management and bidirectional tool calls.">
+    <title>Host — AppHost · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Host — AppHost</h1>
+        
+        <p class="lead">The AppHost mediator: host-side app management and bidirectional tool calls.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/host/01-apphost/README.md"><code>examples/host/01-apphost/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="apphost--host-side-app-management">AppHost — Host-Side App Management <a class="anchor" href="#apphost--host-side-app-management">¶</a></h1>
+<blockquote>
+<p><strong>Stable</strong> — MCP Apps host-side APIs (<code>ext/ui</code>: AppHost).</p>
+</blockquote>
+<p>Demonstrates AppHost mediating between an MCP server and an app bridge with bidirectional tool calls.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Create MCP server with tools</strong> — The server provides two tools: echo (returns input) and time (returns current time).</li>
+<li><strong>Connect client to server via in-process transport</strong> — The client connects without HTTP — using InProcessTransport for direct dispatch.</li>
+<li><strong>Create InProcessAppBridge with app-provided tools</strong> — The bridge simulates an MCP App (iframe). It registers two tools that the host/model can call directly.</li>
+<li><strong>Create AppHost and wire everything together</strong> — AppHost wires up bidirectional routing and fetches the initial app tool list.</li>
+<li><strong>ListAllTools — aggregated server + app tools</strong> — ListAllTools merges tools from the MCP server and the app bridge into a single list.</li>
+<li><strong>CallAppTool — host invokes an app-provided tool</strong> — The host calls a tool registered by the app. The bridge dispatches to the Go handler.</li>
+<li><strong>App calls server tool via bridge → AppHost → Client</strong> — The app calls a server-side tool through the bridge. AppHost forwards to the MCP server via the Client.</li>
+<li><strong>Dynamic registration — app adds a tool at runtime</strong> — The app registers a new tool after startup. AppHost detects the change and refreshes its cache.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Srv as MCP Server
+    participant Client as MCP Client
+    participant Host as AppHost
+    participant Bridge as InProcessAppBridge
+
+    Note over Srv,Bridge: Step 1: Create MCP server with tools
+    Srv-&gt;&gt;Srv: RegisterTool(&quot;server_echo&quot;)
+    Srv-&gt;&gt;Srv: RegisterTool(&quot;server_time&quot;)
+
+    Note over Srv,Bridge: Step 2: Connect client to server via in-process transport
+    Client-&gt;&gt;Srv: initialize
+    Srv--&gt;&gt;Client: capabilities, serverInfo
+
+    Note over Srv,Bridge: Step 3: Create InProcessAppBridge with app-provided tools
+    Bridge-&gt;&gt;Bridge: RegisterTool(&quot;app_greet&quot;)
+    Bridge-&gt;&gt;Bridge: RegisterTool(&quot;app_counter&quot;)
+
+    Note over Srv,Bridge: Step 4: Create AppHost and wire everything together
+    Host-&gt;&gt;Bridge: SetRequestHandler (app→host)
+    Host-&gt;&gt;Bridge: SetNotificationHandler (list_changed)
+    Host-&gt;&gt;Bridge: Start()
+    Host-&gt;&gt;Bridge: Send(tools/list) — initial fetch
+    Bridge--&gt;&gt;Host: {tools: [app_greet, app_counter]}
+
+    Note over Srv,Bridge: Step 5: ListAllTools — aggregated server + app tools
+    Host-&gt;&gt;Client: ListTools() — server tools
+    Client--&gt;&gt;Host: [server_echo, server_time]
+    Host-&gt;&gt;Bridge: cached app tools
+    Bridge--&gt;&gt;Host: [app_greet, app_counter]
+
+    Note over Srv,Bridge: Step 6: CallAppTool — host invokes an app-provided tool
+    Host-&gt;&gt;Bridge: Send(tools/call, {name: &quot;app_greet&quot;, args: {name: &quot;World&quot;}})
+    Bridge--&gt;&gt;Host: ToolResult {text: &quot;Hello, World!&quot;}
+
+    Note over Srv,Bridge: Step 7: App calls server tool via bridge → AppHost → Client
+    Bridge-&gt;&gt;Host: SendToHost(tools/call, {name: &quot;server_echo&quot;})
+    Host-&gt;&gt;Client: Call(tools/call, params)
+    Client-&gt;&gt;Srv: JSON-RPC tools/call
+    Srv--&gt;&gt;Client: ToolResult
+    Client--&gt;&gt;Host: CallResult
+    Host--&gt;&gt;Bridge: Response
+
+    Note over Srv,Bridge: Step 8: Dynamic registration — app adds a tool at runtime
+    Bridge-&gt;&gt;Bridge: RegisterTool(&quot;app_dice&quot;)
+    Bridge-&gt;&gt;Host: notifications/tools/list_changed
+    Host-&gt;&gt;Bridge: Send(tools/list) — refresh
+    Bridge--&gt;&gt;Host: {tools: [app_greet, app_counter, app_dice]}
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="step-1-create-mcp-server-with-tools">Step 1: Create MCP server with tools <a class="anchor" href="#step-1-create-mcp-server-with-tools">¶</a></h3>
+<blockquote>
+<p><strong>References:</strong> <a href="https://spec.modelcontextprotocol.io">MCP Specification</a></p>
+</blockquote>
+<p>The server provides two tools: echo (returns input) and time (returns current time).</p>
+<h3 id="step-2-connect-client-to-server-via-in-process-transport">Step 2: Connect client to server via in-process transport <a class="anchor" href="#step-2-connect-client-to-server-via-in-process-transport">¶</a></h3>
+<p>The client connects without HTTP — using InProcessTransport for direct dispatch.</p>
+<h3 id="step-3-create-inprocessappbridge-with-app-provided-tools">Step 3: Create InProcessAppBridge with app-provided tools <a class="anchor" href="#step-3-create-inprocessappbridge-with-app-provided-tools">¶</a></h3>
+<blockquote>
+<p><strong>References:</strong> <a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps Extension</a></p>
+</blockquote>
+<p>The bridge simulates an MCP App (iframe). It registers two tools that the host/model can call directly.</p>
+<h3 id="step-4-create-apphost-and-wire-everything-together">Step 4: Create AppHost and wire everything together <a class="anchor" href="#step-4-create-apphost-and-wire-everything-together">¶</a></h3>
+<p>AppHost wires up bidirectional routing and fetches the initial app tool list.</p>
+<h3 id="step-5-listalltools--aggregated-server--app-tools">Step 5: ListAllTools — aggregated server + app tools <a class="anchor" href="#step-5-listalltools--aggregated-server--app-tools">¶</a></h3>
+<p>ListAllTools merges tools from the MCP server and the app bridge into a single list.</p>
+<h3 id="step-6-callapptool--host-invokes-an-app-provided-tool">Step 6: CallAppTool — host invokes an app-provided tool <a class="anchor" href="#step-6-callapptool--host-invokes-an-app-provided-tool">¶</a></h3>
+<p>The host calls a tool registered by the app. The bridge dispatches to the Go handler.</p>
+<h3 id="step-7-app-calls-server-tool-via-bridge--apphost--client">Step 7: App calls server tool via bridge → AppHost → Client <a class="anchor" href="#step-7-app-calls-server-tool-via-bridge--apphost--client">¶</a></h3>
+<p>The app calls a server-side tool through the bridge. AppHost forwards to the MCP server via the Client.</p>
+<h3 id="step-8-dynamic-registration--app-adds-a-tool-at-runtime">Step 8: Dynamic registration — app adds a tool at runtime <a class="anchor" href="#step-8-dynamic-registration--app-adds-a-tool-at-runtime">¶</a></h3>
+<p>The app registers a new tool after startup. AppHost detects the change and refreshes its cache.</p>
+<h3 id="cleanup">Cleanup <a class="anchor" href="#cleanup">¶</a></h3>
+<p>AppHost.Close() closes the bridge. The caller closes the Client separately.<br />
+In a real application, you&rsquo;d defer these in the appropriate scope.</p>
+<h2 id="references">References <a class="anchor" href="#references">¶</a></h2>
+<ul>
+<li><a href="https://spec.modelcontextprotocol.io">MCP Specification</a></li>
+<li><a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps Extension</a></li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/host/01-apphost/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/host/01-apphost/ --non-interactive
+</span></span></code></pre><h2 id="what-to-verify">What to verify <a class="anchor" href="#what-to-verify">¶</a></h2>
+<ul>
+<li><strong>Step 5</strong>: ListAllTools shows 4 tools (2 server + 2 app)</li>
+<li><strong>Step 6</strong>: CallAppTool returns &ldquo;Hello, World!&rdquo; and counter increments to 2</li>
+<li><strong>Step 7</strong>: App calls server_echo, result includes &ldquo;echo: from the app&rdquo;</li>
+<li><strong>Step 8</strong>: After dynamic registration, 3 app tools listed (app_greet, app_counter, app_dice)</li>
+</ul>
+<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/examples/host/02-multi-server/">Multi-server registry</a></li>
+<li><a href="/mcpkit/examples/apps/">MCP Apps (the iframe UIs a host renders)</a></li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

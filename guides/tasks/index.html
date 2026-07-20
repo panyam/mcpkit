@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Server-directed async tool calls with the SEP-2663 v2 tasks extension.">
+    <title>Long-running tasks · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Long-running tasks</h1>
+        
+        <p class="lead">Server-directed async tool calls with the SEP-2663 v2 tasks extension.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/TASKS_TUTORIAL.md"><code>docs/TASKS_TUTORIAL.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="tasks-tutorial--sep-2663-server-directed-async-execution-end-to-end">Tasks Tutorial — SEP-2663 server-directed async execution, end to end <a class="anchor" href="#tasks-tutorial--sep-2663-server-directed-async-execution-end-to-end">¶</a></h1>
+<p>Everything you need to know to write tools that run as long-lived background tasks, gather input mid-execution, surface progress, and compose cleanly with the MRTR (SEP-2322) sync round-trip pattern.</p>
+<blockquote>
+<p><strong>Status.</strong> Reflects SEP-2663 (merged Final 2026-05-15), SEP-2575 (stateless wire), and SEP-2322 (MRTR — see <a href="/mcpkit/guides/mrtr/"><code>docs/MRTR_TUTORIAL.md</code></a>).</p>
+<p>mcpkit&rsquo;s reference fixtures live under <a href="/mcpkit/examples/tasks-v2/"><code>examples/tasks-v2</code></a> and <a href="/mcpkit/examples/mrtr/"><code>examples/mrtr</code></a>; the conformance suite is in <a href="https://github.com/panyam/mcpconformance">panyam/mcpconformance</a>, branch <code>feat/tasks-mrtr-extension</code>. The migration guide for v1 → v2 is at <a href="/mcpkit/design/tasks-v2-migration/"><code>docs/TASKS_V2_MIGRATION.md</code></a>.</p>
+</blockquote>
+<hr />
+<h2 id="1-the-core-idea-server-directed-async-execution">1. The core idea: server-directed async execution <a class="anchor" href="#1-the-core-idea-server-directed-async-execution">¶</a></h2>
+<p>A <strong>task</strong> is a long-running tool invocation that gets a stable identifier and outlives any single HTTP round-trip. The client doesn&rsquo;t ask for one — the <em>server</em> decides whether a given <code>tools/call</code> should run as a task, based on a single piece of static metadata on the tool definition (<code>Execution.TaskSupport</code>) plus what the handler returns at runtime.</p>
+<p>The decision flow on the server is intentionally simple:</p>
+<pre><code>tools/call arrives
+       ↓
+Look up tool's Execution.TaskSupport:
+  ├── forbidden / absent → run sync, return ToolResult, never a task
+  ├── optional → server may create a task (gated on client extension)
+  └── required → server must create a task (gated on client extension)
+       ↓
+Has the client negotiated the tasks extension?
+  ├── No, and TaskSupport=required → -32021 with requiredCapabilities
+  ├── No, and TaskSupport=optional → run sync (no task)
+  └── Yes → run the handler, then peek at what it returned
+       ↓
+Handler returned what?
+  ├── core.InputRequiredResult (MRTR)        → return as-is, no task created
+  ├── core.GoAsyncResult                     → mint task, spawn continuation
+  └── core.ToolResult (or any other variant) → mint born-terminal task
+</code></pre>
+<p>The four return shapes are the four concrete variants of the sealed <a href="https://github.com/panyam/mcpkit/blob/main/core/tool.go"><code>core.ToolResponse</code></a> interface — <code>ToolResult</code> for sync results, <code>InputRequiredResult</code> for MRTR rounds, <code>CreateTaskResult</code> for already-shaped task envelopes (rarely returned directly by handlers), and <code>GoAsyncResult</code> as the in-process marker that asks the middleware to mint a task and continue in a goroutine.</p>
+<p>This is the heart of SEP-2663&rsquo;s <em>&ldquo;server decides&rdquo;</em> posture: the v1 <code>task</code> hint in the client request is gone. The server runs the handler, sees what it produced, and decides whether to wrap it in task envelopes.</p>
+<h3 id="when-to-use-a-task-vs-sync-vs-mrtr">When to use a task vs. sync vs. MRTR <a class="anchor" href="#when-to-use-a-task-vs-sync-vs-mrtr">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Picks this when &hellip;</th>
+<th>Wire shape returned</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Sync ToolResult</strong></td>
+<td>Tool does its work in milliseconds, no input needed mid-flight, no need to outlive the HTTP request</td>
+<td><code>ToolResult</code></td>
+</tr>
+<tr>
+<td><strong>MRTR rounds</strong></td>
+<td>Tool needs <em>one or more pieces of input</em> up front to decide what to do, but doesn&rsquo;t need to keep state past the answer</td>
+<td><code>InputRequiredResult</code> then <code>ToolResult</code></td>
+</tr>
+<tr>
+<td><strong>Born-terminal task</strong></td>
+<td>Tool was declared <code>TaskSupport=optional/required</code> for wire consistency, but a particular invocation happens to finish synchronously (cache hit, instant compute, etc.)</td>
+<td><code>CreateTaskResult</code> with <code>status: completed</code></td>
+</tr>
+<tr>
+<td><strong>GoAsync task</strong></td>
+<td>Tool&rsquo;s real work is long, needs the goroutine, can call <code>TaskElicit</code>/<code>TaskSample</code>, emits progress, may need cancellation</td>
+<td><code>CreateTaskResult</code> + later <code>tasks/get</code> polling</td>
+</tr>
+</tbody>
+</table>
+<p>The killer feature — and the focus of §7 — is that <strong>MRTR rounds and GoAsync tasks compose</strong>: a single tool can do MRTR rounds for upfront input, then escalate to a task for the long work, then call <code>TaskElicit</code> mid-task if more input becomes necessary.</p>
+<hr />
+<h2 id="2-wire-shape">2. Wire shape <a class="anchor" href="#2-wire-shape">¶</a></h2>
+<p>Tasks have their own three-method API alongside <code>tools/call</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Direction</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tools/call</code></td>
+<td>C → S</td>
+<td>Tool invocation; server may respond with <code>CreateTaskResult</code></td>
+</tr>
+<tr>
+<td><code>tasks/get</code></td>
+<td>C → S</td>
+<td>Poll a task&rsquo;s state and (when terminal) inlined result</td>
+</tr>
+<tr>
+<td><code>tasks/update</code></td>
+<td>C → S</td>
+<td>Deliver an <code>inputResponses</code> payload to a task parked in <code>input_required</code></td>
+</tr>
+<tr>
+<td><code>tasks/cancel</code></td>
+<td>C → S</td>
+<td>Request cancellation; goroutine sees <code>ctx.Done()</code></td>
+</tr>
+<tr>
+<td><code>notifications/tasks</code></td>
+<td>S → C</td>
+<td>Lifecycle status events; carries the same <code>DetailedTask</code> shape</td>
+</tr>
+</tbody>
+</table>
+<h3 id="createtaskresult-returned-from-toolscall"><code>CreateTaskResult</code> (returned from <code>tools/call</code>) <a class="anchor" href="#createtaskresult-returned-from-toolscall">¶</a></h3>
+<p>The flat intersection of <code>Result</code> and <code>Task</code> (per SEP-2663):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;resultType&#34;</span>: <span style="color:#d14">&#34;task&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;taskId&#34;</span>: <span style="color:#d14">&#34;task-a3f9...&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;status&#34;</span>: <span style="color:#d14">&#34;working&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;createdAt&#34;</span>: <span style="color:#d14">&#34;2026-05-28T12:00:00Z&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;lastUpdatedAt&#34;</span>: <span style="color:#d14">&#34;2026-05-28T12:00:00Z&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;ttlMs&#34;</span>: <span style="color:#099">300000</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;pollIntervalMs&#34;</span>: <span style="color:#099">1000</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>MUST NOT carry <code>result</code>, <code>error</code>, <code>inputRequests</code>, or <code>requestState</code> — those live on <code>DetailedTask</code> returned by <code>tasks/get</code>.</p>
+<h3 id="detailedtask-returned-from-tasksget-and-on-notificationstasks"><code>DetailedTask</code> (returned from <code>tasks/get</code> and on <code>notifications/tasks</code>) <a class="anchor" href="#detailedtask-returned-from-tasksget-and-on-notificationstasks">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;taskId&#34;</span>: <span style="color:#d14">&#34;task-a3f9...&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;status&#34;</span>: <span style="color:#d14">&#34;input_required&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;createdAt&#34;</span>: <span style="color:#d14">&#34;...&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;lastUpdatedAt&#34;</span>: <span style="color:#d14">&#34;...&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;inputRequests&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;elicit-1&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;elicitation/create&#34;</span>,
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;params&#34;</span>: { <span style="color:#a61717;background-color:#e3d2d2">...</span> }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  },
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;result&#34;</span>: <span style="color:#000;font-weight:bold">null</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;error&#34;</span>: <span style="color:#000;font-weight:bold">null</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>When <code>status</code> is terminal:</p>
+<ul>
+<li><code>completed</code> → <code>result</code> is the final <code>ToolResult</code> (may carry <code>isError: true</code> for tool-level errors)</li>
+<li><code>failed</code> → <code>error</code> is a JSON-RPC-shaped <code>{code, message}</code> for protocol-level failures</li>
+<li><code>cancelled</code> → both <code>result</code> and <code>error</code> are absent; <code>statusMessage</code> may carry detail</li>
+</ul>
+<h3 id="tasksupdate"><code>tasks/update</code> <a class="anchor" href="#tasksupdate">¶</a></h3>
+<p>The client delivers responses to in-task input requests:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;tasks/update&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;taskId&#34;</span>: <span style="color:#d14">&#34;task-a3f9...&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;inputResponses&#34;</span>: {
+</span></span><span style="display:flex;"><span>      <span style="color:#000080">&#34;elicit-1&#34;</span>: {
+</span></span><span style="display:flex;"><span>        <span style="color:#000080">&#34;action&#34;</span>: <span style="color:#d14">&#34;accept&#34;</span>,
+</span></span><span style="display:flex;"><span>        <span style="color:#000080">&#34;content&#34;</span>: { <span style="color:#000080">&#34;confirm&#34;</span>: <span style="color:#000;font-weight:bold">true</span> }
+</span></span><span style="display:flex;"><span>      }
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The server&rsquo;s response is an empty ack (<code>{}</code>); the actual continuation happens out-of-band on the parked goroutine.</p>
+<hr />
+<h2 id="3-server-directed-task-creation">3. Server-directed task creation <a class="anchor" href="#3-server-directed-task-creation">¶</a></h2>
+<h3 id="declaring-task-eligibility">Declaring task eligibility <a class="anchor" href="#declaring-task-eligibility">¶</a></h3>
+<p>A tool opts into task execution by setting <code>Execution.TaskSupport</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(
+</span></span><span style="display:flex;"><span>    core.ToolDef{
+</span></span><span style="display:flex;"><span>        Name:        <span style="color:#d14">&#34;slow_compute&#34;</span>,
+</span></span><span style="display:flex;"><span>        Description: <span style="color:#d14">&#34;...&#34;</span>,
+</span></span><span style="display:flex;"><span>        InputSchema: <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;type&#34;</span>: <span style="color:#d14">&#34;object&#34;</span>},
+</span></span><span style="display:flex;"><span>        Execution:   <span style="color:#000;font-weight:bold">&amp;</span>core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    handler,
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p>Three values:</p>
+<ul>
+<li><strong><code>TaskSupportForbidden</code></strong> (or absent <code>Execution</code>) — tool never runs as a task. Handler returns sync. Server ignores <code>core.GoAsyncResult</code> if the handler somehow returns it.</li>
+<li><strong><code>TaskSupportOptional</code></strong> — tool <em>may</em> run as a task, depending on what the handler does. If the client hasn&rsquo;t negotiated the tasks extension, the server falls back to sync.</li>
+<li><strong><code>TaskSupportRequired</code></strong> — tool <em>must</em> run as a task. If the client hasn&rsquo;t negotiated the tasks extension, the server returns <code>-32021</code> (Missing Required Client Capability) with a structured <code>requiredCapabilities</code> payload so the client knows what to add.</li>
+</ul>
+<h3 id="client-negotiation">Client negotiation <a class="anchor" href="#client-negotiation">¶</a></h3>
+<p>The client must declare the extension. Two ways:</p>
+<ul>
+<li><strong>Legacy wire, session-level:</strong> <code>client.WithTasksExtension()</code> adds <code>capabilities.extensions[&quot;io.modelcontextprotocol/tasks&quot;] = {}</code> to the <code>initialize</code> request.</li>
+<li><strong>Stateless wire (or per-request override on legacy):</strong> <code>_meta.io.modelcontextprotocol/clientCapabilities.extensions[&quot;io.modelcontextprotocol/tasks&quot;]</code> on each request.</li>
+</ul>
+<p>The server&rsquo;s <code>taskV2Middleware</code> checks both via <a href="https://github.com/panyam/mcpkit/blob/main/core/stateless.go"><code>core.ClientSupportsExtensionForRequest</code></a>. See <a href="/mcpkit/guides/mrtr/#4-where-the-client-publishes-its-capability-menu--and-how-that-changes-per-wire"><code>docs/MRTR_TUTORIAL.md</code> §4</a> for the full capability-publishing story across wires.</p>
+<h3 id="registering-the-extension-on-the-server">Registering the extension on the server <a class="anchor" href="#registering-the-extension-on-the-server">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/ext/tasks&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info,
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithRequestStateSigning</span>([]<span style="color:#0086b3">byte</span>(signingKey), <span style="color:#099">24</span><span style="color:#000;font-weight:bold">*</span>time.Hour),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(<span style="color:#000;font-weight:bold">...</span>)
+</span></span><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{Server: srv})
+</span></span></code></pre><p><code>tasks.Register</code> does four things:</p>
+<ol>
+<li>Installs <code>taskV2Middleware</code> on the server&rsquo;s middleware chain (intercepts <code>tools/call</code>).</li>
+<li>Registers <code>tasks/get</code>, <code>tasks/update</code>, <code>tasks/cancel</code> as method handlers (gated on the extension).</li>
+<li>Advertises the extension in the <code>initialize</code> response (legacy wire) and the SEP-2575 capabilities surface (stateless wire).</li>
+<li>Wires up a default in-memory <code>TaskStore</code> if you didn&rsquo;t supply one.</li>
+</ol>
+<hr />
+<h2 id="4-the-goasync-return--middleware-peek">4. The GoAsync return + middleware peek <a class="anchor" href="#4-the-goasync-return--middleware-peek">¶</a></h2>
+<p>The handler signals async escalation by returning a dedicated variant on the sealed <code>core.ToolResponse</code> interface, and the middleware peeks at the return value before deciding what to do.</p>
+<h3 id="why-the-middleware-peeks-at-the-response">Why the middleware peeks at the response <a class="anchor" href="#why-the-middleware-peeks-at-the-response">¶</a></h3>
+<p>The middleware runs the handler <strong>synchronously first</strong>, then dispatches on the concrete <code>ToolResponse</code> variant the handler returned. This is what makes the MRTR↔Tasks composition (a single tool gathering input via MRTR rounds first, then escalating to async) possible — if the middleware created the task before the handler ran, round 1 would always emit <code>CreateTaskResult</code> and the handler would never get to return <code>InputRequiredResult</code>.</p>
+<p>The flow:</p>
+<ol>
+<li>Middleware runs the handler <strong>synchronously</strong> via <code>next(ctx, req)</code>.</li>
+<li>Looks at what came back via a type switch on the concrete <code>ToolResponse</code> variant.</li>
+<li>Dispatches:
+<ul>
+<li><code>core.InputRequiredResult</code> → pass through; no task created</li>
+<li><code>core.GoAsyncResult</code> → mint task, spawn continuation goroutine, re-invoke handler with <code>TaskContext</code> attached, return <code>CreateTaskResult</code></li>
+<li><code>core.ToolResult</code> (or any other complete-shaped variant) → mint a born-terminal task, store the result, return <code>CreateTaskResult</code></li>
+</ul>
+</li>
+</ol>
+<p>This is what the <a href="https://github.com/panyam/mcpconformance"><code>mrtr-tasks-composition</code></a> conformance scenario asserts.</p>
+<h3 id="the-handler-is-a-state-machine">The handler is a state machine <a class="anchor" href="#the-handler-is-a-state-machine">¶</a></h3>
+<p><code>GoAsyncResult</code> is a marker variant — it carries no payload, just type identity. So the goroutine <strong>re-invokes the same handler</strong> with the TaskContext plumbed in; the handler is a single function that branches on whether a TaskContext is present:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">myHandler</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Branch 3: re-invocation inside the continuation goroutine
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">doRealWork</span>(ctx, req)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Branch 1: MRTR rounds (optional)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">if</span> ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;foo&#34;</span>) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(<span style="color:#000;font-weight:bold">...</span>)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// Branch 2: sync preflight done; escalate to async
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>For tools that <em>don&rsquo;t</em> need any MRTR preflight, the pattern shortens to &ldquo;no TaskContext → GoAsync; have TaskContext → real work&rdquo;:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">slowTool</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">doSlowWork</span>(ctx, req)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>This is the canonical pattern and what every fixture in <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks-v2/main.go"><code>examples/tasks-v2/main.go</code></a> uses.</p>
+<blockquote>
+<p><strong>Note.</strong> The handler runs <strong>twice</strong> for any GoAsync <code>tools/call</code>: once sync (returns <code>core.GoAsyncResult{}</code>), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing — a handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.</p>
+</blockquote>
+<h3 id="what-happens-to-a-sync-handler-on-a-tasksupportoptional-tool">What happens to a sync handler on a <code>TaskSupport=optional</code> tool? <a class="anchor" href="#what-happens-to-a-sync-handler-on-a-tasksupportoptional-tool">¶</a></h3>
+<p>The middleware still creates a task — but the task is <strong>born terminal</strong>. <code>Status: completed</code>, result already stored, one <code>notifications/tasks</code> event fired. The wire response is still <code>CreateTaskResult</code>, so the client sees task shape; <code>tasks/get</code> returns the answer immediately. No goroutine runs.</p>
+<p>The trade-off: the SEP-2663 G6 filter (no <code>notifications/progress</code> / <code>notifications/message</code> on tasks — see §8) is <strong>not</strong> applied on this path. The handler ran on the unfiltered POST ctx and is responsible for not emitting those notifications itself.</p>
+<hr />
+<h2 id="5-taskcontext--the-in-task-api">5. <code>TaskContext</code> — the in-task API <a class="anchor" href="#5-taskcontext--the-in-task-api">¶</a></h2>
+<p>When the handler is running inside the continuation goroutine, <a href="https://github.com/panyam/mcpkit/blob/main/ext/tasks/runtime.go"><code>tasks.GetTaskContext(ctx)</code></a> returns a non-nil <code>*TaskContext</code> that gives access to task-scoped operations:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> TaskContext <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    core.ToolContext  <span style="color:#998;font-style:italic">// embedded — keeps EmitProgress / EmitLog / etc. accessible
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// ...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (tc <span style="color:#000;font-weight:bold">*</span>TaskContext) <span style="color:#900;font-weight:bold">TaskID</span>() <span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (tc <span style="color:#000;font-weight:bold">*</span>TaskContext) <span style="color:#900;font-weight:bold">ProgressToken</span>() any   <span style="color:#998;font-style:italic">// from _meta.progressToken; nil if not set
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> (tc <span style="color:#000;font-weight:bold">*</span>TaskContext) <span style="color:#900;font-weight:bold">SetStatus</span>(status core.TaskStatus) <span style="color:#458;font-weight:bold">error</span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (tc <span style="color:#000;font-weight:bold">*</span>TaskContext) <span style="color:#900;font-weight:bold">TaskElicit</span>(req core.ElicitationRequest) (core.ElicitationResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> (tc <span style="color:#000;font-weight:bold">*</span>TaskContext) <span style="color:#900;font-weight:bold">TaskSample</span>(req core.CreateMessageRequest) (core.CreateMessageResult, <span style="color:#458;font-weight:bold">error</span>)
+</span></span></code></pre><h3 id="setstatus"><code>SetStatus</code> <a class="anchor" href="#setstatus">¶</a></h3>
+<p>Transitions the task&rsquo;s status and fires a <code>notifications/tasks</code> event. Use it to mark transitions other than the implicit <code>working → completed/failed</code> (e.g., when a long-running job hits an interesting milestone you want to surface). Status transitions enforce a state machine — see §6.</p>
+<h3 id="taskelicit-and-tasksample--the-in-task-input-flow"><code>TaskElicit</code> and <code>TaskSample</code> — the in-task input flow <a class="anchor" href="#taskelicit-and-tasksample--the-in-task-input-flow">¶</a></h3>
+<p>These are the equivalents of MRTR&rsquo;s <code>elicitation/create</code> and <code>sampling/createMessage</code> requests, but they happen <strong>inside</strong> the goroutine instead of before it. The goroutine blocks on a waiter channel; the client wakes it by sending <code>tasks/update</code>. See §7 for the full mechanic.</p>
+<h3 id="whats-missing-from-the-v1-surface">What&rsquo;s missing from the v1 surface <a class="anchor" href="#whats-missing-from-the-v1-surface">¶</a></h3>
+<p>Notably absent: any equivalent of v1&rsquo;s <code>ProgressToken</code> parameter on <code>SetStatus</code>, or v1&rsquo;s <code>EmitProgress</code>-via-task-channel. SEP-2663&rsquo;s G6 rule says tasks don&rsquo;t speak progress/message — surface progress through <code>SetStatus(...)</code> and <code>statusMessage</code> instead. See §8.</p>
+<hr />
+<h2 id="6-task-lifecycle--states--transitions">6. Task lifecycle — states + transitions <a class="anchor" href="#6-task-lifecycle--states--transitions">¶</a></h2>
+<p>Tasks have five statuses and a strict transition graph:</p>
+<pre><code>              ┌─────────────────────┐
+              │      working        │←──┐
+              └──┬──────┬──────┬────┘   │  TaskElicit / TaskSample
+                 │      │      │        │  delivered the response;
+   completion    │      │      │        │  goroutine resumes
+        normally │      │      │        │
+                 ↓      ↓      ↓        │
+          ┌──────┐  ┌──────┐  ┌──────────┐
+          │compl.│  │failed│  │input_req.│
+          │ ⊥    │  │  ⊥   │  │          │ ──┘
+          └──────┘  └──────┘  └────┬─────┘
+                                   │
+                                   │ tasks/cancel before resume
+                                   ↓
+                                ┌──────┐
+                                │cancel│
+                                │  ⊥   │
+                                └──────┘
+</code></pre>
+<p><strong>Transitions the spec allows:</strong></p>
+<ul>
+<li><code>working → working</code> (allowed, but a no-op semantically)</li>
+<li><code>working → input_required</code> (server-internal, fired automatically by <code>TaskElicit</code> / <code>TaskSample</code>)</li>
+<li><code>input_required → working</code> (<code>tasks/update</code> delivers a response and unblocks the waiter)</li>
+<li><code>working → completed</code> (handler returns a regular <code>ToolResult</code>)</li>
+<li><code>working → failed</code> (handler returns a protocol-level error / middleware error / panic)</li>
+<li><code>working → cancelled</code> (<code>tasks/cancel</code> arrives before terminal)</li>
+<li><code>input_required → cancelled</code> (<code>tasks/cancel</code> while parked)</li>
+</ul>
+<p><strong>Terminal statuses are sticky.</strong> Once a task is <code>completed</code> / <code>failed</code> / <code>cancelled</code>, the store rejects further transitions (<code>errTaskTerminal</code>). This is what guards against cancel/complete races.</p>
+<p><strong>Tool errors vs protocol errors:</strong></p>
+<ul>
+<li>A handler returning <code>core.ErrorResult(...)</code> (or <code>core.ToolResult</code> with <code>IsError: true</code>) → status <code>completed</code> with the error embedded in <code>result.isError</code>. Tool <em>output</em> is an error; task <em>execution</em> succeeded.</li>
+<li>A handler returning a non-nil Go error, or a panic, or a middleware error → status <code>failed</code> with the error in <code>DetailedTask.error</code>. Task <em>execution</em> itself failed.</li>
+</ul>
+<p>This split matters for clients: <code>completed + isError:true</code> should be displayed to the user as a tool error; <code>failed</code> should be treated as an infrastructure issue.</p>
+<hr />
+<h2 id="7-the-in-task-input-flow--pause-surface-resume">7. The in-task input flow — pause, surface, resume <a class="anchor" href="#7-the-in-task-input-flow--pause-surface-resume">¶</a></h2>
+<p>This is the symmetric counterpart of MRTR&rsquo;s <code>InputRequiredResult</code> round, scoped to <em>inside</em> a running task. <strong>It&rsquo;s the answer to &ldquo;what if I only discover I need more input <em>after</em> starting the work?&rdquo;</strong></p>
+<h3 id="the-handler-side-api">The handler-side API <a class="anchor" href="#the-handler-side-api">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">confirmDeleteHandler</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    tc <span style="color:#000;font-weight:bold">:=</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tc <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// The goroutine actually BLOCKS here:
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    result, err <span style="color:#000;font-weight:bold">:=</span> tc.<span style="color:#900;font-weight:bold">TaskElicit</span>(core.ElicitationRequest{
+</span></span><span style="display:flex;"><span>        Message:         <span style="color:#d14">&#34;Delete this file?&#34;</span>,
+</span></span><span style="display:flex;"><span>        RequestedSchema: <span style="color:#000;font-weight:bold">...</span>,
+</span></span><span style="display:flex;"><span>    })
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">ErrorResult</span>(err.<span style="color:#900;font-weight:bold">Error</span>()), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> result.Action <span style="color:#000;font-weight:bold">==</span> <span style="color:#d14">&#34;accept&#34;</span> <span style="color:#000;font-weight:bold">&amp;&amp;</span> result.Content[<span style="color:#d14">&#34;confirm&#34;</span>] <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">true</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">TextResult</span>(<span style="color:#d14">&#34;deleted&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">TextResult</span>(<span style="color:#d14">&#34;kept&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The call reads as synchronous, but under the hood:</p>
+<ol>
+<li><code>TaskElicit</code> mints a stable key (<code>elicit-1</code>, <code>elicit-2</code>, &hellip;), stashes the request on the task&rsquo;s <code>inputState</code>, and returns a per-key waiter channel.</li>
+<li>The task&rsquo;s status is updated to <code>input_required</code> and a <code>notifications/tasks</code> event fires (so clients listening on the SSE stream see the transition).</li>
+<li>The goroutine <code>&lt;-waiter</code> blocks. <code>ctx.Done()</code> is honored — if the task is cancelled, the wait unblocks with the context error.</li>
+<li>The client observes the pending input via <code>tasks/get</code> (which surfaces <code>inputState.snapshot()</code> on <code>DetailedTask.InputRequests</code>).</li>
+<li>The client sends <code>tasks/update</code> with the matching key in <code>inputResponses</code>.</li>
+<li>The server delivers the payload to the waiter channel.</li>
+<li>The goroutine unblocks, <code>TaskElicit</code> returns, the handler resumes.</li>
+</ol>
+<h3 id="the-wire-choreography">The wire choreography <a class="anchor" href="#the-wire-choreography">¶</a></h3>
+<pre><code>═══ Inside the goroutine ════════════════════════════════════════════════════
+handler calls tc.TaskElicit(...)
+       ↓
+       inputState.Enqueue(&quot;elicit&quot;, request) → returns (key=&quot;elicit-1&quot;, waiter)
+       store.Update: status → input_required
+       notifyV2TaskStatus(...) → emits notifications/tasks
+       ↓
+       &lt;-waiter   ← BLOCKS HERE until tasks/update arrives (or ctx.Done())
+
+═══ Client side, in parallel ════════════════════════════════════════════════
+client → POST tasks/get {taskId}
+client ← DetailedTask{
+            status: &quot;input_required&quot;,
+            inputRequests: {
+              &quot;elicit-1&quot;: { method: &quot;elicitation/create&quot;, params: {...} }
+            }
+         }
+         ↑ client renders the elicitation to the user, gets an answer
+
+client → POST tasks/update {
+           taskId,
+           inputResponses: {
+             &quot;elicit-1&quot;: { action: &quot;accept&quot;, content: {...} }
+           }
+         }
+client ← {}   ← empty ack; the handler continues asynchronously
+
+═══ Back in the goroutine ═══════════════════════════════════════════════════
+       ↓
+       &lt;-waiter unblocks with the payload
+       store.Update: status → working
+       handler resumes inside TaskElicit, returns the parsed ElicitationResult
+       ↓
+       ... handler may call TaskElicit again, or finish ...
+       ↓
+       store.StoreTerminalResult(... TaskCompleted ...)
+       notifyV2TaskStatus(...) → final notifications/tasks event
+</code></pre>
+<h3 id="parallel-fan-out">Parallel fan-out <a class="anchor" href="#parallel-fan-out">¶</a></h3>
+<p>A handler can call multiple <code>TaskElicit</code> / <code>TaskSample</code> operations from concurrent goroutines; the task surfaces <em>all</em> pending keys under <code>inputRequests</code>, and <code>tasks/update</code> can deliver them partially or in any order. mcpkit&rsquo;s <code>multi_input</code> fixture exercises this:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">var</span> wg sync.WaitGroup
+</span></span><span style="display:flex;"><span>wg.<span style="color:#900;font-weight:bold">Add</span>(<span style="color:#099">2</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">go</span> <span style="color:#000;font-weight:bold">func</span>() {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">defer</span> wg.<span style="color:#900;font-weight:bold">Done</span>()
+</span></span><span style="display:flex;"><span>    nameRes, nameErr = tc.<span style="color:#900;font-weight:bold">TaskElicit</span>(nameRequest)
+</span></span><span style="display:flex;"><span>}()
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">go</span> <span style="color:#000;font-weight:bold">func</span>() {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">defer</span> wg.<span style="color:#900;font-weight:bold">Done</span>()
+</span></span><span style="display:flex;"><span>    confirmRes, confirmErr = tc.<span style="color:#900;font-weight:bold">TaskElicit</span>(confirmRequest)
+</span></span><span style="display:flex;"><span>}()
+</span></span><span style="display:flex;"><span>wg.<span style="color:#900;font-weight:bold">Wait</span>()
+</span></span></code></pre><p>The conformance scenario for partial fulfillment asserts that the client can answer one key, see the task is <em>still</em> <code>input_required</code> (because the other key is still pending), then answer the second.</p>
+<h3 id="map-keys-are-server-chosen-and-opaque">Map keys are server-chosen and opaque <a class="anchor" href="#map-keys-are-server-chosen-and-opaque">¶</a></h3>
+<p>mcpkit picks readable keys (<code>elicit-1</code>, <code>sample-2</code>) for debuggability, but the keys are a server-internal convention. Per SEP-2663 / SEP-2322 the wire contract is <em>&ldquo;keys are opaque echo strings — clients MUST NOT parse them.&rdquo;</em> We&rsquo;re free to change the generator (e.g., to UUIDs) without breaking any conformant client.</p>
+<hr />
+<h2 id="8-notifications--notificationstasks-and-the-g6-filter">8. Notifications — <code>notifications/tasks</code> and the G6 filter <a class="anchor" href="#8-notifications--notificationstasks-and-the-g6-filter">¶</a></h2>
+<h3 id="notificationstasks"><code>notifications/tasks</code> <a class="anchor" href="#notificationstasks">¶</a></h3>
+<p>The lifecycle event stream. Server emits one whenever a task&rsquo;s status transitions; the payload is a full <code>DetailedTask</code> (status, result if completed, error if failed, inputRequests if input_required, etc.). Wire-shape-identical to the response of <code>tasks/get</code>.</p>
+<p>On the legacy wire, these fan out on the persistent GET SSE stream. On the stateless wire, they fan out on <code>subscriptions/listen</code> (when the client opted into a listener) — note: stateless support for <code>notifications/tasks</code> lands in follow-up work; today the stateless path silently drops the emission, matching the spec&rsquo;s &ldquo;no server-initiated push&rdquo; baseline.</p>
+<h3 id="the-g6-filter--what-gets-dropped-inside-a-task">The G6 filter — what gets dropped inside a task <a class="anchor" href="#the-g6-filter--what-gets-dropped-inside-a-task">¶</a></h3>
+<p>SEP-2663 G6: <strong>a task&rsquo;s notification channel is reserved for <code>notifications/tasks</code></strong>. Two notifications that work fine on sync tools are forbidden inside tasks:</p>
+<ul>
+<li><code>notifications/progress</code> — was used for streaming progress %. Replacement: <code>tc.SetStatus(...)</code> + <code>statusMessage</code> on <code>TaskInfo</code>. Clients observe progress via <code>tasks/get</code> polling or the <code>notifications/tasks</code> stream.</li>
+<li><code>notifications/message</code> — was used for streaming server-side log emissions. Replacement: structured <code>result.content</code> when the task completes (final output), or out-of-band server-side logging for live observability (your own log infra, OpenTelemetry, etc.). The spec is &ldquo;MCP isn&rsquo;t the transport for that; use real logging.&rdquo;</li>
+</ul>
+<p>mcpkit enforces this in <a href="https://github.com/panyam/mcpkit/blob/main/ext/tasks/tasks.go"><code>ext/tasks/tasks.go</code></a>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// SEP-2663 G6: notifications/progress and notifications/message MUST
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// NOT be sent on tasks. Filter at the session-notify boundary so any
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// tool handler that calls EmitProgress or EmitLog while it happens to
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// be running as the GoAsync continuation silently no-ops rather than
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// leaking onto the session stream.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>bgCtx = core.<span style="color:#900;font-weight:bold">ApplySessionNotifyFilter</span>(bgCtx,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/progress&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;notifications/message&#34;</span>,
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p>So a handler written for the pre-G6 world doesn&rsquo;t break — it just stops emitting those notifications when running as the GoAsync continuation. The migration is mechanical, not behavioral.</p>
+<h3 id="filter-scope-is-goroutine-only">Filter scope is goroutine-only <a class="anchor" href="#filter-scope-is-goroutine-only">¶</a></h3>
+<p>The filter is applied <strong>only</strong> to the continuation goroutine&rsquo;s <code>bgCtx</code>. A sync handler returning a <code>ToolResult</code> (or running an MRTR round) on a <code>TaskSupport=optional/required</code> tool runs on the <strong>unfiltered</strong> POST ctx — <code>EmitProgress</code> and <code>EmitLog</code> work normally there. This is a deliberate narrowing: sync handlers are responsible for not leaking notifications they shouldn&rsquo;t.</p>
+<p>For deeper coverage of how <code>progressToken</code> works across both paths, see <a href="/mcpkit/guides/mrtr/#5-progresstoken--who-mints-it-and-what-its-for"><code>docs/MRTR_TUTORIAL.md</code> §5</a>.</p>
+<hr />
+<h2 id="9-cancellation">9. Cancellation <a class="anchor" href="#9-cancellation">¶</a></h2>
+<p><code>tasks/cancel</code> triggers cancellation of the goroutine via the bgCtx that was attached when the task spawned. The flow:</p>
+<ol>
+<li>Client sends <code>tasks/cancel {taskId}</code>. Returns an empty ack immediately (<code>{}</code>).</li>
+<li>Server calls <code>cancelFunc()</code> on the bgCtx (set up in <code>spawnGoAsyncTask</code>).</li>
+<li>The goroutine&rsquo;s <code>ctx.Done()</code> channel closes. Inside the handler, any <code>select</code> on <code>ctx.Done()</code> unblocks.</li>
+<li>The handler returns. The middleware&rsquo;s deferred recovery sees the cancellation and records terminal status <code>cancelled</code>.</li>
+<li>Final <code>notifications/tasks</code> event fires.</li>
+</ol>
+<h3 id="handler-responsibilities">Handler responsibilities <a class="anchor" href="#handler-responsibilities">¶</a></h3>
+<ul>
+<li><strong>Long-running blocking work</strong> should <code>select</code> on <code>ctx.Done()</code> alongside whatever else it&rsquo;s waiting on. The <code>slow_compute</code> fixture demonstrates this pattern.</li>
+<li><strong><code>TaskElicit</code> / <code>TaskSample</code></strong> already honor <code>ctx.Done()</code> — the waiter <code>&lt;-</code> unblocks with the context error if the task is cancelled while parked.</li>
+<li><strong>Cleanup</strong> should be in <code>defer</code> blocks. The middleware&rsquo;s recovery handles panics; you handle resource cleanup.</li>
+</ul>
+<h3 id="cancel-during-input-required">Cancel-during-input-required <a class="anchor" href="#cancel-during-input-required">¶</a></h3>
+<p>A particularly important case: a task parked in <code>input_required</code> (waiting on <code>TaskElicit</code>) gets cancelled by the client. The waiter <code>&lt;-</code> unblocks with the context error; <code>TaskElicit</code> returns a non-nil error; the handler returns; status transitions to <code>cancelled</code>. The TestV2_ElicitCancelUnblocks fixture in <a href="https://github.com/panyam/mcpkit/blob/main/ext/tasks/tasks_test.go"><code>ext/tasks/tasks_test.go</code></a> exercises this.</p>
+<hr />
+<h2 id="10-tasks-vs-mrtr--when-to-use-which-and-how-they-compose">10. Tasks vs MRTR — when to use which, and how they compose <a class="anchor" href="#10-tasks-vs-mrtr--when-to-use-which-and-how-they-compose">¶</a></h2>
+<p>Two distinct mechanisms for &ldquo;server-asks-client-for-something,&rdquo; scoped to two different phases of a tool&rsquo;s lifetime. See <a href="/mcpkit/guides/mrtr/#7-when-to-use-what--mrtr-vs-push-vs-task-input-flow"><code>docs/MRTR_TUTORIAL.md</code> §7</a> for the full comparison table and decision flow; the short version:</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>MRTR (<code>ctx.RequestInput</code>)</th>
+<th>Task input flow (<code>tc.TaskElicit</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>When</strong></td>
+<td>Before task escalation, during sync preflight</td>
+<td>After task escalation, inside the goroutine</td>
+</tr>
+<tr>
+<td><strong>Wire</strong></td>
+<td>Client re-invokes the same <code>tools/call</code></td>
+<td>Client polls via <code>tasks/get</code>, delivers via <code>tasks/update</code></td>
+</tr>
+<tr>
+<td><strong>Server state across rounds</strong></td>
+<td>None — stateless continuation token</td>
+<td>Lots — <code>activeTask</code> + <code>inputState</code> + parked goroutine</td>
+</tr>
+<tr>
+<td><strong>Restartable across replicas</strong></td>
+<td>Yes — token carries everything</td>
+<td>No — goroutine is pinned to one process</td>
+</tr>
+<tr>
+<td><strong>Best for</strong></td>
+<td>&ldquo;I know I&rsquo;ll need input before I can decide what to do&rdquo;</td>
+<td>&ldquo;I started the work and only discovered I need more input&rdquo;</td>
+</tr>
+</tbody>
+</table>
+<h3 id="composition-mrtr--goasync--in-task-input">Composition: MRTR + GoAsync + in-task input <a class="anchor" href="#composition-mrtr--goasync--in-task-input">¶</a></h3>
+<p>The killer pattern is a single tool that uses all three:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">compositeHandler</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// PHASE 3: in the continuation goroutine
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">if</span> tc <span style="color:#000;font-weight:bold">:=</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx); tc <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#998;font-style:italic">// Maybe call TaskElicit mid-work if something new comes up
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        confirmation, err <span style="color:#000;font-weight:bold">:=</span> tc.<span style="color:#900;font-weight:bold">TaskElicit</span>(midJobConfirmation)
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">ErrorResult</span>(err.<span style="color:#900;font-weight:bold">Error</span>()), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">if</span> confirmation.Action <span style="color:#000;font-weight:bold">!=</span> <span style="color:#d14">&#34;accept&#34;</span> {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">TextResult</span>(<span style="color:#d14">&#34;aborted at mid-job confirmation&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">finishExpensiveWork</span>(ctx, req)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// PHASE 1: MRTR — gather upfront input
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">if</span> ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;api_key&#34;</span>) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(needApiKey)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;target&#34;</span>) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(needTarget)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// PHASE 2: preflight done; escalate to async
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Three orthogonal mechanisms, one handler. The key spec separations (asserted by the <code>mrtr-tasks-composition</code> conformance scenario, see <a href="https://github.com/panyam/mcpkit/blob/main/conformance/mrtr/scenarios.test.ts"><code>conformance/mrtr/scenarios.test.ts</code></a>):</p>
+<ul>
+<li>MRTR <code>requestState</code> does <strong>not</strong> flow into the task&rsquo;s <code>requestState</code>. Each MRTR phase has its own ephemeral continuation; the task has its own per-task <code>inputState</code> keyed by <code>taskID</code>.</li>
+<li>MRTR <code>inputRequests</code> keys live in the round&rsquo;s <code>requestState</code> token; task <code>inputRequests</code> keys (<code>elicit-1</code>, etc.) live in the task&rsquo;s <code>inputState</code>. They never collide because they live in different wire envelopes.</li>
+<li>Clients don&rsquo;t have to dedup across the two flows. Round 2 goes on <code>tools/call</code>; the task answer goes on <code>tasks/update</code>. The wire shape tells the client which it is.</li>
+</ul>
+<h3 id="when-you-dont-need-mrtr">When you don&rsquo;t need MRTR <a class="anchor" href="#when-you-dont-need-mrtr">¶</a></h3>
+<p>If your tool just needs to run a long-blocking computation with no upfront input, skip MRTR entirely:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">longRunner</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">runForAWhile</span>(ctx, req)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="when-you-dont-need-a-task">When you don&rsquo;t need a task <a class="anchor" href="#when-you-dont-need-a-task">¶</a></h3>
+<p>If your tool just needs to gather input once and then return synchronously, skip the task escalation:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">quickInteractive</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;answer&#34;</span>) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(askForAnswer)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">TextResult</span>(<span style="color:#900;font-weight:bold">buildResult</span>(ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;answer&#34;</span>))), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>(Register without <code>Execution.TaskSupport</code> set — pure sync, no extension dependency.)</p>
+<hr />
+<h2 id="11-multi-tenancy-on-the-stateless-wire">11. Multi-tenancy on the stateless wire <a class="anchor" href="#11-multi-tenancy-on-the-stateless-wire">¶</a></h2>
+<p>A production-deployment note worth knowing upfront.</p>
+<p><a href="https://github.com/panyam/mcpkit/blob/main/server/stateless_backend.go"><code>server/stateless_backend.go:236-240</code></a> documents the current state:</p>
+<blockquote>
+<p>All stateless task store entries currently key under sessionID=&quot;&quot;<br />
+(no session). This means stateless tasks share one bucket per process,<br />
+which is acceptable for the single-tenant fixtures the conformance<br />
+suite covers; multi-tenant deployments should layer an auth-subject-<br />
+keyed store wrapper. Tracked for a follow-up.</p>
+</blockquote>
+<p>What this means in practice:</p>
+<ul>
+<li>On the legacy wire, every request carries an <code>Mcp-Session-Id</code> header → <code>core.GetSessionID(ctx)</code> returns the live session ID → the task store buckets tasks per session → users can&rsquo;t see each other&rsquo;s tasks.</li>
+<li>On the stateless wire, there is no session → <code>core.GetSessionID(ctx)</code> returns <code>&quot;&quot;</code> → all tasks land in the <code>&quot;&quot;</code> bucket → in a multi-tenant deployment, every user&rsquo;s tasks share the same bucket.</li>
+</ul>
+<p>Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. Multi-tenant deployments have a real isolation hole today: <code>tasks/get</code>, <code>tasks/cancel</code>, and <code>tasks/update</code> look up by <code>(taskID, sessionID)</code>, and with <code>sessionID=&quot;&quot;</code> across users they can read / cancel / update each other&rsquo;s tasks.</p>
+<p>The fix is tracked in <a href="https://github.com/panyam/mcpkit/issues/485">issue 485</a> — a <code>TaskBucketKeyer</code> seam that lets deployers derive the bucket key from an auth subject (or any other request attribute) without <code>ext/tasks</code> taking a hard dependency on <code>ext/auth</code>. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.</p>
+<hr />
+<h2 id="12-quick-reference">12. Quick reference <a class="anchor" href="#12-quick-reference">¶</a></h2>
+<h3 id="server-setup">Server setup <a class="anchor" href="#server-setup">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
+</span></span><span style="display:flex;"><span>    tasks <span style="color:#d14">&#34;github.com/panyam/mcpkit/ext/tasks&#34;</span>
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info,
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithRequestStateSigning</span>([]<span style="color:#0086b3">byte</span>(signingKey), <span style="color:#099">24</span><span style="color:#000;font-weight:bold">*</span>time.Hour),  <span style="color:#998;font-style:italic">// for MRTR too
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterTool</span>(
+</span></span><span style="display:flex;"><span>    core.ToolDef{
+</span></span><span style="display:flex;"><span>        Name:        <span style="color:#d14">&#34;slow_compute&#34;</span>,
+</span></span><span style="display:flex;"><span>        Execution:   <span style="color:#000;font-weight:bold">&amp;</span>core.ToolExecution{TaskSupport: core.TaskSupportOptional},
+</span></span><span style="display:flex;"><span>        InputSchema: <span style="color:#000;font-weight:bold">...</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    handler,
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{
+</span></span><span style="display:flex;"><span>    Server:        srv,
+</span></span><span style="display:flex;"><span>    DefaultTTLMs:  <span style="color:#099">5</span> <span style="color:#000;font-weight:bold">*</span> <span style="color:#099">60</span> <span style="color:#000;font-weight:bold">*</span> <span style="color:#099">1000</span>,   <span style="color:#998;font-style:italic">// 5 minutes
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    DefaultPollMs: <span style="color:#099">1000</span>,             <span style="color:#998;font-style:italic">// 1 second
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// Store: ... custom TaskStore impl; defaults to in-memory
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><h3 id="handler-patterns">Handler patterns <a class="anchor" href="#handler-patterns">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Slow / blocking work, no MRTR input
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">slowOnly</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">doSlowWork</span>(ctx, req)
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// MRTR-then-async (the composition pattern)
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">mrtrThenAsync</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx) <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">doRealWork</span>(ctx, req)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> ctx.<span style="color:#900;font-weight:bold">InputResponse</span>(<span style="color:#d14">&#34;foo&#34;</span>) <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(needFoo)
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// In-task input mid-execution
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">midTaskElicit</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    tc <span style="color:#000;font-weight:bold">:=</span> tasks.<span style="color:#900;font-weight:bold">GetTaskContext</span>(ctx)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tc <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.GoAsyncResult{}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    result, err <span style="color:#000;font-weight:bold">:=</span> tc.<span style="color:#900;font-weight:bold">TaskElicit</span>(elicitRequest)
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">ErrorResult</span>(err.<span style="color:#900;font-weight:bold">Error</span>()), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    }
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#900;font-weight:bold">processResult</span>(result)
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><h3 id="client-patterns">Client patterns <a class="anchor" href="#client-patterns">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> client <span style="color:#d14">&#34;github.com/panyam/mcpkit/client&#34;</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(url, info, client.<span style="color:#900;font-weight:bold">WithTasksExtension</span>())
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">Connect</span>(); err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#000;font-weight:bold">...</span> }
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Tool call may return a CreateTaskResult
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>ctr, err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">ToolCall</span>(c, <span style="color:#d14">&#34;slow_compute&#34;</span>, args)
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Wait for terminal
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>dt, err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">WaitForTask</span>(ctx, c, ctr.TaskID)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Or poll yourself
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>dt, err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">GetTask</span>(c, ctr.TaskID)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Deliver mid-task input
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">UpdateTask</span>(c, taskID, inputResponses)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Cancel
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>err <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">CancelTask</span>(c, taskID)
+</span></span></code></pre><h3 id="errors-to-expect">Errors to expect <a class="anchor" href="#errors-to-expect">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>When</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-32021 missing required client capability</code> (<code>io.modelcontextprotocol/tasks</code>)</td>
+<td>Tool has <code>TaskSupport=required</code> but client didn&rsquo;t declare the extension</td>
+<td>Add <code>client.WithTasksExtension()</code> or per-request <code>_meta.clientCapabilities.extensions</code></td>
+</tr>
+<tr>
+<td><code>-32602 request params missing required _meta envelope</code></td>
+<td>Stateless request without <code>_meta</code></td>
+<td>Add the SEP-2575 <code>_meta</code> envelope on every stateless request</td>
+</tr>
+<tr>
+<td><code>task not found</code></td>
+<td><code>tasks/get</code> after the TTL has expired</td>
+<td>Reduce <code>pollIntervalMs</code> or use <code>WaitForTask</code> to avoid hitting the TTL window</td>
+</tr>
+<tr>
+<td><code>errTaskTerminal</code> (server-side)</td>
+<td>Trying to transition a terminal task (e.g., cancel-after-completed race)</td>
+<td>Expected; treat as benign, the task already completed</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="see-also">See also <a class="anchor" href="#see-also">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/guides/mrtr/"><code>docs/MRTR_TUTORIAL.md</code></a> — sibling tutorial for SEP-2322 MRTR (capabilities across wires, progressToken, push-vs-MRTR-vs-task-input decision flow).</li>
+<li><a href="/mcpkit/design/tasks-v2-migration/"><code>docs/TASKS_V2_MIGRATION.md</code></a> — v1 → v2 migration guide.</li>
+<li><a href="/mcpkit/packages/ext-tasks/"><code>ext/tasks/README.md</code></a> — task extension API reference.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md"><code>docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md</code></a> — conformance plan + status.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks-v2/main.go"><code>examples/tasks-v2/main.go</code></a> — six task fixtures (slow_compute, failing_job, confirm_delete, multi_input, protocol_error_job, external_job) all using the GoAsync pattern.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/mrtr/main.go"><code>examples/mrtr/main.go</code></a> — eight MRTR fixtures including <code>test_tool_with_task</code> for the composition pattern (A8).</li>
+<li><a href="https://github.com/panyam/mcpconformance">panyam/mcpconformance</a>, branch <code>feat/tasks-mrtr-extension</code> — SEP-2663 + SEP-2322 conformance scenarios.</li>
+<li><a href="https://github.com/panyam/mcpkit/issues/452">Issue 452</a> — stateless wire MRTR support follow-up.</li>
+<li><a href="https://github.com/panyam/mcpkit/issues/485">Issue 485</a> — multi-tenant isolation for stateless task store follow-up.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

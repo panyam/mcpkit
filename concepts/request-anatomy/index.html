@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="The end-to-end journey of a request through mcpkit&#39;s 13 steps.">
+    <title>Anatomy of a request · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Anatomy of a request</h1>
+        
+        <p class="lead">The end-to-end journey of a request through mcpkit&#39;s 13 steps.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/request-anatomy.md"><code>tutorials/walkthrough/request-anatomy.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="per-request-anatomy">Per-request anatomy <a class="anchor" href="#per-request-anatomy">¶</a></h1>
+<p>How a single MCP request travels from the caller through middleware, dispatch, handler context, the handler itself, and back. Five questions.</p>
+<blockquote>
+<p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/bringup/">bring-up</a>, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a>, <a href="/mcpkit/concepts/notifications/">notifications</a><br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/bringup/">bring-up</a> Next-to-read, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a> Next-to-read, <a href="/mcpkit/concepts/notifications/">notifications</a> Next-to-read, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a> Next-to-read<br />
+<strong>Branches into:</strong> <a href="/mcpkit/concepts/reverse-call/">reverse-call</a>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">tasks</a> <em>(stub)</em>, <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/middleware.md">middleware</a> <em>(stub)</em><br />
+<strong>Spec:</strong> <a href="https://modelcontextprotocol.io/specification/2025-06-18">Base protocol</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/jsonrpc.go"><code>core/jsonrpc.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/typed_tool.go"><code>core/typed_tool.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/core/protocol.go"><code>core/protocol.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/registration.go"><code>server/registration.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/middleware.go"><code>server/middleware.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/method_handler.go"><code>server/method_handler.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/client/middleware.go"><code>client/middleware.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<ul>
+<li>You have a session that&rsquo;s past the <a href="/mcpkit/concepts/bringup/">bring-up</a> barrier — capabilities are negotiated, transport is chosen.</li>
+<li>You can read JSON-RPC messages off the wire and know how the <a href="/mcpkit/concepts/transport-mechanics/#per-direction-id-space">pending-id table</a> correlates responses to requests.</li>
+<li>You know how <a href="/mcpkit/concepts/notifications/">notifications</a> flow on the same channels but without a response.</li>
+</ul>
+<h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
+<p>Bring-up gives you a session. Transport-mechanics gives you the wire. Notifications give you state-change channels. <strong>This page explains what happens <em>between</em> a caller invoking <code>client.Call(...)</code> on one side and the handler running on the other side</strong> — the dispatcher that finds the right handler, the handler context that gives the handler its environment, the middleware stacks that wrap each direction, the typed-binding layer that turns JSON into Go and back, and the response path that returns through all of it.</p>
+<p><strong>The anatomy is symmetric.</strong> Both client and server have a method registry, a dispatch loop, and user-registered custom handlers. Forward calls (client→server, e.g. <code>tools/call</code>) reach a server-side handler via the server&rsquo;s dispatch. Reverse calls (server→client, e.g. <code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>) reach a client-side handler via the <em>client&rsquo;s</em> dispatch — the same shape, mirrored. Tasks plug into the server&rsquo;s dispatch via <a href="https://github.com/panyam/mcpkit/blob/main/server/tasks_v2.go"><code>RegisterTasks</code></a>; the host plugs sampling/elicitation/roots delegates into the client&rsquo;s dispatch the same way. Same machinery on both sides.</p>
+<p>Almost every other planned page drills into a piece of this — reverse-call mechanics, tasks, middleware composition, MRTR. Pin this down once and they all open with <em>&ldquo;assumes per-request anatomy&rdquo;</em> and skip straight to specifics.</p>
+<h2 id="q1--walk-me-through-toolscall-end-to-end">Q1 — Walk me through <code>tools/call</code> end-to-end <a class="anchor" href="#q1--walk-me-through-toolscall-end-to-end">¶</a></h2>
+<p>Concrete journey: client app calls <code>client.Call(&quot;tools/call&quot;, ...)</code> for a typed tool registered on the server with <code>RegisterTool</code>. Session is live, <code>tools.listChanged</code> capability negotiated, transport is streamable HTTP.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant App as caller (host code)
+    participant CSend as client&lt;br/&gt;send-mw
+    participant CTx as transport
+    participant STx as transport
+    participant SRecv as server&lt;br/&gt;recv-mw
+    participant Disp as dispatch
+    participant HC as handler&lt;br/&gt;context
+    participant H as handler
+
+    App-&gt;&gt;CSend: Call(&quot;tools/call&quot;, args)
+    Note over CSend: allocate id=7&lt;br/&gt;register pending[7] = waiter
+    CSend-&gt;&gt;CTx: encode JSON-RPC
+    CTx-&gt;&gt;STx: bytes (POST body)
+    STx-&gt;&gt;SRecv: decoded request
+    SRecv-&gt;&gt;Disp: dispatch by method
+    Note over Disp: registry lookup&lt;br/&gt;&quot;tools/call&quot; → handler
+    Disp-&gt;&gt;HC: build context bound to id=7
+    HC-&gt;&gt;H: invoke(ctx, typed args)
+    Note over H: typed binding decodes args&lt;br/&gt;handler runs
+    H--&gt;&gt;HC: return result
+    HC--&gt;&gt;Disp: typed result
+    Disp--&gt;&gt;SRecv: encode response (id=7)
+    SRecv-&gt;&gt;STx: bytes (JSON or SSE event)
+    STx-&gt;&gt;CTx: bytes
+    CTx-&gt;&gt;CSend: decoded response
+    Note over CSend: pending[7] resolves
+    CSend--&gt;&gt;App: result
+</code></pre>
+<p><strong>Step by step:</strong></p>
+<ol>
+<li>
+<p><strong>Origination.</strong> <code>client.Call(method, params)</code> allocates a fresh id from the client&rsquo;s id-space, registers a waiter in <code>client.pending[id]</code>, and hands the request to the client&rsquo;s send-side middleware.</p>
+</li>
+<li>
+<p><strong>Client send-middleware.</strong> Wraps the outbound request. Common uses: auth header injection, logging, retry, tracing. The chain ends by encoding the message and writing it to the transport.</p>
+</li>
+<li>
+<p><strong>Wire.</strong> Already covered in <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a>. One POST for streamable HTTP; one <code>\n</code>-framed line for stdio.</p>
+</li>
+<li>
+<p><strong>Server recv-middleware.</strong> First thing on the server side. Symmetric to client send-mw: auth verification, logging, tracing, deserialization checks. Eventually hands the decoded request to dispatch.</p>
+</li>
+<li>
+<p><strong>Dispatch.</strong> Looks up the method name in the server&rsquo;s registry; lookup miss → JSON-RPC error <code>-32601</code> (&ldquo;Method not found&rdquo;); lookup hit → proceed. mcpkit&rsquo;s server-side registries (in <a href="https://github.com/panyam/mcpkit/blob/main/server/registration.go"><code>server/registration.go</code></a>):</p>
+<ul>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/server/registration.go"><code>RegisterTool</code></a></strong> — typed handler for <code>tools/call</code> (one tool name per registration).</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/server/registration.go"><code>RegisterPrompt</code></a></strong> — typed handler for <code>prompts/get</code>.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/server/registration.go"><code>RegisterResource</code></a></strong> — typed handler for <code>resources/read</code> and friends.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/ext/tasks/tasks.go"><code>tasks.Register</code></a></strong> (SEP-2663 v2, canonical) and <a href="https://github.com/panyam/mcpkit/blob/main/server/tasks_v1.go"><code>server.RegisterTasksV1</code></a> (frozen) — typed handlers for <code>tasks/*</code>. The v2 surface lives in the <code>ext/tasks/</code> sub-module; v1 stays in <code>server/</code> until decommissioned. Servers wanting both during a rolling upgrade install them side by side.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/server/method_handler.go"><code>MethodHandler</code></a></strong> — raw escape hatch for any method without typed binding.</li>
+</ul>
+<p>The <strong>client has the same shape</strong> for incoming reverse calls. The host registers a sampling delegate, an elicitation handler, and a roots provider; when the server emits <code>sampling/createMessage</code>, the client&rsquo;s dispatch routes it to the sampling delegate the same way the server routes <code>tools/call</code> to a registered tool. Both sides have a method registry. Both sides have a dispatch loop. Both sides have user-provided custom handlers.</p>
+</li>
+<li>
+<p><strong>Handler context construction.</strong> Dispatch builds a per-request <code>HandlerContext</code> — covered in detail in <a href="#q2--whats-in-the-handler-context">Q2</a>. Carries the originating id, session reference, capabilities, request/notify hooks for reverse traffic, a cancel <code>ctx.Context</code>, and the typed params after binding.</p>
+</li>
+<li>
+<p><strong>Handler execution.</strong> The user&rsquo;s registered function runs. It may:</p>
+<ul>
+<li>Read the typed params, do its work, return a typed result.</li>
+<li>Emit progress notifications via the handler context (see <a href="/mcpkit/concepts/notifications/#q4--how-does-the-client-tie-a-progress-notification-back-to-the-right-in-flight-call">notifications Q4</a>).</li>
+<li>Originate reverse calls (<code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>) via the handler context&rsquo;s request hook.</li>
+<li>Cancel itself if <code>ctx.Done()</code> fires (forward request was cancelled by the client).</li>
+<li>Return an error → becomes a JSON-RPC error response.</li>
+</ul>
+</li>
+<li>
+<p><strong>Response encoding.</strong> Handler returns; result is marshaled to JSON-RPC response shape with the same id.</p>
+</li>
+<li>
+<p><strong>Server send-middleware.</strong> Wraps the outbound response. Same idea as client send-mw on the symmetric side — logging, tracing, transport-level concerns.</p>
+</li>
+<li>
+<p><strong>Wire (return path).</strong> Same channel that brought the request. For HTTP-with-SSE-upgrade this is an SSE event on the same POST stream; for HTTP-without-upgrade it&rsquo;s the JSON body of the response; for stdio it&rsquo;s a <code>\n</code>-framed line on stdout.</p>
+</li>
+<li>
+<p><strong>Client recv-middleware.</strong> Decodes the response, looks at the id.</p>
+</li>
+<li>
+<p><strong>Correlation.</strong> <code>client.pending[id]</code> is found and resolved. The waiter (the goroutine blocked in <code>Call</code>) wakes up.</p>
+</li>
+<li>
+<p><strong>Caller resumption.</strong> <code>Call</code> returns the typed result (or error) to the calling code.</p>
+</li>
+</ol>
+<p>Concurrency: many calls can be in flight at once. Each gets its own goroutine on the server side and its own handler context. Middleware must be safe for concurrent invocation. The pending-id table makes correlation work despite arbitrary response ordering.</p>
+<h2 id="q2--whats-in-the-handler-context">Q2 — What&rsquo;s in the handler context? <a class="anchor" href="#q2--whats-in-the-handler-context">¶</a></h2>
+<p>The handler context is the <strong>runtime environment of one in-flight request on the server side</strong>. mcpkit defines it in <a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a>. Conceptually it carries everything a handler needs that isn&rsquo;t in the typed params.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Originating request id</strong></td>
+<td>the JSON-RPC <code>id</code> of the forward request being handled. Used for reverse-call attribution (the spec&rsquo;s &ldquo;in association with an originating client request&rdquo; rule).</td>
+</tr>
+<tr>
+<td><strong><code>context.Context</code></strong></td>
+<td>Go cancellation context. <code>ctx.Done()</code> fires if the forward call is cancelled by the client (<code>notifications/cancelled</code>), the session ends, or a deadline expires.</td>
+</tr>
+<tr>
+<td><strong>Session reference</strong></td>
+<td>the negotiated capabilities of <em>this</em> session, the session id, the transport. Lets the handler decide whether to emit notifications, originate reverse calls, etc. — capability gating per session.</td>
+</tr>
+<tr>
+<td><strong>Request hook</strong></td>
+<td>a function for <strong>originating reverse calls</strong> to the client — <code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>. Internally allocates a new id from the <em>server&rsquo;s</em> id-space and records the back-pointer to the originating forward id (for cancellation propagation; see <a href="/mcpkit/concepts/transport-mechanics/#reverse-call-origination">transport-mechanics → reverse-call origination</a>).</td>
+</tr>
+<tr>
+<td><strong>Notify hook</strong></td>
+<td>a function for emitting fire-and-forget notifications back to the client — typically progress, but anything the negotiated capabilities allow.</td>
+</tr>
+<tr>
+<td><strong>Progress emitter</strong></td>
+<td>a typed wrapper around the notify hook that&rsquo;s only non-nil when the originating request opted in via <code>_meta.progressToken</code>. Calling it when no token was provided is a no-op.</td>
+</tr>
+<tr>
+<td><strong>Typed params</strong></td>
+<td>the decoded, validated, typed-Go-struct version of <code>params</code>. See <a href="#q4--how-does-typed-binding-turn-json-into-go-and-back">Q4</a>.</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>[!IMPORTANT]<br />
+The handler context <strong>dies when the forward request completes</strong> (response sent or error). Background goroutines that need to keep working after the handler returns must escape via <code>core.DetachForBackground(ctx)</code> — this binds them to the <strong>session-level persistent push</strong> (the standing GET back-channel) rather than the dying POST scope. Trying to call the request/notify hooks from a goroutine that has outlived its handler context will fail or no-op. (CLAUDE.md flags this as one of the recurring gotchas.)</p>
+</blockquote>
+<p>The handler context is what makes the spec&rsquo;s bidirectional-but-tied-to-a-forward-call rule enforceable in code: the only way to originate a reverse call is through a handler context, and the only way to get one is to be inside a forward-call handler.</p>
+<h2 id="q3--how-do-the-four-middleware-stacks-compose">Q3 — How do the four middleware stacks compose? <a class="anchor" href="#q3--how-do-the-four-middleware-stacks-compose">¶</a></h2>
+<p>Conceptually there are <strong>four points where middleware can intercept a message</strong>: the cross-product of {client, server} × {send, receive}.</p>
+<pre><code class="language-mermaid">graph LR
+    subgraph Client
+        CApp[caller code]
+        CS[client&lt;br/&gt;send-mw]
+        CR[client&lt;br/&gt;recv-mw]
+        CApp --&gt; CS
+        CR --&gt; CApp
+    end
+    subgraph Server
+        SR[server&lt;br/&gt;recv-mw]
+        SS[server&lt;br/&gt;send-mw]
+        SH[handler]
+        SR --&gt; SH
+        SH --&gt; SS
+    end
+    CS -- request --&gt; SR
+    SS -- response --&gt; CR
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Stack</th>
+<th>Sees</th>
+<th>Common uses</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>client send-mw</strong></td>
+<td>outgoing requests/notifications from app code</td>
+<td>auth header injection (bearer token), tracing context propagation, retry policy, logging</td>
+</tr>
+<tr>
+<td><strong>client recv-mw</strong></td>
+<td>incoming responses + server-initiated requests + notifications</td>
+<td>response decoding checks, server-request dispatch to client-side handlers (e.g., sampling delegate), log surfacing</td>
+</tr>
+<tr>
+<td><strong>server recv-mw</strong></td>
+<td>incoming requests + notifications + responses-to-server-originated-requests</td>
+<td>auth verification (token → session principal), logging, tracing entry, schema pre-validation</td>
+</tr>
+<tr>
+<td><strong>server send-mw</strong></td>
+<td>outgoing responses + server-initiated requests + notifications</td>
+<td>response shaping, log emission, tracing exit, transport hints (e.g., per-call SSE upgrade decision)</td>
+</tr>
+</tbody>
+</table>
+<p>Two things to keep distinct:</p>
+<ul>
+<li><strong>Forward request handling</strong> — server recv-mw → handler → server send-mw is the standard request → response chain. server-recv sees a request coming in; server-send sees the response going out.</li>
+<li><strong>Reverse calls</strong> — when a handler originates a reverse call, the request goes out through <strong>server send-mw</strong> (carrying a <em>request</em>, not a response) and the response comes back through <strong>server recv-mw</strong> (carrying a <em>response</em>, not a request). Same stacks, but each one now carries the <em>opposite role</em> from the standard case. The middleware doesn&rsquo;t care — direction is what defines the stack, not message kind.</li>
+</ul>
+<p>Each stack is a <strong>pipeline</strong> — middleware composes by wrapping the next handler in the chain. mcpkit&rsquo;s middleware shape: a function that takes the next handler and returns a wrapped handler. Standard onion model.</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Why &ldquo;send/recv&rdquo; naming and not &ldquo;request/response&rdquo; naming?</strong> mcpkit names the stacks by <em>direction</em> (send/recv) rather than by <em>message kind</em> (request-handler / response-handler / notification-handler). Direction is the right cleavage because most cross-cutting middleware (logging, tracing, auth) cares about <em>which side of the wire it&rsquo;s on</em>, not <em>what role the message has</em>. A logger wants every outbound message; an auth verifier wants every inbound message; tracers want both. Role can be inferred from the message shape (<code>id</code> + <code>method</code> → request, <code>id</code> + <code>result</code>/<code>error</code> → response, no <code>id</code> → notification).</p>
+<p>The cost is the awkwardness above: &ldquo;server send-mw&rdquo; carries reverse-call <em>requests</em>, not just responses. The middleware framework doesn&rsquo;t care; the naming just reads slightly oddly when you first encounter reverse calls. A role-based scheme (request-send-mw, response-recv-mw, …) would resolve the awkwardness but multiply the interception points 3× and force most middleware to either register at multiple points or constantly check &ldquo;is this my role?&rdquo; The simplification doesn&rsquo;t pay off in practice — but the awkwardness when reading reverse-call flows is real.</p>
+</blockquote>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/middleware.md">Middleware composition</a> <em>(stub)</em> — request-side vs. sending-side in detail, ordering rules, the <code>ext/auth</code> and <code>ext/ui</code> interception points, how middleware integrates with MRTR.</p>
+</blockquote>
+<h2 id="q4--how-does-typed-binding-turn-json-into-go-and-back">Q4 — How does typed binding turn JSON into Go and back? <a class="anchor" href="#q4--how-does-typed-binding-turn-json-into-go-and-back">¶</a></h2>
+<p>mcpkit&rsquo;s value-add over raw JSON-RPC is <strong>typed handlers</strong>. You define a Go struct with json tags; mcpkit handles the marshalling, schema generation, validation, and binding into the handler.</p>
+<p>The pattern (in <a href="https://github.com/panyam/mcpkit/blob/main/core/typed_tool.go"><code>core/typed_tool.go</code></a>):</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> SearchArgs <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Query <span style="color:#458;font-weight:bold">string</span>   <span style="color:#d14">`json:&#34;query&#34;`</span>
+</span></span><span style="display:flex;"><span>    Limit <span style="color:#458;font-weight:bold">int</span>      <span style="color:#d14">`json:&#34;limit,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>    Tags  []<span style="color:#458;font-weight:bold">string</span> <span style="color:#d14">`json:&#34;tags,omitempty&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> SearchResult <span style="color:#000;font-weight:bold">struct</span> {
+</span></span><span style="display:flex;"><span>    Hits []Hit <span style="color:#d14">`json:&#34;hits&#34;`</span>
+</span></span><span style="display:flex;"><span>}
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>server.<span style="color:#900;font-weight:bold">RegisterTool</span>(<span style="color:#d14">&#34;jira_search&#34;</span>, <span style="color:#000;font-weight:bold">func</span>(hc <span style="color:#000;font-weight:bold">*</span>HandlerContext, args SearchArgs) (SearchResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// args is already decoded and validated
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// hc carries id, session, ctx, request/notify hooks, progress emitter
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#998;font-style:italic">// return value gets marshaled to result
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><p>What happens at request time:</p>
+<ol>
+<li><strong>Schema generation (registration time)</strong> — when <code>RegisterTool</code> is called, mcpkit generates a JSON Schema from the <code>SearchArgs</code> struct via reflection on json tags. The schema becomes part of the <code>tools/list</code> response, so clients see <code>inputSchema</code> and can validate user input or hand it to a model.</li>
+<li><strong>Decoding (request time)</strong> — when a <code>tools/call</code> arrives with <code>params.arguments</code>, dispatch routes to the registered tool. The raw JSON arguments get unmarshaled into a fresh <code>SearchArgs</code>.</li>
+<li><strong>Validation</strong> — the unmarshaled value is validated against the generated schema before the handler is invoked. Fail fast: schema violations become JSON-RPC errors, the handler never sees malformed input.</li>
+<li><strong>Handler invocation</strong> — handler is called with the typed args + handler context. Returns a typed result (or error).</li>
+<li><strong>Encoding</strong> — the typed result is marshaled to JSON, wrapped in the JSON-RPC response shape.</li>
+</ol>
+<p>The same pattern applies to prompts (<code>RegisterPrompt</code>), resources (<code>RegisterResource</code>), tasks (<code>RegisterTasks</code>), and so on — typed registries with auto-schema.</p>
+<p>If you need to bypass typed binding (custom JSON shape, dynamic schema, raw access), use <a href="https://github.com/panyam/mcpkit/blob/main/server/method_handler.go"><code>MethodHandler</code></a> directly. You give up the schema auto-generation and have to handle JSON yourself.</p>
+<blockquote>
+<p>[!NOTE]<br />
+Schema validation is one place where capability negotiation interacts with extensions. SEPs that introduce new <code>_meta</code> fields on existing requests need to extend the schemas so validators don&rsquo;t reject them. mcpkit&rsquo;s typed-binding generator is aware of <code>_meta</code> as a reserved field; SEP-driven additions go in there.</p>
+</blockquote>
+<h2 id="q5--how-does-this-same-machinery-handle-notifications-and-reverse-calls">Q5 — How does this same machinery handle notifications and reverse calls? <a class="anchor" href="#q5--how-does-this-same-machinery-handle-notifications-and-reverse-calls">¶</a></h2>
+<p>Notifications and reverse calls reuse most of the per-request anatomy. Two specific differences each.</p>
+<h3 id="notifications-no-id-no-response">Notifications (no id, no response) <a class="anchor" href="#notifications-no-id-no-response">¶</a></h3>
+<p>Coming <strong>into</strong> a server (from the client):</p>
+<ol>
+<li>Bytes arrive, decode, server recv-mw runs (same as for requests).</li>
+<li>Dispatch routes to a <strong>notification handler</strong> (a different registry from method handlers, since the dispatch shape is different — no return value, no error becomes a response).</li>
+<li><strong>No pending-id entry</strong>: the receiver doesn&rsquo;t track notifications in its pending table because there&rsquo;s no response coming back to correlate.</li>
+<li>Handler runs. Any error is logged, not returned to the sender (the spec is fire-and-forget; there&rsquo;s nowhere to send an error).</li>
+<li><strong>No response, no resumption.</strong> Done.</li>
+</ol>
+<p>Coming <strong>out of</strong> a server handler (e.g., progress emission):</p>
+<ol>
+<li>Handler calls the notify hook on its handler context.</li>
+<li>Notify hook constructs a JSON-RPC notification (no id, just method + params).</li>
+<li>Goes through server send-mw onto the wire. Done.</li>
+</ol>
+<p>Symmetric on the client side.</p>
+<h3 id="reverse-calls-server-originates-a-request-to-client">Reverse calls (server originates a request to client) <a class="anchor" href="#reverse-calls-server-originates-a-request-to-client">¶</a></h3>
+<p>The forward path:</p>
+<ol>
+<li>Server handler is running, has its handler context.</li>
+<li>Handler calls <code>hc.Sample(...)</code> or <code>hc.Elicit(...)</code> or similar — internally the request hook on the handler context.</li>
+<li>Request hook allocates a new id from the <strong>server&rsquo;s</strong> id-space, registers <code>server.pending[newId] = handler-resume continuation</code>, records the back-pointer <code>(newId → originated-by → forwardId)</code> in handler context state.</li>
+<li>Goes through server send-mw, onto the wire (over the same channel — typically the same SSE stream that&rsquo;s carrying the forward call&rsquo;s response).</li>
+<li>Client receives, <strong>client recv-mw</strong> runs, <strong>the client&rsquo;s dispatch routes the request by method name</strong> (<code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>) <strong>to a user-registered handler</strong> — the host&rsquo;s sampling delegate, elicitation UI handler, or roots provider. This is the <strong>same shape as server-side dispatch</strong>: the client has its own method registry and its own custom-handler hooks.</li>
+<li>Client-side handler runs (with its own client-side handler context), returns a result.</li>
+<li>Client send-mw, onto the wire.</li>
+<li>Server recv-mw, looks up <code>server.pending[newId]</code>, resolves the continuation, the handler resumes.</li>
+</ol>
+<p>Three things to internalize:</p>
+<ul>
+<li><strong>Reverse calls reuse the four middleware stacks</strong>, in their reverse-direction roles (server send-mw on origination, server recv-mw on response).</li>
+<li><strong>The pending-id table is per-direction</strong>: the server&rsquo;s pending table tracks reverse calls it originated; the client&rsquo;s tracks forward calls it originated. They&rsquo;re independent. (See <a href="/mcpkit/concepts/transport-mechanics/#reverse-call-origination">transport-mechanics → reverse-call origination</a> for the diagram.)</li>
+<li><strong>Sampling, elicitation, roots/list are not special</strong> — they&rsquo;re standard request/response calls dispatched to custom handlers, just on the client side instead of the server side. Anyone implementing an MCP host registers handlers for them the same way a server author registers tools.</li>
+</ul>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Branch →</strong> <a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a> — concretizes this with a <code>tools/call → elicitation/create</code> walkthrough, including cancellation propagation through the forward-id back-pointer.</p>
+</blockquote>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<ul>
+<li>You can trace a request from <code>client.Call</code> through middleware, transport, dispatch, handler context, handler, and back. You know the <strong>13 steps</strong> and which layer each lives at.</li>
+<li>You know what&rsquo;s in the <strong>handler context</strong> — id, ctx, session, request hook, notify hook, progress emitter, typed params — and that it dies with the request unless escaped via <code>DetachForBackground</code>.</li>
+<li>You know there are <strong>four conceptual middleware stacks</strong> (client × {send, recv}, server × {send, recv}); reverse calls reuse the same four in their other direction.</li>
+<li>You know <strong>typed binding</strong> turns Go structs into JSON Schema + decoder + validator at registration time, so handlers see typed params and return typed results; raw <code>MethodHandler</code> is the escape hatch.</li>
+<li>You know <strong>notifications skip the pending-id step</strong> (no id, no correlation, no resumption). <strong>Reverse calls reuse the entire path</strong> but originate from a handler context instead of a wire receive.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a></strong> — drills into the reverse-call subset of this anatomy with a concrete <code>tools/call → elicitation/create</code> walkthrough; covers the parent-id back-pointer for cancellation.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/tasks.md">Tasks v1/v2/hybrid</a></strong> <em>(stub, root)</em> — uses the handler context heavily, plus a separate task store; introduces detach/resume semantics that the per-request anatomy doesn&rsquo;t cover (a task can outlive the originating request).</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/middleware.md">Middleware composition</a></strong> <em>(stub, branch)</em> — request-side vs. sending-side in detail, ordering, ext/auth and ext/ui interception points.</li>
+<li><strong><a href="/mcpkit/concepts/mrtr/">MRTR (SEP-2322)</a></strong> — Multi Round-Trip Requests; the stateless-server alternative to synchronous reverse calls during a <code>tools/call</code>.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/elicitation.md">Elicitation</a></strong> · <strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/sampling.md">Sampling</a></strong> · <strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/roots-list.md">Roots/list</a></strong> <em>(stub, leaves)</em> — concrete reverse-call types as applications of the patterns from this page + reverse-call mechanics.</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

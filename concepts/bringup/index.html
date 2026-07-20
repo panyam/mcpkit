@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Session establishment: transport, auth, version negotiation, capabilities, initialized.">
+    <title>Bring-up · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Bring-up</h1>
+        
+        <p class="lead">Session establishment: transport, auth, version negotiation, capabilities, initialized.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/bringup.md"><code>tutorials/walkthrough/bringup.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="bring-up-from-host-to-live-session">Bring-up: from host to live session <a class="anchor" href="#bring-up-from-host-to-live-session">¶</a></h1>
+<p>What happens between <em>&ldquo;the host has a config entry mentioning this server&rdquo;</em> and <em>&ldquo;the host can issue useful requests.&rdquo;</em></p>
+<blockquote>
+<p><strong>Kind:</strong> root · <strong>Prerequisites:</strong> nothing (foundational)<br />
+<strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a> · <strong>Branches into:</strong> <a href="/mcpkit/concepts/transport-mechanics/">transport mechanics</a>, <a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a> <em>(stub)</em><br />
+<strong>Spec:</strong> <a href="https://modelcontextprotocol.io/specification/2025-06-18">Lifecycle</a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/protocol.go"><code>core/protocol.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/core/auth.go"><code>core/auth.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/core/www_authenticate.go"><code>core/www_authenticate.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/server/stdio_transport.go"><code>server/stdio_transport.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/server/streamable_transport.go"><code>server/streamable_transport.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/client/command_transport.go"><code>client/command_transport.go</code></a>, <code>ext/auth/</code></p>
+</blockquote>
+<h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
+<p><strong>None — this is a foundational page.</strong> A reader needs only general familiarity with client/server concepts, JSON, and HTTP. No other pages required.</p>
+<h2 id="the-four-phases">The four phases <a class="anchor" href="#the-four-phases">¶</a></h2>
+<p>Before any &ldquo;useful&rdquo; request can flow, four phases happen in order. Some are host-territory (the protocol says nothing about them); others are protocol-territory (the spec is normative).</p>
+<pre><code class="language-mermaid">graph LR
+    cfg[host: config + server list] --&gt; sel[host: server selection&lt;br/&gt;+ user consent]
+    sel --&gt; tx[transport selection&lt;br/&gt;config-driven, not negotiated]
+    tx --&gt; bringup[transport bring-up]
+    bringup --&gt; auth{auth required?}
+    auth --&gt;|stdio| init
+    auth --&gt;|&quot;HTTP, 401&quot;| oauth[auth flow&lt;br/&gt;WWW-Authenticate / OAuth]
+    oauth --&gt; init
+    init[initialize request] --&gt; ver[version negotiation]
+    ver --&gt; caps[capability exchange]
+    caps --&gt; ready[notifications/initialized]
+    ready --&gt; session[(session live)]
+</code></pre>
+<h3 id="1--server-selection-host-territory-not-protocol">1 — Server selection (host territory, not protocol) <a class="anchor" href="#1--server-selection-host-territory-not-protocol">¶</a></h3>
+<p>MCP is point-to-point: one client speaks to exactly one server. <strong>The host</strong> (Claude Desktop, an IDE, an agent runtime) is the only thing aware of multiple servers. Selection means: the host reads a config — typically an <code>mcp.json</code>-style file — listing entries like</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{ <span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;fs&#34;</span>,     <span style="color:#000080">&#34;command&#34;</span>: <span style="color:#d14">&#34;mcp-fs&#34;</span>, <span style="color:#000080">&#34;args&#34;</span>: [<span style="color:#d14">&#34;--root&#34;</span>, <span style="color:#d14">&#34;~/work&#34;</span>], <span style="color:#000080">&#34;env&#34;</span>: {<span style="color:#a61717;background-color:#e3d2d2">...</span>} }
+</span></span><span style="display:flex;"><span>{ <span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;github&#34;</span>, <span style="color:#000080">&#34;url&#34;</span>: <span style="color:#d14">&#34;https://mcp.example.com/&#34;</span>, <span style="color:#000080">&#34;auth&#34;</span>: {<span style="color:#a61717;background-color:#e3d2d2">...</span>} }
+</span></span></code></pre><p>…and decides per entry whether to bring up a client now (eager) or on first use (lazy). The protocol says nothing about this — it&rsquo;s host policy plus user consent. From MCP&rsquo;s point of view, &ldquo;selection&rdquo; = &ldquo;the host instantiated a client wired to one server.&rdquo;</p>
+<blockquote>
+<p>[!WARNING]<br />
+<strong>Target-shape gap (extension):</strong> the <a href="https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future/">Dec-2025 transport WG post</a> introduces <strong>Server Cards</strong> at <code>/.well-known/mcp.json</code>, letting a host inspect capabilities <em>before</em> opening a session. Today, you must initialize to learn anything.</p>
+</blockquote>
+<h3 id="2--transport-selection-config-driven-not-negotiated">2 — Transport selection (config-driven, not negotiated) <a class="anchor" href="#2--transport-selection-config-driven-not-negotiated">¶</a></h3>
+<p><strong>Transport is never negotiated by MCP.</strong> It&rsquo;s whatever the config entry says it is. The two live transports are:</p>
+<ul>
+<li><strong>stdio</strong> — host spawns the server as a subprocess; client writes JSON-RPC to its stdin, reads from stdout, treats stderr as opaque host logs.</li>
+<li><strong>streamable HTTP</strong> — client POSTs JSON-RPC to a URL; the server may answer inline or upgrade to SSE for streaming. Session identified by an <code>Mcp-Session-Id</code> header.</li>
+</ul>
+<p>(Plus mcpkit&rsquo;s in-memory and command transports, useful for tests and embedding but not specced.)</p>
+<p>This is the first place transport choice ripples into the rest of the journey: the <em>bring-up</em> mechanics differ wildly, even though everything above the transport line stays identical. → <a href="/mcpkit/concepts/transport-mechanics/">transport mechanics</a> for what the wire looks like.</p>
+<h3 id="3--connection-establishment-transport-specific-possibly-auth">3 — Connection establishment (transport-specific, possibly auth) <a class="anchor" href="#3--connection-establishment-transport-specific-possibly-auth">¶</a></h3>
+<p><strong>stdio</strong>: fork/exec the configured command, hook stdin/stdout/stderr. Done. No handshake, no auth. The trust boundary is &ldquo;the host trusts the binary it spawned&rdquo; — a process-isolation + user-consent-at-config-time model.<br />
+<em>Code:</em> <a href="https://github.com/panyam/mcpkit/blob/main/server/stdio_transport.go"><code>server/stdio_transport.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/client/command_transport.go"><code>client/command_transport.go</code></a>.</p>
+<p><strong>streamable HTTP</strong>: open the URL. If the server requires auth, the first POST returns <code>401</code> with a <code>WWW-Authenticate</code> header advertising the auth scheme (typically OAuth 2.x with PKCE for public clients). The client runs the auth dance, then retries with a bearer token. Only after auth resolves does the <em>protocol-level</em> handshake start.<br />
+<em>Code:</em> <a href="https://github.com/panyam/mcpkit/blob/main/core/www_authenticate.go"><code>core/www_authenticate.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/core/auth.go"><code>core/auth.go</code></a>, <code>ext/auth/</code>.</p>
+<p>This is a conditional sub-DAG: stdio skips it; HTTP traverses it; future transports may add their own (mTLS preflight, etc.).</p>
+<blockquote>
+<p>[!NOTE]<br />
+<strong>Auth is a sibling of transport-bring-up, not a child of it.</strong> Auth currently only matters for HTTP, but modeling it as a peer means future transports can plug in differently without duplicating the node.</p>
+</blockquote>
+<h3 id="4--initialize-handshake-transport-agnostic-protocol-level">4 — Initialize handshake (transport-agnostic, protocol-level) <a class="anchor" href="#4--initialize-handshake-transport-agnostic-protocol-level">¶</a></h3>
+<p>Once bytes can flow, the protocol takes over. This is the <em>only</em> part of bring-up that&rsquo;s identical across transports.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client
+    participant S as Server
+    C-&gt;&gt;S: initialize { protocolVersion, capabilities, clientInfo }
+    Note over C,S: client offers a version it supports
+    S-&gt;&gt;S: pick negotiated version&lt;br/&gt;(highest mutually supported, or error)
+    S--&gt;&gt;C: result { protocolVersion, capabilities, serverInfo, instructions? }
+    C-&gt;&gt;C: verify negotiated version is acceptable&lt;br/&gt;else close transport
+    C-&gt;&gt;S: notifications/initialized
+    Note over C,S: session live — capability flags now gate all subsequent calls
+</code></pre>
+<p>Three things to internalize:</p>
+<ol>
+<li>
+<p><strong>Version negotiation is one-shot, not a range exchange.</strong> Client offers; server picks (its own supported version, ≤ the client&rsquo;s offer); client accepts or hangs up. There&rsquo;s no &ldquo;let&rsquo;s discuss.&rdquo; See <a href="https://github.com/panyam/mcpkit/blob/main/core/protocol.go"><code>core/protocol.go</code></a>.</p>
+</li>
+<li>
+<p><strong>Capabilities are the gate.</strong> Whether the client may receive <code>sampling/createMessage</code>, the server may issue <code>roots/list</code>, either side may send <code>notifications/.../listChanged</code>, etc. — all of it is decided here and <em>cannot</em> be expanded mid-session. A new capability requires a new session.</p>
+<blockquote>
+<p>[!IMPORTANT]<br />
+Capability flags are not just feature toggles — they are <em>contracts</em>. If the client didn&rsquo;t advertise <code>sampling</code>, the server must not send <code>sampling/createMessage</code>. Implementations that send anyway are buggy; receivers may reject.</p>
+</blockquote>
+</li>
+<li>
+<p><strong><code>notifications/initialized</code> is a notification, not a request.</strong> No response. The server must accept incoming traffic <em>before</em> it arrives — there&rsquo;s a brief window where the server has answered <code>initialize</code> and the client hasn&rsquo;t yet sent <code>initialized</code>. The spec resolves this by allowing immediate use after the <code>initialize</code> response; <code>initialized</code> is more of a barrier signal than a gate.</p>
+</li>
+</ol>
+<h2 id="end-state-what-downstream-pages-can-assume">End-state (what downstream pages can assume) <a class="anchor" href="#end-state-what-downstream-pages-can-assume">¶</a></h2>
+<p>After reading this page, the following are true and downstream pages may assume them without re-deriving:</p>
+<ul>
+<li>A <strong>session exists</strong> between exactly one client and one server.</li>
+<li>A <strong>transport is chosen</strong> (stdio | streamable HTTP | …) and bytes can flow in both directions.</li>
+<li><strong>Auth is resolved</strong> if the transport required it. Subsequent traffic carries credentials transparently.</li>
+<li>A <strong>protocol version is agreed</strong> between client and server (one-shot, never re-negotiated for this session).</li>
+<li><strong>Capabilities are fixed</strong> for the lifetime of the session — the set of allowed methods and notifications, in each direction, is locked.</li>
+<li>The client has sent <code>notifications/initialized</code>, so the session is past the &ldquo;barrier&rdquo; point and either side may originate traffic.</li>
+</ul>
+<p>What is <strong>not</strong> yet established (and lives in downstream pages):</p>
+<ul>
+<li>The per-request flow itself — dispatch, middleware, handler context, typed binding (<a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a> <em>(stub)</em>).</li>
+<li>The wire format and correlation model — covered by <a href="/mcpkit/concepts/transport-mechanics/">transport mechanics</a>, another foundational page.</li>
+<li>Reverse calls, notifications, tasks, resumption — all build on those two pages.</li>
+</ul>
+<h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
+<ul>
+<li><strong><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></strong> — drills into the wire format chosen during bring-up phase 2.</li>
+<li><strong><a href="/mcpkit/concepts/notifications/">Notifications</a></strong> — the session&rsquo;s state-change channel. Capability-gated by what was negotiated here.</li>
+<li><strong><a href="/mcpkit/concepts/request-anatomy/">Per-request anatomy</a></strong> — the per-call flow that runs <em>inside</em> an established session: dispatch, middleware, handler context, typed binding.</li>
+<li><strong><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></strong> — how MCP grows; capability flags negotiated here are the gate for all extensions.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/auth.md">Auth deep-dive</a></strong> <em>(stub, off-mainline)</em> — full OAuth dance, PRM, JWT validation, fine-grained-auth per tool. Auth is a &ldquo;bring-up extension&rdquo; — it extends <em>this</em> page&rsquo;s connection-establishment phase, not the message exchange.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/session-resumption.md">Re-init / session resumption</a></strong> <em>(stub, leaf)</em> — what happens if the underlying transport drops mid-session.</li>
+</ul>
+<h2 id="findings-about-the-dag-itself">Findings (about the DAG itself) <a class="anchor" href="#findings-about-the-dag-itself">¶</a></h2>
+<p>This phase is structurally distinct from per-request flow, and walking it surfaced three structural decisions:</p>
+<ol>
+<li>
+<p><strong>Two L1 anatomies, not one.</strong> L1-bringup (this page) and L1-call (<a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a>, planned). The <code>session resolution</code> step in L1-call either resolves to an existing session <strong>or triggers L1-bringup</strong>. Mirrors the spec&rsquo;s lifecycle/operation split.</p>
+</li>
+<li>
+<p><strong>&ldquo;Transport&rdquo; is three concerns at different levels.</strong></p>
+<ul>
+<li>At bring-up: transport <em>establishment</em> (fork+pipe vs. URL+session-id vs. …)</li>
+<li>At per-request time: transport <em>framing</em> (newline-delimited JSON vs. HTTP body vs. …)</li>
+<li>For server-initiated traffic: transport <em>back-channel</em> (read-side of the same pipe vs. SSE stream vs. …)</li>
+</ul>
+<p>These should be three child nodes under a <code>transport</code> parent, not one fused node, because different journeys touch different subsets.</p>
+</li>
+<li>
+<p><strong>Auth is a sibling of transport, not a child.</strong> Currently only HTTP uses it, but the abstraction allows new transports to plug in without duplicating content.</p>
+</li>
+</ol>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>
