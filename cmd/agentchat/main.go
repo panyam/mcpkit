@@ -196,7 +196,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("active", "", "override the active chat connection at startup (a name in the config's connections; default = the config's active)")
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
-	fl.String("ui", "auto", "interface: auto (TUI when interactive) | tui | plain")
+	fl.String("ui", "auto", "interface: auto (TUI when interactive) | tui (inline) | notebook (alt-screen, foldable cells) | plain")
 	fl.Int("offload-threshold", 0, "offload tool results at/over N bytes to a store, feeding the model a stub + read_tool_result (0 = off; blobs use --session-store's backend)")
 	fl.String("offload-dir", "", "store offloaded tool results as files under this directory (no server needed); overrides --session-store for blobs")
 	fl.Bool("memory", false, "enable working memory: remember/recall/forget tools the model manages across turns (in-memory store)")
@@ -264,11 +264,16 @@ func runChat(v *viper.Viper) error {
 		host.WithTracerProvider(tp),
 		host.WithLogger(logger),
 	}
-	tuiMode := wantTUI(v.GetString("ui"))
+	mode := uiMode(v.GetString("ui"))
 	var surface *tuiObserver
-	if tuiMode {
+	var nbSurface *nbObserver
+	switch mode {
+	case "tui":
 		surface = newTUIObserver()
 		appOpts = append(appOpts, host.WithObserver(surface))
+	case "notebook":
+		nbSurface = newNBObserver()
+		appOpts = append(appOpts, host.WithObserver(nbSurface))
 	}
 	sessionStore := v.GetString("session-store")
 	store, err := buildRunStore(sessionStore)
@@ -336,8 +341,11 @@ func runChat(v *viper.Viper) error {
 		fmt.Printf("agentchat: session %s\n", session)
 	}
 
-	if tuiMode {
+	switch mode {
+	case "tui":
 		return runTUI(app, surface)
+	case "notebook":
+		return runNotebook(app, nbSurface)
 	}
 
 	fmt.Printf("agentchat: %d server(s), model %s. /tools /history /quit; Ctrl-C cancels a turn.\n", len(cfg.Servers), cfg.Model.Model)
