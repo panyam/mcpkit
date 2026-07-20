@@ -10,15 +10,21 @@
 # The chat MODEL comes from kitchen-sink.json's connections block (offline
 # local by default); only the embedder is passed by flag.
 
-# --- backends (durable sessions, offload blobs, semantic memory) ----------
+# --- chat + backends (durable sessions, offload blobs, semantic memory) ---
+# ACTIVE overrides the config's active chat connection (e.g. ACTIVE=anthropic-opus);
+# empty keeps kitchen-sink.json's default (local).
+export ACTIVE        := env_var_or_default("ACTIVE", "")
 export SESSION_STORE := env_var_or_default("SESSION_STORE", "postgres://postgres:postgres@localhost:5432/agent")
 export SESSION       := env_var_or_default("SESSION", "kitchen-sink")
 
 # --- tool-result offloading ----------------------------------------------
 export OFFLOAD_THRESHOLD := env_var_or_default("OFFLOAD_THRESHOLD", "1024")
 
-# --- semantic pgvector memory (embedder is an OpenAI-compatible endpoint) --
-export EMBED_MODEL       := env_var_or_default("EMBED_MODEL", "text-embedding-nomic-embed-text-v1.5")
+# --- semantic pgvector memory --------------------------------------------
+# Default: the embedder comes from kitchen-sink.json's `embedder` role (a
+# cloud embedding connection — set that provider's API key). Set EMBED_MODEL
+# to override with an explicit endpoint instead.
+export EMBED_MODEL       := env_var_or_default("EMBED_MODEL", "")
 export EMBED_URL         := env_var_or_default("EMBED_URL", "http://localhost:1234/v1")
 export EMBED_DIM         := env_var_or_default("EMBED_DIM", "768")
 export EMBED_API_KEY_ENV := env_var_or_default("EMBED_API_KEY_ENV", "")

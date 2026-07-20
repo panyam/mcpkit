@@ -2,7 +2,12 @@
   "instructions": "You are a capable assistant with access to MCP tools and two specialist sub-agents (researcher, analyst). Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and keep answers concise.",
   "connections": {
     "active": "local",
+    "embedder": "openai-embed",
     "connections": {
+
+      "openai-embed": { "type": "openai", "model": "text-embedding-3-small", "dim": 1536, "apiKeyEnv": "OPENAI_API_KEY" },
+      "gemini-embed": { "type": "gemini", "model": "text-embedding-004", "dim": 768, "apiKeyEnv": "GEMINI_API_KEY" },
+
       "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
       "ollama": { "type": "ollama", "model": "llama3.1" },
 

@@ -140,12 +140,68 @@ func TestDefaultProviderBuilder_ProviderType(t *testing.T) {
 	}
 }
 
+// TestBuildEmbedder pins that openai/gemini connections build an OpenAI-wire
+// embedder and anthropic (no embeddings API) is rejected.
+func TestBuildEmbedder(t *testing.T) {
+	for _, typ := range []string{"openai", "gemini", "lmstudio"} {
+		e, err := BuildEmbedder(ConnectionConfig{Type: typ, Model: "embed-model", Dim: 1536}, nil)
+		if err != nil {
+			t.Fatalf("%s embedder: %v", typ, err)
+		}
+		if _, ok := e.(*agent.OpenAIEmbedder); !ok {
+			t.Fatalf("%s built %T, want *agent.OpenAIEmbedder", typ, e)
+		}
+	}
+	if _, err := BuildEmbedder(ConnectionConfig{Type: "anthropic", Model: "claude"}, nil); err == nil {
+		t.Fatal("anthropic embedder should error (no embeddings API)")
+	}
+}
+
+// TestEmbedderRole covers the ConnectionsConfig.Embedder selector: the lookup
+// helper and registry validation of a bad/anthropic embedder name.
+func TestEmbedderRole(t *testing.T) {
+	cfg := &ConnectionsConfig{
+		Active:   "chat",
+		Embedder: "emb",
+		Connections: map[string]ConnectionConfig{
+			"chat": {Type: "openai", Model: "gpt-4o"},
+			"emb":  {Type: "openai", Model: "text-embedding-3-small", Dim: 1536},
+		},
+	}
+	conn, ok := cfg.EmbedderConnection()
+	if !ok || conn.Model != "text-embedding-3-small" || conn.Dim != 1536 {
+		t.Fatalf("EmbedderConnection = %+v, ok=%v", conn, ok)
+	}
+	if _, err := NewConnectionRegistry(cfg, stubBuilder(t)); err != nil {
+		t.Fatalf("valid embedder role should build: %v", err)
+	}
+
+	bad := *cfg
+	bad.Embedder = "nope"
+	if _, err := NewConnectionRegistry(&bad, stubBuilder(t)); err == nil {
+		t.Fatal("unknown embedder name should error")
+	}
+
+	anth := &ConnectionsConfig{
+		Active:   "chat",
+		Embedder: "chat",
+		Connections: map[string]ConnectionConfig{
+			"chat": {Type: "anthropic", Model: "claude-sonnet-5"},
+		},
+	}
+	if _, err := NewConnectionRegistry(anth, stubBuilder(t)); err == nil {
+		t.Fatal("anthropic embedder connection should be rejected")
+	}
+}
+
 // TestConnectionsConfigJSON pins the llm.json-inspired shape decodes.
 func TestConnectionsConfigJSON(t *testing.T) {
 	raw := `{
       "active": "local",
+      "embedder": "emb",
       "connections": {
         "local": {"type": "lmstudio", "model": "qwen"},
+        "emb":   {"type": "openai", "model": "text-embedding-3-small", "dim": 1536, "apiKeyEnv": "OPENAI_API_KEY"},
         "think": {"type": "lmstudio", "model": "deepseek",
                   "thinkingHint": {"openTag": "<think>", "closeTag": "</think>"}}
       }
@@ -154,11 +210,14 @@ func TestConnectionsConfigJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &c); err != nil {
 		t.Fatal(err)
 	}
-	if c.Active != "local" || len(c.Connections) != 2 {
+	if c.Active != "local" || c.Embedder != "emb" || len(c.Connections) != 3 {
 		t.Fatalf("decoded wrong: %+v", c)
 	}
 	if h := c.Connections["think"].ThinkingHint; h == nil || h.OpenTag != "<think>" {
 		t.Fatalf("thinkingHint not decoded: %+v", c.Connections["think"])
+	}
+	if e := c.Connections["emb"]; e.Dim != 1536 {
+		t.Fatalf("dim tag not decoded: %+v", e)
 	}
 }
 

@@ -9,13 +9,19 @@
 # The chat MODEL comes from kitchen-sink.json's connections block; only the
 # embedder is passed by flag.
 
-# --- backends ------------------------------------------------------------
+# --- chat + backends -----------------------------------------------------
+# ACTIVE overrides the config's active chat connection (e.g. anthropic-opus);
+# empty keeps kitchen-sink.json's default (local).
+ACTIVE        ?=
 SESSION_STORE ?= postgres://postgres:postgres@localhost:5432/agent
 SESSION       ?= kitchen-sink
 # --- offloading ----------------------------------------------------------
 OFFLOAD_THRESHOLD ?= 1024
 # --- semantic pgvector memory --------------------------------------------
-EMBED_MODEL       ?= text-embedding-nomic-embed-text-v1.5
+# Default: embedder comes from kitchen-sink.json's `embedder` role (a cloud
+# embedding connection — set that provider's API key). Set EMBED_MODEL to
+# override with an explicit endpoint instead.
+EMBED_MODEL       ?=
 EMBED_URL         ?= http://localhost:1234/v1
 EMBED_DIM         ?= 768
 EMBED_API_KEY_ENV ?=
@@ -31,7 +37,7 @@ PG_PORT ?= 5432
 PG_DB   ?= agent
 PG_USER ?= postgres
 
-export SESSION_STORE SESSION OFFLOAD_THRESHOLD EMBED_MODEL EMBED_URL EMBED_DIM \
+export ACTIVE SESSION_STORE SESSION OFFLOAD_THRESHOLD EMBED_MODEL EMBED_URL EMBED_DIM \
        EMBED_API_KEY_ENV COMPACT_TOKENS EXPORTER OTLP_ENDPOINT UI \
        PG_HOST PG_PORT PG_DB PG_USER
 
