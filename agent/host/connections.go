@@ -34,7 +34,9 @@ type ConnectionsConfig struct {
 // resolve, or construction fails.
 type ConnectionConfig struct {
 	// Type names a built-in endpoint profile ("lmstudio", "openai",
-	// "ollama"). Optional when BaseURL is set.
+	// "ollama", "gemini", "anthropic"). All but "anthropic" speak the OpenAI
+	// wire; "anthropic" uses the native Messages-API provider (x-api-key
+	// auth, /v1/messages). Optional when BaseURL is set.
 	Type string `json:"type,omitempty"`
 
 	// BaseURL is the API root including any version prefix, e.g.
@@ -64,11 +66,17 @@ type ThinkingHint struct {
 }
 
 // connectionBaseURLs maps a built-in Type to its default API root. Local
-// runtimes and the OpenAI cloud; anything else sets BaseURL explicitly.
+// runtimes, the OpenAI cloud, Gemini's OpenAI-compatible endpoint, and
+// Anthropic; anything else sets BaseURL explicitly. Every type here is
+// OpenAI-wire EXCEPT "anthropic", which DefaultProviderBuilder routes to the
+// native Messages-API provider (see below) — the base still resolves here so
+// registry validation and BaseURL overrides work uniformly.
 var connectionBaseURLs = map[string]string{
-	"lmstudio": "http://localhost:1234/v1",
-	"openai":   "https://api.openai.com/v1",
-	"ollama":   "http://localhost:11434/v1",
+	"lmstudio":  "http://localhost:1234/v1",
+	"openai":    "https://api.openai.com/v1",
+	"ollama":    "http://localhost:11434/v1",
+	"gemini":    "https://generativelanguage.googleapis.com/v1beta/openai",
+	"anthropic": "https://api.anthropic.com",
 }
 
 // ProviderBuilder builds a Provider from a resolved connection. Injected
@@ -76,8 +84,11 @@ var connectionBaseURLs = map[string]string{
 // is the real OpenAI-compatible path.
 type ProviderBuilder func(ConnectionConfig) (agent.Provider, error)
 
-// DefaultProviderBuilder builds an OpenAI-compatible provider, resolving
-// the base URL from BaseURL or the Type table and the key from APIKeyEnv.
+// DefaultProviderBuilder builds the provider for a connection: the native
+// Anthropic Messages-API provider when Type is "anthropic", otherwise an
+// OpenAI-wire provider (lmstudio / openai / ollama / gemini / any BaseURL).
+// The base URL resolves from BaseURL or the Type table and the key from
+// APIKeyEnv.
 func DefaultProviderBuilder(conn ConnectionConfig) (agent.Provider, error) {
 	base, err := resolveBaseURL(conn)
 	if err != nil {
@@ -86,6 +97,13 @@ func DefaultProviderBuilder(conn ConnectionConfig) (agent.Provider, error) {
 	var key string
 	if conn.APIKeyEnv != "" {
 		key = os.Getenv(conn.APIKeyEnv)
+	}
+	if conn.Type == "anthropic" {
+		return agent.NewAnthropicProvider(agent.AnthropicConfig{
+			BaseURL: base,
+			Model:   conn.Model,
+			APIKey:  key,
+		})
 	}
 	return agent.NewOpenAIProvider(agent.OpenAIConfig{
 		BaseURL: base,
