@@ -24,10 +24,15 @@ distinctive strengths still hold and are now better supported: the **async contr
 (triggers/events/tasks as model-facing meta-tools), **MCP-native wire-agnosticism**, **A2
 wire-serializability**, and **zero-overhead SEP-414 tracing**.
 
-**The one structural piece still open is Phase 4 (durable workflows).** Beyond that, what remains is
-(a) a rich refinement backlog on the shipped primitives (mostly tracked), and (b) a small set of
-genuinely **untracked** gaps — logprob/grammar decoding hooks, prompt-injection guardrails, a
-sampling/vote helper, and the coding-surface features (sandboxing, hooks, repo map, LSP).
+**Four structural phases are now open as epics**, in rough dependency order: **Phase 4 — durable
+workflows** (#928), **Phase 5 — provider control & decoding fidelity** (#1050: logprob #1053, grammar
+decoding #1054, +caching/thinking #953), **Phase 6 — test-time compute & routing reliability** (#1051:
+sampling/vote #1056, confidence-gated cascades #1057; adjacent routing #991), **Phase 7 — safety &
+guardrails** (#1052: prompt-injection spotlighting #1058). The items the previous edition listed as
+*untracked* (logprob/grammar, guardrails, sampling/vote, cascade trigger, coding-surface) have all been
+**promoted to tracked phase children** — see §5a. What is left genuinely untracked is small: two
+opt-in Phase-7 extensions (AgentDojo eval suite, constitutional critique gate — "file if pursued").
+Beyond the phases, a rich refinement backlog on the shipped primitives remains (mostly tracked).
 
 ---
 
@@ -51,14 +56,16 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Host surface** | ✅ #984–#992 | slash-command registry, `ConnectionRegistry` + runtime `/provider`, `HostEvent`/`Observer` render seam, session picker, bubbletea TUI, playground | context-assembly pipeline **⏳ #1024,#1026**; notebook renderer **⏳ #1001** |
 | **Observability** | 🟡 | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) | OTel **metrics** seam (counters/histograms) **⏳ #1023** |
 | **Durable workflows / graphs (Phase 4)** | ⏳ #928 | — | engine **#944**, `SuspendNode` via TriggerPolicy+RunStore **#945**, `ModelNode`/`ToolNode` **#946** |
-| **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044** |
-| **Logprob / grammar-constrained decoding** | ❌ | — | no issue — see §5 |
-| **Prompt-injection guardrails (spotlighting)** | ❌ | event stages exist (`stages.go`) but no shipped Transform | no issue — see §5 |
-| **Sampling/vote helper (self-consistency/best-of-N)** | ❌ | achievable by host loop; `#1033` covers sub-agent parallel fan-out only | no dedicated issue — see §5 |
-| **Coding-surface: sandboxing, hooks, repo map, LSP** | ❌ | — | no issues — arguably out of core-SDK scope, see §4 |
+| **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044**, confidence-gated cascade **#1057** (Phase 6) |
+| **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 | structured output via finalizing `Generate` only | logprob exposure **#1053**, grammar/guided decoding **#1054**, Anthropic caching/thinking **#953** |
+| **Test-time compute (Phase 6)** | ⏳ #1051 | achievable by host loop; `#1033` covers sub-agent fan-out only | sampling/vote helper **#1056**, `FailoverProvider` quality trigger **#1057** |
+| **Safety & guardrails (Phase 7)** | ⏳ #1052 | approval ladder (#929); event stages exist (`stages.go`) but no shipped guardrail Transform | prompt-injection spotlighting **#1058**; opt-in extensions (AgentDojo eval, constitutional gate) unfiled |
+| **Coding-surface: sandboxing, hooks, repo map, LSP** | ⏳ #1059 | — | scope decision (agent/ vs coding agent built on it) **#1059** |
 
-**Bottom line:** Phases 0–3 are effectively **done**; Phase 4 (workflows) is the last big structural
-item and is fully scoped in issues. Everything else open is refinement of shipped primitives.
+**Bottom line:** Phases 0–3 are effectively **done**. Four structural phases are open and fully scoped
+in issues: **Phase 4** (workflows, the last big engine piece) plus **Phases 5–7** (provider decoding
+control, test-time compute, safety) which promote the former §5b "untracked" gaps into tracked epics.
+Everything else open is refinement of shipped primitives.
 
 ---
 
@@ -101,8 +108,22 @@ they belong in `agent/` or in a coding-agent built on it is a scoping decision (
 ## 5. What's still missing
 
 ### 5a. Tracked (open issues — planned work)
-- **Durable workflows (Phase 4):** epic #928 → engine #944, `SuspendNode` (reuses TriggerPolicy +
-  RunStore) #945, `ModelNode`/`ToolNode` adapters #946. *The last structural parity gap.*
+
+**The four structural phases (epics):**
+- **Phase 4 — durable workflows:** epic #928 → engine #944, `SuspendNode` (reuses TriggerPolicy +
+  RunStore) #945, `ModelNode`/`ToolNode` adapters #946. *The last structural engine gap.*
+- **Phase 5 — provider control & decoding fidelity:** epic #1050 → logprob/token-confidence on the
+  `Provider` seam #1053, grammar-constrained/guided decoding passthrough #1054; +Anthropic prompt
+  caching & extended thinking #953. Capability-optional fields, nil = today's behavior (A2/CONSTRAINTS).
+- **Phase 6 — test-time compute & routing reliability:** epic #1051 → sampling+aggregate helper
+  (self-consistency / Best-of-N + verifier rerank) #1056, `FailoverProvider` quality-score trigger for
+  confidence-gated cascades #1057. Complements upfront routing #991 (selection vs escalation).
+- **Phase 7 — safety & guardrails:** epic #1052 → prompt-injection spotlighting/datamarking `Transform`
+  stage for untrusted tool output #1058. Opt-in extensions (AgentDojo eval suite, constitutional
+  pre-dispatch critique) are "file if pursued". The coding-surface scope decision (sandboxing/hooks/
+  repo map/LSP) is #1059.
+
+**Refinement backlog on shipped primitives:**
 - **Provider routing / cascades:** #991 (per-turn/per-role model selection over `ConnectionRegistry`),
   #1044 (openrouter/litellm presets). Today only `FailoverProvider` (failure-triggered).
 - **Prompt caching + extended thinking:** #953 (Anthropic, provider-scoped) — note the documented
@@ -119,24 +140,17 @@ they belong in `agent/` or in a coding-agent built on it is a scoping decision (
 - **Ops:** OTel metrics seam #1023, RunStore retention/GC #999, large/binary tool results #980/#979,
   thinking-hint stream parser #989, session-picker paging #1000.
 
-### 5b. Untracked (no issue yet — genuine gaps to consider filing)
-1. **Logprob exposure on `Provider`.** `ProviderRequest`/`Delta` carry no token probabilities. Blocks
-   calibrated uncertainty/abstention and confidence-gated cascades. (Many hosted providers don't
-   return logprobs — partial by nature, but the seam is absent.)
-2. **Grammar-constrained / guided decoding.** Only JSON-Schema structured output via a *finalizing*
-   Generate exists; no GBNF/regex token-masking, no inline schema-constrained streaming. Needs a
-   self-hosted-provider (vLLM/SGLang) `guided_grammar` passthrough.
-3. **Sampling/vote helper (self-consistency, Best-of-N).** Achievable via a host loop today, but
-   there's no first-class fan-out+aggregate helper. #1033 covers *sub-agent* parallel fan-out, not a
-   general N-samples-then-vote/verify primitive — natural home is the eval harness or a Runner helper.
-4. **Prompt-injection guardrail (spotlighting/datamarking).** The event-stage `Transform` pipeline is
-   the right home, but no shipped stage wraps untrusted tool output. High-value, low-effort, distinctive.
-5. **`FailoverProvider` quality-score trigger.** Cascades (FrugalGPT-style "escalate if the answer
-   looks weak") need an acceptance-scorer trigger; today failover only fires on clean failure. #991
-   (routing) is adjacent but is upfront selection, not confidence-gated escalation.
-6. **Coding-surface features:** sandboxing of tool execution, lifecycle hooks, repo map, LSP-in-loop.
-   **Scoping call needed:** these make sense in a coding agent *built on* `agent/`, less so in the
-   general host layer. Worth an explicit "in scope / out of scope" decision rather than silent omission.
+### 5b. Untracked (no issue yet)
+
+The six gaps this section previously listed — logprob exposure, grammar/guided decoding, the
+sampling/vote helper, the prompt-injection guardrail, the `FailoverProvider` quality-score trigger, and
+the coding-surface scoping call — have all been **promoted to tracked phase children** (Phases 5–7 and
+#1059; see §5a). What remains genuinely unfiled:
+
+1. **AgentDojo-style security eval suite** (Phase 7 extension). Likely rides the external-eval adapter
+   seam #1015 rather than a bespoke harness. File if pursued.
+2. **Constitutional / critique pre-dispatch gate** (Phase 7 extension). Composes with the approval
+   policy (#929). File if pursued.
 
 ---
 
