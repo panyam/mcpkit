@@ -30,8 +30,13 @@ UI="${UI:-tui}"
 
 bash "$DIR/preflight.sh"
 
-echo "==> booting kitchen-sink demo server on :8788"
-( cd "$DIR/server" && go run . ) &
+# Redirect the demo server's logs to a file — its stdout/stderr (and mcpkit's
+# per-connection SSE logging) share this terminal with agentchat's inline TUI
+# and would clobber the input region otherwise. Tail it in another window to
+# watch tool calls: tail -f "$SERVER_LOG".
+SERVER_LOG="${SERVER_LOG:-${TMPDIR:-/tmp}/kitchen-sink-server.log}"
+echo "==> booting kitchen-sink demo server on :8788 (logs -> $SERVER_LOG)"
+( cd "$DIR/server" && go run . ) >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
