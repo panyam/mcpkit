@@ -336,7 +336,11 @@ channel). Multi-agent is not a new engine; it wraps the same stateless `Runner`.
 - `Team` handoff (943, PR 1030): transfer control (not call-and-return) via `transfer_to_<name>`
   tools + a shared-thread swap loop; static membership; `MaxHandoffs` ping-pong cap; per-Run ctx
   handoff signal. `examples/multi-agent` (PR 1034) demos both modes offline.
-Deferred (new scope, filed): host multi-agent surface (1031) · aggregate step/token tree budget
+Host surface: `Config.SubAgents` personas (agent-as-tool via config) + `HostSubAgentEvent` nested
+rendering shipped (1031 part 1, PRs 1040/1041); Team-in-host handoff (1042) + nested per-sub-agent
+provider/servers (1043) deferred. Agent examples grouped under `examples/agents/` with a shared
+`llm.json` (apiKeyEnv only, no secrets; routers are connections).
+Deferred (new scope, filed): aggregate step/token tree budget
 (1032) · parallel fan-out (1033) · async sub-agents / Task form (1035) · upward signals +
 runner-control meta-tools + interruptible turn (1036) · model-driven dynamic composition + agent
 catalog (1038). Handoff-as-injection (per-agent actor context) is the general form of `Team`.
