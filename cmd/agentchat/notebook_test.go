@@ -205,3 +205,19 @@ func TestNotebook_PromptAutoGrowsAndClamps(t *testing.T) {
 		t.Fatalf("after clearing, height = %d, want 1", h)
 	}
 }
+
+func TestNotebook_FirstPromptLineStaysVisible(t *testing.T) {
+	m := newNotebookModel(nil, nil, 20)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 30})
+	typ := func(s string) { m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}) }
+	nl := func() { m = send(m, tea.KeyMsg{Type: tea.KeyCtrlJ}) }
+	typ("FIRSTLINE")
+	nl()
+	typ("second")
+	nl()
+	typ("third")
+	// within the maxLines budget, the first line must not have scrolled off
+	if !strings.Contains(m.ta.View(), "FIRSTLINE") {
+		t.Fatalf("first prompt line scrolled off within budget:\n%s", m.ta.View())
+	}
+}
