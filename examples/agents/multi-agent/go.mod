@@ -1,4 +1,4 @@
-module github.com/panyam/mcpkit/examples/multi-agent
+module github.com/panyam/mcpkit/examples/agents/multi-agent
 
 go 1.26.4
 
@@ -26,6 +26,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/panyam/mcpkit => ../..
+replace github.com/panyam/mcpkit => ../../..
 
-replace github.com/panyam/mcpkit/agent => ../../agent
+replace github.com/panyam/mcpkit/agent => ../../../agent

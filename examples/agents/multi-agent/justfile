@@ -1,0 +1,6 @@
+# multi-agent — Phase 3 composition: sub-agents-as-tools + handoff.
+import '../common.just'
+
+# Show available recipes
+default:
+    @just --list --unsorted
