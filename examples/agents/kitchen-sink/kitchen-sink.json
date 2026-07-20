@@ -1,13 +1,15 @@
 {
+  "instructions": "You are a capable assistant with access to MCP tools and two specialist sub-agents (researcher, analyst). Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and keep answers concise.",
   "connections": {
     "active": "local",
     "embedder": "openai-embed",
     "connections": {
-      "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
-      "ollama": { "type": "ollama", "model": "llama3.1" },
 
       "openai-embed": { "type": "openai", "model": "text-embedding-3-small", "dim": 1536, "apiKeyEnv": "OPENAI_API_KEY" },
       "gemini-embed": { "type": "gemini", "model": "text-embedding-004", "dim": 768, "apiKeyEnv": "GEMINI_API_KEY" },
+
+      "local":  { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
+      "ollama": { "type": "ollama", "model": "llama3.1" },
 
       "openai-5.1":      { "type": "openai", "model": "gpt-5.1", "apiKeyEnv": "OPENAI_API_KEY" },
       "openai-5.1-mini": { "type": "openai", "model": "gpt-5.1-mini", "apiKeyEnv": "OPENAI_API_KEY" },
@@ -24,9 +26,24 @@
 
       "anthropic-opus":   { "type": "anthropic", "model": "claude-opus-4-8", "apiKeyEnv": "ANTHROPIC_API_KEY" },
       "anthropic-sonnet": { "type": "anthropic", "model": "claude-sonnet-5", "apiKeyEnv": "ANTHROPIC_API_KEY" },
-      "anthropic-haiku":  { "type": "anthropic", "model": "claude-haiku-4-5-20251001", "apiKeyEnv": "ANTHROPIC_API_KEY" },
-
-      "router": { "baseURL": "https://openrouter.ai/api/v1", "model": "anthropic/claude-sonnet-4", "apiKeyEnv": "OPENROUTER_API_KEY" }
+      "anthropic-haiku":  { "type": "anthropic", "model": "claude-haiku-4-5-20251001", "apiKeyEnv": "ANTHROPIC_API_KEY" }
     }
-  }
+  },
+  "servers": [
+    { "id": "demo", "url": "http://localhost:8788/mcp" }
+  ],
+  "subAgents": [
+    {
+      "name": "researcher",
+      "description": "Researches a topic and produces a detailed report using the demo server's report tool.",
+      "instructions": "You are a researcher. Call the report tool for the requested topic, then summarize the key points concisely.",
+      "allow": ["report"]
+    },
+    {
+      "name": "analyst",
+      "description": "Computes summary statistics for a list of numbers using the analyze tool.",
+      "instructions": "You are a data analyst. Call the analyze tool on the numbers you are given and explain the result in one sentence.",
+      "allow": ["analyze"]
+    }
+  ]
 }

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/core"
 )
 
 // ConnectionsConfig is a named registry of model connections with one
@@ -24,8 +25,28 @@ type ConnectionsConfig struct {
 	// Must be a key in Connections.
 	Active string `json:"active"`
 
+	// Embedder names the connection used for the embedder role (semantic
+	// memory), the counterpart of Active for embeddings. Optional; empty
+	// means no config-provided embedder (a surface may still supply one by
+	// flag). Must be a key in Connections, and that connection must speak an
+	// embeddings API — Anthropic has none, so an "anthropic"-typed connection
+	// is rejected. Set Dim on the named connection to the embedding width.
+	Embedder string `json:"embedder,omitempty"`
+
 	// Connections maps a caller-chosen name to its endpoint + model.
 	Connections map[string]ConnectionConfig `json:"connections"`
+}
+
+// EmbedderConnection returns the connection named by Embedder and true, or a
+// zero connection and false when no embedder role is set (or it names an
+// undefined connection). It is the read side of the Embedder role, mirroring
+// how the active connection is resolved for chat.
+func (c *ConnectionsConfig) EmbedderConnection() (ConnectionConfig, bool) {
+	if c == nil || c.Embedder == "" {
+		return ConnectionConfig{}, false
+	}
+	conn, ok := c.Connections[c.Embedder]
+	return conn, ok
 }
 
 // ConnectionConfig is one model endpoint. Type resolves to a base URL via
@@ -49,6 +70,13 @@ type ConnectionConfig struct {
 	// APIKeyEnv names the environment variable holding the bearer key.
 	// Empty means unauthenticated (local endpoints).
 	APIKeyEnv string `json:"apiKeyEnv,omitempty"`
+
+	// Dim is the embedding vector width, meaningful only when this
+	// connection is used as an embedder (the ConnectionsConfig.Embedder
+	// role). It must match the embedding model's true output width; the
+	// durable pgvector store sizes its vector column from it. Ignored for
+	// chat connections.
+	Dim int `json:"dim,omitempty"`
 
 	// ThinkingHint describes how this model delimits inline reasoning, for
 	// models that emit it in the text stream (e.g. <think>…</think>).
@@ -109,6 +137,32 @@ func DefaultProviderBuilder(conn ConnectionConfig) (agent.Provider, error) {
 		BaseURL: base,
 		Model:   conn.Model,
 		APIKey:  key,
+	})
+}
+
+// BuildEmbedder builds an agent.Embedder from an embedder connection, the
+// counterpart of DefaultProviderBuilder for the embedder role. Embeddings are
+// an OpenAI-wire concern (an /embeddings endpoint), so every supported type
+// resolves through the OpenAI-compatible embedder — EXCEPT "anthropic", which
+// exposes no embeddings API and is rejected. tp opts the embedder into its
+// agent.embed span; nil is fine.
+func BuildEmbedder(conn ConnectionConfig, tp core.TracerProvider) (agent.Embedder, error) {
+	if conn.Type == "anthropic" {
+		return nil, fmt.Errorf("host: connection type %q has no embeddings API; use an openai/gemini/local embedder", conn.Type)
+	}
+	base, err := resolveBaseURL(conn)
+	if err != nil {
+		return nil, err
+	}
+	var key string
+	if conn.APIKeyEnv != "" {
+		key = os.Getenv(conn.APIKeyEnv)
+	}
+	return agent.NewOpenAIEmbedder(agent.OpenAIEmbedderConfig{
+		BaseURL:        base,
+		Model:          conn.Model,
+		APIKey:         key,
+		TracerProvider: tp,
 	})
 }
 
@@ -185,6 +239,18 @@ func NewConnectionRegistry(cfg *ConnectionsConfig, build ProviderBuilder) (*Conn
 	}
 	if _, ok := cfg.Connections[active]; !ok {
 		return nil, fmt.Errorf("host: active connection %q is not defined", active)
+	}
+	if cfg.Embedder != "" {
+		conn, ok := cfg.Connections[cfg.Embedder]
+		if !ok {
+			return nil, fmt.Errorf("host: embedder connection %q is not defined", cfg.Embedder)
+		}
+		if conn.Type == "anthropic" {
+			return nil, fmt.Errorf("host: embedder connection %q is anthropic, which has no embeddings API", cfg.Embedder)
+		}
+		if _, err := resolveBaseURL(conn); err != nil {
+			return nil, fmt.Errorf("host: embedder connection %q: %w", cfg.Embedder, err)
+		}
 	}
 	return &ConnectionRegistry{
 		conns:  cfg.Connections,

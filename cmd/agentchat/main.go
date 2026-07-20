@@ -121,6 +121,30 @@ func buildToolResultStore(spec, dir string) (agent.ToolResultStore, error) {
 	}
 }
 
+// resolveEmbedder picks the embedder for semantic memory and its vector
+// width. Precedence: the --memory-embed-model flag (explicit override, with
+// its own url/key/dim flags), then the config's `embedder` connection role
+// (host.BuildEmbedder + the connection's dim). Returns (nil, 0, nil) when
+// neither is set, which keeps memory on the in-memory substring store.
+func resolveEmbedder(v *viper.Viper, cfg *host.Config, tp core.TracerProvider) (agent.Embedder, int, error) {
+	if em := v.GetString("memory-embed-model"); em != "" {
+		embedder, err := agent.NewOpenAIEmbedder(agent.OpenAIEmbedderConfig{
+			BaseURL:        v.GetString("memory-embed-url"),
+			Model:          em,
+			APIKey:         os.Getenv(v.GetString("memory-embed-api-key-env")),
+			TracerProvider: tp,
+		})
+		return embedder, v.GetInt("memory-embed-dim"), err
+	}
+	if cfg.Connections != nil {
+		if conn, ok := cfg.Connections.EmbedderConnection(); ok {
+			embedder, err := host.BuildEmbedder(conn, tp)
+			return embedder, conn.Dim, err
+		}
+	}
+	return nil, 0, nil
+}
+
 // buildSemanticMemoryStore picks the semantic MemoryStore backend for
 // --memory-embed-model. A postgres --session-store routes to the durable
 // pgvector store (ANN top-k in SQL, survives restart) over its own handle,
@@ -169,6 +193,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("api-key-env", "", "env var holding the model API key")
 	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
+	fl.String("active", "", "override the active chat connection at startup (a name in the config's connections; default = the config's active)")
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
 	fl.String("ui", "auto", "interface: auto (TUI when interactive) | tui | plain")
@@ -207,6 +232,12 @@ func runChat(v *viper.Viper) error {
 	)
 	if err != nil {
 		return err
+	}
+	// --active overrides the config's chat connection at startup, so a real
+	// provider can be selected by env/flag without editing the config
+	// (validated by NewConnectionRegistry inside NewApp).
+	if active := v.GetString("active"); active != "" && cfg.Connections != nil {
+		cfg.Connections.Active = active
 	}
 
 	ctx := context.Background()
@@ -269,19 +300,15 @@ func runChat(v *viper.Viper) error {
 			RecallMinScore:  v.GetFloat64("memory-recall-min-score"),
 		}
 		// A semantic store makes recall similarity-ranked instead of
-		// substring; without an embed model, memory stays the in-memory
-		// substring default.
-		if em := v.GetString("memory-embed-model"); em != "" {
-			embedder, err := agent.NewOpenAIEmbedder(agent.OpenAIEmbedderConfig{
-				BaseURL:        v.GetString("memory-embed-url"),
-				Model:          em,
-				APIKey:         os.Getenv(v.GetString("memory-embed-api-key-env")),
-				TracerProvider: tp,
-			})
-			if err != nil {
-				return err
-			}
-			store, err := buildSemanticMemoryStore(v.GetString("session-store"), embedder, v.GetInt("memory-embed-dim"), tp)
+		// substring. The embedder is resolved from the --memory-embed-model
+		// flag (override) or the config's `embedder` connection role; with
+		// neither, memory stays the in-memory substring default.
+		embedder, dim, err := resolveEmbedder(v, cfg, tp)
+		if err != nil {
+			return err
+		}
+		if embedder != nil {
+			store, err := buildSemanticMemoryStore(v.GetString("session-store"), embedder, dim, tp)
 			if err != nil {
 				return err
 			}
