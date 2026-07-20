@@ -130,6 +130,29 @@ func TestResolveBaseURL(t *testing.T) {
 	}
 }
 
+// TestThinkingHintWrapsProvider pins that a ThinkingHint on a connection makes
+// DefaultProviderBuilder wrap the provider in the inline-reasoning parser, and
+// that no hint leaves it unwrapped.
+func TestThinkingHintWrapsProvider(t *testing.T) {
+	plain, err := DefaultProviderBuilder(ConnectionConfig{Type: "lmstudio", Model: "m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := plain.(*agent.OpenAIProvider); !ok {
+		t.Fatalf("no hint should be the bare provider, got %T", plain)
+	}
+	hinted, err := DefaultProviderBuilder(ConnectionConfig{
+		Type: "lmstudio", Model: "m",
+		ThinkingHint: &ThinkingHint{OpenTag: "<think>", CloseTag: "</think>"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := hinted.(*agent.OpenAIProvider); ok {
+		t.Fatal("a ThinkingHint should wrap the provider, but got the bare *agent.OpenAIProvider")
+	}
+}
+
 // TestRouterPresets_BuildOpenAIWire pins that the router types build the
 // OpenAI-wire provider (they are gateways, not a native provider).
 func TestRouterPresets_BuildOpenAIWire(t *testing.T) {
