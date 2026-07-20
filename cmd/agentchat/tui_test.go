@@ -2,10 +2,12 @@ package main
 
 import (
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
@@ -162,5 +164,46 @@ func TestCompleteTab(t *testing.T) {
 	m.completeTab()
 	if m.ta.Value() != "/provider " {
 		t.Fatalf("ambiguous arg changed input to %q", m.ta.Value())
+	}
+}
+
+func TestKeyMap_WordNavHasCtrlArrows(t *testing.T) {
+	// newTUIModel only stores app/surface; nil is fine for inspecting the
+	// configured textarea KeyMap.
+	m := newTUIModel(nil, nil)
+	fwd := m.ta.KeyMap.WordForward.Keys()
+	back := m.ta.KeyMap.WordBackward.Keys()
+	if !slices.Contains(fwd, "ctrl+right") {
+		t.Fatalf("WordForward keys = %v, want ctrl+right (word nav without Meta)", fwd)
+	}
+	if !slices.Contains(back, "ctrl+left") {
+		t.Fatalf("WordBackward keys = %v, want ctrl+left", back)
+	}
+	// the Meta bindings must survive the augmentation
+	if !slices.Contains(fwd, "alt+f") || !slices.Contains(back, "alt+b") {
+		t.Fatalf("alt word-nav bindings dropped: fwd=%v back=%v", fwd, back)
+	}
+}
+
+func TestKeyHelp_ListsBindings(t *testing.T) {
+	h := keyHelp()
+	for _, want := range []string{"ctrl+← / ctrl+→", "ctrl+a / ctrl+e", "ctrl+w", "ctrl+k / ctrl+u", "Option-as-Meta"} {
+		if !strings.Contains(h, want) {
+			t.Fatalf("keyHelp() missing %q:\n%s", want, h)
+		}
+	}
+}
+
+func TestKeyMap_CtrlRightMovesByWord(t *testing.T) {
+	m := newTUIModel(nil, nil)
+	m.ta.SetValue("one two three")
+	m.ta.CursorStart()
+	if col := m.ta.LineInfo().ColumnOffset; col != 0 {
+		t.Fatalf("cursor not at start: %d", col)
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
+	after := nm.(tuiModel).ta.LineInfo().ColumnOffset
+	if after < 3 {
+		t.Fatalf("ctrl+right did not advance past the first word: col=%d", after)
 	}
 }
