@@ -13,7 +13,7 @@ line to the walkthrough.
 |---|---|---|
 | Durable sessions (resume/fork) | `--session-store $SESSION_STORE --session $SESSION` | postgres `RunStore` |
 | Tool-result offloading | `--offload-threshold $OFFLOAD_THRESHOLD` | postgres blobs (shares the session store) |
-| Semantic memory (recall by meaning) | `--memory --memory-inject-recall --memory-embed-*` | pgvector `SemanticMemoryStore` |
+| Semantic memory (recall by meaning) | `--memory --memory-inject-recall` + the config's `embedder` role | pgvector `SemanticMemoryStore` |
 | History compaction | `--compact-tokens $COMPACT_TOKENS` | in-Runner summarizer |
 | Distributed tracing | `--exporter $EXPORTER --otlp-endpoint $OTLP_ENDPOINT` | OTel → Tempo/Grafana |
 | Sub-agent personas | `subAgents` in `kitchen-sink.json` | in-process child Runners |
@@ -32,8 +32,11 @@ flag, because it is a separate endpoint from the chat model.
   var). Point `connections.active` at one, or switch between them at runtime
   with `/provider` to compare models. The model ids are examples; edit them
   for what your account has access to.
-- An OpenAI-compatible **embeddings** endpoint for semantic memory. `just check`
-  tells you exactly what to start if it's missing.
+- An **embeddings** endpoint for semantic memory. By default the config's
+  `embedder` role points at OpenAI (`text-embedding-3-small`), so just set
+  `OPENAI_API_KEY` — no local embedder needed. Switch it to `gemini-embed`, or
+  override with a local endpoint via `EMBED_MODEL`/`EMBED_URL`/`EMBED_DIM`.
+  `just check` tells you exactly what's missing.
 
 ## Quick start
 
@@ -48,6 +51,23 @@ just alldown    # tear the stacks back down
 `just run` fails fast if postgres is down (the config depends on it) and warns
 if observability or the embedder are missing (chat still works; those features
 degrade).
+
+### Run against real providers
+
+Chat and the embedder are both connections in `kitchen-sink.json`. Pick them
+without editing the file:
+
+```bash
+# Chat on Anthropic, embeddings on OpenAI (the default embedder role)
+ACTIVE=anthropic-opus just run          # needs ANTHROPIC_API_KEY + OPENAI_API_KEY
+
+# All OpenAI
+ACTIVE=openai-5.1 just run              # needs OPENAI_API_KEY (chat + embeddings)
+```
+
+`ACTIVE` overrides the active chat connection; the embedder comes from the
+config's `embedder` role (switch it to `gemini-embed` in the file to embed with
+Gemini). You can also swap chat models mid-session with `/provider`.
 
 ## Guided walkthrough (exercise each feature)
 
@@ -82,21 +102,23 @@ live at the top of the `justfile` / `Makefile`.
 
 | Variable | Default | Notes |
 |---|---|---|
+| `ACTIVE` | *(config's active)* | override the active chat connection (e.g. `anthropic-opus`) |
 | `SESSION_STORE` | `postgres://postgres:postgres@localhost:5432/agent` | runs + offload blobs |
 | `SESSION` | `kitchen-sink` | run id to create/resume |
 | `OFFLOAD_THRESHOLD` | `1024` | bytes; 0 disables offloading |
-| `EMBED_MODEL` | `text-embedding-nomic-embed-text-v1.5` | must exist on the embedder |
-| `EMBED_URL` | `http://localhost:1234/v1` | OpenAI-compatible `/embeddings` |
-| `EMBED_DIM` | `768` | **must match the model** — pgvector rejects a mismatch |
+| `EMBED_MODEL` | *(empty)* | empty = use the config's `embedder` role; set to override with an explicit endpoint |
+| `EMBED_URL` | `http://localhost:1234/v1` | with `EMBED_MODEL`: OpenAI-compatible `/embeddings` |
+| `EMBED_DIM` | *(empty)* | with `EMBED_MODEL`: **must match the model** — pgvector rejects a mismatch |
 | `COMPACT_TOKENS` | `8000` | compact history past this estimate |
 | `EXPORTER` | `otlp` | `otlp` / `stdout` / `auto` / empty(off) |
 | `OTLP_ENDPOINT` | `localhost:4317` | OTel collector |
 
 ## Gotchas
 
-- **`EMBED_DIM` must equal the embedding model's true width** (nomic = 768,
-  OpenAI `text-embedding-3-small` = 1536, MiniLM = 384). A mismatch fails the
-  insert.
+- **The embedding dimension must equal the model's true width** — the `dim` on
+  the `embedder` connection (or `EMBED_DIM` when overriding by flag). OpenAI
+  `text-embedding-3-small` = 1536, Gemini `text-embedding-004` = 768, nomic =
+  768, MiniLM = 384. A mismatch fails the pgvector insert.
 - **The `agent` DB + `vector` extension are created on a fresh postgres volume
   only.** If you started the backends stack before this feature existed,
   `just check` tells you to reset: `cd docker/backends && just down && rm -rf data/postgres && just up`.

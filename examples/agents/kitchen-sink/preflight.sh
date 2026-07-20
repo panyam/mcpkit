@@ -18,9 +18,11 @@ PG_PORT="${PG_PORT:-5432}"
 PG_DB="${PG_DB:-agent}"
 PG_USER="${PG_USER:-postgres}"
 OTLP_ENDPOINT="${OTLP_ENDPOINT:-localhost:4317}"
+# EMBED_MODEL empty (the default) => the embedder is resolved from the
+# config's `embedder` role below; non-empty means a flag override.
 EMBED_URL="${EMBED_URL:-http://localhost:1234/v1}"
-EMBED_MODEL="${EMBED_MODEL:-text-embedding-nomic-embed-text-v1.5}"
-EMBED_DIM="${EMBED_DIM:-768}"
+EMBED_MODEL="${EMBED_MODEL:-}"
+EMBED_DIM="${EMBED_DIM:-}"
 
 fail=0
 
@@ -62,16 +64,40 @@ else
 	echo "         -> cd $ROOT/docker/observability && just up   # or: just allup"
 fi
 
-# --- Embedder endpoint (optional, needed for semantic memory) ------------
-if command -v curl >/dev/null 2>&1 && curl -fsS -m 3 "$EMBED_URL/models" >/dev/null 2>&1; then
-	echo "  [ok]   embedder   $EMBED_URL (model=$EMBED_MODEL, dim=$EMBED_DIM)"
+# --- Embedder (optional, needed for semantic memory) ---------------------
+# EMBED_MODEL set => a flag override (probe EMBED_URL). Otherwise the embedder
+# comes from kitchen-sink.json's `embedder` role: resolve its endpoint + key
+# env from the config so we check the right place.
+emb_url="$EMBED_URL"; emb_key_env=""
+if [ -z "$EMBED_MODEL" ] && command -v jq >/dev/null 2>&1; then
+	cfg="$DIR/kitchen-sink.json"
+	ename="$(jq -r '.connections.embedder // empty' "$cfg")"
+	if [ -n "$ename" ]; then
+		econn="$(jq -c --arg n "$ename" '.connections.connections[$n] // {}' "$cfg")"
+		EMBED_MODEL="$(jq -r '.model // empty' <<<"$econn")"
+		emb_key_env="$(jq -r '.apiKeyEnv // empty' <<<"$econn")"
+		emb_url="$(jq -r '.baseUrl // empty' <<<"$econn")"
+		if [ -z "$emb_url" ]; then
+			case "$(jq -r '.type // empty' <<<"$econn")" in
+				openai)   emb_url="https://api.openai.com/v1" ;;
+				gemini)   emb_url="https://generativelanguage.googleapis.com/v1beta/openai" ;;
+				lmstudio) emb_url="http://localhost:1234/v1" ;;
+				ollama)   emb_url="http://localhost:11434/v1" ;;
+			esac
+		fi
+	fi
+fi
+
+if [ -n "$emb_key_env" ] && [ -z "${!emb_key_env:-}" ]; then
+	echo "  [warn] embedder   config role needs \$$emb_key_env set (semantic memory will error)"
+	echo "         -> export $emb_key_env=...   (the $EMBED_MODEL embedder at $emb_url)"
+elif command -v curl >/dev/null 2>&1 && curl -fsS -m 3 "$emb_url/models" >/dev/null 2>&1; then
+	echo "  [ok]   embedder   $emb_url (model=$EMBED_MODEL)"
 else
-	echo "  [warn] embedder   $EMBED_URL unreachable (remember/recall will error; chat still works)"
-	echo "         -> start an OpenAI-compatible /embeddings endpoint and load '$EMBED_MODEL', e.g.:"
-	echo "            LM Studio: load an embedding model, serve on :1234  (EMBED_URL default)"
-	echo "            Ollama:    ollama pull nomic-embed-text && ollama serve"
-	echo "                       then EMBED_URL=http://localhost:11434/v1 EMBED_MODEL=nomic-embed-text EMBED_DIM=768"
-	echo "         (set EMBED_DIM to the model's true width — pgvector rejects a mismatch)"
+	echo "  [warn] embedder   $emb_url not verified (remember/recall may error; chat still works)"
+	echo "         -> for a cloud embedder set the provider key (e.g. export OPENAI_API_KEY=...);"
+	echo "            for a local one run LM Studio (:1234) or Ollama and set EMBED_MODEL/EMBED_URL/EMBED_DIM"
+	echo "         (EMBED_DIM / the config 'dim' must match the model's width — pgvector rejects a mismatch)"
 fi
 
 echo "----------------------"

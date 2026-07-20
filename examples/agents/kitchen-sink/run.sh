@@ -14,8 +14,12 @@ ROOT="$(cd "$DIR/../../.." && pwd)"
 
 SESSION_STORE="${SESSION_STORE:-postgres://postgres:postgres@localhost:5432/agent}"
 SESSION="${SESSION:-kitchen-sink}"
+ACTIVE="${ACTIVE:-}"
 OFFLOAD_THRESHOLD="${OFFLOAD_THRESHOLD:-1024}"
-EMBED_MODEL="${EMBED_MODEL:-text-embedding-nomic-embed-text-v1.5}"
+# EMBED_MODEL empty => the embedder comes from kitchen-sink.json's `embedder`
+# connection role (a cloud embedding endpoint, no local model needed). Set it
+# to force a specific embedder endpoint via flags instead.
+EMBED_MODEL="${EMBED_MODEL:-}"
 EMBED_URL="${EMBED_URL:-http://localhost:1234/v1}"
 EMBED_DIM="${EMBED_DIM:-768}"
 EMBED_API_KEY_ENV="${EMBED_API_KEY_ENV:-}"
@@ -44,14 +48,16 @@ args=(
 	--session "$SESSION"
 	--offload-threshold "$OFFLOAD_THRESHOLD"
 	--memory --memory-inject-recall
-	--memory-embed-model "$EMBED_MODEL"
-	--memory-embed-url "$EMBED_URL"
-	--memory-embed-dim "$EMBED_DIM"
 	--compact-tokens "$COMPACT_TOKENS"
 	--exporter "$EXPORTER"
 	--otlp-endpoint "$OTLP_ENDPOINT"
 	--ui "$UI"
 )
-[ -n "$EMBED_API_KEY_ENV" ] && args+=(--memory-embed-api-key-env "$EMBED_API_KEY_ENV")
+[ -n "$ACTIVE" ] && args+=(--active "$ACTIVE")
+# Only override the config's embedder role when EMBED_MODEL is set.
+if [ -n "$EMBED_MODEL" ]; then
+	args+=(--memory-embed-model "$EMBED_MODEL" --memory-embed-url "$EMBED_URL" --memory-embed-dim "$EMBED_DIM")
+	[ -n "$EMBED_API_KEY_ENV" ] && args+=(--memory-embed-api-key-env "$EMBED_API_KEY_ENV")
+fi
 
 exec go run . "${args[@]}"
