@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/pgvector/pgvector-go"
@@ -15,6 +16,15 @@ import (
 // DefaultMemoryTable is the table a SemanticMemoryStore uses when
 // WithMemoryTableName is not set.
 const DefaultMemoryTable = "agent_memories"
+
+// identifierPattern is the whitelist for the (developer-set) table name,
+// which is composed into raw SQL rather than bound as a parameter. A match
+// contains no quote or whitespace, so it is safe to interpolate directly.
+const identifierPattern = `^[A-Za-z_][A-Za-z0-9_]*$`
+
+var identifierRE = regexp.MustCompile(identifierPattern)
+
+func validIdentifier(s string) bool { return identifierRE.MatchString(s) }
 
 // DefaultEmbeddingDimensions is the vector width the store provisions its
 // pgvector column with when WithVectorDimensions is not set. 1536 is the
@@ -118,6 +128,15 @@ func NewSemanticMemoryStore(db *gorm.DB, embedder agent.Embedder, opts ...Memory
 	cfg := &memoryConfig{table: DefaultMemoryTable, dims: DefaultEmbeddingDimensions}
 	for _, o := range opts {
 		o(cfg)
+	}
+	// The table name is composed into raw DDL/DML (not bindable as a
+	// parameter), so it is restricted to a plain SQL identifier at
+	// construction rather than trusted to quoting. It is developer-set
+	// (WithMemoryTableName), never end-user input, so this is defense in
+	// depth — but a validated identifier carries no quotes, which closes the
+	// hole outright instead of relying on correct escaping.
+	if !validIdentifier(cfg.table) {
+		return nil, fmt.Errorf("gormstore: invalid memory table name %q (must match %s)", cfg.table, identifierPattern)
 	}
 	s := &SemanticMemoryStore{
 		db:        db,
