@@ -51,6 +51,26 @@ startup when a named variable is unset. A per-server `allow` list is a
 capability boundary (a FilterSource): tools outside it are neither offered to
 the model nor callable.
 
+## Prompt editing keys (TUI)
+
+The input line supports readline-style editing. `/keys` prints this cheatsheet
+in-session.
+
+| Key | Action |
+|---|---|
+| `←` / `→` | char back / forward |
+| `ctrl+←` / `ctrl+→` | word back / forward |
+| `ctrl+a` / `ctrl+e` (or `Home` / `End`) | start / end of line |
+| `ctrl+w` | delete previous word |
+| `ctrl+k` / `ctrl+u` | delete to end / start of line |
+| `ctrl+home` / `ctrl+end` | start / end of input |
+| `↑` / `↓` | command history · `Tab` complete · `Enter` send · `ctrl+c` quit |
+
+Word navigation is bound to both `ctrl+←/→` and `alt+←/→` (`alt+b`/`alt+f`); the
+`alt+*` bindings (and `alt+d` delete-word-forward, `alt+<`/`alt+>` input ends)
+need your terminal to send Option as Meta — the `ctrl+*` bindings work without
+it.
+
 ## Telemetry and failover
 
 `--exporter` selects telemetry (`stdout`, `otlp`, `auto`; empty = off, zero
