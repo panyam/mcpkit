@@ -14,7 +14,10 @@ PG_PORT           := 5435
 PG_USER           := postgres
 PG_PASSWORD       := testpassword
 PG_DB             := mcpkit_agent_test
-PG_IMAGE          := postgres:15-alpine
+# pgvector image (superset of Postgres) so `testpg` also covers the pgvector
+# semantic MemoryStore; the semantic tests CREATE EXTENSION vector themselves
+# and skip if unavailable, so a non-pgvector Postgres still runs the rest.
+PG_IMAGE          := pgvector/pgvector:pg16
 
 .PHONY: test testpg updb downdb
 

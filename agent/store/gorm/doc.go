@@ -25,4 +25,20 @@
 // Schema changes follow the repo's fresh-deploys-only convention: no
 // migration recipes ship with column changes; recreate the tables (see
 // DEPLOYMENT.md in the events SDK for the rationale).
+//
+// The module also ships two agent-memory backends behind the same package:
+//
+//	ToolResultStore        agent.ToolResultStore (Postgres or SQLite)
+//	SemanticMemoryStore    agent.MemoryStore, Postgres + pgvector ONLY
+//
+// SemanticMemoryStore is the durable counterpart to
+// agent.InMemorySemanticStore: it embeds notes and queries client-side
+// (the agent.Embedder seam) and does ANN top-k in SQL over a pgvector
+// column ("ORDER BY embedding <=> $query LIMIT k"), so recall survives
+// process exit and scales past a scratchpad. It has no SQLite path — the
+// vector type, the cosine-distance operator, and the HNSW index are
+// pgvector features — and assumes the "vector" extension already exists
+// (docker/backends' init SQL creates it). A namespace column scopes many
+// scratchpads to one table (WithMemoryNamespace); the per-request
+// Namespace field is issue 1003.
 package gormstore

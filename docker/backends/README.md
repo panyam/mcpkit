@@ -35,7 +35,7 @@ With this stack up, point the agent knobs at it (all from the host, terminal-run
 |---|---|
 | Sessions (RunStore) | `--session-store postgres://postgres:postgres@localhost:5432/agent` — or `redis://localhost:6379` |
 | Tool-result offloading | `--offload-threshold 4096` (blobs share `--session-store`'s backend) |
-| Semantic memory | `--memory --memory-embed-model <model>` + the pgvector `MemoryStore` (issue 1019) against the `agent` DB |
+| Semantic memory | `--memory --memory-embed-model <model>` + a postgres `--session-store` routes to the pgvector `SemanticMemoryStore` against the `agent` DB (set `--memory-embed-dim` to the model's width) |
 | Traces | `--exporter otlp --otlp-endpoint localhost:4317` (needs `docker/observability` up) |
 
 sqlite (`--session-store sqlite://path.db`) needs none of this — the Postgres
