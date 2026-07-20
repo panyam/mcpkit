@@ -247,25 +247,27 @@ func (m notebookModel) updateInsert(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.atBottom = m.vp.AtBottom()
 		return m, nil
 	case tea.KeyUp:
+		// Move within the prompt lines first; only at the top line do up-arrow
+		// history recall / transcript scroll kick in.
+		if m.ta.Line() > 0 {
+			break
+		}
 		if m.recallHistory(-1) {
 			return m, nil
 		}
-		// No history to recall (and single-line input): scroll the transcript
-		// so the arrows always do something visible.
-		if !strings.Contains(m.ta.Value(), "\n") {
-			m.vp.ScrollUp(1)
-			m.atBottom = m.vp.AtBottom()
-			return m, nil
-		}
+		m.vp.ScrollUp(1)
+		m.atBottom = m.vp.AtBottom()
+		return m, nil
 	case tea.KeyDown:
+		if m.ta.Line() < m.ta.LineCount()-1 {
+			break
+		}
 		if m.recallHistory(1) {
 			return m, nil
 		}
-		if !strings.Contains(m.ta.Value(), "\n") {
-			m.vp.ScrollDown(1)
-			m.atBottom = m.vp.AtBottom()
-			return m, nil
-		}
+		m.vp.ScrollDown(1)
+		m.atBottom = m.vp.AtBottom()
+		return m, nil
 	}
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
@@ -284,7 +286,7 @@ func (m notebookModel) statusBar() string {
 	if m.nav {
 		hint = "NAV  ↑↓/jk select · space fold · g/G ends · esc/i type"
 	} else {
-		hint = "INS  type & enter · ↑↓ history then scroll · pgup/pgdn/wheel scroll · esc: fold cells"
+		hint = "INS  enter send · ctrl+j newline · ↑↓ prompt/history/scroll · pgup/pgdn/wheel · esc fold"
 	}
 	if m.running {
 		hint = "working…  " + hint

@@ -83,7 +83,10 @@ terminal, else `plain`), `tui` (inline), `notebook` (alt-screen), or `plain`
   transcript of **collapsible cells** (one per turn / command / info line). Two
   modes: **INS** (default) types into the input — `esc` enters **NAV**, where
   `↑↓`/`jk` move a cell cursor, `space` folds/unfolds, `g`/`G` jump to ends, and
-  `esc`/`i` return to INS. `pgup`/`pgdn` and the mouse wheel scroll. The cost:
+  `esc`/`i` return to INS. `pgup`/`pgdn` and the mouse wheel scroll; in INS,
+  `↑`/`↓` move within a multi-line prompt first, then recall history, then
+  scroll the transcript. **Enter sends; `ctrl+j` inserts a newline** (also
+  `shift+enter` / `alt+enter` where the terminal supports them). The cost:
   alt-screen takes the whole screen, breaks native copy/paste + shell scroll,
   and clears on exit — which is why the inline `tui` stays the default.
 

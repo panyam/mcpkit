@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -140,5 +141,40 @@ func TestNotebook_RuleBetweenCells(t *testing.T) {
 	m = send(m, nbCellMsg{label: "assistant", body: "hello"})
 	if !strings.Contains(m.renderCells(), "─") {
 		t.Fatalf("two cells should have a delimiter between them:\n%s", m.renderCells())
+	}
+}
+
+func TestPromptArea_NewlineOffEnter(t *testing.T) {
+	keys := newPromptArea().KeyMap.InsertNewline.Keys()
+	if !slices.Contains(keys, "ctrl+j") {
+		t.Fatalf("InsertNewline keys = %v, want ctrl+j", keys)
+	}
+	if slices.Contains(keys, "enter") {
+		t.Fatalf("InsertNewline still on enter (would break submit): %v", keys)
+	}
+}
+
+func TestNotebook_CtrlJInsertsNewline(t *testing.T) {
+	m := newNotebookModel(nil, nil)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
+	m.ta.SetValue("abc")
+	m.ta.CursorEnd()
+	m = send(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if !strings.Contains(m.ta.Value(), "\n") {
+		t.Fatalf("ctrl+j did not insert a newline: %q", m.ta.Value())
+	}
+}
+
+func TestNotebook_UpMovesWithinPromptFirst(t *testing.T) {
+	m := newNotebookModel(nil, nil)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
+	m.ta.SetValue("line1\nline2")
+	m.ta.CursorEnd()
+	if m.ta.Line() != 1 {
+		t.Fatalf("setup: cursor row = %d, want 1", m.ta.Line())
+	}
+	m = send(m, tea.KeyMsg{Type: tea.KeyUp}) // moves within prompt, not history/scroll
+	if m.ta.Line() != 0 {
+		t.Fatalf("up did not move the cursor up within the prompt: row = %d", m.ta.Line())
 	}
 }
