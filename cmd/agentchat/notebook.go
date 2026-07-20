@@ -197,6 +197,13 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.nav {
 			return m.updateNav(msg)
 		}
+		// Give the input its full height budget before the edit so the
+		// textarea's internal reposition only scrolls when content genuinely
+		// exceeds maxLines. Otherwise a just-inserted newline transiently
+		// over-scrolls (the old, smaller height is in effect during Update) and
+		// hides line 1 even though the grown box has room. relayout then shrinks
+		// the box back to the actual line count.
+		m.ta.SetHeight(m.maxLines)
 		nm, cmd := m.updateInsert(msg)
 		n := nm.(notebookModel)
 		n.relayout() // the input may have grown or shrunk a line
