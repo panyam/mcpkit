@@ -154,6 +154,17 @@ func TestSemanticMemoryStore_UpsertPreservesPosition(t *testing.T) {
 	}
 }
 
+func TestSemanticMemoryStore_RejectsUnsafeTableName(t *testing.T) {
+	// Construction validates the (raw-SQL-composed) table name before it
+	// touches the DB, so a nil handle is fine — the identifier check fires
+	// first. No Postgres needed, so this guards the injection surface in CI.
+	for _, name := range []string{`agent_memories"; DROP TABLE x; --`, "has space", "a.b", "1bad"} {
+		if _, err := NewSemanticMemoryStore(nil, agent.StubEmbedder{}, WithMemoryTableName(name)); err == nil {
+			t.Errorf("table name %q: want rejection, got nil error", name)
+		}
+	}
+}
+
 func TestSemanticMemoryStore_NamespaceIsolation(t *testing.T) {
 	db := openPgvector(t)
 	ctx := context.Background()
