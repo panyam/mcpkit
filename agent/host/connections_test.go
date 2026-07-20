@@ -112,6 +112,32 @@ func TestResolveBaseURL(t *testing.T) {
 	if _, err := resolveBaseURL(ConnectionConfig{Model: "m"}); err == nil {
 		t.Fatal("no type and no baseUrl should error")
 	}
+	if u, _ := resolveBaseURL(ConnectionConfig{Type: "gemini"}); u != "https://generativelanguage.googleapis.com/v1beta/openai" {
+		t.Fatalf("gemini base = %q", u)
+	}
+	if u, _ := resolveBaseURL(ConnectionConfig{Type: "anthropic"}); u != "https://api.anthropic.com" {
+		t.Fatalf("anthropic base = %q", u)
+	}
+}
+
+// TestDefaultProviderBuilder_ProviderType pins that only "anthropic" routes to
+// the native Messages-API provider; every other type (gemini included) builds
+// the OpenAI-wire provider.
+func TestDefaultProviderBuilder_ProviderType(t *testing.T) {
+	anth, err := DefaultProviderBuilder(ConnectionConfig{Type: "anthropic", Model: "claude-sonnet-5"})
+	if err != nil {
+		t.Fatalf("anthropic build: %v", err)
+	}
+	if _, ok := anth.(*agent.AnthropicProvider); !ok {
+		t.Fatalf("anthropic type built %T, want *agent.AnthropicProvider", anth)
+	}
+	gem, err := DefaultProviderBuilder(ConnectionConfig{Type: "gemini", Model: "gemini-2.5-flash"})
+	if err != nil {
+		t.Fatalf("gemini build: %v", err)
+	}
+	if _, ok := gem.(*agent.OpenAIProvider); !ok {
+		t.Fatalf("gemini type built %T, want *agent.OpenAIProvider", gem)
+	}
 }
 
 // TestConnectionsConfigJSON pins the llm.json-inspired shape decodes.
