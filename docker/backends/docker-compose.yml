@@ -120,13 +120,23 @@ services:
   # posture; production overrides via DSN env on each consumer.
   # -------------------------------------------------------------------
   postgres:
-    image: postgres:18-alpine
+    # pgvector image (PG18 + the `vector` extension) so the durable agent
+    # backends (gorm RunStore / ToolResultStore / MemoryStore) and the pgvector
+    # semantic MemoryStore work against this instance directly. Same PG major
+    # as before, so an existing ./data/postgres volume stays valid.
+    image: pgvector/pgvector:pg18
     container_name: mcpkit-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: events
+    # Published to the host (loopback only) so examples run from the terminal
+    # (agentchat --session-store postgres://postgres:postgres@localhost:5432/agent)
+    # reach it without joining the mcpkit network. Bound to 127.0.0.1 so the
+    # demo-credential DB is NOT reachable off-host (LAN/WiFi).
+    ports:
+      - "127.0.0.1:5432:5432"
     expose:
       - "5432"
     healthcheck:
@@ -140,6 +150,10 @@ services:
     # https://github.com/docker-library/postgres/issues/37
     volumes:
       - ./data/postgres:/var/lib/postgresql
+      # Runs ONCE on a fresh volume: creates the `vector` extension + an
+      # `agent` DB. An already-initialized ./data/postgres will NOT re-run it —
+      # `docker compose down -v` (or a manual CREATE EXTENSION) to pick it up.
+      - ./init:/docker-entrypoint-initdb.d:ro
     networks:
       mcpkit:
         aliases:
@@ -156,6 +170,11 @@ services:
     container_name: mcpkit-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+    # Published to the host (loopback only) for terminal-run examples
+    # (agentchat --session-store redis://localhost:6379). Bound to 127.0.0.1 so
+    # the unauthenticated cache is NOT reachable off-host.
+    ports:
+      - "127.0.0.1:6379:6379"
     expose:
       - "6379"
     healthcheck:
