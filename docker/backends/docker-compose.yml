@@ -131,11 +131,12 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: events
-    # Published to the host so examples run from the terminal (agentchat
-    # --session-store postgres://postgres:postgres@localhost:5432/agent) reach
-    # it without joining the mcpkit network. Demo-only credentials.
+    # Published to the host (loopback only) so examples run from the terminal
+    # (agentchat --session-store postgres://postgres:postgres@localhost:5432/agent)
+    # reach it without joining the mcpkit network. Bound to 127.0.0.1 so the
+    # demo-credential DB is NOT reachable off-host (LAN/WiFi).
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     expose:
       - "5432"
     healthcheck:
@@ -169,10 +170,11 @@ services:
     container_name: mcpkit-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
-    # Published to the host for terminal-run examples
-    # (agentchat --session-store redis://localhost:6379).
+    # Published to the host (loopback only) for terminal-run examples
+    # (agentchat --session-store redis://localhost:6379). Bound to 127.0.0.1 so
+    # the unauthenticated cache is NOT reachable off-host.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     expose:
       - "6379"
     healthcheck:
