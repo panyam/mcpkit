@@ -30,9 +30,9 @@ decoding #1054, +caching/thinking #953), **Phase 6 — test-time compute & routi
 sampling/vote #1056, confidence-gated cascades #1057; adjacent routing #991), **Phase 7 — safety &
 guardrails** (#1052: prompt-injection spotlighting #1058). The items the previous edition listed as
 *untracked* (logprob/grammar, guardrails, sampling/vote, cascade trigger, coding-surface) have all been
-**promoted to tracked phase children** — see §5a. What is left genuinely untracked is small: two
-opt-in Phase-7 extensions (AgentDojo eval suite, constitutional critique gate — "file if pursued").
-Beyond the phases, a rich refinement backlog on the shipped primitives remains (mostly tracked).
+**promoted to tracked phase children** — see §5a. Nothing identified is left untracked (the two opt-in
+Phase-7 extensions are now filed as #1060/#1061). Beyond the phases, a rich refinement backlog on the
+shipped primitives remains (mostly tracked).
 
 ---
 
@@ -119,9 +119,9 @@ they belong in `agent/` or in a coding-agent built on it is a scoping decision (
   (self-consistency / Best-of-N + verifier rerank) #1056, `FailoverProvider` quality-score trigger for
   confidence-gated cascades #1057. Complements upfront routing #991 (selection vs escalation).
 - **Phase 7 — safety & guardrails:** epic #1052 → prompt-injection spotlighting/datamarking `Transform`
-  stage for untrusted tool output #1058. Opt-in extensions (AgentDojo eval suite, constitutional
-  pre-dispatch critique) are "file if pursued". The coding-surface scope decision (sandboxing/hooks/
-  repo map/LSP) is #1059.
+  stage for untrusted tool output #1058; opt-in extensions AgentDojo eval suite #1060 and constitutional
+  pre-dispatch critique gate #1061. The coding-surface scope decision (sandboxing/hooks/repo map/LSP)
+  is #1059.
 
 **Refinement backlog on shipped primitives:**
 - **Provider routing / cascades:** #991 (per-turn/per-role model selection over `ConnectionRegistry`),
@@ -142,15 +142,11 @@ they belong in `agent/` or in a coding-agent built on it is a scoping decision (
 
 ### 5b. Untracked (no issue yet)
 
-The six gaps this section previously listed — logprob exposure, grammar/guided decoding, the
+Nothing. The six gaps this section previously listed — logprob exposure, grammar/guided decoding, the
 sampling/vote helper, the prompt-injection guardrail, the `FailoverProvider` quality-score trigger, and
-the coding-surface scoping call — have all been **promoted to tracked phase children** (Phases 5–7 and
-#1059; see §5a). What remains genuinely unfiled:
-
-1. **AgentDojo-style security eval suite** (Phase 7 extension). Likely rides the external-eval adapter
-   seam #1015 rather than a bespoke harness. File if pursued.
-2. **Constitutional / critique pre-dispatch gate** (Phase 7 extension). Composes with the approval
-   policy (#929). File if pursued.
+the coding-surface scoping call — are now tracked phase children (Phases 5–7 and #1059; see §5a), and
+the two Phase-7 extensions (AgentDojo eval suite #1060, constitutional critique gate #1061) have been
+filed. Everything identified is tracked; new gaps get filed as they surface.
 
 ---
 
