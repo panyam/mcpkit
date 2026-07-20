@@ -43,7 +43,8 @@ flag, because it is a separate endpoint from the chat model.
 ```bash
 just allup      # postgres+pgvector + observability stacks (or: make allup)
 just check      # probe everything; prints how to fix whatever is down
-just run        # preflight, boot the demo MCP server, launch agentchat (TUI)
+just run        # preflight, boot the demo MCP server, launch agentchat (inline TUI)
+just note       # same, but the alt-screen notebook UI (scrollable, foldable cells)
 # ... chat ...
 just alldown    # tear the stacks back down
 ```
