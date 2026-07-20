@@ -8,18 +8,38 @@ Shared backend services for mcpkit examples — identity, relational state, cach
 |---|---|---|---|
 | `mcpkit-keycloak` | `quay.io/keycloak/keycloak:26.0` | OAuth AS (3 tenant realms) | `8180` (admin UI + token endpoints) |
 | `mcpkit-keycloak-init` | `quay.io/keycloak/keycloak:26.0` | One-shot sidecar: master realm sslRequired=NONE | — (exits after init) |
-| `mcpkit-postgres` | `postgres:18-alpine` | Relational state (events: WebhookStore + EventBufferStore) | internal-only (5432) |
-| `mcpkit-redis` | `redis:7-alpine` | Cache + pub/sub (events: QuotaStore + Emitter) | internal-only (6379) |
+| `mcpkit-postgres` | `pgvector/pgvector:pg18` | Relational state (events: WebhookStore + EventBufferStore) **+ the agent stack**: durable gorm RunStore / ToolResultStore / MemoryStore, and the pgvector semantic MemoryStore | `5432` (host + network) |
+| `mcpkit-redis` | `redis:7-alpine` | Cache + pub/sub (events: QuotaStore + Emitter) **+ the agent stack**: redis RunStore / ToolResultStore / MemoryStore | `6379` (host + network) |
 
-Postgres and Redis are NOT host-port-mapped — they're reachable from any container on the `mcpkit` network by alias (`postgres:5432`, `redis:6379`). An example needing direct host access can either `docker exec` into the container or add a `ports:` block in a local override.
+Postgres and Redis are reachable both **on the `mcpkit` network** by alias (`postgres:5432`, `redis:6379`) for containerized examples, **and on `localhost`** (`5432` / `6379`) for examples run from the terminal (agentchat). Credentials are demo-only (`postgres/postgres`).
+
+Postgres runs the **pgvector** image, and a one-time init script (`init/01-agent.sql`, on a **fresh** volume only) creates the `vector` extension and a dedicated **`agent`** database. On an already-initialized `./data/postgres`, reset with `docker compose down -v` — or create the extension manually — to pick it up.
 
 ## Quick start
 
 ```
-cd docker/backends && just up       # bring the stack up
+cd docker/backends && just up       # bring the stack up (make up also works)
 open http://localhost:8180          # Keycloak admin UI (admin/admin)
 cd docker/backends && just down     # tear it down
 ```
+
+Observability (Grafana / Tempo / OTel collector / Mimir) is a **separate**
+compose — bring it up from [`docker/observability/`](../observability/) with its
+own `just up` / `make up`. Both join the shared `mcpkit` network.
+
+## The agent stack — wiring agentchat / agent examples
+
+With this stack up, point the agent knobs at it (all from the host, terminal-run):
+
+| Agent knob | Value against this stack |
+|---|---|
+| Sessions (RunStore) | `--session-store postgres://postgres:postgres@localhost:5432/agent` — or `redis://localhost:6379` |
+| Tool-result offloading | `--offload-threshold 4096` (blobs share `--session-store`'s backend) |
+| Semantic memory | `--memory --memory-embed-model <model>` + the pgvector `MemoryStore` (issue 1019) against the `agent` DB |
+| Traces | `--exporter otlp --otlp-endpoint localhost:4317` (needs `docker/observability` up) |
+
+sqlite (`--session-store sqlite://path.db`) needs none of this — the Postgres
+path is for the durable/multi-replica story and for exercising pgvector.
 
 ## Reaching these from an example
 
