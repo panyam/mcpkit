@@ -94,10 +94,17 @@ type tuiModel struct {
 
 func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
 	ta := textarea.New()
-	ta.Placeholder = "message, or /command (Tab completes, ↑↓ history)"
+	ta.Placeholder = "message, or /command (Tab completes, ↑↓ history, /keys for editing keys)"
 	ta.Prompt = "› "
 	ta.ShowLineNumbers = false
 	ta.SetHeight(2)
+	// The default KeyMap binds word navigation to Meta only (alt+←/→, alt+b/f),
+	// which does nothing on terminals that don't send Option as Meta (the macOS
+	// default). Add the Ctrl variants so word motion works out of the box; the
+	// alt bindings stay for those who have Meta enabled. Everything else the
+	// user needs is already Ctrl-based (a/e/w/k/u) — see /keys.
+	ta.KeyMap.WordForward.SetKeys(append(ta.KeyMap.WordForward.Keys(), "ctrl+right")...)
+	ta.KeyMap.WordBackward.SetKeys(append(ta.KeyMap.WordBackward.Keys(), "ctrl+left")...)
 	ta.Focus()
 	m := tuiModel{app: app, surface: surface, ta: ta}
 	m.histIdx = 0
@@ -185,6 +192,11 @@ func (m tuiModel) View() string {
 // both on a goroutine so the UI stays responsive; the surface streams
 // segments back and the goroutine ends with turnDoneMsg.
 func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
+	// /keys is a terminal-only cheatsheet (prompt editing is a TUI concern, so
+	// it is not a surface-agnostic host command); print it without a turn.
+	if line == "/keys" {
+		return m, tea.Println(keyHelp())
+	}
 	m.running = true
 	app, surface := m.app, m.surface
 	ctx := context.Background()
@@ -212,6 +224,23 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 		}()
 	}
 	return m, nil
+}
+
+// keyHelp is the /keys cheatsheet: the prompt-editing bindings, grouped by
+// what works without a Meta key (the top rows) versus what needs the
+// terminal's Option-as-Meta (the alt-* bindings).
+func keyHelp() string {
+	return strings.Join([]string{
+		"Prompt editing keys:",
+		"  ← / →                 char back / forward",
+		"  ctrl+← / ctrl+→       word back / forward",
+		"  ctrl+a / ctrl+e       start / end of line   (also Home / End)",
+		"  ctrl+w                delete previous word",
+		"  ctrl+k / ctrl+u       delete to end / start of line",
+		"  ctrl+home / ctrl+end  start / end of input",
+		"  ↑ / ↓  history    Tab  complete    Enter  send    ctrl+c  quit",
+		"  With Option-as-Meta on: alt+←/→ or alt+b/f word nav, alt+d delete-word-forward, alt+</> input ends.",
+	}, "\n")
 }
 
 // completeTab completes a leading slash command against the registry: a
