@@ -107,6 +107,11 @@ func newPromptArea() textarea.Model {
 	// alt bindings stay for those who have Meta enabled.
 	ta.KeyMap.WordForward.SetKeys(append(ta.KeyMap.WordForward.Keys(), "ctrl+right")...)
 	ta.KeyMap.WordBackward.SetKeys(append(ta.KeyMap.WordBackward.Keys(), "ctrl+left")...)
+	// Enter submits (both surfaces intercept it), so rebind "insert newline" off
+	// Enter and onto keys that reach the textarea. ctrl+j (keyLF) is the
+	// reliable one everywhere; shift+enter works only in terminals that
+	// disambiguate it (kitty keyboard protocol), alt+enter in most others.
+	ta.KeyMap.InsertNewline.SetKeys("ctrl+j", "shift+enter", "alt+enter")
 	ta.Focus()
 	return ta
 }
@@ -244,6 +249,7 @@ func keyHelp() string {
 		"  ctrl+w                delete previous word",
 		"  ctrl+k / ctrl+u       delete to end / start of line",
 		"  ctrl+home / ctrl+end  start / end of input",
+		"  ctrl+j               insert a newline (also shift+enter / alt+enter)",
 		"  ↑ / ↓  history    Tab  complete    Enter  send    ctrl+c  quit",
 		"  With Option-as-Meta on: alt+←/→ or alt+b/f word nav, alt+d delete-word-forward, alt+</> input ends.",
 	}, "\n")
