@@ -12,8 +12,11 @@ echo "==> booting demo MCP server (getting-started 'greet') on :8787"
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
-for _ in $(seq 1 30); do
-	if curl -s -o /dev/null http://localhost:8787/mcp 2>/dev/null; then break; fi
+# Wait for the port via a TCP probe — NOT an HTTP GET. A GET to /mcp opens the
+# server's SSE stream and never returns, so a curl-based check would hang the
+# launch forever.
+for _ in $(seq 1 60); do
+	(exec 3<>/dev/tcp/localhost/8787) 2>/dev/null && { exec 3>&-; break; }
 	sleep 0.5
 done
 
