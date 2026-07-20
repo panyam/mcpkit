@@ -92,7 +92,10 @@ type tuiModel struct {
 	pending string
 }
 
-func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
+// newPromptArea builds the shared input textarea used by both TUI surfaces
+// (inline and notebook): the readline keybindings (issue #1065 — Ctrl word-nav
+// so it works without Option-as-Meta) live here so both get them.
+func newPromptArea() textarea.Model {
 	ta := textarea.New()
 	ta.Placeholder = "message, or /command (Tab completes, ↑↓ history, /keys for editing keys)"
 	ta.Prompt = "› "
@@ -101,12 +104,20 @@ func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
 	// The default KeyMap binds word navigation to Meta only (alt+←/→, alt+b/f),
 	// which does nothing on terminals that don't send Option as Meta (the macOS
 	// default). Add the Ctrl variants so word motion works out of the box; the
-	// alt bindings stay for those who have Meta enabled. Everything else the
-	// user needs is already Ctrl-based (a/e/w/k/u) — see /keys.
+	// alt bindings stay for those who have Meta enabled.
 	ta.KeyMap.WordForward.SetKeys(append(ta.KeyMap.WordForward.Keys(), "ctrl+right")...)
 	ta.KeyMap.WordBackward.SetKeys(append(ta.KeyMap.WordBackward.Keys(), "ctrl+left")...)
+	// Enter submits (both surfaces intercept it), so rebind "insert newline" off
+	// Enter and onto keys that reach the textarea. ctrl+j (keyLF) is the
+	// reliable one everywhere; shift+enter works only in terminals that
+	// disambiguate it (kitty keyboard protocol), alt+enter in most others.
+	ta.KeyMap.InsertNewline.SetKeys("ctrl+j", "shift+enter", "alt+enter")
 	ta.Focus()
-	m := tuiModel{app: app, surface: surface, ta: ta}
+	return ta
+}
+
+func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
+	m := tuiModel{app: app, surface: surface, ta: newPromptArea()}
 	m.histIdx = 0
 	return m
 }
@@ -238,36 +249,50 @@ func keyHelp() string {
 		"  ctrl+w                delete previous word",
 		"  ctrl+k / ctrl+u       delete to end / start of line",
 		"  ctrl+home / ctrl+end  start / end of input",
+		"  ctrl+j               insert a newline (also shift+enter / alt+enter)",
 		"  ↑ / ↓  history    Tab  complete    Enter  send    ctrl+c  quit",
 		"  With Option-as-Meta on: alt+←/→ or alt+b/f word nav, alt+d delete-word-forward, alt+</> input ends.",
 	}, "\n")
 }
 
-// completeTab completes a leading slash command against the registry: a
-// unique command-name match is inlined; an argument prefix is completed
-// via the command's Complete hook (providers, sessions, ...).
-func (m *tuiModel) completeTab() {
-	val := m.ta.Value()
+func (m *tuiModel) completeTab() { tabComplete(&m.ta, m.app) }
+
+// tabComplete completes a leading slash command against the registry: a
+// unique command-name match is inlined; an argument prefix is completed via
+// the command's Complete hook (providers, sessions, ...). Shared by both TUI
+// surfaces.
+func tabComplete(ta *textarea.Model, app *host.App) {
+	val := ta.Value()
 	if !strings.HasPrefix(val, "/") {
 		return
 	}
-	reg := m.app.Commands()
+	reg := app.Commands()
 	word, rest, hasArg := strings.Cut(val, " ")
 	if !hasArg {
 		// completing the command name
 		if names := reg.Match(word); len(names) == 1 {
-			m.ta.SetValue("/" + names[0] + " ")
-			m.ta.CursorEnd()
+			ta.SetValue("/" + names[0] + " ")
+			ta.CursorEnd()
 		}
 		return
 	}
 	// completing an argument
 	if cmd, ok := reg.Lookup(word); ok && cmd.Complete != nil {
 		if opts := cmd.Complete(strings.TrimSpace(rest)); len(opts) == 1 {
-			m.ta.SetValue(word + " " + opts[0])
-			m.ta.CursorEnd()
+			ta.SetValue(word + " " + opts[0])
+			ta.CursorEnd()
 		}
 	}
+}
+
+// snippet trims s to one line of at most n runes with an ellipsis, for
+// collapsed cell headers.
+func snippet(s string, n int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // recallHistory replaces the input with a previous/next submitted line.
@@ -295,20 +320,26 @@ func (m *tuiModel) recallHistory(dir int) bool {
 	return true
 }
 
-// wantTUI resolves the --ui flag: "tui"/"plain" force the mode; "auto"
-// (the default) picks the TUI only when stdout is an interactive
-// terminal, so piped or CI runs get the scriptable scanner REPL.
-func wantTUI(mode string) bool {
-	switch mode {
-	case "tui":
-		return true
-	case "plain":
-		return false
+// uiMode resolves the --ui flag to a concrete surface: "plain" (the scriptable
+// scanner REPL), "tui" (the default inline bubbletea surface), or "notebook"
+// (the opt-in alt-screen surface). "auto" (the default flag value) picks "tui"
+// when stdout is an interactive terminal and "plain" otherwise (pipes / CI).
+func uiMode(flag string) string {
+	switch flag {
+	case "plain", "tui", "notebook":
+		return flag
 	default:
 		fi, err := os.Stdout.Stat()
-		return err == nil && (fi.Mode()&os.ModeCharDevice) != 0
+		if err == nil && (fi.Mode()&os.ModeCharDevice) != 0 {
+			return "tui"
+		}
+		return "plain"
 	}
 }
+
+// wantTUI reports whether --ui resolves to an interactive bubbletea surface
+// (inline tui or notebook) rather than the plain REPL.
+func wantTUI(mode string) bool { return uiMode(mode) != "plain" }
 
 // runTUI starts the inline bubbletea program (no alt-screen): the input
 // and the live turn render at the bottom while finished segments commit to

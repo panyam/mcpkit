@@ -41,7 +41,7 @@ export ACTIVE SESSION_STORE SESSION OFFLOAD_THRESHOLD EMBED_MODEL EMBED_URL EMBE
        EMBED_API_KEY_ENV COMPACT_TOKENS EXPORTER OTLP_ENDPOINT UI \
        PG_HOST PG_PORT PG_DB PG_USER
 
-.PHONY: check preflight run demo allup alldown up obs-up psql mem server build
+.PHONY: check preflight run demo note allup alldown up obs-up psql mem server build
 
 check: ## Probe every backend; print bring-up instructions for what's missing.
 	@bash preflight.sh
@@ -50,6 +50,9 @@ preflight: check
 run: ## Preflight, boot the demo server, launch agentchat with everything wired.
 	@bash run.sh
 demo: run
+
+note: ## Same as run, but the alt-screen notebook UI (scrollable, foldable cells).
+	@UI=notebook bash run.sh
 
 allup: ## Bring up ALL stacks kitchen-sink can use (backends + observability).
 	cd ../../../docker/backends && $(MAKE) up

@@ -71,7 +71,28 @@ Word navigation is bound to both `ctrl+←/→` and `alt+←/→` (`alt+b`/`alt+
 need your terminal to send Option as Meta — the `ctrl+*` bindings work without
 it.
 
-## Telemetry and failover
+## Interfaces (`--ui`)
+
+`--ui` picks the surface: `auto` (default — the inline TUI when stdout is a
+terminal, else `plain`), `tui` (inline), `notebook` (alt-screen), or `plain`
+(a scriptable line REPL for pipes/CI).
+
+- **`tui`** (inline): finished output commits to the terminal's own scrollback,
+  so native scroll, copy/paste, and a transcript that survives exit all work.
+- **`notebook`** (alt-screen): a managed viewport with its own scroll and a
+  transcript of **collapsible cells** (one per turn / command / info line). Two
+  modes: **INS** (default) types into the input — `esc` enters **NAV**, where
+  `↑↓`/`jk` move a cell cursor, `space` folds/unfolds, `g`/`G` jump to ends, and
+  `esc`/`i` return to INS. `pgup`/`pgdn` and the mouse wheel scroll; in INS,
+  `↑`/`↓` move within a multi-line prompt first, then recall history, then
+  scroll the transcript. **Enter sends; `ctrl+j` inserts a newline** (also
+  `shift+enter` / `alt+enter` where the terminal supports them); the prompt box
+  auto-grows with its line count up to `--notebook-max-lines` (default 20) and
+  shrinks back. The cost:
+  alt-screen takes the whole screen, breaks native copy/paste + shell scroll,
+  and clears on exit — which is why the inline `tui` stays the default.
+
+## Prompt editing keys (TUI)
 
 `--exporter` selects telemetry (`stdout`, `otlp`, `auto`; empty = off, zero
 overhead) and `--otlp-endpoint` points at a collector (default
