@@ -86,7 +86,9 @@ terminal, else `plain`), `tui` (inline), `notebook` (alt-screen), or `plain`
   `esc`/`i` return to INS. `pgup`/`pgdn` and the mouse wheel scroll; in INS,
   `↑`/`↓` move within a multi-line prompt first, then recall history, then
   scroll the transcript. **Enter sends; `ctrl+j` inserts a newline** (also
-  `shift+enter` / `alt+enter` where the terminal supports them). The cost:
+  `shift+enter` / `alt+enter` where the terminal supports them); the prompt box
+  auto-grows with its line count up to `--notebook-max-lines` (default 20) and
+  shrinks back. The cost:
   alt-screen takes the whole screen, breaks native copy/paste + shell scroll,
   and clears on exit — which is why the inline `tui` stays the default.
 

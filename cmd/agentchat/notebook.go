@@ -110,25 +110,44 @@ type notebookModel struct {
 	history []string
 	histIdx int
 
+	maxLines      int // input auto-grows up to this many rows (0 = default)
 	width, height int
 	ready         bool
 }
 
-func newNotebookModel(app *host.App, surface *nbObserver) notebookModel {
-	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), atBottom: true}
+// defaultNotebookMaxLines caps the auto-growing prompt when --notebook-max-lines
+// is unset.
+const defaultNotebookMaxLines = 20
+
+func newNotebookModel(app *host.App, surface *nbObserver, maxLines int) notebookModel {
+	if maxLines <= 0 {
+		maxLines = defaultNotebookMaxLines
+	}
+	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), atBottom: true, maxLines: maxLines}
 	m.histIdx = 0
 	return m
 }
 
 func (m notebookModel) Init() tea.Cmd { return textarea.Blink }
 
-// chromeHeight is the rows the input + status bar consume; the viewport gets
-// the rest.
-const chromeHeight = 4
-
-func (m *notebookModel) layout() {
+// relayout recomputes the split between the input and the viewport. The input
+// auto-grows with its line count (1 line when empty, up to maxLines, shrinking
+// back), and the viewport takes the rest — so a long multi-line draft expands
+// the prompt while a short one keeps the transcript tall.
+func (m *notebookModel) relayout() {
+	if m.width == 0 {
+		return
+	}
+	ih := m.ta.LineCount()
+	if ih < 1 {
+		ih = 1
+	}
+	if ih > m.maxLines {
+		ih = m.maxLines
+	}
 	m.ta.SetWidth(m.width)
-	vpH := m.height - chromeHeight
+	m.ta.SetHeight(ih)
+	vpH := m.height - ih - 2 // status line + separator
 	if vpH < 1 {
 		vpH = 1
 	}
@@ -145,7 +164,7 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.layout()
+		m.relayout()
 		m.refresh()
 		return m, nil
 
@@ -178,7 +197,11 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.nav {
 			return m.updateNav(msg)
 		}
-		return m.updateInsert(msg)
+		nm, cmd := m.updateInsert(msg)
+		n := nm.(notebookModel)
+		n.relayout() // the input may have grown or shrunk a line
+		n.refresh()
+		return n, cmd
 	}
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
@@ -434,8 +457,9 @@ func (m *notebookModel) recallHistory(dir int) bool {
 }
 
 // runNotebook starts the alt-screen notebook program with mouse support.
-func runNotebook(app *host.App, surface *nbObserver) error {
-	prog := tea.NewProgram(newNotebookModel(app, surface), tea.WithAltScreen(), tea.WithMouseCellMotion())
+// maxLines caps the auto-growing prompt.
+func runNotebook(app *host.App, surface *nbObserver, maxLines int) error {
+	prog := tea.NewProgram(newNotebookModel(app, surface, maxLines), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	surface.prog = prog
 	_, err := prog.Run()
 	return err
