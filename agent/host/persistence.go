@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/panyam/mcpkit/agent"
 )
@@ -64,19 +65,93 @@ func (a *App) AttachRun(ctx context.Context, runID string) error {
 	return a.resumeLocked(ctx, runID)
 }
 
-// Sessions lists the persisted runs newest-first (the /sessions picker),
-// or an error when no RunStore is configured. It returns the first page;
-// a surface that needs more pages the store's cursor via ListRuns
-// directly.
+// Sessions lists the first page of persisted runs newest-first (the
+// /sessions picker), or an error when no RunStore is configured. It is the
+// first-page shim over SessionsPage; a surface that pages calls SessionsPage.
 func (a *App) Sessions(ctx context.Context) ([]agent.RunInfo, error) {
+	page, err := a.SessionsPage(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	return page.Runs, nil
+}
+
+// SessionPage is one page of the session picker: the runs on this page and
+// HasMore reporting whether another page exists (the underlying cursor is
+// remembered on the App so the next SessionsPage("") advance-from-last works
+// via the /sessions "more" flow — callers page by empty cursor for the first
+// page, then let the host thread its remembered cursor).
+type SessionPage struct {
+	Runs    []agent.RunInfo
+	HasMore bool
+}
+
+// SessionsPage returns one page of runs newest-first (gorm / in-memory order
+// recency for free; redis SCAN is unordered — see the runstore docs). An empty
+// cursor starts from the most recent; any other value continues a prior page.
+// The response's next cursor is remembered on the App so PageMore advances
+// without the surface handling the opaque cursor. Errors when no RunStore is
+// configured.
+func (a *App) SessionsPage(ctx context.Context, cursor string) (SessionPage, error) {
+	if a.store == nil {
+		return SessionPage{}, fmt.Errorf("host: no RunStore configured")
+	}
+	resp, err := a.store.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor})
+	if err != nil {
+		return SessionPage{}, fmt.Errorf("host: listing sessions: %w", err)
+	}
+	a.sessionsMu.Lock()
+	a.sessionsCursor = resp.NextCursor
+	a.sessionsMu.Unlock()
+	return SessionPage{Runs: resp.Runs, HasMore: resp.NextCursor != ""}, nil
+}
+
+// PageMore returns the next page after the last SessionsPage call (the
+// /sessions "more" flow), or an empty page when there is nothing more.
+func (a *App) PageMore(ctx context.Context) (SessionPage, error) {
+	a.sessionsMu.Lock()
+	cursor := a.sessionsCursor
+	a.sessionsMu.Unlock()
+	if cursor == "" {
+		return SessionPage{}, nil
+	}
+	return a.SessionsPage(ctx, cursor)
+}
+
+// maxSessionSearchScan bounds SearchSessions: id-substring search has no
+// store-side filter, so the host walks pages — capped so a huge run set can't
+// turn a search into an unbounded scan. Content search is a future index.
+const maxSessionSearchScan = 1000
+
+// SearchSessions returns runs whose ID contains query (case-insensitive),
+// newest-first, walking pages up to maxSessionSearchScan runs. The scan is
+// bounded, so a match past the cap is not found — a deliberate limit until a
+// real search index exists.
+func (a *App) SearchSessions(ctx context.Context, query string) ([]agent.RunInfo, error) {
 	if a.store == nil {
 		return nil, fmt.Errorf("host: no RunStore configured")
 	}
-	resp, err := a.store.ListRuns(ctx, agent.ListRunsRequest{})
-	if err != nil {
-		return nil, fmt.Errorf("host: listing sessions: %w", err)
+	q := strings.ToLower(query)
+	var out []agent.RunInfo
+	cursor := ""
+	scanned := 0
+	for scanned < maxSessionSearchScan {
+		resp, err := a.store.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor})
+		if err != nil {
+			return nil, fmt.Errorf("host: searching sessions: %w", err)
+		}
+		for _, r := range resp.Runs {
+			scanned++
+			if strings.Contains(strings.ToLower(r.ID), q) {
+				out = append(out, r)
+			}
+		}
+		if resp.NextCursor == "" {
+			break
+		}
+		cursor = resp.NextCursor
 	}
-	return resp.Runs, nil
+	return out, nil
 }
 
 // Resume switches the session to an existing run: its persisted
