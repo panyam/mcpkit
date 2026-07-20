@@ -1,18 +1,17 @@
-# ext/ui Makefile
+# ext/ui Makefile — recipe bodies live in ext/ui/scripts/*.sh (runner-agnostic,
+# shared with the justfile).
 
 test: ## Run Go + JS bridge unit tests
-	go test ./... -count=1 -timeout 30s
-	cd assets && pnpm install --frozen-lockfile --silent && pnpm test
+	@bash scripts/test.sh
 
 test-bridge: ## Run JS bridge unit tests (requires pnpm + Node.js)
-	cd assets && pnpm install --frozen-lockfile --silent && pnpm test
+	@bash scripts/test-bridge.sh
 
 test-bridge-e2e: ## Run Playwright bridge integration tests (requires Chromium)
-	cp assets/mcp-app-bridge.js tests/playwright/mcp-app-bridge.js
-	cd tests/playwright && pnpm install --frozen-lockfile --silent && pnpm test
+	@bash scripts/test-bridge-e2e.sh
 
 build-bridge: ## Compile mcp-app-bridge.ts → .js (requires pnpm + TypeScript)
-	cd assets && pnpm install --frozen-lockfile && pnpm build
+	@bash scripts/build-bridge.sh
 
-.PHONY: test test-bridge build-bridge
+.PHONY: test test-bridge test-bridge-e2e build-bridge
 .DEFAULT_GOAL := test

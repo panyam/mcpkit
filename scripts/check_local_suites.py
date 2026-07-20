@@ -50,6 +50,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "conformance" / "local-suites.yaml"
 CONF_JUSTFILE = REPO_ROOT / "conformance" / "justfile"
 ROOT_JUSTFILE = REPO_ROOT / "justfile"
+# The testall stage list was extracted from the root justfile into a shared,
+# runner-agnostic script. The run_stage calls that case C validates now live
+# there; fall back to the root justfile for older checkouts.
+TESTALL_SCRIPT = REPO_ROOT / "scripts" / "testall.sh"
 
 ALLOWLIST = {
     "testconf",  # umbrella
@@ -64,8 +68,8 @@ ALLOWLIST = {
 # Matches a testconf-* recipe definition at the start of a justfile line.
 TARGET_RE = re.compile(r"^(testconf[-a-z0-9]*):", re.MULTILINE)
 
-# Matches a `run_stage X 9 name testconf-*` line in the root justfile's
-# testall recipe and captures (stage, target). Tolerates both run_stage
+# Matches a `run_stage X 9 name testconf-*` line in the testall stage list
+# (scripts/testall.sh) and captures (stage, target). Tolerates both run_stage
 # and run_stage_info.
 RUN_STAGE_RE = re.compile(
     r"^\s*run_stage[a-z_]*\s+([0-9a-z]+)\s+\d+\s+\S+\s+(testconf[-a-z0-9]+)",
@@ -83,8 +87,16 @@ def load_inputs():
         die(f"{MANIFEST} not found")
     if not CONF_JUSTFILE.exists():
         die(f"{CONF_JUSTFILE} not found")
-    if not ROOT_JUSTFILE.exists():
-        die(f"{ROOT_JUSTFILE} not found")
+
+    # The testall stage list lives in scripts/testall.sh (extracted from the
+    # root justfile). Fall back to the root justfile so the gate still works on
+    # checkouts predating the extraction.
+    if TESTALL_SCRIPT.exists():
+        stage_source = TESTALL_SCRIPT
+    elif ROOT_JUSTFILE.exists():
+        stage_source = ROOT_JUSTFILE
+    else:
+        die(f"neither {TESTALL_SCRIPT} nor {ROOT_JUSTFILE} found")
 
     try:
         manifest = yaml.safe_load(MANIFEST.read_text())
@@ -100,7 +112,7 @@ def load_inputs():
 
     makefile_targets = set(TARGET_RE.findall(CONF_JUSTFILE.read_text()))
     stage_map = {}
-    for stage, target in RUN_STAGE_RE.findall(ROOT_JUSTFILE.read_text()):
+    for stage, target in RUN_STAGE_RE.findall(stage_source.read_text()):
         stage_map[target] = stage
 
     return suites, makefile_targets, stage_map

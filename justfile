@@ -208,17 +208,20 @@ test-agent:
     @{{just_executable()}} _go-test examples/tasks-v2 60s "-run TestAgentScenario"
 
 # Run auth sub-module tests
-test-auth: (_go-test "ext/auth")
+test-auth:
+    @bash scripts/test-auth.sh
 
 # Run SEP-414 ext/otel adapter sub-module tests
-test-otel: (_go-test "ext/otel")
+test-otel:
+    @bash scripts/test-otel.sh
 
 # Run the examples/otel/stdout smoke test
-test-otel-example: (_go-test "examples/otel/stdout")
+test-otel-example:
+    @bash scripts/test-otel-example.sh
 
 # Run UI extension sub-module tests
 test-ui:
-    just -f ext/ui/justfile test
+    @bash ext/ui/scripts/test.sh
 
 # Run skills extension sub-module tests (SEP-2640, experimental)
 test-skills: (_go-test "ext/skills")
@@ -238,30 +241,35 @@ test-mcpskills-walkthrough:
 
 # Compile mcp-app-bridge.ts → .js (delegates to ext/ui)
 build-bridge:
-    just -f ext/ui/justfile build-bridge
+    @bash ext/ui/scripts/build-bridge.sh
 
 # Run protogen sub-module tests + e2e example
 test-protogen:
-    cd experimental/ext/protogen && go test ./... -count=1 -timeout 30s && just test-e2e
+    @bash scripts/test-protogen.sh
 
 # Run all E2E tests (auth, apps — no Docker)
-test-e2e: (_go-test "tests/e2e" "60s")
+test-e2e:
+    @bash scripts/test-e2e.sh
 
-# Run all experimental POC tests (delegates to experimental/justfile)
+# Run all experimental POC tests
 test-experimental:
-    just -f experimental/justfile test
+    @bash experimental/scripts/test-events.sh
+    @bash experimental/scripts/test-events-clients-go.sh
+    @bash experimental/scripts/test-events-stores-gorm.sh
+    @bash experimental/scripts/test-events-discord.sh
+    @bash experimental/scripts/test-events-telegram.sh
 
 # Run experimental ext/events library tests
 test-experimental-events:
-    just -f experimental/justfile test-events
+    @bash experimental/scripts/test-events.sh
 
 # Run experimental ext/events Go client SDK tests
 test-experimental-events-clients-go:
-    just -f experimental/justfile test-events-clients-go
+    @bash experimental/scripts/test-events-clients-go.sh
 
 # Run experimental ext/events GORM stores (sqlite + inmemory; no Docker required)
 test-experimental-events-stores-gorm:
-    just -f experimental/justfile test-events-stores-gorm
+    @bash experimental/scripts/test-events-stores-gorm.sh
 
 # Run experimental ext/events GORM stores against a real Postgres container (Docker)
 test-experimental-events-stores-gorm-pg:
@@ -269,7 +277,7 @@ test-experimental-events-stores-gorm-pg:
 
 # Run experimental ext/events Redis pubsub Emitter (miniredis; no Docker required)
 test-experimental-events-stores-redis:
-    just -f experimental/justfile test-events-stores-redis
+    @bash experimental/scripts/test-events-stores-redis.sh
 
 # Run experimental ext/events Redis pubsub Emitter against a real Redis container (Docker)
 test-experimental-events-stores-redis-real:
@@ -277,11 +285,11 @@ test-experimental-events-stores-redis-real:
 
 # Run experimental events Discord example tests
 test-experimental-events-discord:
-    just -f experimental/justfile test-events-discord
+    @bash experimental/scripts/test-events-discord.sh
 
 # Run experimental events Telegram example tests
 test-experimental-events-telegram:
-    just -f experimental/justfile test-events-telegram
+    @bash experimental/scripts/test-events-telegram.sh
 
 # Run ext-apps Playwright tests against testserver (needs Node.js + Playwright). EXAMPLE=<name> picks a fixture.
 test-apps-playwright:
@@ -306,39 +314,7 @@ refresh-visual-gallery:
 
 # Release-time apps/compat audit umbrella — fully end-to-end: refresh ext-apps clone → docker-all (parity + visual gate) → regenerate gallery → commit + push the gallery → ghdeploy. Single command for "release-time, just do everything."
 release-audit-apps:
-    #!/usr/bin/env bash
-    set -eu
-    echo "==> [1/5] Refreshing upstream ext-apps clone at /tmp/ext-apps..."
-    if [ -f /tmp/ext-apps/.git/HEAD ]; then
-        (cd /tmp/ext-apps && git pull --quiet) && echo "  pulled"
-    elif [ -e /tmp/ext-apps ]; then
-        rm -rf /tmp/ext-apps && git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  re-cloned (was corrupted: missing .git/HEAD)"
-    else
-        git clone --quiet https://github.com/modelcontextprotocol/ext-apps.git /tmp/ext-apps && echo "  cloned"
-    fi
-    echo ""
-    echo "==> [2/5] Running docker-all (parity diff + Playwright visual gate across 21 fixtures)..."
-    {{just_executable()}} test-apps-playwright-docker-all || echo "  WARNING: docker-all failed. Continuing so drift is captured in the gallery for inspection."
-    echo ""
-    echo "==> [3/5] Regenerating visual gallery..."
-    {{just_executable()}} refresh-visual-gallery
-    echo ""
-    echo "==> [4/5] Committing + pushing regenerated gallery artifacts..."
-    if git status --porcelain docs/site/content/conformance/apps/visual-gallery/ docs/site/static/conformance/apps/visual-gallery/ 2>/dev/null | grep -q .; then
-        git add docs/site/content/conformance/apps/visual-gallery/ docs/site/static/conformance/apps/visual-gallery/
-        git commit -m "refresh: visual gallery for release"
-        git push
-        echo "  committed + pushed"
-    else
-        echo "  no gallery changes; nothing to commit"
-    fi
-    echo ""
-    echo "==> [5/5] Deploying docs site to gh-pages..."
-    {{just_executable()}} ghdeploy
-    echo ""
-    echo "==> Release audit complete."
-    echo "    Gallery: https://panyam.github.io/mcpkit/conformance/apps/visual-gallery/"
-    echo "    (gh-pages CDN may take 1-5 min to flush)"
+    bash scripts/release-audit-apps.sh
 
 # Browse a compat fixture interactively. Default: mcpkit-Go server + basic-host (no LLM needed). basic-host runs on :8080; open it manually (or pass OPEN=1 to auto-open). Override with RENDERER=mcpjam for wire inspection. Usage: just demo-app <name>
 demo-app EXAMPLE OPEN="":
@@ -354,192 +330,15 @@ testkcl:
 
 # Run ALL tests (starts Keycloak if needed) + per-stage HTML reports
 testall:
-    #!/usr/bin/env bash
-    set -u
-    mkdir -p {{REPORT_DIR}}
-    rm -f {{REPORT_DIR}}/stage-*.log
-    echo "=== MCPKit Comprehensive Test Suite ===" | tee {{REPORT_DIR}}/run.log
-    echo "Started: $(date)" | tee -a {{REPORT_DIR}}/run.log
-    PASS=0; FAIL=0; INFO=0; STAGES=""
-
-    # run_stage runs a just recipe as a testall stage with per-stage log files.
-    # Each stage writes to {{REPORT_DIR}}/stage-<label>.log (not the shared run.log).
-    # Usage: run_stage STEP_NUM TOTAL LABEL RECIPE [info]
-    #
-    # A 5th argument of "info" is the soft-failure mode for experimental or
-    # in-flight conformance work where the suite SHOULD surface in testall
-    # reports but MUST NOT block the build. Failure is recorded as INFO and
-    # counted separately so a failing experimental stage does not show up in
-    # the PASS/FAIL tallies.
-    run_stage() {
-        local STEP=$1 TOTAL=$2 LABEL=$3 TARGET=$4 MODE=${5:-}
-        local STAGE_LOG={{REPORT_DIR}}/stage-$LABEL.log
-        local STAGE_START=$(date +%s)
-        if [ "$MODE" = "info" ]; then
-            echo "--- [$STEP/$TOTAL] $LABEL (informational) ---" | tee -a {{REPORT_DIR}}/run.log
-            echo "=== Stage $STEP/$TOTAL: $LABEL (just $TARGET) [informational] ===" > $STAGE_LOG
-        else
-            echo "--- [$STEP/$TOTAL] $LABEL ---" | tee -a {{REPORT_DIR}}/run.log
-            echo "=== Stage $STEP/$TOTAL: $LABEL (just $TARGET) ===" > $STAGE_LOG
-        fi
-        echo "Started: $(date)" >> $STAGE_LOG
-        if {{just_executable()}} $TARGET >> $STAGE_LOG 2>&1; then
-            local ELAPSED=$(($(date +%s) - STAGE_START))
-            if [ "$MODE" = "info" ]; then
-                echo "  PASS: $LABEL (${ELAPSED}s, informational)" | tee -a {{REPORT_DIR}}/run.log
-            else
-                echo "  PASS: $LABEL (${ELAPSED}s)" | tee -a {{REPORT_DIR}}/run.log
-            fi
-            PASS=$((PASS+1)); STAGES="$STAGES $LABEL:PASS:$TARGET:${ELAPSED}s"
-        else
-            local ELAPSED=$(($(date +%s) - STAGE_START))
-            if [ "$MODE" = "info" ]; then
-                echo "  INFO: $LABEL (${ELAPSED}s, informational, not counted as failure)" | tee -a {{REPORT_DIR}}/run.log
-                INFO=$((INFO+1)); STAGES="$STAGES $LABEL:INFO:$TARGET:${ELAPSED}s"
-            else
-                echo "  FAIL: $LABEL (${ELAPSED}s)" | tee -a {{REPORT_DIR}}/run.log
-                FAIL=$((FAIL+1)); STAGES="$STAGES $LABEL:FAIL:$TARGET:${ELAPSED}s"
-            fi
-            echo "  --- $LABEL tail ---"; tail -20 $STAGE_LOG; echo "  ---"
-        fi
-        echo "Finished: $(date) (elapsed ${ELAPSED}s)" >> $STAGE_LOG
-    }
-
-    echo "" | tee -a {{REPORT_DIR}}/run.log
-    run_stage 1 9 unit+coverage cover-html
-    run_stage 2 9 race test-race
-    run_stage 3 9 auth test-auth
-    run_stage 4 9 ui test-ui
-    run_stage 5 9 protogen test-protogen
-    run_stage 5a 9 otel-adapter test-otel
-    run_stage 5b 9 otel-example test-otel-example
-    run_stage 6 9 e2e test-e2e
-    run_stage 7a 9 experimental-events test-experimental-events
-    run_stage 7b 9 experimental-events-clients-go test-experimental-events-clients-go
-    run_stage 7c 9 experimental-events-stores-gorm test-experimental-events-stores-gorm
-    run_stage 7d 9 experimental-events-stores-redis test-experimental-events-stores-redis
-    run_stage 7e 9 experimental-events-discord test-experimental-events-discord
-    run_stage 7f 9 experimental-events-telegram test-experimental-events-telegram
-    run_stage 8a 9 conformance testconf
-    run_stage 8b 9 auth-conformance testconfauth
-    run_stage 8c 9 tasks-conformance testconf-tasks
-    run_stage 8d 9 tasks-v2-conformance testconf-tasks-v2
-    run_stage 8e 9 mrtr-conformance testconf-mrtr
-    run_stage 8f 9 file-inputs-conformance testconf-file-inputs
-    run_stage 8g 9 auth-server-conformance testconf-auth-server
-    run_stage 8h 9 skills-conformance testconf-skills info
-    run_stage 9 9 keycloak testkcl-auto
-    echo "" | tee -a {{REPORT_DIR}}/run.log
-    echo "=== Results: $PASS passed, $FAIL failed, $INFO informational ===" | tee -a {{REPORT_DIR}}/run.log
-    echo "Finished: $(date)" | tee -a {{REPORT_DIR}}/run.log
-    echo "Per-stage logs: {{REPORT_DIR}}/stage-*.log"
-    {{just_executable()}} test-report "$STAGES"
-    echo "HTML report: {{REPORT_DIR}}/report.html"
-    [ $FAIL -eq 0 ]
+    REPORT_DIR={{REPORT_DIR}} bash scripts/testall.sh
 
 # Start Keycloak if needed, run interop tests, stop after
 testkcl-auto:
-    #!/usr/bin/env bash
-    set -u
-    if ! curl -sf {{KC_REALM_URL}} > /dev/null 2>&1; then
-        echo "Starting Keycloak for interop tests..."
-        {{just_executable()}} upkcl
-        echo "Waiting for Keycloak realm..."
-        for i in $(seq 1 60); do
-            curl -sf {{KC_REALM_URL}} > /dev/null 2>&1 && break
-            sleep 2
-        done
-        KC_STARTED=1
-    fi
-    (cd tests/keycloak && go test ./... -count=1 -timeout 120s -v)
-    EXIT=$?
-    if [ "${KC_STARTED:-}" = "1" ]; then {{just_executable()}} downkcl; fi
-    exit $EXIT
+    @bash scripts/testkcl-auto.sh
 
 # Generate HTML report with per-stage collapsible logs
 test-report STAGES:
-    #!/usr/bin/env bash
-    set -u
-    mkdir -p {{REPORT_DIR}}
-    STAGES="{{STAGES}}"
-    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-    R={{REPORT_DIR}}/report.html
-    echo '<!DOCTYPE html>' > $R
-    echo '<html><head><meta charset="utf-8"><title>MCPKit Test Report</title>' >> $R
-    echo '<style>' >> $R
-    echo 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }' >> $R
-    echo 'h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }' >> $R
-    echo '.meta { color: #666; font-size: 14px; margin-bottom: 20px; }' >> $R
-    echo 'table { border-collapse: collapse; width: 100%; margin: 20px 0; }' >> $R
-    echo 'th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }' >> $R
-    echo 'th { background: #f5f5f5; font-weight: 600; }' >> $R
-    echo '.pass { color: #22863a; font-weight: 600; }' >> $R
-    echo '.fail { color: #cb2431; font-weight: 600; }' >> $R
-    echo '.skip { color: #6a737d; font-weight: 600; }' >> $R
-    echo '.info { color: #b08800; font-weight: 600; }' >> $R
-    echo '.summary-pass { background: #dcffe4; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $R
-    echo '.summary-fail { background: #ffdce0; padding: 12px 20px; border-radius: 6px; font-size: 18px; }' >> $R
-    echo 'details { margin: 8px 0; }' >> $R
-    echo 'summary { cursor: pointer; font-weight: 600; padding: 6px 0; }' >> $R
-    echo 'summary:hover { color: #0366d6; }' >> $R
-    echo 'pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; max-height: 500px; overflow-y: auto; }' >> $R
-    echo 'code.cmd { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }' >> $R
-    echo '</style></head><body>' >> $R
-    echo "<h1>MCPKit Test Report</h1>" >> $R
-    echo "<div class='meta'>Branch: <strong>$BRANCH</strong> | Commit: <code>$COMMIT</code> | Date: $TIMESTAMP</div>" >> $R
-
-    PASS=0; FAIL=0; INFO=0
-    echo "<table><tr><th>Stage</th><th>Result</th><th>Re-run</th></tr>" >> $R
-    for entry in $STAGES; do
-        STAGE=$(echo $entry | cut -d: -f1)
-        RESULT=$(echo $entry | cut -d: -f2)
-        TARGET=$(echo $entry | cut -d: -f3)
-        if [ "$RESULT" = "PASS" ]; then
-            echo "<tr><td><a href='#log-$STAGE'>$STAGE</a></td><td class='pass'>PASS</td><td><code class='cmd'>just $TARGET</code></td></tr>" >> $R
-            PASS=$((PASS+1))
-        elif [ "$RESULT" = "SKIP" ]; then
-            echo "<tr><td>$STAGE</td><td class='skip'>SKIP</td><td><code class='cmd'>just $TARGET</code></td></tr>" >> $R
-        elif [ "$RESULT" = "INFO" ]; then
-            echo "<tr><td><a href='#log-$STAGE'>$STAGE</a></td><td class='info'>INFO</td><td><code class='cmd'>just $TARGET</code></td></tr>" >> $R
-            INFO=$((INFO+1))
-        else
-            echo "<tr><td><a href='#log-$STAGE'>$STAGE</a></td><td class='fail'>FAIL</td><td><code class='cmd'>just $TARGET</code></td></tr>" >> $R
-            FAIL=$((FAIL+1))
-        fi
-    done
-    echo "</table>" >> $R
-
-    if [ $FAIL -eq 0 ] && [ $INFO -eq 0 ]; then
-        echo "<div class='summary-pass'>All $PASS stages passed</div>" >> $R
-    elif [ $FAIL -eq 0 ]; then
-        echo "<div class='summary-pass'>$PASS passed, $INFO informational (no failures)</div>" >> $R
-    else
-        echo "<div class='summary-fail'>$PASS passed, $FAIL failed, $INFO informational</div>" >> $R
-    fi
-
-    echo "<h2>Stage Logs</h2>" >> $R
-    for entry in $STAGES; do
-        STAGE=$(echo $entry | cut -d: -f1)
-        RESULT=$(echo $entry | cut -d: -f2)
-        LOGFILE={{REPORT_DIR}}/stage-$STAGE.log
-        OPEN=""; if [ "$RESULT" = "FAIL" ] || [ "$RESULT" = "INFO" ]; then OPEN=" open"; fi
-        case "$RESULT" in
-            PASS) CLS=pass ;;
-            INFO) CLS=info ;;
-            SKIP) CLS=skip ;;
-            *) CLS=fail ;;
-        esac
-        echo "<details id='log-$STAGE'$OPEN><summary class='$CLS'>$STAGE — $RESULT</summary><pre>" >> $R
-        if [ -f "$LOGFILE" ]; then
-            sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' "$LOGFILE" >> $R
-        else
-            echo "(no log file found)" >> $R
-        fi
-        echo "</pre></details>" >> $R
-    done
-    echo "</body></html>" >> $R
+    @REPORT_DIR={{REPORT_DIR}} bash scripts/test-report.sh "{{STAGES}}"
 
 # =============================================================================
 # Keycloak (for interop tests)
@@ -547,32 +346,7 @@ test-report STAGES:
 
 # Start Keycloak container for interop tests (skips if already healthy)
 upkcl:
-    #!/usr/bin/env bash
-    set -u
-    if curl -sf {{KC_REALM_URL}} > /dev/null 2>&1; then
-        echo "Keycloak already running on port {{KC_PORT}} — skipping start"
-    else
-        docker rm -f {{KC_CONTAINER}} 2>/dev/null || true
-        docker run -d --name {{KC_CONTAINER}} \
-            -p {{KC_PORT}}:8080 \
-            -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
-            -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-            -v {{justfile_directory()}}/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json \
-            {{KC_IMAGE}} start-dev --import-realm \
-            --log-level=INFO,org.keycloak.events:DEBUG
-        echo "Keycloak starting on port {{KC_PORT}}... (realm import takes ~30s)"
-        echo "Waiting for realm import to land before flipping master sslRequired..."
-        for i in $(seq 1 60); do
-            curl -sf {{KC_REALM_URL}} > /dev/null 2>&1 && break
-            sleep 1
-        done
-        echo "Flipping master realm sslRequired=NONE so the test admin-token grant works over HTTP..."
-        docker exec {{KC_CONTAINER}} /opt/keycloak/bin/kcadm.sh config credentials \
-            --server http://localhost:8080 --realm master --user admin --password admin >/dev/null 2>&1 && \
-        docker exec {{KC_CONTAINER}} /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE >/dev/null && \
-        echo "[upkcl] master sslRequired=NONE (the bcl_test admin-cli password grant requires it)"
-        echo "Run 'just kcllogs' to watch startup, 'just testkcl' when ready"
-    fi
+    @bash scripts/keycloak-up.sh
 
 # Stop Keycloak container
 downkcl:
@@ -695,7 +469,7 @@ collect-walkthroughs:
 
 # Build docs/site/ into docs/site/dist/docs (mirrors what CI ships to gh-pages). Includes walkthrough bundles via docs/site/justfile's build tail.
 ghbuild:
-    just -f docs/site/justfile build
+    @bash docs/site/scripts/build.sh
 
 # Run the docs site dev server on :8085 with live rebuild
 ghserve:
@@ -703,7 +477,7 @@ ghserve:
 
 # Build + force-push docs/site/dist/docs to the gh-pages branch (one-shot manual deploy)
 ghdeploy:
-    just -f docs/site/justfile gh-pages
+    @bash docs/site/scripts/gh-pages.sh
 
 # =============================================================================
 # Release

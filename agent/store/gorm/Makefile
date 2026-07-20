@@ -24,24 +24,10 @@ PG_IMAGE          := pgvector/pgvector:pg16
 test:
 	go test ./... -count=1 -timeout 60s
 
+PG_ENV := PG_CONTAINER_NAME=$(PG_CONTAINER_NAME) PG_PORT=$(PG_PORT) PG_USER=$(PG_USER) PG_PASSWORD=$(PG_PASSWORD) PG_DB=$(PG_DB) PG_IMAGE=$(PG_IMAGE)
+
 testpg:
-	@if ! docker ps --format '{{.Names}}' | grep -q '^$(PG_CONTAINER_NAME)$$'; then \
-		echo "Starting Postgres container $(PG_CONTAINER_NAME) on port $(PG_PORT)..."; \
-		docker run --rm -d \
-			--name $(PG_CONTAINER_NAME) \
-			-e POSTGRES_USER=$(PG_USER) \
-			-e POSTGRES_PASSWORD=$(PG_PASSWORD) \
-			-e POSTGRES_DB=$(PG_DB) \
-			-p $(PG_PORT):5432 \
-			$(PG_IMAGE) >/dev/null; \
-		echo "Waiting for Postgres to accept connections..."; \
-		for i in 1 2 3 4 5 6 7 8 9 10; do \
-			if docker exec $(PG_CONTAINER_NAME) pg_isready -U $(PG_USER) -d $(PG_DB) >/dev/null 2>&1; then \
-				break; \
-			fi; \
-			sleep 1; \
-		done; \
-	fi
+	@$(PG_ENV) bash pg-up.sh wait
 	MCPKIT_AGENT_TEST_PGHOST=localhost \
 	MCPKIT_AGENT_TEST_PGPORT=$(PG_PORT) \
 	MCPKIT_AGENT_TEST_PGUSER=$(PG_USER) \
@@ -50,17 +36,7 @@ testpg:
 	go test ./... -count=1 -timeout 120s
 
 updb:
-	@if docker ps --format '{{.Names}}' | grep -q '^$(PG_CONTAINER_NAME)$$'; then \
-		echo "Postgres container $(PG_CONTAINER_NAME) already running."; \
-	else \
-		docker run --rm -d \
-			--name $(PG_CONTAINER_NAME) \
-			-e POSTGRES_USER=$(PG_USER) \
-			-e POSTGRES_PASSWORD=$(PG_PASSWORD) \
-			-e POSTGRES_DB=$(PG_DB) \
-			-p $(PG_PORT):5432 \
-			$(PG_IMAGE); \
-	fi
+	@$(PG_ENV) bash pg-up.sh
 
 downdb:
 	@docker stop $(PG_CONTAINER_NAME) 2>/dev/null || echo "Container $(PG_CONTAINER_NAME) was not running."
