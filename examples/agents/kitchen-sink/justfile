@@ -61,6 +61,10 @@ run:
 # Alias for run.
 demo: run
 
+# Same as run, but the alt-screen notebook UI (scrollable, foldable cells).
+note:
+    @UI=notebook bash run.sh
+
 # Bring up ALL stacks kitchen-sink can use (backends + observability).
 allup:
     cd ../../../docker/backends && just up
