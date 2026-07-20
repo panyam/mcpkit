@@ -1,519 +1,231 @@
-# Competitive Analysis — mcpkit `agent/` vs. the field
+# mcpkit Agent SDK — Competitive Status & Gap Analysis
 
-**Scope.** A three-way comparison of mcpkit's agent host layer (`agent/`) against (a) general agent
-frameworks and (b) real coding-agent loops, plus a grounded build-out roadmap for closing every
-material gap. This document treats the current `AGENT_DESIGN.md` exclusions (memory, multi-agent,
-workflows, persistence) as **temporary** and folds them back in as build targets: the question here
-is not "what is in scope today" but "what would it take to ship a complete, competitive agent SDK."
+**What this is.** A living assessment of the mcpkit `agent/` host layer against (a) general agent
+frameworks (Mastra, Eino, Genkit-Go, langchaingo, swarmgo, agno-Go) and (b) real coding-agent loops
+(Claude Code, Cursor, Gemini CLI, aider, Codex, OpenCode). The first edition (below the fold) framed
+these as "what would it take to build a complete agent SDK." **Most of that roadmap has now shipped**
+— this edition re-baselines to *where we actually stand* and *what is genuinely still missing*,
+distinguishing **tracked** gaps (open issues) from **untracked** ones.
 
-**Method.** Direct inventory of the `agent/` source (file-cited), a survey of agent frameworks
-(Mastra, Eino, Genkit-Go, langchaingo, swarmgo, agno-Go) and coding-agent loops (Claude Code, Cursor
-CLI, Gemini CLI, aider, Codex CLI, OpenCode), and an architecture pass mapping each missing capability
-onto the existing seams. Verdicts respect `agent/CONSTRAINTS.md` (dependency direction A1,
-wire-serializability A2, no global output A4, mechanism-vs-policy layering A6).
-
----
-
-## 1. Positioning — what `agent/` is today
-
-A clean **four-seam** host loop (`docs/AGENT_DESIGN.md`):
-
-- **Provider** (`agent/provider.go`, `openai_provider.go`) — streaming OpenAI-compatible chat
-  completions, no SDK dependency; `StubProvider` for determinism; `FailoverProvider` for
-  primary/backup with cooldown.
-- **Runner** (`agent/runner.go`) — bounded multi-step loop (`MaxSteps=8`), parallel tool dispatch
-  with ordered results, every failure fed back to the model as text (only cancellation / provider
-  failure / step cap abort), SEP-414 spans (`agent.turn`/`agent.step`/`agent.tool`).
-- **ToolSource** (`agent/toolsource.go`, `client_source.go`, `func_source.go`, `multi_source.go`,
-  `filter_source.go`) — aggregation across MCP servers + host-local functions, `FilterSource` as a
-  hard capability boundary, per-step `Selector` for context-aware narrowing.
-- **Policy hooks** — FIFO **elicitation** (`elicitation.go`), plus **injection** and **trigger**
-  policies (`injection.go`, `triggers.go`) that turn server events into injected context or
-  proactive turns.
-
-**Distinctive strengths worth defending** (most competitors lack these):
-
-1. **Async control plane.** The model manages its *own* async via host meta-tools —
-   `subscribe_events`, `create_trigger`/`list_triggers`, `list_tasks`/`cancel_task`
-   (`agent/host/metatools.go`). No surveyed framework exposes standing-behavior installation to
-   the model this way.
-2. **MCP-native, wire-agnostic.** Client *and* server authoring; stateless / legacy / task input
-   wires are absorbed at the client layer, so the agent never branches on wire mode.
-3. **Wire-serializable by constraint (A2).** `Message`, `Event`, `Delta`, `IncomingEvent` all
-   round-trip as JSON — persistence and web surfaces are cheap to add later.
-4. **Zero-overhead observability by default.** SEP-414 tracing stitches agent → client → server into
-   one trace; Noop provider means the unconfigured path pays nothing.
+**Status snapshot:** `main` as of 2026-07 (post the Phase 0–3 stack; issues #929–#1044). Method:
+direct inventory of `agent/` source + open-issue sweep. Verdicts respect `agent/CONSTRAINTS.md`
+(A1 dependency direction, A2 wire-serializability, A6 mechanism-vs-policy layering).
 
 ---
 
-## 2. Gap table A — agent-framework parity
+## 1. Headline: how are we doing?
 
-| Capability | Leaders | mcpkit today | Verdict |
+**Very well.** The four-phase build-out sketched in the first edition landed almost in full over ~140
+commits. The agent SDK today is no longer "a minimal loop" — it has approval gating, a native
+Anthropic provider, in-loop structured output, an eval harness, durable persistence with fork/rewind,
+per-tool-call cancellation, tiered memory (working + semantic + compaction), tool-result offloading,
+sub-agents + team handoff, and a real host surface (slash commands, connection registry, TUI). The
+distinctive strengths still hold and are now better supported: the **async control plane**
+(triggers/events/tasks as model-facing meta-tools), **MCP-native wire-agnosticism**, **A2
+wire-serializability**, and **zero-overhead SEP-414 tracing**.
+
+**The one structural piece still open is Phase 4 (durable workflows).** Beyond that, what remains is
+(a) a rich refinement backlog on the shipped primitives (mostly tracked), and (b) a small set of
+genuinely **untracked** gaps — logprob/grammar decoding hooks, prompt-injection guardrails, a
+sampling/vote helper, and the coding-surface features (sandboxing, hooks, repo map, LSP).
+
+---
+
+## 2. Status scorecard
+
+Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open issue) · ❌ untracked gap.
+
+| Area | Status | As-built (file) | Remaining |
 |---|---|---|---|
-| Tiered memory: working + **semantic recall** (vector) + compaction | Mastra (best), langchaingo, agno-Go | absent; history is caller-owned `[]Message` | **Build — Phase 2** |
-| Durable **suspend/resume** workflows; branch/parallel control flow | Mastra, Eino, agno-Go, Genkit | absent (linear loop only) | **Build — Phase 4 (sibling module)** |
-| Multi-agent / handoffs / sub-agents | all five Go frameworks + Mastra | absent | **Build — Phase 3** |
-| RAG pipeline (chunk / embed / retrieve / index) | Mastra, Eino, Genkit, agno-Go | absent | Compose from tools + memory recall — ext/example |
-| **Eval / scorer framework** | Mastra, Genkit *(rare in Go)* | absent (StubProvider = unit tests) | **Build — Phase 0 (differentiator)** |
-| Prompt versioning / templating | Genkit (Dotprompt) | minimal (`Instructions` + skills) | Defer — seam/example |
-| Native providers beyond OpenAI-compat | all | OpenAI-compat only | **Build — Phase 0 (Anthropic)** |
-| Structured output *inside the loop* | Mastra, Genkit, Eino | `Generate`-only (not in Runner) | **Build — Phase 0** |
-| Voice (STT / TTS) | Mastra only | absent | Non-goal (no Go competitor either) |
+| **Tool-call approval / permission ladder** | ✅ #929 | `agent/approval.go` — `ApprovalPolicy`, `TieredApproval`, `ApprovalMode` {AlwaysAsk/ReadOnlyAuto/AlwaysAllow} + per-tool `RuleAsk/Allow/Deny`; "ask" routes through `ElicitationCoordinator.Confirm`; `EventToolDenied`; host `/approve` | — |
+| **Anthropic-native provider** | 🟡 #930 | `agent/anthropic_provider.go` — no-SDK, content-block↔Delta, `thinking_delta`→reasoning; structured output via forced synthetic tool | prompt caching + extended-thinking **⏳ #953** |
+| **Structured output in the loop** | ✅ #931 | finalizing `Generate` (`runner.go` `finalizeStructured`, retry×2); `RunnerConfig.ResponseSchema` → `TurnResult.Structured` | — |
+| **Eval / scorer harness** | 🟡 #974,#932 | `agent/eval/` — `Case`/`Scorer`/`Suite`/`Scenario`; 8 deterministic scorers; `Judge` (build-tagged); LongMemEval *smoke* scenarios | external-benchmark adapter **⏳ #1015**; real LongMemEval loader **⏳ #1014** |
+| **Persistence (RunStore) + fork/rewind** | ✅ #960,#962,#963,#986 | `agent/runstore.go` — full interface + `InMemoryRunStore`; redis + gorm (pg/sqlite) backends; `ForkRun{AtMessage}` checkpoint fork; `ListRuns`; `Message.Timestamp` | retention/GC **⏳ #999** |
+| **Per-tool-call cancellation / interrupt** | ✅ #936,#937 | `runner.go` `TurnRequest`/`Control` channel (per-`CallID`); `EventToolCancelled` | — |
+| **Working memory** | ✅ #938 | `agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore` | durable/session-scoped backends **⏳ #1003** |
+| **Semantic recall (vector)** | ✅ #940,#1019 | `agent/embedder.go` (`Embedder`, `OpenAIEmbedder`), `agent/semantic_memory.go` (`InMemorySemanticStore`), gorm **pgvector** store; pre-turn recall auto-injection | standalone doc-RAG VectorStore **⏳ #1021**; reranker **⏳ #1020**; auto-distillation **⏳ #1022** |
+| **Compaction / summarization** | 🟡 #939,#1011 | `agent/compaction.go` — `SummarizingCompactor`, `TokenEstimator`/`CharTokenEstimator`, `EventCompaction`; pre-loop hook; budgeted summary injection | mid-turn compaction **⏳ #1006**; real tokenizer **⏳ #1007** |
+| **Tool-result offloading (context mgmt)** | ✅ #966,#971,#972 | `agent/offloading_source.go` + `ToolResultStore` (mem/redis/gorm); `read_tool_result` (offset/limit/grep) | streaming/handle-based very-large results **⏳ #980,#979** |
+| **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031 | `agent/agent_source.go` (`AgentSource`, depth+budget caps), `SubAgentEvent` nesting, `agent/team.go` (`Team` handoff), declarative host personas | richer composition (structured I/O, parallel fan-out, async/task sub-agents, dynamic catalog) **⏳ #1032,#1033,#1035,#1036,#1038,#1043** |
+| **Host surface** | ✅ #984–#992 | slash-command registry, `ConnectionRegistry` + runtime `/provider`, `HostEvent`/`Observer` render seam, session picker, bubbletea TUI, playground | context-assembly pipeline **⏳ #1024,#1026**; notebook renderer **⏳ #1001** |
+| **Observability** | 🟡 | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) | OTel **metrics** seam (counters/histograms) **⏳ #1023** |
+| **Durable workflows / graphs (Phase 4)** | ⏳ #928 | — | engine **#944**, `SuspendNode` via TriggerPolicy+RunStore **#945**, `ModelNode`/`ToolNode` **#946** |
+| **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044** |
+| **Logprob / grammar-constrained decoding** | ❌ | — | no issue — see §5 |
+| **Prompt-injection guardrails (spotlighting)** | ❌ | event stages exist (`stages.go`) but no shipped Transform | no issue — see §5 |
+| **Sampling/vote helper (self-consistency/best-of-N)** | ❌ | achievable by host loop; `#1033` covers sub-agent parallel fan-out only | no dedicated issue — see §5 |
+| **Coding-surface: sandboxing, hooks, repo map, LSP** | ❌ | — | no issues — arguably out of core-SDK scope, see §4 |
 
-**Notes on the field.** *Eino* (ByteDance, "LangGraph for Go") is the most mature Go competitor:
-graph/chain orchestration, a ReAct ADK with sub-agent delegation, interrupt/resume checkpoints.
-*Genkit-Go* is the only Go framework with a real eval framework (dataset runner + Developer UI) and
-prompt versioning (Dotprompt). *agno-Go* brings teams, snapshot-resumable workflows, and explicit
-prompt-injection guardrails. *langchaingo* and *swarmgo* are broad/lightweight respectively but lack
-MCP, durable workflows, and evals. **The scarcest capability in the Go ecosystem — and thus the best
-differentiation bet — is a proper eval/scorer harness.**
-
----
-
-## 3. Gap table B — coding-agent-loop UX
-
-Three features are **near-universal across all six** coding agents and absent from `agent/`:
-
-| # | Feature | mcpkit today | Verdict |
-|---|---|---|---|
-| 1 | **Tiered permission ladder** (read-only → auto-edit → full-auto) + per-tool allow/ask/deny + fast toggle | `FilterSource` is static-only; the Runner auto-dispatches every call | **Build — Phase 0 (the single most consistent competitor feature)** |
-| 2 | **Checkpoint / rewind** restoring file *and* conversation state | none | Build — surface (`agent/host`); conversation side in Phase 1 |
-| 3 | **Mid-turn interrupt** (Esc cancels the running call, not the session) | ctx-cancel kills the whole turn | **Build — Phase 1** |
-
-Second tier (2–3 agents each): **context compaction/summarization** (steerable, with a
-"context-remaining" indicator), **subagents with isolated context**, **session persistence /
-resume / fork**, **slash + custom commands**, **lifecycle hooks**, **repo map** (aider's ranked
-tree-sitter summary), **LSP-in-loop** (OpenCode), **sandboxing** (Codex/Gemini), and a **soft
-tool-call budget gate** (Cursor's "~25 calls then Continue").
-
-**Takeaway for a coding surface:** the non-negotiable trio to reach parity is (1) the permission
-ladder, (2) checkpoint/rewind of file *and* conversation state, (3) the fine-grained interrupt.
-After that, compaction, isolated-context subagents, and session resume/fork separate a demo from a
-production coding agent. Repo map, hooks, and LSP-in-loop are differentiation, not table stakes.
+**Bottom line:** Phases 0–3 are effectively **done**; Phase 4 (workflows) is the last big structural
+item and is fully scoped in issues. Everything else open is refinement of shipped primitives.
 
 ---
 
-## 4. Build-out roadmap — what it would take
+## 3. Gap table A — agent-framework parity (updated)
 
-Four invariants decide *where each piece lives*:
+| Capability | Leaders | mcpkit status |
+|---|---|---|
+| Tiered memory: working + semantic recall + compaction | Mastra, langchaingo, agno-Go | ✅ **at parity** (#938/#940/#939) + pgvector (#1019); reranker/distillation tracked (#1020/#1022) |
+| Multi-agent / handoffs / sub-agents | all five + Mastra | ✅ **at parity** (AgentSource #941, Team #943); richer composition tracked (#1032–#1038) |
+| Eval / scorer framework | Mastra, Genkit *(rare in Go)* | ✅ **shipped** (#974) — a **differentiator vs the Go field**; external-suite adapter tracked (#1015) |
+| Native providers beyond OpenAI-compat | all | ✅ Anthropic (#930); caching tracked (#953) |
+| Structured output *inside the loop* | Mastra, Genkit, Eino | ✅ **shipped** (#931) |
+| Durable suspend/resume workflows; branch/parallel | Mastra, Eino, agno-Go, Genkit | ⏳ **the remaining parity gap** — Phase 4 (#928/#944/#945/#946) |
+| RAG pipeline (chunk/embed/retrieve/index) | Mastra, Eino, Genkit, agno-Go | 🟡 recall path shipped; standalone doc-RAG VectorStore tracked (#1021) |
+| Prompt versioning / templating | Genkit (Dotprompt) | ❌ still minimal (`Instructions` + skills) — no issue |
+| Voice (STT/TTS) | Mastra only | ❌ non-goal (no Go competitor either) |
 
-- **A1** — LLM/provider dependencies live only in `agent/`.
-- **A2** — events and messages are wire-serializable; this is the lever that makes persistence cheap.
-- **A6** — model-facing thing (returns a `Message`, `ToolResult`, injected context, a proactive
-  turn) → `agent/`; a general mechanism a *non-agent* consumer would want → `client/` or a sibling
-  module. **Corollary:** anything trafficking in `agent.Message`/`agent.Event` cannot live in the
-  root `stores/` package (that would force root→agent). Agent-typed stores get their interface +
-  in-memory default *in* `agent/`, with heavy backends in siblings (`agent/store/redis`), mirroring
-  the existing `stores/` + `stores/redis` split.
-- **The Runner stays stateless over history.** `Run(ctx, history, emit)` clones history and returns
-  only appended messages — resume, fork, and checkpoint fall out for free. Persistence and memory
-  **wrap** `Run`; they are not baked into it.
+**Net:** mcpkit has moved from "behind on memory/multi-agent/evals" to **at or ahead of the Go field**
+on those, with a proper eval harness that only Genkit matches. Durable workflows are the one place the
+TS/heavier frameworks still lead, and that gap is scoped and scheduled.
 
-### E. Tool-call approval / permission ladder — *do first* (effort: S–M)
+## 4. Gap table B — coding-agent-loop UX (updated)
 
-New: `ApprovalPolicy` interface + batteries-included `TieredApproval` (per-tool/per-source rules,
-read-only auto-allow tier, session-scoped remember-cache) + `RunnerConfig.Approval` (nil = today's
-behavior, fully backward compatible), in `agent/approval.go`. **Gate in `Runner.callTool`
-(runner.go:269) before `Tools.Call`.** Key reuse: the **"Ask" outcome routes through the existing
-`ElicitationCoordinator`** — an approval prompt *is* an elicitation, and its strict FIFO already
-solves the "parallel dispatch stacks N dialogs" problem, so no new UI seam is needed. "Deny" feeds a
-model-visible `"denied by policy"` result back (error-as-feedback); the turn continues. Tiered modes
-(YOLO / ask-once / always-ask / read-only-auto) are pure config. Risk: keep the gate outside the
-dispatch emit-mutex; ensure a denied call still yields a well-formed `RoleTool` message.
+The three once-universal gaps are now mostly closed:
 
-### G. Anthropic provider — *early* (effort: M)
+| # | Feature | mcpkit status |
+|---|---|---|
+| 1 | **Tiered permission ladder** | ✅ shipped (#929) — modes + per-tool rules + runtime `/approve` |
+| 2 | **Checkpoint / rewind** | 🟡 **conversation-state** side shipped (fork-at-point #962, resume/`ListRuns` #986); **file-state** rewind is a coding-surface concern, not in the general SDK |
+| 3 | **Mid-turn interrupt** | ✅ shipped (#936/#937) — cancel one call, turn continues |
 
-The `Provider` interface is already correctly shaped; this is a translation layer, not a redesign.
-Follow the `openai_provider.go` no-SDK precedent (net/http + servicekit SSE reader). Mapping:
-`Instructions`→top-level `system`; `RoleAssistant.ToolCalls`→`tool_use` blocks; `RoleTool` +
-`ToolCallID`→`tool_result` blocks (the `ToolCallID` field already carries `tool_use_id`); SSE
-`content_block_delta`→`Delta` (`text_delta`/`input_json_delta`/`thinking_delta`/usage — the
-`Accumulator` folds these unchanged). Structured output = a forced synthetic tool via the existing
-`ToolChoice` machinery. Risks: prompt caching (`cache_control`) and thinking-signature round-tripping
-need a **provider-scoped option**, not neutral-`ProviderRequest` pollution. *Consult the `claude-api`
-skill for current model IDs, params, and caching semantics before implementing.*
-
-### F. Structured output in the loop (effort: S–M)
-
-Add `RunnerConfig.ResponseSchema` + `TurnResult.Structured`. **Opinionated:** do not attempt tools
-and `response_format` simultaneously (many OpenAI-compat servers forbid it; Anthropic can't). Run the
-tool loop exactly as today; when the model emits its terminal no-tool-call response, do **one
-finalizing `Provider.Generate`** with the schema set to coerce the answer. Portable, reuses
-`Generate` + `Accumulator`, costs one extra call per structured turn. Add a bounded retry on invalid
-JSON; degrade to schema-in-prompt where unsupported.
-
-### H. Eval / scorer harness — *early, compounding* (effort: M)
-
-New `agent/eval/` sub-package: `Case` / `Scorer` / `Suite`. Reuses `StubProvider` (deterministic
-model), `TracerProvider` spans + `TurnResult.Messages` + the captured `emit` stream as the transcript
-to score. Ship deterministic scorers first (exact/contains, tool-was-called, step-count, no-error);
-put **LLM-as-judge behind the `Provider` seam** as one opt-in scorer, build-tagged off the default CI
-path (like the integration tests). Standing this up early gives every later phase regression coverage.
-
-### D. Persistence / durability — *the keystone* (effort: M; L for mid-turn)
-
-`RunStore` interface + in-memory default in `agent/runstore.go`; durable backends as sibling modules
-(`agent/store/redis`, `agent/store/sql`). Follows the `stores/` gRPC-style convention
-(`Method(ctx, req) (resp, error)`, app-state on the response, error reserved for storage faults):
-
-```go
-type RunStore interface {
-    CreateRun(ctx, CreateRunRequest) (CreateRunResponse, error) // returns RunID
-    AppendMessages(ctx, AppendMessagesRequest) (…, error)
-    AppendEvents(ctx, AppendEventsRequest) (…, error)           // optional: replay/audit
-    LoadRun(ctx, LoadRunRequest) (Run, error)
-    ForkRun(ctx, ForkRunRequest) (RunID, error)                 // copy log, diverge
-}
-```
-
-**Not in the Runner** — the surface persists `TurnResult.Messages` at the existing
-`append(history, result.Messages...)` site (the host's `RunTurn`, `agent/host`); a `PersistingEmit` helper tees
-the event stream into `AppendEvents`. **Resume = `LoadRun` → `Run(ctx, run.Messages, emit)`;
-Fork = `ForkRun` then diverge** — both essentially free because `Run` is stateless over history. Ship
-**per-turn** durability first (fully covers resume/fork/session lifecycle); mid-turn replay requires
-tool-call idempotency the module can't guarantee for arbitrary MCP servers, so treat it as a later,
-opt-in feature gated on idempotency metadata.
-
-### I. Interrupt granularity + session lifecycle (effort: M)
-
-Give each dispatched call a **child context keyed by `call.ID`** (today `dispatch`, runner.go:241,
-runs all calls under one ctx). Add a consolidated `TurnRequest`/`Runner.RunTurn(ctx, TurnRequest)`
-carrying a `Control <-chan Control` (existing `Run` delegates to it — avoids a breaking signature
-change per C2). A control listener cancels the specific call's child ctx; the cancelled call feeds
-`"cancelled by user"` back as its `RoleTool` result and **the turn continues** — the whole point of
-the finer grain. Reuses `ClientSource.Call`'s ctx-to-wire threading for *real* MCP-level
-cancellation. A `tool-cancelled` event kind may be warranted (respect the A2 round-trip test).
-Session lifecycle (resume/fork) rides entirely on D.
-
-### A. Memory (effort: L)
-
-Four sub-capabilities, four homes — memory is a pre/post-turn wrapper around `Run`, not a Runner
-change:
-
-1. **Working memory** — a model-managed scratchpad. First-class `MemorySource` (a `FuncSource`
-   exposing `remember`/`recall`/`forget`) in `agent/memory.go`, with optional per-turn summary
-   injection. Model-facing → `agent/`. (S)
-2. **Conversation store** — this *is* D's `RunStore` at session grain; don't build a second thing.
-3. **Semantic recall** — new `Embedder` seam (sibling to `Provider`, → `agent/`) + `VectorStore`
-   (interface in `agent/`, backends in siblings). Retrieved context enters via the **same pre-turn
-   injection path** as `EventInjectionPolicy.Drain` (produces `InjectedContext`/system messages) — reuse
-   that shape, don't invent a parallel one. (L)
-4. **Compaction** — `Compactor` / `SummarizingCompactor` backed by `Provider.Generate`, run pre-turn
-   when a token estimate trips a threshold; keep a verbatim tail window and summarize only the head.
-   Definitively `agent/` (needs a model + turn). (M)
-
-Risks: compaction dropping load-bearing detail; recall poisoning context with irrelevant hits;
-embedding latency on the turn's critical path (do it async, feeding the injection buffer the way
-`AddAsyncFunc` already feeds completions). Depends on D for the conversation store.
-
-### B. Multi-agent (effort: S–M → M–L)
-
-A sub-agent is **a `Runner` exposed to a parent as a tool** — `ToolSource` + `FuncSource` +
-`MultiSource` already compose to make this trivial:
-
-- `AgentSource` implements `ToolSource`; `Call(task)` runs the child `Runner.Run` over its **own
-  isolated `[]Message`** and returns the child's final `Text`. Isolation is structural (a separate
-  slice); nothing in the Runner changes.
-- **Supervision** = a coordinator `Runner` whose `Tools` is a `MultiSource` of `AgentSource`s
-  (existing aggregation + collision semantics + `Selector` routing).
-- **Handoff** (transfer control, don't return) is the one case that doesn't fit agent-as-tool: model
-  a small `Team`/`Orchestrator` *above* the Runner that swaps the active Runner on a handoff signal,
-  keeping the Runner unaware.
-- **Nested event streams** are the main subtlety: a sub-agent's `emit` must surface to the parent's
-  surface with a sub-agent scope on the wire envelope (not new `Event` fields — preserve A2).
-
-Guard runaway recursion/cost with depth + aggregate `MaxSteps`/budget caps across the tree.
-
-### C. Workflows — *sibling module, build last* (effort: XL)
-
-By A6, a general graph engine (nodes, edges, branch, parallel, suspend/resume) is a mechanism a
-non-agent consumer would want, so it belongs in a **`workflow/` sibling module** (depends on `core/`
-+ a state store), with `agent/` providing only a `ModelNode` adapter that wraps a `Runner`. Two
-reuses matter and are easy to get wrong:
-
-- **`stages.go` is NOT the workflow engine** — it's synchronous *event transformation inside a node*,
-  not control flow. Don't overload it. (Per the settled pushdown decision, those stages graduate
-  into gocurrent when a second consumer appears.)
-- **The trigger machinery IS the suspend/resume primitive.** A durable `SuspendNode` waiting on an
-  external event/approval resumes when a matching `IncomingEvent` arrives — exactly
-  `TriggerBinding` + `TriggerPolicy.OnEvent`. "Wait for `task.completed`" and "wait for user
-  approval" become the same mechanism.
-- **Durability leans entirely on D** — checkpoint node state to the `RunStore` between transitions.
-
-**Opinion:** build a *minimal durable state machine* (linear + branch + one-level parallel +
-event-driven suspend), not a maximal DAG product. For Temporal-grade durability, integrate rather
-than reimplement.
+Second-tier: context compaction ✅ (#939), isolated-context subagents ✅ (#941), session
+persistence/resume/fork ✅ (#960/#962), slash + custom commands ✅ (#985). **Still absent (untracked):**
+lifecycle **hooks** (PreToolUse/PostToolUse), **sandboxing** of tool execution, **repo map**,
+**LSP-in-loop**, and a soft **tool-call budget gate**. These are coding-*surface* features; whether
+they belong in `agent/` or in a coding-agent built on it is a scoping decision (see §5).
 
 ---
 
-## 5. Sequencing & phased roadmap
+## 5. What's still missing
 
-```
-D (run store) ──┬──> I (session resume/fork)
-                ├──> A (conversation store, semantic-recall backend)
-                └──> C (durable workflows)   [also reuses TriggerPolicy]
+### 5a. Tracked (open issues — planned work)
+- **Durable workflows (Phase 4):** epic #928 → engine #944, `SuspendNode` (reuses TriggerPolicy +
+  RunStore) #945, `ModelNode`/`ToolNode` adapters #946. *The last structural parity gap.*
+- **Provider routing / cascades:** #991 (per-turn/per-role model selection over `ConnectionRegistry`),
+  #1044 (openrouter/litellm presets). Today only `FailoverProvider` (failure-triggered).
+- **Prompt caching + extended thinking:** #953 (Anthropic, provider-scoped) — note the documented
+  cache-vs-`Selector` prefix-stability tension.
+- **Memory depth:** standalone doc-RAG `VectorStore` #1021, Scorer/Reranker seam #1020, auto-distillation
+  write-path #1022, durable/session-scoped MemoryStore #1003, faster cosine #1018.
+- **Compaction depth:** mid-turn compaction #1006, token-accurate estimator #1007.
+- **Sub-agent composition:** aggregate tree budget #1032, structured I/O + parallel fan-out #1033,
+  async/task sub-agents #1035, upward signals / runner-control meta-tools #1036, dynamic agent catalog
+  + transfer graph #1038, full nested per-agent config #1043, Team config in the App loop #1042.
+- **Context assembly:** explicit pre-turn pipeline #1026, unified injection budget with a final arbiter
+  #1024.
+- **Eval:** external eval/conformance adapter seam #1015 (see §6), real LongMemEval loader #1014.
+- **Ops:** OTel metrics seam #1023, RunStore retention/GC #999, large/binary tool results #980/#979,
+  thinking-hint stream parser #989, session-picker paging #1000.
 
-E, G, F, H  ── independent, no upstream deps (fast SDK-credibility wins)
-B  ── on Runner + ToolSource (present); better with D + A
-I (finer interrupt) ── Runner change, independent of D
-```
-
-Each **phase = an epic** merging stacked per-issue PRs into an integration branch (the epic-895
-pattern that built `agent/` itself); each bullet = one PR.
-
-**Phase 0 — "feels like a real SDK" (parallel, no deps): ✅ SHIPPED.**
-`ApprovalPolicy` gate + `TieredApproval` (E, issue 929) · Anthropic provider (G, issue 930) ·
-structured final output (F, issue 931) · `agent/eval` deterministic scorers + LLM-judge (H, issue 932).
-All merged. Deferred riders: extract the shared provider SSE loop (issue 952); Anthropic prompt
-caching / extended thinking (issue 953, best sequenced with P2 compaction — the cache breakpoint is
-the compactor's stable-head boundary).
-
-**Phase 1 — durability & control: ✅ SHIPPED.**
-`RunStore` interface + in-memory (D, issue 933) · Redis sibling `agent/store/redis` (issue 934) ·
-Postgres/SQLite sibling `agent/store/gorm` (issue 960) · `agent/host` persist/resume/fork + agentchat
-`--session-store` / `--session` (issue 935) · per-tool-call cancellation via `TurnRequest`/`Control`
-(I, issue 936) · `tool-cancelled` event (issue 937). All merged (PRs 955–959, 961, 965, 967, 968).
-Review-driven riders shipped in the same arc: ForkRun atomicity + idempotent-retry contract (issue
-963 — `NewRunID` is an idempotency key; each backend uses its database's native atomicity primitive,
-transaction vs Lua script, rationale doc'd on both ForkRuns), `Message.Timestamp` stamped at the
-store boundary (issue 964), and fork-at-point + `ForkPoint` lineage (issue 962 — the conversation
-half of checkpoint/rewind; `ForkPoint` is a message count, never a timestamp). Deferred with a full
-design: tool-result offloading (issue 966 — `OffloadingSource` + `ToolResultStore` +
-`read_tool_result`; lossless pay-on-demand beats lossy compaction for tool outputs, sequence with
-P2 memory).
-
-**Interactive surface — agentchat playground (epic 983): ✅ SHIPPED.** The UX layer that makes P1/P2
-usable and delivers the coding-agent-loop rows (Gap table B: checkpoint/rewind conversation side,
-finer interrupt). `agent/host` gains named-provider connections + registry (per-session and
-mid-session provider switching, issues 984/985), a `CommandRegistry` + `App.Dispatch` slash-command
-system (986), `HostEvent`/`Observer` domain-event fan-out replacing io.Writer prints (992 — host
-lifecycle events, not "UI" events; `UIPrompt` dropped as it's request/response not fire-and-forget),
-and `RunStore.ListRuns` + a `/sessions` picker (986). `cmd/agentchat` is the thin CLI over it: an
-**inline** bubbletea TUI (997 — commit-to-scrollback, native scroll/copy/paste/persist; alt-screen
-`--ui notebook` deferred to issue 1001) and `make pg` (988). Layering rule: host concerns in
-`agent/host` so a web surface reuses everything and swaps only stdin/stdout. Follow-ups: run
-retention (999), paged session picker (1000), provider-routing policy (991).
-
-**Phase 2 — memory: ✅ SHIPPED (epic issue 926, closed).** All four tracks landed — see the diagram in
-`docs/AGENT_MEMORY_FLOW.md`.
-- **Tool-result offloading** (the just-in-time-context opener, lossless/pay-on-demand): `OffloadingSource`
-  + `ToolResultStore` + in-memory (966) · durable redis (TTL) + gorm (configurable table, `PruneExpired`)
-  (971) · dep-free `FileToolResultStore` (977) · host `Config.Offload` + agentchat `--offload-threshold` /
-  `--offload-dir` (972) · turn-end `Result.Messages` redaction (973). PRs 970/975/976/978/981.
-- **Working memory** (938, PR 1004): `MemorySource` (leaf ToolSource: remember/recall/forget) over the
-  `MemoryStore` seam (in-memory substring default); pluggable via `WithMemoryStore`.
-- **Eval harness** (974, PR 1005): multi-turn `eval.Scenario` / `RunScenario` (threads history + a shared
-  MemorySource; one Runner reused), `NotContains` scorer, and `agent/eval/longmemeval` `SmokeScenarios()`
-  (hand-authored, NOT the dataset — real loader is 1014). `Scenario.NewMemoryStore` /
-  `MemCase.NewCompactor` factories grade different impls through the same scenarios.
-- **Compaction** (939, PR 1008): `SummarizingCompactor` + `TokenEstimator`/`CharTokenEstimator` +
-  `RunnerConfig.Compactor` hook (in the Runner, top of the turn, so the eval harness can grade it);
-  `EventCompaction`; host `Config.Compaction` + agentchat `--compact-tokens`/`--compact-keep-recent`.
-- **Semantic recall** (940, PRs 1017 + 1025): `Embedder` seam (`Embedding` type + `Cosine` method;
-  `OpenAIEmbedder` no-SDK `/embeddings` + `StubEmbedder`) + `InMemorySemanticStore` (brute-force cosine
-  behind `MemoryStore`; retrieval stays an impl detail — no separate `VectorStore` public seam) +
-  `ScoredMemory` results (`ListMemories(Query, Limit)`) + pre-turn recall auto-injection
-  (`RecallRelevant`, `Config.Memory.InjectRecall`/`RecallMinScore` poison-guard). `agent.embed` /
-  `agent.memory.recall` spans.
-- **Injection correctness/budget** (1010 transient-not-stacked, 1011 recency-budget) + the
-  `InjectionPolicy` → `EventInjectionPolicy` rename (memory injection is its own step).
-
-Deferred follow-ups (all filed): pgvector semantic store (1019) · Scorer/Reranker multi-signal (1020) ·
-VectorStore for doc-RAG (1021) · distillation write path (1022) · metrics seam (1023) · unified
-injection arbiter (1024) · explicit context-assembly pipeline (1026) · faster cosine (1018) ·
-durable/session-scoped MemoryStore backends (1003) · LongMemEval loader (1014) + eval adapter seam
-(1015) · binary offloading (979) · streaming/handle-based large results (980).
-
-**Phase 3 — composition: ✅ SHIPPED (epic 927, closed).** Design frame: `docs/AGENT_COMPOSITION.md`
-(the two-axis model — context via injection, control via tools + signals; observability the third
-channel). Multi-agent is not a new engine; it wraps the same stateless `Runner`.
-- `AgentSource` (941, PR 1028): agent-as-tool — a child Runner exposed to a parent as a tool over its
-  own isolated slice; depth (`MaxDepth`) + ctx-threaded aggregate call budget (`WithAgentCallBudget`)
-  guards; supervision falls out via a `MultiSource` of `AgentSource`s.
-- `SubAgentEvent` nesting (942, PR 1029): the child's turn-lifecycle emit stream surfaces to the
-  parent surface, scoped on an envelope (`Event` stays wire-flat, A2). NOT domain-event
-  subscriptions — a sub-agent's `subscribe_events` injects into its OWN context.
-- `Team` handoff (943, PR 1030): transfer control (not call-and-return) via `transfer_to_<name>`
-  tools + a shared-thread swap loop; static membership; `MaxHandoffs` ping-pong cap; per-Run ctx
-  handoff signal. `examples/multi-agent` (PR 1034) demos both modes offline.
-Host surface: `Config.SubAgents` personas (agent-as-tool via config) + `HostSubAgentEvent` nested
-rendering shipped (1031 part 1, PRs 1040/1041); Team-in-host handoff (1042) + nested per-sub-agent
-provider/servers (1043) deferred. Agent examples grouped under `examples/agents/` with a shared
-`llm.json` (apiKeyEnv only, no secrets; routers are connections).
-Deferred (new scope, filed): aggregate step/token tree budget
-(1032) · parallel fan-out (1033) · async sub-agents / Task form (1035) · upward signals +
-runner-control meta-tools + interruptible turn (1036) · model-driven dynamic composition + agent
-catalog (1038). Handoff-as-injection (per-agent actor context) is the general form of `Team`.
-
-**Phase 4 — orchestration:**
-`workflow/` engine (C) · `SuspendNode` via `TriggerPolicy` + `RunStore` checkpoint (C) ·
-`ModelNode`/`ToolNode` adapters (C).
-
-**Bottom line.** Phase 0 makes the SDK *look* competitive with zero upstream dependencies — ship it
-first and in parallel. Phase 1 (persistence) is the structural keystone that unlocks durable
-sessions, memory, and workflows; don't attempt C before it. And resist building C as a maximal DAG
-framework — the mcpkit-native move is a minimal durable state machine that reuses the existing
-trigger machinery for suspend/resume, keeping the whole system MCP-native and event-driven rather
-than importing a second orchestration paradigm.
+### 5b. Untracked (no issue yet — genuine gaps to consider filing)
+1. **Logprob exposure on `Provider`.** `ProviderRequest`/`Delta` carry no token probabilities. Blocks
+   calibrated uncertainty/abstention and confidence-gated cascades. (Many hosted providers don't
+   return logprobs — partial by nature, but the seam is absent.)
+2. **Grammar-constrained / guided decoding.** Only JSON-Schema structured output via a *finalizing*
+   Generate exists; no GBNF/regex token-masking, no inline schema-constrained streaming. Needs a
+   self-hosted-provider (vLLM/SGLang) `guided_grammar` passthrough.
+3. **Sampling/vote helper (self-consistency, Best-of-N).** Achievable via a host loop today, but
+   there's no first-class fan-out+aggregate helper. #1033 covers *sub-agent* parallel fan-out, not a
+   general N-samples-then-vote/verify primitive — natural home is the eval harness or a Runner helper.
+4. **Prompt-injection guardrail (spotlighting/datamarking).** The event-stage `Transform` pipeline is
+   the right home, but no shipped stage wraps untrusted tool output. High-value, low-effort, distinctive.
+5. **`FailoverProvider` quality-score trigger.** Cascades (FrugalGPT-style "escalate if the answer
+   looks weak") need an acceptance-scorer trigger; today failover only fires on clean failure. #991
+   (routing) is adjacent but is upfront selection, not confidence-gated escalation.
+6. **Coding-surface features:** sandboxing of tool execution, lifecycle hooks, repo map, LSP-in-loop.
+   **Scoping call needed:** these make sense in a coding agent *built on* `agent/`, less so in the
+   general host layer. Worth an explicit "in scope / out of scope" decision rather than silent omission.
 
 ---
 
-## 6. Validation & benchmarks — what we can test against
+## 6. Validation & benchmarks
 
-A recurring question for the eval-harness work (Phase 0, area H): is there an existing conformance
-or benchmark suite we can validate the agent SDK against? The honest answer has two halves.
+Unchanged in substance — and issue **#1015** now tracks exactly the recommendation below (external
+eval/conformance adapter seam). The competitor projects still ship no reusable suite (Eino none; Mastra
+a TS judge lib; Genkit flow-coupled; aider's harness aider-coupled but its polyglot problem set is
+reusable data). MCP's own conformance is wire-level only — **no first-party agent-level MCP conformance
+suite exists.** Practical stand-ins, reachable via the existing OpenAI-compatible endpoint / an HTTP
+shim:
 
-**The competitor projects do not give us a reusable suite.** Their tests are internal or coupled to
-their own runtime:
+| Suite | Validates | Integration cost |
+|---|---|---|
+| **BFCL v3/v4** | tool-calling fidelity | lowest — OpenAI-compatible `--skip-server-setup` |
+| **τ²-bench** | multi-turn tool-agent-*user* loop | one thin Python `HalfDuplexAgent` proxy → our Runner |
+| **SWE-bench Verified** | end coding-task resolution | near-zero (predictions JSONL); adopt when a coding agent exists |
+| **AgentDojo** | prompt-injection security | optional; pairs with the §5b spotlighting gap |
 
-- **Eino** — no eval/conformance harness at all (plain Go unit tests). Useful as API-shape
-  inspiration, not validation.
-- **Mastra** — its `scorers` are a TypeScript/Node judge library (`createScorer`), not an agent
-  conformance suite. Usable only as the *judge* inside a harness we write, and only cross-runtime.
-- **Genkit Go** — its eval runner drives Genkit `flow`s, so we'd have to wrap our agent as a Genkit
-  flow first — at which point we've built our own harness.
-- **aider** — the harness is aider-coupled ("not intended for external use"), but the **polyglot
-  problem set** (225 Exercism problems across 6 languages incl. Go) is freely reusable *data*. Steal
-  the problems, rebuild the harness.
-- **Claude Code / Cursor / Gemini CLI / Codex / OpenCode** — nothing first-party; they only *report*
-  scores on third-party benchmarks.
-
-**MCP's own `modelcontextprotocol/conformance` is protocol/wire-level only** (`initialize`,
-`tools/call` handshake correctness — which mcpkit already passes). There is **no first-party
-agent-level MCP conformance suite**; that gap is real, and the framework-agnostic benchmarks below
-are the practical stand-ins. (Note SEP-2484: an MCP Standards-Track SEP can't reach Final without a
-matching conformance scenario — worth tracking, but it certifies wire behavior, not the agent loop.)
-
-**What we can actually adopt** (all Python + usually Docker; the standard integration for a Go SDK is
-to expose the agent — or just its tool-calling turn — behind an HTTP endpoint):
-
-| Suite | Validates | Integration cost | Source |
-|---|---|---|---|
-| **BFCL v3/v4** (Berkeley Function-Calling Leaderboard) | Tool-calling fidelity (AST + executable match, single & multi-turn) | **Lowest** — supports OpenAI-compatible endpoints with `--skip-server-setup`; our `OpenAIProvider` already speaks that wire | [gorilla](https://github.com/ShishirPatil/gorilla/tree/main/berkeley-function-call-leaderboard) |
-| **τ²-bench** (sierra-research) | The multi-turn **tool-agent-*user*** loop, policy adherence, reliability (pass^k) | One thin Python `HalfDuplexAgent` proxying HTTP → our Runner | [tau2-bench](https://github.com/sierra-research/tau2-bench) |
-| **SWE-bench Verified** | End coding-task resolution | Near-zero — contract is a predictions JSONL (`instance_id` + `model_patch`); adopt only once we build a coding agent | [SWE-bench](https://github.com/swe-bench/SWE-bench) |
-| **AgentDojo** | Prompt-injection *security* over untrusted tool output | Optional — adopt if MCP tool-output hijacking is a threat we want regression coverage on | [agentdojo](https://github.com/ethz-spylab/agentdojo) |
-
-(ToolBench, AgentBench, GAIA, WebArena, ToolSandbox exist but are dated, heavyweight, or
-wrong-modality for an MCP tool-calling SDK.)
-
-**Recommended shape for Phase 0's eval harness (H):** two layers, not one —
-
-1. **`agent/eval` internal harness** (`StubProvider` + SEP-414 spans + captured `emit` stream) for
-   fast, deterministic, offline regression — the CI gate.
-2. **An external-benchmark adapter**: since the OpenAI-compatible endpoint already exists, a **BFCL
-   run is genuinely low-friction** and yields a quantitative, reputable tool-calling-fidelity number;
-   **τ²-bench** (behind the small Python shim) covers the multi-turn loop. These are the practical
-   stand-ins for the agent-level MCP conformance suite that does not yet exist.
+**Shape for the eval harness:** the internal `agent/eval` harness (StubProvider + spans, ✅ shipped) is
+the CI gate; the **external-benchmark adapter (#1015)** — starting with BFCL — is the missing second
+layer. mcpkit's own `agent/eval` scorer harness is itself a differentiator: only Genkit matches it in
+the Go field.
 
 ---
 
 ## 7. Advanced techniques enabled by our primitives
 
-A survey of research techniques (current through 2025) mapped onto what our SDK can express — so we
-can ship demos and let people experiment with new strategies on mcpkit. The unifying observation:
-**most of these techniques are orchestration patterns over one-or-more model calls plus a
-scoring/verification step.** Our `Runner` (bounded loop, parallel dispatch, error-fed-back, per-step
-`Selector`) + `Provider.Generate` (`ResponseSchema` + `ToolChoice`) + `FuncSource` verifiers already
-cover the entire *single-trajectory* family. Two roadmap primitives unlock most of the rest.
+The technique catalog (research through 2025, mapped to primitives) is unchanged in its analysis — but
+the shipped memory + sub-agent + structured-output work has **moved most of it from "needs a roadmap
+primitive" to "buildable today."** Updated status:
 
-### 7.1 The two primitives that unlock the most techniques
+### Now buildable on shipped primitives
+- **Sleep-time compute / Generative-Agents reflection / A-MEM evolution** — trigger/injection async
+  control plane + `SummarizingCompactor` + `MemorySource` (all ✅). ([2504.13171](https://arxiv.org/abs/2504.13171),
+  [2304.03442](https://arxiv.org/abs/2304.03442), [2502.12110](https://arxiv.org/abs/2502.12110))
+- **Semantic recall / MemGPT paging** — `Embedder` + `InMemorySemanticStore`/pgvector + injection (✅).
+  ([2310.08560](https://arxiv.org/abs/2310.08560))
+- **Multi-agent debate / Mixture-of-Agents / CAMEL / supervisor** — `AgentSource` + `MultiSource` +
+  `Team` (✅). ([2305.14325](https://arxiv.org/abs/2305.14325), [2406.04692](https://arxiv.org/abs/2406.04692))
+- **Best-of-N + verifier / CRITIC / judge panel** — `ToolChoice` forced-tool + `ResponseSchema` +
+  `FuncSource` verifiers + eval scorers (✅). ([2110.14168](https://arxiv.org/abs/2110.14168),
+  [2305.11738](https://arxiv.org/abs/2305.11738), [2404.18796](https://arxiv.org/abs/2404.18796))
+- **Tool retrieval via `Selector`** — narrow a big `MultiSource` per step (✅; relevance needs an
+  embedder, now present). ([2410.14594](https://arxiv.org/abs/2410.14594))
+- **CodeAct** — `execute_code` `FuncSource` + forced-tool + error-feedback (✅).
+  ([2402.01030](https://arxiv.org/abs/2402.01030))
 
-- **Sub-agents (`AgentSource` = a Runner-as-a-tool).** Unlocks the whole *multi-trajectory /
-  multi-agent* family at once: multi-agent debate, Mixture-of-Agents, CAMEL role-play,
-  supervisor/hierarchical delegation, and the tree-search methods (Tree-of-Thoughts, LATS, MCTS/RAP,
-  ADaPT recursion). Today these are only approximable via host-side orchestration around single
-  `Runner`/`Generate` calls. **Highest leverage roadmap item for technique coverage.**
-- **`Embedder` + `VectorStore` (feeding the injection path).** Unlocks the whole *semantic-retrieval*
-  family: baseline RAG, Self-RAG, HyDE, GraphRAG, RAPTOR, relevance-ranked memory (Generative Agents,
-  A-MEM), tool-retrieval relevance, and episodic experience replay. Build this one primitive and ~8
-  techniques become demoable. (Keyword/BM25 variants work *before* it lands.)
+### Still gated on missing infra (from §5b)
+- **Grammar-guided decoding** ([2307.09702](https://arxiv.org/abs/2307.09702)) — gated on §5b #2.
+- **Calibrated uncertainty / abstention** ([2407.16221](https://arxiv.org/abs/2407.16221)) — gated on
+  logprob exposure §5b #1.
+- **Model cascades (FrugalGPT)** ([2305.05176](https://arxiv.org/abs/2305.05176)) — gated on §5b #5 /
+  routing #991.
+- **Spotlighting injection defense** ([2403.14720](https://arxiv.org/abs/2403.14720)) — gated on §5b #4.
+- **Tree search (ToT/LATS/MCTS)** — sub-agents exist, but no search/fork controller helper (§5b #3
+  neighborhood).
 
-### 7.2 Techniques that showcase our *distinctive* primitives (buildable today)
-
-These are the demos competitors' SDKs mostly can't express, because they lean on primitives unique to
-mcpkit — the async control plane, `Selector`, `FailoverProvider`, and the event-stage pipeline.
-
-| Primitive | Technique it enables | How | Cite |
-|---|---|---|---|
-| **Trigger / injection (async control plane)** | **Sleep-time compute** — consolidate memory during idle so query-time needs less compute | idle-event trigger → proactive turn → `Generate` compaction → write to working-memory `FuncSource` | Lin 2025, [2504.13171](https://arxiv.org/abs/2504.13171) |
-| | **Generative-Agents reflection** — importance-threshold → synthesize insights back into memory | importance sum crosses threshold → trigger fires proactive reflection turn | Park 2023, [2304.03442](https://arxiv.org/abs/2304.03442) |
-| | **Budget-forcing test-time scaling** — nudge "wait, re-check" when the model tries to stop early | trigger injects a continuation on an early-finish event (turn-level, not token-level) | s1, [2501.19393](https://arxiv.org/abs/2501.19393) |
-| | **A-MEM memory evolution** — rewrite linked notes when new info arrives | new-note event → trigger → `Generate` updates related notes | Xu 2025, [2502.12110](https://arxiv.org/abs/2502.12110) |
-| **`Selector`** | **Tool retrieval (RAG over tools)** — narrow a 200+-tool `MultiSource` to top-k per step | `Selector` embeds query/history, vector-searches `ToolDef`s, offers only the relevant set | Toolshed [2410.14594](https://arxiv.org/abs/2410.14594), RAG-MCP [2505.03275](https://arxiv.org/abs/2505.03275) |
-| | **Model routing (RouteLLM)** — send easy turns to the cheap model | a classifier `Selector`/`Provider` front picks the backend (single upfront decision) | Ong 2024, [2406.18665](https://arxiv.org/abs/2406.18665) |
-| **`FailoverProvider`** | **Model cascades (FrugalGPT)** — escalate to a pricier model only when the cheap answer scores low | backup-first + a `ResponseSchema`/judge acceptance score gates escalation | Chen 2023, [2305.05176](https://arxiv.org/abs/2305.05176) |
-| **Event stages (Filter/Transform/Window)** | **Spotlighting / datamarking** — mark untrusted tool output as data, not instructions | a Transform stage wraps every tool result in delimiters/datamarks before it reaches the model | Hines 2024, [2403.14720](https://arxiv.org/abs/2403.14720) |
-| | **Step-level PRM scoring** — score each reasoning step, prune low-scoring ones | Transform each `emit` step event into a scored event; abort/branch on low score | Lightman 2023, [2305.20050](https://arxiv.org/abs/2305.20050) |
-| **`ToolChoice` forced-tool + `ResponseSchema` + `FuncSource` verifiers** | **Best-of-N + verifier** — sample N, score each, pick best | N `Runner` runs at `Temperature>0`, scored by a `FuncSource` test-harness or judge `Generate` | Cobbe 2021, [2110.14168](https://arxiv.org/abs/2110.14168) |
-| | **CRITIC** — forced tool-grounded self-correction | `ToolChoice=required` + `Selector` exposing only a verify tool → error-feedback loop revises | Gou 2023, [2305.11738](https://arxiv.org/abs/2305.11738) |
-| | **Judge panel / jury (PoLL)** — several diverse judges vote to cut bias | a `MultiSource`/parallel set of judge `Provider`s, each emitting `{score}` via `ResponseSchema` | Verga 2024, [2404.18796](https://arxiv.org/abs/2404.18796) |
-| | **CodeAct** — code as the action space | one `execute_code` `FuncSource` + `ToolChoice=forced` + error-feedback observe-revise loop | Wang 2024, [2402.01030](https://arxiv.org/abs/2402.01030) |
-| | **Self-Consistency / Chain-of-Verification** — majority vote / independent verification | K parallel `Generate` at `Temp>0`; CoVe's *independent* answers = isolated parallel calls | [2203.11171](https://arxiv.org/abs/2203.11171), [2309.11495](https://arxiv.org/abs/2309.11495) |
-
-Also fully buildable today with the core loop (no distinctive primitive needed): **ReAct**
-([2210.03629](https://arxiv.org/abs/2210.03629), *is* our Runner), **Reflexion**
-([2303.11366](https://arxiv.org/abs/2303.11366)), **Self-Refine**
-([2303.17651](https://arxiv.org/abs/2303.17651)), **Plan-and-Solve / Least-to-Most**
-([2305.04091](https://arxiv.org/abs/2305.04091), [2205.10625](https://arxiv.org/abs/2205.10625)),
-**MemGPT paging** ([2310.08560](https://arxiv.org/abs/2310.08560), memory tools as `FuncSource` +
-injection budget), **context offloading / scratchpads**, and **Corrective-RAG control flow**
-([2401.15884](https://arxiv.org/abs/2401.15884), keyword KB before embeddings land).
-
-### 7.3 Honest infrastructure gaps (block whole classes of technique)
-
-- **No logprob or grammar hooks on `Provider`.** Caps true grammar-constrained/guided decoding
-  (Outlines [2307.09702](https://arxiv.org/abs/2307.09702) — token-mask GBNF/regex) and
-  calibrated uncertainty/abstention ([2407.16221](https://arxiv.org/abs/2407.16221)). We approximate
-  both via `ResponseSchema` + sampling-agreement, but the real thing needs logprob exposure and a
-  self-hosted provider (vLLM/SGLang) exposing guided-grammar params.
-- **Prompt caching needs a provider-scoped option — and it fights `Selector`.** Cache hit-rate
-  depends on a byte-stable prefix (system prompt + tool schemas first, volatile content last). A
-  per-step `Selector` that *reorders* the serialized tools busts the cache. Design guidance to
-  document + guard: cache the full tool catalog as a stable prefix and do retrieval by instruction,
-  not by reordering. Lands with the Anthropic provider (Phase 0, area G).
-- **No fan-out / vote / tree-search helper.** Self-Consistency, Best-of-N, ToT, LATS all hand-roll
-  the N-loop and search bookkeeping today. A small helper (part of the eval harness, area H) would
-  formalize parallel-run + aggregate; full tree search waits on `AgentSource`.
-- **`FailoverProvider`'s trigger is failure/cooldown, not a quality score.** Cascades/routing want
-  "escalate if the answer looks wrong" — a concrete, small SDK improvement (accept a scorer callback).
-
-### 7.4 Demo shortlist — ranked by (buildable-now × showcases-a-distinctive-primitive × appeal)
-
-1. **Tool retrieval via `Selector`** (RAG over a big `MultiSource`) — most distinctive primitive,
-   immediately practical (everyone hits prompt-bloat with many MCP servers). Buildable now.
-2. **Best-of-N with a `FuncSource` test-harness verifier** (code-gen-with-tests) — best
-   impact/effort; substrate for PRM/LATS later. Buildable now.
-3. **Sleep-time compute / background memory consolidation** — the demo that *uniquely* exercises the
-   async control plane; produces measurable latency/token wins. Buildable now (persistence-limited).
-4. **Judge panel / jury** — `MultiSource` of judges + structured verdicts; doubles as the eval-harness
-   seed. Buildable now.
-5. **Model routing + cascade (RouteLLM / FrugalGPT)** on `FailoverProvider` — high "wow" (cost curves);
-   surfaces the quality-score-trigger improvement. Buildable now with a scorer wrapper.
-6. **CRITIC — forced tool-grounded self-correction** — showcases `Selector` + `ToolChoice=required` +
-   error-feedback; honest self-correction (external signal, not intrinsic). Buildable now.
-7. **Spotlighting / datamarking injection defense** (with a mini AgentDojo task) — showcases the event
-   pipeline; safety demos land well. Buildable now.
-8. **Mixture-of-Agents / Multi-Agent Debate** — the flagship forcing-function for the `AgentSource`
-   roadmap primitive; most visually compelling multi-agent demo. **Needs sub-agents.**
-
-**Bottom line for the roadmap:** prioritizing **`AgentSource`** (Phase 3) and **`Embedder`+`VectorStore`**
-(Phase 2) has by far the highest technique-unlock-per-unit-work — between them they gate the entire
-multi-agent and semantic-retrieval literature. Everything in demos #1–#7 above ships on primitives we
-already have or that land in Phase 0–2, which makes a compelling "experiment with SOTA agent strategies
-on mcpkit" story available early.
+**Demo shortlist, re-ranked for what ships today:** (1) tool-retrieval-via-`Selector`, (2) Best-of-N
+with a `FuncSource` verifier, (3) sleep-time compute (the async-control-plane showcase), (4) judge
+panel (seeds the eval harness), (5) Mixture-of-Agents / debate on `AgentSource`+`Team`. All five now
+build on shipped primitives — the "experiment with SOTA agent strategies on mcpkit" story is available
+*now*, not after Phase 4.
 
 ---
 
-## Appendix — key files
+## Appendix — key files (current)
 
 | Area | Files |
 |---|---|
-| Loop / approval / interrupt / structured | `agent/runner.go` |
-| Provider / structured / embedder / Anthropic | `agent/provider.go`, `agent/openai_provider.go` |
-| Tool layer (AgentSource/MemorySource hinge) | `agent/toolsource.go`, `client_source.go`, `func_source.go`, `multi_source.go`, `filter_source.go` |
-| Approval "ask" reuse | `agent/elicitation.go` |
-| Suspend/resume reuse | `agent/triggers.go`, `agent/injection.go`, `agent/incoming_event.go` |
-| Event transformation (not control flow) | `agent/stages.go`, `agent/events.go` |
-| Surface: persist / resume / recall / compaction | `agent/host/app.go`, `agent/host/metatools.go`, `agent/host/tasks_bg.go` |
+| Loop / approval / cancel / structured | `agent/runner.go`, `agent/approval.go` |
+| Providers | `agent/provider.go`, `agent/anthropic_provider.go`, `agent/openai_provider.go`, `agent/failover.go` |
+| Memory | `agent/memory.go`, `agent/semantic_memory.go`, `agent/embedder.go`, `agent/compaction.go` |
+| Persistence / offloading | `agent/runstore.go`, `agent/toolresultstore.go`, `agent/offloading_source.go`, `agent/store/{redis,gorm}` |
+| Multi-agent | `agent/agent_source.go`, `agent/team.go` |
+| Eval | `agent/eval/` (`eval.go`, `scorer.go`, `judge.go`, `suite.go`, `scenario.go`, `longmemeval/`) |
+| Tool layer / events / policies | `agent/toolsource.go`, `agent/multi_source.go`, `agent/filter_source.go`, `agent/events.go`, `agent/injection.go`, `agent/triggers.go`, `agent/stages.go` |
+| Host surface | `agent/host/` (`commands.go`, `connections.go`, `render.go`, `hostevent.go`, `memory.go`, `subagents.go`, `persistence.go`), `cmd/agentchat/` |
 | Invariants | `docs/AGENT_DESIGN.md`, `agent/CONSTRAINTS.md` |
+
+---
+
+<details>
+<summary><b>First edition (2026-07, pre-implementation): "What it would take to build a solid Agent SDK"</b> — retained for provenance; superseded by the status above.</summary>
+
+The original build-out roadmap (Phases 0–4, the E/G/F/H/D/I/A/B/C area designs, and the effort/sequencing
+analysis) is preserved in git history at the first revisions of this file. Its designs were implemented
+substantially as written — see the git log for issues #929–#1044 and the scorecard in §2 for the
+as-built mapping. The competitor surveys and technique catalog it introduced live on in §3, §4, §6, §7
+above, updated to current status.
+
+</details>
