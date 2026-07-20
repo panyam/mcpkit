@@ -87,6 +87,11 @@ Gemini). You can also swap chat models mid-session with `/provider`.
    then trigger a tool and approve/deny it.
 5. **Traces.** With the observability stack up, open Grafana at
    http://localhost:3000 and find the trace for a turn (service `agentchat`).
+6. **Reasoning display.** `/provider local-thinker` switches to a local reasoning
+   model (deepseek-r1 via LM Studio on :1234). Its inline `<think>…</think>` is
+   re-tagged as reasoning by the connection's `thinkingHint` and streamed dimmed
+   under a `· thinking:` line. Cloud OpenAI/Gemini models don't emit inline
+   reasoning, so this only shows with a reasoning model + a `thinkingHint`.
 
 ## Inspecting state
 

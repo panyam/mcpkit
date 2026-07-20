@@ -41,10 +41,14 @@ func (r *renderer) handle(e agent.Event) {
 	switch e.Kind {
 	case agent.EventThinkingBegin:
 		r.breakLine()
-		fmt.Fprint(r.out, r.dim("· thinking "))
+		r.thinking = true
+		fmt.Fprint(r.out, r.dim("· thinking: "))
 	case agent.EventThinkingDelta:
-		fmt.Fprint(r.out, r.dim("."))
+		// Stream the reasoning text itself (dimmed), so a reasoning model's
+		// chain-of-thought is readable — not a row of dots.
+		fmt.Fprint(r.out, r.dim(e.Text))
 	case agent.EventThinkingEnd:
+		r.thinking = false
 		fmt.Fprintln(r.out)
 	case agent.EventTextDelta:
 		r.thinking = false
