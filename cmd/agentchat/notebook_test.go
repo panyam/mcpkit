@@ -30,7 +30,7 @@ func TestNBLabelFor(t *testing.T) {
 }
 
 func TestNotebook_CellAppendedAndRendered(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, nbCellMsg{label: "assistant", body: "hi\nthere"})
 	if len(m.cells) != 1 {
 		t.Fatalf("cells = %d, want 1", len(m.cells))
@@ -45,7 +45,7 @@ func TestNotebook_CellAppendedAndRendered(t *testing.T) {
 }
 
 func TestNotebook_FoldToggleInNav(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, nbCellMsg{label: "assistant", body: "long answer here"})
 	// Esc enters nav mode selecting the last cell.
 	m = send(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -69,7 +69,7 @@ func TestNotebook_FoldToggleInNav(t *testing.T) {
 }
 
 func TestNotebook_KeysCommandAddsInfoCell(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	nm, _ := m.submit("/keys")
 	m = nm.(notebookModel)
 	if len(m.cells) != 1 || m.cells[0].label != "info" {
@@ -81,7 +81,7 @@ func TestNotebook_KeysCommandAddsInfoCell(t *testing.T) {
 }
 
 func TestNotebook_LiveRendersAtBottom(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, nbLiveMsg("streaming answer"))
 	out := m.renderCells()
 	if !strings.Contains(out, "▾ assistant") || !strings.Contains(out, "  streaming answer") {
@@ -102,7 +102,7 @@ func TestUIMode(t *testing.T) {
 }
 
 func TestNotebook_EnterSubmitsAndViewRenders(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 24}) // sets ready + viewport size
 	m.ta.SetValue("/keys")
 	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -115,7 +115,7 @@ func TestNotebook_EnterSubmitsAndViewRenders(t *testing.T) {
 }
 
 func TestNotebook_UpArrowScrollsWhenNoHistory(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, tea.WindowSizeMsg{Width: 60, Height: 8}) // small viewport (~4 rows)
 	// add enough content to overflow the viewport
 	for i := 0; i < 6; i++ {
@@ -132,7 +132,7 @@ func TestNotebook_UpArrowScrollsWhenNoHistory(t *testing.T) {
 }
 
 func TestNotebook_RuleBetweenCells(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
 	m = send(m, nbCellMsg{label: "you", body: "hi"})
 	if strings.Contains(m.renderCells(), "─") {
@@ -155,7 +155,7 @@ func TestPromptArea_NewlineOffEnter(t *testing.T) {
 }
 
 func TestNotebook_CtrlJInsertsNewline(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
 	m.ta.SetValue("abc")
 	m.ta.CursorEnd()
@@ -166,7 +166,7 @@ func TestNotebook_CtrlJInsertsNewline(t *testing.T) {
 }
 
 func TestNotebook_UpMovesWithinPromptFirst(t *testing.T) {
-	m := newNotebookModel(nil, nil)
+	m := newNotebookModel(nil, nil, 20)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
 	m.ta.SetValue("line1\nline2")
 	m.ta.CursorEnd()
@@ -176,5 +176,32 @@ func TestNotebook_UpMovesWithinPromptFirst(t *testing.T) {
 	m = send(m, tea.KeyMsg{Type: tea.KeyUp}) // moves within prompt, not history/scroll
 	if m.ta.Line() != 0 {
 		t.Fatalf("up did not move the cursor up within the prompt: row = %d", m.ta.Line())
+	}
+}
+
+func TestNotebook_PromptAutoGrowsAndClamps(t *testing.T) {
+	m := newNotebookModel(nil, nil, 4) // maxLines = 4
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 30})
+	if h := m.ta.Height(); h != 1 {
+		t.Fatalf("empty prompt height = %d, want 1", h)
+	}
+	// add newlines with ctrl+j; the box grows with line count
+	m = send(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	m = send(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	if h := m.ta.Height(); h != 3 {
+		t.Fatalf("after 2 newlines height = %d, want 3", h)
+	}
+	// grow past the cap — clamps at maxLines
+	for i := 0; i < 10; i++ {
+		m = send(m, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	}
+	if h := m.ta.Height(); h != 4 {
+		t.Fatalf("height should clamp at maxLines=4, got %d", h)
+	}
+	// clearing shrinks it back
+	m.ta.SetValue("")
+	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if h := m.ta.Height(); h != 1 {
+		t.Fatalf("after clearing, height = %d, want 1", h)
 	}
 }
