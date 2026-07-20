@@ -112,3 +112,33 @@ func TestNotebook_EnterSubmitsAndViewRenders(t *testing.T) {
 		t.Fatalf("submitted cheatsheet not visible in View():\n%s", m.View())
 	}
 }
+
+func TestNotebook_UpArrowScrollsWhenNoHistory(t *testing.T) {
+	m := newNotebookModel(nil, nil)
+	m = send(m, tea.WindowSizeMsg{Width: 60, Height: 8}) // small viewport (~4 rows)
+	// add enough content to overflow the viewport
+	for i := 0; i < 6; i++ {
+		m = send(m, nbCellMsg{label: "assistant", body: "line one\nline two\nline three"})
+	}
+	if !m.atBottom {
+		t.Fatal("should auto-follow to bottom after new cells")
+	}
+	// up-arrow with no history scrolls the transcript up (off the bottom)
+	m = send(m, tea.KeyMsg{Type: tea.KeyUp})
+	if m.atBottom {
+		t.Fatal("up-arrow did not scroll the transcript (still at bottom)")
+	}
+}
+
+func TestNotebook_RuleBetweenCells(t *testing.T) {
+	m := newNotebookModel(nil, nil)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
+	m = send(m, nbCellMsg{label: "you", body: "hi"})
+	if strings.Contains(m.renderCells(), "─") {
+		t.Fatal("a single cell should have no delimiter")
+	}
+	m = send(m, nbCellMsg{label: "assistant", body: "hello"})
+	if !strings.Contains(m.renderCells(), "─") {
+		t.Fatalf("two cells should have a delimiter between them:\n%s", m.renderCells())
+	}
+}
