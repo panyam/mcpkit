@@ -250,8 +250,20 @@ func (m notebookModel) updateInsert(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.recallHistory(-1) {
 			return m, nil
 		}
+		// No history to recall (and single-line input): scroll the transcript
+		// so the arrows always do something visible.
+		if !strings.Contains(m.ta.Value(), "\n") {
+			m.vp.ScrollUp(1)
+			m.atBottom = m.vp.AtBottom()
+			return m, nil
+		}
 	case tea.KeyDown:
 		if m.recallHistory(1) {
+			return m, nil
+		}
+		if !strings.Contains(m.ta.Value(), "\n") {
+			m.vp.ScrollDown(1)
+			m.atBottom = m.vp.AtBottom()
 			return m, nil
 		}
 	}
@@ -270,9 +282,9 @@ func (m notebookModel) View() string {
 func (m notebookModel) statusBar() string {
 	var hint string
 	if m.nav {
-		hint = "NAV  ↑↓/jk select · space fold · g/G ends · esc/i insert"
+		hint = "NAV  ↑↓/jk select · space fold · g/G ends · esc/i type"
 	} else {
-		hint = "INS  esc nav · pgup/pgdn scroll · /keys editing · enter send"
+		hint = "INS  type & enter · ↑↓ history then scroll · pgup/pgdn/wheel scroll · esc: fold cells"
 	}
 	if m.running {
 		hint = "working…  " + hint
@@ -299,7 +311,12 @@ func (m *notebookModel) refresh() {
 // then appends the in-flight turn.
 func (m notebookModel) renderCells() string {
 	var b strings.Builder
+	rule := m.hrule()
 	for i, c := range m.cells {
+		if i > 0 {
+			b.WriteString(rule)
+			b.WriteString("\n")
+		}
 		marker := "▾"
 		if c.collapsed {
 			marker = "▸"
@@ -319,10 +336,26 @@ func (m notebookModel) renderCells() string {
 		}
 	}
 	if m.live != "" {
+		if len(m.cells) > 0 {
+			b.WriteString(rule)
+			b.WriteString("\n")
+		}
 		b.WriteString("▾ assistant\n")
 		b.WriteString(indentBlock(m.live))
 	}
 	return b.String()
+}
+
+// hrule is a faint full-width horizontal delimiter drawn between cells.
+func (m notebookModel) hrule() string {
+	w := m.vp.Width
+	if w <= 0 {
+		w = m.width
+	}
+	if w <= 0 {
+		w = 40
+	}
+	return lipgloss.NewStyle().Faint(true).Render(strings.Repeat("─", w))
 }
 
 func indentBlock(s string) string {
