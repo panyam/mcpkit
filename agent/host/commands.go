@@ -224,7 +224,11 @@ func (a *App) registerBuiltinCommands() {
 	r.Register(&Command{Name: "approve", Help: "show or set approval mode (allow | read-only-auto | ask)",
 		Run: func(_ context.Context, args string) (CmdResult, error) {
 			if args != "" && a.approval != nil {
-				a.approval.SetDefaultMode(parseApprovalMode(args))
+				mode := parseApprovalMode(args)
+				a.approval.SetDefaultMode(mode)
+				a.persistOverlay("approval mode", func(o *configOverlay) error {
+					return o.setApprovalMode(approvalModeName(mode))
+				})
 			}
 			return CmdResult{Kind: CmdApproval, Approval: a.approval}, nil
 		}})
@@ -310,6 +314,9 @@ func (a *App) registerBuiltinCommands() {
 				if err := a.SwitchProvider(args); err != nil {
 					return CmdResult{}, err
 				}
+				a.persistOverlay("provider", func(o *configOverlay) error {
+					return o.setActiveConnection(args)
+				})
 			}
 			names, active := a.Providers()
 			return CmdResult{Kind: CmdProviders, Providers: names, ActiveProvider: active}, nil

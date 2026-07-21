@@ -492,6 +492,42 @@ func LoadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// LoadConfigWithOverlay loads the base config, then merges the sibling
+// local-overlay file (overlayPathFor) over it when that file exists, then
+// validates. This is the read side of runtime-config persistence: the overlay
+// carries only the mutable picks a slash command changed (active connection,
+// approval mode), written by WithConfigOverlay.
+//
+// The merge is deliberately a second json.Unmarshal into the same struct, so
+// the semantics are the standard library's, pinned by tests: a scalar present
+// in the overlay overrides the base, a map merges by key (base entries the
+// overlay omits survive), a slice present in the overlay REPLACES the base
+// slice wholesale, and a key the overlay omits is left untouched. That last
+// rule is what lets a one-line overlay (just active) leave servers and
+// connections intact.
+func LoadConfigWithOverlay(path string) (*Config, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var cfg Config
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return nil, fmt.Errorf("agentchat: parse %s: %w", path, err)
+	}
+	overlay := overlayPathFor(path)
+	if oraw, err := os.ReadFile(overlay); err == nil {
+		if err := json.Unmarshal(oraw, &cfg); err != nil {
+			return nil, fmt.Errorf("agentchat: parse %s: %w", overlay, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("agentchat: %s: %w", path, err)
+	}
+	return &cfg, nil
+}
+
 // Validate enforces the invariants the app relies on.
 func (c *Config) Validate() error {
 	// A connections registry supersedes Model for the chat provider, so

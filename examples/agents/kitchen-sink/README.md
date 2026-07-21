@@ -21,6 +21,7 @@ line to the walkthrough.
 | Skills, eager | `skillsMode: "eager"` on the `runbooks` server | skills-core MCP server (:8789) |
 | Skills, catalog | `skillsMode: "catalog"` on the `community` server | skills MCP server (:8790) + `load_skill` |
 | Event injection | `events` on the `events` server | events kitchen-sink MCP server (:8791) |
+| Runtime-config persistence | `--persist-config` in `run.sh` | `kitchen-sink.local.json` overlay (gitignored) |
 
 The chat model comes from `kitchen-sink.json`'s `connections` block (local
 LM Studio by default, offline-friendly). Only the **embedder** is passed by
@@ -132,6 +133,14 @@ Gemini). You can also swap chat models mid-session with `/provider`.
    them ahead of your next turn. After a short pause, ask: *"Anything happen
    while I was away?"* — the injected occurrences are in context, so the model
    can summarize them.
+10. **Config persistence.** `run.sh` passes `--persist-config`. Switch models
+    with `/provider openai-5.1` (or set an approval mode with `/approve ask`) and
+    those picks are written to `kitchen-sink.local.json` (gitignored). Quit and
+    `just run` again: it comes back on your last-picked provider, not the
+    config's default. The overlay is a sparse delta merged over
+    `kitchen-sink.json` at startup, so it never touches the base file; a launch
+    flag still wins (`ACTIVE=anthropic-opus just run` overrides the overlay for
+    that run).
 
 ## Inspecting state
 
