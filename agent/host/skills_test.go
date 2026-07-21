@@ -32,6 +32,61 @@ func TestResolveSkillsMode(t *testing.T) {
 	}
 }
 
+func TestFilterSkillsAllow(t *testing.T) {
+	idx := skills.NewIndex(
+		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "alpha"},
+		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "beta"},
+		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "gamma"},
+	)
+
+	names := func(i skills.Index) []string {
+		var out []string
+		for _, e := range i.Skills {
+			out = append(out, e.Name)
+		}
+		return out
+	}
+	eq := func(got, want []string) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// empty allow is a passthrough (all skills, unchanged)
+	if got := names(filterSkillsAllow(idx, nil)); !eq(got, []string{"alpha", "beta", "gamma"}) {
+		t.Fatalf("nil allow should passthrough, got %v", got)
+	}
+	if got := names(filterSkillsAllow(idx, []string{})); !eq(got, []string{"alpha", "beta", "gamma"}) {
+		t.Fatalf("empty allow should passthrough, got %v", got)
+	}
+
+	// subset keeps only allowed names, in original order (not allow order)
+	if got := names(filterSkillsAllow(idx, []string{"gamma", "alpha"})); !eq(got, []string{"alpha", "gamma"}) {
+		t.Fatalf("subset should keep allowed in index order, got %v", got)
+	}
+
+	// unknown names in allow are no-ops
+	if got := names(filterSkillsAllow(idx, []string{"beta", "nope", "missing"})); !eq(got, []string{"beta"}) {
+		t.Fatalf("unknown allow names should be ignored, got %v", got)
+	}
+
+	// allow that matches nothing yields an empty skill set
+	if got := names(filterSkillsAllow(idx, []string{"nope"})); len(got) != 0 {
+		t.Fatalf("no matches should yield empty index, got %v", got)
+	}
+
+	// the schema URI survives the rebuild
+	if filterSkillsAllow(idx, []string{"alpha"}).Schema != idx.Schema {
+		t.Fatal("filtered index should keep the index schema URI")
+	}
+}
+
 func TestRegisterLoadSkill(t *testing.T) {
 	app := &App{}
 	multi := agent.NewMultiSource()
