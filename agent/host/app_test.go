@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/client"
@@ -63,6 +64,28 @@ func TestAppBootsWithDownOptionalServer(t *testing.T) {
 	}
 	if len(res.Servers) != 2 {
 		t.Fatalf("/servers = %d entries, want 2", len(res.Servers))
+	}
+}
+
+// TestAppCloseDoesNotHang is the host-level regression for the close hang: with
+// a ready server (open SSE stream) AND a down server (a background retry loop),
+// app.Close must tear both down promptly, not block. A generous deadline turns
+// a hang into a fast, clear failure instead of a whole-suite timeout.
+func TestAppCloseDoesNotHang(t *testing.T) {
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Servers = append(cfg.Servers, ServerConfig{ID: "down", URL: "http://127.0.0.1:1/mcp"})
+
+	app, err := NewApp(cfg, io.Discard, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "hi"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { app.Close(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("app.Close hung")
 	}
 }
 
