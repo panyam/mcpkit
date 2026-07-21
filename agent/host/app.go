@@ -64,6 +64,7 @@ type App struct {
 	metaTools bool
 	turnMu    sync.Mutex
 	emitMu    sync.Mutex // serializes emit so concurrent server-connect events don't race the renderer
+	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
 	// store and runID are the persistence seam (WithRunStore): runID is
@@ -265,6 +266,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		if ch.State == client.StateReady {
 			app.registerServerTools(serverByID[ch.ID], clientByID[ch.ID])
 			app.onServerSkills(serverByID[ch.ID], clientByID[ch.ID])
+			app.onServerEvents(serverByID[ch.ID])
 		}
 	}
 	app.group = client.NewGroup(client.WithObserver(onState))
@@ -290,6 +292,19 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		clientByID[sc.ID] = c
 		app.group.Add(sc.ID, c, sc.Required)
 	}
+	// The event infrastructure (fanIn + subscription ctx) must exist before the
+	// servers connect, so the ready-observer can subscribe a server's event
+	// streams the moment it connects — late servers included. The consumer
+	// goroutine starts later, once the Runner exists; streams buffer until then.
+	app.metaTools = cfg.MetaTools || len(cfg.Triggers) > 0
+	for _, sc := range cfg.Servers {
+		app.metaTools = app.metaTools || len(sc.Events) > 0
+	}
+	if app.metaTools {
+		app.evCtx, app.eventStop = context.WithCancel(context.Background())
+		app.fanIn = gocurrent.NewFanIn[agent.IncomingEvent]()
+	}
+
 	app.group.Start(context.Background())
 	// Block only for the servers marked required; the rest keep connecting in
 	// the background and register via the observer as they become ready.
@@ -363,10 +378,6 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		Logger:   o.logger,
 	})
 
-	app.metaTools = cfg.MetaTools || len(cfg.Triggers) > 0
-	for _, sc := range cfg.Servers {
-		app.metaTools = app.metaTools || len(sc.Events) > 0
-	}
 	if app.metaTools {
 		if err := app.registerMetaTools(multi); err != nil {
 			app.Close()
@@ -440,16 +451,12 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	app.runner = runner
 	app.registerBuiltinCommands()
 
-	if app.metaTools {
-		evCtx, cancel := context.WithCancel(context.Background())
-		app.eventStop = cancel
-		app.fanIn = gocurrent.NewFanIn[agent.IncomingEvent]()
-		if err := app.startEventStreams(evCtx); err != nil {
-			cancel()
-			app.Close()
-			return nil, err
-		}
-		go app.consumeEvents(evCtx)
+	// The fanIn + subscription ctx were built before the servers connected, and
+	// the ready-observer has been subscribing each server's event streams; now
+	// that the Runner exists, start the consumer that drains them into the
+	// injection/trigger policies.
+	if app.metaTools && app.fanIn != nil {
+		go app.consumeEvents(app.evCtx)
 	}
 	return app, nil
 }
