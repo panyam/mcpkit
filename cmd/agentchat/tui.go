@@ -37,11 +37,17 @@ type usageMsg struct{ in, out int }
 // plus a "N% context left" gauge when a context window is configured (issue
 // 1063 D1/D2). Kept out of the transcript — it lives only in the managed live
 // region so it is never committed to scrollback.
-func statusLine(app *host.App, u usageMsg, window int) string {
+//
+// session is passed in (cached by the surface model), NOT read live from
+// app.RunID(): RunID takes App.turnMu, which RunTurn holds for the whole turn,
+// so calling it from View() would block every render until the turn finished
+// and freeze the UI. ModelLabel only touches the connections mutex (never held
+// during a turn) so it stays a live read.
+func statusLine(app *host.App, session string, u usageMsg, window int) string {
 	if app == nil {
 		return ""
 	}
-	return formatStatus(app.ModelLabel(), app.RunID(), u, window)
+	return formatStatus(app.ModelLabel(), session, u, window)
 }
 
 // formatStatus is the pure status-line renderer (model · session · tokens ·
@@ -131,6 +137,7 @@ type tuiModel struct {
 	pending string
 	usage   usageMsg // last turn's tokens, for the status line
 	window  int      // context window for the "N% left" gauge (0 = off)
+	session string   // cached RunID for the status line (refreshed off the render path)
 }
 
 // newPromptArea builds the shared input textarea used by both TUI surfaces
@@ -160,6 +167,10 @@ func newPromptArea() textarea.Model {
 func newTUIModel(app *host.App, surface *tuiObserver, window int) tuiModel {
 	m := tuiModel{app: app, surface: surface, ta: newPromptArea(), window: window}
 	m.histIdx = 0
+	if app != nil {
+		// Safe here: construction runs before the first turn, so turnMu is free.
+		m.session = app.RunID()
+	}
 	return m
 }
 
@@ -185,6 +196,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case turnDoneMsg:
 		m.running = false
+		// The turn (or dispatched command) has fully returned, so turnMu is
+		// free and a session-changing command like /sessions has landed.
+		if m.app != nil {
+			m.session = m.app.RunID()
+		}
 		return m, nil
 
 	case usageMsg:
@@ -234,7 +250,7 @@ func (m tuiModel) View() string {
 		b.WriteString(strings.TrimRight(m.pending, "\n"))
 		b.WriteString("\n")
 	}
-	status := statusLine(m.app, m.usage, m.window)
+	status := statusLine(m.app, m.session, m.usage, m.window)
 	if m.running {
 		status = "working… · " + status
 	}

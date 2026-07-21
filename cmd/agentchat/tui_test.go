@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -192,6 +197,67 @@ func TestKeyHelp_ListsBindings(t *testing.T) {
 			t.Fatalf("keyHelp() missing %q:\n%s", want, h)
 		}
 	}
+}
+
+// blockingProvider holds a turn open inside the model call until release is
+// closed, so a test can observe the UI while App.turnMu is held by RunTurn.
+type blockingProvider struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *blockingProvider) signalStarted() { p.once.Do(func() { close(p.started) }) }
+
+func (p *blockingProvider) Stream(ctx context.Context, req agent.ProviderRequest) (agent.Stream, error) {
+	p.signalStarted()
+	<-p.release
+	return nil, errors.New("blocking provider released")
+}
+
+func (p *blockingProvider) Generate(ctx context.Context, req agent.ProviderRequest) (*agent.ProviderResponse, error) {
+	p.signalStarted()
+	<-p.release
+	return nil, errors.New("blocking provider released")
+}
+
+// TestView_DoesNotBlockDuringTurn guards the #1074 regression: the status line
+// must render from a cached session, never from App.RunID() (which takes
+// turnMu, held by RunTurn for the whole turn). Before the fix, View() blocked
+// until the turn finished, freezing the UI on the first message.
+func TestView_DoesNotBlockDuringTurn(t *testing.T) {
+	prov := &blockingProvider{started: make(chan struct{}), release: make(chan struct{})}
+	cfg := &host.Config{
+		Model: host.ModelConfig{BaseURL: "http://unused", Model: "stub"},
+		Connections: &host.ConnectionsConfig{
+			Active:      "local",
+			Connections: map[string]host.ConnectionConfig{"local": {Type: "lmstudio", Model: "m"}},
+		},
+	}
+	build := func(host.ConnectionConfig) (agent.Provider, error) { return prov, nil }
+	app, err := host.NewApp(cfg, io.Discard, strings.NewReader(""), host.WithProviderBuilder(build))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	m := newTUIModel(app, nil, 0)
+
+	turnDone := make(chan struct{})
+	go func() { _ = app.RunTurn(context.Background(), "hi"); close(turnDone) }()
+	<-prov.started // the turn now holds turnMu inside the provider
+
+	rendered := make(chan string, 1)
+	go func() { rendered <- m.View() }()
+	select {
+	case <-rendered: // View returned while the turn is in flight — the fix holds
+	case <-time.After(2 * time.Second):
+		close(prov.release)
+		t.Fatal("View() blocked during a turn — status line is reading RunID() under turnMu")
+	}
+
+	close(prov.release)
+	<-turnDone
 }
 
 func TestKeyMap_CtrlRightMovesByWord(t *testing.T) {
