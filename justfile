@@ -259,6 +259,10 @@ test-experimental:
     @bash experimental/scripts/test-events-discord.sh
     @bash experimental/scripts/test-events-telegram.sh
 
+# Run every infra-free example test (delegates to examples/justfile)
+test-examples:
+    just -f examples/justfile test
+
 # Run experimental ext/events library tests
 test-experimental-events:
     @bash experimental/scripts/test-events.sh
