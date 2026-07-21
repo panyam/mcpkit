@@ -65,8 +65,35 @@ Ready      → Failed               (live connection dropped → de-register, re
 
 Each transition emits a **`HostServerStateChanged`** event so surfaces update live. On
 `→ Ready`: `multi.Add(id, src)`, register that server's catalog skills + `load_skill`,
-`startEventStreams` for it, and (phase 2) recompute the eager system-prompt block. On
-`→ Failed`: de-register / mark stale.
+`startEventStreams` for it, and (phase 2) recompute the eager system-prompt block.
+
+**On `→ Failed` (server drops mid-conversation): keep the tool defs, fail calls
+gracefully.** The tool set does not shrink mid-turn — the model keeps seeing the tools it
+knew about, so it is not surprised. Calls that land while the server is down are handled
+below.
+
+## Tool calls to a non-Ready server
+
+Because tool defs stay registered, the model can call a tool whose server is not `Ready`.
+Rather than a hard failure or an indefinite block:
+
+- **Default — model-visible miss.** The dispatch short-circuits with an **`ErrNotAvailableNow`**
+  sentinel (recognized before the call reaches the disconnected client) and feeds back a
+  **non-fatal** `ToolResult` naming the server and its state — e.g. "tool `create_issue` is
+  unavailable: server `atlassian` is not connected (needs-login); retry, route around it, or
+  tell the user." A distinct **`EventToolUnavailable`** carries `Reason` + state (NOT `Error`,
+  so error-keyed eval scorers don't miscount — the same care taken for `EventToolDenied` /
+  `EventToolCancelled`). The turn continues; the model adapts. This is the same
+  "non-fatal tool outcome → model-visible → continue" family as approval-denial and
+  cancellation.
+- **Narrow exception — bounded wait for `Connecting`.** If the server is mid-connect (the
+  common first-turn boot race, where the model calls a tool before an async server finished
+  connecting), the dispatch does a short **capped** wait for `Ready` before falling through
+  to the miss. Never wait on `Failed` / `NeedsLogin` / `Disabled` — they won't resolve
+  without action, so blocking is pointless.
+
+**Rejected:** blocking the turn indefinitely (queue-and-wait) — it couples turn latency to
+reconnect timing and hangs on servers that may never come up.
 
 ## `client.Group` (client-layer primitive)
 
@@ -131,10 +158,10 @@ blocks of currently-`Ready` servers.
    returning server wires in with no restart.
 3. **Interactive re-auth** (`NeedsLogin` → `/login`).
 
-## Open items
+## Resolved
 
-- `WaitRequired` timeout default (and whether `0` = wait indefinitely).
-- De-registration semantics when a `Ready` server drops mid-conversation: drop its tools
-  immediately, or keep them and fail calls with a clear "server unavailable"? (Leaning: keep
-  the tool defs, fail calls gracefully, so the model is not surprised by a shrinking toolset
-  mid-turn.)
+- **`WaitRequired` timeout: default 30s.** `0` = wait indefinitely, for the "hang until this
+  server is up, however long it takes" case; a non-zero value fails with the required servers
+  that didn't reach `Ready` in time.
+- **A `Ready` server that drops keeps its tool defs; calls fail gracefully** (see the tool-call
+  section above) rather than shrinking the tool set mid-turn.
