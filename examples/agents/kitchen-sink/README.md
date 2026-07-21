@@ -81,7 +81,7 @@ already owns stdio subprocess lifecycle, only the config surface is missing.
 Three layers, brought up separately (backends → MCP servers → agent):
 
 ```bash
-just allup      # postgres+pgvector + observability stacks (or: make allup)
+just allup      # postgres+pgvector + observability stacks
 just servers-up # the four MCP servers (independent of the chat)
 just check      # probe backends; prints how to fix whatever is down
 just run        # preflight, verify servers are up, launch agentchat (inline TUI)
@@ -170,7 +170,7 @@ just psql       # a psql shell on the agent DB (agent_runs, agent_memories, ...)
 ## Variables
 
 Override any of these on the CLI (`SESSION=demo2 just run`) or via env. Defaults
-live at the top of the `justfile` / `Makefile`.
+live at the top of the `justfile`.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -203,6 +203,6 @@ live at the top of the `justfile` / `Makefile`.
 ## Extending
 
 This is the place to demo new features end to end. When one lands: add its flag
-to `run.sh`, expose the knob as a variable in the `justfile`/`Makefile`, add a
-probe to `preflight.sh` if it needs a new backend, and add a numbered step to
-the walkthrough above.
+to `run.sh`, expose the knob as a variable in the `justfile`, add a probe to
+`preflight.sh` if it needs a new backend, and add a numbered step to the
+walkthrough above.

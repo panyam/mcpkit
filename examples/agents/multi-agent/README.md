@@ -40,7 +40,7 @@ billing → I've refunded the duplicate charge — you'll see it in 3-5 days.
   tool) as `AgentSource`s under a supervisor `MultiSource`, and a `Team` with a
   `transfer_to_billing` handoff. `nestedRenderer` turns `SubAgentEvent`s into
   the indented transcript.
-- `scenario_test.go` — the golden transcript; runs under `make test-agent`.
+- `scenario_test.go` — the golden transcript; runs under `just test-agent`.
 
 The whole flow is scripted, so it doubles as a deterministic test. The
 sub-agents use host-local `FuncSource` tools (not an MCP server) to keep the
