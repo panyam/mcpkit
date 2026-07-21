@@ -353,6 +353,14 @@ type ServerConfig struct {
 	// false opts out even when the server advertises skills.
 	Skills *bool `json:"skills,omitempty"`
 
+	// SkillsMode selects how enabled skills enter context: "eager" (full
+	// SKILL.md bodies in the system prompt), "catalog" (only name +
+	// description; bodies fetched on demand via the load_skill tool), or ""
+	// (auto — eager below a small skill count, catalog at/above). Progressive
+	// disclosure keeps a large skill set from bloating every request. Ignored
+	// when Skills is false.
+	SkillsMode string `json:"skillsMode,omitempty"`
+
 	// Events lists the event streams to open on this server. Each event
 	// feeds the injection policy (and any trigger bindings that match).
 	Events []EventConfig `json:"events,omitempty"`

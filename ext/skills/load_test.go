@@ -87,3 +87,27 @@ func TestInstructionsBlockExcludesFailuresAndIsDeterministic(t *testing.T) {
 		t.Fatalf("empty batch must render empty, got %q", got)
 	}
 }
+
+func TestCatalogBlock(t *testing.T) {
+	idx := skills.NewIndex(
+		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "alpha", Description: "does alpha", URL: "skill://a/SKILL.md"},
+		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "beta", URL: "skill://b/SKILL.md"},
+		skills.IndexEntry{Type: skills.SkillTypeArchive, Name: "arch", Description: "a pack", URL: "skill://z.zip"},
+	)
+	block := skills.CatalogBlock(idx)
+	if !strings.Contains(block, "## Skills (catalog)") || !strings.Contains(block, "load_skill") {
+		t.Fatalf("catalog header/hint missing:\n%s", block)
+	}
+	if !strings.Contains(block, "- alpha: does alpha") {
+		t.Fatalf("named+described skill missing:\n%s", block)
+	}
+	if !strings.Contains(block, "- beta\n") {
+		t.Fatalf("description-less skill should still list:\n%s", block)
+	}
+	if strings.Contains(block, "arch") {
+		t.Fatalf("archive entries must be excluded from the catalog:\n%s", block)
+	}
+	if got := skills.CatalogBlock(skills.NewIndex()); got != "" {
+		t.Fatalf("empty index catalog = %q, want \"\"", got)
+	}
+}
