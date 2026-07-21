@@ -9,10 +9,10 @@
 # shared with the justfile). The -pg / -real variants delegate to the
 # sub-module recipes that boot Docker containers.
 #
-# Two of the sub-suites live under `examples/events/` rather than
-# `experimental/`, but they're conceptually part of the experimental
-# events POC (they're demo apps consuming the experimental library), so
-# they're orchestrated here next to the library tests.
+# The discord/telegram example suites moved to examples/Makefile (they test
+# example apps, not the experimental library — issue 688). The targets below
+# are kept as aliases delegating there, so testall's per-suite timing
+# (7a–7e) and any CI script referencing the old names keep working.
 
 EXPERIMENTAL_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
@@ -38,11 +38,11 @@ test-events-stores-redis: ## Run Redis pubsub Emitter sub-module (miniredis; no 
 test-events-stores-redis-real: ## Run the Redis pubsub Emitter against a real Redis container (Docker)
 	$(MAKE) -C $(EXPERIMENTAL_DIR)/ext/events/stores/redis testredis
 
-test-events-discord: ## Run experimental events Discord example tests
-	@bash $(EXPERIMENTAL_DIR)/scripts/test-events-discord.sh
+test-events-discord: ## (alias) Discord example tests — moved to examples/Makefile
+	$(MAKE) -C $(EXPERIMENTAL_DIR)/../examples test-events-discord
 
-test-events-telegram: ## Run experimental events Telegram example tests
-	@bash $(EXPERIMENTAL_DIR)/scripts/test-events-telegram.sh
+test-events-telegram: ## (alias) Telegram example tests — moved to examples/Makefile
+	$(MAKE) -C $(EXPERIMENTAL_DIR)/../examples test-events-telegram
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}'
