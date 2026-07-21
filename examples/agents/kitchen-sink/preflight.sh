@@ -5,7 +5,7 @@
 # stack and the embedder endpoint are optional but memory/traces degrade
 # without them, so they warn rather than fail.
 #
-# Env (all have Make/just defaults): PG_HOST PG_PORT PG_DB PG_USER
+# Env (all have just defaults): PG_HOST PG_PORT PG_DB PG_USER
 # OTLP_ENDPOINT EMBED_URL EMBED_MODEL EMBED_DIM. Exit non-zero iff a required
 # backend is down.
 set -uo pipefail
