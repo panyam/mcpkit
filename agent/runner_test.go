@@ -34,6 +34,38 @@ func newRunner(t *testing.T, p Provider, src ToolSource) *Runner {
 	return r
 }
 
+// TestRunnerInstructionsFuncPerTurn verifies InstructionsFunc overrides the
+// static Instructions and is recomputed each turn (the dynamic system prompt
+// that lets late-connecting servers' eager skills appear on the next turn).
+func TestRunnerInstructionsFuncPerTurn(t *testing.T) {
+	stub := NewStubProvider(StubTurn{Text: "a"}, StubTurn{Text: "b"})
+	turn := 0
+	r, err := NewRunner(RunnerConfig{
+		Provider:     stub,
+		Instructions: "static",
+		InstructionsFunc: func(context.Context) string {
+			turn++
+			return fmt.Sprintf("dynamic-%d", turn)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Run(context.Background(), []Message{{Role: RoleUser, Text: "one"}}, nil)
+	r.Run(context.Background(), []Message{{Role: RoleUser, Text: "two"}}, nil)
+
+	reqs := stub.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(reqs))
+	}
+	if reqs[0].Instructions != "dynamic-1" {
+		t.Errorf("turn 1 instructions = %q, want dynamic-1 (func overrides static)", reqs[0].Instructions)
+	}
+	if reqs[1].Instructions != "dynamic-2" {
+		t.Errorf("turn 2 instructions = %q, want dynamic-2 (recomputed per turn)", reqs[1].Instructions)
+	}
+}
+
 func TestRunnerSingleStepText(t *testing.T) {
 	stub := NewStubProvider(StubTurn{Deltas: []Delta{
 		{Kind: DeltaText, Text: "Hello "},
