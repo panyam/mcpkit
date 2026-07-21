@@ -74,6 +74,11 @@ type App struct {
 	// commands is the slash-command registry every surface dispatches
 	// through (Dispatch / Commands). Built in NewApp.
 	commands *CommandRegistry
+
+	// overlay persists mutable config picks (active connection, approval
+	// mode) back to a local-overlay file when WithConfigOverlay is set; nil
+	// means runtime changes are session-only.
+	overlay *configOverlay
 }
 
 // AppOption customizes construction. The provider override exists so tests
@@ -90,6 +95,7 @@ type appOptions struct {
 	memoryStore     agent.MemoryStore
 	providerBuilder ProviderBuilder
 	observers       []Observer
+	configPath      string
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -114,6 +120,18 @@ func WithTracerProvider(tp core.TracerProvider) AppOption {
 // routes here. Nil discards.
 func WithLogger(l *slog.Logger) AppOption {
 	return func(o *appOptions) { o.logger = l }
+}
+
+// WithConfigOverlay enables runtime-config persistence: mutable picks changed
+// via slash commands (the /provider active connection and the /approve mode)
+// are written back to the sibling local-overlay file derived from configPath
+// (kitchen-sink.json -> kitchen-sink.local.json), so they survive a restart
+// once the launcher loads the config with LoadConfigWithOverlay. configPath is
+// the base config path, not the overlay path. Without this option the picks are
+// session-only. A persist failure degrades to a warning, never a failed
+// command (mirrors the RunStore persistence contract).
+func WithConfigOverlay(configPath string) AppOption {
+	return func(o *appOptions) { o.configPath = configPath }
 }
 
 // NewApp connects every configured server and assembles the agent. The
@@ -142,6 +160,9 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
+	if o.configPath != "" {
+		app.overlay = &configOverlay{path: overlayPathFor(o.configPath)}
+	}
 	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
 	// gated tool call never stacks a dialog against a concurrent elicitation.
 	ask := func(ctx context.Context, req agent.ApprovalRequest) (bool, error) {

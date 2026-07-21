@@ -30,10 +30,10 @@ func TestEnvOverridesFlagDefaults(t *testing.T) {
 // TestBuildConfigRequiresModelOrConfig pins the CLI's quick-start guard
 // (moved here from the host config test when App core was extracted).
 func TestBuildConfigRequiresModelOrConfig(t *testing.T) {
-	if _, err := buildConfig("", nil, "b", "", "", "", 0); err == nil {
+	if _, err := buildConfig("", false, nil, "b", "", "", "", 0); err == nil {
 		t.Fatal("want error when neither config nor url/model given")
 	}
-	cfg, err := buildConfig("", []string{"http://x/mcp"}, "b", "m", "", "sys", 0)
+	cfg, err := buildConfig("", false, []string{"http://x/mcp"}, "b", "m", "", "sys", 0)
 	if err != nil || len(cfg.Servers) != 1 || cfg.Model.Model != "m" {
 		t.Fatalf("valid quick-start config: %+v %v", cfg, err)
 	}
