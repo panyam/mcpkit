@@ -66,6 +66,37 @@ func (c *Client) LoadIndex(ctx context.Context, idx Index) []LoadedSkill {
 // all-failed batch renders to the empty string so callers can append the
 // result unconditionally. Ordering follows the input, which LoadAll already
 // made deterministic.
+// CatalogBlock renders a compact catalog of a server's skills — one line per
+// skill-md entry (name + description), the two-tier alternative to
+// InstructionsBlock's full-body injection (issue 910). It tells the model what
+// skills exist for roughly a tenth of the tokens; the body is fetched on demand
+// via a host load_skill tool. Archive entries are omitted (host-decided
+// extraction, like InstructionsBlock). Returns "" when there are no skill-md
+// entries.
+func CatalogBlock(idx Index) string {
+	var b strings.Builder
+	for _, e := range idx.Skills {
+		if e.Type != SkillTypeSkillMD {
+			continue
+		}
+		name := e.Name
+		if name == "" {
+			name = e.URL
+		}
+		if e.Description != "" {
+			fmt.Fprintf(&b, "- %s: %s\n", name, e.Description)
+		} else {
+			fmt.Fprintf(&b, "- %s\n", name)
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "## Skills (catalog)\n\nThese skills are available. Call load_skill(name) to read a skill's full instructions before using it.\n\n" + b.String()
+}
+
+// InstructionsBlock renders the full SKILL.md body of every successfully loaded
+// skill for eager injection into the system prompt.
 func InstructionsBlock(loaded []LoadedSkill) string {
 	var b strings.Builder
 	for _, ls := range loaded {
