@@ -80,7 +80,9 @@ terminal, else `plain`), `tui` (inline), `notebook` (alt-screen), or `plain`
 - **`tui`** (inline): finished output commits to the terminal's own scrollback,
   so native scroll, copy/paste, and a transcript that survives exit all work.
 - **`notebook`** (alt-screen): a managed viewport with its own scroll and a
-  transcript of **collapsible cells** (one per turn / command / info line). Two
+  transcript of **collapsible cells** — the assistant text, each tool call
+  (parallel calls group into one), and command / info lines each fold on their
+  own. Two
   modes: **INS** (default) types into the input — `esc` enters **NAV**, where
   `↑↓`/`jk` move a cell cursor, `space` folds/unfolds, `g`/`G` jump to ends, and
   `esc`/`i` return to INS. `pgup`/`pgdn` and the mouse wheel scroll; in INS,
