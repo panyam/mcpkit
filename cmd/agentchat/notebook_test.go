@@ -31,7 +31,7 @@ func TestNBLabelFor(t *testing.T) {
 }
 
 func TestNotebook_CellAppendedAndRendered(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, nbCellMsg{label: "assistant", body: "hi\nthere"})
 	if len(m.cells) != 1 {
 		t.Fatalf("cells = %d, want 1", len(m.cells))
@@ -46,7 +46,7 @@ func TestNotebook_CellAppendedAndRendered(t *testing.T) {
 }
 
 func TestNotebook_FoldToggleInNav(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, nbCellMsg{label: "assistant", body: "long answer here"})
 	// Esc enters nav mode selecting the last cell.
 	m = send(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -70,7 +70,7 @@ func TestNotebook_FoldToggleInNav(t *testing.T) {
 }
 
 func TestNotebook_KeysCommandAddsInfoCell(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	nm, _ := m.submit("/keys")
 	m = nm.(notebookModel)
 	if len(m.cells) != 1 || m.cells[0].label != "info" {
@@ -82,7 +82,7 @@ func TestNotebook_KeysCommandAddsInfoCell(t *testing.T) {
 }
 
 func TestNotebook_LiveRendersAtBottom(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, nbLiveMsg("streaming answer"))
 	out := m.renderCells()
 	if !strings.Contains(out, "▾ assistant") || !strings.Contains(out, "  streaming answer") {
@@ -103,7 +103,7 @@ func TestUIMode(t *testing.T) {
 }
 
 func TestNotebook_EnterSubmitsAndViewRenders(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 80, Height: 24}) // sets ready + viewport size
 	m.ta.SetValue("/keys")
 	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -116,7 +116,7 @@ func TestNotebook_EnterSubmitsAndViewRenders(t *testing.T) {
 }
 
 func TestNotebook_UpArrowScrollsWhenNoHistory(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 60, Height: 8}) // small viewport (~4 rows)
 	// add enough content to overflow the viewport
 	for i := 0; i < 6; i++ {
@@ -133,7 +133,7 @@ func TestNotebook_UpArrowScrollsWhenNoHistory(t *testing.T) {
 }
 
 func TestNotebook_RuleBetweenCells(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
 	m = send(m, nbCellMsg{label: "you", body: "hi"})
 	if strings.Contains(m.renderCells(), "─") {
@@ -156,7 +156,7 @@ func TestPromptArea_NewlineOffEnter(t *testing.T) {
 }
 
 func TestNotebook_CtrlJInsertsNewline(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
 	m.ta.SetValue("abc")
 	m.ta.CursorEnd()
@@ -167,7 +167,7 @@ func TestNotebook_CtrlJInsertsNewline(t *testing.T) {
 }
 
 func TestNotebook_UpMovesWithinPromptFirst(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
 	m.ta.SetValue("line1\nline2")
 	m.ta.CursorEnd()
@@ -181,7 +181,7 @@ func TestNotebook_UpMovesWithinPromptFirst(t *testing.T) {
 }
 
 func TestNotebook_PromptAutoGrowsAndClamps(t *testing.T) {
-	m := newNotebookModel(nil, nil, 4) // maxLines = 4
+	m := newNotebookModel(nil, nil, 4, 0) // maxLines = 4
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 30})
 	if h := m.ta.Height(); h != 1 {
 		t.Fatalf("empty prompt height = %d, want 1", h)
@@ -208,7 +208,7 @@ func TestNotebook_PromptAutoGrowsAndClamps(t *testing.T) {
 }
 
 func TestNotebook_FirstPromptLineStaysVisible(t *testing.T) {
-	m := newNotebookModel(nil, nil, 20)
+	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 30})
 	typ := func(s string) { m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}) }
 	nl := func() { m = send(m, tea.KeyMsg{Type: tea.KeyCtrlJ}) }

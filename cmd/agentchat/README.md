@@ -51,6 +51,16 @@ startup when a named variable is unset. A per-server `allow` list is a
 capability boundary (a FilterSource): tools outside it are neither offered to
 the model nor callable.
 
+## Status line
+
+Both TUI surfaces show a persistent status line (kept in the managed live
+region, never committed to scrollback): `model <active> · session <id> · ctx
+<in>↑ <out>↓ tok`, where the token counts come from the last turn's streamed
+`Usage`. Pass `--context-window <tokens>` to add a `N% context left` gauge
+(context exhaustion is the top silent failure). This is the first slice of the
+TUI layout track (#1063 D1/D2); collapsible tool cells (B4) already shipped with
+`--ui notebook`.
+
 ## Prompt editing keys (TUI)
 
 The input line supports readline-style editing. `/keys` prints this cheatsheet
