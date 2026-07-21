@@ -34,6 +34,15 @@ type RunnerConfig struct {
 	// Instructions is the system prompt sent on every step.
 	Instructions string
 
+	// InstructionsFunc, when non-nil, is called once at the top of each turn to
+	// compute that turn's system prompt, overriding the static Instructions. It
+	// lets the prompt track dynamic state — the set of currently-connected
+	// servers whose eager skills belong in the prompt, the date, injected
+	// context — instead of being frozen at construction. Recomputed per turn
+	// (not per step), so the prompt is stable within a turn and a provider
+	// cache only breaks when the value actually changes.
+	InstructionsFunc func(context.Context) string
+
 	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
 	MaxSteps int
 
@@ -225,6 +234,13 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 	defer turnSpan.End()
 	emit(Event{Kind: EventTurnBegin})
 
+	// The system prompt is resolved once per turn (dynamic when InstructionsFunc
+	// is set), then reused across this turn's steps.
+	turnInstructions := r.cfg.Instructions
+	if r.cfg.InstructionsFunc != nil {
+		turnInstructions = r.cfg.InstructionsFunc(ctx)
+	}
+
 	msgs := slices.Clone(history)
 	if r.cfg.Compactor != nil {
 		before := len(msgs)
@@ -263,7 +279,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 		stepSpan.SetAttribute("agent.tools.offered", fmt.Sprint(len(tools)))
 
 		stream, err := r.cfg.Provider.Stream(stepCtx, ProviderRequest{
-			Instructions: r.cfg.Instructions,
+			Instructions: turnInstructions,
 			Messages:     msgs,
 			Tools:        tools,
 		})
@@ -292,7 +308,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			stepSpan.End()
 			var structured core.RawJSON
 			if r.cfg.ResponseSchema.Len() > 0 {
-				s, err := r.finalizeStructured(ctx, msgs, &usage)
+				s, err := r.finalizeStructured(ctx, turnInstructions, msgs, &usage)
 				if err != nil {
 					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: structured finalize: %w", err))
 				}
@@ -384,11 +400,11 @@ const structuredMaxAttempts = 2
 // aborts (the caller asked for structured output and cannot get it); after the
 // retry budget it returns the last output best-effort so a caller's Bind, not
 // a lost turn, surfaces a still-malformed document.
-func (r *Runner) finalizeStructured(ctx context.Context, msgs []Message, usage *Usage) (core.RawJSON, error) {
+func (r *Runner) finalizeStructured(ctx context.Context, instructions string, msgs []Message, usage *Usage) (core.RawJSON, error) {
 	var last string
 	for attempt := 0; attempt < structuredMaxAttempts; attempt++ {
 		resp, err := r.cfg.Provider.Generate(ctx, ProviderRequest{
-			Instructions:   r.cfg.Instructions,
+			Instructions:   instructions,
 			Messages:       msgs,
 			ResponseSchema: r.cfg.ResponseSchema,
 		})
