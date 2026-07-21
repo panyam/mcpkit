@@ -359,6 +359,18 @@ type ServerConfig struct {
 	// (auto — eager below a small skill count, catalog at/above). Progressive
 	// disclosure keeps a large skill set from bloating every request. Ignored
 	// when Skills is false.
+	//
+	// Mode is also the trust lever for a lower-trust skills server. Skills are
+	// data, not code (ext/skills is enforced no-exec), so the risk they carry
+	// is context-poisoning: a skill body is text the model reads as guidance.
+	// "eager" splices that text into the system prompt at connect time, with no
+	// per-skill gate. "catalog" is the safer default for a server you do not
+	// fully trust: a skill enters context only when the model calls load_skill,
+	// and load_skill is an ordinary tool, so it flows through the same approval
+	// ladder as every other call (set Approval.Rules["load_skill"] = "ask" to
+	// confirm each activation; the prompt shows the requested skill name). The
+	// fetched body also lands in tool history rather than the system prompt, so
+	// it carries less authority. Reserve "eager" for servers you trust.
 	SkillsMode string `json:"skillsMode,omitempty"`
 
 	// Events lists the event streams to open on this server. Each event
