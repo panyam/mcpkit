@@ -2,7 +2,7 @@
 #
 # Quick start:
 #   just allup     # bring up postgres+pgvector and the observability stack
-#   just run       # preflight, boot the demo server, launch agentchat
+#   just run       # preflight, boot the demo + skills + events servers, launch agentchat
 #   just alldown   # tear the stacks back down
 #
 # Every store/endpoint below is a variable: override on the CLI or via env,
@@ -54,7 +54,8 @@ check:
 # Alias for check.
 preflight: check
 
-# Preflight, boot the demo server, launch agentchat with everything wired.
+# Preflight, boot the four MCP servers (demo + eager/catalog skills + events),
+# then launch agentchat with everything wired.
 run:
     @bash run.sh
 
