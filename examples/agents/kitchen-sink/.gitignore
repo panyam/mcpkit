@@ -1,3 +1,7 @@
 # Runtime-config overlay: mutable picks (/provider, /approve) persisted by
 # --persist-config. Machine-local, merged over kitchen-sink.json at startup.
 kitchen-sink.local.json
+
+# MCP server process state: built binaries, PID files, and logs written by
+# servers.sh (just servers-up). Machine-local, never committed.
+.servers/
