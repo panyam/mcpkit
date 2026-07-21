@@ -373,6 +373,14 @@ type ServerConfig struct {
 	// it carries less authority. Reserve "eager" for servers you trust.
 	SkillsMode string `json:"skillsMode,omitempty"`
 
+	// SkillsAllow, when non-empty, restricts this server to the named skills
+	// (by skill Name), a hard capability boundary rather than a display
+	// preference. The fetched index is narrowed to the allowed entries before
+	// anything else, so both the injected block (eager or catalog) and the
+	// load_skill tool only ever see allowed skills. Nil or empty means every
+	// skill the server advertises. This is the skills analog of Allow.
+	SkillsAllow []string `json:"skillsAllow,omitempty"`
+
 	// Events lists the event streams to open on this server. Each event
 	// feeds the injection policy (and any trigger bindings that match).
 	Events []EventConfig `json:"events,omitempty"`

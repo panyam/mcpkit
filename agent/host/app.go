@@ -212,7 +212,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		if sc.Skills != nil && !*sc.Skills {
 			continue
 		}
-		block, cat, err := loadSkillsForServer(app.clients[i], sc.ID, sc.SkillsMode, app.emit, o.tp)
+		block, cat, err := loadSkillsForServer(app.clients[i], sc.ID, sc.SkillsMode, sc.SkillsAllow, app.emit, o.tp)
 		if err != nil {
 			app.Close()
 			return nil, err

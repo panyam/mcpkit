@@ -48,14 +48,40 @@ func resolveSkillsMode(mode string, idx skills.Index) string {
 	}
 }
 
+// filterSkillsAllow narrows an index to only the entries whose Name is in the
+// allow list, a hard capability boundary applied before mode resolution so both
+// the injected block and the load_skill tool see only allowed skills. An empty
+// (or nil) allow list is a passthrough that returns the index unchanged. The
+// match is exact by Name and covers every entry type, though only skill-md
+// entries reach the model downstream. Original entry order is preserved.
+func filterSkillsAllow(idx skills.Index, allow []string) skills.Index {
+	if len(allow) == 0 {
+		return idx
+	}
+	want := make(map[string]struct{}, len(allow))
+	for _, name := range allow {
+		want[name] = struct{}{}
+	}
+	var kept []skills.IndexEntry
+	for _, e := range idx.Skills {
+		if _, ok := want[e.Name]; ok {
+			kept = append(kept, e)
+		}
+	}
+	return skills.NewIndex(kept...)
+}
+
 // loadSkillsForServer fetches a server's skill index and returns the system-
 // prompt block plus, in catalog mode, the entries the load_skill tool serves.
 // Servers without the skills capability return empty silently; a fetchable
 // index that fails is a startup error (the server advertised skills and the
-// host could not honor them). Eager mode injects full bodies (digest-verified;
-// per-skill failures warn and are excluded); catalog mode injects only
-// name+description and defers bodies to load_skill.
-func loadSkillsForServer(c *client.Client, serverID, mode string, emit func(HostEvent), tp core.TracerProvider) (string, []catalogSkill, error) {
+// host could not honor them). When skillsAllow is non-empty the index is
+// narrowed to those skills first, so every downstream step (mode resolution,
+// eager bodies, catalog, load_skill) operates on the allowed set only. Eager
+// mode injects full bodies (digest-verified; per-skill failures warn and are
+// excluded); catalog mode injects only name+description and defers bodies to
+// load_skill.
+func loadSkillsForServer(c *client.Client, serverID, mode string, skillsAllow []string, emit func(HostEvent), tp core.TracerProvider) (string, []catalogSkill, error) {
 	sc := skills.NewClient(c, skills.WithTracerProvider(tp))
 	if !sc.SupportsSkills() {
 		return "", nil, nil
@@ -64,6 +90,7 @@ func loadSkillsForServer(c *client.Client, serverID, mode string, emit func(Host
 	if err != nil {
 		return "", nil, fmt.Errorf("agentchat: skills index from %s: %w", serverID, err)
 	}
+	idx = filterSkillsAllow(idx, skillsAllow)
 
 	if resolveSkillsMode(mode, idx) == "catalog" {
 		var cat []catalogSkill
