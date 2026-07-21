@@ -194,6 +194,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
 	fl.String("active", "", "override the active chat connection at startup (a name in the config's connections; default = the config's active)")
+	fl.Bool("persist-config", false, "persist runtime picks (/provider, /approve) to a sibling <config>.local.json overlay, merged over the base config on the next start (needs --config)")
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
 	fl.String("session", "", "session run ID to create or resume at startup (needs --session-store)")
 	fl.String("ui", "auto", "interface: auto (TUI when interactive) | tui (inline) | notebook (alt-screen, foldable cells) | plain")
@@ -223,8 +224,11 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 }
 
 func runChat(v *viper.Viper) error {
+	configPath := v.GetString("config")
+	persistConfig := v.GetBool("persist-config") && configPath != ""
 	cfg, err := buildConfig(
-		v.GetString("config"),
+		configPath,
+		persistConfig,
 		v.GetStringSlice("url"),
 		v.GetString("base-url"),
 		v.GetString("model"),
@@ -265,6 +269,9 @@ func runChat(v *viper.Viper) error {
 	appOpts := []host.AppOption{
 		host.WithTracerProvider(tp),
 		host.WithLogger(logger),
+	}
+	if persistConfig {
+		appOpts = append(appOpts, host.WithConfigOverlay(configPath))
 	}
 	mode := uiMode(v.GetString("ui"))
 	var surface *tuiObserver
@@ -380,8 +387,13 @@ func main() {
 
 // buildConfig merges the config file with quick-start settings: a config
 // file wins for everything it specifies; url/model cover the no-file case.
-func buildConfig(path string, urls []string, baseURL, model, apiKeyEnv, instructions string, maxSteps int) (*host.Config, error) {
+func buildConfig(path string, persist bool, urls []string, baseURL, model, apiKeyEnv, instructions string, maxSteps int) (*host.Config, error) {
 	if path != "" {
+		if persist {
+			// Merge the sibling <config>.local.json overlay (the runtime picks
+			// persisted by /provider and /approve) over the base config.
+			return host.LoadConfigWithOverlay(path)
+		}
 		return host.LoadConfig(path)
 	}
 	if len(urls) == 0 || model == "" {

@@ -71,6 +71,7 @@ echo "==> launching agentchat (session=$SESSION, store=$SESSION_STORE)"
 cd "$ROOT/cmd/agentchat"
 args=(
 	--config "$DIR/kitchen-sink.json"
+	--persist-config
 	--session-store "$SESSION_STORE"
 	--session "$SESSION"
 	--offload-threshold "$OFFLOAD_THRESHOLD"

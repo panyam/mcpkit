@@ -1,0 +1,3 @@
+# Runtime-config overlay: mutable picks (/provider, /approve) persisted by
+# --persist-config. Machine-local, merged over kitchen-sink.json at startup.
+kitchen-sink.local.json
