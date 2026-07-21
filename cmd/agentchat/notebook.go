@@ -126,6 +126,9 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 		s.term.On(ev)
 		msgs = append(msgs, nbCellMsg{label: nbLabelFor(ev.Kind), body: seg()})
 		s.buf.Reset()
+		if ev.Kind == host.HostTurnDone && ev.Result != nil {
+			msgs = append(msgs, usageMsg{in: ev.Result.Usage.InputTokens, out: ev.Result.Usage.OutputTokens})
+		}
 	}
 	return msgs
 }
@@ -166,7 +169,9 @@ type notebookModel struct {
 	history []string
 	histIdx int
 
-	maxLines      int // input auto-grows up to this many rows (0 = default)
+	maxLines      int      // input auto-grows up to this many rows (0 = default)
+	usage         usageMsg // last turn's tokens, for the status line
+	window        int      // context window for the "N% left" gauge (0 = off)
 	width, height int
 	ready         bool
 }
@@ -175,11 +180,11 @@ type notebookModel struct {
 // is unset.
 const defaultNotebookMaxLines = 20
 
-func newNotebookModel(app *host.App, surface *nbObserver, maxLines int) notebookModel {
+func newNotebookModel(app *host.App, surface *nbObserver, maxLines, window int) notebookModel {
 	if maxLines <= 0 {
 		maxLines = defaultNotebookMaxLines
 	}
-	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), atBottom: true, maxLines: maxLines}
+	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), atBottom: true, maxLines: maxLines, window: window}
 	m.histIdx = 0
 	return m
 }
@@ -203,7 +208,7 @@ func (m *notebookModel) relayout() {
 	}
 	m.ta.SetWidth(m.width)
 	m.ta.SetHeight(ih)
-	vpH := m.height - ih - 2 // status line + separator
+	vpH := m.height - ih - 3 // 2-line status + separator
 	if vpH < 1 {
 		vpH = 1
 	}
@@ -239,6 +244,10 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case turnDoneMsg:
 		m.running = false
+		return m, nil
+
+	case usageMsg:
+		m.usage = msg
 		return m, nil
 
 	case tea.MouseMsg:
@@ -372,12 +381,13 @@ func (m notebookModel) statusBar() string {
 	if m.nav {
 		hint = "NAV  ↑↓/jk select · space fold · g/G ends · esc/i type"
 	} else {
-		hint = "INS  enter send · ctrl+j newline · ↑↓ prompt/history/scroll · pgup/pgdn/wheel · esc fold"
+		hint = "INS  enter send · ctrl+j newline · ↑↓ scroll · esc fold"
 	}
 	if m.running {
 		hint = "working…  " + hint
 	}
-	return lipgloss.NewStyle().Faint(true).Render(hint)
+	// Two-line status: the persistent model/session/context line, then keys.
+	return lipgloss.NewStyle().Faint(true).Render(statusLine(m.app, m.usage, m.window) + "\n" + hint)
 }
 
 // refresh rebuilds the viewport content from the cells (+ the live turn) and,
@@ -521,8 +531,8 @@ func (m *notebookModel) recallHistory(dir int) bool {
 
 // runNotebook starts the alt-screen notebook program with mouse support.
 // maxLines caps the auto-growing prompt.
-func runNotebook(app *host.App, surface *nbObserver, maxLines int) error {
-	prog := tea.NewProgram(newNotebookModel(app, surface, maxLines), tea.WithAltScreen(), tea.WithMouseCellMotion())
+func runNotebook(app *host.App, surface *nbObserver, maxLines, window int) error {
+	prog := tea.NewProgram(newNotebookModel(app, surface, maxLines, window), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	surface.prog = prog
 	_, err := prog.Run()
 	return err
