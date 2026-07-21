@@ -260,6 +260,64 @@ func TestView_DoesNotBlockDuringTurn(t *testing.T) {
 	<-turnDone
 }
 
+// stubMD marks a span so a test can see which blocks took the glamour path
+// (prose) versus which passed through verbatim (tool/thinking meta lines).
+func stubMD(s string) string { return "MD{" + s + "}" }
+
+// tuiCommit drives the observer through a turn and returns the committed
+// segment (the string handed to tea.Println at the boundary).
+func tuiCommit(obs *tuiObserver, evs ...host.HostEvent) string {
+	var commit string
+	for _, ev := range evs {
+		for _, m := range obs.fold(ev) {
+			if c, ok := m.(commitMsg); ok {
+				commit = string(c)
+			}
+		}
+	}
+	return commit
+}
+
+func TestTUIObserver_GlamoursProseKeepsToolLinesVerbatim(t *testing.T) {
+	obs := newTUIObserver()
+	obs.renderMD = stubMD
+
+	commit := tuiCommit(obs,
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "before **tool**"}),
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "after"}),
+		turnDoneEv(),
+	)
+
+	// both prose runs went through glamour...
+	if !strings.Contains(commit, "MD{before **tool**}") {
+		t.Fatalf("prose-before-tool not glamoured:\n%s", commit)
+	}
+	if !strings.Contains(commit, "MD{after}") {
+		t.Fatalf("prose-after-tool not glamoured:\n%s", commit)
+	}
+	// ...but the tool lines stayed verbatim (not wrapped in MD{})
+	if !strings.Contains(commit, "greet") {
+		t.Fatalf("tool line dropped from commit:\n%s", commit)
+	}
+	if strings.Contains(commit, "MD{⚙") || strings.Contains(commit, "MD{  ✓") {
+		t.Fatalf("tool line was glamoured (should be verbatim):\n%s", commit)
+	}
+}
+
+func TestTUIObserver_TextOnlyTurnIsGlamoured(t *testing.T) {
+	obs := newTUIObserver()
+	obs.renderMD = stubMD
+	commit := tuiCommit(obs,
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "# Title"}),
+		turnDoneEv(),
+	)
+	if !strings.Contains(commit, "MD{# Title}") {
+		t.Fatalf("plain-prose turn not glamoured at commit:\n%s", commit)
+	}
+}
+
 func TestKeyMap_CtrlRightMovesByWord(t *testing.T) {
 	m := newTUIModel(nil, nil, 0)
 	m.ta.SetValue("one two three")

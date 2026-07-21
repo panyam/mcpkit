@@ -31,10 +31,14 @@ type nbCellMsg nbCell
 // cell) so it renders live at the bottom.
 type nbLiveMsg string
 
-// nbCell is one collapsible block in the transcript.
+// nbCell is one collapsible block in the transcript. rendered holds the
+// glamour-formatted body for assistant cells (issue 1063 B2); body stays the
+// raw text so the collapsed snippet and fold logic read plainly. Empty
+// rendered means "display body verbatim" (tool / info / user cells).
 type nbCell struct {
 	label     string // "you" / "assistant" / "command" / "info" / "error"
 	body      string
+	rendered  string
 	collapsed bool
 }
 
@@ -49,6 +53,9 @@ type nbObserver struct {
 	term host.Observer
 	prog *tea.Program
 
+	md       *mdRenderer
+	renderMD func(string) string // == md.render; swapped in tests
+
 	// openTools/toolLabel track the current tool cell: a turn is split so each
 	// tool call (or a parallel batch) folds on its own, with the text before/
 	// after as separate assistant cells. openTools counts in-flight calls so
@@ -59,7 +66,41 @@ type nbObserver struct {
 
 func newNBObserver() *nbObserver {
 	buf := &bytes.Buffer{}
-	return &nbObserver{buf: buf, term: host.NewTerminalRenderer(buf)}
+	md := newMDRenderer()
+	return &nbObserver{buf: buf, term: host.NewTerminalRenderer(buf), md: md, renderMD: md.render}
+}
+
+// setWidth fans the terminal width to the markdown renderer so assistant cells
+// word-wrap to the current width (called from tea.WindowSizeMsg).
+func (s *nbObserver) setWidth(w int) { s.md.setWidth(w) }
+
+// cell builds a boundary cell, rendering assistant prose through glamour once
+// (issue 1063 B2). Non-assistant cells (tools, commands, info) pass through.
+// Used for the text-before-a-tool assistant cell, which carries no footer.
+func (s *nbObserver) cell(label, body string) nbCellMsg {
+	c := nbCellMsg{label: label, body: strings.TrimRight(body, "\n")}
+	if label == "assistant" {
+		c.rendered = s.renderMD(c.body)
+	}
+	return c
+}
+
+// assistantCell builds the turn-final assistant cell: the accumulated prose
+// rendered through glamour (issue 1063 B2), with the dim turn footer kept
+// verbatim after it — glamour must never see the ANSI footer.
+func (s *nbObserver) assistantCell(prose, footer string) nbCellMsg {
+	prose = strings.TrimRight(prose, "\n")
+	footer = strings.TrimRight(footer, "\n")
+	body, rendered := prose, s.renderMD(prose)
+	if footer != "" {
+		if body != "" {
+			body += "\n"
+			rendered += "\n"
+		}
+		body += footer
+		rendered += footer
+	}
+	return nbCellMsg{label: "assistant", body: body, rendered: rendered}
 }
 
 func (s *nbObserver) On(ev host.HostEvent) {
@@ -92,7 +133,7 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 		if re.Kind == agent.EventToolBegin {
 			if s.openTools == 0 {
 				if txt := seg(); txt != "" {
-					msgs = append(msgs, nbCellMsg{label: "assistant", body: txt})
+					msgs = append(msgs, s.cell("assistant", txt))
 				}
 				s.buf.Reset()
 				s.toolLabel = "⚙"
@@ -113,7 +154,7 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 				s.openTools--
 			}
 			if s.openTools == 0 {
-				msgs = append(msgs, nbCellMsg{label: s.toolLabel, body: seg()})
+				msgs = append(msgs, s.cell(s.toolLabel, seg()))
 				s.buf.Reset()
 			} else {
 				msgs = append(msgs, nbLiveMsg(seg()))
@@ -123,8 +164,17 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 		}
 	} else {
 		// non-runner event = a discrete boundary (turn done, command, info)
+		before := s.buf.Len()
 		s.term.On(ev)
-		msgs = append(msgs, nbCellMsg{label: nbLabelFor(ev.Kind), body: seg()})
+		if nbLabelFor(ev.Kind) == "assistant" {
+			// The assistant's prose accumulated before this event; the event's
+			// own output is the dim turn footer. Split them so glamour renders
+			// only the prose, never the ANSI footer.
+			full := s.buf.String()
+			msgs = append(msgs, s.assistantCell(full[:before], full[before:]))
+		} else {
+			msgs = append(msgs, s.cell(nbLabelFor(ev.Kind), seg()))
+		}
 		s.buf.Reset()
 		if ev.Kind == host.HostTurnDone && ev.Result != nil {
 			msgs = append(msgs, usageMsg{in: ev.Result.Usage.InputTokens, out: ev.Result.Usage.OutputTokens})
@@ -230,6 +280,9 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.surface != nil {
+			m.surface.setWidth(msg.Width)
+		}
 		m.relayout()
 		m.refresh()
 		return m, nil
@@ -439,7 +492,11 @@ func (m notebookModel) renderCells() string {
 		b.WriteString(header)
 		b.WriteString("\n")
 		if !c.collapsed && c.body != "" {
-			b.WriteString(indentBlock(c.body))
+			display := c.body
+			if c.rendered != "" {
+				display = c.rendered
+			}
+			b.WriteString(indentBlock(display))
 			b.WriteString("\n")
 		}
 	}
