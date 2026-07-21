@@ -5,7 +5,7 @@
 # semantic pgvector memory, compaction, OTel traces, and two sub-agent personas
 # (from kitchen-sink.json).
 #
-# Every knob is an env var with a Make/just default, so `just run` and
+# Every knob is an env var with a just default, so `just run` and
 # `SESSION=foo EMBED_DIM=1536 just run` both work. The chat model comes from
 # kitchen-sink.json's connections block; only the embedder is set by flag.
 set -euo pipefail
