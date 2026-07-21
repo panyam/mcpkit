@@ -45,6 +45,22 @@ func TestNotebook_CellAppendedAndRendered(t *testing.T) {
 	}
 }
 
+func TestNotebook_RenderedBodyDisplayedRawUsedForSnippet(t *testing.T) {
+	m := newNotebookModel(nil, nil, 20, 0)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
+	m = send(m, nbCellMsg{label: "assistant", body: "raw text", rendered: "STYLED text"})
+
+	out := m.renderCells()
+	if !strings.Contains(out, "STYLED text") || strings.Contains(out, "raw text") {
+		t.Fatalf("expanded cell should show rendered body, not raw:\n%s", out)
+	}
+	// collapsed snippet comes from the raw body (folding/snippet read plainly)
+	m.cells[0].collapsed = true
+	if snip := m.renderCells(); !strings.Contains(snip, "· raw text") {
+		t.Fatalf("collapsed snippet should use raw body:\n%s", snip)
+	}
+}
+
 func TestNotebook_FoldToggleInNav(t *testing.T) {
 	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, nbCellMsg{label: "assistant", body: "long answer here"})
@@ -263,6 +279,44 @@ func TestNBObserver_ToolBecomesOwnCell(t *testing.T) {
 	}
 	if cells[2].label != "assistant" || !strings.Contains(cells[2].body, "all done") {
 		t.Fatalf("cell 2 = %+v, want trailing assistant cell", cells[2])
+	}
+}
+
+func TestNBObserver_AssistantCellsGlamouredToolCellsVerbatim(t *testing.T) {
+	obs := newNBObserver()
+	obs.renderMD = func(s string) string { return "MD{" + s + "}" }
+	var cells []nbCell
+	for _, ev := range []host.HostEvent{
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "hello"}),
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "all done"}),
+		turnDoneEv(),
+	} {
+		for _, m := range obs.render(ev) {
+			if c, ok := m.(nbCellMsg); ok {
+				cells = append(cells, nbCell(c))
+			}
+		}
+	}
+	if len(cells) != 3 {
+		t.Fatalf("want text / tool / text cells, got %d: %+v", len(cells), cells)
+	}
+	// the pre-tool assistant cell is pure prose, glamoured, raw body preserved
+	if cells[0].label != "assistant" || cells[0].rendered != "MD{hello}" || cells[0].body != "hello" {
+		t.Fatalf("pre-tool assistant cell wrong: %+v", cells[0])
+	}
+	// the tool cell is passed through verbatim
+	if !strings.HasPrefix(cells[1].label, "⚙") || cells[1].rendered != "" {
+		t.Fatalf("tool cell should not be glamoured: %+v", cells[1])
+	}
+	// the turn-final assistant cell glamours the prose but keeps the dim footer
+	// (which carries ANSI) out of the glamour input
+	if cells[2].label != "assistant" || !strings.Contains(cells[2].rendered, "MD{all done}") {
+		t.Fatalf("turn-final assistant cell not glamoured: %+v", cells[2])
+	}
+	if strings.Contains(cells[2].rendered, "MD{all done\n") || strings.Contains(cells[2].rendered, "step(s)}") {
+		t.Fatalf("footer leaked into the glamour input: %q", cells[2].rendered)
 	}
 }
 
