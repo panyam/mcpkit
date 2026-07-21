@@ -9,10 +9,10 @@
 # shared with the Makefile). The -pg / -real variants delegate to the
 # sub-module recipes that boot Docker containers.
 #
-# Two of the sub-suites live under `examples/events/` rather than
-# `experimental/`, but they're conceptually part of the experimental
-# events POC (they're demo apps consuming the experimental library), so
-# they're orchestrated here next to the library tests.
+# The discord/telegram example suites moved to examples/justfile (they test
+# example apps, not the experimental library — issue 688). The recipes below
+# are kept as aliases delegating there, so testall's per-suite timing (7a–7e)
+# and any CI script referencing the old names keep working.
 
 EXPERIMENTAL_DIR := justfile_directory()
 
@@ -44,12 +44,13 @@ test-events-stores-redis-real:
     just -f {{EXPERIMENTAL_DIR}}/ext/events/stores/redis/justfile testredis
 
 # Run experimental events Discord example tests
+# (alias) Discord example tests — moved to examples/justfile (issue 688)
 test-events-discord:
-    @bash {{EXPERIMENTAL_DIR}}/scripts/test-events-discord.sh
+    just -f {{EXPERIMENTAL_DIR}}/../examples/justfile test-events-discord
 
-# Run experimental events Telegram example tests
+# (alias) Telegram example tests — moved to examples/justfile (issue 688)
 test-events-telegram:
-    @bash {{EXPERIMENTAL_DIR}}/scripts/test-events-telegram.sh
+    just -f {{EXPERIMENTAL_DIR}}/../examples/justfile test-events-telegram
 
 # Show available recipes
 help:
