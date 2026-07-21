@@ -50,6 +50,8 @@ const (
 	CmdTasks CmdKind = "tasks"
 	// CmdApproval reports the approval policy (Approval; nil = gate off).
 	CmdApproval CmdKind = "approval"
+	// CmdServers lists the MCP servers and their connection state (Servers).
+	CmdServers CmdKind = "servers"
 	// CmdQuit signals the loop to exit (Quit true).
 	CmdQuit CmdKind = "quit"
 )
@@ -74,6 +76,7 @@ type CmdResult struct {
 	Approval       *agent.TieredApproval
 	Sessions       []agent.RunInfo
 	SessionsNote   string
+	Servers        []client.MemberStatus
 	Quit           bool
 }
 
@@ -231,6 +234,15 @@ func (a *App) registerBuiltinCommands() {
 				})
 			}
 			return CmdResult{Kind: CmdApproval, Approval: a.approval}, nil
+		}})
+
+	r.Register(&Command{Name: "servers", Help: "list MCP servers and their connection state",
+		Run: func(context.Context, string) (CmdResult, error) {
+			var st []client.MemberStatus
+			if a.group != nil {
+				st = a.group.Status()
+			}
+			return CmdResult{Kind: CmdServers, Servers: st}, nil
 		}})
 
 	r.Register(&Command{Name: "session", Help: "show the active session id",
