@@ -18,10 +18,33 @@ line to the walkthrough.
 | Distributed tracing | `--exporter $EXPORTER --otlp-endpoint $OTLP_ENDPOINT` | OTel → Tempo/Grafana |
 | Sub-agent personas | `subAgents` in `kitchen-sink.json` | in-process child Runners |
 | Tool-call approval | `/approval` slash command in-session | — |
+| Skills, eager | `skillsMode: "eager"` on the `runbooks` server | skills-core MCP server (:8789) |
+| Skills, catalog | `skillsMode: "catalog"` on the `community` server | skills MCP server (:8790) + `load_skill` |
+| Event injection | `events` on the `events` server | events kitchen-sink MCP server (:8791) |
 
 The chat model comes from `kitchen-sink.json`'s `connections` block (local
 LM Studio by default, offline-friendly). Only the **embedder** is passed by
 flag, because it is a separate endpoint from the chat model.
+
+### The four MCP servers
+
+`kitchen-sink.json` connects to four servers, and the host is a **pure client**:
+it connects to them, it does not manage them, so the launcher boots them on the
+ports the config expects. This mirrors an `.mcp.json`-style connect-list.
+
+| Server | Port | Serves | Why |
+|---|---|---|---|
+| `demo` | 8788 | `greet`/`report`/`analyze` | offloading (`report` is large) + sub-agent tools |
+| `runbooks` | 8789 | one skill, **eager** | full skill body spliced into the system prompt at connect |
+| `community` | 8790 | three skills, **catalog** | names + descriptions only; bodies fetched on demand via `load_skill` |
+| `events` | 8791 | synthetic `chat.message` + `alert.fired` | the host auto-subscribes and injects occurrences into the turn |
+
+`runbooks` is eager and `community` is catalog on purpose: eager for the small,
+trusted skill set, catalog for the fuller one — the trust lever documented in
+`agent/host` (catalog gates each skill through the `load_skill` tool, so it can
+ride the approval ladder). Spawning these servers from the config instead of the
+launcher is a deferred follow-up (`ServerConfig.command`); today they connect by
+URL.
 
 ## Prerequisites
 
@@ -43,7 +66,7 @@ flag, because it is a separate endpoint from the chat model.
 ```bash
 just allup      # postgres+pgvector + observability stacks (or: make allup)
 just check      # probe everything; prints how to fix whatever is down
-just run        # preflight, boot the demo MCP server, launch agentchat (inline TUI)
+just run        # preflight, boot the four MCP servers, launch agentchat (inline TUI)
 just note       # same, but the alt-screen notebook UI (scrollable, foldable cells)
 # ... chat ...
 just alldown    # tear the stacks back down
@@ -93,6 +116,22 @@ Gemini). You can also swap chat models mid-session with `/provider`.
    re-tagged as reasoning by the connection's `thinkingHint` and streamed dimmed
    under a `· thinking:` line. Cloud OpenAI/Gemini models don't emit inline
    reasoning, so this only shows with a reasoning model + a `thinkingHint`.
+7. **Eager skills.** The `runbooks` server's skill is spliced into the system
+   prompt at connect. Ask it to do what that skill covers (the skills-core
+   `commit-helper` skill formats commit messages): *"Format a commit for a bug
+   fix in the auth module."* The model follows the skill's guidance with no tool
+   round-trip — the body was already in context.
+8. **Catalog skills.** The `community` server is catalog mode, so only skill
+   names + descriptions are in the prompt. Ask about one of its skills (*"Use the
+   git-workflow skill to help me rebase."*). The model first calls `load_skill`
+   to fetch that body (a tool call you'll see in the transcript), then acts on
+   it. Turn on `/approval ask` first and you'll be prompted before the skill
+   loads — catalog skills ride the tool-approval ladder.
+9. **Event injection.** The `events` server emits synthetic `chat.message` and
+   `alert.fired` every few seconds; the host subscribes at startup and injects
+   them ahead of your next turn. After a short pause, ask: *"Anything happen
+   while I was away?"* — the injected occurrences are in context, so the model
+   can summarize them.
 
 ## Inspecting state
 
@@ -128,8 +167,11 @@ live at the top of the `justfile` / `Makefile`.
 - **The `agent` DB + `vector` extension are created on a fresh postgres volume
   only.** If you started the backends stack before this feature existed,
   `just check` tells you to reset: `cd docker/backends && just down && rm -rf data/postgres && just up`.
-- **Ports:** demo server `:8788` (playground owns `:8787`), postgres `:5432`,
-  OTLP `:4317`, Grafana `:3000`.
+- **Ports:** demo `:8788` (playground owns `:8787`), skills-core/eager `:8789`,
+  skills/catalog `:8790`, events `:8791`, postgres `:5432`, OTLP `:4317`,
+  Grafana `:3000`. The four MCP servers are booted by `run.sh`; their logs go to
+  `$LOG_DIR/kitchen-sink-<name>.log` (default `$TMPDIR`) so they don't clobber
+  the TUI. `tail -f` one to watch a server.
 
 ## Extending
 
