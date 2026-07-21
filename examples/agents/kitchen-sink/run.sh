@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Launch the kitchen-sink demo: preflight the backends, boot the demo MCP
-# server, then start agentchat with every feature wired — durable postgres
-# sessions, tool-result offloading, semantic pgvector memory, compaction,
-# OTel traces, and two sub-agent personas (from kitchen-sink.json).
+# Launch the kitchen-sink demo: preflight the backends, verify the MCP servers
+# are up (started separately via `just servers-up`), then start agentchat with
+# every feature wired — durable postgres sessions, tool-result offloading,
+# semantic pgvector memory, compaction, OTel traces, and two sub-agent personas
+# (from kitchen-sink.json).
 #
 # Every knob is an env var with a Make/just default, so `just run` and
 # `SESSION=foo EMBED_DIM=1536 just run` both work. The chat model comes from
@@ -30,42 +31,29 @@ UI="${UI:-tui}"
 
 bash "$DIR/preflight.sh"
 
-# The config connects to four MCP servers (kitchen-sink.json):
-#   demo      :8788  greet/report/analyze (offloading + sub-agent tools)
-#   runbooks  :8789  skills-core, EAGER   (full skill bodies in the prompt)
-#   community :8790  skills,      CATALOG (bodies fetched on demand via load_skill)
-#   events    :8791  synthetic chat.message + alert.fired (feed injection)
-# The host is a pure client — it CONNECTS to these, it does not manage them, so
-# the launcher boots them here on the ports the config expects. Each server's
-# logs go to their own file: their stdout/stderr (and mcpkit's per-connection
-# SSE logging) would otherwise clobber agentchat's inline TUI input region.
-# Tail one in another window to watch it: tail -f "$LOG_DIR/kitchen-sink-<name>.log".
-LOG_DIR="${LOG_DIR:-${TMPDIR:-/tmp}}"
-SERVER_PIDS=()
-trap 'for p in "${SERVER_PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done' EXIT
-
-# boot_server <label> <workdir> <port> <run-cmd...>
-# Boots a server in the background with its logs redirected, then waits for the
-# port via a TCP probe — NOT an HTTP GET: a GET to /mcp opens the server's SSE
-# stream and never returns, so a curl-based check would hang the launch forever.
-boot_server() {
-	local label="$1" workdir="$2" port="$3"; shift 3
-	local log="$LOG_DIR/kitchen-sink-$label.log"
-	echo "==> booting $label on :$port (logs -> $log)"
-	( cd "$workdir" && "$@" ) >"$log" 2>&1 &
-	SERVER_PIDS+=("$!")
-	for _ in $(seq 1 60); do
-		(exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null && { exec 3>&-; return 0; }
-		sleep 0.5
-	done
-	echo "!! $label did not come up on :$port — see $log" >&2
-	return 1
-}
-
-boot_server demo      "$DIR/server"                       8788 go run .
-boot_server runbooks  "$ROOT/examples/skills-core"        8789 go run . --serve --addr=:8789
-boot_server community "$ROOT/examples/skills"             8790 go run . --serve --addr=:8790
-boot_server events    "$ROOT/examples/events/kitchen-sink" 8791 go run . --serve --addr=:8791
+# The agent does NOT manage the MCP servers (root CONSTRAINTS.md: server
+# lifecycle is decoupled from the agent). They are brought up independently
+# with `just servers-up` and survive chat restarts. Here we only CHECK the four
+# ports the config expects and, if any are down, point the operator at the
+# command to start them — rather than booting (and killing) them ourselves.
+down=""
+for probe in demo:8788 runbooks:8789 community:8790 events:8791; do
+	name="${probe%%:*}"; port="${probe##*:}"
+	# The probe opens (and closes) fd 3 inside a subshell; its exit status is
+	# the connect result. Don't close fd 3 in this shell — it was never opened
+	# here, so `exec 3>&-` would error and falsely flag the server down.
+	if ! (exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null; then
+		down="$down $name(:$port)"
+	fi
+done
+if [ -n "$down" ]; then
+	echo "MCP server(s) not reachable:$down" >&2
+	echo "  -> start them first:  just servers-up      (they run independently of the chat)" >&2
+	echo "     or just one:        just servers-up demo" >&2
+	# Until the agent connects asynchronously (idea 2), a down server fails the
+	# launch, so stop here with a clear message instead of an opaque connect error.
+	exit 1
+fi
 
 echo "==> launching agentchat (session=$SESSION, store=$SESSION_STORE)"
 cd "$ROOT/cmd/agentchat"

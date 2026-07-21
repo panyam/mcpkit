@@ -54,8 +54,7 @@ check:
 # Alias for check.
 preflight: check
 
-# Preflight, boot the four MCP servers (demo + eager/catalog skills + events),
-# then launch agentchat with everything wired.
+# Preflight backends + verify MCP servers are up (just servers-up), launch agentchat.
 run:
     @bash run.sh
 
@@ -94,9 +93,21 @@ psql:
 mem:
     docker exec mcpkit-postgres psql -U {{PG_USER}} -d {{PG_DB}} -c "select namespace, key, created_at from agent_memories order by created_at;"
 
-# Boot just the demo MCP server in the foreground (:8788).
-server:
-    cd server && go run .
+# --- MCP servers (lifecycle decoupled from the agent; root CONSTRAINTS.md) ---
+# These run independently of agentchat and survive chat restarts. `just run`
+# only checks they are up; it never starts or stops them.
+
+# Start all MCP servers the config connects to, or one: `just servers-up demo`.
+servers-up name="":
+    @bash servers.sh up {{name}}
+
+# Stop all MCP servers, or one: `just servers-down events`.
+servers-down name="":
+    @bash servers.sh down {{name}}
+
+# Show which MCP servers are up (or one: `just servers demo`).
+servers name="":
+    @bash servers.sh status {{name}}
 
 # Build the demo server (compile check).
 build:
