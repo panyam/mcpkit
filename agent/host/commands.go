@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -9,6 +10,22 @@ import (
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 )
+
+// sessionsResult builds the CmdSessions result for the /sessions picker: the
+// runs on this page, the active run, and a footer note.
+func sessionsResult(a *App, runs []agent.RunInfo, note string) CmdResult {
+	return CmdResult{Kind: CmdSessions, Sessions: runs, RunID: a.RunID(), SessionsNote: note}
+}
+
+// sessionsFooter is the hint under a page of sessions: how many showed and how
+// to page / search / resume.
+func sessionsFooter(shown int, hasMore bool, _ string) string {
+	f := fmt.Sprintf("%d shown", shown)
+	if hasMore {
+		f += " · /sessions more for older"
+	}
+	return f + " · /sessions find <text> to search · /sessions <id> to resume"
+}
 
 // CmdKind tags a CmdResult so a surface renders it without re-parsing.
 // One kind per distinct command output shape.
@@ -56,6 +73,7 @@ type CmdResult struct {
 	Tasks          []*client.BackgroundTask
 	Approval       *agent.TieredApproval
 	Sessions       []agent.RunInfo
+	SessionsNote   string
 	Quit           bool
 }
 
@@ -216,26 +234,51 @@ func (a *App) registerBuiltinCommands() {
 			return CmdResult{Kind: CmdSession, RunID: a.RunID()}, nil
 		}})
 
-	r.Register(&Command{Name: "sessions", Help: "list persisted sessions; /sessions <id> switches",
+	r.Register(&Command{Name: "sessions", Help: "list recent sessions; 'more' pages, 'find <text>' searches, '<id>' resumes",
 		Run: func(ctx context.Context, args string) (CmdResult, error) {
-			if args != "" {
+			args = strings.TrimSpace(args)
+			switch {
+			case args == "":
+				page, err := a.SessionsPage(ctx, "")
+				if err != nil {
+					return CmdResult{}, err
+				}
+				return sessionsResult(a, page.Runs, sessionsFooter(len(page.Runs), page.HasMore, "")), nil
+			case args == "more":
+				page, err := a.PageMore(ctx)
+				if err != nil {
+					return CmdResult{}, err
+				}
+				if len(page.Runs) == 0 {
+					return CmdResult{Kind: CmdMessage, Message: "no more sessions"}, nil
+				}
+				return sessionsResult(a, page.Runs, sessionsFooter(len(page.Runs), page.HasMore, "")), nil
+			case strings.HasPrefix(args, "find "):
+				q := strings.TrimSpace(strings.TrimPrefix(args, "find "))
+				infos, err := a.SearchSessions(ctx, q)
+				if err != nil {
+					return CmdResult{}, err
+				}
+				return sessionsResult(a, infos, fmt.Sprintf("%d match(es) for %q", len(infos), q)), nil
+			default:
+				// resume by id
 				if err := a.Resume(ctx, args); err != nil {
 					return CmdResult{}, err
 				}
 				return CmdResult{Kind: CmdSession, RunID: args}, nil
 			}
-			infos, err := a.Sessions(ctx)
-			if err != nil {
-				return CmdResult{}, err
-			}
-			return CmdResult{Kind: CmdSessions, Sessions: infos, RunID: a.RunID()}, nil
 		},
 		Complete: func(prefix string) []string {
+			var out []string
+			for _, sub := range []string{"more", "find"} {
+				if strings.HasPrefix(sub, prefix) {
+					out = append(out, sub)
+				}
+			}
 			infos, err := a.Sessions(context.Background())
 			if err != nil {
-				return nil
+				return out
 			}
-			var out []string
 			for _, r := range infos {
 				if strings.HasPrefix(r.ID, prefix) {
 					out = append(out, r.ID)

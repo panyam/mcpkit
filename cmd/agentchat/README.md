@@ -191,6 +191,11 @@ In the REPL: `/tools` lists the merged tool index, `/history` the
 conversation, `/health` the failover snapshot, `/quit` exits; Ctrl-C cancels the in-flight turn. During an
 elicitation, `/d` declines and `/c` cancels.
 
+`/sessions` shows recent persisted sessions (newest-first), with `/sessions
+more` to page older ones, `/sessions find <text>` to search by id, and
+`/sessions <id>` to resume. (Recency is free on the gorm/sqlite and in-memory
+stores; a redis store's SCAN order is unsorted — see the runstore docs.)
+
 ## What a session looks like
 
 ```
