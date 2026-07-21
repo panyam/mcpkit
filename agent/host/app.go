@@ -458,6 +458,16 @@ func (a *App) Providers() (names []string, active string) {
 	return a.connections.Names(), a.connections.Active()
 }
 
+// ModelLabel is the human-facing name of the active model for a status line:
+// the active connection name when a ConnectionRegistry is configured, else the
+// single-model identifier.
+func (a *App) ModelLabel() string {
+	if _, active := a.Providers(); active != "" {
+		return active
+	}
+	return a.cfg.Model.Model
+}
+
 // SwitchProvider makes name the active chat provider for subsequent
 // turns. An unknown name or a build failure leaves the current provider
 // in place (the error says which). The swap takes effect on the next

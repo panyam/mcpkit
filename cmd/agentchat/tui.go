@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -27,6 +28,41 @@ type commitMsg string
 // turnDoneMsg re-enables input after a dispatched command or a turn
 // finishes on its goroutine.
 type turnDoneMsg struct{}
+
+// usageMsg carries the finished turn's token usage so the status line can show
+// a live context gauge. Sent by the observers on HostTurnDone.
+type usageMsg struct{ in, out int }
+
+// statusLine renders the persistent status: model · session · last-turn tokens,
+// plus a "N% context left" gauge when a context window is configured (issue
+// 1063 D1/D2). Kept out of the transcript — it lives only in the managed live
+// region so it is never committed to scrollback.
+func statusLine(app *host.App, u usageMsg, window int) string {
+	if app == nil {
+		return ""
+	}
+	return formatStatus(app.ModelLabel(), app.RunID(), u, window)
+}
+
+// formatStatus is the pure status-line renderer (model · session · tokens ·
+// gauge), split out so it is testable without a live App.
+func formatStatus(model, session string, u usageMsg, window int) string {
+	if session == "" {
+		session = "no session"
+	}
+	parts := []string{"model " + model, "session " + session}
+	if u.in > 0 || u.out > 0 {
+		parts = append(parts, fmt.Sprintf("ctx %d↑ %d↓ tok", u.in, u.out))
+	}
+	if window > 0 && u.in > 0 {
+		left := 100 * (window - u.in) / window
+		if left < 0 {
+			left = 0
+		}
+		parts = append(parts, fmt.Sprintf("%d%% ctx left", left))
+	}
+	return strings.Join(parts, " · ")
+}
 
 // tuiObserver is the host.Observer the App renders through in inline TUI
 // mode. It forwards each HostEvent to the built-in terminal renderer
@@ -68,6 +104,9 @@ func (s *tuiObserver) On(ev host.HostEvent) {
 	if prog == nil {
 		return
 	}
+	if ev.Kind == host.HostTurnDone && ev.Result != nil {
+		prog.Send(usageMsg{in: ev.Result.Usage.InputTokens, out: ev.Result.Usage.OutputTokens})
+	}
 	if boundary {
 		prog.Send(commitMsg(segment))
 	} else {
@@ -90,6 +129,8 @@ type tuiModel struct {
 	histIdx int // len(history) == "not navigating"
 	running bool
 	pending string
+	usage   usageMsg // last turn's tokens, for the status line
+	window  int      // context window for the "N% left" gauge (0 = off)
 }
 
 // newPromptArea builds the shared input textarea used by both TUI surfaces
@@ -116,8 +157,8 @@ func newPromptArea() textarea.Model {
 	return ta
 }
 
-func newTUIModel(app *host.App, surface *tuiObserver) tuiModel {
-	m := tuiModel{app: app, surface: surface, ta: newPromptArea()}
+func newTUIModel(app *host.App, surface *tuiObserver, window int) tuiModel {
+	m := tuiModel{app: app, surface: surface, ta: newPromptArea(), window: window}
 	m.histIdx = 0
 	return m
 }
@@ -144,6 +185,10 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case turnDoneMsg:
 		m.running = false
+		return m, nil
+
+	case usageMsg:
+		m.usage = msg
 		return m, nil
 
 	case tea.KeyMsg:
@@ -189,9 +234,9 @@ func (m tuiModel) View() string {
 		b.WriteString(strings.TrimRight(m.pending, "\n"))
 		b.WriteString("\n")
 	}
-	status := "ready"
+	status := statusLine(m.app, m.usage, m.window)
 	if m.running {
-		status = "working…"
+		status = "working… · " + status
 	}
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render(status))
 	b.WriteString("\n")
@@ -345,8 +390,8 @@ func wantTUI(mode string) bool { return uiMode(mode) != "plain" }
 // and the live turn render at the bottom while finished segments commit to
 // the terminal's own scrollback. The surface is wired to the program so
 // host events stream in as the model renders.
-func runTUI(app *host.App, surface *tuiObserver) error {
-	prog := tea.NewProgram(newTUIModel(app, surface))
+func runTUI(app *host.App, surface *tuiObserver, window int) error {
+	prog := tea.NewProgram(newTUIModel(app, surface, window))
 	surface.prog = prog
 	_, err := prog.Run()
 	return err

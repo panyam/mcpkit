@@ -79,7 +79,7 @@ func TestIsBoundary(t *testing.T) {
 }
 
 func TestUpdateLiveThenCommit(t *testing.T) {
-	m := newTUIModel(nil, nil)
+	m := newTUIModel(nil, nil, 0)
 
 	// a live segment lands in the pending region, not scrollback
 	next, _ := m.Update(liveMsg("thinking…"))
@@ -111,7 +111,7 @@ func TestUpdateLiveThenCommit(t *testing.T) {
 }
 
 func TestUpdateTurnDoneClearsRunning(t *testing.T) {
-	m := newTUIModel(nil, nil)
+	m := newTUIModel(nil, nil, 0)
 	m.running = true
 	next, _ := m.Update(turnDoneMsg{})
 	if next.(tuiModel).running {
@@ -170,7 +170,7 @@ func TestCompleteTab(t *testing.T) {
 func TestKeyMap_WordNavHasCtrlArrows(t *testing.T) {
 	// newTUIModel only stores app/surface; nil is fine for inspecting the
 	// configured textarea KeyMap.
-	m := newTUIModel(nil, nil)
+	m := newTUIModel(nil, nil, 0)
 	fwd := m.ta.KeyMap.WordForward.Keys()
 	back := m.ta.KeyMap.WordBackward.Keys()
 	if !slices.Contains(fwd, "ctrl+right") {
@@ -195,7 +195,7 @@ func TestKeyHelp_ListsBindings(t *testing.T) {
 }
 
 func TestKeyMap_CtrlRightMovesByWord(t *testing.T) {
-	m := newTUIModel(nil, nil)
+	m := newTUIModel(nil, nil, 0)
 	m.ta.SetValue("one two three")
 	m.ta.CursorStart()
 	if col := m.ta.LineInfo().ColumnOffset; col != 0 {
