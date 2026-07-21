@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
 )
 
@@ -78,16 +79,64 @@ func formatStatus(model, session string, u usageMsg, window int) string {
 // transcript in the real terminal buffer: native scroll, copy/paste, and
 // it survives exit. HostRunnerEvent accumulates live; every other event
 // closes a segment and commits.
+//
+// The committed segment is split into blocks so assistant prose renders
+// through glamour once at commit (issue 1063 B2) while tool/thinking lines
+// pass through verbatim: glamour-ing the whole turn would mangle the dim
+// ⚙/✓ tool lines. Streaming stays raw in the live region — glamour only
+// touches a finished block.
 type tuiObserver struct {
 	mu   sync.Mutex
 	buf  *bytes.Buffer
 	term host.Observer
 	prog *tea.Program
+
+	md       *mdRenderer
+	renderMD func(string) string // == md.render; swapped in tests
+	blocks   []segBlock          // the current turn's committed blocks
+	prose    strings.Builder     // the open assistant-prose run (raw markdown)
+}
+
+// segBlock is one span of a committed turn: assistant prose (raw markdown,
+// rendered through glamour at commit) or a meta line (tool/thinking output,
+// already terminal-formatted, passed through verbatim).
+type segBlock struct {
+	prose bool
+	text  string
 }
 
 func newTUIObserver() *tuiObserver {
 	buf := &bytes.Buffer{}
-	return &tuiObserver{buf: buf, term: host.NewTerminalRenderer(buf)}
+	md := newMDRenderer()
+	return &tuiObserver{buf: buf, term: host.NewTerminalRenderer(buf), md: md, renderMD: md.render}
+}
+
+// setWidth fans the terminal width to the markdown renderer so committed
+// blocks word-wrap to the current terminal (called from tea.WindowSizeMsg).
+func (s *tuiObserver) setWidth(w int) { s.md.setWidth(w) }
+
+// flushProse closes any open assistant-prose run into a block.
+func (s *tuiObserver) flushProse() {
+	if s.prose.Len() > 0 {
+		s.blocks = append(s.blocks, segBlock{prose: true, text: s.prose.String()})
+		s.prose.Reset()
+	}
+}
+
+// renderBlocks builds the committed segment: prose blocks through glamour,
+// meta blocks verbatim, joined in order with blank-trimmed edges.
+func (s *tuiObserver) renderBlocks() string {
+	var out []string
+	for _, b := range s.blocks {
+		text := b.text
+		if b.prose {
+			text = s.renderMD(text)
+		}
+		if text = strings.TrimRight(text, "\n"); text != "" {
+			out = append(out, text)
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // isBoundary reports whether an event closes a scrollback segment. Every
@@ -98,26 +147,55 @@ func isBoundary(k host.HostEventKind) bool {
 }
 
 func (s *tuiObserver) On(ev host.HostEvent) {
+	msgs := s.fold(ev)
 	s.mu.Lock()
-	s.term.On(ev)
-	segment := s.buf.String()
-	boundary := isBoundary(ev.Kind)
-	if boundary {
-		s.buf.Reset()
-	}
 	prog := s.prog
 	s.mu.Unlock()
 	if prog == nil {
 		return
 	}
-	if ev.Kind == host.HostTurnDone && ev.Result != nil {
-		prog.Send(usageMsg{in: ev.Result.Usage.InputTokens, out: ev.Result.Usage.OutputTokens})
+	for _, m := range msgs {
+		prog.Send(m)
 	}
-	if boundary {
-		prog.Send(commitMsg(segment))
-	} else {
-		prog.Send(liveMsg(segment))
+}
+
+// fold turns one HostEvent into the tea messages the model should receive (a
+// live update mid-turn, or a usage + commit pair at a boundary). Separated from
+// On so tests can assert the prose/meta split without a running program.
+func (s *tuiObserver) fold(ev host.HostEvent) []tea.Msg {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	before := s.buf.Len()
+	s.term.On(ev)
+	live := s.buf.String()
+	var msgs []tea.Msg
+
+	switch {
+	case isBoundary(ev.Kind):
+		// The boundary event's own output (turn footer, command result, info
+		// line) is meta; close any open prose, fold it in, then render the turn.
+		s.flushProse()
+		if tail := live[before:]; tail != "" {
+			s.blocks = append(s.blocks, segBlock{text: tail})
+		}
+		commit := s.renderBlocks()
+		s.blocks = nil
+		s.buf.Reset()
+		if ev.Kind == host.HostTurnDone && ev.Result != nil {
+			msgs = append(msgs, usageMsg{in: ev.Result.Usage.InputTokens, out: ev.Result.Usage.OutputTokens})
+		}
+		msgs = append(msgs, commitMsg(commit))
+	case ev.Kind == host.HostRunnerEvent && ev.RunnerEvent.Kind == agent.EventTextDelta:
+		// Assistant prose accumulates raw; glamour is applied once at commit.
+		s.prose.WriteString(ev.RunnerEvent.Text)
+		msgs = append(msgs, liveMsg(live))
+	default:
+		// A tool / thinking line: close open prose, keep the formatted line verbatim.
+		s.flushProse()
+		s.blocks = append(s.blocks, segBlock{text: live[before:]})
+		msgs = append(msgs, liveMsg(live))
 	}
+	return msgs
 }
 
 // tuiModel is the inline bubbletea Model: an editable input at the bottom
@@ -180,6 +258,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.ta.SetWidth(msg.Width)
+		if m.surface != nil {
+			m.surface.setWidth(msg.Width)
+		}
 		return m, nil
 
 	case liveMsg:
