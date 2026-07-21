@@ -207,17 +207,25 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 
 	instructions := cfg.Instructions
+	var skillCatalog []catalogSkill
 	for i, sc := range cfg.Servers {
 		if sc.Skills != nil && !*sc.Skills {
 			continue
 		}
-		block, err := loadSkillsBlock(app.clients[i], sc.ID, app.emit, o.tp)
+		block, cat, err := loadSkillsForServer(app.clients[i], sc.ID, sc.SkillsMode, app.emit, o.tp)
 		if err != nil {
 			app.Close()
 			return nil, err
 		}
 		if block != "" {
 			instructions += "\n\n" + block
+		}
+		skillCatalog = append(skillCatalog, cat...)
+	}
+	if len(skillCatalog) > 0 {
+		if err := app.registerLoadSkill(multi, skillCatalog); err != nil {
+			app.Close()
+			return nil, err
 		}
 	}
 
