@@ -89,6 +89,12 @@ terminal, else `plain`), `tui` (inline), `notebook` (alt-screen), or `plain`
 
 - **`tui`** (inline): finished output commits to the terminal's own scrollback,
   so native scroll, copy/paste, and a transcript that survives exit all work.
+
+Both interactive surfaces (`tui`, `notebook`) render the assistant's finished
+prose as **markdown** — headings, lists, and fenced code are formatted once when
+the block commits, while it streams raw. Tool lines and the turn footer pass
+through verbatim, and `NO_COLOR` falls back to raw text (as does `plain`, which
+never renders markdown).
 - **`notebook`** (alt-screen): a managed viewport with its own scroll and a
   transcript of **collapsible cells** — the assistant text, each tool call
   (parallel calls group into one), and command / info lines each fold on their
