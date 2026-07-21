@@ -172,6 +172,7 @@ type notebookModel struct {
 	maxLines      int      // input auto-grows up to this many rows (0 = default)
 	usage         usageMsg // last turn's tokens, for the status line
 	window        int      // context window for the "N% left" gauge (0 = off)
+	session       string   // cached RunID for the status line (refreshed off the render path)
 	width, height int
 	ready         bool
 }
@@ -186,6 +187,10 @@ func newNotebookModel(app *host.App, surface *nbObserver, maxLines, window int) 
 	}
 	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), atBottom: true, maxLines: maxLines, window: window}
 	m.histIdx = 0
+	if app != nil {
+		// Safe here: construction runs before the first turn, so turnMu is free.
+		m.session = app.RunID()
+	}
 	return m
 }
 
@@ -244,6 +249,11 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case turnDoneMsg:
 		m.running = false
+		// The turn (or dispatched command) has fully returned, so turnMu is
+		// free and a session-changing command like /sessions has landed.
+		if m.app != nil {
+			m.session = m.app.RunID()
+		}
 		return m, nil
 
 	case usageMsg:
@@ -387,7 +397,7 @@ func (m notebookModel) statusBar() string {
 		hint = "working…  " + hint
 	}
 	// Two-line status: the persistent model/session/context line, then keys.
-	return lipgloss.NewStyle().Faint(true).Render(statusLine(m.app, m.usage, m.window) + "\n" + hint)
+	return lipgloss.NewStyle().Faint(true).Render(statusLine(m.app, m.session, m.usage, m.window) + "\n" + hint)
 }
 
 // refresh rebuilds the viewport content from the cells (+ the live turn) and,
