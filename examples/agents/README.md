@@ -7,10 +7,10 @@ Agent-focused examples grouped together, sharing a common demo harness.
 
 ## Running
 
-Each example is deterministic offline (`just agent` / `make agent` — scripted
-StubProviders, no LLM). To drive it with a live model, `just demo` / `make demo`
-resolves the model and endpoint from `llm.json` (or a gitignored
-`llm.local.json` override) when `MODEL` / `BASE_URL` aren't set.
+Each example is deterministic offline (`just agent` — scripted StubProviders,
+no LLM). To drive it with a live model, `just demo` resolves the model and
+endpoint from `llm.json` (or a gitignored `llm.local.json` override) when
+`MODEL` / `BASE_URL` aren't set.
 
 ## `llm.json` — providers, no secrets
 
