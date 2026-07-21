@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
 )
 
@@ -219,5 +220,80 @@ func TestNotebook_FirstPromptLineStaysVisible(t *testing.T) {
 	// within the maxLines budget, the first line must not have scrolled off
 	if !strings.Contains(m.ta.View(), "FIRSTLINE") {
 		t.Fatalf("first prompt line scrolled off within budget:\n%s", m.ta.View())
+	}
+}
+
+func nbCollectCells(evs ...host.HostEvent) []nbCell {
+	obs := newNBObserver()
+	var cells []nbCell
+	for _, ev := range evs {
+		for _, m := range obs.render(ev) {
+			if c, ok := m.(nbCellMsg); ok {
+				cells = append(cells, nbCell(c))
+			}
+		}
+	}
+	return cells
+}
+
+func runnerEv(e agent.Event) host.HostEvent {
+	return host.HostEvent{Kind: host.HostRunnerEvent, RunnerEvent: e}
+}
+
+func turnDoneEv() host.HostEvent {
+	return host.HostEvent{Kind: host.HostTurnDone, Result: &agent.TurnResult{Steps: 1}}
+}
+
+func TestNBObserver_ToolBecomesOwnCell(t *testing.T) {
+	cells := nbCollectCells(
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "greeting you"}),
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "all done"}),
+		turnDoneEv(),
+	)
+	if len(cells) != 3 {
+		t.Fatalf("want 3 cells (text / tool / text), got %d: %+v", len(cells), cells)
+	}
+	if cells[0].label != "assistant" || !strings.Contains(cells[0].body, "greeting you") {
+		t.Fatalf("cell 0 = %+v, want assistant text-before-tool", cells[0])
+	}
+	if cells[1].label != "⚙ greet" || !strings.Contains(cells[1].body, "greet") {
+		t.Fatalf("cell 1 = %+v, want its own ⚙ greet cell", cells[1])
+	}
+	if cells[2].label != "assistant" || !strings.Contains(cells[2].body, "all done") {
+		t.Fatalf("cell 2 = %+v, want trailing assistant cell", cells[2])
+	}
+}
+
+func TestNBObserver_TextOnlyTurnIsOneCell(t *testing.T) {
+	cells := nbCollectCells(
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "just a plain answer"}),
+		turnDoneEv(),
+	)
+	if len(cells) != 1 || cells[0].label != "assistant" {
+		t.Fatalf("text-only turn should be one assistant cell, got %+v", cells)
+	}
+}
+
+func TestNBObserver_ParallelToolsGroupIntoOneCell(t *testing.T) {
+	cells := nbCollectCells(
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "A"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "B"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "A"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "B"}}),
+		turnDoneEv(),
+	)
+	var tool *nbCell
+	for i := range cells {
+		if strings.HasPrefix(cells[i].label, "⚙") {
+			tool = &cells[i]
+		}
+	}
+	if tool == nil || tool.label != "⚙ tools" {
+		t.Fatalf("parallel tools should be one '⚙ tools' cell, got %+v", cells)
+	}
+	if !strings.Contains(tool.body, "A") || !strings.Contains(tool.body, "B") {
+		t.Fatalf("batch cell should contain both tools: %q", tool.body)
 	}
 }
