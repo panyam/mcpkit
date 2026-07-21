@@ -30,8 +30,10 @@ flag, because it is a separate endpoint from the chat model.
 ### The four MCP servers
 
 `kitchen-sink.json` connects to four servers, and the host is a **pure client**:
-it connects to them, it does not manage them, so the launcher boots them on the
-ports the config expects. This mirrors an `.mcp.json`-style connect-list.
+it connects to them by URL, it does not manage them. Their lifecycle is
+decoupled from the agent (root `CONSTRAINTS.md` C6) — you start them once with
+`just servers-up` and they survive chat restarts. This mirrors an
+`.mcp.json`-style connect-list.
 
 | Server | Port | Serves | Why |
 |---|---|---|---|
@@ -43,9 +45,21 @@ ports the config expects. This mirrors an `.mcp.json`-style connect-list.
 `runbooks` is eager and `community` is catalog on purpose: eager for the small,
 trusted skill set, catalog for the fuller one — the trust lever documented in
 `agent/host` (catalog gates each skill through the `load_skill` tool, so it can
-ride the approval ladder). Spawning these servers from the config instead of the
-launcher is a deferred follow-up (`ServerConfig.command`); today they connect by
-URL.
+ride the approval ladder).
+
+Manage the servers independently of the chat:
+
+```bash
+just servers-up            # start all four (built to .servers/bin, run detached)
+just servers               # status: which are up
+just servers-up events     # start just one
+just servers-down          # stop all
+```
+
+`just run` only *checks* these ports and tells you to `just servers-up` if any
+are down — it never boots or kills them. Having the agent spawn them from the
+config (`ServerConfig.command`, stdio) is a deferred follow-up; the client
+already owns stdio subprocess lifecycle, only the config surface is missing.
 
 ## Prerequisites
 
@@ -64,18 +78,22 @@ URL.
 
 ## Quick start
 
+Three layers, brought up separately (backends → MCP servers → agent):
+
 ```bash
 just allup      # postgres+pgvector + observability stacks (or: make allup)
-just check      # probe everything; prints how to fix whatever is down
-just run        # preflight, boot the four MCP servers, launch agentchat (inline TUI)
+just servers-up # the four MCP servers (independent of the chat)
+just check      # probe backends; prints how to fix whatever is down
+just run        # preflight, verify servers are up, launch agentchat (inline TUI)
 just note       # same, but the alt-screen notebook UI (scrollable, foldable cells)
-# ... chat ...
-just alldown    # tear the stacks back down
+# ... chat, quit, `just run` again — the servers are still up ...
+just servers-down  # stop the MCP servers
+just alldown       # tear the stacks back down
 ```
 
-`just run` fails fast if postgres is down (the config depends on it) and warns
-if observability or the embedder are missing (chat still works; those features
-degrade).
+`just run` fails fast if postgres is down (the config depends on it) or if any
+MCP server is unreachable (it tells you to `just servers-up`), and warns if
+observability or the embedder are missing (chat still works; those degrade).
 
 ### Run against real providers
 
@@ -178,9 +196,9 @@ live at the top of the `justfile` / `Makefile`.
   `just check` tells you to reset: `cd docker/backends && just down && rm -rf data/postgres && just up`.
 - **Ports:** demo `:8788` (playground owns `:8787`), skills-core/eager `:8789`,
   skills/catalog `:8790`, events `:8791`, postgres `:5432`, OTLP `:4317`,
-  Grafana `:3000`. The four MCP servers are booted by `run.sh`; their logs go to
-  `$LOG_DIR/kitchen-sink-<name>.log` (default `$TMPDIR`) so they don't clobber
-  the TUI. `tail -f` one to watch a server.
+  Grafana `:3000`. The four MCP servers are managed by `just servers-up` /
+  `servers.sh` (not `run.sh`); their binaries, PID files, and logs live under
+  `.servers/` (gitignored). `tail -f .servers/<name>.log` to watch a server.
 
 ## Extending
 
