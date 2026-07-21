@@ -1,7 +1,7 @@
 # kitchen-sink — every agent feature wired at once (Makefile mirror of the
 # justfile). Quick start:
 #   make allup     # postgres+pgvector and observability stacks
-#   make run       # preflight, boot the demo server, launch agentchat
+#   make run       # preflight, boot the demo + skills + events servers, launch agentchat
 #   make alldown   # tear the stacks back down
 #
 # Every store/endpoint is a variable: override on the CLI or via env,
@@ -47,7 +47,7 @@ check: ## Probe every backend; print bring-up instructions for what's missing.
 	@bash preflight.sh
 preflight: check
 
-run: ## Preflight, boot the demo server, launch agentchat with everything wired.
+run: ## Preflight, boot the four MCP servers (demo + eager/catalog skills + events), launch agentchat.
 	@bash run.sh
 demo: run
 

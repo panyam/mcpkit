@@ -34,7 +34,11 @@
     }
   },
   "servers": [
-    { "id": "demo", "url": "http://localhost:8788/mcp" }
+    { "id": "demo",      "url": "http://localhost:8788/mcp" },
+    { "id": "runbooks",  "url": "http://localhost:8789/mcp", "skillsMode": "eager" },
+    { "id": "community", "url": "http://localhost:8790/mcp", "skillsMode": "catalog" },
+    { "id": "events",    "url": "http://localhost:8791/mcp",
+      "events": [ { "name": "chat.message" }, { "name": "alert.fired" } ] }
   ],
   "subAgents": [
     {

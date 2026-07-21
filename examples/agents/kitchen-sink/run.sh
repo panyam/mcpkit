@@ -30,23 +30,42 @@ UI="${UI:-tui}"
 
 bash "$DIR/preflight.sh"
 
-# Redirect the demo server's logs to a file — its stdout/stderr (and mcpkit's
-# per-connection SSE logging) share this terminal with agentchat's inline TUI
-# and would clobber the input region otherwise. Tail it in another window to
-# watch tool calls: tail -f "$SERVER_LOG".
-SERVER_LOG="${SERVER_LOG:-${TMPDIR:-/tmp}/kitchen-sink-server.log}"
-echo "==> booting kitchen-sink demo server on :8788 (logs -> $SERVER_LOG)"
-( cd "$DIR/server" && go run . ) >"$SERVER_LOG" 2>&1 &
-SERVER_PID=$!
-trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+# The config connects to four MCP servers (kitchen-sink.json):
+#   demo      :8788  greet/report/analyze (offloading + sub-agent tools)
+#   runbooks  :8789  skills-core, EAGER   (full skill bodies in the prompt)
+#   community :8790  skills,      CATALOG (bodies fetched on demand via load_skill)
+#   events    :8791  synthetic chat.message + alert.fired (feed injection)
+# The host is a pure client — it CONNECTS to these, it does not manage them, so
+# the launcher boots them here on the ports the config expects. Each server's
+# logs go to their own file: their stdout/stderr (and mcpkit's per-connection
+# SSE logging) would otherwise clobber agentchat's inline TUI input region.
+# Tail one in another window to watch it: tail -f "$LOG_DIR/kitchen-sink-<name>.log".
+LOG_DIR="${LOG_DIR:-${TMPDIR:-/tmp}}"
+SERVER_PIDS=()
+trap 'for p in "${SERVER_PIDS[@]:-}"; do kill "$p" 2>/dev/null || true; done' EXIT
 
-# Wait for the port to accept connections via a TCP probe — NOT an HTTP GET.
-# A GET to /mcp opens the server's SSE stream and never returns, so a
-# curl-based check would hang the readiness loop (and the launch) forever.
-for _ in $(seq 1 60); do
-	(exec 3<>/dev/tcp/localhost/8788) 2>/dev/null && { exec 3>&-; break; }
-	sleep 0.5
-done
+# boot_server <label> <workdir> <port> <run-cmd...>
+# Boots a server in the background with its logs redirected, then waits for the
+# port via a TCP probe — NOT an HTTP GET: a GET to /mcp opens the server's SSE
+# stream and never returns, so a curl-based check would hang the launch forever.
+boot_server() {
+	local label="$1" workdir="$2" port="$3"; shift 3
+	local log="$LOG_DIR/kitchen-sink-$label.log"
+	echo "==> booting $label on :$port (logs -> $log)"
+	( cd "$workdir" && "$@" ) >"$log" 2>&1 &
+	SERVER_PIDS+=("$!")
+	for _ in $(seq 1 60); do
+		(exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null && { exec 3>&-; return 0; }
+		sleep 0.5
+	done
+	echo "!! $label did not come up on :$port — see $log" >&2
+	return 1
+}
+
+boot_server demo      "$DIR/server"                       8788 go run .
+boot_server runbooks  "$ROOT/examples/skills-core"        8789 go run . --serve --addr=:8789
+boot_server community "$ROOT/examples/skills"             8790 go run . --serve --addr=:8790
+boot_server events    "$ROOT/examples/events/kitchen-sink" 8791 go run . --serve --addr=:8791
 
 echo "==> launching agentchat (session=$SESSION, store=$SESSION_STORE)"
 cd "$ROOT/cmd/agentchat"
