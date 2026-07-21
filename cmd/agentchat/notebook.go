@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
 )
 
@@ -47,6 +48,13 @@ type nbObserver struct {
 	buf  *bytes.Buffer
 	term host.Observer
 	prog *tea.Program
+
+	// openTools/toolLabel track the current tool cell: a turn is split so each
+	// tool call (or a parallel batch) folds on its own, with the text before/
+	// after as separate assistant cells. openTools counts in-flight calls so
+	// concurrent tool-begins group into one cell.
+	openTools int
+	toolLabel string
 }
 
 func newNBObserver() *nbObserver {
@@ -55,23 +63,71 @@ func newNBObserver() *nbObserver {
 }
 
 func (s *nbObserver) On(ev host.HostEvent) {
+	msgs := s.render(ev)
 	s.mu.Lock()
-	s.term.On(ev)
-	segment := s.buf.String()
-	boundary := isBoundary(ev.Kind)
-	if boundary {
-		s.buf.Reset()
-	}
 	prog := s.prog
 	s.mu.Unlock()
 	if prog == nil {
 		return
 	}
-	if boundary {
-		prog.Send(nbCellMsg{label: nbLabelFor(ev.Kind), body: strings.TrimRight(segment, "\n")})
-	} else {
-		prog.Send(nbLiveMsg(strings.TrimRight(segment, "\n")))
+	for _, m := range msgs {
+		prog.Send(m)
 	}
+}
+
+// render folds one HostEvent into the tea messages the model should receive
+// (cells committed at boundaries, live updates in between). Separated from On
+// so tests can assert the cell split without a running program.
+func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var msgs []tea.Msg
+	seg := func() string { return strings.TrimRight(s.buf.String(), "\n") }
+
+	if ev.Kind == host.HostRunnerEvent {
+		re := ev.RunnerEvent
+		// A tool-begin cuts the accumulated text into its own assistant cell
+		// (the first begin of a batch), then the tool renders into a fresh
+		// buffer that a matching tool-end flushes as a ⚙ cell.
+		if re.Kind == agent.EventToolBegin {
+			if s.openTools == 0 {
+				if txt := seg(); txt != "" {
+					msgs = append(msgs, nbCellMsg{label: "assistant", body: txt})
+				}
+				s.buf.Reset()
+				s.toolLabel = "⚙"
+				if re.ToolCall != nil {
+					s.toolLabel = "⚙ " + re.ToolCall.Name
+				}
+			} else {
+				s.toolLabel = "⚙ tools"
+			}
+			s.openTools++
+		}
+
+		s.term.On(ev) // render this event into buf
+
+		switch re.Kind {
+		case agent.EventToolEnd, agent.EventToolError, agent.EventToolDenied, agent.EventToolCancelled:
+			if s.openTools > 0 {
+				s.openTools--
+			}
+			if s.openTools == 0 {
+				msgs = append(msgs, nbCellMsg{label: s.toolLabel, body: seg()})
+				s.buf.Reset()
+			} else {
+				msgs = append(msgs, nbLiveMsg(seg()))
+			}
+		default:
+			msgs = append(msgs, nbLiveMsg(seg()))
+		}
+	} else {
+		// non-runner event = a discrete boundary (turn done, command, info)
+		s.term.On(ev)
+		msgs = append(msgs, nbCellMsg{label: nbLabelFor(ev.Kind), body: seg()})
+		s.buf.Reset()
+	}
+	return msgs
 }
 
 // nbLabelFor maps a boundary event kind to a cell label. The streaming turn
