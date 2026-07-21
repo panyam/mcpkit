@@ -131,13 +131,15 @@ type loadSkillArgs struct {
 // (laziness never bypasses digest verification; the activation hook fires so
 // hosts learn which skills earn their tokens). An unknown name is an app-state
 // result, not an error, so the model can recover.
-func (a *App) registerLoadSkill(multi *agent.MultiSource, catalog []catalogSkill) error {
+func (a *App) registerLoadSkill(multi *agent.MultiSource) error {
 	fs := agent.NewFuncSource()
 	err := agent.AddFunc(fs, "load_skill",
 		"Read the full instructions for a named skill (from the skills catalog) before using it.",
 		func(ctx context.Context, in loadSkillArgs) (string, error) {
 			name := strings.TrimSpace(in.Name)
-			for _, cs := range catalog {
+			// Read the catalog live: catalog servers can connect after boot, so
+			// the set grows as they become ready.
+			for _, cs := range a.allCatalogSkills() {
 				if cs.entry.Name == name || cs.entry.URL == name {
 					res, err := cs.client.ReadAndVerify(ctx, cs.entry.URL, cs.entry.Digest)
 					if err != nil {
@@ -152,4 +154,69 @@ func (a *App) registerLoadSkill(multi *agent.MultiSource, catalog []catalogSkill
 		return err
 	}
 	return multi.Add(skillLoaderSourceID, fs)
+}
+
+// onServerSkills loads a ready server's skills into the shared state the dynamic
+// system prompt and load_skill read live. Called from the connection Group's
+// ready-observer, so a server that connects after boot contributes its skills
+// on the next turn. A load failure degrades to a warning, never a crash.
+func (a *App) onServerSkills(sc ServerConfig, c *client.Client) {
+	if c == nil || (sc.Skills != nil && !*sc.Skills) {
+		return
+	}
+	block, cat, err := loadSkillsForServer(c, sc.ID, sc.SkillsMode, sc.SkillsAllow, a.emit, a.tp)
+	if err != nil {
+		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("load skills for %s: %v", sc.ID, err)})
+		return
+	}
+	a.skillsMu.Lock()
+	if block != "" {
+		a.skillBlocks[sc.ID] = block
+	}
+	if len(cat) > 0 {
+		a.skillCatalog[sc.ID] = cat
+	}
+	// Register load_skill lazily, once, on the first catalog skill — so it never
+	// appears when no server offers catalog skills.
+	registerLoader := len(cat) > 0 && !a.loadSkillReg
+	if registerLoader {
+		a.loadSkillReg = true
+	}
+	a.skillsMu.Unlock()
+
+	if registerLoader {
+		if err := a.registerLoadSkill(a.sources); err != nil {
+			a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("register load_skill: %v", err)})
+		}
+	}
+	// The system prompt (dynamic) and tool list changed; clear any cache.
+	a.sources.Invalidate()
+}
+
+// buildInstructions is the dynamic system prompt: cfg.Instructions followed by
+// the prompt block of every currently-connected server, in config order. Set as
+// RunnerConfig.InstructionsFunc, so it is recomputed each turn and a late
+// server's skills land on the next turn.
+func (a *App) buildInstructions(context.Context) string {
+	a.skillsMu.Lock()
+	defer a.skillsMu.Unlock()
+	s := a.cfg.Instructions
+	for _, id := range a.serverOrder {
+		if block := a.skillBlocks[id]; block != "" {
+			s += "\n\n" + block
+		}
+	}
+	return s
+}
+
+// allCatalogSkills flattens every connected server's catalog entries, in config
+// order, for the load_skill lookup.
+func (a *App) allCatalogSkills() []catalogSkill {
+	a.skillsMu.Lock()
+	defer a.skillsMu.Unlock()
+	var out []catalogSkill
+	for _, id := range a.serverOrder {
+		out = append(out, a.skillCatalog[id]...)
+	}
+	return out
 }
