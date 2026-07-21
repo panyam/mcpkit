@@ -41,13 +41,13 @@ export ACTIVE SESSION_STORE SESSION OFFLOAD_THRESHOLD EMBED_MODEL EMBED_URL EMBE
        EMBED_API_KEY_ENV COMPACT_TOKENS EXPORTER OTLP_ENDPOINT UI \
        PG_HOST PG_PORT PG_DB PG_USER
 
-.PHONY: check preflight run demo note allup alldown up obs-up psql mem server build
+.PHONY: check preflight run demo note allup alldown up obs-up psql mem servers-up servers-down servers build
 
 check: ## Probe every backend; print bring-up instructions for what's missing.
 	@bash preflight.sh
 preflight: check
 
-run: ## Preflight, boot the four MCP servers (demo + eager/catalog skills + events), launch agentchat.
+run: ## Preflight, verify the MCP servers are up (make servers-up), launch agentchat.
 	@bash run.sh
 demo: run
 
@@ -76,8 +76,18 @@ psql: ## Open a psql shell on the agent DB.
 mem: ## Show the durable semantic-memory rows.
 	docker exec mcpkit-postgres psql -U $(PG_USER) -d $(PG_DB) -c "select namespace, key, created_at from agent_memories order by created_at;"
 
-server: ## Boot just the demo MCP server (:8788).
-	cd server && go run .
+# --- MCP servers (lifecycle decoupled from the agent; root CONSTRAINTS.md) ---
+# Run independently of agentchat and survive chat restarts. `make run` only
+# checks they are up. Optional NAME targets one server: `make servers-up NAME=demo`.
+
+servers-up: ## Start all MCP servers the config connects to (NAME=<one> for just one).
+	@bash servers.sh up $(NAME)
+
+servers-down: ## Stop all MCP servers (NAME=<one> for just one).
+	@bash servers.sh down $(NAME)
+
+servers: ## Show which MCP servers are up (NAME=<one> for just one).
+	@bash servers.sh status $(NAME)
 
 build: ## Build the demo server (compile check).
 	cd server && go build ./...
