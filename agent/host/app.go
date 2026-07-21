@@ -50,6 +50,12 @@ type App struct {
 	store agent.RunStore
 	runID string
 
+	// sessionsMu guards sessionsCursor, the paging position the /sessions
+	// picker remembers so "/sessions more" advances (the store cursor is
+	// opaque, so the host holds where the last page ended).
+	sessionsMu     sync.Mutex
+	sessionsCursor string
+
 	// toolResultStore backs tool-result offloading when Config.Offload
 	// is set; nil when offloading is off.
 	toolResultStore agent.ToolResultStore

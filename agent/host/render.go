@@ -276,6 +276,9 @@ func (r *renderer) command(res CmdResult) {
 		r.session(res.RunID)
 	case CmdSessions:
 		r.sessions(res.Sessions, res.RunID)
+		if res.SessionsNote != "" {
+			fmt.Fprintf(r.out, "%s\n", r.dim(res.SessionsNote))
+		}
 	case CmdTools:
 		r.toolList(res.Tools)
 	case CmdHistory:
