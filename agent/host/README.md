@@ -51,6 +51,19 @@ stay out of the lean `agent/` module.
   nothing; persistence failures degrade to a rendered warning, never a turn
   failure.
 
+## Skills trust model
+
+Skills are data, not code (`ext/skills` is enforced no-exec), so the risk a
+skills server carries is context-poisoning, not side effects. `ServerConfig.SkillsMode`
+is the trust lever. `"eager"` splices full skill bodies into the system prompt
+at connect time with no per-skill gate — reserve it for servers you trust.
+`"catalog"` is the safer default for a lower-trust server: a skill enters
+context only when the model calls `load_skill`, which is an ordinary tool, so it
+flows through the approval ladder (set `Approval.Rules["load_skill"] = "ask"` to
+confirm each activation — the prompt names the requested skill). The fetched
+body lands in tool history rather than the system prompt, so it carries less
+authority. See the `SkillsMode` godoc in `config.go`.
+
 ## Testing
 
 Fully offline: real in-process mcpkit servers plus a scripted `StubProvider` plus
