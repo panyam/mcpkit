@@ -348,6 +348,14 @@ type ServerConfig struct {
 	// (a FilterSource capability boundary, not a display preference).
 	Allow []string `json:"allow,omitempty"`
 
+	// Required makes boot block until this server is connected: NewApp waits
+	// for it (up to the required-timeout) instead of returning while it is
+	// still connecting. Use it for a server the agent is useless without.
+	// Non-required servers (the default) connect in the background and never
+	// block boot — the agent is usable immediately and their tools wire in as
+	// they become ready. See docs/AGENT_SERVER_STATE.md.
+	Required bool `json:"required,omitempty"`
+
 	// Skills controls SEP-2640 skill loading for this server. Nil or true
 	// auto-detects (servers without the capability are skipped silently);
 	// false opts out even when the server advertises skills.

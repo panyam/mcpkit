@@ -84,6 +84,33 @@ func (r *renderer) approvalMode(p *agent.TieredApproval) {
 	fmt.Fprintf(r.out, "%s\n", r.dim("approval: "+approvalModeName(p.DefaultMode())))
 }
 
+// serverList renders /servers: each MCP server and its connection state.
+func (r *renderer) serverList(servers []client.MemberStatus) {
+	if len(servers) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("servers: none configured"))
+		return
+	}
+	for _, s := range servers {
+		line := fmt.Sprintf("  %-14s %s", s.ID, s.State)
+		if s.Required {
+			line += " (required)"
+		}
+		if s.Err != nil {
+			line += ": " + s.Err.Error()
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim(line))
+	}
+}
+
+// serverState renders one HostServerStateChanged transition.
+func (r *renderer) serverState(id, state, errMsg string) {
+	line := "server " + id + ": " + state
+	if errMsg != "" {
+		line += " (" + errMsg + ")"
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}
+
 func (r *renderer) breakLine() {
 	if r.midText {
 		fmt.Fprintln(r.out)
@@ -289,6 +316,8 @@ func (r *renderer) command(res CmdResult) {
 		r.taskList(res.Tasks)
 	case CmdApproval:
 		r.approvalMode(res.Approval)
+	case CmdServers:
+		r.serverList(res.Servers)
 	case CmdQuit:
 		// nothing to render; the loop exits
 	}
@@ -328,6 +357,8 @@ func (r *renderer) On(ev HostEvent) {
 		r.taskCompleted(ev.Task)
 	case HostMessage:
 		fmt.Fprintf(r.out, "%s\n", r.dim(ev.Message))
+	case HostServerStateChanged:
+		r.serverState(ev.ServerID, ev.ServerState, ev.Err)
 	case HostSubAgentEvent:
 		r.subAgent(ev.SubAgent)
 	}

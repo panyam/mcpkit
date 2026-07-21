@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/mcpkit/testutil"
 )
@@ -72,9 +73,18 @@ func TestBearerAuthReachesTheWire(t *testing.T) {
 	}
 	app.Close()
 
+	// Without the bearer, the guarded server rejects the connection. Under
+	// graceful degradation (docs/AGENT_SERVER_STATE.md) this no longer fails
+	// boot — the agent starts and the server surfaces as not-ready (401 ->
+	// needs-login), which is how we know the un-bearered request was refused.
 	cfg.Servers[0].Auth = nil
-	if _, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(agent.NewStubProvider())); err == nil {
-		t.Fatal("connect without bearer must fail against the guarded server")
+	app2, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(agent.NewStubProvider()))
+	if err != nil {
+		t.Fatalf("without bearer, boot should still succeed gracefully: %v", err)
+	}
+	defer app2.Close()
+	if s, _ := app2.group.State(cfg.Servers[0].ID); s == client.StateReady {
+		t.Fatalf("un-bearered connection to the guarded server must not be ready, got %v", s)
 	}
 }
 
