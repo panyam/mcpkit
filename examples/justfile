@@ -1,0 +1,56 @@
+# examples/justfile — test orchestration for the examples tree (mirror of
+# examples/Makefile). The root justfile delegates here via `just test-examples`.
+#
+# Every recipe here is infra-free (no Docker/live services) so `just test` runs
+# in CI as-is. The events/discord + events/telegram suites moved here from
+# experimental/justfile (they test example apps, not the experimental library);
+# experimental/justfile keeps the old names as aliases.
+
+EXAMPLES_DIR := justfile_directory()
+
+# Run every infra-free example test
+test: test-agents-async test-agents-multi test-skills test-tasks-v2 test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server
+
+# agents/agent-async
+test-agents-async:
+    cd {{EXAMPLES_DIR}}/agents/agent-async && go test ./... -count=1 -timeout 60s
+
+# agents/multi-agent
+test-agents-multi:
+    cd {{EXAMPLES_DIR}}/agents/multi-agent && go test ./... -count=1 -timeout 60s
+
+# skills (agent scenario)
+test-skills:
+    cd {{EXAMPLES_DIR}}/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario
+
+# tasks-v2 (agent scenario)
+test-tasks-v2:
+    cd {{EXAMPLES_DIR}}/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario
+
+# common (shared example helpers + otel setup)
+test-common:
+    cd {{EXAMPLES_DIR}}/common && go test ./... -count=1 -timeout 60s
+
+# otel/stdout smoke
+test-otel-stdout:
+    cd {{EXAMPLES_DIR}}/otel/stdout && go test ./... -count=1 -timeout 60s
+
+# protogen/bookservice
+test-protogen:
+    cd {{EXAMPLES_DIR}}/protogen/bookservice && go test ./... -count=1 -timeout 60s
+
+# events/kitchen-sink
+test-events-kitchen-sink:
+    cd {{EXAMPLES_DIR}}/events/kitchen-sink && go test ./... -count=1 -timeout 60s
+
+# whole-enchilada/events/event-server
+test-whole-enchilada-event-server:
+    cd {{EXAMPLES_DIR}}/whole-enchilada/events/event-server && go test ./... -count=1 -timeout 60s
+
+# events/discord (runner-agnostic script, shared with the Makefile)
+test-events-discord:
+    @bash {{EXAMPLES_DIR}}/../experimental/scripts/test-events-discord.sh
+
+# events/telegram
+test-events-telegram:
+    @bash {{EXAMPLES_DIR}}/../experimental/scripts/test-events-telegram.sh
