@@ -412,19 +412,150 @@ func TestDiscoverMCPAuth_PRMResourceEmpty_Accepts(t *testing.T) {
 
 // TestDiscoverMCPAuth_NoPRM verifies that DiscoverMCPAuth returns an error
 // when both path-based and root well-known URIs return 404.
-func TestDiscoverMCPAuth_NoPRM(t *testing.T) {
+func TestDiscoverMCPAuth_NoPRM_LegacyDefaultEndpoints(t *testing.T) {
+	// A server with no PRM and no AS metadata is the 2025-03-26
+	// endpoint-fallback shape: discovery synthesizes the legacy default
+	// endpoints at the origin instead of erroring.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("WWW-Authenticate", `Bearer`)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 	})
-	// No PRM endpoints at all
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
+	info, err := DiscoverMCPAuth(srv.URL+"/mcp", WithHTTPClient(srv.Client()))
+	if err != nil {
+		t.Fatalf("DiscoverMCPAuth: %v", err)
+	}
+	if !info.LegacyDiscovery {
+		t.Error("expected LegacyDiscovery to be set")
+	}
+	if info.PRM != nil {
+		t.Error("expected nil PRM on the legacy path")
+	}
+	if got, want := info.ASMetadata.AuthorizationEndpoint, srv.URL+"/authorize"; got != want {
+		t.Errorf("AuthorizationEndpoint = %q, want %q", got, want)
+	}
+	if got, want := info.ASMetadata.TokenEndpoint, srv.URL+"/token"; got != want {
+		t.Errorf("TokenEndpoint = %q, want %q", got, want)
+	}
+	if got, want := info.ASMetadata.RegistrationEndpoint, srv.URL+"/register"; got != want {
+		t.Errorf("RegistrationEndpoint = %q, want %q", got, want)
+	}
+	if got, want := len(info.AuthorizationServers), 1; got != want || info.AuthorizationServers[0] != srv.URL {
+		t.Errorf("AuthorizationServers = %v, want [%s]", info.AuthorizationServers, srv.URL)
+	}
+	if err := ValidatePKCES256(info.ASMetadata); err != nil {
+		t.Errorf("synthesized metadata must pass the PKCE gate: %v", err)
+	}
+}
+
+func TestDiscoverMCPAuth_Legacy_ASMetadataAtRoot(t *testing.T) {
+	// The 2025-03-26 metadata-backcompat shape: no PRM, but AS metadata
+	// at the origin's oauth-authorization-server well-known path. The
+	// advertised endpoints must win over the synthesized defaults.
+	mux := http.NewServeMux()
+	var srvURL string
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Bearer`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 srvURL,
+			"authorization_endpoint": srvURL + "/oauth/authorize",
+			"token_endpoint":         srvURL + "/oauth/token",
+			"registration_endpoint":  srvURL + "/oauth/register",
+		})
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+
+	info, err := DiscoverMCPAuth(srv.URL+"/mcp", WithHTTPClient(srv.Client()))
+	if err != nil {
+		t.Fatalf("DiscoverMCPAuth: %v", err)
+	}
+	if !info.LegacyDiscovery {
+		t.Error("expected LegacyDiscovery to be set")
+	}
+	if got, want := info.ASMetadata.AuthorizationEndpoint, srv.URL+"/oauth/authorize"; got != want {
+		t.Errorf("AuthorizationEndpoint = %q, want %q", got, want)
+	}
+	if got, want := info.ASMetadata.TokenEndpoint, srv.URL+"/oauth/token"; got != want {
+		t.Errorf("TokenEndpoint = %q, want %q", got, want)
+	}
+	if got, want := info.ASMetadata.RegistrationEndpoint, srv.URL+"/oauth/register"; got != want {
+		t.Errorf("RegistrationEndpoint = %q, want %q", got, want)
+	}
+}
+
+func TestDiscoverMCPAuth_NoLegacyFallbackOnPRMServerError(t *testing.T) {
+	// The downgrade guard: only a definitive 404 at both PRM locations
+	// enters the legacy path. A 5xx (transient failure, misbehaving
+	// proxy, attacker-induced error) must abort discovery, and no legacy
+	// well-known or default-endpoint request may be made.
+	for _, tc := range []struct {
+		name          string
+		pathBasedCode int
+		rootCode      int
+	}{
+		{"path-based 500", http.StatusInternalServerError, http.StatusNotFound},
+		{"root 500 after path 404", http.StatusNotFound, http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyProbed := false
+			mux := http.NewServeMux()
+			mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("WWW-Authenticate", `Bearer`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+			})
+			mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "nope", tc.pathBasedCode)
+			})
+			mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "nope", tc.rootCode)
+			})
+			mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+				legacyProbed = true
+				http.Error(w, "should not be reached", http.StatusNotFound)
+			})
+
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+
+			_, err := DiscoverMCPAuth(srv.URL+"/mcp", WithHTTPClient(srv.Client()))
+			if err == nil {
+				t.Fatal("expected error on PRM server error, got legacy fallback")
+			}
+			if legacyProbed {
+				t.Error("legacy AS metadata endpoint was probed despite PRM server error")
+			}
+		})
+	}
+}
+
+func TestDiscoverMCPAuth_NoLegacyFallbackWhenHeaderAdvertisesPRM(t *testing.T) {
+	// A WWW-Authenticate resource_metadata link marks the server as
+	// modern: a failing fetch of that URL must error, never fall back
+	// to legacy discovery.
+	mux := http.NewServeMux()
+	var srvURL string
+	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+srvURL+`/.well-known/oauth-protected-resource/mcp"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	})
+	// The advertised PRM URL 404s; nothing else is served.
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	srvURL = srv.URL
+
 	_, err := DiscoverMCPAuth(srv.URL+"/mcp", WithHTTPClient(srv.Client()))
 	if err == nil {
-		t.Fatal("expected error when no PRM endpoint exists")
+		t.Fatal("expected error when the header-advertised PRM URL fails")
 	}
 }

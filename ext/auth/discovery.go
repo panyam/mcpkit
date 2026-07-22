@@ -43,6 +43,17 @@ type MCPAuthInfo struct {
 
 	// ASMetadata is the discovered authorization server metadata.
 	ASMetadata *client.ASMetadata
+
+	// LegacyDiscovery reports that discovery fell back to the
+	// 2025-03-26 authorization spec's shape: the server published no
+	// Protected Resource Metadata (definitive 404 at both RFC 9728
+	// well-known locations), so the MCP server origin itself is treated
+	// as the authorization server. On this path PRM is nil and
+	// AuthorizationServers holds the bare origin. ASMetadata is either
+	// the document served at the origin's oauth-authorization-server
+	// well-known path or, when that is also absent, the legacy spec's
+	// default endpoints (/authorize, /token, /register at the origin).
+	LegacyDiscovery bool
 }
 
 // ProtectedResourceMetadata is the JSON structure served by the PRM endpoint (RFC 9728).
@@ -165,6 +176,16 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 			if err != nil {
 				return nil, fmt.Errorf("fetch PRM (root): %w", err)
 			}
+			if prmResp.StatusCode == http.StatusNotFound {
+				// Definitive 404 at both RFC 9728 locations: the server
+				// predates PRM, so take the 2025-03-26 legacy discovery
+				// path. Reached only from here — any non-404 PRM failure
+				// (5xx, network error) aborts below instead, so a modern
+				// server's flow cannot be downgraded by a transient PRM
+				// failure, and a header-advertised resource_metadata URL
+				// (the branch above) never falls back at all.
+				return discoverLegacy(httpClient, u)
+			}
 		}
 
 		if prmResp.StatusCode != http.StatusOK {
@@ -224,6 +245,57 @@ func DiscoverMCPAuth(serverURL string, opts ...DiscoverOption) (*MCPAuthInfo, er
 		return nil, fmt.Errorf("discover AS metadata for %s: %w", issuer, err)
 	}
 	info.ASMetadata = asMeta
+
+	return info, nil
+}
+
+// discoverLegacy resolves auth configuration per the 2025-03-26
+// authorization spec, which predates RFC 9728 PRM: the MCP server origin
+// is the authorization server. AS metadata is fetched from the origin's
+// oauth-authorization-server well-known path; a definitive 404 there
+// falls through to the legacy spec's default endpoint paths at the
+// origin. Any other failure (5xx, network error, malformed JSON) is an
+// error — the same no-downgrade rule the caller applies to PRM.
+func discoverLegacy(httpClient *http.Client, u *url.URL) (*MCPAuthInfo, error) {
+	origin := u.Scheme + "://" + u.Host
+	info := &MCPAuthInfo{
+		AuthorizationServers: []string{origin},
+		LegacyDiscovery:      true,
+	}
+
+	metaURL := origin + "/.well-known/oauth-authorization-server"
+	resp, err := httpClient.Get(metaURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch legacy AS metadata: %w", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read legacy AS metadata: %w", err)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		var meta client.ASMetadata
+		if err := json.Unmarshal(body, &meta); err != nil {
+			return nil, fmt.Errorf("parse legacy AS metadata: %w", err)
+		}
+		info.ASMetadata = &meta
+	case http.StatusNotFound:
+		// S256 is stamped on the synthesized document because the C11/C12
+		// "refuse when code_challenge_methods_supported is absent" rule
+		// guards a *served* metadata document; there is none here, and the
+		// 2025-03-26 spec required PKCE of its authorization servers.
+		info.ASMetadata = &client.ASMetadata{
+			Issuer:                        origin,
+			AuthorizationEndpoint:         origin + "/authorize",
+			TokenEndpoint:                 origin + "/token",
+			RegistrationEndpoint:          origin + "/register",
+			CodeChallengeMethodsSupported: []string{"S256"},
+		}
+	default:
+		return nil, fmt.Errorf("legacy AS metadata endpoint returned %d", resp.StatusCode)
+	}
 
 	return info, nil
 }
