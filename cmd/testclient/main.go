@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strings"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -76,19 +77,44 @@ func main() {
 	// Step 1: Try connecting without auth first.
 	// Some conformance scenarios don't require auth, or the server accepts
 	// initialize but returns 403 on subsequent requests (scope step-up).
+	//
+	// Wire selection: legacy first (matches the library default and every
+	// pre-SEP-2575 mock). If the server rejects the legacy handshake with
+	// the stateless signature (-32020 missing MCP-Protocol-Version), pin
+	// ClientModeStateless and reconnect — deliberately NOT blanket
+	// Adaptive, which sends a server/discover probe that confuses the
+	// older legacy mocks in this same suite.
+	newConformanceClient := func(stateless bool, extra ...client.ClientOption) *client.Client {
+		opts := []client.ClientOption{
+			client.WithClientLogging(log.Default()),
+			client.WithElicitationHandler(conformanceElicitationHandler),
+			// Open a background GET SSE so server-to-client requests
+			// (elicitation/create, sampling/createMessage) sent on the
+			// session-wide stream by SDK-conformant servers reach us.
+			// Without this, scenarios that drive elicitation via
+			// StreamableHTTPServerTransport hang waiting on the wrong stream.
+			client.WithGetSSEStream(),
+		}
+		if stateless {
+			opts = append(opts, client.WithClientMode(client.ClientModeStateless))
+		}
+		opts = append(opts, extra...)
+		return client.NewClient(serverURL,
+			core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"}, opts...)
+	}
+	statelessWire := false
 	log.Println("Step 1: Trying direct connect (no auth)...")
-	noAuthClient := client.NewClient(serverURL,
-		core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
-		client.WithClientLogging(log.Default()),
-		client.WithElicitationHandler(conformanceElicitationHandler),
-		// Open a background GET SSE so server-to-client requests
-		// (elicitation/create, sampling/createMessage) sent on the
-		// session-wide stream by SDK-conformant servers reach us.
-		// Without this, scenarios that drive elicitation via
-		// StreamableHTTPServerTransport hang waiting on the wrong stream.
-		client.WithGetSSEStream())
+	noAuthClient := newConformanceClient(false)
+	connectErr := noAuthClient.Connect()
+	if connectErr != nil && strings.Contains(connectErr.Error(), "MCP-Protocol-Version") {
+		log.Println("Legacy handshake rejected with stateless signature — reconnecting on the SEP-2575 wire")
+		statelessWire = true
+		noAuthClient.Close()
+		noAuthClient = newConformanceClient(true)
+		connectErr = noAuthClient.Connect()
+	}
 
-	if err := noAuthClient.Connect(); err == nil {
+	if err := connectErr; err == nil {
 		// Connected without auth — verify session works
 		tools, err := noAuthClient.ListTools(context.Background())
 		if err == nil {
@@ -139,13 +165,7 @@ func main() {
 
 	// Step 3: Connect with auth token.
 	log.Println("Step 3: MCP initialize with OAuth token...")
-	c := client.NewClient(serverURL,
-		core.ClientInfo{Name: "mcpkit-testclient", Version: "0.1.0"},
-		client.WithTokenSource(ts),
-		client.WithClientLogging(log.Default()),
-		client.WithElicitationHandler(conformanceElicitationHandler),
-		client.WithGetSSEStream(),
-	)
+	c := newConformanceClient(statelessWire, client.WithTokenSource(ts))
 
 	if err := c.Connect(); err != nil {
 		log.Fatalf("MCP connect: %v", err)
