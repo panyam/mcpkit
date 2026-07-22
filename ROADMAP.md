@@ -25,4 +25,4 @@ All required (non-experimental) features of the current spec, including the opti
 
 ## Out of scope for spec tracking
 
-The agent SDK (`agent/`, `agent/host/`, `cmd/agentchat`) is a separate track above the protocol layer, with its own roadmap in `docs/AGENT_SDK_ROADMAP.md`. It is not part of the MCP specification surface and is versioned and released independently.
+The agent SDK (`agent/`, `agent/host/`, `cmd/agentchat`) is a separate track above the protocol layer, with its own roadmap in `docs/AGENT_SDK_ROADMAP.md`. It is not part of the MCP specification surface and is versioned and released independently. Because it sits above the protocol layer, it may be extracted into its own repository in the future if that better serves its independent cadence; such a move would not affect the protocol modules or their consumers.
