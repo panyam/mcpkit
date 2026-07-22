@@ -72,28 +72,34 @@ gracefully.** The tool set does not shrink mid-turn — the model keeps seeing t
 knew about, so it is not surprised. Calls that land while the server is down are handled
 below.
 
-## Tool calls to a non-Ready server
+## Tool calls to a non-Ready server (SHIPPED, reactive)
 
-Because tool defs stay registered, the model can call a tool whose server is not `Ready`.
-Rather than a hard failure or an indefinite block:
+Because tool defs stay registered, the model can call a tool whose server is unreachable.
+The implementation is **reactive**, not a proactive pre-call gate — and deliberately so:
+`client.Client` **auto-reconnects transparently** (`retryWithReconnect`) and exposes no
+disconnect signal, so a live drop is not cleanly observable before a call. A blip heals
+itself; only a persistent failure surfaces, and it surfaces exactly where it matters — when
+a call is actually made.
 
-- **Default — model-visible miss.** The dispatch short-circuits with an **`ErrNotAvailableNow`**
-  sentinel (recognized before the call reaches the disconnected client) and feeds back a
-  **non-fatal** `ToolResult` naming the server and its state — e.g. "tool `create_issue` is
-  unavailable: server `atlassian` is not connected (needs-login); retry, route around it, or
-  tell the user." A distinct **`EventToolUnavailable`** carries `Reason` + state (NOT `Error`,
-  so error-keyed eval scorers don't miscount — the same care taken for `EventToolDenied` /
-  `EventToolCancelled`). The turn continues; the model adapts. This is the same
-  "non-fatal tool outcome → model-visible → continue" family as approval-denial and
-  cancellation.
-- **Narrow exception — bounded wait for `Connecting`.** If the server is mid-connect (the
-  common first-turn boot race, where the model calls a tool before an async server finished
-  connecting), the dispatch does a short **capped** wait for `Ready` before falling through
-  to the miss. Never wait on `Failed` / `NeedsLogin` / `Disabled` — they won't resolve
-  without action, so blocking is pointless.
+- **Model-visible miss.** Each server's source is wrapped by `availabilitySource` (in the
+  host). When a call returns a **transient (network-level) error** — the client tried to
+  reconnect and could not — the wrapper maps it to **`agent.ErrNotAvailableNow`** with a
+  message naming the server and tool ("tool `create_issue` is temporarily unavailable —
+  server `atlassian` is not reachable right now; retry, use another approach, or tell the
+  user"). The Runner recognizes the sentinel, emits a distinct **`EventToolUnavailable`**
+  carrying `Reason` (NOT `Error`, so error-keyed eval scorers don't miscount — the same care
+  as `EventToolDenied` / `EventToolCancelled`), and feeds the message back. The turn
+  continues; the model adapts. Same "non-fatal tool outcome → model-visible → continue"
+  family as approval-denial and cancellation. A tool that *ran* and failed (`IsError` result)
+  or a server-side JSON-RPC / 4xx error is not transient and falls through unchanged.
 
 **Rejected:** blocking the turn indefinitely (queue-and-wait) — it couples turn latency to
 reconnect timing and hangs on servers that may never come up.
+
+**Deferred (not needed yet):** a proactive health poll that marks a server down *before* a
+call hits it (so `/servers` reflects a drop eagerly) and the bounded-wait-for-`Connecting`
+window. These compose additively on top of the reactive path — a `Group` health-poll option
+would feed the same status + retry, and the `availabilitySource` stays as-is.
 
 ## `client.Group` (client-layer primitive)
 
@@ -149,14 +155,16 @@ blocks of currently-`Ready` servers.
 
 ## Phasing
 
-1. **Async connect + state + `/servers` + graceful boot + per-server `required`.**
-   `client.Group` lands here. Eager skills at boot: a `required` eager server blocks boot
-   (baked as today); a non-required eager server that is down is simply absent until phase 2.
-   Flips C6's noted target toward done.
-2. **Seamless late integration.** `RunnerConfig.InstructionsFunc` + host recompute of eager
-   blocks from the Ready-set; reconnect/de-register of tools/catalog-skills/events. A
-   returning server wires in with no restart.
-3. **Interactive re-auth** (`NeedsLogin` → `/login`).
+1. **Async connect + state + `/servers` + graceful boot + per-server `required`.** SHIPPED
+   (`client.Group`). Flips C6's noted target toward done.
+2. **Seamless late integration.** SHIPPED. `RunnerConfig.InstructionsFunc` + host recompute of
+   eager/catalog blocks from the ready-set (skills), ready-observer subscription (events), and
+   the reactive `ErrNotAvailableNow` miss for a call to an unreachable server. A returning
+   server wires its tools/skills/events back in with no restart.
+3. **Interactive re-auth** (`NeedsLogin` → `/login`). Not started.
+
+Deferred (additive, not blocking): a proactive `Group` health poll (eager `/servers`
+drop status + bounded-wait-for-`Connecting`); `SystemPromptBuilder` (issue 1091).
 
 ## Resolved
 

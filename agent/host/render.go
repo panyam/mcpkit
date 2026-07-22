@@ -69,6 +69,8 @@ func (r *renderer) handle(e agent.Event) {
 		fmt.Fprintf(r.out, "%s\n", r.dim("  ⃠ "+e.ToolCall.Name+" not permitted: "+snippet(e.Reason, 120)))
 	case agent.EventToolCancelled:
 		fmt.Fprintf(r.out, "%s\n", r.dim("  ◼ "+e.ToolCall.Name+" cancelled: "+snippet(e.Reason, 120)))
+	case agent.EventToolUnavailable:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ⊘ "+e.ToolCall.Name+" unavailable: "+snippet(e.Reason, 120)))
 	case agent.EventError:
 		r.breakLine()
 	}

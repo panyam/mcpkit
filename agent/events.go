@@ -29,6 +29,14 @@ const (
 	// differently from a failure. Reason carries the model-visible
 	// feedback text.
 	EventToolCancelled EventKind = "tool-cancelled"
+	// EventToolUnavailable marks a call whose backing server was not reachable
+	// (ErrNotAvailableNow): the tool exists but its server is down right now.
+	// Distinct from tool-error (nothing failed on the server; it just isn't
+	// there yet) so a surface can render it as a transient miss and evals keyed
+	// on Error don't count it. Reason carries the model-visible feedback text;
+	// the turn continues so the model can retry, route around it, or tell the
+	// user. See docs/AGENT_SERVER_STATE.md.
+	EventToolUnavailable EventKind = "tool-unavailable"
 	// EventCompaction marks that a Compactor rewrote the turn's history
 	// before the first model call (the head summarized, a recent tail kept
 	// verbatim). Emitted only when compaction actually fired; Compaction
