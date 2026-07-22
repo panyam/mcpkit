@@ -63,7 +63,21 @@ var removedLegacyMethods = map[string]struct{}{
 // correct HTTP status (e.g. 403) + WWW-Authenticate header — so the stateless
 // wire matches the legacy wire's auth signaling instead of folding it into a
 // generic -32603 body (issue 815). When err is non-nil the *core.Response is nil.
+//
+// Every success result is stamped with _meta[io.modelcontextprotocol/serverInfo]
+// (spec PR 3002 SHOULD — the stateless wire has no initialize handshake to
+// carry server identity). Error responses are not stamped: the schema puts
+// ResultMetaObject on Result only.
 func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Response, error) {
+	resp, err := d.dispatch(ctx, req)
+	if err == nil && resp != nil && resp.Error == nil {
+		resp.Result = core.InjectServerInfoIntoResult(resp.Result, d.Backend.ServerInfo())
+	}
+	return resp, err
+}
+
+// dispatch is the unstamped routing core of Dispatch.
+func (d *Dispatcher) dispatch(ctx context.Context, req *core.Request) (*core.Response, error) {
 	id := req.ID
 	if id == nil {
 		id = json.RawMessage("null")
