@@ -10,7 +10,11 @@
 
 ## mcpkit-local Conformance Suites
 
-These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the tables.
+
+### mcpkit-authored suites
+
+_Scenarios authored by this project, typically in the `panyam/mcpconformance` fork while the SEP they cover is still in flight upstream. They assert what the spec says, not what mcpkit does, but they have not been through upstream review._
 
 | Suite | Covers | Stage | Status | Source | Tracking |
 |---|---|:---:|:---:|---|---|
