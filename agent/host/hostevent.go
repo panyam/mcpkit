@@ -51,6 +51,10 @@ const (
 	// (SubAgent) — a persona's activity, scoped/depth on the envelope, for a
 	// surface to render indented under the parent's turn.
 	HostSubAgentEvent HostEventKind = "sub-agent-event"
+	// HostServerStateChanged reports an MCP server's connection state changing
+	// (ServerID, ServerState; Err on failed/needs-login) — the async
+	// graceful-degrade surface (see docs/AGENT_SERVER_STATE.md).
+	HostServerStateChanged HostEventKind = "server-state-changed"
 )
 
 // HostEvent is one domain event the host announces: a thing that
@@ -83,11 +87,12 @@ type HostEvent struct {
 	Label       string
 	Message     string
 
-	ServerID  string
-	URI       string
-	EventName string
-	Loaded    int
-	Skipped   int
+	ServerID    string
+	ServerState string // ConnState on HostServerStateChanged
+	URI         string
+	EventName   string
+	Loaded      int
+	Skipped     int
 
 	TaskStatus *core.DetailedTask
 	Task       *client.BackgroundTask

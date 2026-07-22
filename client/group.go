@@ -83,9 +83,19 @@ type groupMember struct {
 	required bool
 
 	// guarded by Group.mu
-	state ConnState
-	err   error
-	ready chan struct{} // closed once, on first StateReady (for WaitRequired)
+	state   ConnState
+	err     error
+	ready   chan struct{} // closed once, on first StateReady (for WaitRequired)
+	settled chan struct{} // closed once, when the first connect attempt completes (for WaitSettled)
+}
+
+// closeOnce closes ch if it is not already closed. The caller holds Group.mu.
+func closeOnce(ch chan struct{}) {
+	select {
+	case <-ch:
+	default:
+		close(ch)
+	}
 }
 
 // Group manages the connection lifecycle of N clients: it connects them
@@ -103,10 +113,11 @@ type Group struct {
 	members map[string]*groupMember
 	order   []string
 
-	reqTimeout time.Duration
-	minBackoff time.Duration
-	maxBackoff time.Duration
-	observer   func(StateChange)
+	reqTimeout    time.Duration
+	settleTimeout time.Duration
+	minBackoff    time.Duration
+	maxBackoff    time.Duration
+	observer      func(StateChange)
 
 	started bool
 	ctx     context.Context
@@ -130,6 +141,15 @@ func WithGroupBackoff(min, max time.Duration) GroupOption {
 	return func(g *Group) { g.minBackoff, g.maxBackoff = min, max }
 }
 
+// WithSettleTimeout caps how long WaitSettled waits for the initial connect
+// round. Default 10s; 0 waits indefinitely. Reachable servers settle in well
+// under this (a ready connect or a fast refusal); only a server that accepts
+// the socket but never completes the handshake hits the cap, and then it just
+// wires in late instead of blocking boot.
+func WithSettleTimeout(d time.Duration) GroupOption {
+	return func(g *Group) { g.settleTimeout = d }
+}
+
 // WithObserver registers a callback invoked on every member state transition.
 // It is called from the member's own goroutine, so it may be invoked
 // concurrently for different members and must be safe for concurrent use; keep
@@ -141,10 +161,11 @@ func WithObserver(fn func(StateChange)) GroupOption {
 // NewGroup builds a Group. Add members, then Start.
 func NewGroup(opts ...GroupOption) *Group {
 	g := &Group{
-		members:    map[string]*groupMember{},
-		reqTimeout: 30 * time.Second,
-		minBackoff: 500 * time.Millisecond,
-		maxBackoff: 30 * time.Second,
+		members:       map[string]*groupMember{},
+		reqTimeout:    30 * time.Second,
+		settleTimeout: 10 * time.Second,
+		minBackoff:    500 * time.Millisecond,
+		maxBackoff:    30 * time.Second,
 	}
 	for _, o := range opts {
 		o(g)
@@ -160,7 +181,7 @@ func (g *Group) Add(id string, c *Client, required bool) {
 	if _, ok := g.members[id]; ok {
 		return
 	}
-	g.members[id] = &groupMember{id: id, client: c, required: required, state: StateDisabled, ready: make(chan struct{})}
+	g.members[id] = &groupMember{id: id, client: c, required: required, state: StateDisabled, ready: make(chan struct{}), settled: make(chan struct{})}
 	g.order = append(g.order, id)
 }
 
@@ -200,6 +221,15 @@ func (g *Group) run(m *groupMember) {
 		}
 		g.set(m, StateConnecting, nil)
 		err := m.client.Connect()
+		// If the group is closing, a Connect that just succeeded left an open
+		// connection that Close's earlier client.Close could not see (it raced
+		// this in-flight Connect). Close it here so it doesn't leak past Close.
+		if g.ctx.Err() != nil {
+			if err == nil {
+				m.client.Close()
+			}
+			return
+		}
 		if err == nil {
 			g.set(m, StateReady, nil)
 			return
@@ -226,18 +256,23 @@ func (g *Group) run(m *groupMember) {
 func (g *Group) set(m *groupMember, s ConnState, err error) {
 	g.mu.Lock()
 	m.state, m.err = s, err
-	if s == StateReady {
-		select {
-		case <-m.ready: // already closed
-		default:
-			close(m.ready)
-		}
-	}
 	obs := g.observer
 	g.mu.Unlock()
+
+	// Fire the observer first (it registers a ready server's capabilities),
+	// THEN signal ready/settled — so a WaitRequired / WaitSettled caller
+	// observes the server as usable (tools registered), not merely connected.
 	if obs != nil {
 		obs(StateChange{ID: m.id, State: s, Err: err})
 	}
+	g.mu.Lock()
+	if s == StateReady {
+		closeOnce(m.ready)
+	}
+	if s != StateConnecting { // first non-connecting state = first attempt done
+		closeOnce(m.settled)
+	}
+	g.mu.Unlock()
 }
 
 // WaitRequired blocks until every required member has reached ready, the
@@ -268,6 +303,40 @@ func (g *Group) WaitRequired(ctx context.Context) error {
 			return ctx.Err()
 		case <-deadline:
 			return fmt.Errorf("client: required servers not ready within %s: %s", timeout, g.notReadyRequired())
+		}
+	}
+	return nil
+}
+
+// WaitSettled blocks until every member's first connect attempt has completed
+// (reached ready, failed, or needs-login), the context is cancelled, or the
+// settle-timeout elapses. Unlike WaitRequired, a timeout is NOT an error: it
+// just means some server is still on its first attempt, and it will register
+// via the observer when it finishes. This is the bounded initial-connect round
+// a caller waits for so reachable servers are ready-and-registered at boot
+// while a down server (fast failure) does not block.
+func (g *Group) WaitSettled(ctx context.Context) error {
+	g.mu.Lock()
+	members := make([]*groupMember, 0, len(g.order))
+	for _, id := range g.order {
+		members = append(members, g.members[id])
+	}
+	timeout := g.settleTimeout
+	g.mu.Unlock()
+
+	var deadline <-chan time.Time
+	if timeout > 0 {
+		t := time.NewTimer(timeout)
+		defer t.Stop()
+		deadline = t.C
+	}
+	for _, m := range members {
+		select {
+		case <-m.settled:
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline:
+			return nil
 		}
 	}
 	return nil
