@@ -55,14 +55,6 @@ func TestDecodeRequestMeta_MissingRequiredSubfields(t *testing.T) {
 			"protocolVersion",
 		},
 		{
-			"missing clientInfo",
-			`{
-				"io.modelcontextprotocol/protocolVersion":"2026-07-28",
-				"io.modelcontextprotocol/clientCapabilities":{}
-			}`,
-			"clientInfo",
-		},
-		{
 			"missing clientCapabilities",
 			`{
 				"io.modelcontextprotocol/protocolVersion":"2026-07-28",
@@ -87,6 +79,99 @@ func TestDecodeRequestMeta_MissingRequiredSubfields(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDecodeRequestMeta_ClientInfoOptional locks the spec PR 3002 demotion:
+// a request whose _meta omits clientInfo MUST decode cleanly (clientInfo is
+// a SHOULD, never a rejection), with RequestMeta.ClientInfo left nil.
+func TestDecodeRequestMeta_ClientInfoOptional(t *testing.T) {
+	params := []byte(`{
+		"_meta": {
+			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+			"io.modelcontextprotocol/clientCapabilities": {}
+		}
+	}`)
+	meta, err := DecodeRequestMeta(params)
+	if err != nil {
+		t.Fatalf("clientInfo-less envelope rejected: %v", err)
+	}
+	if meta.ClientInfo != nil {
+		t.Errorf("ClientInfo = %+v, want nil for omitted field", meta.ClientInfo)
+	}
+}
+
+func TestInjectServerInfoIntoResult(t *testing.T) {
+	info := ServerInfo{Name: "srv", Version: "1.0"}
+
+	readMeta := func(t *testing.T, result any) *ServerInfo {
+		t.Helper()
+		raw, err := MarshalJSON(result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var probe struct {
+			Meta ResultMeta `json:"_meta"`
+		}
+		if err := json.Unmarshal(raw, &probe); err != nil {
+			t.Fatal(err)
+		}
+		return probe.Meta.ServerInfo
+	}
+
+	t.Run("stamps plain object result", func(t *testing.T) {
+		out := InjectServerInfoIntoResult(map[string]any{"tools": []any{}}, info)
+		si := readMeta(t, out)
+		if si == nil || si.Name != "srv" || si.Version != "1.0" {
+			t.Errorf("serverInfo = %+v, want srv/1.0", si)
+		}
+	})
+
+	t.Run("preserves existing _meta keys", func(t *testing.T) {
+		out := InjectServerInfoIntoResult(map[string]any{
+			"_meta": map[string]any{"vendor/x": "y"},
+		}, info)
+		raw, _ := MarshalJSON(out)
+		var probe struct {
+			Meta map[string]json.RawMessage `json:"_meta"`
+		}
+		if err := json.Unmarshal(raw, &probe); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := probe.Meta["vendor/x"]; !ok {
+			t.Errorf("existing _meta key dropped: %s", raw)
+		}
+		if _, ok := probe.Meta[MetaKeyServerInfo]; !ok {
+			t.Errorf("serverInfo not stamped alongside existing keys: %s", raw)
+		}
+	})
+
+	t.Run("caller-set serverInfo wins", func(t *testing.T) {
+		out := InjectServerInfoIntoResult(map[string]any{
+			"_meta": map[string]any{
+				MetaKeyServerInfo: map[string]any{"name": "custom", "version": "9"},
+			},
+		}, info)
+		si := readMeta(t, out)
+		if si == nil || si.Name != "custom" {
+			t.Errorf("serverInfo = %+v, want caller-set custom", si)
+		}
+	})
+
+	t.Run("empty info is a no-op", func(t *testing.T) {
+		in := map[string]any{"a": 1}
+		out := InjectServerInfoIntoResult(in, ServerInfo{})
+		if si := readMeta(t, out); si != nil {
+			t.Errorf("serverInfo = %+v, want none for empty identity", si)
+		}
+	})
+
+	t.Run("non-object result unchanged", func(t *testing.T) {
+		out := InjectServerInfoIntoResult([]string{"a"}, info)
+		raw, _ := MarshalJSON(out)
+		if string(raw) != `["a"]` {
+			t.Errorf("non-object result mutated: %s", raw)
+		}
+	})
 }
 
 // TestClientCaps_StatelessWire verifies that ctx.ClientCaps() returns the

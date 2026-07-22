@@ -26,11 +26,20 @@ import (
 var SupportedStatelessVersions = []string{DraftProtocolVersion2026V1}
 
 // SEP-2575 _meta envelope keys. Carried inside the params._meta object on
-// every stateless request; missing any of the three triggers -32602.
+// every stateless request; a missing protocolVersion or clientCapabilities
+// triggers -32602. clientInfo is a SHOULD since spec PR 3002 — servers MUST
+// serve requests that omit it.
 const (
 	MetaKeyProtocolVersion    = "io.modelcontextprotocol/protocolVersion"
 	MetaKeyClientInfo         = "io.modelcontextprotocol/clientInfo"
 	MetaKeyClientCapabilities = "io.modelcontextprotocol/clientCapabilities"
+
+	// MetaKeyServerInfo is the result-side identity field (spec PR 3002).
+	// Servers SHOULD set it in every result's _meta so clients retain the
+	// server identity that the initialize handshake used to carry before
+	// SEP-2575 removed it. Self-reported and unverified — for display,
+	// logging, and debugging only; never for behavior or security decisions.
+	MetaKeyServerInfo = "io.modelcontextprotocol/serverInfo"
 
 	// MetaKeyLogLevel is the per-request log-level opt-in. Absent ⇒ no
 	// notifications/message frames may be emitted for this request.
@@ -53,8 +62,13 @@ const HTTPProtocolVersionHeader = "MCP-Protocol-Version"
 // malformed envelope produces a typed *MetaValidationError that the
 // dispatcher translates into a -32602 / HTTP 400 response.
 type RequestMeta struct {
-	ProtocolVersion    string             `json:"io.modelcontextprotocol/protocolVersion"`
-	ClientInfo         *ClientInfo        `json:"io.modelcontextprotocol/clientInfo"`
+	ProtocolVersion string `json:"io.modelcontextprotocol/protocolVersion"`
+
+	// ClientInfo identifies the client software. Optional since spec
+	// PR 3002 (clients SHOULD send it; servers MUST NOT require it) —
+	// nil when the request omitted the field. Self-reported and
+	// unverified: display/logging/debugging only.
+	ClientInfo         *ClientInfo         `json:"io.modelcontextprotocol/clientInfo"`
 	ClientCapabilities *ClientCapabilities `json:"io.modelcontextprotocol/clientCapabilities"`
 
 	// LogLevel is set when the client opts in to log frames for this
@@ -67,7 +81,7 @@ type RequestMeta struct {
 // -32602 + HTTP 400 at the transport boundary.
 type MetaValidationError struct {
 	// Field names the missing/invalid envelope component for diagnostics:
-	// "_meta", "protocolVersion", "clientInfo", or "clientCapabilities".
+	// "_meta", "protocolVersion", or "clientCapabilities".
 	Field string
 }
 
@@ -79,9 +93,10 @@ func (e *MetaValidationError) Error() string {
 }
 
 // DecodeRequestMeta extracts the SEP-2575 _meta envelope from raw params.
-// Returns a typed *MetaValidationError when the envelope is absent or any
-// required sub-field (protocolVersion, clientInfo, clientCapabilities) is
-// missing; the dispatcher maps these to -32602 / HTTP 400.
+// Returns a typed *MetaValidationError when the envelope is absent or a
+// required sub-field (protocolVersion, clientCapabilities) is missing; the
+// dispatcher maps these to -32602 / HTTP 400. clientInfo is not required
+// (spec PR 3002) — RequestMeta.ClientInfo is nil when the request omits it.
 //
 // An absent params (empty raw) is treated as "missing _meta" — the wire
 // requires _meta on every stateless request.
@@ -108,13 +123,70 @@ func DecodeRequestMetaFromRawJSON(m *RawJSON) (*RequestMeta, error) {
 	if rm.ProtocolVersion == "" {
 		return nil, &MetaValidationError{Field: "protocolVersion"}
 	}
-	if rm.ClientInfo == nil {
-		return nil, &MetaValidationError{Field: "clientInfo"}
-	}
 	if rm.ClientCapabilities == nil {
 		return nil, &MetaValidationError{Field: "clientCapabilities"}
 	}
 	return &rm, nil
+}
+
+// ResultMeta is the SEP-2575 result-side _meta shape (spec PR 3002's
+// ResultMetaObject). Currently carries only the optional server identity;
+// decode a result's _meta into this to read it.
+type ResultMeta struct {
+	// ServerInfo identifies the server software that produced the
+	// response. Servers SHOULD set it on every result. Self-reported
+	// and unverified — display/logging/debugging only; clients SHOULD
+	// NOT use it to change behavior or for security decisions.
+	ServerInfo *ServerInfo `json:"io.modelcontextprotocol/serverInfo,omitempty"`
+}
+
+// InjectServerInfoIntoResult returns result with
+// _meta[MetaKeyServerInfo] set to info, implementing the spec PR 3002
+// SHOULD that servers identify themselves on every response. Existing
+// _meta keys are preserved, and a caller-set serverInfo wins (mirroring
+// the InjectTraceContextIntoParams convention). Returns the input
+// unchanged when result is not a JSON object (no MCP result is), when
+// info is empty, or on any marshal failure — stamping is best-effort
+// decoration, never a dispatch error.
+//
+// The returned value is a json.RawMessage when stamping occurred; the
+// transport serializes it verbatim.
+func InjectServerInfoIntoResult(result any, info ServerInfo) any {
+	if info.Name == "" && info.Version == "" {
+		return result
+	}
+	raw, err := MarshalJSON(result)
+	if err != nil {
+		return result
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
+		return result
+	}
+	meta := map[string]json.RawMessage{}
+	if existing, ok := obj["_meta"]; ok {
+		if err := json.Unmarshal(existing, &meta); err != nil {
+			return result
+		}
+		if _, present := meta[MetaKeyServerInfo]; present {
+			return result
+		}
+	}
+	infoRaw, err := json.Marshal(info)
+	if err != nil {
+		return result
+	}
+	meta[MetaKeyServerInfo] = infoRaw
+	metaRaw, err := json.Marshal(meta)
+	if err != nil {
+		return result
+	}
+	obj["_meta"] = metaRaw
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return result
+	}
+	return json.RawMessage(out)
 }
 
 // UnsupportedProtocolVersionData is the structured error payload returned

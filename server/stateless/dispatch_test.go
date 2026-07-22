@@ -281,18 +281,79 @@ func TestDispatch_ServerDiscoverShape(t *testing.T) {
 	}
 
 	raw, _ := json.Marshal(resp.Result)
-	var result DiscoverResult
+	var result struct {
+		DiscoverResult
+		Meta core.ResultMeta `json:"_meta"`
+	}
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatalf("discover result did not decode: %v", err)
 	}
 	if len(result.SupportedVersions) == 0 {
 		t.Errorf("SupportedVersions empty")
 	}
-	if result.ServerInfo.Name != "test" {
-		t.Errorf("ServerInfo.Name = %q, want %q", result.ServerInfo.Name, "test")
+	// Spec PR 3002: server identity lives in the result _meta, not the body.
+	if result.Meta.ServerInfo == nil || result.Meta.ServerInfo.Name != "test" {
+		t.Errorf("_meta serverInfo = %+v, want name %q", result.Meta.ServerInfo, "test")
 	}
 	if result.Capabilities.Tools == nil || !result.Capabilities.Tools.ListChanged {
 		t.Errorf("Capabilities not echoed correctly: %+v", result.Capabilities)
+	}
+}
+
+// TestDispatch_ClientInfoOptional locks the spec PR 3002 demotion at the
+// dispatcher level: a request whose _meta omits clientInfo MUST be served,
+// not rejected with -32602 (conformance check
+// sep-2575-request-meta-client-info-optional).
+func TestDispatch_ClientInfoOptional(t *testing.T) {
+	d := New(&fakeBackend{info: core.ServerInfo{Name: "test", Version: "1"}})
+	req := &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage("7"),
+		Method:  "tools/list",
+		Params: core.NewRawJSON(json.RawMessage(`{
+			"_meta": {
+				"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+				"io.modelcontextprotocol/clientCapabilities": {}
+			}
+		}`)),
+	}
+	resp, err := d.Dispatch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("dispatch error: %v", err)
+	}
+	if resp == nil || resp.Error != nil {
+		t.Fatalf("clientInfo-less request rejected: %+v", resp)
+	}
+}
+
+// TestDispatch_StampsServerInfoOnEveryResult verifies the spec PR 3002
+// SHOULD: every success result — not just server/discover — carries the
+// server identity in _meta[io.modelcontextprotocol/serverInfo].
+func TestDispatch_StampsServerInfoOnEveryResult(t *testing.T) {
+	d := New(&fakeBackend{info: core.ServerInfo{Name: "test", Version: "2.0"}})
+	for _, method := range []string{"tools/list", "resources/list", "prompts/list"} {
+		t.Run(method, func(t *testing.T) {
+			req := &core.Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage("8"),
+				Method:  method,
+				Params:  core.NewRawJSON(validMetaParams(t)),
+			}
+			resp, err := d.Dispatch(context.Background(), req)
+			if err != nil || resp == nil || resp.Error != nil {
+				t.Fatalf("dispatch failed: resp=%+v err=%v", resp, err)
+			}
+			raw, _ := core.MarshalJSON(resp.Result)
+			var probe struct {
+				Meta core.ResultMeta `json:"_meta"`
+			}
+			if err := json.Unmarshal(raw, &probe); err != nil {
+				t.Fatalf("result did not decode: %v", err)
+			}
+			if probe.Meta.ServerInfo == nil || probe.Meta.ServerInfo.Name != "test" || probe.Meta.ServerInfo.Version != "2.0" {
+				t.Errorf("_meta serverInfo = %+v, want test/2.0 (result=%s)", probe.Meta.ServerInfo, raw)
+			}
+		})
 	}
 }
 

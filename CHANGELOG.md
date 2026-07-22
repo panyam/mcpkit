@@ -64,6 +64,19 @@ targeted spec version.
   sending empty args (fixes the `tools_call` scenario, which grades argument
   types). Remaining client failures are extension/draft/backcompat categories,
   annotated in `conformance/known-gaps.yaml`.
+- **SEP-2575 final-revision `_meta` identity alignment (spec PR 3002).**
+  `clientInfo` in the per-request `_meta` envelope is now optional on the
+  stateless wire: requests that omit it are served instead of rejected with
+  `-32602` (clients SHOULD still send it, and mcpkit's client does). Servers
+  now stamp `_meta["io.modelcontextprotocol/serverInfo"]` on every stateless
+  success result via new `core.InjectServerInfoIntoResult` (caller-set values
+  win; error responses are not stamped), restoring the server identity the
+  removed `initialize` handshake used to carry. *Wire change:* `serverInfo`
+  moved out of the `server/discover` result body into the result `_meta`;
+  `client.DiscoverResult` reads the `_meta` form first and falls back to the
+  pre-3002 body field, so older draft servers keep working. New
+  `core.MetaKeyServerInfo` and `core.ResultMeta`. Both fields are
+  self-reported and unverified, for display/logging/debugging only.
 - **`core.RawJSON`** — a typed, parse-once wrapper for JSON-RPC raw values
   (params / `_meta` / …) with `Bind` / `Meta` / `Field` helpers; wire-transparent
   (round-trips identically to `json.RawMessage`). This is the read-side type
