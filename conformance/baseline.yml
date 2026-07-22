@@ -48,8 +48,6 @@ client:
   - auth/dpop                               # DPoP proof on token request + resource calls
   - auth/dpop-nonce                         # DPoP with server-required nonce
 
-  # Extension — workload identity federation, not implemented
-  - auth/wif-jwt-bearer                     # RFC 7523 JWT bearer grant via WIF
 
   # Draft — informational, not tier-scored
   - auth/authorization-server-migration     # re-registration when the PRM's AS changes

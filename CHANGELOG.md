@@ -53,6 +53,16 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **`auth.JWTBearerTokenSource` — RFC 7523 JWT-bearer grant for workload
+  identity federation (SEP-1933, issue 1101).** A `core.TokenSource` for
+  workloads whose identity is attested out-of-band: the caller supplies the
+  signed assertion (static or via `AssertionProvider` for rotating platform
+  credentials) and the source exchanges it at the discovered AS with
+  `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, no browser and no
+  client secret. Scope step-up via `TokenForScopes`; a failed exchange is
+  surfaced verbatim with no self-retry or grant fallback per RFC 7523. Flips
+  the `auth/wif-jwt-bearer` conformance extension scenario to pass (12/12
+  checks).
 - **2025-03-26 legacy OAuth discovery fallback (issue 451, reversed wontfix).**
   `ext/auth.DiscoverMCPAuth` now falls back to the 2025-03-26 authorization
   spec's discovery shape when the server publishes no Protected Resource

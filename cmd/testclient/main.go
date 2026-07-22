@@ -228,6 +228,7 @@ type conformanceContext struct {
 	IdpIDToken       string         `json:"idp_id_token"`
 	IdpIssuer        string         `json:"idp_issuer"`
 	IdpTokenEndpoint string         `json:"idp_token_endpoint"`
+	ValidJwt         string         `json:"valid_jwt"`
 	ToolCalls        []toolCallSpec `json:"toolCalls"`
 }
 
@@ -247,6 +248,15 @@ type toolCallSpec struct {
 // to keep DCR scenarios with no pre-registered credentials on the
 // OAuthTokenSource fast path without spurious PRM/AS round trips.
 func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource {
+	if ctx.ValidJwt != "" {
+		log.Println("Step 2: ctx has valid_jwt → JWTBearerTokenSource (RFC 7523 WIF)")
+		return &auth.JWTBearerTokenSource{
+			ServerURL:     serverURL,
+			ClientID:      ctx.ClientID,
+			Assertion:     ctx.ValidJwt,
+			AllowInsecure: true,
+		}
+	}
 	if ctx.IdpIDToken != "" && ctx.IdpTokenEndpoint != "" {
 		log.Println("Step 2: ctx has idp_id_token + idp_token_endpoint → EnterpriseManagedTokenSource (SEP-990)")
 		return &auth.EnterpriseManagedTokenSource{
