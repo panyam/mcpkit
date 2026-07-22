@@ -67,6 +67,9 @@ jobs:
       # here and shipped inside the site output at /coverage/badge.json,
       # same pattern as the conformance badge (which is committed under
       # docs/site/static/ by refresh-conformance and rides `just build`).
+      # Relies on docs/site/go.mod sharing the root module's go directive:
+      # setup-go@v7 pins GOTOOLCHAIN=local, so the one installed toolchain
+      # must satisfy both modules.
       - name: Coverage badge
         run: |
           go test ./... -coverprofile=/tmp/cover.out -covermode=atomic > /dev/null
