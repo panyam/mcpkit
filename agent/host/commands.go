@@ -78,9 +78,19 @@ type CmdResult struct {
 	Approval       *agent.TieredApproval
 	Sessions       []agent.RunInfo
 	SessionsNote   string
-	Servers        []client.MemberStatus
+	Servers        []ServerStatus
 	ServerID       string // the server a CmdServerTools result scopes to
 	Quit           bool
+}
+
+// ServerStatus is one MCP server's state for the /mcp view: the client-layer
+// connection status plus the host-layer CanLogin (an interactive oauth auth
+// type is configured, so a needs-login server can be logged in). Kept a
+// host-layer struct because CanLogin is a config fact the client layer does not
+// carry.
+type ServerStatus struct {
+	client.MemberStatus
+	CanLogin bool
 }
 
 // Command is one slash command. Run receives the raw argument string
@@ -257,15 +267,25 @@ func (a *App) registerBuiltinCommands() {
 				}
 				return CmdResult{Kind: CmdServerTools, ServerID: id, Tools: defs}, nil
 			}
-			var st []client.MemberStatus
+			if id, ok := strings.CutPrefix(args, "login "); ok {
+				id = strings.TrimSpace(id)
+				if !a.canLogin(id) {
+					return CmdResult{Kind: CmdMessage, Message: "server " + id + " has no interactive (oauth) auth type to log in with"}, nil
+				}
+				a.LoginServer(id)
+				return CmdResult{Kind: CmdMessage, Message: "login started for " + id}, nil
+			}
+			var st []ServerStatus
 			if a.group != nil {
-				st = a.group.Status()
+				for _, ms := range a.group.Status() {
+					st = append(st, ServerStatus{MemberStatus: ms, CanLogin: a.canLogin(ms.ID)})
+				}
 			}
 			return CmdResult{Kind: CmdServers, Servers: st}, nil
 		},
 		Complete: func(prefix string) []string {
 			var out []string
-			for _, sub := range []string{"reconnect", "tools"} {
+			for _, sub := range []string{"reconnect", "tools", "login"} {
 				if strings.HasPrefix(sub, prefix) {
 					out = append(out, sub)
 				}
