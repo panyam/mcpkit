@@ -40,6 +40,71 @@ type overlayOutcome struct {
 	Line    string
 }
 
+// focusLayer is a modal component that temporarily owns the keyboard above a
+// surface's base view: it consumes keys and renders itself. The overlay is the
+// only implementation today; the seam is what lets both TUI surfaces share the
+// open/route/dismiss glue instead of each special-casing *overlayModel. The
+// fuller model — base view and overlay as peer layers routed uniformly — is the
+// focus-management design-track item (issue 1063 C4).
+type focusLayer interface {
+	handleKey(tea.KeyMsg) overlayOutcome
+	setWidth(int)
+	View() string
+}
+
+// modalHost is the shared state a surface needs to carry an optional modal
+// layer. Both TUI models embed one, so "is a modal open, route keys to it,
+// close it" is defined once here rather than branched per surface. It holds
+// only the layer (a pointer, safe across the value-copies bubbletea makes each
+// Update); blurring/focusing the input stays with the surface that owns it.
+type modalHost struct {
+	layer focusLayer
+}
+
+// active reports whether a modal layer currently owns the keyboard.
+func (h *modalHost) active() bool { return h.layer != nil }
+
+// open installs l as the active modal and sizes it to the surface width. The
+// caller blurs its own input after this.
+func (h *modalHost) open(l focusLayer, width int) {
+	h.layer = l
+	if l != nil {
+		l.setWidth(width)
+	}
+}
+
+// setWidth reflows the active layer on resize; a no-op when none is open.
+func (h *modalHost) setWidth(w int) {
+	if h.layer != nil {
+		h.layer.setWidth(w)
+	}
+}
+
+// route feeds one key to the active modal and reports the command line to
+// dispatch (empty unless an action fired) and whether the modal stays open. On
+// close it clears the layer; the caller refocuses its own input when open is
+// false.
+func (h *modalHost) route(msg tea.KeyMsg) (line string, open bool) {
+	out := h.layer.handleKey(msg)
+	switch {
+	case out.Dismiss:
+		h.layer = nil
+		return "", false
+	case out.Line != "":
+		h.layer = nil
+		return out.Line, false
+	default:
+		return "", true
+	}
+}
+
+// view composes the modal above the surface's base region (passed in, since the
+// base differs per surface: the input alone for the inline TUI, the viewport
+// plus input for the notebook).
+func (h *modalHost) view(base string) string {
+	return h.layer.View() + "\n" + base
+}
+
 // overlayModel is the reusable interactive dialog rendered in the bottom region
 // of a TUI surface (issue 1095): a titled, selectable list with per-row keyed
 // actions, Enter for the primary action and Esc to dismiss. It is
