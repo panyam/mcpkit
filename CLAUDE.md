@@ -12,6 +12,7 @@ just test-ui           # ext/ui sub-module
 just test-e2e          # E2E tests (auth + apps)
 just testconf          # MCP conformance suite (needs Node.js)
 just testconfauth      # Auth conformance (client OAuth)
+just testconf-client   # Full client conformance (core + auth + extensions) — same set tier-check --client-cmd runs
 just testconf-tasks    # Tasks v1 conformance (27 scenarios, local; 26 pass + 1 skip — v1 sampling push vs 2.0 SDK client)
 just testconf-tasks-v2 # SEP-2663 — upstream @ MCPCONFORMANCE_TASKS_V2_PATH + mcpkit-local stricter sentinel
 just testconf-mrtr     # SEP-2322 — upstream @ MCPCONFORMANCE_MRTR_PATH + mcpkit-local stricter sentinel

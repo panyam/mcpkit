@@ -54,6 +54,9 @@ fi
 echo "=== Building cmd/testserver ==="
 (cd "$REPO_ROOT" && go build -o "$WORK_DIR/testserver" ./cmd/testserver)
 
+echo "=== Building cmd/testclient ==="
+(cd "$REPO_ROOT/cmd/testclient" && go build -buildvcs=false -o "$WORK_DIR/testclient" .)
+
 # Kill any stale process on the port to avoid connecting to old code.
 if lsof -i ":$PORT" -t >/dev/null 2>&1; then
     echo "Killing stale process on port $PORT..."
@@ -107,6 +110,7 @@ echo "=== Running upstream tier-check --output json ==="
 (cd "$CONF_DIR" && node dist/index.js tier-check \
     --repo panyam/mcpkit \
     --conformance-server-url "http://localhost:$PORT/mcp" \
+    --client-cmd "$WORK_DIR/testclient" \
     --output json \
     > "$WORK_DIR/scorecard.json")
 

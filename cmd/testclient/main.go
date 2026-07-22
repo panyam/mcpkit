@@ -97,15 +97,17 @@ func main() {
 				// Directed: scenario specified exact toolCalls to invoke.
 				driveToolCalls(noAuthClient, ctx.ToolCalls)
 			case len(tools) > 0:
-				// Fallback: best-effort call the first tool, no args.
-				// Mirrors the OAuth-success path so scenarios that don't
-				// direct toolCalls still exercise a tools/call request
-				// against the server (required by e.g. SEP-2243
-				// http-invalid-tool-headers, which grades whether the
-				// client calls the valid_tool the server advertises).
+				// Fallback: best-effort call the first tool with
+				// schema-synthesized args. Mirrors the OAuth-success path
+				// so scenarios that don't direct toolCalls still exercise
+				// a tools/call request against the server (required by
+				// e.g. SEP-2243 http-invalid-tool-headers, which grades
+				// whether the client calls the valid_tool the server
+				// advertises, and tools_call, which grades the argument
+				// types).
 				toolName := tools[0].Name
 				log.Printf("Calling tool %q (no-auth fallback)...", toolName)
-				if _, err := noAuthClient.ToolCall(toolName, map[string]any{}); err != nil {
+				if _, err := noAuthClient.ToolCall(toolName, synthArgs(tools[0].InputSchema)); err != nil {
 					log.Printf("tools/call %q: %v (may be expected)", toolName, err)
 				}
 			}
@@ -165,10 +167,11 @@ func main() {
 			// Directed: scenario specified exact toolCalls to invoke.
 			driveToolCalls(c, ctx.ToolCalls)
 		case len(tools) > 0:
-			// Fallback: best-effort call the first tool, no args.
+			// Fallback: best-effort call the first tool with
+			// schema-synthesized args.
 			toolName := tools[0].Name
 			log.Printf("Calling tool %q (default fallback)...", toolName)
-			if _, err := c.ToolCall(toolName, map[string]any{}); err != nil {
+			if _, err := c.ToolCall(toolName, synthArgs(tools[0].InputSchema)); err != nil {
 				log.Printf("tools/call %q: %v (may be expected)", toolName, err)
 			} else {
 				log.Printf("tools/call %q: ok", toolName)

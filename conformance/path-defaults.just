@@ -8,6 +8,7 @@
 # imported. conformance/justfile sets it as absolute_path(justfile_directory() / "..").
 
 MCPCONFORMANCE_AUTH_PATH := env('MCPCONFORMANCE_AUTH_PATH', absolute_path(REPO_ROOT / '../conf-pending'))
+MCPCONFORMANCE_CLIENT_PATH := env('MCPCONFORMANCE_CLIENT_PATH', absolute_path(REPO_ROOT / '../conf-upstream-main'))
 MCPCONFORMANCE_FILE_INPUTS_PATH := env('MCPCONFORMANCE_FILE_INPUTS_PATH', absolute_path(REPO_ROOT / '../conf-pending'))
 MCPCONFORMANCE_MRTR_PATH := env('MCPCONFORMANCE_MRTR_PATH', absolute_path(REPO_ROOT / '../conf-upstream-main'))
 MCPCONFORMANCE_SKILLS_PATH := env('MCPCONFORMANCE_SKILLS_PATH', absolute_path(REPO_ROOT / '../conf-skills'))
