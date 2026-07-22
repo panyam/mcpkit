@@ -156,7 +156,7 @@ jobs:
           enable-cache: true
           working-directory: mcpkit
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Sync Python tooling env
         working-directory: mcpkit
@@ -199,7 +199,7 @@ jobs:
         with:
           node-version: '22'
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Run apps-compat renderer unit tests
         working-directory: tools/compat-reports
