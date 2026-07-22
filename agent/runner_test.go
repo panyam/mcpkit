@@ -250,6 +250,57 @@ func TestRunnerIsErrorResultIsToolEndNotToolError(t *testing.T) {
 	}
 }
 
+// unavailableSource returns ErrNotAvailableNow from Call — a server that's
+// unreachable right now (distinct from a tool that ran and failed, which
+// reports via IsError, and which FuncSource would convert to a result).
+type unavailableSource struct{}
+
+func (unavailableSource) Tools(context.Context) ([]core.ToolDef, error) {
+	return []core.ToolDef{{Name: "remote"}}, nil
+}
+func (unavailableSource) Call(context.Context, string, map[string]any) (*core.ToolResult, error) {
+	return nil, fmt.Errorf("%w: server atlassian is down", ErrNotAvailableNow)
+}
+
+func TestRunnerToolUnavailableIsNonFatal(t *testing.T) {
+	stub := NewStubProvider(
+		StubTurn{ToolCalls: []ToolCall{{ID: "c1", Name: "remote", Args: core.NewRawJSON(json.RawMessage(`{}`))}}},
+		StubTurn{Text: "noted, I'll try later"},
+	)
+	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: unavailableSource{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emit, events := collectEvents()
+	res, err := r.Run(context.Background(), nil, emit)
+	if err != nil {
+		t.Fatalf("unavailable tool must not fail the turn: %v", err)
+	}
+	if res.Text != "noted, I'll try later" {
+		t.Fatalf("turn must continue past the unavailable call, got %+v", res)
+	}
+	var sawUnavailable bool
+	for _, e := range *events {
+		if e.Kind == EventToolError {
+			t.Fatalf("unavailable must be tool-unavailable, not tool-error: %+v", e)
+		}
+		if e.Kind == EventToolUnavailable {
+			sawUnavailable = true
+			if e.Error != "" || e.Reason == "" {
+				t.Fatalf("must carry Reason not Error: %+v", e)
+			}
+		}
+	}
+	if !sawUnavailable {
+		t.Fatalf("missing tool-unavailable event: %v", kinds(*events))
+	}
+	// the model sees the miss and can adapt
+	toolMsg := stub.Requests()[1].Messages[1]
+	if toolMsg.Role != RoleTool || !strings.Contains(toolMsg.Text, "server atlassian is down") {
+		t.Fatalf("model must see the unavailable message: %+v", toolMsg)
+	}
+}
+
 func TestRunnerStepCap(t *testing.T) {
 	loop := StubTurn{ToolCalls: []ToolCall{{ID: "c", Name: "spin", Args: core.NewRawJSON(json.RawMessage(`{}`))}}}
 	stub := NewStubProvider(loop, loop, loop)
