@@ -10,7 +10,7 @@ replace (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/panyam/mcpkit v0.4.0-b2
+	github.com/panyam/mcpkit v0.4.0-b3
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
 	github.com/panyam/oneauth v0.1.35

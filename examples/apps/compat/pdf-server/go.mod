@@ -11,7 +11,7 @@ replace (
 require (
 	github.com/panyam/demokit v0.0.30
 	github.com/panyam/gocurrent v0.1.1
-	github.com/panyam/mcpkit v0.4.0-b2
+	github.com/panyam/mcpkit v0.4.0-b3
 	github.com/panyam/mcpkit/examples/common v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
 	github.com/panyam/servicekit v0.1.2
