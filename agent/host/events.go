@@ -8,34 +8,28 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
-	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
 
-// startEventStreams opens one events/stream per configured event. Each
-// stream delivers on its own buffered channel (eventsclient.StreamChan, the
-// mechanism half living in the client SDK), gets a per-stream adapter
-// goroutine tagging occurrences with the server id, and merges into one
-// consumer feed via gocurrent's FanIn. Per-stream buffers isolate
-// backpressure: one noisy stream drops its own events (warned), never a
-// sibling's.
-func (a *App) startEventStreams(ctx context.Context) error {
-	for _, sc := range a.cfg.Servers {
-		// Boot snapshot: only subscribe servers ready by now. A server that
-		// connects later gets its tools (via the Group observer) but not its
-		// event streams until a restart — late-event wiring is the follow-up
-		// (docs/AGENT_SERVER_STATE.md phase 2).
-		if s, ok := a.group.State(sc.ID); !ok || s != client.StateReady {
-			continue
-		}
-		for _, ec := range sc.Events {
-			if _, err := a.openSubscription(ctx, sc.ID, ec.Name); err != nil {
-				return fmt.Errorf("agentchat: events/stream %s on %s: %w", ec.Name, sc.ID, err)
-			}
+// onServerEvents opens one events/stream per configured event on a server that
+// just became ready. Each stream delivers on its own buffered channel
+// (eventsclient.StreamChan), gets a per-stream adapter goroutine tagging
+// occurrences with the server id, and merges into one consumer feed via
+// gocurrent's FanIn. Per-stream buffers isolate backpressure: one noisy stream
+// drops its own events (warned), never a sibling's.
+func (a *App) onServerEvents(sc ServerConfig) {
+	if a.fanIn == nil || len(sc.Events) == 0 {
+		return
+	}
+	// Called from the ready-observer, so a server that connects after boot has
+	// its event streams subscribed with no restart. openSubscription is
+	// idempotent (dedup by server:name), and a failure degrades to a warning.
+	for _, ec := range sc.Events {
+		if _, err := a.openSubscription(a.evCtx, sc.ID, ec.Name); err != nil {
+			a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("events/stream %s on %s: %v", ec.Name, sc.ID, err)})
 		}
 	}
-	return nil
 }
 
 // consumeEvents is the single goroutine that owns the policy pipeline:
