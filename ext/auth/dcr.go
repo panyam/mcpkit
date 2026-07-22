@@ -29,9 +29,12 @@ var RegisterClient = client.RegisterClient
 // (installed) clients, not web-server-hosted clients.
 func DefaultClientRegistration() client.ClientRegistrationRequest {
 	return client.ClientRegistrationRequest{
-		ClientName:              "mcpkit-client",
-		RedirectURIs:            []string{"http://127.0.0.1:0/callback"},
-		GrantTypes:              []string{"authorization_code"},
+		ClientName:   "mcpkit-client",
+		RedirectURIs: []string{"http://127.0.0.1:0/callback"},
+		// refresh_token is declared alongside authorization_code per
+		// SEP-2207: clients SHOULD register for refresh tokens so long
+		// sessions survive access-token expiry without re-authorization.
+		GrantTypes:              []string{"authorization_code", "refresh_token"},
 		ResponseTypes:           []string{"code"},
 		TokenEndpointAuthMethod: "none",
 		ApplicationType:         "native",
