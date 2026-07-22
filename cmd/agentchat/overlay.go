@@ -282,6 +282,13 @@ func serversOverlay(res host.CmdResult) *overlayModel {
 		} else {
 			actions = append(actions, overlayAction{Label: "reconnect"}) // n/a for ready/connecting
 		}
+		// Tools are listable only once the server is ready (its catalog is
+		// registered); otherwise the action is shown disabled.
+		tools := overlayAction{Key: "t", Label: "tools"}
+		if s.State == client.StateReady {
+			tools.Line = "/servers tools " + s.ID
+		}
+		actions = append(actions, tools)
 		if s.State == client.StateNeedsLogin {
 			actions = append(actions, overlayAction{Key: "l", Label: "login"}) // n/a: follow-up
 		}
@@ -327,6 +334,18 @@ func sessionsOverlay(res host.CmdResult) *overlayModel {
 	return o
 }
 
+// toolsOverlay builds the read-only per-server tool list opened from the /mcp
+// overlay's tools action (issue 1117): one row per tool (name + description),
+// no actions — Esc closes back to the input. Opening it replaces the servers
+// overlay; a back-to-parent stack is the focus-model follow-up (issue 1063 C4).
+func toolsOverlay(res host.CmdResult) *overlayModel {
+	items := make([]overlayItem, 0, len(res.Tools))
+	for _, t := range res.Tools {
+		items = append(items, overlayItem{Label: t.Name, Detail: t.Description})
+	}
+	return newOverlay("tools · "+res.ServerID, items)
+}
+
 // overlayFor converts a command result into the overlay that presents it, or
 // nil when the result is not an interactive-picker shape. Centralizes the
 // surface's "which CmdKinds open an overlay" decision so both TUI surfaces
@@ -337,6 +356,8 @@ func overlayFor(res host.CmdResult) *overlayModel {
 		return serversOverlay(res)
 	case host.CmdSessions:
 		return sessionsOverlay(res)
+	case host.CmdServerTools:
+		return toolsOverlay(res)
 	default:
 		return nil
 	}

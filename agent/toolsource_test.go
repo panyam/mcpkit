@@ -60,6 +60,32 @@ func TestMultiSourceMergesUniqueNames(t *testing.T) {
 	}
 }
 
+func TestMultiSourceSourceTools(t *testing.T) {
+	m := NewMultiSource()
+	m.Add("alpha", &fakeSource{defs: defsNamed("one", "two")})
+	m.Add("beta", &fakeSource{defs: defsNamed("three")})
+
+	// one source's own (unqualified) tools
+	defs, found, err := m.SourceTools(context.Background(), "alpha")
+	if err != nil || !found {
+		t.Fatalf("SourceTools(alpha) = (found=%v, err=%v)", found, err)
+	}
+	if got := toolNames(defs); fmt.Sprint(got) != fmt.Sprint([]string{"one", "two"}) {
+		t.Fatalf("alpha tools = %v", got)
+	}
+
+	// unknown id is app state, not an error
+	if _, found, err := m.SourceTools(context.Background(), "nope"); found || err != nil {
+		t.Fatalf("SourceTools(nope) = (found=%v, err=%v), want (false, nil)", found, err)
+	}
+
+	// a listing failure from the source surfaces as an error
+	m.Add("boom", &fakeSource{listErr: errors.New("down")})
+	if _, found, err := m.SourceTools(context.Background(), "boom"); !found || err == nil {
+		t.Fatalf("SourceTools(boom) = (found=%v, err=%v), want (true, err)", found, err)
+	}
+}
+
 func TestMultiSourceCollisionQualifiesAllClaimants(t *testing.T) {
 	var notified []string
 	m := NewMultiSource(WithCollisionNotify(func(name string, ids []string) {
