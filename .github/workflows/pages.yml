@@ -54,7 +54,7 @@ jobs:
         with:
           enable-cache: true
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Sync Python tooling env
         run: uv sync
