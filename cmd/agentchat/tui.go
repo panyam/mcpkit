@@ -142,10 +142,12 @@ func (s *tuiObserver) renderBlocks() string {
 }
 
 // isBoundary reports whether an event closes a scrollback segment. Every
-// discrete event commits immediately; only the streaming turn
-// (HostRunnerEvent) accumulates live until a non-runner event closes it.
+// discrete event commits immediately; the streaming turn (HostRunnerEvent) and
+// nested sub-agent activity (HostSubAgentEvent) accumulate live so the
+// sub-agent's tree-gutter lines nest under the main turn instead of committing
+// as fragmented separate blocks (issue 1063 B4).
 func isBoundary(k host.HostEventKind) bool {
-	return k != host.HostRunnerEvent
+	return k != host.HostRunnerEvent && k != host.HostSubAgentEvent
 }
 
 func (s *tuiObserver) On(ev host.HostEvent) {

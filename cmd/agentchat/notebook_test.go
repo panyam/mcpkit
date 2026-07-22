@@ -256,6 +256,40 @@ func runnerEv(e agent.Event) host.HostEvent {
 	return host.HostEvent{Kind: host.HostRunnerEvent, RunnerEvent: e}
 }
 
+// TestNBObserver_SubAgentNestsInDelegationCell pins the B4 gutter/flat choice:
+// a sub-agent's activity accumulates into the open ⚙ delegation tool cell
+// rather than spawning its own info cells.
+func TestNBObserver_SubAgentNestsInDelegationCell(t *testing.T) {
+	subEv := func(e agent.Event) host.HostEvent {
+		return host.HostEvent{Kind: host.HostSubAgentEvent, SubAgent: agent.SubAgentEvent{Scope: "research", Depth: 1, Event: e}}
+	}
+	cells := nbCollectCells(
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "research"}}),
+		subEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "grep"}}),
+		subEv(agent.Event{Kind: agent.EventTurnEnd, Result: &agent.TurnResult{Text: "found 3"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "research"}}),
+		turnDoneEv(),
+	)
+	var tool *nbCell
+	for i := range cells {
+		if strings.HasPrefix(cells[i].label, "⚙") {
+			tool = &cells[i]
+		}
+	}
+	if tool == nil {
+		t.Fatalf("no ⚙ delegation cell, got %+v", cells)
+	}
+	if !strings.Contains(tool.body, "[research] · grep") || !strings.Contains(tool.body, "[research] → found 3") {
+		t.Fatalf("sub-agent activity did not nest in the delegation cell:\n%q", tool.body)
+	}
+	// and it did NOT leak into standalone info cells
+	for _, c := range cells {
+		if c.label == "info" && strings.Contains(c.body, "[research]") {
+			t.Fatalf("sub-agent line leaked into a separate info cell: %+v", c)
+		}
+	}
+}
+
 func turnDoneEv() host.HostEvent {
 	return host.HostEvent{Kind: host.HostTurnDone, Result: &agent.TurnResult{Steps: 1}}
 }

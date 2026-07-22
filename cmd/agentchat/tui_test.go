@@ -69,9 +69,12 @@ func TestRecallHistoryEmpty(t *testing.T) {
 }
 
 func TestIsBoundary(t *testing.T) {
-	// the streaming turn accumulates live; everything else closes a segment
-	if isBoundary(host.HostRunnerEvent) {
-		t.Fatal("HostRunnerEvent should stream live, not commit")
+	// the streaming turn + nested sub-agent activity accumulate live; every
+	// other event closes a segment
+	for _, k := range []host.HostEventKind{host.HostRunnerEvent, host.HostSubAgentEvent} {
+		if isBoundary(k) {
+			t.Fatalf("kind %v should stream live, not commit", k)
+		}
 	}
 	for _, k := range []host.HostEventKind{
 		host.HostTurnDone, host.HostTurnFailed, host.HostCommandResult,
