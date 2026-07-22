@@ -114,6 +114,10 @@ testconf:
 testconfauth:
     just -f conformance/justfile testconfauth
 
+# Run full client conformance suite — core + auth + extensions (delegates to conformance/justfile)
+testconf-client:
+    just -f conformance/justfile testconf-client
+
 # Run MCP Tasks v1 conformance (delegates to conformance/justfile)
 testconf-tasks:
     just -f conformance/justfile testconf-tasks
