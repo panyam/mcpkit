@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directories:
+      - "/"
+      - "/ext/auth"
+      - "/ext/tasks"
+      - "/ext/ui"
+      - "/ext/otel"
+    schedule:
+      interval: weekly
+    groups:
+      go-deps:
+        patterns:
+          - "*"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
