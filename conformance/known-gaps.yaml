@@ -21,12 +21,6 @@ scenarios:
   "server-stateless":
     issue: "upstream conformance test bug"
     note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."
-  "auth/2025-03-26-oauth-endpoint-fallback":
-    issue: "https://github.com/panyam/mcpkit/issues/451"
-    note: "Wontfix — 2025-03-26 OAuth-endpoint root fallback removed by spec in 2025-06-18. mcpkit targets 2025-11-25+; see ext/auth/docs/DESIGN.md for the policy."
-  "auth/2025-03-26-oauth-metadata-backcompat":
-    issue: "https://github.com/panyam/mcpkit/issues/451"
-    note: "Wontfix — rootless OAuth metadata removed by spec in 2025-06-18. See ext/auth/docs/DESIGN.md."
   "auth/dpop":
     issue: "https://github.com/panyam/mcpkit/issues/803"
     note: "Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft."

@@ -140,7 +140,7 @@ func (s *ClientCredentialsTokenSource) ensureSourceLocked() error {
 	}
 
 	scopes := s.Scopes
-	if len(scopes) == 0 {
+	if len(scopes) == 0 && info.PRM != nil {
 		scopes = info.PRM.ScopesSupported
 	}
 
