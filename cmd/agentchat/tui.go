@@ -36,6 +36,12 @@ type turnDoneMsg struct{}
 // a live context gauge. Sent by the observers on HostTurnDone.
 type usageMsg struct{ in, out int }
 
+// openOverlayMsg opens an interactive overlay (the /mcp server panel, the
+// /sessions picker) in the bottom region instead of committing the command's
+// result to scrollback. Sent from the dispatch goroutine when a command returns
+// an interactive-picker shape (issue 1095).
+type openOverlayMsg struct{ ov *overlayModel }
+
 // statusLine renders the persistent status: model · session · last-turn tokens,
 // plus a "N% context left" gauge when a context window is configured (issue
 // 1063 D1/D2). Kept out of the transcript — it lives only in the managed live
@@ -215,7 +221,8 @@ type tuiModel struct {
 	ta      textarea.Model
 	keys    appKeys
 	help    help.Model
-	showAll bool // ? toggled the full-help view
+	overlay *overlayModel // non-nil while an interactive dialog (/mcp, /sessions) is open
+	showAll bool          // ? toggled the full-help view
 	history []string
 	histIdx int // len(history) == "not navigating"
 	running bool
@@ -268,6 +275,17 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.surface != nil {
 			m.surface.setWidth(msg.Width)
 		}
+		if m.overlay != nil {
+			m.overlay.setWidth(msg.Width)
+		}
+		return m, nil
+
+	case openOverlayMsg:
+		m.overlay = msg.ov
+		if m.overlay != nil {
+			m.overlay.setWidth(m.ta.Width())
+			m.ta.Blur() // focus goes to the overlay
+		}
 		return m, nil
 
 	case liveMsg:
@@ -296,9 +314,26 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, m.keys.Quit):
+		// Ctrl+C always quits, even with an overlay open.
+		if key.Matches(msg, m.keys.Quit) {
 			return m, tea.Quit
+		}
+		// While a dialog is open it owns the keyboard (focus routing): navigate,
+		// act (which dispatches a command line and closes), or dismiss.
+		if m.overlay != nil {
+			out := m.overlay.handleKey(msg)
+			switch {
+			case out.Dismiss:
+				m.overlay = nil
+				m.ta.Focus()
+			case out.Line != "":
+				m.overlay = nil
+				m.ta.Focus()
+				return m.submit(out.Line)
+			}
+			return m, nil
+		}
+		switch {
 		case key.Matches(msg, m.keys.Help) && m.ta.Value() == "":
 			// `?` toggles full help only on an empty prompt, so it stays typeable
 			// mid-message.
@@ -344,6 +379,13 @@ func (m tuiModel) View() string {
 		b.WriteString(strings.TrimRight(m.pending, "\n"))
 		b.WriteString("\n")
 	}
+	// An open dialog takes over the managed region above the input.
+	if m.overlay != nil {
+		b.WriteString(m.overlay.View())
+		b.WriteString("\n")
+		b.WriteString(m.ta.View())
+		return b.String()
+	}
 	status := statusLine(m.app, m.session, m.usage, m.window)
 	if m.running {
 		status = "working… · " + status
@@ -380,6 +422,10 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: "unknown command " + line})
 			case err != nil:
 				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: err.Error()})
+			case overlayFor(res) != nil:
+				// An interactive-picker result (/mcp, /sessions) opens a dialog in
+				// the bottom region rather than committing to scrollback.
+				surface.prog.Send(openOverlayMsg{ov: overlayFor(res)})
 			default:
 				surface.On(host.HostEvent{Kind: host.HostCommandResult, Command: res})
 				if res.Quit {

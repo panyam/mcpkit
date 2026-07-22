@@ -2,9 +2,11 @@ package client_test
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,6 +168,107 @@ func TestGroup_CloseRacingConnect(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("iteration %d: httptest.Server.Close blocked — Connect raced Close and leaked", i)
 		}
+	}
+}
+
+// gatedServer wraps the real MCP handler behind an atomic gate: while the gate
+// is closed it returns downStatus (401 → needs-login, 5xx → failed), and once
+// opened it serves MCP normally. It is the reconnection-path fixture — a member
+// gets stuck, the gate opens, and Reconnect must recover it.
+func gatedServer(t *testing.T, downStatus int) (*httptest.Server, *atomic.Bool) {
+	t.Helper()
+	real := testutil.NewTestServer().Handler(server.WithStreamableHTTP(true))
+	var up atomic.Bool
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !up.Load() {
+			w.WriteHeader(downStatus)
+			return
+		}
+		real.ServeHTTP(w, r)
+	}))
+	t.Cleanup(ts.Close)
+	return ts, &up
+}
+
+// TestGroup_ReconnectFromNeedsLogin is the primary reconnect path: a 401 parks
+// the member at needs-login with no auto-retry; after the operator "logs in"
+// (the gate opens) Reconnect un-parks it and it reaches ready. Without
+// Reconnect a parked member would never retry, so reaching ready proves the
+// wake works.
+func TestGroup_ReconnectFromNeedsLogin(t *testing.T) {
+	ts, up := gatedServer(t, http.StatusUnauthorized)
+	g := client.NewGroup(client.WithGroupBackoff(10*time.Millisecond, 50*time.Millisecond))
+	g.Add("a", client.NewClient(ts.URL+"/mcp", ci), false)
+	g.Start(context.Background())
+	defer g.Close()
+
+	waitState(t, g, "a", client.StateNeedsLogin, 3*time.Second)
+	// Parked: it must NOT climb out on its own.
+	time.Sleep(150 * time.Millisecond)
+	if s, _ := g.State("a"); s != client.StateNeedsLogin {
+		t.Fatalf("needs-login member auto-retried (state=%v); it should park until Reconnect", s)
+	}
+
+	up.Store(true)
+	g.Reconnect("a")
+	waitState(t, g, "a", client.StateReady, 3*time.Second)
+}
+
+// TestGroup_ReconnectWakesBackoff proves Reconnect short-circuits a failed
+// member's backoff sleep. The backoff is pinned to 30s, so without a wake the
+// member would not retry within the test window; Reconnect makes it retry now
+// and reach ready.
+func TestGroup_ReconnectWakesBackoff(t *testing.T) {
+	ts, up := gatedServer(t, http.StatusServiceUnavailable)
+	g := client.NewGroup(client.WithGroupBackoff(30*time.Second, 30*time.Second))
+	g.Add("a", client.NewClient(ts.URL+"/mcp", ci), false)
+	g.Start(context.Background())
+	defer g.Close()
+
+	waitState(t, g, "a", client.StateFailed, 3*time.Second)
+	up.Store(true)
+	g.Reconnect("a")
+	waitState(t, g, "a", client.StateReady, 3*time.Second)
+}
+
+// TestGroup_ReconnectReadyIsNoop verifies Reconnect on a ready member does not
+// trigger a fresh connect (a live drop is the client's concern, not the
+// Group's) — no new StateConnecting transition fires and the member stays
+// ready.
+func TestGroup_ReconnectReadyIsNoop(t *testing.T) {
+	ts := testMCPServer(t)
+	var mu sync.Mutex
+	connects := 0
+	g := client.NewGroup(
+		client.WithRequiredTimeout(5*time.Second),
+		client.WithObserver(func(sc client.StateChange) {
+			if sc.State == client.StateConnecting {
+				mu.Lock()
+				connects++
+				mu.Unlock()
+			}
+		}),
+	)
+	g.Add("a", client.NewClient(ts.URL+"/mcp", ci), true)
+	g.Start(context.Background())
+	defer g.Close()
+	if err := g.WaitRequired(context.Background()); err != nil {
+		t.Fatalf("WaitRequired: %v", err)
+	}
+
+	mu.Lock()
+	before := connects
+	mu.Unlock()
+	g.Reconnect("a")
+	time.Sleep(150 * time.Millisecond)
+	mu.Lock()
+	after := connects
+	mu.Unlock()
+	if after != before {
+		t.Fatalf("Reconnect on a ready member forced a reconnect (connecting transitions %d→%d)", before, after)
+	}
+	if s, _ := g.State("a"); s != client.StateReady {
+		t.Fatalf("state = %v, want ready", s)
 	}
 }
 

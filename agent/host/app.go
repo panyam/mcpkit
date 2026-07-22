@@ -496,6 +496,18 @@ func (a *App) Close() {
 	}
 }
 
+// ReconnectServer forces the named MCP server to attempt connecting again: it
+// wakes a failed server that is sleeping between backoff retries and un-parks a
+// needs-login server (the caller has since logged in). A ready or unknown
+// server is a no-op. It is the data-only capability behind the /servers
+// reconnect command and the interactive /mcp overlay's reconnect action; the
+// surface renders the resulting state transitions from the group observer.
+func (a *App) ReconnectServer(id string) {
+	if a.group != nil {
+		a.group.Reconnect(id)
+	}
+}
+
 // RunTurn executes one user input, rendering events as they stream. History
 // threads across turns; a cancelled or failed turn leaves history at its
 // pre-turn state (and persists nothing) so the next attempt is clean.

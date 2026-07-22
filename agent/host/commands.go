@@ -236,13 +236,32 @@ func (a *App) registerBuiltinCommands() {
 			return CmdResult{Kind: CmdApproval, Approval: a.approval}, nil
 		}})
 
-	r.Register(&Command{Name: "servers", Help: "list MCP servers and their connection state",
-		Run: func(context.Context, string) (CmdResult, error) {
+	r.Register(&Command{Name: "servers", Aliases: []string{"mcp"}, Help: "list MCP servers and their state; /servers reconnect <name> retries a failed/needs-login one",
+		Run: func(_ context.Context, args string) (CmdResult, error) {
+			if id, ok := strings.CutPrefix(args, "reconnect "); ok {
+				id = strings.TrimSpace(id)
+				a.ReconnectServer(id)
+				return CmdResult{Kind: CmdMessage, Message: "reconnect requested for " + id}, nil
+			}
 			var st []client.MemberStatus
 			if a.group != nil {
 				st = a.group.Status()
 			}
 			return CmdResult{Kind: CmdServers, Servers: st}, nil
+		},
+		Complete: func(prefix string) []string {
+			var out []string
+			if strings.HasPrefix("reconnect", prefix) {
+				out = append(out, "reconnect")
+			}
+			if a.group != nil {
+				for _, st := range a.group.Status() {
+					if strings.HasPrefix(st.ID, prefix) {
+						out = append(out, st.ID)
+					}
+				}
+			}
+			return out
 		}})
 
 	r.Register(&Command{Name: "session", Help: "show the active session id",
