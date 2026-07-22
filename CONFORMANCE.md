@@ -500,10 +500,10 @@ _None._
 
 | Scenario | Surface | Checks fail/pass | Tracking |
 |---|---|---:|---|
-| `auth/authorization-server-migration` | client | 1/2 | no tracking issue yet — Draft category, not tier-scored. Client does not yet re-register when the PRM's authorization server changes. |
+| `auth/authorization-server-migration` | client | 1/2 | https://github.com/panyam/mcpkit/issues/1100 — Draft category, not tier-scored. Client does not re-register when the PRM's authorization server changes; reopened gap from issue 500 cluster D. |
 | `auth/dpop` | client | 3/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft. |
 | `auth/dpop-nonce` | client | 5/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant. |
-| `auth/wif-jwt-bearer` | client | 1/10 | no tracking issue yet — Extension category, not tier-scored. RFC 7523 JWT bearer grant via workload identity federation, not implemented. |
+| `auth/wif-jwt-bearer` | client | 1/10 | https://github.com/panyam/mcpkit/issues/1101 — Extension category, not tier-scored. RFC 7523 JWT bearer grant via workload identity federation, not implemented. |
 
 ### Declared requirements with no emitted check
 
