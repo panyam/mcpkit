@@ -10,6 +10,7 @@ import (
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
 	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
 )
 
 func kmsg(s string) tea.KeyMsg {
@@ -131,6 +132,41 @@ func TestServersOverlay_ReconnectOnlyWhenStuck(t *testing.T) {
 	}
 }
 
+func TestServersOverlay_ToolsActionOnlyWhenReady(t *testing.T) {
+	res := host.CmdResult{Kind: host.CmdServers, Servers: []client.MemberStatus{
+		{ID: "ready", State: client.StateReady},
+		{ID: "down", State: client.StateFailed},
+	}}
+	o := serversOverlay(res)
+	if got := actionLine(o.items[0], "t"); got != "/servers tools ready" {
+		t.Fatalf("ready tools action = %q, want /servers tools ready", got)
+	}
+	if got := actionLine(o.items[1], "t"); got != "" {
+		t.Fatalf("failed tools action = %q, want disabled", got)
+	}
+}
+
+func TestToolsOverlay_ListsToolsReadOnly(t *testing.T) {
+	res := host.CmdResult{Kind: host.CmdServerTools, ServerID: "flights", Tools: []core.ToolDef{
+		{Name: "search", Description: "find flights"},
+		{Name: "book", Description: "book a seat"},
+	}}
+	o := toolsOverlay(res)
+	if len(o.items) != 2 || o.items[0].Label != "search" {
+		t.Fatalf("tools overlay items = %+v", o.items)
+	}
+	// read-only: no actions, so Enter is a no-op and Esc dismisses
+	if out := o.handleKey(kmsg("enter")); out != (overlayOutcome{}) {
+		t.Fatalf("enter on a read-only tool row = %+v, want no-op", out)
+	}
+	if out := o.handleKey(kmsg("esc")); !out.Dismiss {
+		t.Fatal("esc should dismiss the tools overlay")
+	}
+	if overlayFor(res) == nil {
+		t.Fatal("CmdServerTools should open an overlay")
+	}
+}
+
 func TestSessionsOverlay_ResumeAndActiveCursor(t *testing.T) {
 	res := host.CmdResult{Kind: host.CmdSessions, RunID: "s2", Sessions: []agent.RunInfo{
 		{ID: "s1", MessageCount: 3},
@@ -162,8 +198,14 @@ func TestOverlayFor_OnlyInteractiveKinds(t *testing.T) {
 
 // primaryLine is the test helper for the selected row's Enter action line.
 func primaryLine(it overlayItem) string {
+	return actionLine(it, "")
+}
+
+// actionLine returns the Line of the row's action bound to key (or "" for the
+// primary/Enter action); empty when absent or disabled.
+func actionLine(it overlayItem, key string) string {
 	for _, a := range it.Actions {
-		if a.Key == "" {
+		if a.Key == key {
 			return a.Line
 		}
 	}
