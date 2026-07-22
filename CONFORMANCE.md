@@ -41,16 +41,27 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 
 ## mcpkit-local Conformance Suites
 
-These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.
+These suites exercise SEP-specific behavior beyond what upstream's tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the tables.
+
+### Upstream-scenario suites
+
+_Scenarios owned and maintained in `modelcontextprotocol/conformance`; mcpkit supplies only the fixture under test._
 
 | Suite | Covers | Stage | Status | Source | Tracking |
 |---|---|:---:|:---:|---|---|
 | `testconf-tasks-v2` | SEP-2663 Tasks v2 | 8d | **PASS** | [`modelcontextprotocol/conformance@main`](https://github.com/modelcontextprotocol/conformance/tree/main) | — |
 | `testconf-mrtr` | SEP-2322 MRTR | 8e | **PASS** | [`modelcontextprotocol/conformance@main`](https://github.com/modelcontextprotocol/conformance/tree/main) | — |
-| `testconf-file-inputs` | SEP-2356 File inputs | 8f | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
-| `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
 | `testconf-client` | Client core + auth (full suite) | - | **PASS**<sup>1</sup> | [`modelcontextprotocol/conformance@main`](https://github.com/modelcontextprotocol/conformance/tree/main) | — |
 | `testconf-stateless` | SEP-2575 Stateless wire | - | **PASS**<sup>2</sup> | [`modelcontextprotocol/conformance@main`](https://github.com/modelcontextprotocol/conformance/tree/main) | — |
+
+### mcpkit-authored suites
+
+_Scenarios authored by this project, typically in the `panyam/mcpconformance` fork while the SEP they cover is still in flight upstream. They assert what the spec says, not what mcpkit does, but they have not been through upstream review._
+
+| Suite | Covers | Stage | Status | Source | Tracking |
+|---|---|:---:|:---:|---|---|
+| `testconf-file-inputs` | SEP-2356 File inputs | 8f | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
+| `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
 | `testconf-skills` | SEP-2640 Skills | 8h | _INFO_<sup>3</sup> | [`panyam/mcpconformance@chore/sep-2640-yaml`](https://github.com/panyam/mcpconformance/tree/chore/sep-2640-yaml) | mcpkit 567 |
 
 <sup>1</sup> Same scenario set tier-check's --client-cmd runs. Expected failures (extension + draft + backcompat categories, none tier-scored) live in conformance/baseline.yml.
