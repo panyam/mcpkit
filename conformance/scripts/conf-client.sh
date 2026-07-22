@@ -36,5 +36,11 @@ RC=$?
 echo "testconf-client: upstream runner exit $RC (artifacts: $OUT)"
 if [ $RC -ne 0 ]; then
     echo "A scenario outside conformance/baseline.yml failed, or a listed entry now passes (stale entry — remove it)."
+    exit $RC
 fi
-exit $RC
+
+# Depth guard: a passing scenario that emits fewer checks than the committed
+# snapshot is the thin-shadow signature (a setup failure masking most of the
+# scenario's check surface — see scripts/check_client_check_counts.py).
+python3 "${REPO_ROOT}/scripts/check_client_check_counts.py" "$OUT"
+exit $?
