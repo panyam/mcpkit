@@ -108,10 +108,10 @@ func TestOverlay_EmptyItemsOnlyEscActs(t *testing.T) {
 }
 
 func TestServersOverlay_ReconnectOnlyWhenStuck(t *testing.T) {
-	res := host.CmdResult{Kind: host.CmdServers, Servers: []client.MemberStatus{
-		{ID: "ready", State: client.StateReady},
-		{ID: "down", State: client.StateFailed, Err: errors.New("refused")},
-		{ID: "auth", State: client.StateNeedsLogin},
+	res := host.CmdResult{Kind: host.CmdServers, Servers: []host.ServerStatus{
+		{MemberStatus: client.MemberStatus{ID: "ready", State: client.StateReady}},
+		{MemberStatus: client.MemberStatus{ID: "down", State: client.StateFailed, Err: errors.New("refused")}},
+		{MemberStatus: client.MemberStatus{ID: "auth", State: client.StateNeedsLogin}, CanLogin: true},
 	}}
 	o := serversOverlay(res)
 
@@ -133,9 +133,9 @@ func TestServersOverlay_ReconnectOnlyWhenStuck(t *testing.T) {
 }
 
 func TestServersOverlay_ToolsActionOnlyWhenReady(t *testing.T) {
-	res := host.CmdResult{Kind: host.CmdServers, Servers: []client.MemberStatus{
-		{ID: "ready", State: client.StateReady},
-		{ID: "down", State: client.StateFailed},
+	res := host.CmdResult{Kind: host.CmdServers, Servers: []host.ServerStatus{
+		{MemberStatus: client.MemberStatus{ID: "ready", State: client.StateReady}},
+		{MemberStatus: client.MemberStatus{ID: "down", State: client.StateFailed}},
 	}}
 	o := serversOverlay(res)
 	if got := actionLine(o.items[0], "t"); got != "/servers tools ready" {
@@ -143,6 +143,20 @@ func TestServersOverlay_ToolsActionOnlyWhenReady(t *testing.T) {
 	}
 	if got := actionLine(o.items[1], "t"); got != "" {
 		t.Fatalf("failed tools action = %q, want disabled", got)
+	}
+}
+
+func TestServersOverlay_LoginActionGatedOnCanLogin(t *testing.T) {
+	res := host.CmdResult{Kind: host.CmdServers, Servers: []host.ServerStatus{
+		{MemberStatus: client.MemberStatus{ID: "oauth-srv", State: client.StateNeedsLogin}, CanLogin: true},
+		{MemberStatus: client.MemberStatus{ID: "bare-srv", State: client.StateNeedsLogin}, CanLogin: false},
+	}}
+	o := serversOverlay(res)
+	if got := actionLine(o.items[0], "l"); got != "/servers login oauth-srv" {
+		t.Fatalf("oauth server login action = %q, want /servers login oauth-srv", got)
+	}
+	if got := actionLine(o.items[1], "l"); got != "" {
+		t.Fatalf("non-oauth server login action = %q, want disabled", got)
 	}
 }
 

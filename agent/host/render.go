@@ -87,7 +87,7 @@ func (r *renderer) approvalMode(p *agent.TieredApproval) {
 }
 
 // serverList renders /servers: each MCP server and its connection state.
-func (r *renderer) serverList(servers []client.MemberStatus) {
+func (r *renderer) serverList(servers []ServerStatus) {
 	if len(servers) == 0 {
 		fmt.Fprintf(r.out, "%s\n", r.dim("servers: none configured"))
 		return
@@ -96,6 +96,9 @@ func (r *renderer) serverList(servers []client.MemberStatus) {
 		line := fmt.Sprintf("  %-14s %s", s.ID, s.State)
 		if s.Required {
 			line += " (required)"
+		}
+		if s.CanLogin {
+			line += " (login available)"
 		}
 		if s.Err != nil {
 			line += ": " + s.Err.Error()

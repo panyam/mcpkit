@@ -289,8 +289,15 @@ func serversOverlay(res host.CmdResult) *overlayModel {
 			tools.Line = "/servers tools " + s.ID
 		}
 		actions = append(actions, tools)
+		// Login is offered on a needs-login server only when an interactive
+		// (oauth) auth type is configured for it; otherwise the action is
+		// disabled (there is nothing to trigger).
 		if s.State == client.StateNeedsLogin {
-			actions = append(actions, overlayAction{Key: "l", Label: "login"}) // n/a: follow-up
+			login := overlayAction{Key: "l", Label: "login"}
+			if s.CanLogin {
+				login.Line = "/servers login " + s.ID
+			}
+			actions = append(actions, login)
 		}
 		items = append(items, overlayItem{Label: s.ID, Detail: detail, Actions: actions})
 	}

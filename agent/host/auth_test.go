@@ -20,7 +20,9 @@ func TestAuthConfigValidation(t *testing.T) {
 		want string
 	}{
 		{"unknown type", AuthConfig{Type: "magic"}, nil, "unknown auth type"},
-		{"oauth not yet", AuthConfig{Type: "oauth"}, nil, "not implemented yet"},
+		{"oauth ok (DCR, no env)", AuthConfig{Type: "oauth"}, nil, ""},
+		{"oauth ok (pinned client)", AuthConfig{Type: "oauth", ClientIDEnv: "AC_OA"}, map[string]string{"AC_OA": "cid"}, ""},
+		{"oauth pinned env unset", AuthConfig{Type: "oauth", ClientIDEnv: "AC_OA_NOPE"}, nil, "is not set"},
 		{"bearer missing env name", AuthConfig{Type: "bearer"}, nil, "requires tokenEnv"},
 		{"bearer env unset", AuthConfig{Type: "bearer", TokenEnv: "AGENTCHAT_NO_SUCH"}, nil, "is not set"},
 		{"cc missing envs", AuthConfig{Type: "client-credentials"}, nil, "clientIdEnv and clientSecretEnv"},
@@ -108,7 +110,31 @@ func TestClientCredentialsWiring(t *testing.T) {
 	if len(src.Scopes) != 1 || src.Scopes[0] != "mcp:basic" || !src.AllowInsecure {
 		t.Fatalf("wiring: %+v", src)
 	}
-	if opt, err := authOption(sc); err != nil || opt == nil {
-		t.Fatalf("authOption: %v %v", opt, err)
+	if opt, ls, err := authOption(sc); err != nil || opt == nil || ls != nil {
+		t.Fatalf("authOption: opt=%v loginSource=%v err=%v", opt, ls, err)
+	}
+}
+
+func TestAuthOption_OAuthBuildsLoginSource(t *testing.T) {
+	t.Setenv("OA_CLIENT", "cid-123")
+	sc := ServerConfig{ID: "s", URL: "https://mcp.example.com/mcp", Auth: &AuthConfig{
+		Type:        "oauth",
+		ClientIDEnv: "OA_CLIENT",
+		Scopes:      []string{"mcp:read"},
+	}}
+	opt, ls, err := authOption(sc)
+	if err != nil || opt == nil || ls == nil {
+		t.Fatalf("authOption(oauth): opt=%v loginSource=%v err=%v", opt, ls, err)
+	}
+
+	// inspect the env-to-field wiring on the concrete source
+	src := oauthSource(sc)
+	if src.ServerURL != sc.URL || src.ClientID != "cid-123" || src.EnableDCR {
+		t.Fatalf("pinned-client wiring: %+v", src)
+	}
+	// no clientIdEnv → self-register via DCR
+	dcr := oauthSource(ServerConfig{URL: sc.URL, Auth: &AuthConfig{Type: "oauth"}})
+	if !dcr.EnableDCR || dcr.ClientID != "" {
+		t.Fatalf("DCR fallback wiring: %+v", dcr)
 	}
 }
