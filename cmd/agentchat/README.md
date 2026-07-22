@@ -61,7 +61,14 @@ region, never committed to scrollback): `model <active> · session <id> · ctx
 TUI layout track (#1063 D1/D2); collapsible tool cells (B4) already shipped with
 `--ui notebook`.
 
-## Prompt editing keys (TUI)
+## Keys & help (TUI)
+
+Both surfaces show a one-line help bar under the status line (`enter send · tab
+complete · ↑↓ history · ? help · ctrl+c quit`). Press **`?`** on an empty prompt
+to expand the full key list (in the notebook's NAV mode, `?` always toggles).
+The bar, the `?` view, and the `/keys` cheatsheet are all generated from one
+`key.Binding` set, so they can't drift from the keys the surface actually
+handles (#1063 C2).
 
 The input line supports readline-style editing. `/keys` prints this cheatsheet
 in-session.

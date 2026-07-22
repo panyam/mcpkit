@@ -190,11 +190,11 @@ func TestKeyMap_WordNavHasCtrlArrows(t *testing.T) {
 	}
 }
 
-func TestKeyHelp_ListsBindings(t *testing.T) {
-	h := keyHelp()
-	for _, want := range []string{"ctrl+← / ctrl+→", "ctrl+a / ctrl+e", "ctrl+w", "ctrl+k / ctrl+u", "Option-as-Meta"} {
+func TestRenderKeyHelp_ListsEditingBindings(t *testing.T) {
+	h := renderKeyHelp()
+	for _, want := range []string{"ctrl+←", "ctrl+a / e", "ctrl+w", "ctrl+k / u", "Option-as-Meta"} {
 		if !strings.Contains(h, want) {
-			t.Fatalf("keyHelp() missing %q:\n%s", want, h)
+			t.Fatalf("renderKeyHelp() missing %q:\n%s", want, h)
 		}
 	}
 }
