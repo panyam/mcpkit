@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -209,6 +211,9 @@ type tuiModel struct {
 	app     *host.App
 	surface *tuiObserver
 	ta      textarea.Model
+	keys    appKeys
+	help    help.Model
+	showAll bool // ? toggled the full-help view
 	history []string
 	histIdx int // len(history) == "not navigating"
 	running bool
@@ -243,7 +248,7 @@ func newPromptArea() textarea.Model {
 }
 
 func newTUIModel(app *host.App, surface *tuiObserver, window int) tuiModel {
-	m := tuiModel{app: app, surface: surface, ta: newPromptArea(), window: window}
+	m := tuiModel{app: app, surface: surface, ta: newPromptArea(), keys: newAppKeys(), help: help.New(), window: window}
 	m.histIdx = 0
 	if app != nil {
 		// Safe here: construction runs before the first turn, so turnMu is free.
@@ -289,10 +294,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC:
+		switch {
+		case key.Matches(msg, m.keys.Quit):
 			return m, tea.Quit
-		case tea.KeyEnter:
+		case key.Matches(msg, m.keys.Help) && m.ta.Value() == "":
+			// `?` toggles full help only on an empty prompt, so it stays typeable
+			// mid-message.
+			m.showAll = !m.showAll
+			return m, nil
+		case key.Matches(msg, m.keys.Send):
 			if m.running {
 				return m, nil
 			}
@@ -304,15 +314,16 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.history = append(m.history, line)
 			m.histIdx = len(m.history)
 			return m.submit(line)
-		case tea.KeyTab:
+		case key.Matches(msg, m.keys.Complete):
 			m.completeTab()
 			return m, nil
-		case tea.KeyUp:
-			if m.recallHistory(-1) {
-				return m, nil
+		case key.Matches(msg, m.keys.History):
+			// up/down recall history; a miss falls through to cursor motion
+			dir := -1
+			if msg.String() == "down" {
+				dir = 1
 			}
-		case tea.KeyDown:
-			if m.recallHistory(1) {
+			if m.recallHistory(dir) {
 				return m, nil
 			}
 		}
@@ -337,6 +348,12 @@ func (m tuiModel) View() string {
 	}
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render(status))
 	b.WriteString("\n")
+	if m.showAll {
+		b.WriteString(m.help.FullHelpView(m.keys.fullHelp()))
+	} else {
+		b.WriteString(m.help.ShortHelpView(m.keys.insertBar()))
+	}
+	b.WriteString("\n")
 	b.WriteString(m.ta.View())
 	return b.String()
 }
@@ -348,7 +365,7 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 	// /keys is a terminal-only cheatsheet (prompt editing is a TUI concern, so
 	// it is not a surface-agnostic host command); print it without a turn.
 	if line == "/keys" {
-		return m, tea.Println(keyHelp())
+		return m, tea.Println(renderKeyHelp())
 	}
 	m.running = true
 	app, surface := m.app, m.surface
@@ -377,24 +394,6 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 		}()
 	}
 	return m, nil
-}
-
-// keyHelp is the /keys cheatsheet: the prompt-editing bindings, grouped by
-// what works without a Meta key (the top rows) versus what needs the
-// terminal's Option-as-Meta (the alt-* bindings).
-func keyHelp() string {
-	return strings.Join([]string{
-		"Prompt editing keys:",
-		"  ← / →                 char back / forward",
-		"  ctrl+← / ctrl+→       word back / forward",
-		"  ctrl+a / ctrl+e       start / end of line   (also Home / End)",
-		"  ctrl+w                delete previous word",
-		"  ctrl+k / ctrl+u       delete to end / start of line",
-		"  ctrl+home / ctrl+end  start / end of input",
-		"  ctrl+j               insert a newline (also shift+enter / alt+enter)",
-		"  ↑ / ↓  history    Tab  complete    Enter  send    ctrl+c  quit",
-		"  With Option-as-Meta on: alt+←/→ or alt+b/f word nav, alt+d delete-word-forward, alt+</> input ends.",
-	}, "\n")
 }
 
 func (m *tuiModel) completeTab() { tabComplete(&m.ta, m.app) }
