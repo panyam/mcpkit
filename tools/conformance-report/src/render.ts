@@ -156,44 +156,76 @@ function renderLocalSuites(input: RenderInput): string[] {
   }
   const lines: string[] = [];
   lines.push(
-    'These suites exercise SEP-specific behavior beyond what upstream\'s tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.'
+    'These suites exercise SEP-specific behavior beyond what upstream\'s tier-check covers. Each is wired into `just testall` as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means "work in flight" — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the tables.'
   );
-  lines.push('');
-  lines.push('| Suite | Covers | Stage | Status | Source | Tracking |');
-  lines.push('|---|---|:---:|:---:|---|---|');
   const footnotes: string[] = [];
-  for (const s of suites) {
-    let statusCell: string;
-    switch (s.status) {
-      case 'PASS':
-        statusCell = '**PASS**';
-        break;
-      case 'FAIL':
-        statusCell = '**FAIL**';
-        break;
-      case 'INFO':
-        statusCell = '_INFO_';
-        break;
-      case 'SKIP':
-        statusCell = '_SKIP_';
-        break;
+  const pushTable = (subset: typeof suites) => {
+    lines.push('| Suite | Covers | Stage | Status | Source | Tracking |');
+    lines.push('|---|---|:---:|:---:|---|---|');
+    for (const s of subset) {
+      let statusCell: string;
+      switch (s.status) {
+        case 'PASS':
+          statusCell = '**PASS**';
+          break;
+        case 'FAIL':
+          statusCell = '**FAIL**';
+          break;
+        case 'INFO':
+          statusCell = '_INFO_';
+          break;
+        case 'SKIP':
+          statusCell = '_SKIP_';
+          break;
+      }
+      if (s.note) {
+        const idx = footnotes.length + 1;
+        statusCell = `${statusCell}<sup>${idx}</sup>`;
+        footnotes.push(`<sup>${idx}</sup> ${s.note}`);
+      }
+      let sourceCell: string;
+      if (s.source) {
+        const url = `https://github.com/${s.source.repo}/tree/${s.source.branch}`;
+        sourceCell = `[\`${s.source.repo}@${s.source.branch}\`](${url})`;
+      } else {
+        sourceCell = '—';
+      }
+      const tracking = s.tracking ? s.tracking : '—';
+      lines.push(
+        `| \`${s.suite}\` | ${s.sep} | ${s.stage} | ${statusCell} | ${sourceCell} | ${tracking} |`
+      );
     }
-    if (s.note) {
-      const idx = footnotes.length + 1;
-      statusCell = `${statusCell}<sup>${idx}</sup>`;
-      footnotes.push(`<sup>${idx}</sup> ${s.note}`);
-    }
-    let sourceCell: string;
-    if (s.source) {
-      const url = `https://github.com/${s.source.repo}/tree/${s.source.branch}`;
-      sourceCell = `[\`${s.source.repo}@${s.source.branch}\`](${url})`;
-    } else {
-      sourceCell = '—';
-    }
-    const tracking = s.tracking ? s.tracking : '—';
+  };
+  // Split by scenario ownership so a reader can tell at a glance which
+  // results are graded by upstream-maintained scenarios versus scenarios
+  // this project authored (usually in the panyam/mcpconformance fork while
+  // a SEP is still in flight upstream). A suite with no source block is
+  // mcpkit-authored by definition.
+  const upstreamSuites = suites.filter(
+    (s) => s.source?.repo === 'modelcontextprotocol/conformance'
+  );
+  const forkSuites = suites.filter(
+    (s) => s.source?.repo !== 'modelcontextprotocol/conformance'
+  );
+  if (upstreamSuites.length > 0) {
+    lines.push('');
+    lines.push('### Upstream-scenario suites');
+    lines.push('');
     lines.push(
-      `| \`${s.suite}\` | ${s.sep} | ${s.stage} | ${statusCell} | ${sourceCell} | ${tracking} |`
+      '_Scenarios owned and maintained in `modelcontextprotocol/conformance`; mcpkit supplies only the fixture under test._'
     );
+    lines.push('');
+    pushTable(upstreamSuites);
+  }
+  if (forkSuites.length > 0) {
+    lines.push('');
+    lines.push('### mcpkit-authored suites');
+    lines.push('');
+    lines.push(
+      '_Scenarios authored by this project, typically in the `panyam/mcpconformance` fork while the SEP they cover is still in flight upstream. They assert what the spec says, not what mcpkit does, but they have not been through upstream review._'
+    );
+    lines.push('');
+    pushTable(forkSuites);
   }
   if (footnotes.length > 0) {
     lines.push('');
