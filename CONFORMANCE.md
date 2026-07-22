@@ -37,7 +37,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 | Surface | Scenarios pass/total | Checks pass/fail |
 |---|---:|---:|
 | Server | 30/30 | 42/0 |
-| Client | 40/43 | 508/9 |
+| Client | 41/43 | 537/8 |
 
 ## mcpkit-local Conformance Suites
 
@@ -511,7 +511,6 @@ _None._
 
 | Scenario | Surface | Checks fail/pass | Tracking |
 |---|---|---:|---|
-| `auth/authorization-server-migration` | client | 1/2 | https://github.com/panyam/mcpkit/issues/1100 — Draft category, not tier-scored. Client does not re-register when the PRM's authorization server changes; reopened gap from issue 500 cluster D. |
 | `auth/dpop` | client | 3/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft. |
 | `auth/dpop-nonce` | client | 5/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant. |
 

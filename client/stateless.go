@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -50,7 +51,18 @@ func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err err
 	params := map[string]any{
 		"_meta": c.buildRequestMeta(),
 	}
-	resp, callErr := c.rawCall("server/discover", params)
+	// The transport only auto-attaches MCP-Protocol-Version once
+	// useStatelessWire is set, but the probe runs before that flip — and
+	// a compliant SEP-2575 server MUST reject headerless requests. Carry
+	// the header explicitly, matching _meta.protocolVersion, so strict
+	// stateless-only servers classify instead of 400ing the probe.
+	cc := &CallContext{
+		Context: context.Background(),
+		Headers: map[string]string{
+			core.HTTPProtocolVersionHeader: c.getNegotiatedVersion(),
+		},
+	}
+	resp, callErr := c.rawCallWithContext("server/discover", params, cc)
 	if callErr != nil {
 		// Transport-level failure (network, TLS) — propagate up. The
 		// caller does not attempt fallback for these; a broken

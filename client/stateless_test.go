@@ -475,3 +475,58 @@ func TestClient_4xxJSONRPCErrorParsed(t *testing.T) {
 		t.Errorf("error message = %q, want containing 'bad version'", err.Error())
 	}
 }
+
+func TestAdaptiveProbe_SendsProtocolVersionHeader(t *testing.T) {
+	// A compliant SEP-2575 server MUST reject requests without the
+	// MCP-Protocol-Version header. The adaptive probe runs before the
+	// client flips useStatelessWire, so the header must be attached
+	// explicitly or adaptive mode can never connect to a strict
+	// stateless-only server (upstream auth/authorization-server-migration
+	// mock is exactly this shape).
+	var sawHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+		}
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &req)
+		if req.Method != "server/discover" {
+			http.Error(w, "unexpected method "+req.Method, http.StatusBadRequest)
+			return
+		}
+		sawHeader = r.Header.Get("MCP-Protocol-Version")
+		if sawHeader == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0", "id": req.ID,
+				"error": map[string]any{"code": -32020, "message": "Missing MCP-Protocol-Version header"},
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"jsonrpc": "2.0", "id": req.ID,
+			"result": map[string]any{
+				"supportedVersions": []string{core.DraftProtocolVersion2026V1},
+				"capabilities":      map[string]any{},
+				"_meta": map[string]any{
+					core.MetaKeyServerInfo: map[string]any{"name": "strict-stateless", "version": "1.0"},
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, core.ClientInfo{Name: "t", Version: "1"},
+		WithClientMode(ClientModeAdaptive))
+	if err := c.Connect(); err != nil {
+		t.Fatalf("adaptive Connect against strict stateless server: %v", err)
+	}
+	defer c.Close()
+	if sawHeader == "" {
+		t.Fatal("probe request carried no MCP-Protocol-Version header")
+	}
+	if got, want := c.ServerInfo.Name, "strict-stateless"; got != want {
+		t.Errorf("ServerInfo.Name = %q, want %q", got, want)
+	}
+}
