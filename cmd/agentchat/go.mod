@@ -96,7 +96,7 @@ require (
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect
-	github.com/panyam/oneauth v0.1.35 // indirect
+	github.com/panyam/oneauth v0.1.36 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

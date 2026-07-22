@@ -53,6 +53,17 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **CIMD advertised-support gate + SEP-2207 refresh-token registration.**
+  `OAuthTokenSource` now prefers its configured `ClientMetadataURL` as the
+  client_id exactly when the AS advertises
+  `client_id_metadata_document_supported` (SEP-991 SHOULD; the flag surfaced
+  by oneauth v0.1.36), falling back to DCR when the AS does not advertise it
+  and DCR is available; a CIMD-only configuration still presents the URL
+  best-effort. `DefaultClientRegistration()` now declares
+  `refresh_token` alongside `authorization_code` in `grant_types`
+  (SEP-2207). Clears the last two client-conformance warnings: the full
+  suite's baseline is down to the two SEP-1932-gated DPoP scenarios.
+  oneauth bumped to v0.1.36 across all consuming modules.
 - **Adaptive-probe protocol-version header (SEP-2575).** The
   `ClientModeAdaptive` / `ClientModeStateless` `server/discover` probe now
   carries the `MCP-Protocol-Version` HTTP header matching its
