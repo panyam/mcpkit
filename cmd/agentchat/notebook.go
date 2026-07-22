@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -211,6 +213,10 @@ type notebookModel struct {
 	cells []nbCell
 	live  string // the in-flight turn, always shown expanded at the bottom
 
+	keys    appKeys
+	help    help.Model
+	showAll bool // ? toggled the full-help view
+
 	nav      bool // false = insert, true = nav
 	sel      int  // selected cell index in nav mode
 	running  bool
@@ -235,7 +241,7 @@ func newNotebookModel(app *host.App, surface *nbObserver, maxLines, window int) 
 	if maxLines <= 0 {
 		maxLines = defaultNotebookMaxLines
 	}
-	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), atBottom: true, maxLines: maxLines, window: window}
+	m := notebookModel{app: app, surface: surface, ta: newPromptArea(), keys: newAppKeys(), help: help.New(), atBottom: true, maxLines: maxLines, window: window}
 	m.histIdx = 0
 	if app != nil {
 		// Safe here: construction runs before the first turn, so turnMu is free.
@@ -346,29 +352,33 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateNav handles keys while the selection cursor is active: move the
 // selection, fold/unfold, jump to ends, or return to insert mode.
 func (m notebookModel) updateNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "esc", "i":
+	switch {
+	case key.Matches(msg, m.keys.Help):
+		m.showAll = !m.showAll
+	case key.Matches(msg, m.keys.Insert):
 		m.nav = false
-	case "up", "k":
-		if m.sel > 0 {
+	case key.Matches(msg, m.keys.Select):
+		if s := msg.String(); (s == "up" || s == "k") && m.sel > 0 {
 			m.sel--
-		}
-	case "down", "j":
-		if m.sel < len(m.cells)-1 {
+		} else if (s == "down" || s == "j") && m.sel < len(m.cells)-1 {
 			m.sel++
 		}
-	case "g":
-		m.sel = 0
-	case "G":
-		m.sel = len(m.cells) - 1
-	case " ", "enter":
+	case key.Matches(msg, m.keys.Ends):
+		if msg.String() == "g" {
+			m.sel = 0
+		} else {
+			m.sel = len(m.cells) - 1
+		}
+	case key.Matches(msg, m.keys.Fold):
 		if m.sel >= 0 && m.sel < len(m.cells) {
 			m.cells[m.sel].collapsed = !m.cells[m.sel].collapsed
 		}
-	case "pgup":
-		m.vp.HalfPageUp()
-	case "pgdown":
-		m.vp.HalfPageDown()
+	case key.Matches(msg, m.keys.Scroll):
+		if msg.String() == "pgup" {
+			m.vp.HalfPageUp()
+		} else {
+			m.vp.HalfPageDown()
+		}
 	}
 	m.refresh()
 	return m, nil
@@ -377,6 +387,13 @@ func (m notebookModel) updateNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // updateInsert handles keys while typing: submit, complete, history, scroll the
 // viewport, or enter nav mode; anything else edits the input.
 func (m notebookModel) updateInsert(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// `?` toggles full help only on an empty prompt, so it stays typeable
+	// mid-message. (In NAV mode there is no typing, so `?` always toggles.)
+	if key.Matches(msg, m.keys.Help) && m.ta.Value() == "" {
+		m.showAll = !m.showAll
+		m.refresh()
+		return m, nil
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		if len(m.cells) > 0 {
@@ -441,10 +458,12 @@ func (m notebookModel) View() string {
 
 func (m notebookModel) statusBar() string {
 	var hint string
-	if m.nav {
-		hint = "NAV  ↑↓/jk select · space fold · g/G ends · esc/i type"
+	if m.showAll {
+		hint = m.help.FullHelpView(m.keys.fullHelp())
+	} else if m.nav {
+		hint = "NAV  " + m.help.ShortHelpView(m.keys.navBar())
 	} else {
-		hint = "INS  enter send · ctrl+j newline · ↑↓ scroll · esc fold"
+		hint = "INS  " + m.help.ShortHelpView(m.keys.insertBar())
 	}
 	if m.running {
 		hint = "working…  " + hint
@@ -542,7 +561,7 @@ func firstLine(s string) string {
 // goroutine, mirroring the inline TUI. /keys is a terminal-only cheatsheet.
 func (m notebookModel) submit(line string) (tea.Model, tea.Cmd) {
 	if line == "/keys" {
-		m.cells = append(m.cells, nbCell{label: "info", body: keyHelp()})
+		m.cells = append(m.cells, nbCell{label: "info", body: renderKeyHelp()})
 		m.refresh()
 		return m, nil
 	}
