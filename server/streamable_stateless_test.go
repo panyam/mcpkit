@@ -130,15 +130,19 @@ func TestStatelessRouting_DualMode_ServerDiscoverHits200(t *testing.T) {
 	}
 	// Result is a map after unmarshal; verify the shape.
 	raw, _ := json.Marshal(r.Result)
-	var dr stateless.DiscoverResult
+	var dr struct {
+		stateless.DiscoverResult
+		Meta core.ResultMeta `json:"_meta"`
+	}
 	if err := json.Unmarshal(raw, &dr); err != nil {
 		t.Fatalf("decode DiscoverResult: %v", err)
 	}
 	if len(dr.SupportedVersions) == 0 || dr.SupportedVersions[0] != draftVersion {
 		t.Errorf("SupportedVersions = %v, want first=%q", dr.SupportedVersions, draftVersion)
 	}
-	if dr.ServerInfo.Name != "stateless-test" {
-		t.Errorf("ServerInfo.Name = %q, want stateless-test", dr.ServerInfo.Name)
+	// Spec PR 3002: server identity lives in the result _meta, not the body.
+	if dr.Meta.ServerInfo == nil || dr.Meta.ServerInfo.Name != "stateless-test" {
+		t.Errorf("_meta serverInfo = %+v, want name stateless-test", dr.Meta.ServerInfo)
 	}
 }
 
