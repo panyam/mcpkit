@@ -1,0 +1,34 @@
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '30 2 * * 1'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed to publish results and get a badge (see publish_results below).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        # Pinned by commit SHA (v2.4.3). Third-party action — bump only via
+        # Dependabot or a deliberate manual review, matching the pages.yml
+        # convention.
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # publish_results feeds api.scorecard.dev, which backs the README
+          # badge and the public viewer.
+          publish_results: true

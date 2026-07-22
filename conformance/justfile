@@ -132,9 +132,9 @@ check-conformance-stale: refresh-conformance
     #!/usr/bin/env bash
     set -eu
     cd {{REPO_ROOT}}
-    if ! git diff --exit-code HEAD -- CONFORMANCE.md > /dev/null 2>&1; then
-        echo "CONFORMANCE.md is stale relative to current testserver + upstream conformance."
-        echo "Run 'just refresh-conformance' locally and commit the regenerated file."
+    if ! git diff --exit-code HEAD -- CONFORMANCE.md docs/site/static/conformance/badge.json > /dev/null 2>&1; then
+        echo "CONFORMANCE.md (or its badge JSON) is stale relative to current testserver + upstream conformance."
+        echo "Run 'just refresh-conformance' locally and commit the regenerated files."
         echo ""
         git diff HEAD -- CONFORMANCE.md | head -60
         exit 1

@@ -129,6 +129,30 @@ echo "=== Rendering CONFORMANCE.md ==="
     --upstream-sha "$UPSTREAM_SHA" \
     --protocol "$PROTOCOL_VERSION")
 
+# --- 4. Badge ---------------------------------------------------------------
+# Shields "endpoint" badge JSON, published by the pages build at
+# /conformance/badge.json and referenced from the README. Message carries the
+# raw scenario counts; color follows tier-scoring status (pass/partial/fail),
+# so expected non-tier failures (extension/draft/backcompat baselines) don't
+# turn the badge red. Same determinism contract as CONFORMANCE.md — the
+# check-conformance-stale gate diffs this file too.
+
+echo ""
+echo "=== Emitting conformance badge JSON ==="
+BADGE_OUT="$REPO_ROOT/docs/site/static/conformance/badge.json"
+node -e '
+const fs = require("fs");
+const sc = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const seg = (r, name) => (r && r.total ? name + " " + r.passed + "/" + r.total : null);
+const server = sc.checks.conformance;
+const client = sc.checks.client_conformance;
+const message = [seg(server, "server"), seg(client, "client")].filter(Boolean).join(" · ") || "no results";
+const statuses = [server, client].map((r) => (r ? r.status : "skipped"));
+const color = statuses.includes("fail") ? "red" : statuses.includes("partial") ? "yellow" : "brightgreen";
+fs.writeFileSync(process.argv[2], JSON.stringify({ schemaVersion: 1, label: "MCP conformance", message, color }) + "\n");
+' "$WORK_DIR/scorecard.json" "$BADGE_OUT"
+echo "  wrote $BADGE_OUT"
+
 echo ""
 echo "=== CONFORMANCE.md refreshed ==="
 echo "  upstream-conformance@$UPSTREAM_SHA"
