@@ -82,6 +82,12 @@ type groupMember struct {
 	client   *Client
 	required bool
 
+	// reconnect wakes the member's run loop to attempt connecting immediately —
+	// either short-circuiting a failed member's backoff sleep or un-parking a
+	// needs-login member. Buffered (cap 1) so a wake is never lost to a
+	// not-currently-selecting loop and a redundant wake is simply dropped.
+	reconnect chan struct{}
+
 	// guarded by Group.mu
 	state   ConnState
 	err     error
@@ -181,7 +187,7 @@ func (g *Group) Add(id string, c *Client, required bool) {
 	if _, ok := g.members[id]; ok {
 		return
 	}
-	g.members[id] = &groupMember{id: id, client: c, required: required, state: StateDisabled, ready: make(chan struct{}), settled: make(chan struct{})}
+	g.members[id] = &groupMember{id: id, client: c, required: required, state: StateDisabled, reconnect: make(chan struct{}, 1), ready: make(chan struct{}), settled: make(chan struct{})}
 	g.order = append(g.order, id)
 }
 
@@ -210,8 +216,10 @@ func (g *Group) Start(ctx context.Context) {
 // run is one member's connect-and-retry loop. On success it settles at
 // StateReady and stops (a live drop after ready is out of scope for phase 1 —
 // the client reconnects a dropped live connection internally). On an auth
-// rejection it settles at StateNeedsLogin and stops (no hammering). Any other
-// failure retries with exponential backoff until the context is cancelled.
+// rejection it settles at StateNeedsLogin and parks — it does NOT auto-retry
+// (no hammering), but a Reconnect wakes it (the user has since logged in). Any
+// other failure retries with exponential backoff, which a Reconnect can
+// short-circuit; the loop runs until the context is cancelled.
 func (g *Group) run(m *groupMember) {
 	defer g.wg.Done()
 	backoff := g.minBackoff
@@ -237,16 +245,51 @@ func (g *Group) run(m *groupMember) {
 		state := classifyConnectErr(err)
 		g.set(m, state, err)
 		if state == StateNeedsLogin {
-			return
+			// Park until a Reconnect (post-login) or Close. No backoff timer —
+			// an auth rejection won't clear on its own, so retrying would only
+			// hammer the server.
+			select {
+			case <-g.ctx.Done():
+				return
+			case <-m.reconnect:
+				backoff = g.minBackoff
+			}
+			continue
 		}
 		select {
 		case <-g.ctx.Done():
 			return
+		case <-m.reconnect:
+			// Forced retry now — reset the backoff so the next failure starts
+			// from the floor again.
+			backoff = g.minBackoff
 		case <-time.After(backoff):
+			if backoff *= 2; backoff > g.maxBackoff {
+				backoff = g.maxBackoff
+			}
 		}
-		if backoff *= 2; backoff > g.maxBackoff {
-			backoff = g.maxBackoff
-		}
+	}
+}
+
+// Reconnect forces a stuck member to attempt connecting again now: it wakes a
+// failed member that is sleeping between backoff retries, and un-parks a
+// needs-login member (the caller has since logged in) whose loop is otherwise
+// idle. A ready member (nothing to reconnect — a live drop is handled by the
+// client internally), an in-flight connecting member, an unknown id, and a
+// not-yet-started or closing Group are all no-ops. Safe for concurrent and
+// repeated use — a redundant wake is dropped.
+func (g *Group) Reconnect(id string) {
+	g.mu.Lock()
+	m, ok := g.members[id]
+	if !ok || !g.started || g.ctx == nil || g.ctx.Err() != nil || m.state == StateReady || m.state == StateConnecting {
+		g.mu.Unlock()
+		return
+	}
+	wake := m.reconnect
+	g.mu.Unlock()
+	select {
+	case wake <- struct{}{}:
+	default:
 	}
 }
 

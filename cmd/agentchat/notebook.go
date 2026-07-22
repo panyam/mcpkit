@@ -224,6 +224,7 @@ type notebookModel struct {
 
 	keys    appKeys
 	help    help.Model
+	modalHost // an open interactive dialog (/mcp, /sessions) as the focused layer
 	showAll bool // ? toggled the full-help view
 
 	nav      bool // false = insert, true = nav
@@ -328,6 +329,11 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.usage = msg
 		return m, nil
 
+	case openOverlayMsg:
+		m.open(msg.ov, m.width)
+		m.ta.Blur()
+		return m, nil
+
 	case tea.MouseMsg:
 		m.vp, _ = m.vp.Update(msg)
 		m.atBottom = m.vp.AtBottom()
@@ -336,6 +342,17 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
 			return m, tea.Quit
+		}
+		// An open dialog owns the keyboard until it acts or dismisses.
+		if m.active() {
+			line, open := m.route(msg)
+			if !open {
+				m.ta.Focus()
+			}
+			if line != "" {
+				return m.submit(line)
+			}
+			return m, nil
 		}
 		if m.nav {
 			return m.updateNav(msg)
@@ -462,6 +479,10 @@ func (m notebookModel) View() string {
 	if !m.ready {
 		return "starting…"
 	}
+	// An open dialog renders between the transcript and the input.
+	if m.active() {
+		return m.vp.View() + "\n" + m.view(m.ta.View())
+	}
 	return m.vp.View() + "\n" + m.statusBar() + "\n" + m.ta.View()
 }
 
@@ -587,6 +608,8 @@ func (m notebookModel) submit(line string) (tea.Model, tea.Cmd) {
 				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: "unknown command " + line})
 			case err != nil:
 				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: err.Error()})
+			case overlayFor(res) != nil:
+				surface.prog.Send(openOverlayMsg{ov: overlayFor(res)})
 			default:
 				surface.On(host.HostEvent{Kind: host.HostCommandResult, Command: res})
 				if res.Quit {
