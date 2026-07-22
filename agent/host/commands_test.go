@@ -240,6 +240,43 @@ func TestApp_DispatchServersListAliasAndReconnect(t *testing.T) {
 	}
 }
 
+type fakeLoginSource struct{ invalidated int }
+
+func (f *fakeLoginSource) Invalidate() { f.invalidated++ }
+
+func TestApp_LoginServer(t *testing.T) {
+	app, _ := newCmdApp(t)
+	fake := &fakeLoginSource{}
+	app.oauthSources["oauth-srv"] = fake
+
+	if !app.canLogin("oauth-srv") || app.canLogin("bare-srv") {
+		t.Fatalf("canLogin: oauth-srv=%v bare-srv=%v", app.canLogin("oauth-srv"), app.canLogin("bare-srv"))
+	}
+
+	// login on the configured server drops the cached token (Invalidate) then
+	// reconnects; the reconnect on an unknown group member is a harmless no-op.
+	app.LoginServer("oauth-srv")
+	if fake.invalidated != 1 {
+		t.Fatalf("LoginServer did not invalidate the token source (count=%d)", fake.invalidated)
+	}
+	// unknown / non-oauth server is a no-op (no panic, nothing to invalidate)
+	app.LoginServer("bare-srv")
+
+	// the /servers login command refuses a server with no interactive auth type
+	res, err := app.Dispatch(context.Background(), "/servers login bare-srv")
+	if err != nil || res.Kind != CmdMessage || !strings.Contains(res.Message, "no interactive") {
+		t.Fatalf("/servers login bare-srv = (%+v, %v)", res, err)
+	}
+	// and starts login for the configured one
+	res, err = app.Dispatch(context.Background(), "/servers login oauth-srv")
+	if err != nil || res.Kind != CmdMessage || !strings.Contains(res.Message, "login started") {
+		t.Fatalf("/servers login oauth-srv = (%+v, %v)", res, err)
+	}
+	if fake.invalidated != 2 {
+		t.Fatalf("command path did not invalidate (count=%d)", fake.invalidated)
+	}
+}
+
 func TestApp_SessionsNoStoreErrors(t *testing.T) {
 	ts := startTestServer(t)
 	var out strings.Builder

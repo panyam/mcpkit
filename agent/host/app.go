@@ -38,6 +38,11 @@ type App struct {
 	group       *client.Group
 	serverTools *agent.MultiSource
 
+	// oauthSources holds the interactive (oauth) token source per server id, so
+	// LoginServer can force a fresh browser login. Only oauth-typed servers have
+	// an entry; its presence is what CanLogin reports.
+	oauthSources map[string]loginSource
+
 	// tp is the tracer provider, held so the ready-observer can load a late
 	// server's skills with the same instrumentation as the boot path.
 	tp core.TracerProvider
@@ -235,7 +240,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
-		tp: o.tp, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}}
+		tp: o.tp, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
 	for _, sc := range cfg.Servers {
 		app.serverOrder = append(app.serverOrder, sc.ID)
 	}
@@ -281,13 +286,16 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			client.WithToolsListChangedHandler(multi.Invalidate),
 			client.WithTracerProvider(o.tp),
 		}
-		authOpt, err := authOption(sc)
+		authOpt, loginSrc, err := authOption(sc)
 		if err != nil {
 			app.Close()
 			return nil, err
 		}
 		if authOpt != nil {
 			copts = append(copts, authOpt)
+		}
+		if loginSrc != nil {
+			app.oauthSources[sc.ID] = loginSrc
 		}
 		c := client.NewClient(sc.URL, core.ClientInfo{Name: "agentchat", Version: "0.1"}, copts...)
 		app.clients = append(app.clients, c)
@@ -508,6 +516,30 @@ func (a *App) ServerTools(ctx context.Context, id string) (defs []core.ToolDef, 
 		return nil, false, nil
 	}
 	return a.sources.SourceTools(ctx, id)
+}
+
+// loginSource is the subset of an interactive OAuth token source the host needs
+// to force a fresh login: dropping the cached token so the client's next
+// connect re-runs the browser authorization-code flow. *extauth.OAuthTokenSource
+// satisfies it.
+type loginSource interface{ Invalidate() }
+
+// canLogin reports whether an interactive (oauth) auth type is configured for
+// the server, so a surface knows when to offer the login action.
+func (a *App) canLogin(id string) bool { return a.oauthSources[id] != nil }
+
+// LoginServer forces a fresh interactive login for an oauth-configured server:
+// it drops any cached token and reconnects, so the client's next connect runs
+// the browser authorization-code flow again. A server without an interactive
+// (oauth) auth type, or an unknown id, is a no-op — canLogin / the server
+// status CanLogin flag tells a surface when to offer it.
+func (a *App) LoginServer(id string) {
+	src := a.oauthSources[id]
+	if src == nil {
+		return
+	}
+	src.Invalidate()
+	a.ReconnectServer(id)
 }
 
 // ReconnectServer forces the named MCP server to attempt connecting again: it

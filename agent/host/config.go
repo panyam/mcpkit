@@ -433,8 +433,8 @@ type TriggerConfig struct {
 type AuthConfig struct {
 	// Type is "bearer" (static token), "client-credentials" (OAuth
 	// machine-to-machine via PRM/AS discovery), or "oauth"
-	// (authorization-code browser flow; not implemented yet, tracked in
-	// the agent epic).
+	// (authorization-code browser flow: PRM/AS discovery + PKCE, DCR when no
+	// client is pre-registered; the /mcp overlay's login action re-runs it).
 	Type string `json:"type"`
 
 	// TokenEnv names the env var holding the static bearer token.
@@ -477,9 +477,15 @@ func (a *AuthConfig) Validate() error {
 			}
 		}
 	case "oauth":
-		return fmt.Errorf("auth type oauth (authorization-code browser flow) is not implemented yet (tracked as mcpkit issue 907); use bearer or client-credentials")
+		// Authorization-code browser flow. No mandatory env: the client
+		// self-registers via DCR when no clientIdEnv is given, and the PKCE
+		// flow acquires interactively on the first 401. clientIdEnv (+ optional
+		// clientSecretEnv) pin a pre-registered client when set.
+		if a.ClientIDEnv != "" && os.Getenv(a.ClientIDEnv) == "" {
+			return fmt.Errorf("auth env %s is not set", a.ClientIDEnv)
+		}
 	default:
-		return fmt.Errorf("unknown auth type %q (want bearer or client-credentials)", a.Type)
+		return fmt.Errorf("unknown auth type %q (want bearer, client-credentials, or oauth)", a.Type)
 	}
 	return nil
 }
