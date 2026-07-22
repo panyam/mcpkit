@@ -69,9 +69,12 @@ func TestRecallHistoryEmpty(t *testing.T) {
 }
 
 func TestIsBoundary(t *testing.T) {
-	// the streaming turn accumulates live; everything else closes a segment
-	if isBoundary(host.HostRunnerEvent) {
-		t.Fatal("HostRunnerEvent should stream live, not commit")
+	// the streaming turn + nested sub-agent activity accumulate live; every
+	// other event closes a segment
+	for _, k := range []host.HostEventKind{host.HostRunnerEvent, host.HostSubAgentEvent} {
+		if isBoundary(k) {
+			t.Fatalf("kind %v should stream live, not commit", k)
+		}
 	}
 	for _, k := range []host.HostEventKind{
 		host.HostTurnDone, host.HostTurnFailed, host.HostCommandResult,
@@ -190,11 +193,11 @@ func TestKeyMap_WordNavHasCtrlArrows(t *testing.T) {
 	}
 }
 
-func TestKeyHelp_ListsBindings(t *testing.T) {
-	h := keyHelp()
-	for _, want := range []string{"ctrl+← / ctrl+→", "ctrl+a / ctrl+e", "ctrl+w", "ctrl+k / ctrl+u", "Option-as-Meta"} {
+func TestRenderKeyHelp_ListsEditingBindings(t *testing.T) {
+	h := renderKeyHelp()
+	for _, want := range []string{"ctrl+←", "ctrl+a / e", "ctrl+w", "ctrl+k / u", "Option-as-Meta"} {
 		if !strings.Contains(h, want) {
-			t.Fatalf("keyHelp() missing %q:\n%s", want, h)
+			t.Fatalf("renderKeyHelp() missing %q:\n%s", want, h)
 		}
 	}
 }

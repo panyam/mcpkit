@@ -21,6 +21,15 @@ const DefaultMaxSteps = 8
 // tool calls past the step cap. Check with errors.Is.
 var ErrMaxSteps = errors.New("agent: max steps exceeded")
 
+// ErrNotAvailableNow is returned by a ToolSource.Call when the tool exists but
+// its backing server is unreachable right now (as opposed to the tool failing).
+// The Runner treats it as a NON-FATAL miss: it emits EventToolUnavailable and
+// feeds the wrapped error's message back to the model, and the turn continues.
+// Wrap it with a descriptive message (fmt.Errorf("%w: ...", ErrNotAvailableNow,
+// ...)) so the model learns which server and can retry, route around it, or
+// tell the user. See docs/AGENT_SERVER_STATE.md.
+var ErrNotAvailableNow = errors.New("agent: tool source not available now")
+
 // RunnerConfig assembles a Runner.
 type RunnerConfig struct {
 	// Provider is the LLM. Required.
@@ -581,6 +590,14 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	}
 	res, err := r.cfg.Tools.Call(ctx, call.Name, args)
 	if err != nil {
+		// A tool whose server is unreachable right now is a non-fatal miss, not
+		// a failure: the model is told and the turn continues (mirrors denial /
+		// cancellation). Reason (not Error) so error-keyed scorers don't count it.
+		if errors.Is(err, ErrNotAvailableNow) && !cancelled() {
+			span.SetAttribute("agent.tool.unavailable", "true")
+			emit(Event{Kind: EventToolUnavailable, Step: step, ToolCall: &call, Reason: err.Error()})
+			return err.Error()
+		}
 		return failed(err)
 	}
 	if cancelled() {
