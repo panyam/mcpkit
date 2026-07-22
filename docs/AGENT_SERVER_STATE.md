@@ -72,6 +72,14 @@ no-op for `Ready` (live-drop reconnect is the client's own concern), `Connecting
 unknown ids. The agentchat `/mcp` overlay's reconnect action and `/servers reconnect <name>`
 both route through `App.ReconnectServer` → this.
 
+**Login re-runs the flow (issues 1116/907).** A server configured with the interactive
+authorization-code auth type (`"auth": {"type": "oauth"}`) carries an `ext/auth.OAuthTokenSource`.
+When it hits `NeedsLogin`, the overlay's login action (or `/servers login <name>`) calls
+`App.LoginServer(id)` = drop the cached token (`OAuthTokenSource.Invalidate`) + `ReconnectServer(id)`,
+so the next connect re-runs the PKCE browser flow as a *fresh* login (distinct from plain
+reconnect, which may reuse a cached token). Only oauth-typed servers are loginable; the
+server status carries a host-layer `CanLogin` flag so a surface knows when to offer it.
+
 Each transition emits a **`HostServerStateChanged`** event so surfaces update live. On
 `→ Ready`: `multi.Add(id, src)`, register that server's catalog skills + `load_skill`,
 `startEventStreams` for it, and (phase 2) recompute the eager system-prompt block.

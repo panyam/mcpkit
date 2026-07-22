@@ -204,9 +204,14 @@ suggest triggers; the host decides.
   discovery, token caching, and refresh are automatic; `scopes` is optional
   (empty inherits the server's PRM scopes_supported); `allowInsecure: true`
   permits an http:// AS for dev setups.
-- **`oauth`** (authorization-code browser flow): not implemented yet; the
-  config rejects it with a pointer at the tracking issue. Interactive CLI
-  login is the natural fit for agentchat and lands with that ticket.
+- **`oauth`** (authorization-code browser flow): interactive login via ext/auth.
+  PRM and AS discovery + PKCE are automatic. With no `clientIdEnv` the client
+  self-registers via DCR; set `clientIdEnv` (and optional `clientSecretEnv`) to
+  pin a pre-registered client. `scopes` is optional (empty follows the server's
+  401 challenge). The PKCE flow runs on the first 401; if it does not complete,
+  the server sits at `needs-login` and the `/mcp` overlay offers a login action
+  (or `/servers login <name>`) that re-runs it. `allowInsecure: true` permits an
+  http:// AS for dev.
 
 Every flag is env-overridable with the `AGENTCHAT_` prefix (dashes become
 underscores: `--base-url` is `AGENTCHAT_BASE_URL`); an explicit flag beats
@@ -220,6 +225,14 @@ elicitation, `/d` declines and `/c` cancels.
 more` to page older ones, `/sessions find <text>` to search by id, and
 `/sessions <id>` to resume. (Recency is free on the gorm/sqlite and in-memory
 stores; a redis store's SCAN order is unsorted — see the runstore docs.)
+
+`/mcp` (alias `/servers`) opens an interactive panel of the connected MCP
+servers and their state. On a selected row: `enter` reconnects a failed or
+needs-login server, `t` lists that server's own tools, and `l` starts an
+interactive login for a needs-login server that uses the `oauth` auth type. The
+same actions are available as commands: `/servers reconnect <name>`, `/servers
+tools <name>`, `/servers login <name>`. In the interactive surfaces these render
+as an overlay dialog; the plain REPL prints the result.
 
 ## What a session looks like
 
