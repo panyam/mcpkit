@@ -186,6 +186,44 @@ func TestApp_DispatchSessionsListAndSwitch(t *testing.T) {
 	}
 }
 
+func TestApp_DispatchServersListAliasAndReconnect(t *testing.T) {
+	ctx := context.Background()
+	app, _ := newCmdApp(t)
+
+	// /servers lists the connected members; the /mcp alias resolves to the same.
+	list, err := app.Dispatch(ctx, "/servers")
+	if err != nil || list.Kind != CmdServers {
+		t.Fatalf("/servers = (%+v, %v)", list, err)
+	}
+	if len(list.Servers) == 0 {
+		t.Fatalf("/servers listed no members, want the configured server")
+	}
+	id := list.Servers[0].ID
+	alias, err := app.Dispatch(ctx, "/mcp")
+	if err != nil || alias.Kind != CmdServers || len(alias.Servers) != len(list.Servers) {
+		t.Fatalf("/mcp alias = (%+v, %v)", alias, err)
+	}
+
+	// reconnect subcommand is a data-only ack; on a ready member it is a no-op
+	// (proven at the client layer) but must not error here.
+	rc, err := app.Dispatch(ctx, "/servers reconnect "+id)
+	if err != nil || rc.Kind != CmdMessage || !strings.Contains(rc.Message, id) {
+		t.Fatalf("/servers reconnect = (%+v, %v)", rc, err)
+	}
+
+	// completer offers the reconnect subcommand and the member id.
+	cmd, ok := app.Commands().Lookup("servers")
+	if !ok || cmd.Complete == nil {
+		t.Fatal("servers command has no completer")
+	}
+	if got := cmd.Complete("rec"); len(got) != 1 || got[0] != "reconnect" {
+		t.Fatalf("Complete(rec) = %v, want [reconnect]", got)
+	}
+	if got := cmd.Complete(id[:1]); len(got) == 0 {
+		t.Fatalf("Complete(%q) offered no server id", id[:1])
+	}
+}
+
 func TestApp_SessionsNoStoreErrors(t *testing.T) {
 	ts := startTestServer(t)
 	var out strings.Builder
