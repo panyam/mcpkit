@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
@@ -21,6 +22,13 @@ import (
 // sibling's.
 func (a *App) startEventStreams(ctx context.Context) error {
 	for _, sc := range a.cfg.Servers {
+		// Boot snapshot: only subscribe servers ready by now. A server that
+		// connects later gets its tools (via the Group observer) but not its
+		// event streams until a restart — late-event wiring is the follow-up
+		// (docs/AGENT_SERVER_STATE.md phase 2).
+		if s, ok := a.group.State(sc.ID); !ok || s != client.StateReady {
+			continue
+		}
 		for _, ec := range sc.Events {
 			if _, err := a.openSubscription(ctx, sc.ID, ec.Name); err != nil {
 				return fmt.Errorf("agentchat: events/stream %s on %s: %w", ec.Name, sc.ID, err)

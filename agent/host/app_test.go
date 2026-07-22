@@ -13,8 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	skills "github.com/panyam/mcpkit/ext/skills"
 	"github.com/panyam/mcpkit/server"
@@ -32,6 +34,76 @@ func testConfig(url string) *Config {
 	return &Config{
 		Model:   ModelConfig{BaseURL: "http://unused", Model: "stub"},
 		Servers: []ServerConfig{{ID: "test", URL: url + "/mcp"}},
+	}
+}
+
+// TestAppBootsWithDownOptionalServer is the graceful-degrade acceptance: a down
+// optional server must not fail boot; the reachable server is ready, the down
+// one is not, and /servers lists both (docs/AGENT_SERVER_STATE.md).
+func TestAppBootsWithDownOptionalServer(t *testing.T) {
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Servers = append(cfg.Servers, ServerConfig{ID: "down", URL: "http://127.0.0.1:1/mcp"})
+
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "hi"})))
+	if err != nil {
+		t.Fatalf("boot must not fail on a down optional server: %v", err)
+	}
+	defer app.Close()
+
+	if s, _ := app.group.State("test"); s != client.StateReady {
+		t.Fatalf("reachable server state = %v, want ready", s)
+	}
+	if s, _ := app.group.State("down"); s == client.StateReady {
+		t.Fatalf("down server should not be ready, got %v", s)
+	}
+	res, err := app.Dispatch(context.Background(), "/servers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Servers) != 2 {
+		t.Fatalf("/servers = %d entries, want 2", len(res.Servers))
+	}
+}
+
+// TestAppCloseDoesNotHang is the host-level regression for the close hang: with
+// a ready server (open SSE stream) AND a down server (a background retry loop),
+// app.Close must tear both down promptly, not block. A generous deadline turns
+// a hang into a fast, clear failure instead of a whole-suite timeout.
+func TestAppCloseDoesNotHang(t *testing.T) {
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Servers = append(cfg.Servers, ServerConfig{ID: "down", URL: "http://127.0.0.1:1/mcp"})
+
+	app, err := NewApp(cfg, io.Discard, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "hi"})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { app.Close(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("app.Close hung")
+	}
+}
+
+// TestAppRequiredServerReadyAfterBoot verifies a required server is connected by
+// the time NewApp returns (WaitRequired blocked for it).
+func TestAppRequiredServerReadyAfterBoot(t *testing.T) {
+	ts := startTestServer(t)
+	cfg := testConfig(ts.URL)
+	cfg.Servers[0].Required = true
+
+	var out strings.Builder
+	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(agent.NewStubProvider(agent.StubTurn{Text: "hi"})))
+	if err != nil {
+		t.Fatalf("boot with a reachable required server: %v", err)
+	}
+	defer app.Close()
+	if s, _ := app.group.State("test"); s != client.StateReady {
+		t.Fatalf("required server must be ready after boot, got %v", s)
 	}
 }
 

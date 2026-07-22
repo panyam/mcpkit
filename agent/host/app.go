@@ -31,6 +31,13 @@ type App struct {
 	replOut   io.Writer // terminal REPL draws its own prompt here
 	failover  *agent.FailoverProvider
 
+	// group owns the MCP server connection lifecycle (async connect, per-server
+	// state, backoff reconnect); its observer registers a server's tools when it
+	// becomes ready. serverTools mirrors the server sources for sub-agent
+	// personas. See docs/AGENT_SERVER_STATE.md.
+	group       *client.Group
+	serverTools *agent.MultiSource
+
 	injection *agent.EventInjectionPolicy
 	triggers  *agent.TriggerPolicy
 	approval  *agent.TieredApproval
@@ -42,6 +49,7 @@ type App struct {
 	subs      map[string]*subscription
 	metaTools bool
 	turnMu    sync.Mutex
+	emitMu    sync.Mutex // serializes emit so concurrent server-connect events don't race the renderer
 	eventStop context.CancelFunc
 
 	// store and runID are the persistence seam (WithRunStore): runID is
@@ -134,6 +142,49 @@ func WithConfigOverlay(configPath string) AppOption {
 	return func(o *appOptions) { o.configPath = configPath }
 }
 
+// registerServerTools wraps a now-ready server's client as a ToolSource (with
+// its per-server allow filter) and adds it to the aggregate and, when
+// sub-agents are configured, the sub-agent view. It is called from the
+// connection Group's observer on StateReady — possibly concurrently for
+// several servers — so it relies on MultiSource.Add being safe for concurrent
+// use. A registration failure degrades to a warning, never a crash.
+func (a *App) registerServerTools(sc ServerConfig, c *client.Client) {
+	if c == nil {
+		return
+	}
+	var src agent.ToolSource = agent.NewClientSource(c,
+		agent.WithInputHandler(client.DefaultInputHandler(c)),
+		agent.WithTaskStatusHook(func(dt *core.DetailedTask) { a.emit(HostEvent{Kind: HostTaskStatus, TaskStatus: dt}) }),
+		agent.WithTaskGrace(a.cfg.taskGrace()),
+		agent.WithTaskDetachHook(a.onTaskDetach),
+		agent.WithTaskCompletionHook(func(bt *client.BackgroundTask) { a.onTaskComplete(sc.ID, bt) }))
+	if len(sc.Allow) > 0 {
+		allowed := make(map[string]bool, len(sc.Allow))
+		for _, name := range sc.Allow {
+			allowed[name] = true
+		}
+		src = agent.NewFilterSource(src, func(d core.ToolDef) bool { return allowed[d.Name] })
+	}
+	if err := a.sources.Add(sc.ID, src); err != nil {
+		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("register tools for %s: %v", sc.ID, err)})
+		return
+	}
+	if a.serverTools != nil {
+		_ = a.serverTools.Add(sc.ID, src)
+	}
+	// A late-added source changes the tool list; clear any cached aggregate so
+	// the next turn sees the new tools.
+	a.sources.Invalidate()
+}
+
+// errString renders an error for a HostEvent's Err field, empty for nil.
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
 // NewApp connects every configured server and assembles the agent. The
 // returned App owns the client connections; call Close when done.
 func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, error) {
@@ -146,6 +197,12 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	if o.logger == nil {
 		o.logger = slog.New(slog.DiscardHandler)
+	}
+	// A nil writer is a valid "discard output" request: the default renderer and
+	// the terminal elicitation UI both write to it, and servers now emit
+	// state-change events during construction, so a nil here would panic.
+	if out == nil {
+		out = io.Discard
 	}
 
 	observers := o.observers
@@ -174,11 +231,24 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// sub-agents — so a sub-agent persona gets a filtered view of the servers
 	// without seeing the meta-tools or the other personas (which would let it
 	// recurse). Built only when sub-agents are configured.
-	var serverTools *agent.MultiSource
 	if len(cfg.SubAgents) > 0 {
-		serverTools = agent.NewMultiSource()
+		app.serverTools = agent.NewMultiSource()
 	}
 
+	// Build one client per server and hand it to the connection Group, which
+	// connects them asynchronously and calls the observer as each transitions.
+	// A server's tools register the moment it becomes ready (registerServerTools),
+	// so a server that is down at boot — or comes up late — wires its tools in
+	// without blocking or failing the agent. Required servers block boot below.
+	serverByID := make(map[string]ServerConfig, len(cfg.Servers))
+	clientByID := make(map[string]*client.Client, len(cfg.Servers))
+	onState := func(ch client.StateChange) {
+		app.emit(HostEvent{Kind: HostServerStateChanged, ServerID: ch.ID, ServerState: ch.State.String(), Err: errString(ch.Err)})
+		if ch.State == client.StateReady {
+			app.registerServerTools(serverByID[ch.ID], clientByID[ch.ID])
+		}
+	}
+	app.group = client.NewGroup(client.WithObserver(onState))
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
 			client.WithGetSSEStream(),
@@ -196,41 +266,35 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			copts = append(copts, authOpt)
 		}
 		c := client.NewClient(sc.URL, core.ClientInfo{Name: "agentchat", Version: "0.1"}, copts...)
-		if err := c.Connect(); err != nil {
-			app.Close()
-			return nil, fmt.Errorf("agentchat: connect %s (%s): %w", sc.ID, sc.URL, err)
-		}
 		app.clients = append(app.clients, c)
-
-		var src agent.ToolSource = agent.NewClientSource(c,
-			agent.WithInputHandler(client.DefaultInputHandler(c)),
-			agent.WithTaskStatusHook(func(dt *core.DetailedTask) { app.emit(HostEvent{Kind: HostTaskStatus, TaskStatus: dt}) }),
-			agent.WithTaskGrace(cfg.taskGrace()),
-			agent.WithTaskDetachHook(app.onTaskDetach),
-			agent.WithTaskCompletionHook(func(bt *client.BackgroundTask) { app.onTaskComplete(sc.ID, bt) }))
-		if len(sc.Allow) > 0 {
-			allowed := make(map[string]bool, len(sc.Allow))
-			for _, name := range sc.Allow {
-				allowed[name] = true
-			}
-			src = agent.NewFilterSource(src, func(d core.ToolDef) bool { return allowed[d.Name] })
-		}
-		if err := multi.Add(sc.ID, src); err != nil {
-			app.Close()
-			return nil, err
-		}
-		if serverTools != nil {
-			if err := serverTools.Add(sc.ID, src); err != nil {
-				app.Close()
-				return nil, err
-			}
-		}
+		serverByID[sc.ID] = sc
+		clientByID[sc.ID] = c
+		app.group.Add(sc.ID, c, sc.Required)
 	}
+	app.group.Start(context.Background())
+	// Block only for the servers marked required; the rest keep connecting in
+	// the background and register via the observer as they become ready.
+	if err := app.group.WaitRequired(context.Background()); err != nil {
+		app.Close()
+		return nil, fmt.Errorf("agentchat: %w", err)
+	}
+	// Wait for the initial connect round to settle (bounded) so reachable
+	// servers are ready and their tools/skills registered before the first
+	// turn; a down server fails fast and does not block, and a slow one wires
+	// in later via the observer.
+	_ = app.group.WaitSettled(context.Background())
 
+	// Skills are a boot snapshot: only servers ready by now contribute their
+	// eager blocks / catalog. A server that connects later gets its tools (via
+	// the observer) but not its skills until a restart — late-skill wiring is
+	// the follow-up (docs/AGENT_SERVER_STATE.md phase 2).
 	instructions := cfg.Instructions
 	var skillCatalog []catalogSkill
 	for i, sc := range cfg.Servers {
 		if sc.Skills != nil && !*sc.Skills {
+			continue
+		}
+		if s, _ := app.group.State(sc.ID); s != client.StateReady {
 			continue
 		}
 		block, cat, err := loadSkillsForServer(app.clients[i], sc.ID, sc.SkillsMode, sc.SkillsAllow, app.emit, o.tp)
@@ -333,7 +397,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// a filtered view of serverTools (built above), so it never sees the
 	// meta-tools or its sibling personas.
 	if len(cfg.SubAgents) > 0 {
-		if err := app.registerSubAgents(multi, serverTools, provider, o.tp); err != nil {
+		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp); err != nil {
 			app.Close()
 			return nil, err
 		}
@@ -414,8 +478,16 @@ func (a *App) Close() {
 		bt.Cancel()
 	}
 	a.tasksMu.Unlock()
-	for _, c := range a.clients {
-		c.Close()
+	// The Group owns the server connections' lifecycle: closing it stops the
+	// connect/retry goroutines and closes the member clients. Fall back to
+	// closing clients directly only if the Group was never built (an early
+	// construction error).
+	if a.group != nil {
+		a.group.Close()
+	} else {
+		for _, c := range a.clients {
+			c.Close()
+		}
 	}
 }
 
@@ -506,8 +578,13 @@ func (a *App) SwitchProvider(name string) error {
 }
 
 // emit fans a host event out to every registered observer. Fire-and-forget:
-// observers render, trace, or push it; none reply.
+// observers render, trace, or push it; none reply. Serialized: the async server
+// connections (Group observer), the turn goroutine, and event goroutines all
+// emit, so the lock keeps a not-inherently-concurrent observer (the terminal
+// renderer writing to one io.Writer) from racing.
 func (a *App) emit(ev HostEvent) {
+	a.emitMu.Lock()
+	defer a.emitMu.Unlock()
 	for _, o := range a.observers {
 		o.On(ev)
 	}
