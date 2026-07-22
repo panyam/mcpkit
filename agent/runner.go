@@ -41,6 +41,13 @@ type RunnerConfig struct {
 	// context — instead of being frozen at construction. Recomputed per turn
 	// (not per step), so the prompt is stable within a turn and a provider
 	// cache only breaks when the value actually changes.
+	//
+	// It is per-Runner: each Runner is built from its own RunnerConfig, so a
+	// sub-agent's Runner has its own InstructionsFunc (or none) — different
+	// runners can produce different prompts. The func captures whatever context
+	// it needs (e.g. the host's set of connected servers, its own tool view) via
+	// closure; the Runner is deliberately NOT passed, which would be circular
+	// (the Runner holds this config). The ctx is for cancellation/deadline only.
 	InstructionsFunc func(context.Context) string
 
 	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
