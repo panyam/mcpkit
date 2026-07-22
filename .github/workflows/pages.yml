@@ -63,6 +63,22 @@ jobs:
         working-directory: docs/site
         run: just build
 
+      # Self-hosted shields endpoint badge: root-module coverage computed
+      # here and shipped inside the site output at /coverage/badge.json,
+      # same pattern as the conformance badge (which is committed under
+      # docs/site/static/ by refresh-conformance and rides `just build`).
+      # Relies on docs/site/go.mod sharing the root module's go directive:
+      # setup-go@v7 pins GOTOOLCHAIN=local, so the one installed toolchain
+      # must satisfy both modules.
+      - name: Coverage badge
+        run: |
+          go test ./... -coverprofile=/tmp/cover.out -covermode=atomic > /dev/null
+          PCT=$(go tool cover -func=/tmp/cover.out | tail -1 | awk '{gsub(/%/,"",$3); print $3}')
+          COLOR=$(awk -v p="$PCT" 'BEGIN{print (p>=80)?"brightgreen":(p>=70)?"green":(p>=60)?"yellowgreen":(p>=50)?"yellow":"orange"}')
+          mkdir -p docs/site/dist/docs/coverage
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$PCT" "$COLOR" > docs/site/dist/docs/coverage/badge.json
+          cat docs/site/dist/docs/coverage/badge.json
+
       - uses: actions/upload-artifact@v7
         with:
           name: docs-site
