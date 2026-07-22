@@ -180,6 +180,9 @@ func (a *App) registerServerTools(sc ServerConfig, c *client.Client) {
 		}
 		src = agent.NewFilterSource(src, func(d core.ToolDef) bool { return allowed[d.Name] })
 	}
+	// Outermost: map an unreachable-server transport error on any call to a
+	// non-fatal ErrNotAvailableNow miss (docs/AGENT_SERVER_STATE.md).
+	src = newAvailabilitySource(src, sc.ID)
 	if err := a.sources.Add(sc.ID, src); err != nil {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("register tools for %s: %v", sc.ID, err)})
 		return
