@@ -21,12 +21,6 @@ scenarios:
   "server-stateless":
     issue: "upstream conformance test bug"
     note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."
-  "auth/2025-03-26-oauth-endpoint-fallback":
-    issue: "https://github.com/panyam/mcpkit/issues/451"
-    note: "Wontfix — 2025-03-26 OAuth-endpoint root fallback removed by spec in 2025-06-18. mcpkit targets 2025-11-25+; see ext/auth/docs/DESIGN.md for the policy."
-  "auth/2025-03-26-oauth-metadata-backcompat":
-    issue: "https://github.com/panyam/mcpkit/issues/451"
-    note: "Wontfix — rootless OAuth metadata removed by spec in 2025-06-18. See ext/auth/docs/DESIGN.md."
   "auth/dpop":
     issue: "https://github.com/panyam/mcpkit/issues/803"
     note: "Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft."
@@ -34,11 +28,11 @@ scenarios:
     issue: "https://github.com/panyam/mcpkit/issues/803"
     note: "Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant."
   "auth/wif-jwt-bearer":
-    issue: "no tracking issue yet"
+    issue: "https://github.com/panyam/mcpkit/issues/1101"
     note: "Extension category, not tier-scored. RFC 7523 JWT bearer grant via workload identity federation, not implemented."
   "auth/authorization-server-migration":
-    issue: "no tracking issue yet"
-    note: "Draft category, not tier-scored. Client does not yet re-register when the PRM's authorization server changes."
+    issue: "https://github.com/panyam/mcpkit/issues/1100"
+    note: "Draft category, not tier-scored. Client does not re-register when the PRM's authorization server changes; reopened gap from issue 500 cluster D."
 
 checks:
   "sep-2243-server-not-expect-null":

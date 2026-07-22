@@ -37,7 +37,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 | Surface | Scenarios pass/total | Checks pass/fail |
 |---|---:|---:|
 | Server | 30/30 | 42/0 |
-| Client | 37/43 | 479/17 |
+| Client | 39/43 | 506/10 |
 
 ## mcpkit-local Conformance Suites
 
@@ -500,12 +500,10 @@ _None._
 
 | Scenario | Surface | Checks fail/pass | Tracking |
 |---|---|---:|---|
-| `auth/2025-03-26-oauth-endpoint-fallback` | client | 3/0 | https://github.com/panyam/mcpkit/issues/451 — Wontfix — 2025-03-26 OAuth-endpoint root fallback removed by spec in 2025-06-18. mcpkit targets 2025-11-25+; see ext/auth/docs/DESIGN.md for the policy. |
-| `auth/2025-03-26-oauth-metadata-backcompat` | client | 4/0 | https://github.com/panyam/mcpkit/issues/451 — Wontfix — rootless OAuth metadata removed by spec in 2025-06-18. See ext/auth/docs/DESIGN.md. |
-| `auth/authorization-server-migration` | client | 1/2 | no tracking issue yet — Draft category, not tier-scored. Client does not yet re-register when the PRM's authorization server changes. |
+| `auth/authorization-server-migration` | client | 1/2 | https://github.com/panyam/mcpkit/issues/1100 — Draft category, not tier-scored. Client does not re-register when the PRM's authorization server changes; reopened gap from issue 500 cluster D. |
 | `auth/dpop` | client | 3/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft. |
 | `auth/dpop-nonce` | client | 5/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant. |
-| `auth/wif-jwt-bearer` | client | 1/10 | no tracking issue yet — Extension category, not tier-scored. RFC 7523 JWT bearer grant via workload identity federation, not implemented. |
+| `auth/wif-jwt-bearer` | client | 1/10 | https://github.com/panyam/mcpkit/issues/1101 — Extension category, not tier-scored. RFC 7523 JWT bearer grant via workload identity federation, not implemented. |
 
 ### Declared requirements with no emitted check
 

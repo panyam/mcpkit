@@ -6,16 +6,17 @@ MCPKit implements the MCP Authorization specification (draft, based on OAuth 2.1
 
 ## Supported spec versions
 
-mcpkit targets the **2025-11-25 MCP Authorization spec** and the in-flight **2026-07-28** draft. The auth-flow shapes from the **2025-03-26 spec** (rootless OAuth metadata, OAuth-endpoint root fallback when no metadata endpoints exist) are intentionally **not supported** — those shapes were removed by the spec itself in 2025-06-18, and implementing them would mean carrying deprecated code paths indefinitely for a tiny pool of servers that haven't tracked the spec for more than a year.
+mcpkit targets the **2025-11-25 MCP Authorization spec** and the in-flight **2026-07-28** draft, and additionally supports the **2025-03-26 spec's** legacy discovery shapes as a client-side fallback (issue 451, reversed from an earlier wontfix: the TypeScript SDK carries the same fallback, the tier-check conformance suite scores it, and deployed pre-PRM servers are still common enough to matter).
 
-Concretely:
+The discovery ladder in `ext/auth/discovery.go`:
 
-- mcpkit's client **requires a PRM endpoint** (`/.well-known/oauth-protected-resource{path}` or `/.well-known/oauth-protected-resource`). If PRM is missing, `ext/auth/discovery.go` returns a clear `PRM endpoint returned 404` error — that error is the actionable signal that the server is on the deprecated spec.
-- The OAuth-endpoint root fallback (`/authorize`, `/token`, `/register` at server root without metadata discovery) is also unsupported. Same rationale: spec removed it; mcpkit doesn't carry it.
+1. `WWW-Authenticate` `resource_metadata` link, when the 401 provides one.
+2. PRM well-known probes: path-based, then root (`/.well-known/oauth-protected-resource{path}`, then bare).
+3. **Legacy (2025-03-26) fallback**, reached only when both PRM probes return a definitive **404**: fetch AS metadata at the origin's `/.well-known/oauth-authorization-server`; if that too is 404, synthesize the legacy default endpoints (`/authorize`, `/token`, `/register` at the origin, with S256 stamped so the PKCE gate passes on our own synthesized document). The result carries `MCPAuthInfo.LegacyDiscovery = true` and a nil `PRM`.
 
-The conformance audit's two `auth/2025-03-26-*` scenarios live in `conformance/baseline.yml` as expected-failures and in `conformance/known-gaps.yaml` with this rationale + a tracking link to #451. The upstream audit report (`conformance/UPSTREAM_AUDIT.md`) still shows them as `partial`; that's correct — we don't pass them, and that's intentional.
+The no-downgrade rule is load-bearing: any non-404 PRM outcome (5xx, network error) aborts discovery instead of falling back, and a header-advertised `resource_metadata` URL never falls back at all. A modern server's auth flow cannot be walked down to endpoint-guessing by inducing a transient PRM failure. `TestDiscoverMCPAuth_NoLegacyFallbackOnPRMServerError` and `TestDiscoverMCPAuth_NoLegacyFallbackWhenHeaderAdvertisesPRM` pin this.
 
-Note: this is distinct from MCP **protocol version** negotiation. mcpkit's `server.supportedProtocolVersions` includes `2024-11-05`, `2025-03-26`, `2025-11-25`, and `2026-07-28` — clients on the older protocol version still negotiate successfully. The thing that's unsupported is the *auth-flow shape* the 2025-03-26 spec mandated, which is independent of the protocol version field.
+Note: this is distinct from MCP **protocol version** negotiation. mcpkit's `server.supportedProtocolVersions` includes `2024-11-05`, `2025-03-26`, `2025-11-25`, and `2026-07-28` — the protocol version field and the auth-flow shape are independent axes. The server side serves PRM only; the legacy shapes are client-side fallback, not something mcpkit servers emit.
 
 ## Design Principles
 

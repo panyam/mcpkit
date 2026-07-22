@@ -53,6 +53,18 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **2025-03-26 legacy OAuth discovery fallback (issue 451, reversed wontfix).**
+  `ext/auth.DiscoverMCPAuth` now falls back to the 2025-03-26 authorization
+  spec's discovery shape when the server publishes no Protected Resource
+  Metadata: AS metadata at the origin's `oauth-authorization-server`
+  well-known path, then the legacy default endpoints (`/authorize`, `/token`,
+  `/register` at the origin). Reached only on a definitive 404 at both RFC
+  9728 PRM locations — any other PRM failure still errors, so a modern
+  server's flow cannot be downgraded, and a `WWW-Authenticate`-advertised PRM
+  URL never falls back. New `MCPAuthInfo.LegacyDiscovery` field; `PRM` is nil
+  on this path (nil-guard added to `ClientCredentialsTokenSource`). Flips the
+  two `auth/2025-03-26-*` conformance scenarios to pass: Client: Auth
+  aggregate 16/16.
 - **Client conformance wired into tier-check.** `scripts/refresh-conformance.sh`
   now builds `cmd/testclient` and passes it via `--client-cmd`, so
   `CONFORMANCE.md` scores the client scenario suites (Client: Core, Client:
