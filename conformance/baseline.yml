@@ -44,3 +44,18 @@ client:
   # ext/auth/docs/DESIGN.md "Supported spec versions" for the policy.
   - auth/2025-03-26-oauth-endpoint-fallback # legacy OAuth-endpoint root fallback (#451 wontfix)
   - auth/2025-03-26-oauth-metadata-backcompat # legacy rootless OAuth metadata (#451 wontfix)
+
+  # --- Full client suite (testconf-client, --suite all) ---
+  # Everything below is extension or draft category upstream — none of these
+  # count toward tier scoring (tier-check excludes 'extension' and draft tags).
+
+  # Extension — SEP-1932 DPoP, deferred until the spec exits draft (issue 803)
+  - auth/dpop                               # DPoP proof on token request + resource calls
+  - auth/dpop-nonce                         # DPoP with server-required nonce
+
+  # Extension — workload identity federation, not implemented
+  - auth/wif-jwt-bearer                     # RFC 7523 JWT bearer grant via WIF
+
+  # Draft — informational, not tier-scored
+  - auth/authorization-server-migration     # re-registration when the PRM's AS changes
+  - auth/offline-access-scope               # offline_access request (warning: not requested)

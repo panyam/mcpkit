@@ -10,6 +10,7 @@
 # otherwise falls back to the sibling conf-* worktree default.
 
 : "${MCPCONFORMANCE_AUTH_PATH:="$REPO_ROOT/../conf-pending"}"
+: "${MCPCONFORMANCE_CLIENT_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_FILE_INPUTS_PATH:="$REPO_ROOT/../conf-pending"}"
 : "${MCPCONFORMANCE_MRTR_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_SKILLS_PATH:="$REPO_ROOT/../conf-skills"}"

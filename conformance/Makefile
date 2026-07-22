@@ -30,7 +30,7 @@ include $(CONFORMANCE_DIR)/path-defaults.mk
 # grade mcpkit against every scenario upstream currently ships.
 MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 
-.PHONY: test testconf testconfauth \
+.PHONY: test testconf testconfauth testconf-client \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills \
@@ -44,13 +44,16 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	cd $(REPO_ROOT) && bash scripts/conformance-test.sh
 
 testconfauth: ## Run MCP Auth conformance suite (client-side, requires mcpkit/auth)
 	cd $(REPO_ROOT) && bash scripts/conformance-auth-test.sh
+
+testconf-client: ## Run full client conformance suite — core + auth + backcompat + extensions (auto-builds testclient)
+	@bash $(CONFORMANCE_DIR)/scripts/conf-client.sh
 
 testconf-tasks: ## Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
 	@bash $(CONFORMANCE_DIR)/scripts/conf-tasks.sh

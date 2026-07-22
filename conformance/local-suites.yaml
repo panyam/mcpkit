@@ -70,6 +70,17 @@ suites:
       path_var: MCPCONFORMANCE_AUTH_PATH
       default_path: ../conf-pending
 
+  - suite: testconf-client
+    sep: Client core + auth (full suite)
+    stage: "-"
+    status: PASS
+    source:
+      repo: modelcontextprotocol/conformance
+      branch: main
+      path_var: MCPCONFORMANCE_CLIENT_PATH
+      default_path: ../conf-upstream-main
+    note: "Same scenario set tier-check's --client-cmd runs. Expected failures (extension + draft + backcompat categories, none tier-scored) live in conformance/baseline.yml."
+
   - suite: testconf-stateless
     sep: SEP-2575 Stateless wire
     stage: "-"

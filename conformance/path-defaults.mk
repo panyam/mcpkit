@@ -8,6 +8,7 @@
 # included. conformance/Makefile sets it as $(abspath $(CONFORMANCE_DIR)/..).
 
 MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
+MCPCONFORMANCE_CLIENT_PATH      ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 MCPCONFORMANCE_SKILLS_PATH      ?= $(abspath $(REPO_ROOT)/../conf-skills)
