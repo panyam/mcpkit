@@ -42,7 +42,7 @@ default:
 # surfaces.
 
 # Run all conformance suites (needs fork worktrees + conf-upstream-main)
-test: testconf testconfauth testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance
 
 # Run MCP conformance test suite (requires Node.js/npx)
 testconf:
@@ -51,6 +51,10 @@ testconf:
 # Run MCP Auth conformance suite (client-side, requires mcpkit/auth)
 testconfauth:
     cd {{REPO_ROOT}} && bash scripts/conformance-auth-test.sh
+
+# Run full client conformance suite — core + auth + backcompat + extensions (auto-builds testclient)
+testconf-client:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-client.sh
 
 # Run MCP Tasks v1 conformance (builds + starts server, runs tests, tears down)
 testconf-tasks:

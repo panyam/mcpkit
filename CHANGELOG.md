@@ -53,6 +53,17 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **Client conformance wired into tier-check.** `scripts/refresh-conformance.sh`
+  now builds `cmd/testclient` and passes it via `--client-cmd`, so
+  `CONFORMANCE.md` scores the client scenario suites (Client: Core, Client:
+  Auth) alongside the server ones — previously reported as skipped 0/0. New
+  `testconf-client` target runs upstream's full client suite (core + auth +
+  backcompat + extensions + draft, the same set tier-check runs) against
+  `conformance/baseline.yml`. `cmd/testclient`'s best-effort fallback tool
+  call now synthesizes arguments from the tool's input schema instead of
+  sending empty args (fixes the `tools_call` scenario, which grades argument
+  types). Remaining client failures are extension/draft/backcompat categories,
+  annotated in `conformance/known-gaps.yaml`.
 - **SEP-2575 final-revision `_meta` identity alignment (spec PR 3002).**
   `clientInfo` in the per-request `_meta` envelope is now optional on the
   stateless wire: requests that omit it are served instead of rejected with
