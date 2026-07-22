@@ -149,7 +149,7 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 		s.term.On(ev) // render this event into buf
 
 		switch re.Kind {
-		case agent.EventToolEnd, agent.EventToolError, agent.EventToolDenied, agent.EventToolCancelled:
+		case agent.EventToolEnd, agent.EventToolError, agent.EventToolDenied, agent.EventToolCancelled, agent.EventToolUnavailable:
 			if s.openTools > 0 {
 				s.openTools--
 			}
