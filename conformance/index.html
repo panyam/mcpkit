@@ -277,7 +277,9 @@
 </tbody>
 </table>
 <h2 id="mcpkit-local-conformance-suites">mcpkit-local Conformance Suites <a class="anchor" href="#mcpkit-local-conformance-suites">¶</a></h2>
-<p>These suites exercise SEP-specific behavior beyond what upstream&rsquo;s tier-check covers. Each is wired into <code>just testall</code> as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means &ldquo;work in flight&rdquo; — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the table.</p>
+<p>These suites exercise SEP-specific behavior beyond what upstream&rsquo;s tier-check covers. Each is wired into <code>just testall</code> as a separate stage and may show as PASS, FAIL, INFO (informational, not gating), or SKIP. INFO typically means &ldquo;work in flight&rdquo; — see the Tracking column. The Source column links to the branch the scenarios live on; per-suite env vars and default checkout paths are listed below the tables.</p>
+<h3 id="upstream-scenario-suites">Upstream-scenario suites <a class="anchor" href="#upstream-scenario-suites">¶</a></h3>
+<p><em>Scenarios owned and maintained in <code>modelcontextprotocol/conformance</code>; mcpkit supplies only the fixture under test.</em></p>
 <table>
 <thead>
 <tr>
@@ -307,22 +309,6 @@
 <td>—</td>
 </tr>
 <tr>
-<td><code>testconf-file-inputs</code></td>
-<td>SEP-2356 File inputs</td>
-<td align="center">8f</td>
-<td align="center"><strong>PASS</strong></td>
-<td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>testconf-auth-server</code></td>
-<td>MCP authz 2025-11-25</td>
-<td align="center">8g</td>
-<td align="center"><strong>PASS</strong></td>
-<td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
-<td>—</td>
-</tr>
-<tr>
 <td><code>testconf-client</code></td>
 <td>Client core + auth (full suite)</td>
 <td align="center">-</td>
@@ -336,6 +322,38 @@
 <td align="center">-</td>
 <td align="center"><strong>PASS</strong><sup>2</sup></td>
 <td><a href="https://github.com/modelcontextprotocol/conformance/tree/main"><code>modelcontextprotocol/conformance@main</code></a></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="mcpkit-authored-suites">mcpkit-authored suites <a class="anchor" href="#mcpkit-authored-suites">¶</a></h3>
+<p><em>Scenarios authored by this project, typically in the <code>panyam/mcpconformance</code> fork while the SEP they cover is still in flight upstream. They assert what the spec says, not what mcpkit does, but they have not been through upstream review.</em></p>
+<table>
+<thead>
+<tr>
+<th>Suite</th>
+<th>Covers</th>
+<th align="center">Stage</th>
+<th align="center">Status</th>
+<th>Source</th>
+<th>Tracking</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>testconf-file-inputs</code></td>
+<td>SEP-2356 File inputs</td>
+<td align="center">8f</td>
+<td align="center"><strong>PASS</strong></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>testconf-auth-server</code></td>
+<td>MCP authz 2025-11-25</td>
+<td align="center">8g</td>
+<td align="center"><strong>PASS</strong></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
 <td>—</td>
 </tr>
 <tr>
