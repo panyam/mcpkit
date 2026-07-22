@@ -83,12 +83,20 @@ func renderKeyHelp() string {
 	b.WriteString("\nPrompt editing (readline):\n")
 	b.WriteString(strings.Join([]string{
 		"  ← / →       char back / forward",
+		"  ↑ / ↓       recall history on a single-line prompt; move line to line in a multi-line prompt",
 		"  ctrl+← / →  word back / forward",
 		"  ctrl+a / e  start / end of line   (also Home / End)",
 		"  ctrl+w      delete previous word",
 		"  ctrl+k / u  delete to end / start of line",
 		"  ctrl+j      insert a newline (also shift+enter / alt+enter)",
 		"  With Option-as-Meta on: alt+←/→ or alt+b/f word nav, alt+d delete-word-forward.",
+	}, "\n"))
+	b.WriteString("\n\nNotebook modes (--ui notebook):\n")
+	b.WriteString(strings.Join([]string{
+		"  INS   typing (default). esc enters NAV.",
+		"  NAV   cell selection. i or esc returns to INS; the NAV keys above",
+		"        (↑↓/jk select, space fold, g/G ends, pgup/dn scroll) act only here.",
+		"  The inline surface (--ui tui) has no modes; it is always in INS.",
 	}, "\n"))
 	return b.String()
 }
