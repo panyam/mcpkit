@@ -59,9 +59,18 @@ A `serverConn` per configured server: `{id, cfg, client, state, lastErr, srcHand
 Disabled                          (config off)
 Connecting → Ready                (connected + capabilities negotiated → register)
 Connecting → Failed               (connect/handshake error; backoff → Connecting)
-Connecting → NeedsLogin           (401/403; wait for user action, don't hammer)
+Connecting → NeedsLogin           (401/403; park, don't hammer)
+Failed/NeedsLogin → Connecting    (Group.Reconnect: wake backoff / un-park post-login)
 Ready      → Failed               (live connection dropped → de-register, retry)
 ```
+
+**`Group.Reconnect(id)` forces a stuck member to retry now** (issue 1095): a `Failed`
+member is looping in backoff and Reconnect short-circuits the sleep; a `NeedsLogin`
+member's `run` loop **parks on a buffered wake channel** (it does not return the goroutine)
+so a Reconnect after the user logs in resumes it with no relaunch-race. `Reconnect` is a
+no-op for `Ready` (live-drop reconnect is the client's own concern), `Connecting`, and
+unknown ids. The agentchat `/mcp` overlay's reconnect action and `/servers reconnect <name>`
+both route through `App.ReconnectServer` → this.
 
 Each transition emits a **`HostServerStateChanged`** event so surfaces update live. On
 `→ Ready`: `multi.Add(id, src)`, register that server's catalog skills + `load_skill`,
