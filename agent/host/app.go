@@ -38,6 +38,20 @@ type App struct {
 	group       *client.Group
 	serverTools *agent.MultiSource
 
+	// tp is the tracer provider, held so the ready-observer can load a late
+	// server's skills with the same instrumentation as the boot path.
+	tp core.TracerProvider
+
+	// Skills load in the ready-observer (late servers too), so their prompt
+	// blocks and load_skill catalog are shared mutable state read live: the
+	// dynamic system prompt (buildInstructions -> RunnerConfig.InstructionsFunc)
+	// and the load_skill tool. serverOrder keeps assembly deterministic.
+	skillsMu     sync.Mutex
+	skillBlocks  map[string]string        // serverID -> system-prompt block (eager bodies or catalog listing)
+	skillCatalog map[string][]catalogSkill // serverID -> catalog entries for load_skill
+	serverOrder  []string
+	loadSkillReg bool // load_skill registered once, lazily, on the first catalog skill
+
 	injection *agent.EventInjectionPolicy
 	triggers  *agent.TriggerPolicy
 	approval  *agent.TieredApproval
@@ -216,7 +230,11 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	coord := agent.NewElicitationCoordinator(elicUI)
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store}
+	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
+		tp: o.tp, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}}
+	for _, sc := range cfg.Servers {
+		app.serverOrder = append(app.serverOrder, sc.ID)
+	}
 	if o.configPath != "" {
 		app.overlay = &configOverlay{path: overlayPathFor(o.configPath)}
 	}
@@ -246,6 +264,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		app.emit(HostEvent{Kind: HostServerStateChanged, ServerID: ch.ID, ServerState: ch.State.String(), Err: errString(ch.Err)})
 		if ch.State == client.StateReady {
 			app.registerServerTools(serverByID[ch.ID], clientByID[ch.ID])
+			app.onServerSkills(serverByID[ch.ID], clientByID[ch.ID])
 		}
 	}
 	app.group = client.NewGroup(client.WithObserver(onState))
@@ -279,40 +298,13 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		return nil, fmt.Errorf("agentchat: %w", err)
 	}
 	// Wait for the initial connect round to settle (bounded) so reachable
-	// servers are ready and their tools/skills registered before the first
+	// servers are ready and their tools + skills registered before the first
 	// turn; a down server fails fast and does not block, and a slow one wires
-	// in later via the observer.
+	// in later via the observer. Skills (eager blocks + the load_skill catalog)
+	// are loaded in the ready-observer (onServerSkills) into shared state that
+	// the dynamic system prompt (buildInstructions) and load_skill read live, so
+	// a server that connects after boot contributes its skills on the next turn.
 	_ = app.group.WaitSettled(context.Background())
-
-	// Skills are a boot snapshot: only servers ready by now contribute their
-	// eager blocks / catalog. A server that connects later gets its tools (via
-	// the observer) but not its skills until a restart — late-skill wiring is
-	// the follow-up (docs/AGENT_SERVER_STATE.md phase 2).
-	instructions := cfg.Instructions
-	var skillCatalog []catalogSkill
-	for i, sc := range cfg.Servers {
-		if sc.Skills != nil && !*sc.Skills {
-			continue
-		}
-		if s, _ := app.group.State(sc.ID); s != client.StateReady {
-			continue
-		}
-		block, cat, err := loadSkillsForServer(app.clients[i], sc.ID, sc.SkillsMode, sc.SkillsAllow, app.emit, o.tp)
-		if err != nil {
-			app.Close()
-			return nil, err
-		}
-		if block != "" {
-			instructions += "\n\n" + block
-		}
-		skillCatalog = append(skillCatalog, cat...)
-	}
-	if len(skillCatalog) > 0 {
-		if err := app.registerLoadSkill(multi, skillCatalog); err != nil {
-			app.Close()
-			return nil, err
-		}
-	}
 
 	provider := o.provider
 	if provider == nil && cfg.Connections != nil {
@@ -418,11 +410,14 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 
 	runnerCfg := agent.RunnerConfig{
-		Provider:       provider,
-		Tools:          runnerTools,
-		Instructions:   instructions,
-		MaxSteps:       cfg.MaxSteps,
-		TracerProvider: o.tp,
+		Provider: provider,
+		Tools:    runnerTools,
+		// Dynamic system prompt: cfg.Instructions plus the eager/catalog blocks
+		// of the currently-connected servers, recomputed each turn so a
+		// late-connecting server's skills appear without a restart.
+		InstructionsFunc: app.buildInstructions,
+		MaxSteps:         cfg.MaxSteps,
+		TracerProvider:   o.tp,
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.
