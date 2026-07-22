@@ -186,12 +186,15 @@ func TestClient_AdaptiveAgainstStatelessServer(t *testing.T) {
 			saw[method]++
 			switch method {
 			case "server/discover":
+				// Spec PR 3002 shape: server identity in the result _meta.
 				body, _ := json.Marshal(map[string]any{
 					"jsonrpc": "2.0", "id": 1,
 					"result": map[string]any{
 						"supportedVersions": []string{core.DraftProtocolVersion2026V1},
 						"capabilities":      map[string]any{},
-						"serverInfo":        map[string]any{"name": "stateless", "version": "0.0.1"},
+						"_meta": map[string]any{
+							core.MetaKeyServerInfo: map[string]any{"name": "stateless", "version": "0.0.1"},
+						},
 					},
 				})
 				return 200, body
@@ -217,6 +220,39 @@ func TestClient_AdaptiveAgainstStatelessServer(t *testing.T) {
 	}
 	if saw["server/discover"] != 1 {
 		t.Errorf("expected 1 server/discover, got %d", saw["server/discover"])
+	}
+}
+
+// TestClient_DiscoverBodyServerInfoFallback verifies compatibility with a
+// server built against the pre-PR-3002 draft shape, which emits serverInfo
+// in the discover result body instead of _meta. The client still captures
+// the identity.
+func TestClient_DiscoverBodyServerInfoFallback(t *testing.T) {
+	fake := &fakeMCPServer{
+		handler: func(method string, _ json.RawMessage) (int, []byte) {
+			if method == "server/discover" {
+				body, _ := json.Marshal(map[string]any{
+					"jsonrpc": "2.0", "id": 1,
+					"result": map[string]any{
+						"supportedVersions": []string{core.DraftProtocolVersion2026V1},
+						"capabilities":      map[string]any{},
+						"serverInfo":        map[string]any{"name": "pre-3002", "version": "0.0.1"},
+					},
+				})
+				return 200, body
+			}
+			return 500, []byte(`{"jsonrpc":"2.0","error":{"code":-32603,"message":"unexpected"}}`)
+		},
+	}
+	ts, url := fake.start()
+	defer ts.Close()
+
+	c := NewClient(url, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeAdaptive))
+	if err := c.Connect(); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	if c.ServerInfo.Name != "pre-3002" {
+		t.Errorf("ServerInfo.Name = %q, want %q (body fallback)", c.ServerInfo.Name, "pre-3002")
 	}
 }
 
