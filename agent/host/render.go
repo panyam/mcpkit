@@ -366,19 +366,34 @@ func (r *renderer) On(ev HostEvent) {
 	}
 }
 
-// subAgent renders a persona's nested activity indented by depth and tagged
-// by scope: the tools it calls and its final answer. Other lifecycle events
-// (deltas, turn boundaries) are omitted to keep the nested transcript terse.
+// gutter renders a dim border-left tree indent for a sub-agent at the given
+// depth (1 = top-level persona, 2 = nested), so delegation reads as a tree
+// rather than flat two-space indentation (issue 1063 B4).
+func (r *renderer) gutter(depth int) string {
+	if depth < 1 {
+		return ""
+	}
+	return r.dim(strings.Repeat("│ ", depth))
+}
+
+// subAgent renders a persona's nested activity under a border-left gutter keyed
+// to depth and tagged by scope: the tools it calls (name + compact args) and
+// its final answer. Other lifecycle events (deltas, turn boundaries) are
+// omitted to keep the nested transcript terse.
 func (r *renderer) subAgent(sa agent.SubAgentEvent) {
-	indent := strings.Repeat("  ", sa.Depth)
+	g := r.gutter(sa.Depth)
 	switch sa.Event.Kind {
 	case agent.EventToolBegin:
-		if sa.Event.ToolCall != nil {
-			fmt.Fprintf(r.out, "%s%s\n", indent, r.dim("["+sa.Scope+"] · "+sa.Event.ToolCall.Name))
+		if tc := sa.Event.ToolCall; tc != nil {
+			line := "[" + sa.Scope + "] · " + tc.Name
+			if args := compactJSON(tc.Args); args != "" && args != "{}" {
+				line += "(" + args + ")"
+			}
+			fmt.Fprintf(r.out, "%s%s\n", g, r.dim(line))
 		}
 	case agent.EventTurnEnd:
 		if sa.Event.Result != nil && sa.Event.Result.Text != "" {
-			fmt.Fprintf(r.out, "%s%s\n", indent, r.dim("["+sa.Scope+"] → "+sa.Event.Result.Text))
+			fmt.Fprintf(r.out, "%s%s\n", g, r.dim("["+sa.Scope+"] → "+snippet(sa.Event.Result.Text, 200)))
 		}
 	}
 }

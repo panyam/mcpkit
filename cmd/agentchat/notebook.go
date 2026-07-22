@@ -127,6 +127,15 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 	var msgs []tea.Msg
 	seg := func() string { return strings.TrimRight(s.buf.String(), "\n") }
 
+	if ev.Kind == host.HostSubAgentEvent {
+		// Nested sub-agent activity accumulates into the currently open cell (the
+		// ⚙ delegation tool cell during a sub-agent call), so its tree-gutter
+		// lines nest inside that cell instead of spawning separate info cells
+		// (issue 1063 B4).
+		s.term.On(ev)
+		return append(msgs, nbLiveMsg(seg()))
+	}
+
 	if ev.Kind == host.HostRunnerEvent {
 		re := ev.RunnerEvent
 		// A tool-begin cuts the accumulated text into its own assistant cell
