@@ -128,8 +128,8 @@ func TestOverlayOpenRouteDismiss(t *testing.T) {
 	// opening the overlay renders it in the managed frame and blurs the input
 	next, _ := m.Update(openOverlayMsg{ov: ov})
 	m = next.(tuiModel)
-	if m.overlay == nil {
-		t.Fatal("openOverlayMsg should set the overlay")
+	if !m.active() {
+		t.Fatal("openOverlayMsg should set the overlay as the focused layer")
 	}
 	if !strings.Contains(m.View(), "sessions") {
 		t.Fatal("overlay title should render in the view")
@@ -138,14 +138,14 @@ func TestOverlayOpenRouteDismiss(t *testing.T) {
 	// keys route to the overlay (down moves the selection), not the textarea
 	next, _ = m.Update(kmsg("down"))
 	m = next.(tuiModel)
-	if m.overlay.cursor != 1 {
-		t.Fatalf("down should move the overlay cursor, got %d", m.overlay.cursor)
+	if got := m.layer.(*overlayModel).cursor; got != 1 {
+		t.Fatalf("down should move the overlay cursor, got %d", got)
 	}
 
 	// esc dismisses and refocuses the input
 	next, _ = m.Update(kmsg("esc"))
 	m = next.(tuiModel)
-	if m.overlay != nil {
+	if m.active() {
 		t.Fatal("esc should dismiss the overlay")
 	}
 }

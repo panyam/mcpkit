@@ -224,8 +224,8 @@ type notebookModel struct {
 
 	keys    appKeys
 	help    help.Model
-	overlay *overlayModel // non-nil while an interactive dialog (/mcp, /sessions) is open
-	showAll bool          // ? toggled the full-help view
+	modalHost // an open interactive dialog (/mcp, /sessions) as the focused layer
+	showAll bool // ? toggled the full-help view
 
 	nav      bool // false = insert, true = nav
 	sel      int  // selected cell index in nav mode
@@ -330,11 +330,8 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case openOverlayMsg:
-		m.overlay = msg.ov
-		if m.overlay != nil {
-			m.overlay.setWidth(m.width)
-			m.ta.Blur()
-		}
+		m.open(msg.ov, m.width)
+		m.ta.Blur()
 		return m, nil
 
 	case tea.MouseMsg:
@@ -347,16 +344,13 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		// An open dialog owns the keyboard until it acts or dismisses.
-		if m.overlay != nil {
-			out := m.overlay.handleKey(msg)
-			switch {
-			case out.Dismiss:
-				m.overlay = nil
+		if m.active() {
+			line, open := m.route(msg)
+			if !open {
 				m.ta.Focus()
-			case out.Line != "":
-				m.overlay = nil
-				m.ta.Focus()
-				return m.submit(out.Line)
+			}
+			if line != "" {
+				return m.submit(line)
 			}
 			return m, nil
 		}
@@ -486,8 +480,8 @@ func (m notebookModel) View() string {
 		return "starting…"
 	}
 	// An open dialog renders between the transcript and the input.
-	if m.overlay != nil {
-		return m.vp.View() + "\n" + m.overlay.View() + "\n" + m.ta.View()
+	if m.active() {
+		return m.vp.View() + "\n" + m.view(m.ta.View())
 	}
 	return m.vp.View() + "\n" + m.statusBar() + "\n" + m.ta.View()
 }

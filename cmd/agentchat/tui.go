@@ -221,8 +221,8 @@ type tuiModel struct {
 	ta      textarea.Model
 	keys    appKeys
 	help    help.Model
-	overlay *overlayModel // non-nil while an interactive dialog (/mcp, /sessions) is open
-	showAll bool          // ? toggled the full-help view
+	modalHost // an open interactive dialog (/mcp, /sessions) as the focused layer
+	showAll bool // ? toggled the full-help view
 	history []string
 	histIdx int // len(history) == "not navigating"
 	running bool
@@ -275,17 +275,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.surface != nil {
 			m.surface.setWidth(msg.Width)
 		}
-		if m.overlay != nil {
-			m.overlay.setWidth(msg.Width)
-		}
+		m.setWidth(msg.Width) // reflow the modal layer if one is open
 		return m, nil
 
 	case openOverlayMsg:
-		m.overlay = msg.ov
-		if m.overlay != nil {
-			m.overlay.setWidth(m.ta.Width())
-			m.ta.Blur() // focus goes to the overlay
-		}
+		m.open(msg.ov, m.ta.Width())
+		m.ta.Blur() // focus goes to the overlay
 		return m, nil
 
 	case liveMsg:
@@ -320,16 +315,13 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// While a dialog is open it owns the keyboard (focus routing): navigate,
 		// act (which dispatches a command line and closes), or dismiss.
-		if m.overlay != nil {
-			out := m.overlay.handleKey(msg)
-			switch {
-			case out.Dismiss:
-				m.overlay = nil
+		if m.active() {
+			line, open := m.route(msg)
+			if !open {
 				m.ta.Focus()
-			case out.Line != "":
-				m.overlay = nil
-				m.ta.Focus()
-				return m.submit(out.Line)
+			}
+			if line != "" {
+				return m.submit(line)
 			}
 			return m, nil
 		}
@@ -380,10 +372,8 @@ func (m tuiModel) View() string {
 		b.WriteString("\n")
 	}
 	// An open dialog takes over the managed region above the input.
-	if m.overlay != nil {
-		b.WriteString(m.overlay.View())
-		b.WriteString("\n")
-		b.WriteString(m.ta.View())
+	if m.active() {
+		b.WriteString(m.view(m.ta.View()))
 		return b.String()
 	}
 	status := statusLine(m.app, m.session, m.usage, m.window)
