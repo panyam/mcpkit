@@ -14,9 +14,11 @@ All required (non-experimental) features of the current spec, including the opti
 
 ## Near-term
 
-- **Stable v0.4.0 release** shortly after the 2026-07-28 spec GA. The scope of the 0.4.0 bundle is in `CHANGELOG.md` and `docs/releases/v0.4.0.md`.
-- **Client conformance harness:** wire mcpkit's client into upstream tier-check's `--client-cmd` runner so the client scenario suites score alongside the server ones.
-- **Tier 1 process items:** issue-triage SLA hygiene and the tier-advancement request to the SDK Working Group.
+- **Stable v0.4.0 release** in the 30-day window after the 2026-07-28 spec GA (the timing clears the tiering system's stable-release and spec-tracking checks together). Scope in `CHANGELOG.md` and `docs/releases/v0.4.0.md`; the agent modules are excluded from this release's tag set.
+- **Tier-advancement request** to the SDK Working Group once the stable release is published and the triage metrics have a few clean weeks (issue auto-labeling shipped 2026-07-22).
+- **SEP-2243 server-side custom param-header validation** (issue 1111) ahead of the upstream conformance suite activating those checks.
+
+Done from this list: client conformance harness (tier-check `--client-cmd`, suite at 41/43 with only draft-SEP DPoP remaining), 2025-03-26 legacy discovery fallback, WIF JWT-bearer grant, data-driven badges, triage auto-labeling.
 
 ## Longer-term
 
