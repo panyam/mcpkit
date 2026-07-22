@@ -86,6 +86,13 @@ func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err err
 	if err := json.Unmarshal(resp.Result, &dr); err != nil {
 		return nil, false, fmt.Errorf("server/discover returned malformed result: %w", err)
 	}
+	// Spec PR 3002 moved server identity from the result body to
+	// _meta[io.modelcontextprotocol/serverInfo]. Prefer the _meta form;
+	// the body field remains as a decode fallback for servers built
+	// against the pre-3002 draft shape.
+	if dr.Meta.ServerInfo != nil {
+		dr.ServerInfo = *dr.Meta.ServerInfo
+	}
 	return &dr, false, nil
 }
 
@@ -100,7 +107,16 @@ func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err err
 type DiscoverResult struct {
 	SupportedVersions []string                `json:"supportedVersions"`
 	Capabilities      core.ServerCapabilities `json:"capabilities"`
-	ServerInfo        core.ServerInfo         `json:"serverInfo"`
+
+	// ServerInfo is the server's self-reported identity. Since spec
+	// PR 3002 it arrives in _meta[io.modelcontextprotocol/serverInfo]
+	// (see Meta); adaptiveProbe copies it here so callers keep one
+	// stable accessor. The json tag doubles as a decode fallback for
+	// pre-3002 servers that still emit it in the result body.
+	ServerInfo core.ServerInfo `json:"serverInfo"`
+
+	// Meta carries the result-side _meta envelope (spec PR 3002).
+	Meta core.ResultMeta `json:"_meta"`
 }
 
 // UnsupportedDiscoverError is returned by Client.Discover() when the
