@@ -53,6 +53,16 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **Adaptive-probe protocol-version header (SEP-2575).** The
+  `ClientModeAdaptive` / `ClientModeStateless` `server/discover` probe now
+  carries the `MCP-Protocol-Version` HTTP header matching its
+  `_meta.protocolVersion`. The header was previously attached only after the
+  client flipped to the stateless wire, so a compliant stateless-only server
+  (which MUST reject headerless requests) rejected the probe itself and
+  adaptive mode could never connect. Surfaced by the SEP-2352
+  `auth/authorization-server-migration` conformance scenario, which now
+  passes 3/3 — the AS-change re-registration machinery (issue 500 cluster D)
+  was already correct once the wire connected. (issue 1100)
 - **`auth.JWTBearerTokenSource` — RFC 7523 JWT-bearer grant for workload
   identity federation (SEP-1933, issue 1101).** A `core.TokenSource` for
   workloads whose identity is attested out-of-band: the caller supplies the

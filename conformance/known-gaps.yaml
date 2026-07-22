@@ -27,9 +27,6 @@ scenarios:
   "auth/dpop-nonce":
     issue: "https://github.com/panyam/mcpkit/issues/803"
     note: "Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant."
-  "auth/authorization-server-migration":
-    issue: "https://github.com/panyam/mcpkit/issues/1100"
-    note: "Draft category, not tier-scored. Client does not re-register when the PRM's authorization server changes; reopened gap from issue 500 cluster D."
 
 checks:
   "sep-2243-server-not-expect-null":

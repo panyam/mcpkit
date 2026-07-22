@@ -50,5 +50,4 @@ client:
 
 
   # Draft — informational, not tier-scored
-  - auth/authorization-server-migration     # re-registration when the PRM's AS changes
   - auth/offline-access-scope               # offline_access request (warning: not requested)
