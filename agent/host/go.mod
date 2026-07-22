@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/panyam/gocurrent v0.1.1
-	github.com/panyam/mcpkit v0.4.0-b2
+	github.com/panyam/mcpkit v0.4.0-b3
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0

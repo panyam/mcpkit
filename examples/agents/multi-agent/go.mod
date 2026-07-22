@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/agents/multi-agent
 go 1.26.4
 
 require (
-	github.com/panyam/mcpkit v0.4.0-b2
+	github.com/panyam/mcpkit v0.4.0-b3
 	github.com/panyam/mcpkit/agent v0.0.0
 )
 
