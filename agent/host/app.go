@@ -496,6 +496,20 @@ func (a *App) Close() {
 	}
 }
 
+// ServerTools returns the tools exposed by a single connected MCP server, in
+// that server's own (unqualified) naming — the data behind the /mcp overlay's
+// per-server tool view. found is false for an unknown or not-yet-ready server
+// id (app state, not an error). Each server's source is registered in the
+// aggregate under its own id, so looking it up by that id returns only that
+// server's tools (respecting its Allow filter) and never the meta-tools or
+// sub-agents registered under other ids.
+func (a *App) ServerTools(ctx context.Context, id string) (defs []core.ToolDef, found bool, err error) {
+	if a.sources == nil {
+		return nil, false, nil
+	}
+	return a.sources.SourceTools(ctx, id)
+}
+
 // ReconnectServer forces the named MCP server to attempt connecting again: it
 // wakes a failed server that is sleeping between backoff retries and un-parks a
 // needs-login server (the caller has since logged in). A ready or unknown

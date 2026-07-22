@@ -154,6 +154,22 @@ func (m *MultiSource) Tools(ctx context.Context) ([]core.ToolDef, error) {
 	return out, nil
 }
 
+// SourceTools returns the tools of the single source registered under id, in
+// that source's own (unqualified) naming — the per-source view a caller uses to
+// show "what does server X expose", distinct from the merged Tools list where
+// colliding names are qualified. found is false for an unknown id (app state,
+// not an error); err is only a real listing failure from that source.
+func (m *MultiSource) SourceTools(ctx context.Context, id string) (defs []core.ToolDef, found bool, err error) {
+	m.mu.RLock()
+	src, ok := m.sources[id]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, false, nil
+	}
+	defs, err = src.Tools(ctx)
+	return defs, true, err
+}
+
 // Call dispatches by bare or qualified name. Resolution order: exact unique
 // bare name; qualified "sourceID_name"; ambiguous bare name via Resolver.
 // A name miss against the memoized index triggers exactly one fresh gather

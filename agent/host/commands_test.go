@@ -211,13 +211,29 @@ func TestApp_DispatchServersListAliasAndReconnect(t *testing.T) {
 		t.Fatalf("/servers reconnect = (%+v, %v)", rc, err)
 	}
 
-	// completer offers the reconnect subcommand and the member id.
+	// tools subcommand scopes to one server; an unknown server is app state.
+	tv, err := app.Dispatch(ctx, "/servers tools "+id)
+	if err != nil || tv.Kind != CmdServerTools || tv.ServerID != id {
+		t.Fatalf("/servers tools = (%+v, %v)", tv, err)
+	}
+	if len(tv.Tools) == 0 {
+		t.Fatalf("/servers tools listed no tools for %q", id)
+	}
+	miss, err := app.Dispatch(ctx, "/servers tools nope")
+	if err != nil || miss.Kind != CmdMessage {
+		t.Fatalf("/servers tools nope = (%+v, %v), want a CmdMessage", miss, err)
+	}
+
+	// completer offers the subcommands and the member id.
 	cmd, ok := app.Commands().Lookup("servers")
 	if !ok || cmd.Complete == nil {
 		t.Fatal("servers command has no completer")
 	}
 	if got := cmd.Complete("rec"); len(got) != 1 || got[0] != "reconnect" {
 		t.Fatalf("Complete(rec) = %v, want [reconnect]", got)
+	}
+	if got := cmd.Complete("to"); len(got) != 1 || got[0] != "tools" {
+		t.Fatalf("Complete(to) = %v, want [tools]", got)
 	}
 	if got := cmd.Complete(id[:1]); len(got) == 0 {
 		t.Fatalf("Complete(%q) offered no server id", id[:1])
