@@ -24,7 +24,7 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/oneauth v0.1.35 // indirect
+	github.com/panyam/oneauth v0.1.36 // indirect
 	github.com/panyam/servicekit v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

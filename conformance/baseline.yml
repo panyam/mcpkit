@@ -32,8 +32,6 @@ client:
   # ✓ auth/scope-retry-limit (16/16 checks)
   # ⚠ auth/basic-cimd (passing with 1 warning — CIMD not implemented)
 
-  # Required — CIMD (warning: not using Client ID Metadata Documents yet)
-  - auth/basic-cimd                         # Client ID Metadata Document flow (warning)
 
   # 2025-03-26 spec backcompat now passes — legacy discovery fallback
   # implemented in ext/auth/discovery.go (issue 451, option a). See
@@ -49,5 +47,3 @@ client:
   - auth/dpop-nonce                         # DPoP with server-required nonce
 
 
-  # Draft — informational, not tier-scored
-  - auth/offline-access-scope               # offline_access request (warning: not requested)

@@ -78,7 +78,7 @@ require (
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
 	github.com/panyam/mcpkit/stores/redis v0.0.0-00010101000000-000000000000 // indirect
-	github.com/panyam/oneauth v0.1.35 // indirect
+	github.com/panyam/oneauth v0.1.36 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
