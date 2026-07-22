@@ -320,6 +320,9 @@ func (r *renderer) command(res CmdResult) {
 		r.approvalMode(res.Approval)
 	case CmdServers:
 		r.serverList(res.Servers)
+	case CmdServerTools:
+		fmt.Fprintf(r.out, "%s\n", r.dim("tools on "+res.ServerID))
+		r.toolList(res.Tools)
 	case CmdQuit:
 		// nothing to render; the loop exits
 	}

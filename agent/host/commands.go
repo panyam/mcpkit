@@ -52,6 +52,8 @@ const (
 	CmdApproval CmdKind = "approval"
 	// CmdServers lists the MCP servers and their connection state (Servers).
 	CmdServers CmdKind = "servers"
+	// CmdServerTools lists one server's own tools (Tools + ServerID = which).
+	CmdServerTools CmdKind = "server-tools"
 	// CmdQuit signals the loop to exit (Quit true).
 	CmdQuit CmdKind = "quit"
 )
@@ -77,6 +79,7 @@ type CmdResult struct {
 	Sessions       []agent.RunInfo
 	SessionsNote   string
 	Servers        []client.MemberStatus
+	ServerID       string // the server a CmdServerTools result scopes to
 	Quit           bool
 }
 
@@ -236,12 +239,23 @@ func (a *App) registerBuiltinCommands() {
 			return CmdResult{Kind: CmdApproval, Approval: a.approval}, nil
 		}})
 
-	r.Register(&Command{Name: "servers", Aliases: []string{"mcp"}, Help: "list MCP servers and their state; /servers reconnect <name> retries a failed/needs-login one",
-		Run: func(_ context.Context, args string) (CmdResult, error) {
+	r.Register(&Command{Name: "servers", Aliases: []string{"mcp"}, Help: "list MCP servers and their state; /servers reconnect <name> retries one; /servers tools <name> lists one server's tools",
+		Run: func(ctx context.Context, args string) (CmdResult, error) {
 			if id, ok := strings.CutPrefix(args, "reconnect "); ok {
 				id = strings.TrimSpace(id)
 				a.ReconnectServer(id)
 				return CmdResult{Kind: CmdMessage, Message: "reconnect requested for " + id}, nil
+			}
+			if id, ok := strings.CutPrefix(args, "tools "); ok {
+				id = strings.TrimSpace(id)
+				defs, found, err := a.ServerTools(ctx, id)
+				if err != nil {
+					return CmdResult{}, err
+				}
+				if !found {
+					return CmdResult{Kind: CmdMessage, Message: "no ready server named " + id}, nil
+				}
+				return CmdResult{Kind: CmdServerTools, ServerID: id, Tools: defs}, nil
 			}
 			var st []client.MemberStatus
 			if a.group != nil {
@@ -251,8 +265,10 @@ func (a *App) registerBuiltinCommands() {
 		},
 		Complete: func(prefix string) []string {
 			var out []string
-			if strings.HasPrefix("reconnect", prefix) {
-				out = append(out, "reconnect")
+			for _, sub := range []string{"reconnect", "tools"} {
+				if strings.HasPrefix(sub, prefix) {
+					out = append(out, sub)
+				}
 			}
 			if a.group != nil {
 				for _, st := range a.group.Status() {
