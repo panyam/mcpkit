@@ -316,12 +316,17 @@ func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource 
 	}
 	log.Println("Step 2: Setting up OAuthTokenSource...")
 	return &auth.OAuthTokenSource{
-		ServerURL:     serverURL,
-		ClientID:      ctx.ClientID,
-		ClientSecret:  ctx.ClientSecret,
-		EnableDCR:     true,
-		AllowInsecure: true,
-		OpenBrowser:   oneauthclient.FollowRedirects(nil),
+		ServerURL:    serverURL,
+		ClientID:     ctx.ClientID,
+		ClientSecret: ctx.ClientSecret,
+		// The fixed CIMD URL upstream's scenarios expect (exported as
+		// CIMD_CLIENT_METADATA_URL in the suite). resolveClientID uses it
+		// only when the AS advertises client_id_metadata_document_supported,
+		// so DCR-based scenarios are unaffected.
+		ClientMetadataURL: "https://conformance-test.local/client-metadata.json",
+		EnableDCR:         true,
+		AllowInsecure:     true,
+		OpenBrowser:       oneauthclient.FollowRedirects(nil),
 	}
 }
 

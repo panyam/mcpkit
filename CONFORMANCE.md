@@ -37,7 +37,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 | Surface | Scenarios pass/total | Checks pass/fail |
 |---|---:|---:|
 | Server | 30/30 | 42/0 |
-| Client | 41/43 | 537/8 |
+| Client | 41/43 | 535/8 |
 
 ## mcpkit-local Conformance Suites
 

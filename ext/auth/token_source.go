@@ -503,13 +503,25 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 		return s.ClientID, s.ClientSecret, nil
 	}
 
-	// 2. CIMD (C7/C8)
+	// 2. CIMD (C7/C8) — preferred exactly when the AS advertises
+	// client_id_metadata_document_supported (SEP-991 SHOULD). When the AS
+	// does not advertise it and DCR is available, fall through to DCR so a
+	// generic client configured with both works against either kind of AS.
+	// When there is no DCR fallback, still present the URL best-effort:
+	// a CIMD-only configuration must keep working against an AS that
+	// supports CIMD without advertising it.
 	if s.ClientMetadataURL != "" {
 		if err := client.ValidateCIMDURL(s.ClientMetadataURL); err != nil {
 			// Log warning but fall through to DCR
 			_ = err
 		} else {
-			return s.ClientMetadataURL, "", nil
+			advertised := s.authInfo != nil && s.authInfo.ASMetadata != nil &&
+				s.authInfo.ASMetadata.ClientIdMetadataDocumentSupported
+			dcrAvailable := s.EnableDCR && s.authInfo != nil && s.authInfo.ASMetadata != nil &&
+				s.authInfo.ASMetadata.RegistrationEndpoint != ""
+			if advertised || !dcrAvailable {
+				return s.ClientMetadataURL, "", nil
+			}
 		}
 	}
 
