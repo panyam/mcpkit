@@ -99,7 +99,8 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ProviderRequest) (St
 	if err != nil {
 		return nil, err
 	}
-	return &anthropicStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body)}, nil
+	_, safeToReal := toolNameMaps(req.Tools)
+	return &anthropicStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body), nameMap: safeToReal}, nil
 }
 
 // Generate implements Provider with a non-streaming request. When
@@ -125,6 +126,7 @@ func (p *AnthropicProvider) Generate(ctx context.Context, req ProviderRequest) (
 	}
 
 	out := &ProviderResponse{FinishReason: full.StopReason}
+	_, safeToReal := toolNameMaps(req.Tools)
 	var text, reason strings.Builder
 	for _, block := range full.Content {
 		switch block.Type {
@@ -143,7 +145,7 @@ func (p *AnthropicProvider) Generate(ctx context.Context, req ProviderRequest) (
 				out.Text = string(args)
 				continue
 			}
-			out.ToolCalls = append(out.ToolCalls, ToolCall{ID: block.ID, Name: block.Name, Args: core.NewRawJSON(args)})
+			out.ToolCalls = append(out.ToolCalls, ToolCall{ID: block.ID, Name: realToolName(safeToReal, block.Name), Args: core.NewRawJSON(args)})
 		}
 	}
 	if out.Text == "" {
@@ -186,6 +188,7 @@ func (p *AnthropicProvider) post(ctx context.Context, body map[string]any) (*htt
 // buildBody produces the Messages API request. Kept as one method so the
 // wire-shape test pins the exact JSON we emit.
 func (p *AnthropicProvider) buildBody(req ProviderRequest, stream bool) map[string]any {
+	realToSafe, _ := toolNameMaps(req.Tools)
 	msgs := make([]map[string]any, 0, len(req.Messages))
 	for _, m := range req.Messages {
 		switch m.Role {
@@ -203,7 +206,7 @@ func (p *AnthropicProvider) buildBody(req ProviderRequest, stream bool) map[stri
 				content = append(content, map[string]any{
 					"type":  "tool_use",
 					"id":    tc.ID,
-					"name":  tc.Name,
+					"name":  safeToolName(realToSafe, tc.Name),
 					"input": rawToInput(tc.Args),
 				})
 			}
@@ -248,7 +251,7 @@ func (p *AnthropicProvider) buildBody(req ProviderRequest, stream bool) map[stri
 	tools := make([]map[string]any, 0, len(req.Tools)+1)
 	for _, td := range req.Tools {
 		tools = append(tools, map[string]any{
-			"name":         td.Name,
+			"name":         realToSafe[td.Name],
 			"description":  td.Description,
 			"input_schema": td.InputSchema,
 		})
@@ -268,7 +271,11 @@ func (p *AnthropicProvider) buildBody(req ProviderRequest, stream bool) map[stri
 		}
 	} else if len(tools) > 0 {
 		body["tools"] = tools
-		if tc := anthropicToolChoice(req.ToolChoice); tc != nil {
+		choice := req.ToolChoice
+		if choice.Mode == "function" {
+			choice.Name = safeToolName(realToSafe, choice.Name) // match the sanitized tools-list name
+		}
+		if tc := anthropicToolChoice(choice); tc != nil {
 			body["tool_choice"] = tc
 		}
 	}
@@ -364,6 +371,7 @@ type anthropicStream struct {
 	queue       []Delta
 	inputTokens int
 	done        bool
+	nameMap     map[string]string // safe→real tool name, to reverse sanitized names on tool_use blocks
 }
 
 // Recv implements Stream.
@@ -418,7 +426,7 @@ func (s *anthropicStream) enqueue(msg anthropicSSE) error {
 				Kind:       DeltaToolCallStart,
 				Index:      msg.Index,
 				ToolCallID: msg.ContentBlock.ID,
-				ToolName:   msg.ContentBlock.Name,
+				ToolName:   realToolName(s.nameMap, msg.ContentBlock.Name),
 			})
 		}
 	case "content_block_delta":
