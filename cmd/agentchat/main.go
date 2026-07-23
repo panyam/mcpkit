@@ -200,6 +200,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("ui", "auto", "interface: auto (TUI when interactive) | tui (inline) | notebook (alt-screen, foldable cells) | plain")
 	fl.Int("notebook-max-lines", 20, "with --ui notebook, max rows the auto-growing prompt expands to")
 	fl.Int("context-window", 0, "model context window in tokens; enables a 'N% context left' gauge in the status line (0 = show token counts only)")
+	fl.Bool("no-color", false, "disable color/ANSI styling on every surface (also honored via NO_COLOR / TERM=dumb)")
 	fl.Int("offload-threshold", 0, "offload tool results at/over N bytes to a store, feeding the model a stub + read_tool_result (0 = off; blobs use --session-store's backend)")
 	fl.String("offload-dir", "", "store offloaded tool results as files under this directory (no server needed); overrides --session-store for blobs")
 	fl.Bool("memory", false, "enable working memory: remember/recall/forget tools the model manages across turns (in-memory store)")
@@ -274,15 +275,25 @@ func runChat(v *viper.Viper) error {
 		appOpts = append(appOpts, host.WithConfigOverlay(configPath))
 	}
 	mode := uiMode(v.GetString("ui"))
+	// One color decision (flag → NO_COLOR → TERM=dumb) drives every surface: the
+	// lipgloss profile for the overlay/status/notebook chrome, and the host's
+	// ANSI renderer + glamour via the observers below (issue 1063 E1/E2).
+	colorEnabled := resolveColorEnabled(v.GetBool("no-color"), os.LookupEnv)
+	applyLipglossProfile(colorEnabled)
 	var surface *tuiObserver
 	var nbSurface *nbObserver
 	switch mode {
 	case "tui":
-		surface = newTUIObserver()
+		surface = newTUIObserver(colorEnabled)
 		appOpts = append(appOpts, host.WithObserver(surface))
 	case "notebook":
-		nbSurface = newNBObserver()
+		nbSurface = newNBObserver(colorEnabled)
 		appOpts = append(appOpts, host.WithObserver(nbSurface))
+	default:
+		// The plain REPL uses the host's auto-created renderer; register a
+		// color-resolved one explicitly so --no-color reaches it too (the
+		// auto default follows only the environment).
+		appOpts = append(appOpts, host.WithObserver(host.NewTerminalRendererColor(os.Stdout, colorEnabled)))
 	}
 	sessionStore := v.GetString("session-store")
 	store, err := buildRunStore(sessionStore)

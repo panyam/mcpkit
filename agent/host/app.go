@@ -230,7 +230,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	observers := o.observers
 	if len(observers) == 0 {
-		observers = []Observer{newRenderer(out)}
+		observers = []Observer{newRenderer(out, envColorEnabled())}
 	}
 	elicUI := o.ui
 	if elicUI == nil {

@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+// TestNewMDRenderer_ColorDecision pins that the color decision drives the
+// disabled gate (E2): color off = raw passthrough, color on = glamour renders.
+func TestNewMDRenderer_ColorDecision(t *testing.T) {
+	if got := newMDRenderer(false).render("# H"); got != "# H" {
+		t.Fatalf("color-off renderer should pass through raw: %q", got)
+	}
+	on := newMDRenderer(true)
+	on.setWidth(80)
+	if got := on.render("# H"); got == "# H" {
+		t.Fatalf("color-on renderer left markdown untouched: %q", got)
+	}
+}
+
 func TestMDRenderer_DisabledPassthrough(t *testing.T) {
 	r := &mdRenderer{disabled: true}
 	in := "# Heading\n\n- a\n- b"
