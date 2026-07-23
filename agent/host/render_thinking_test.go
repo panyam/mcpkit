@@ -1,7 +1,6 @@
 package host
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -12,10 +11,8 @@ import (
 // reasoning text (dimmed), not a row of dots — so a reasoning model's
 // chain-of-thought is readable in plain and TUI output.
 func TestRenderer_ThinkingStreamsText(t *testing.T) {
-	os.Setenv("NO_COLOR", "1") // strip ANSI so we assert on plain text
-	defer os.Unsetenv("NO_COLOR")
 	var b strings.Builder
-	r := newRenderer(&b)
+	r := newRenderer(&b, false) // color off strips ANSI so we assert on plain text
 	r.handle(agent.Event{Kind: agent.EventThinkingBegin})
 	r.handle(agent.Event{Kind: agent.EventThinkingDelta, Text: "weigh option A "})
 	r.handle(agent.Event{Kind: agent.EventThinkingDelta, Text: "vs option B"})

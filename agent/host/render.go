@@ -17,7 +17,7 @@ import (
 
 // renderer maps the agent event stream onto the terminal, line-based so
 // interleaved tool events from parallel calls stay readable. ANSI styling is
-// suppressed with --plain or when NO_COLOR is set.
+// suppressed when the resolved color decision is off (see envColorEnabled).
 type renderer struct {
 	out      io.Writer
 	plain    bool
@@ -25,8 +25,24 @@ type renderer struct {
 	midText  bool
 }
 
-func newRenderer(out io.Writer) *renderer {
-	return &renderer{out: out, plain: os.Getenv("NO_COLOR") != ""}
+// newRenderer builds a terminal renderer. colorEnabled=false renders every
+// line plain (no ANSI dim), for a --no-color / NO_COLOR / dumb-terminal caller.
+func newRenderer(out io.Writer, colorEnabled bool) *renderer {
+	return &renderer{out: out, plain: !colorEnabled}
+}
+
+// envColorEnabled resolves the color decision from the environment alone: off
+// when NO_COLOR is present (any value, per no-color.org) or the terminal is
+// TERM=dumb, on otherwise. It is the surface-agnostic default; a CLI layers its
+// own --no-color flag on top and threads the result via NewTerminalRendererColor.
+func envColorEnabled() bool {
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		return false
+	}
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	return true
 }
 
 func (r *renderer) dim(s string) string {

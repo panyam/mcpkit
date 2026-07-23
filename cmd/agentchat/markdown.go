@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"strings"
 	"sync"
 
@@ -14,10 +13,11 @@ import (
 // mangles a half-written fenced code block and reflows on every call, so
 // streaming stays raw and the render happens once when the block closes.
 //
-// Rendering is disabled (raw passthrough) when NO_COLOR is set, matching the
-// plain-mode semantics in agent/host's terminal renderer; the plain REPL never
-// reaches this path at all. The underlying glamour TermRenderer is cached and
-// rebuilt only when the target width changes.
+// Rendering is disabled (raw passthrough) when color is off (the resolved
+// --no-color / NO_COLOR / dumb-terminal decision), matching the plain-mode
+// semantics in agent/host's terminal renderer; the plain REPL never reaches
+// this path at all. The underlying glamour TermRenderer is cached and rebuilt
+// only when the target width changes.
 type mdRenderer struct {
 	mu       sync.Mutex
 	disabled bool
@@ -25,8 +25,10 @@ type mdRenderer struct {
 	tr       *glamour.TermRenderer
 }
 
-func newMDRenderer() *mdRenderer {
-	return &mdRenderer{disabled: os.Getenv("NO_COLOR") != ""}
+// newMDRenderer builds the commit-time markdown renderer. colorEnabled=false
+// disables glamour styling so committed blocks pass through as raw markdown.
+func newMDRenderer(colorEnabled bool) *mdRenderer {
+	return &mdRenderer{disabled: !colorEnabled}
 }
 
 // setWidth updates the word-wrap width used for subsequent renders (fanned out

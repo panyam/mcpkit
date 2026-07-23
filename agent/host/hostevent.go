@@ -129,5 +129,13 @@ func WithObserver(o Observer) AppOption {
 // NewTerminalRenderer returns the built-in terminal Observer — the ANSI
 // line renderer, writing to w. A TUI reuses it by pointing w at a buffer
 // and reading the formatted transcript back, rather than reimplementing
-// every event's formatting.
-func NewTerminalRenderer(w io.Writer) Observer { return newRenderer(w) }
+// every event's formatting. Color follows the environment (NO_COLOR / TERM);
+// use NewTerminalRendererColor to force the decision.
+func NewTerminalRenderer(w io.Writer) Observer { return newRenderer(w, envColorEnabled()) }
+
+// NewTerminalRendererColor is NewTerminalRenderer with an explicit color
+// decision, for a surface that has already resolved --no-color (or its own
+// precedence chain) and wants the ANSI dim styling suppressed accordingly.
+func NewTerminalRendererColor(w io.Writer, colorEnabled bool) Observer {
+	return newRenderer(w, colorEnabled)
+}

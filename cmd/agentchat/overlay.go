@@ -203,7 +203,7 @@ func (o *overlayModel) handleKey(msg tea.KeyMsg) overlayOutcome {
 // and a dim key hint. Dynamic height — the box grows with the visible rows.
 func (o *overlayModel) View() string {
 	dim := lipgloss.NewStyle().Faint(true)
-	sel := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
+	sel := lipgloss.NewStyle().Bold(true).Foreground(accentColor)
 	var b strings.Builder
 	b.WriteString(sel.Render(o.title))
 	b.WriteString("\n")

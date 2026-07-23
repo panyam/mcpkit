@@ -2,6 +2,7 @@ package host
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -14,8 +15,7 @@ import (
 // call shows name + compact args.
 func TestRendererSubAgentGutter(t *testing.T) {
 	var out strings.Builder
-	r := newRenderer(&out)
-	r.plain = true // strip ANSI so the gutter glyph is asserted directly
+	r := newRenderer(&out, false) // color off strips ANSI so the gutter glyph is asserted directly
 
 	r.subAgent(agent.SubAgentEvent{Scope: "research", Depth: 1, Event: agent.Event{
 		Kind:     agent.EventToolBegin,
@@ -35,11 +35,53 @@ func TestRendererSubAgentGutter(t *testing.T) {
 	}
 }
 
+// TestEnvColorEnabled pins the surface-agnostic env decision (issue 1063 E2):
+// NO_COLOR present (any value) or TERM=dumb turns color off; a normal terminal
+// keeps it on.
+func TestEnvColorEnabled(t *testing.T) {
+	cases := []struct {
+		name       string
+		noColorSet bool
+		noColorVal string
+		term       string
+		want       bool
+	}{
+		{"normal terminal", false, "", "xterm-256color", true},
+		{"NO_COLOR=1", true, "1", "xterm-256color", false},
+		{"NO_COLOR empty still off", true, "", "xterm-256color", false},
+		{"TERM=dumb", false, "", "dumb", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.noColorSet {
+				t.Setenv("NO_COLOR", c.noColorVal)
+			} else {
+				os.Unsetenv("NO_COLOR")
+			}
+			t.Setenv("TERM", c.term)
+			if got := envColorEnabled(); got != c.want {
+				t.Fatalf("envColorEnabled() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestRendererColorOffStripsANSI pins that a color-off renderer emits no ANSI
+// escapes, the property --no-color / NO_COLOR / TERM=dumb all resolve to.
+func TestRendererColorOffStripsANSI(t *testing.T) {
+	var out strings.Builder
+	r := newRenderer(&out, false)
+	r.turnDone(&agent.TurnResult{Steps: 1})
+	if strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("color-off render leaked ANSI: %q", out.String())
+	}
+}
+
 // TestRendererToolCancelledDistinctFromError pins that a user cancel
 // renders as an interrupt, not a failure.
 func TestRendererToolCancelledDistinctFromError(t *testing.T) {
 	var out strings.Builder
-	r := newRenderer(&out)
+	r := newRenderer(&out, false)
 	r.handle(agent.Event{
 		Kind:     agent.EventToolCancelled,
 		Step:     1,

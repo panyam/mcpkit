@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
+	github.com/muesli/termenv v0.16.0
 	github.com/panyam/mcpkit v0.4.0-b3
 	github.com/panyam/mcpkit/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.3.1
@@ -58,7 +59,6 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
-	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pgvector/pgvector-go v0.4.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
