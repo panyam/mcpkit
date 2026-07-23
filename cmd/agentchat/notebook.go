@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -33,6 +34,17 @@ type nbCellMsg nbCell
 // nbLiveMsg carries the growing in-flight turn (the not-yet-finished assistant
 // cell) so it renders live at the bottom.
 type nbLiveMsg string
+
+// liveFlushMsg is the debounce tick that re-renders the viewport for the
+// accumulated live text. Streaming sends one nbLiveMsg per token, and each
+// re-renders the whole transcript; doing that per token starves keystroke
+// render frames, so the model coalesces them behind this tick (the "alternate
+// keystrokes swallowed while streaming" report).
+type liveFlushMsg struct{}
+
+// liveFlushInterval caps live re-renders during streaming (~25 fps): smooth to
+// read, slow enough that typing stays responsive.
+const liveFlushInterval = 40 * time.Millisecond
 
 // nbCell is one collapsible block in the transcript. rendered holds the
 // glamour-formatted body for assistant cells (issue 1063 B2); body stays the
@@ -158,9 +170,23 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 			s.openTools++
 		}
 
+		// Reasoning renders as its own verbatim cell. The terminal renderer dims it
+		// with ANSI; folded into the glamoured assistant prose, glamour garbles the
+		// escape codes into literal "[2m" text (glamour must never see ANSI). So cut
+		// the prose so far at begin, close a verbatim "thinking" cell at end.
+		if re.Kind == agent.EventThinkingBegin {
+			if txt := seg(); txt != "" {
+				msgs = append(msgs, s.cell("assistant", txt))
+			}
+			s.buf.Reset()
+		}
+
 		s.term.On(ev) // render this event into buf
 
 		switch re.Kind {
+		case agent.EventThinkingEnd:
+			msgs = append(msgs, s.cell("thinking", seg())) // verbatim: cell() only glamours "assistant"
+			s.buf.Reset()
 		case agent.EventToolEnd, agent.EventToolError, agent.EventToolDenied, agent.EventToolCancelled, agent.EventToolUnavailable:
 			if s.openTools > 0 {
 				s.openTools--
@@ -228,11 +254,12 @@ type notebookModel struct {
 	modalHost // an open interactive dialog (/mcp, /sessions) as the focused layer
 	showAll bool // ? toggled the full-help view
 
-	nav      bool // false = insert, true = nav
-	raw      bool // ctrl+o: show cells as raw markdown, not glamour-rendered (1083)
-	sel      int  // selected cell index in nav mode
-	running  bool
-	atBottom bool // whether the viewport is scrolled to the end (for auto-follow)
+	nav           bool // false = insert, true = nav
+	raw           bool // ctrl+o: show cells as raw markdown, not glamour-rendered (1083)
+	sel           int  // selected cell index in nav mode
+	running       bool
+	atBottom      bool // whether the viewport is scrolled to the end (for auto-follow)
+	liveScheduled bool // a liveFlushMsg tick is pending (coalesces per-token renders)
 
 	history []string
 	histIdx int
@@ -306,7 +333,18 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case nbLiveMsg:
+		// Coalesce per-token updates: record the latest live text but debounce the
+		// (whole-transcript) re-render behind a single pending tick, so streaming
+		// does not starve keystroke render frames.
 		m.live = string(msg)
+		if m.liveScheduled {
+			return m, nil
+		}
+		m.liveScheduled = true
+		return m, tea.Tick(liveFlushInterval, func(time.Time) tea.Msg { return liveFlushMsg{} })
+
+	case liveFlushMsg:
+		m.liveScheduled = false
 		m.refresh()
 		return m, nil
 
