@@ -330,8 +330,15 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case openOverlayMsg:
-		m.open(msg.ov, m.width)
+		m.push(msg.ov, m.width) // nests above the current overlay, if any
 		m.ta.Blur()
+		return m, nil
+
+	case closeOverlaysMsg:
+		if m.active() {
+			m.clear()
+			m.ta.Focus()
+		}
 		return m, nil
 
 	case tea.MouseMsg:
@@ -343,14 +350,19 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.KeyCtrlC {
 			return m, tea.Quit
 		}
-		// An open dialog owns the keyboard until it acts or dismisses.
+		// An open dialog owns the keyboard: Esc pops one level (back to the
+		// parent overlay or the prompt); an action dispatches a line whose result
+		// nests a new overlay or closes the stack.
 		if m.active() {
-			line, open := m.route(msg)
-			if !open {
-				m.ta.Focus()
-			}
-			if line != "" {
-				return m.submit(line)
+			out := m.top().handleKey(msg)
+			switch {
+			case out.Dismiss:
+				m.pop()
+				if !m.active() {
+					m.ta.Focus()
+				}
+			case out.Line != "":
+				return m.submit(out.Line)
 			}
 			return m, nil
 		}
@@ -611,6 +623,7 @@ func (m notebookModel) submit(line string) (tea.Model, tea.Cmd) {
 			case overlayFor(res) != nil:
 				surface.prog.Send(openOverlayMsg{ov: overlayFor(res)})
 			default:
+				surface.prog.Send(closeOverlaysMsg{})
 				surface.On(host.HostEvent{Kind: host.HostCommandResult, Command: res})
 				if res.Quit {
 					surface.prog.Quit()

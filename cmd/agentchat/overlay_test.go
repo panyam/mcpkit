@@ -28,6 +28,35 @@ func kmsg(s string) tea.KeyMsg {
 	}
 }
 
+func TestModalHost_StackPushPopClear(t *testing.T) {
+	var h modalHost
+	a := newOverlay("a", nil)
+	b := newOverlay("b", nil)
+	if h.active() {
+		t.Fatal("empty stack should be inactive")
+	}
+	h.push(a, 40)
+	h.push(b, 40)
+	if !h.active() || h.top() != b {
+		t.Fatalf("top should be b, got %v", h.top())
+	}
+	h.pop()
+	if h.top() != a {
+		t.Fatal("pop should reveal the parent (a)")
+	}
+	// setWidth fans to every layer, not just the top, so a revealed parent is sized
+	h.push(b, 40)
+	h.setWidth(77)
+	if a.width != 77 || b.width != 77 {
+		t.Fatalf("setWidth should reach all layers: a=%d b=%d", a.width, b.width)
+	}
+	h.clear()
+	if h.active() {
+		t.Fatal("clear should empty the whole stack")
+	}
+	h.pop() // no-op on empty, must not panic
+}
+
 func TestOverlay_EscDismisses(t *testing.T) {
 	o := newOverlay("t", []overlayItem{{Label: "a"}})
 	if out := o.handleKey(kmsg("esc")); !out.Dismiss {

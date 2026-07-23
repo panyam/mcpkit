@@ -52,57 +52,61 @@ type focusLayer interface {
 	View() string
 }
 
-// modalHost is the shared state a surface needs to carry an optional modal
-// layer. Both TUI models embed one, so "is a modal open, route keys to it,
-// close it" is defined once here rather than branched per surface. It holds
-// only the layer (a pointer, safe across the value-copies bubbletea makes each
-// Update); blurring/focusing the input stays with the surface that owns it.
+// modalHost is the shared state a surface needs to carry a stack of modal
+// layers. Both TUI models embed one, so "is a modal open, route keys to the top
+// one, push a nested one, pop back to the parent" is defined once here rather
+// than branched per surface. A stack (not a single layer) is what gives nested
+// overlays back-navigation: opening the tools view from the servers overlay
+// pushes, and Esc pops back to the servers overlay instead of dropping to the
+// input (issue 1063 C4). The layers are pointers, safe across the value-copies
+// bubbletea makes each Update; blurring/focusing the input stays with the
+// surface that owns it.
 type modalHost struct {
-	layer focusLayer
+	stack []focusLayer
 }
 
-// active reports whether a modal layer currently owns the keyboard.
-func (h *modalHost) active() bool { return h.layer != nil }
+// active reports whether any modal layer currently owns the keyboard.
+func (h *modalHost) active() bool { return len(h.stack) > 0 }
 
-// open installs l as the active modal and sizes it to the surface width. The
-// caller blurs its own input after this.
-func (h *modalHost) open(l focusLayer, width int) {
-	h.layer = l
-	if l != nil {
-		l.setWidth(width)
+// top is the focused layer — the one keys route to and that renders. Only call
+// when active.
+func (h *modalHost) top() focusLayer { return h.stack[len(h.stack)-1] }
+
+// push opens l as a nested modal above the current one (or the first modal when
+// the stack is empty), sized to the surface width. The caller blurs its input.
+func (h *modalHost) push(l focusLayer, width int) {
+	if l == nil {
+		return
+	}
+	l.setWidth(width)
+	h.stack = append(h.stack, l)
+}
+
+// pop closes the top modal, revealing its parent (or the input when the stack
+// empties). A no-op on an empty stack.
+func (h *modalHost) pop() {
+	if n := len(h.stack); n > 0 {
+		h.stack = h.stack[:n-1]
 	}
 }
 
-// setWidth reflows the active layer on resize; a no-op when none is open.
+// clear closes the whole stack at once — the "an action completed, return to
+// the prompt" path (e.g. resuming a session).
+func (h *modalHost) clear() { h.stack = nil }
+
+// setWidth reflows every layer on resize, not just the top, so a parent revealed
+// by a later pop is already sized. A no-op when the stack is empty.
 func (h *modalHost) setWidth(w int) {
-	if h.layer != nil {
-		h.layer.setWidth(w)
+	for _, l := range h.stack {
+		l.setWidth(w)
 	}
 }
 
-// route feeds one key to the active modal and reports the command line to
-// dispatch (empty unless an action fired) and whether the modal stays open. On
-// close it clears the layer; the caller refocuses its own input when open is
-// false.
-func (h *modalHost) route(msg tea.KeyMsg) (line string, open bool) {
-	out := h.layer.handleKey(msg)
-	switch {
-	case out.Dismiss:
-		h.layer = nil
-		return "", false
-	case out.Line != "":
-		h.layer = nil
-		return out.Line, false
-	default:
-		return "", true
-	}
-}
-
-// view composes the modal above the surface's base region (passed in, since the
-// base differs per surface: the input alone for the inline TUI, the viewport
-// plus input for the notebook).
+// view composes the top modal above the surface's base region (passed in, since
+// the base differs per surface: the input alone for the inline TUI, the
+// viewport plus input for the notebook).
 func (h *modalHost) view(base string) string {
-	return h.layer.View() + "\n" + base
+	return h.top().View() + "\n" + base
 }
 
 // overlayModel is the reusable interactive dialog rendered in the bottom region

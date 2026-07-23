@@ -38,9 +38,16 @@ type usageMsg struct{ in, out int }
 
 // openOverlayMsg opens an interactive overlay (the /mcp server panel, the
 // /sessions picker) in the bottom region instead of committing the command's
-// result to scrollback. Sent from the dispatch goroutine when a command returns
-// an interactive-picker shape (issue 1095).
+// result to scrollback. It pushes onto the dialog stack, so an overlay opened
+// from within another overlay nests above it (issue 1095, 1063 C4). Sent from
+// the dispatch goroutine when a command returns an interactive-picker shape.
 type openOverlayMsg struct{ ov *overlayModel }
+
+// closeOverlaysMsg closes the whole dialog stack and returns focus to the
+// prompt. Sent from the dispatch goroutine when an overlay action produced a
+// non-overlay result (e.g. resuming a session): the dialog's job is done, so it
+// dismisses rather than leaving a stale stack. A no-op when nothing is open.
+type closeOverlaysMsg struct{}
 
 // statusLine renders the persistent status: model · session · last-turn tokens,
 // plus a "N% context left" gauge when a context window is configured (issue
@@ -279,8 +286,17 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case openOverlayMsg:
-		m.open(msg.ov, m.ta.Width())
-		m.ta.Blur() // focus goes to the overlay
+		m.push(msg.ov, m.ta.Width()) // nests above the current overlay, if any
+		m.ta.Blur()                  // focus goes to the overlay
+		return m, nil
+
+	case closeOverlaysMsg:
+		// A non-overlay command result closes the whole dialog stack and returns
+		// focus to the prompt. A no-op when nothing is open.
+		if m.active() {
+			m.clear()
+			m.ta.Focus()
+		}
 		return m, nil
 
 	case liveMsg:
@@ -314,14 +330,19 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		// While a dialog is open it owns the keyboard (focus routing): navigate,
-		// act (which dispatches a command line and closes), or dismiss.
+		// dismiss (Esc pops one level, back to the parent overlay or the prompt),
+		// or act (dispatch a command line; the result nests a new overlay or
+		// closes the stack — handled in submit / the dispatch goroutine).
 		if m.active() {
-			line, open := m.route(msg)
-			if !open {
-				m.ta.Focus()
-			}
-			if line != "" {
-				return m.submit(line)
+			out := m.top().handleKey(msg)
+			switch {
+			case out.Dismiss:
+				m.pop()
+				if !m.active() {
+					m.ta.Focus()
+				}
+			case out.Line != "":
+				return m.submit(out.Line)
 			}
 			return m, nil
 		}
@@ -413,10 +434,15 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 			case err != nil:
 				surface.On(host.HostEvent{Kind: host.HostTurnFailed, Err: err.Error()})
 			case overlayFor(res) != nil:
-				// An interactive-picker result (/mcp, /sessions) opens a dialog in
-				// the bottom region rather than committing to scrollback.
+				// An interactive-picker result (/mcp, /sessions, per-server tools)
+				// opens a dialog — pushed onto the stack, so a result triggered from
+				// within an overlay nests above it (issue 1063 C4).
 				surface.prog.Send(openOverlayMsg{ov: overlayFor(res)})
 			default:
+				// A non-overlay result: if the command came from an open overlay
+				// (its action fired), the dialog's job is done — close the stack.
+				// A no-op when nothing is open.
+				surface.prog.Send(closeOverlaysMsg{})
 				surface.On(host.HostEvent{Kind: host.HostCommandResult, Command: res})
 				if res.Quit {
 					surface.prog.Quit()
