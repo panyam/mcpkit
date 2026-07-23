@@ -66,10 +66,10 @@ type nbObserver struct {
 	toolLabel string
 }
 
-func newNBObserver() *nbObserver {
+func newNBObserver(colorEnabled bool) *nbObserver {
 	buf := &bytes.Buffer{}
-	md := newMDRenderer()
-	return &nbObserver{buf: buf, term: host.NewTerminalRenderer(buf), md: md, renderMD: md.render}
+	md := newMDRenderer(colorEnabled)
+	return &nbObserver{buf: buf, term: host.NewTerminalRendererColor(buf, colorEnabled), md: md, renderMD: md.render}
 }
 
 // setWidth fans the terminal width to the markdown renderer so assistant cells
@@ -543,7 +543,14 @@ func (m notebookModel) renderCells() string {
 		if c.collapsed {
 			marker = "▸"
 		}
-		header := marker + " " + c.label
+		// A leading cursor column marks the nav selection with a glyph, not
+		// color/attribute alone, so the selected cell stays visible under
+		// NO_COLOR / a dumb terminal where Reverse is stripped (issue 1063 E3).
+		cursor := "  "
+		if m.nav && i == m.sel {
+			cursor = "▌ "
+		}
+		header := cursor + marker + " " + c.label
 		if c.collapsed {
 			header += " · " + snippet(firstLine(c.body), 70)
 		}

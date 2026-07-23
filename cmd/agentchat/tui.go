@@ -120,10 +120,10 @@ type segBlock struct {
 	text  string
 }
 
-func newTUIObserver() *tuiObserver {
+func newTUIObserver(colorEnabled bool) *tuiObserver {
 	buf := &bytes.Buffer{}
-	md := newMDRenderer()
-	return &tuiObserver{buf: buf, term: host.NewTerminalRenderer(buf), md: md, renderMD: md.render}
+	md := newMDRenderer(colorEnabled)
+	return &tuiObserver{buf: buf, term: host.NewTerminalRendererColor(buf, colorEnabled), md: md, renderMD: md.render}
 }
 
 // setWidth fans the terminal width to the markdown renderer so committed
