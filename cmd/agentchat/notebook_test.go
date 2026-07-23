@@ -6,10 +6,25 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
 )
+
+func TestNotebook_WrapsWideLinesToViewport(t *testing.T) {
+	m := newNotebookModel(nil, nil, 20, 0)
+	m = send(m, tea.WindowSizeMsg{Width: 30, Height: 20})
+	// long prose (wraps on spaces) plus an unbreakable token (must hard-break)
+	long := strings.Repeat("word ", 40) + strings.Repeat("x", 80)
+	m = send(m, nbCellMsg{label: "error", body: long})
+
+	for _, line := range strings.Split(m.renderCells(), "\n") {
+		if w := ansi.StringWidth(line); w > 30 {
+			t.Fatalf("line exceeds the viewport width 30 (got %d): %q", w, line)
+		}
+	}
+}
 
 func send(m notebookModel, msg tea.Msg) notebookModel {
 	nm, _ := m.Update(msg)
