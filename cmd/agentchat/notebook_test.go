@@ -61,6 +61,28 @@ func TestNotebook_RenderedBodyDisplayedRawUsedForSnippet(t *testing.T) {
 	}
 }
 
+// TestNotebook_NavSelectionHasGlyphCursor pins E3 (issue 1063): the nav
+// selection is marked by a leading glyph cursor, not Reverse video alone, so it
+// stays visible when color/attributes are stripped (NO_COLOR / dumb terminal).
+// The cursor sits inside the reverse-styled span, so asserting the glyph is
+// present also proves it survives the style being a no-op.
+func TestNotebook_NavSelectionHasGlyphCursor(t *testing.T) {
+	m := newNotebookModel(nil, nil, 20, 0)
+	m = send(m, nbCellMsg{label: "assistant", body: "one"})
+	m = send(m, nbCellMsg{label: "assistant", body: "two"})
+
+	before := m.renderCells()
+	if strings.Contains(before, "▌") {
+		t.Fatalf("insert mode should carry no selection cursor:\n%s", before)
+	}
+
+	m = send(m, tea.KeyMsg{Type: tea.KeyEsc}) // enter nav on the last cell
+	out := m.renderCells()
+	if !strings.Contains(out, "▌") {
+		t.Fatalf("nav selection missing glyph cursor:\n%s", out)
+	}
+}
+
 func TestNotebook_FoldToggleInNav(t *testing.T) {
 	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, nbCellMsg{label: "assistant", body: "long answer here"})
@@ -240,7 +262,7 @@ func TestNotebook_FirstPromptLineStaysVisible(t *testing.T) {
 }
 
 func nbCollectCells(evs ...host.HostEvent) []nbCell {
-	obs := newNBObserver()
+	obs := newNBObserver(true)
 	var cells []nbCell
 	for _, ev := range evs {
 		for _, m := range obs.render(ev) {
@@ -317,7 +339,7 @@ func TestNBObserver_ToolBecomesOwnCell(t *testing.T) {
 }
 
 func TestNBObserver_AssistantCellsGlamouredToolCellsVerbatim(t *testing.T) {
-	obs := newNBObserver()
+	obs := newNBObserver(true)
 	obs.renderMD = func(s string) string { return "MD{" + s + "}" }
 	var cells []nbCell
 	for _, ev := range []host.HostEvent{

@@ -361,7 +361,7 @@ func tuiCommit(obs *tuiObserver, evs ...host.HostEvent) string {
 }
 
 func TestTUIObserver_GlamoursProseKeepsToolLinesVerbatim(t *testing.T) {
-	obs := newTUIObserver()
+	obs := newTUIObserver(true)
 	obs.renderMD = stubMD
 
 	commit := tuiCommit(obs,
@@ -389,7 +389,7 @@ func TestTUIObserver_GlamoursProseKeepsToolLinesVerbatim(t *testing.T) {
 }
 
 func TestTUIObserver_TextOnlyTurnIsGlamoured(t *testing.T) {
-	obs := newTUIObserver()
+	obs := newTUIObserver(true)
 	obs.renderMD = stubMD
 	commit := tuiCommit(obs,
 		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "# Title"}),
