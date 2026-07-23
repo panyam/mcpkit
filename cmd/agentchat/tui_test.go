@@ -138,7 +138,7 @@ func TestOverlayOpenRouteDismiss(t *testing.T) {
 	// keys route to the overlay (down moves the selection), not the textarea
 	next, _ = m.Update(kmsg("down"))
 	m = next.(tuiModel)
-	if got := m.layer.(*overlayModel).cursor; got != 1 {
+	if got := m.top().(*overlayModel).cursor; got != 1 {
 		t.Fatalf("down should move the overlay cursor, got %d", got)
 	}
 
@@ -147,6 +147,53 @@ func TestOverlayOpenRouteDismiss(t *testing.T) {
 	m = next.(tuiModel)
 	if m.active() {
 		t.Fatal("esc should dismiss the overlay")
+	}
+}
+
+func TestOverlayStackNestedBackNav(t *testing.T) {
+	m := newTUIModel(nil, nil, 0)
+	servers := newOverlay("MCP servers", []overlayItem{{Label: "flights"}})
+	next, _ := m.Update(openOverlayMsg{ov: servers})
+	m = next.(tuiModel)
+
+	// nest a tools overlay on top of the servers overlay
+	tools := newOverlay("tools · flights", []overlayItem{{Label: "search"}})
+	next, _ = m.Update(openOverlayMsg{ov: tools})
+	m = next.(tuiModel)
+	if !strings.Contains(m.View(), "tools · flights") {
+		t.Fatal("the pushed (top) overlay should render")
+	}
+
+	// esc pops back to the parent overlay, NOT down to the input
+	next, _ = m.Update(kmsg("esc"))
+	m = next.(tuiModel)
+	if !m.active() {
+		t.Fatal("esc from a nested overlay should return to the parent, not close the stack")
+	}
+	if !strings.Contains(m.View(), "MCP servers") {
+		t.Fatal("after popping the tools overlay, the servers overlay should be revealed")
+	}
+
+	// esc again pops the last overlay, returning to the prompt
+	next, _ = m.Update(kmsg("esc"))
+	m = next.(tuiModel)
+	if m.active() {
+		t.Fatal("esc from the last overlay should close to the input")
+	}
+}
+
+func TestOverlayStackCloseAll(t *testing.T) {
+	m := newTUIModel(nil, nil, 0)
+	next, _ := m.Update(openOverlayMsg{ov: newOverlay("a", nil)})
+	m = next.(tuiModel)
+	next, _ = m.Update(openOverlayMsg{ov: newOverlay("b", nil)})
+	m = next.(tuiModel)
+
+	// a non-overlay action result closes the entire stack at once
+	next, _ = m.Update(closeOverlaysMsg{})
+	m = next.(tuiModel)
+	if m.active() {
+		t.Fatal("closeOverlaysMsg should clear the whole dialog stack")
 	}
 }
 
