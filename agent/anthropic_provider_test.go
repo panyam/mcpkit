@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/panyam/mcpkit/core"
@@ -188,6 +189,39 @@ func TestAnthropicStreamTextFinishUsage(t *testing.T) {
 	}
 	if res.Usage == nil || res.Usage.InputTokens != 12 || res.Usage.OutputTokens != 9 {
 		t.Fatalf("usage = %+v", res.Usage)
+	}
+}
+
+func TestAnthropicToolNameSanitizedAndReversed(t *testing.T) {
+	var reqBody []byte
+	ts := sseServer(t, &reqBody,
+		`{"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1}}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"weather_current"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":7}}`,
+		`{"type":"message_stop"}`,
+	)
+	defer ts.Close()
+
+	s, err := newTestAnthropic(t, ts.URL).Stream(context.Background(), ProviderRequest{
+		Tools: []core.ToolDef{{Name: "weather.current", InputSchema: map[string]any{"type": "object"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	var acc Accumulator
+	for _, d := range collectDeltas(t, s) {
+		acc.Add(d)
+	}
+	res := acc.Result()
+
+	if !strings.Contains(string(reqBody), `"name":"weather_current"`) || strings.Contains(string(reqBody), "weather.current") {
+		t.Fatalf("tools-list name not sanitized in the request:\n%s", reqBody)
+	}
+	if len(res.ToolCalls) != 1 || res.ToolCalls[0].Name != "weather.current" {
+		t.Fatalf("tool call name not reversed on the response: %+v", res.ToolCalls)
 	}
 }
 
