@@ -355,6 +355,73 @@ func turnDoneEv() host.HostEvent {
 	return host.HostEvent{Kind: host.HostTurnDone, Result: &agent.TurnResult{Steps: 1}}
 }
 
+func TestNBObserver_ThinkingIsSeparateVerbatimCell(t *testing.T) {
+	cells := nbCollectCells(
+		runnerEv(agent.Event{Kind: agent.EventThinkingBegin}),
+		runnerEv(agent.Event{Kind: agent.EventThinkingDelta, Text: "pondering"}),
+		runnerEv(agent.Event{Kind: agent.EventThinkingEnd}),
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "the answer"}),
+		turnDoneEv(),
+	)
+	var thinking, assistant *nbCell
+	for i := range cells {
+		switch cells[i].label {
+		case "thinking":
+			thinking = &cells[i]
+		case "assistant":
+			assistant = &cells[i]
+		}
+	}
+	if thinking == nil {
+		t.Fatalf("expected a separate 'thinking' cell, got %+v", cells)
+	}
+	if !strings.Contains(thinking.body, "pondering") {
+		t.Fatalf("thinking cell should carry the reasoning verbatim: %q", thinking.body)
+	}
+	if thinking.rendered != "" {
+		t.Fatalf("thinking cell must be verbatim (never glamoured): %q", thinking.rendered)
+	}
+	if assistant == nil {
+		t.Fatalf("expected an assistant cell, got %+v", cells)
+	}
+	// the bug: reasoning (dim ANSI) must not leak into the glamoured prose, where
+	// glamour would garble the escape codes into literal "[2m" text
+	if strings.Contains(assistant.body, "pondering") || strings.Contains(assistant.rendered, "pondering") {
+		t.Fatalf("thinking leaked into the assistant cell: body=%q rendered=%q", assistant.body, assistant.rendered)
+	}
+}
+
+func TestNotebook_LiveRendersCoalesced(t *testing.T) {
+	m := newNotebookModel(nil, nil, 20, 0)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
+
+	// the first live update schedules a flush tick and does NOT render yet
+	nm, cmd := m.Update(nbLiveMsg("streaming one"))
+	m = nm.(notebookModel)
+	if !m.liveScheduled || cmd == nil {
+		t.Fatal("first live update should schedule a flush tick")
+	}
+	if strings.Contains(m.vp.View(), "streaming one") {
+		t.Fatalf("live text should not render before the flush tick:\n%s", m.vp.View())
+	}
+
+	// a second update while a flush is pending coalesces (no second tick)
+	nm, cmd2 := m.Update(nbLiveMsg("streaming two"))
+	m = nm.(notebookModel)
+	if cmd2 != nil {
+		t.Fatal("a coalesced live update should not schedule another tick")
+	}
+
+	// the flush renders the latest text and clears the pending schedule
+	m = send(m, liveFlushMsg{})
+	if m.liveScheduled {
+		t.Fatal("flush should clear the pending schedule")
+	}
+	if !strings.Contains(m.vp.View(), "streaming two") {
+		t.Fatalf("flush should render the latest live text:\n%s", m.vp.View())
+	}
+}
+
 func TestNBObserver_ToolBecomesOwnCell(t *testing.T) {
 	cells := nbCollectCells(
 		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "greeting you"}),
