@@ -51,10 +51,15 @@ Manage the servers independently of the chat:
 
 ```bash
 just servers-up            # start all four (built to .servers/bin, run detached)
+just servers-up-fg         # start + tail all logs in the foreground (Ctrl+C stops them)
 just servers               # status: which are up
 just servers-up events     # start just one
 just servers-down          # stop all
 ```
+
+Use `servers-up-fg` in one terminal to watch every server's logs live, and run
+`just run` (agentchat) in a second terminal — the inline TUI and the interleaved
+logs would fight for the same screen otherwise.
 
 `just run` only *checks* these ports and tells you to `just servers-up` if any
 are down — it never boots or kills them. Having the agent spawn them from the
