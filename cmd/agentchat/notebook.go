@@ -228,6 +228,7 @@ type notebookModel struct {
 	showAll bool // ? toggled the full-help view
 
 	nav      bool // false = insert, true = nav
+	raw      bool // ctrl+o: show cells as raw markdown, not glamour-rendered (1083)
 	sel      int  // selected cell index in nav mode
 	running  bool
 	atBottom bool // whether the viewport is scrolled to the end (for auto-follow)
@@ -364,6 +365,13 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case out.Line != "":
 				return m.submit(out.Line)
 			}
+			return m, nil
+		}
+		// ctrl+o toggles the whole transcript between rich and raw markdown, in
+		// place (issue 1083) — works in both INS and NAV modes.
+		if key.Matches(msg, m.keys.Raw) {
+			m.raw = !m.raw
+			m.refresh()
 			return m, nil
 		}
 		if m.nav {
@@ -507,6 +515,9 @@ func (m notebookModel) statusBar() string {
 	} else {
 		hint = "INS  " + m.help.ShortHelpView(m.keys.insertBar())
 	}
+	if m.raw {
+		hint = "RAW  " + hint
+	}
 	if m.running {
 		hint = "working…  " + hint
 	}
@@ -561,7 +572,9 @@ func (m notebookModel) renderCells() string {
 		b.WriteString("\n")
 		if !c.collapsed && c.body != "" {
 			display := c.body
-			if c.rendered != "" {
+			// ctrl+o (m.raw) shows raw markdown for copy fidelity; otherwise the
+			// glamour-rendered form when there is one (issue 1083).
+			if c.rendered != "" && !m.raw {
 				display = c.rendered
 			}
 			b.WriteString(indentBlock(display))

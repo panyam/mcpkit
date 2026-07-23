@@ -45,6 +45,30 @@ func TestNotebook_CellAppendedAndRendered(t *testing.T) {
 	}
 }
 
+func TestNotebook_CtrlOTogglesRawMarkdown(t *testing.T) {
+	m := newNotebookModel(nil, nil, 20, 0)
+	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
+	m = send(m, nbCellMsg{label: "assistant", body: "- raw item", rendered: "• styled item"})
+
+	// default: rich (glamour-rendered) body
+	if out := m.renderCells(); !strings.Contains(out, "• styled item") || strings.Contains(out, "- raw item") {
+		t.Fatalf("default should render rich:\n%s", out)
+	}
+	// ctrl+o toggles to raw markdown in place
+	m = send(m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	if out := m.renderCells(); !strings.Contains(out, "- raw item") || strings.Contains(out, "• styled item") {
+		t.Fatalf("after ctrl+o should show raw:\n%s", out)
+	}
+	if !strings.Contains(m.statusBar(), "RAW") {
+		t.Fatal("raw mode should show a RAW indicator in the status bar")
+	}
+	// ctrl+o again flips back to rich
+	m = send(m, tea.KeyMsg{Type: tea.KeyCtrlO})
+	if out := m.renderCells(); !strings.Contains(out, "• styled item") {
+		t.Fatalf("second ctrl+o should return to rich:\n%s", out)
+	}
+}
+
 func TestNotebook_RenderedBodyDisplayedRawUsedForSnippet(t *testing.T) {
 	m := newNotebookModel(nil, nil, 20, 0)
 	m = send(m, tea.WindowSizeMsg{Width: 40, Height: 20})
