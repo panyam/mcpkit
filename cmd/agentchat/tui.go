@@ -110,6 +110,7 @@ type tuiObserver struct {
 	renderMD func(string) string // == md.render; swapped in tests
 	blocks   []segBlock          // the current turn's committed blocks
 	prose    strings.Builder     // the open assistant-prose run (raw markdown)
+	lastRaw  string              // raw markdown of the last committed assistant turn (ctrl+o, 1083)
 }
 
 // segBlock is one span of a committed turn: assistant prose (raw markdown,
@@ -136,6 +137,29 @@ func (s *tuiObserver) flushProse() {
 		s.blocks = append(s.blocks, segBlock{prose: true, text: s.prose.String()})
 		s.prose.Reset()
 	}
+}
+
+// rawProse joins the raw markdown of the prose blocks (assistant text), skipping
+// meta blocks (tool lines, the turn footer) — the source a ctrl+o dump reprints
+// so it copies as real markdown, not glamour's rendered text.
+func rawProse(blocks []segBlock) string {
+	var out []string
+	for _, b := range blocks {
+		if b.prose {
+			if t := strings.TrimRight(b.text, "\n"); t != "" {
+				out = append(out, t)
+			}
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// rawDump returns the raw markdown of the last committed assistant turn (empty
+// before any turn), for the inline ctrl+o copy-fidelity dump (issue 1083).
+func (s *tuiObserver) rawDump() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastRaw
 }
 
 // renderBlocks builds the committed segment: prose blocks through glamour,
@@ -194,6 +218,12 @@ func (s *tuiObserver) fold(ev host.HostEvent) []tea.Msg {
 		s.flushProse()
 		if tail := live[before:]; tail != "" {
 			s.blocks = append(s.blocks, segBlock{text: tail})
+		}
+		// Capture this turn's raw assistant markdown (prose blocks only, tool /
+		// footer meta excluded) for the ctrl+o raw dump (issue 1083); a turn with
+		// no prose (a bare command result) leaves the previous dump in place.
+		if raw := rawProse(s.blocks); raw != "" {
+			s.lastRaw = raw
 		}
 		commit := s.renderBlocks()
 		s.blocks = nil
@@ -352,6 +382,11 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// mid-message.
 			m.showAll = !m.showAll
 			return m, nil
+		case key.Matches(msg, m.keys.Raw):
+			// ctrl+o dumps the last assistant turn as raw markdown to scrollback:
+			// inline commits are immutable, so we reprint the source rather than
+			// re-render in place (the in-place toggle is notebook mode). Issue 1083.
+			return m, m.dumpRaw()
 		case key.Matches(msg, m.keys.Send):
 			if m.running {
 				return m, nil
@@ -458,6 +493,24 @@ func (m tuiModel) submit(line string) (tea.Model, tea.Cmd) {
 		}()
 	}
 	return m, nil
+}
+
+// dumpRaw prints the last assistant turn's raw markdown to scrollback so it can
+// be copied as source (glamour-rendered scrollback copies as bullets/no-fences).
+// Returns nil (no-op) when there is nothing committed yet. A hint points at the
+// notebook surface for the in-place whole-session toggle, which inline's
+// immutable scrollback cannot offer. Issue 1083.
+func (m tuiModel) dumpRaw() tea.Cmd {
+	if m.surface == nil {
+		return nil
+	}
+	raw := m.surface.rawDump()
+	if raw == "" {
+		return nil
+	}
+	dim := lipgloss.NewStyle().Faint(true)
+	header := dim.Render("── raw markdown (last reply · --ui notebook toggles the whole session) ──")
+	return tea.Println(header + "\n" + raw)
 }
 
 func (m *tuiModel) completeTab() { tabComplete(&m.ta, m.app) }

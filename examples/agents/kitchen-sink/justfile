@@ -101,6 +101,11 @@ mem:
 servers-up name="":
     @bash servers.sh up {{name}}
 
+# Start the servers and tail their logs in the foreground (Ctrl+C stops them).
+# Run agentchat in a separate terminal. Or one: `just servers-up-fg demo`.
+servers-up-fg name="":
+    @bash servers.sh up-fg {{name}}
+
 # Stop all MCP servers, or one: `just servers-down events`.
 servers-down name="":
     @bash servers.sh down {{name}}

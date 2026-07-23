@@ -19,6 +19,7 @@ type appKeys struct {
 	Complete key.Binding
 	History  key.Binding
 	Help     key.Binding
+	Raw      key.Binding
 	Quit     key.Binding
 
 	// notebook NAV mode
@@ -37,6 +38,7 @@ func newAppKeys() appKeys {
 		Complete: key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "complete")),
 		History:  key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑↓", "history")),
 		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Raw:      key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "raw markdown")),
 		Quit:     key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),
 
 		Select: key.NewBinding(key.WithKeys("up", "down", "k", "j"), key.WithHelp("↑↓/jk", "select")),
@@ -55,14 +57,14 @@ func (k appKeys) insertBar() []key.Binding {
 }
 
 func (k appKeys) navBar() []key.Binding {
-	return []key.Binding{k.Select, k.Fold, k.Ends, k.Insert, k.Help}
+	return []key.Binding{k.Select, k.Fold, k.Ends, k.Raw, k.Insert, k.Help}
 }
 
 // fullHelp groups every surface binding for the `?` view.
 func (k appKeys) fullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Send, k.Newline, k.Complete},
-		{k.History, k.Help, k.Quit},
+		{k.History, k.Raw, k.Help, k.Quit},
 		{k.Nav, k.Select, k.Fold, k.Ends, k.Insert, k.Scroll},
 	}
 }
@@ -97,6 +99,14 @@ func renderKeyHelp() string {
 		"  NAV   cell selection. i or esc returns to INS; the NAV keys above",
 		"        (↑↓/jk select, space fold, g/G ends, pgup/dn scroll) act only here.",
 		"  The inline surface (--ui tui) has no modes; it is always in INS.",
+	}, "\n"))
+	b.WriteString("\n\nctrl+o (raw markdown):\n")
+	b.WriteString(strings.Join([]string{
+		"  notebook  toggles the whole transcript between rich (glamour) and raw",
+		"            markdown, in place — for copying source, not rendered text.",
+		"  inline    dumps the last assistant reply as raw markdown to scrollback",
+		"            (committed output can't be re-rendered); use --ui notebook for",
+		"            the in-place whole-session toggle.",
 	}, "\n"))
 	return b.String()
 }
