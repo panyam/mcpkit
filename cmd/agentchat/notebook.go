@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
@@ -577,7 +578,7 @@ func (m notebookModel) renderCells() string {
 			if c.rendered != "" && !m.raw {
 				display = c.rendered
 			}
-			b.WriteString(indentBlock(display))
+			b.WriteString(indentBlock(wrapCell(display, m.contentWidth())))
 			b.WriteString("\n")
 		}
 	}
@@ -587,13 +588,15 @@ func (m notebookModel) renderCells() string {
 			b.WriteString("\n")
 		}
 		b.WriteString("▾ assistant\n")
-		b.WriteString(indentBlock(m.live))
+		b.WriteString(indentBlock(wrapCell(m.live, m.contentWidth())))
 	}
 	return b.String()
 }
 
-// hrule is a faint full-width horizontal delimiter drawn between cells.
-func (m notebookModel) hrule() string {
+// contentWidth is the viewport width the transcript renders into (falling back
+// to the last window width, then a floor), the single width both the hrule and
+// cell wrapping measure against.
+func (m notebookModel) contentWidth() int {
 	w := m.vp.Width
 	if w <= 0 {
 		w = m.width
@@ -601,7 +604,26 @@ func (m notebookModel) hrule() string {
 	if w <= 0 {
 		w = 40
 	}
-	return lipgloss.NewStyle().Faint(true).Render(strings.Repeat("─", w))
+	return w
+}
+
+// hrule is a faint full-width horizontal delimiter drawn between cells.
+func (m notebookModel) hrule() string {
+	return lipgloss.NewStyle().Faint(true).Render(strings.Repeat("─", m.contentWidth()))
+}
+
+// wrapCell soft-wraps a cell body to the viewport width before it is indented,
+// so wide lines (a long error, unwrapped tool output, raw JSON) stay inside the
+// viewport instead of being clipped at the right edge — the viewport does not
+// wrap on its own. ansi.Wrap preserves styling, is grapheme-width aware, and
+// hard-breaks tokens longer than the width (JSON with no spaces). The width is
+// reduced by the two-space indent indentBlock adds.
+func wrapCell(s string, width int) string {
+	w := width - 2
+	if w < 1 {
+		w = 1
+	}
+	return ansi.Wrap(s, w, "")
 }
 
 func indentBlock(s string) string {
