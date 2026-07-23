@@ -77,7 +77,8 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ProviderRequest) (Strea
 	if err != nil {
 		return nil, err
 	}
-	return &openaiStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body)}, nil
+	_, safeToReal := toolNameMaps(req.Tools)
+	return &openaiStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body), nameMap: safeToReal}, nil
 }
 
 // Generate implements Provider with a non-streaming request. When
@@ -114,12 +115,13 @@ func (p *OpenAIProvider) Generate(ctx context.Context, req ProviderRequest) (*Pr
 		Reasoning:    choice.Message.ReasoningContent,
 		FinishReason: choice.FinishReason,
 	}
+	_, safeToReal := toolNameMaps(req.Tools)
 	for _, tc := range choice.Message.ToolCalls {
 		args := tc.Function.Arguments
 		if args == "" {
 			args = "{}"
 		}
-		out.ToolCalls = append(out.ToolCalls, ToolCall{ID: tc.ID, Name: tc.Function.Name, Args: core.NewRawJSON(json.RawMessage(args))})
+		out.ToolCalls = append(out.ToolCalls, ToolCall{ID: tc.ID, Name: realToolName(safeToReal, tc.Function.Name), Args: core.NewRawJSON(json.RawMessage(args))})
 	}
 	if full.Usage != nil {
 		out.Usage = &Usage{InputTokens: full.Usage.PromptTokens, OutputTokens: full.Usage.CompletionTokens}
@@ -156,6 +158,7 @@ func (p *OpenAIProvider) post(ctx context.Context, body map[string]any) (*http.R
 // buildBody produces the chat-completions request. Kept as one method so the
 // wire-shape test pins the exact JSON we emit.
 func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]any {
+	realToSafe, _ := toolNameMaps(req.Tools)
 	msgs := make([]map[string]any, 0, len(req.Messages)+1)
 	if req.Instructions != "" {
 		msgs = append(msgs, map[string]any{"role": "system", "content": req.Instructions})
@@ -177,7 +180,7 @@ func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]
 						"id":   tc.ID,
 						"type": "function",
 						"function": map[string]any{
-							"name":      tc.Name,
+							"name":      safeToolName(realToSafe, tc.Name),
 							"arguments": string(tc.Args.Raw()),
 						},
 					}
@@ -200,7 +203,7 @@ func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]
 			tools[i] = map[string]any{
 				"type": "function",
 				"function": map[string]any{
-					"name":        td.Name,
+					"name":        realToSafe[td.Name],
 					"description": td.Description,
 					"parameters":  td.InputSchema,
 				},
@@ -215,7 +218,11 @@ func (p *OpenAIProvider) buildBody(req ProviderRequest, stream bool) map[string]
 		body["max_tokens"] = req.MaxTokens
 	}
 	if len(req.Tools) > 0 && !req.ToolChoice.IsZero() {
-		if tc := req.ToolChoice.wire(); tc != nil {
+		choice := req.ToolChoice
+		if choice.Mode == "function" {
+			choice.Name = safeToolName(realToSafe, choice.Name) // match the sanitized tools-list name
+		}
+		if tc := choice.wire(); tc != nil {
 			body["tool_choice"] = tc
 		}
 	}
@@ -275,6 +282,7 @@ type openaiStream struct {
 	queue   []Delta
 	started map[int]bool
 	done    bool
+	nameMap map[string]string // safe→real tool name, to reverse sanitized names on tool_call deltas
 }
 
 // Recv implements Stream.
@@ -346,7 +354,7 @@ func (s *openaiStream) enqueue(chunk oaChunk) {
 				Kind:       DeltaToolCallStart,
 				Index:      tc.Index,
 				ToolCallID: tc.ID,
-				ToolName:   tc.Function.Name,
+				ToolName:   realToolName(s.nameMap, tc.Function.Name),
 				Text:       tc.Function.Arguments,
 			})
 			continue

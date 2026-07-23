@@ -81,6 +81,34 @@ func TestOpenAIRequestWireShape(t *testing.T) {
 	}
 }
 
+func TestOpenAIToolNameSanitizedAndReversed(t *testing.T) {
+	var reqBody []byte
+	ts := sseServer(t, &reqBody,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a1","function":{"name":"weather_current","arguments":"{}"}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		`[DONE]`,
+	)
+	defer ts.Close()
+
+	s, err := newTestProvider(t, ts.URL).Stream(context.Background(), ProviderRequest{
+		Tools: []core.ToolDef{{Name: "weather.current", InputSchema: map[string]any{"type": "object"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	res := drain(t, s)
+
+	// forward: the request carries the provider-safe name, never the raw dotted one
+	if !strings.Contains(string(reqBody), `"name":"weather_current"`) || strings.Contains(string(reqBody), "weather.current") {
+		t.Fatalf("tools-list name not sanitized in the request:\n%s", reqBody)
+	}
+	// reverse: the model's tool_call (safe name) maps back to the real tool name
+	if len(res.ToolCalls) != 1 || res.ToolCalls[0].Name != "weather.current" {
+		t.Fatalf("tool call name not reversed on the response: %+v", res.ToolCalls)
+	}
+}
+
 func TestOpenAIStreamTextFinishUsage(t *testing.T) {
 	ts := sseServer(t, nil,
 		`{"choices":[{"delta":{"content":"Hel"}}]}`,
