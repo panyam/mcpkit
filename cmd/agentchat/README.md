@@ -117,6 +117,12 @@ never renders markdown).
   alt-screen takes the whole screen, breaks native copy/paste + shell scroll,
   and clears on exit — which is why the inline `tui` stays the default.
 
+Color follows one decision across every surface: `--no-color` disables ANSI
+styling, and it is also honored via `NO_COLOR` (any value) and `TERM=dumb`;
+otherwise color is on and degrades truecolor→256→16→mono to the terminal's
+capability. Meaning is never carried by color alone (glyphs mark selections and
+status), so a no-color terminal stays legible.
+
 ## Prompt editing keys (TUI)
 
 `--exporter` selects telemetry (`stdout`, `otlp`, `auto`; empty = off, zero
