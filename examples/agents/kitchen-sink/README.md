@@ -32,7 +32,7 @@ flag, because it is a separate endpoint from the chat model.
 `kitchen-sink.json` connects to four servers, and the host is a **pure client**:
 it connects to them by URL, it does not manage them. Their lifecycle is
 decoupled from the agent (root `CONSTRAINTS.md` C6) — you start them once with
-`just servers-up` and they survive chat restarts. This mirrors an
+`just servers-up-bg` and they survive chat restarts. This mirrors an
 `.mcp.json`-style connect-list.
 
 | Server | Port | Serves | Why |
@@ -50,19 +50,19 @@ ride the approval ladder).
 Manage the servers independently of the chat:
 
 ```bash
-just servers-up            # start all four (detached), then tail logs; Ctrl+C leaves them running
-just servers-restart       # down then up (+ tail) — bounce them without two commands
-just servers-up-fg         # like servers-up, but Ctrl+C brings the servers DOWN
+just servers-up            # start + tail all four in the FOREGROUND; Ctrl+C brings them down
+just servers-up-bg         # start detached, no tail — they survive restarts (stop with servers-down)
+just servers-restart       # down then up (foreground + tail) — bounce them in one command
 just servers               # status: which are up
-just servers-up events     # start just one
+just servers-up-bg events  # start just one, detached
 just servers-down          # stop all
 ```
 
-`servers-up` and `servers-restart` tail the logs at the end so you can watch the
-servers come up; Ctrl+C stops watching and the detached servers keep running.
-Run `just run` (agentchat) in a **second** terminal — the inline TUI and the
-interleaved logs would fight for the same screen otherwise. (`servers-up-fg` is
-the ephemeral variant: Ctrl+C stops the servers too.)
+`servers-up` (and `servers-restart`) run the servers in the **foreground** and
+tail their logs, so this terminal owns them — Ctrl+C brings them down. Run
+`just run` (agentchat) in a **second** terminal (the inline TUI and the
+interleaved logs would fight for the same screen). For a fire-and-forget start
+that survives restarts and needs no dedicated terminal, use `servers-up-bg`.
 
 `just run` only *checks* these ports and tells you to `just servers-up` if any
 are down — it never boots or kills them. Having the agent spawn them from the
@@ -89,15 +89,19 @@ already owns stdio subprocess lifecycle, only the config surface is missing.
 Three layers, brought up separately (backends → MCP servers → agent):
 
 ```bash
-just allup      # postgres+pgvector + observability stacks
-just servers-up # the four MCP servers (independent of the chat)
-just check      # probe backends; prints how to fix whatever is down
-just run        # preflight, verify servers are up, launch agentchat (inline TUI)
-just note       # same, but the alt-screen notebook UI (scrollable, foldable cells)
+just allup        # postgres+pgvector + observability stacks
+just servers-up-bg # the four MCP servers, detached (independent of the chat)
+just check        # probe backends; prints how to fix whatever is down
+just run          # preflight, verify servers are up, launch agentchat (inline TUI)
+just note         # same, but the alt-screen notebook UI (scrollable, foldable cells)
 # ... chat, quit, `just run` again — the servers are still up ...
 just servers-down  # stop the MCP servers
 just alldown       # tear the stacks back down
 ```
+
+`servers-up-bg` here starts the servers detached so this same terminal can go on
+to `just run`. Prefer `just servers-up` in a dedicated terminal when you want to
+watch the server logs live (Ctrl+C there brings the servers down).
 
 `just run` fails fast if postgres is down (the config depends on it) or if any
 MCP server is unreachable (it tells you to `just servers-up`), and warns if
