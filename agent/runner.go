@@ -8,6 +8,7 @@ import (
 	"io"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -69,6 +70,14 @@ type RunnerConfig struct {
 	// core.NoopTracerProvider means zero overhead, the repo-wide pattern.
 	TracerProvider core.TracerProvider
 
+	// MeterProvider opts the Runner into OTel metric emission (issue 1023),
+	// the metrics sibling of the trace spans: a turn counter + duration
+	// histogram, a steps counter, a tokens counter (by direction), and a
+	// tool-call counter + duration histogram (by tool and status). Emitted
+	// at the same points the spans are. Nil or core.NoopMeterProvider means
+	// zero overhead, the same repo-wide pattern as TracerProvider.
+	MeterProvider core.MeterProvider
+
 	// Selector, when non-nil, narrows the tools offered to the model each
 	// step. It runs on the freshly listed set with the full history, so
 	// context-aware routing (keyword, embedding, scored) plugs in here.
@@ -121,7 +130,8 @@ type ToolSelector func(ctx context.Context, history []Message, tools []core.Tool
 // answers in text. Safe for concurrent use; each Run call is an independent
 // turn.
 type Runner struct {
-	cfg RunnerConfig
+	cfg     RunnerConfig
+	metrics *runnerMetrics
 }
 
 // NewRunner validates cfg and returns a Runner.
@@ -135,7 +145,10 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 	if cfg.TracerProvider == nil {
 		cfg.TracerProvider = core.NoopTracerProvider{}
 	}
-	return &Runner{cfg: cfg}, nil
+	if cfg.MeterProvider == nil {
+		cfg.MeterProvider = core.NoopMeterProvider{}
+	}
+	return &Runner{cfg: cfg, metrics: newRunnerMetrics(cfg.MeterProvider)}, nil
 }
 
 // TurnResult is the completed turn. Messages holds exactly the entries the
@@ -248,6 +261,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 	}
 	ctx, turnSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.turn")
 	defer turnSpan.End()
+	turnStart := time.Now()
 	emit(Event{Kind: EventTurnBegin})
 
 	// The system prompt is resolved once per turn (dynamic when InstructionsFunc
@@ -342,6 +356,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			turnSpan.SetAttribute("agent.finish_reason", resp.FinishReason)
 			turnSpan.SetAttribute("agent.tokens.input", fmt.Sprint(usage.InputTokens))
 			turnSpan.SetAttribute("agent.tokens.output", fmt.Sprint(usage.OutputTokens))
+			r.metrics.turnDone(ctx, step, usage.InputTokens, usage.OutputTokens, resp.FinishReason, time.Since(turnStart))
 			emit(Event{Kind: EventTurnEnd, Result: result})
 			return result, nil
 		}
@@ -543,8 +558,16 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	// a transport surfaces a cancelled call as an error, an in-process
 	// source as an IsError result, and a tool racing the cancel may
 	// even return success; the user's cancel wins over all three.
+	// status is the terminal outcome recorded on the tool-call metric; the
+	// closures and branches below set it as they resolve. Deferred so every
+	// return path (including the early ones) is counted exactly once.
+	start := time.Now()
+	status := "ok"
+	defer func() { r.metrics.toolDone(ctx, call.Name, status, time.Since(start)) }()
+
 	cancelled := func() bool { return ctx.Err() != nil && parent.Err() == nil }
 	cancelledText := func() string {
+		status = "cancelled"
 		span.SetAttribute("agent.tool.cancelled", "true")
 		emit(Event{Kind: EventToolCancelled, Step: step, ToolCall: &call, Reason: "cancelled by user"})
 		return "cancelled by user"
@@ -553,6 +576,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 		if cancelled() {
 			return cancelledText()
 		}
+		status = "error"
 		span.RecordError(err)
 		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
 		return fmt.Sprintf("tool call failed: %v", err)
@@ -576,6 +600,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 			if reason == "" {
 				reason = "denied by approval policy"
 			}
+			status = "denied"
 			span.SetAttribute("agent.tool.denied", "true")
 			emit(Event{Kind: EventToolDenied, Step: step, ToolCall: &call, Reason: reason})
 			return "tool call not permitted: " + reason
@@ -594,6 +619,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 		// a failure: the model is told and the turn continues (mirrors denial /
 		// cancellation). Reason (not Error) so error-keyed scorers don't count it.
 		if errors.Is(err, ErrNotAvailableNow) && !cancelled() {
+			status = "unavailable"
 			span.SetAttribute("agent.tool.unavailable", "true")
 			emit(Event{Kind: EventToolUnavailable, Step: step, ToolCall: &call, Reason: err.Error()})
 			return err.Error()
@@ -607,6 +633,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	emit(Event{Kind: EventToolEnd, Step: step, ToolCall: &call, ToolResult: res})
 	text := toolResultText(res)
 	if res.IsError {
+		status = "tool_error"
 		return "tool reported an error: " + text
 	}
 	return text

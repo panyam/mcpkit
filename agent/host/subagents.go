@@ -11,7 +11,7 @@ import (
 // narrowed view of serverTools (server tools only — never the meta-tools or a
 // sibling persona), with its own instructions. Its event stream is forwarded
 // to the host observers as a HostSubAgentEvent for nested rendering.
-func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider) error {
+func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider, mp core.MeterProvider) error {
 	for _, sub := range a.cfg.SubAgents {
 		var tools agent.ToolSource = serverTools
 		if len(sub.Allow) > 0 {
@@ -28,6 +28,7 @@ func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider 
 			Instructions:   sub.Instructions,
 			MaxSteps:       a.cfg.MaxSteps,
 			TracerProvider: tp,
+			MeterProvider:  mp,
 		})
 		if err != nil {
 			return err
