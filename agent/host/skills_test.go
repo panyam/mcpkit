@@ -87,7 +87,7 @@ func TestFilterSkillsAllow(t *testing.T) {
 	}
 }
 
-// TestBuildInstructions covers the dynamic system prompt: base instructions
+// TestBuildInstructions covers the default system prompt: base instructions
 // plus each connected server's block, in config order, skipping empties. This
 // is what makes a late server's eager skills appear on the next turn.
 func TestBuildInstructions(t *testing.T) {
@@ -96,18 +96,20 @@ func TestBuildInstructions(t *testing.T) {
 		skillBlocks: map[string]string{"s1": "block1", "s2": "block2"},
 		serverOrder: []string{"s1", "s2"},
 	}
-	if got := a.buildInstructions(context.Background()); got != "base\n\nblock1\n\nblock2" {
+	build := func() string { return a.defaultPromptBuilder().Build(context.Background()) }
+
+	if got := build(); got != "base\n\nblock1\n\nblock2" {
 		t.Fatalf("got %q", got)
 	}
 	// order follows serverOrder, not map iteration
 	a.serverOrder = []string{"s2", "s1"}
-	if got := a.buildInstructions(context.Background()); got != "base\n\nblock2\n\nblock1" {
+	if got := build(); got != "base\n\nblock2\n\nblock1" {
 		t.Fatalf("order must follow serverOrder: %q", got)
 	}
 	// a server with no block yet is skipped
 	a.skillBlocks = map[string]string{"s1": "only1"}
 	a.serverOrder = []string{"s1", "s2"}
-	if got := a.buildInstructions(context.Background()); got != "base\n\nonly1" {
+	if got := build(); got != "base\n\nonly1" {
 		t.Fatalf("empty block must be skipped: %q", got)
 	}
 }

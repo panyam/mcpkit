@@ -193,20 +193,31 @@ func (a *App) onServerSkills(sc ServerConfig, c *client.Client) {
 	a.sources.Invalidate()
 }
 
-// buildInstructions is the dynamic system prompt: cfg.Instructions followed by
-// the prompt block of every currently-connected server, in config order. Set as
-// RunnerConfig.InstructionsFunc, so it is recomputed each turn and a late
-// server's skills land on the next turn.
-func (a *App) buildInstructions(context.Context) string {
+// skillsSection is the skills part of the dynamic system prompt: the prompt
+// block of every currently-connected server, in config order, joined by a blank
+// line. It is one section of the SystemPromptBuilder (after the base
+// instructions), recomputed each turn so a late server's skills land on the next
+// turn.
+func (a *App) skillsSection(context.Context) string {
 	a.skillsMu.Lock()
 	defer a.skillsMu.Unlock()
-	s := a.cfg.Instructions
+	var blocks []string
 	for _, id := range a.serverOrder {
 		if block := a.skillBlocks[id]; block != "" {
-			s += "\n\n" + block
+			blocks = append(blocks, block)
 		}
 	}
-	return s
+	return strings.Join(blocks, "\n\n")
+}
+
+// defaultPromptBuilder assembles the standard system prompt: the base
+// instructions, then the per-server skill blocks. NewApp wires this (after
+// applying any WithSystemPromptBuilder mutator) as RunnerConfig.InstructionsFunc.
+func (a *App) defaultPromptBuilder() *SystemPromptBuilder {
+	return &SystemPromptBuilder{Sections: []PromptSection{
+		PromptSectionFunc(func(context.Context) string { return a.cfg.Instructions }),
+		PromptSectionFunc(a.skillsSection),
+	}}
 }
 
 // allCatalogSkills flattens every connected server's catalog entries, in config
