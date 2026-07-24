@@ -110,7 +110,7 @@ func TestClientCredentialsWiring(t *testing.T) {
 	if len(src.Scopes) != 1 || src.Scopes[0] != "mcp:basic" || !src.AllowInsecure {
 		t.Fatalf("wiring: %+v", src)
 	}
-	if opt, ls, err := authOption(sc); err != nil || opt == nil || ls != nil {
+	if opt, ls, err := authOption(sc, nil); err != nil || opt == nil || ls != nil {
 		t.Fatalf("authOption: opt=%v loginSource=%v err=%v", opt, ls, err)
 	}
 }
@@ -122,18 +122,18 @@ func TestAuthOption_OAuthBuildsLoginSource(t *testing.T) {
 		ClientIDEnv: "OA_CLIENT",
 		Scopes:      []string{"mcp:read"},
 	}}
-	opt, ls, err := authOption(sc)
+	opt, ls, err := authOption(sc, nil)
 	if err != nil || opt == nil || ls == nil {
 		t.Fatalf("authOption(oauth): opt=%v loginSource=%v err=%v", opt, ls, err)
 	}
 
 	// inspect the env-to-field wiring on the concrete source
-	src := oauthSource(sc)
+	src := oauthSource(sc, nil)
 	if src.ServerURL != sc.URL || src.ClientID != "cid-123" || src.EnableDCR {
 		t.Fatalf("pinned-client wiring: %+v", src)
 	}
 	// no clientIdEnv → self-register via DCR
-	dcr := oauthSource(ServerConfig{URL: sc.URL, Auth: &AuthConfig{Type: "oauth"}})
+	dcr := oauthSource(ServerConfig{URL: sc.URL, Auth: &AuthConfig{Type: "oauth"}}, nil)
 	if !dcr.EnableDCR || dcr.ClientID != "" {
 		t.Fatalf("DCR fallback wiring: %+v", dcr)
 	}

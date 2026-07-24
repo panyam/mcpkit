@@ -130,6 +130,15 @@ type appOptions struct {
 	observers       []Observer
 	configPath      string
 	promptMutate    func(*SystemPromptBuilder)
+	browserOpener   func(string) error
+}
+
+// WithBrowserOpener overrides how the interactive (oauth) auth type opens the
+// authorization URL. Nil (the default) uses the platform browser. A headless or
+// kiosk deployment injects its own launcher; a test injects a scripted
+// redirect-follower so the authorization-code flow runs without a real browser.
+func WithBrowserOpener(fn func(string) error) AppOption {
+	return func(o *appOptions) { o.browserOpener = fn }
 }
 
 // WithSystemPromptBuilder customizes per-turn system-prompt assembly. The
@@ -301,7 +310,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			client.WithToolsListChangedHandler(multi.Invalidate),
 			client.WithTracerProvider(o.tp),
 		}
-		authOpt, loginSrc, err := authOption(sc)
+		authOpt, loginSrc, err := authOption(sc, o.browserOpener)
 		if err != nil {
 			app.Close()
 			return nil, err
