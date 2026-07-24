@@ -97,15 +97,15 @@ mem:
 # These run independently of agentchat and survive chat restarts. `just run`
 # only checks they are up; it never starts or stops them.
 
-# Start the MCP servers (detached) + tail logs; Ctrl+C leaves them running. Or: `just servers-up demo`.
+# Start + tail the MCP servers in the FOREGROUND; Ctrl+C brings them down. Or: `just servers-up demo`.
 servers-up name="":
     @bash servers.sh up {{name}}
 
-# Like servers-up, but Ctrl+C brings the servers DOWN (foreground lifetime).
-servers-up-fg name="":
-    @bash servers.sh up-fg {{name}}
+# Start the servers detached (no tail); they survive restarts. Stop with servers-down.
+servers-up-bg name="":
+    @bash servers.sh up-bg {{name}}
 
-# Restart the servers (down then up), then tail their logs. Or one: `just servers-restart demo`.
+# Restart the servers (down then up), foreground + tail. Or one: `just servers-restart demo`.
 servers-restart name="":
     @bash servers.sh restart {{name}}
 
