@@ -100,7 +100,9 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ProviderRequest) (St
 		return nil, err
 	}
 	_, safeToReal := toolNameMaps(req.Tools)
-	return &anthropicStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body), nameMap: safeToReal}, nil
+	st := &anthropicStream{nameMap: safeToReal}
+	st.sseStream = sseStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body), decode: st.decode}
+	return st, nil
 }
 
 // Generate implements Provider with a non-streaming request. When
@@ -365,56 +367,24 @@ type anthropicSSE struct {
 // usage). inputTokens is captured at message_start and folded into the usage
 // delta emitted at message_delta.
 type anthropicStream struct {
-	ctx         context.Context
-	body        io.ReadCloser
-	events      *ssehttp.SSEEventReader
-	queue       []Delta
+	sseStream
 	inputTokens int
-	done        bool
 	nameMap     map[string]string // safe→real tool name, to reverse sanitized names on tool_use blocks
 }
 
-// Recv implements Stream.
-func (s *anthropicStream) Recv() (Delta, error) {
-	for {
-		if len(s.queue) > 0 {
-			d := s.queue[0]
-			s.queue = s.queue[1:]
-			return d, nil
-		}
-		if s.done {
-			return Delta{}, io.EOF
-		}
-		if err := s.ctx.Err(); err != nil {
-			return Delta{}, err
-		}
-		ev, err := s.events.ReadEvent()
-		if err != nil {
-			if ctxErr := s.ctx.Err(); ctxErr != nil {
-				return Delta{}, ctxErr
-			}
-			// A partial event can ride along with io.EOF; process it before
-			// surfacing EOF on the next call.
-			if !errors.Is(err, io.EOF) || ev.Data == "" {
-				return Delta{}, err
-			}
-			s.done = true
-		}
-		payload := strings.TrimSpace(ev.Data)
-		if payload == "" {
-			continue
-		}
-		var msg anthropicSSE
-		if err := json.Unmarshal([]byte(payload), &msg); err != nil {
-			return Delta{}, fmt.Errorf("agent: bad SSE event: %w", err)
-		}
-		if err := s.enqueue(msg); err != nil {
-			return Delta{}, err
-		}
+// decode unmarshals one Anthropic SSE event and expands it into Deltas.
+func (s *anthropicStream) decode(payload string) ([]Delta, bool, error) {
+	var msg anthropicSSE
+	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+		return nil, false, fmt.Errorf("agent: bad SSE event: %w", err)
 	}
+	return s.eventDeltas(msg)
 }
 
-func (s *anthropicStream) enqueue(msg anthropicSSE) error {
+// eventDeltas maps one typed Anthropic event to Deltas, tracking input tokens
+// across the message so the final usage delta carries both counts. "message_stop"
+// ends the stream; an "error" event surfaces as a decode error.
+func (s *anthropicStream) eventDeltas(msg anthropicSSE) ([]Delta, bool, error) {
 	switch msg.Type {
 	case "message_start":
 		if msg.Message != nil && msg.Message.Usage != nil {
@@ -422,54 +392,51 @@ func (s *anthropicStream) enqueue(msg anthropicSSE) error {
 		}
 	case "content_block_start":
 		if msg.ContentBlock != nil && msg.ContentBlock.Type == "tool_use" {
-			s.queue = append(s.queue, Delta{
+			return []Delta{{
 				Kind:       DeltaToolCallStart,
 				Index:      msg.Index,
 				ToolCallID: msg.ContentBlock.ID,
 				ToolName:   realToolName(s.nameMap, msg.ContentBlock.Name),
-			})
+			}}, false, nil
 		}
 	case "content_block_delta":
 		if msg.Delta == nil {
-			return nil
+			return nil, false, nil
 		}
 		switch msg.Delta.Type {
 		case "text_delta":
 			if msg.Delta.Text != "" {
-				s.queue = append(s.queue, Delta{Kind: DeltaText, Text: msg.Delta.Text})
+				return []Delta{{Kind: DeltaText, Text: msg.Delta.Text}}, false, nil
 			}
 		case "input_json_delta":
 			if msg.Delta.PartialJSON != "" {
-				s.queue = append(s.queue, Delta{Kind: DeltaToolCallArgs, Index: msg.Index, Text: msg.Delta.PartialJSON})
+				return []Delta{{Kind: DeltaToolCallArgs, Index: msg.Index, Text: msg.Delta.PartialJSON}}, false, nil
 			}
 		case "thinking_delta":
 			if msg.Delta.Thinking != "" {
-				s.queue = append(s.queue, Delta{Kind: DeltaReasoning, Text: msg.Delta.Thinking})
+				return []Delta{{Kind: DeltaReasoning, Text: msg.Delta.Thinking}}, false, nil
 			}
 		}
 	case "message_delta":
+		var out []Delta
 		if msg.Delta != nil && msg.Delta.StopReason != "" {
-			s.queue = append(s.queue, Delta{Kind: DeltaFinish, FinishReason: msg.Delta.StopReason})
+			out = append(out, Delta{Kind: DeltaFinish, FinishReason: msg.Delta.StopReason})
 		}
 		if msg.Usage != nil {
-			s.queue = append(s.queue, Delta{Kind: DeltaUsage, Usage: &Usage{
+			out = append(out, Delta{Kind: DeltaUsage, Usage: &Usage{
 				InputTokens:  s.inputTokens,
 				OutputTokens: msg.Usage.OutputTokens,
 			}})
 		}
+		return out, false, nil
 	case "message_stop":
-		s.done = true
+		return nil, true, nil
 	case "error":
 		if msg.Error != nil {
-			return fmt.Errorf("agent: anthropic stream error (%s): %s", msg.Error.Type, msg.Error.Message)
+			return nil, false, fmt.Errorf("agent: anthropic stream error (%s): %s", msg.Error.Type, msg.Error.Message)
 		}
-		return errors.New("agent: anthropic stream error")
+		return nil, false, errors.New("agent: anthropic stream error")
 	}
 	// content_block_stop and ping carry no deltas.
-	return nil
-}
-
-// Close implements Stream.
-func (s *anthropicStream) Close() error {
-	return s.body.Close()
+	return nil, false, nil
 }
