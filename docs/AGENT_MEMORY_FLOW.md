@@ -114,4 +114,4 @@ issue 966 offloading → working memory + `MemorySource` (938) → eval harness 
 
 **Deferred:** agentchat wiring to session-scope by run id (needs a lock-safe run-id accessor — `App.RunID` takes `turnMu`, which `RunTurn` holds during the tool call, so the namespace func can't call it directly) → follow-up. A Redis **semantic** (vector) backend is also a follow-up; durable semantic recall is the pgvector store's job today.
 
-**Deferred refinements (filed):** distillation write path (1022, the Extract→Consolidate loop above), Scorer/Reranker multi-signal ranking (1020), unified injection arbiter (1024), explicit context-assembly pipeline (1026), faster cosine (1018), metrics seam (1023), LongMemEval dataset loader (1014).
+**Deferred refinements (filed):** distillation write path (1022, the Extract→Consolidate loop above), Scorer/Reranker multi-signal ranking (1020), unified injection arbiter (1024), explicit context-assembly pipeline (1026), faster cosine (1018), LongMemEval dataset loader (1014).

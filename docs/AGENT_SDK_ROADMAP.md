@@ -54,7 +54,7 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Tool-result offloading (context mgmt)** | ✅ #966,#971,#972 | `agent/offloading_source.go` + `ToolResultStore` (mem/redis/gorm); `read_tool_result` (offset/limit/grep) | streaming/handle-based very-large results **⏳ #980,#979** |
 | **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031 | `agent/agent_source.go` (`AgentSource`, depth+budget caps), `SubAgentEvent` nesting, `agent/team.go` (`Team` handoff), declarative host personas | richer composition (structured I/O, parallel fan-out, async/task sub-agents, dynamic catalog) **⏳ #1032,#1033,#1035,#1036,#1038,#1043** |
 | **Host surface** | ✅ #984–#992 | slash-command registry, `ConnectionRegistry` + runtime `/provider`, `HostEvent`/`Observer` render seam, notebook renderer (#1001), interactive `/mcp` + `/sessions` overlay (#1095, `focusLayer`/`modalHost` seam + `client.Group.Reconnect`), per-server tool view (#1117) + oauth login action / authorization-code auth type (#1116, #907), dialog stack for nested-overlay back-nav (#1124), color accessibility (#1125), bubbletea TUI, playground | context-assembly pipeline **⏳ #1024,#1026**; remaining TUI-track items (dimmed-base compositing, grapheme width, `WindowSizeMsg` fan-out) **⏳ #1063** |
-| **Observability** | 🟡 | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) | OTel **metrics** seam (counters/histograms) **⏳ #1023** |
+| **Observability** | ✅ | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) + OTel **metrics** (#1023 — turn/step/token/tool counters + duration histograms via `RunnerConfig.MeterProvider`, `host.WithMeterProvider`, agentchat `SetupMeter`, `mcpkit-agent` Grafana dashboard) | — |
 | **Durable workflows / graphs (Phase 4)** | ⏳ #928 | — | engine **#944**, `SuspendNode` via TriggerPolicy+RunStore **#945**, `ModelNode`/`ToolNode` **#946** |
 | **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044**, confidence-gated cascade **#1057** (Phase 6) |
 | **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 | structured output via finalizing `Generate` only | logprob exposure **#1053**, grammar/guided decoding **#1054**, Anthropic caching/thinking **#953** |
@@ -137,8 +137,8 @@ they belong in `agent/` or in a coding-agent built on it is a scoping decision (
 - **Context assembly:** explicit pre-turn pipeline #1026, unified injection budget with a final arbiter
   #1024.
 - **Eval:** external eval/conformance adapter seam #1015 (see §6), real LongMemEval loader #1014.
-- **Ops:** OTel metrics seam #1023, RunStore retention/GC #999, large/binary tool results #980/#979,
-  thinking-hint stream parser #989, session-picker paging #1000.
+- **Ops:** RunStore retention/GC #999, large/binary tool results #980/#979,
+  thinking-hint stream parser #989, session-picker paging #1000. (OTel metrics seam #1023 shipped.)
 
 ### 5b. Untracked (no issue yet)
 
