@@ -122,6 +122,7 @@ type appOptions struct {
 	provider        agent.Provider
 	ui              agent.ElicitationUI
 	tp              core.TracerProvider
+	mp              core.MeterProvider
 	logger          *slog.Logger
 	store           agent.RunStore
 	toolResultStore agent.ToolResultStore
@@ -165,6 +166,15 @@ func WithElicitationUI(ui agent.ElicitationUI) AppOption {
 // activation spans. Nil means noop.
 func WithTracerProvider(tp core.TracerProvider) AppOption {
 	return func(o *appOptions) { o.tp = tp }
+}
+
+// WithMeterProvider opts the agent Runner (and its sub-agents) into OTel metric
+// emission (issue 1023): the per-turn and per-tool-call instruments that back
+// the mcpkit-agent Grafana dashboard. Pair it with WithTracerProvider off the
+// same OTLP endpoint so traces and metrics land in one collector. Nil means
+// noop.
+func WithMeterProvider(mp core.MeterProvider) AppOption {
+	return func(o *appOptions) { o.mp = mp }
 }
 
 // WithLogger sets the operational slog logger (failover transitions, future
@@ -241,6 +251,9 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	if o.tp == nil {
 		o.tp = core.NoopTracerProvider{}
+	}
+	if o.mp == nil {
+		o.mp = core.NoopMeterProvider{}
 	}
 	if o.logger == nil {
 		o.logger = slog.New(slog.DiscardHandler)
@@ -435,7 +448,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// a filtered view of serverTools (built above), so it never sees the
 	// meta-tools or its sibling personas.
 	if len(cfg.SubAgents) > 0 {
-		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp); err != nil {
+		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}
@@ -470,6 +483,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		InstructionsFunc: app.promptBuilder.Build,
 		MaxSteps:         cfg.MaxSteps,
 		TracerProvider:   o.tp,
+		MeterProvider:    o.mp,
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.

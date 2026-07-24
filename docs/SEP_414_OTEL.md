@@ -226,6 +226,41 @@ Grafana's metric → trace pivot works without per-call configuration.
 See `ext/otel/README.md` § Metrics for the wiring snippet and
 `server/metrics_middleware.go` for the dispatch-side instrumentation.
 
+### Agent Runner metrics — landed (issue 1023)
+
+The `agent.Runner` emits through the same `core.MeterProvider` seam, the
+metrics sibling of its SEP-414 spans. `RunnerConfig.MeterProvider` opts
+it in; nil or `core.NoopMeterProvider` is zero overhead. Instruments are
+built once in `NewRunner` (`agent/metrics.go`) and recorded at the same
+points the spans are (`agent/runner.go`): turn end and each tool call.
+
+| Instrument | Kind | Attributes | Recorded |
+|---|---|---|---|
+| `agent.turns` | counter | `agent.finish_reason` | one per completed turn |
+| `agent.turn.duration` | histogram (`s`) | — | turn wall-clock |
+| `agent.steps` | counter | — | model round-trips, at turn end |
+| `agent.tokens` | counter | `direction` (`input`/`output`) | tokens per turn |
+| `agent.tool.calls` | counter | `tool`, `status` | one per tool call |
+| `agent.tool.duration` | histogram (`s`) | `tool` | tool-call wall-clock |
+
+`status` is the terminal outcome: `ok`, `error`, `tool_error` (the
+handler returned an error result), `denied` (approval policy), `cancelled`
+(per-call cancel), or `unavailable` (server down this turn). A deferred
+`defer` in `callTool` records exactly one point per call regardless of
+which outcome path returns, so the counter never double-counts or misses.
+
+The host threads it end to end: `host.WithMeterProvider` sets it on the
+main Runner and every sub-agent persona; agentchat builds it from the
+same `--exporter`/`--otlp-endpoint` decision as the tracer and logger
+(`cmd/agentchat/telemetry_setup_meter.go`, the meter sibling of
+`SetupTelemetry`/`SetupLogs`). The OTLP path lands in Mimir; the
+`mcpkit — agent` Grafana dashboard
+(`docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json`)
+charts turn rate, latency, token throughput, and tool failure ratio out
+of the box. Prometheus renames apply the usual OTel conventions: dots to
+underscores, a `_total` suffix on counters, and the unit suffix on
+histograms (`agent_turn_duration_seconds_bucket`).
+
 ## P6 — tracing across surfaces (auth / tasks / apps)
 
 P1–P5 instrumented the **dispatch spine**: every JSON-RPC method gets one

@@ -257,6 +257,15 @@ func runChat(v *viper.Viper) error {
 		return err
 	}
 	defer tpShutdown(context.Background())
+	mp, mpShutdown, err := SetupMeter(ctx,
+		WithServiceName("agentchat"),
+		WithExporter(v.GetString("exporter")),
+		WithOTLPEndpoint(v.GetString("otlp-endpoint")),
+	)
+	if err != nil {
+		return err
+	}
+	defer mpShutdown(context.Background())
 	logger, logShutdown, err := SetupLogs(ctx,
 		WithServiceName("agentchat"),
 		WithExporter(v.GetString("exporter")),
@@ -269,6 +278,7 @@ func runChat(v *viper.Viper) error {
 
 	appOpts := []host.AppOption{
 		host.WithTracerProvider(tp),
+		host.WithMeterProvider(mp),
 		host.WithLogger(logger),
 	}
 	if persistConfig {
