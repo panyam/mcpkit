@@ -103,6 +103,11 @@ type App struct {
 	// through (Dispatch / Commands). Built in NewApp.
 	commands *CommandRegistry
 
+	// promptBuilder assembles the per-turn system prompt from ordered sections
+	// (base instructions + per-server skills by default; customizable via
+	// WithSystemPromptBuilder). Wired as RunnerConfig.InstructionsFunc.
+	promptBuilder *SystemPromptBuilder
+
 	// overlay persists mutable config picks (active connection, approval
 	// mode) back to a local-overlay file when WithConfigOverlay is set; nil
 	// means runtime changes are session-only.
@@ -124,6 +129,16 @@ type appOptions struct {
 	providerBuilder ProviderBuilder
 	observers       []Observer
 	configPath      string
+	promptMutate    func(*SystemPromptBuilder)
+}
+
+// WithSystemPromptBuilder customizes per-turn system-prompt assembly. The
+// mutator receives the default builder (base instructions, then per-server skill
+// blocks) after it is assembled in NewApp, so a caller can reorder sections,
+// insert profile/domain-guide sections, or replace Sections wholesale. It runs
+// once at construction; the resulting builder's Build runs each turn.
+func WithSystemPromptBuilder(mutate func(*SystemPromptBuilder)) AppOption {
+	return func(o *appOptions) { o.promptMutate = mutate }
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -431,13 +446,19 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		runnerTools = agent.NewOffloadingSource(multi, store, cfg.Offload.toAgent())
 	}
 
+	// The default system prompt is base instructions followed by the connected
+	// servers' skill blocks; both are recomputed each turn so a late-connecting
+	// server's skills appear without a restart. WithSystemPromptBuilder can
+	// reorder or extend it.
+	app.promptBuilder = app.defaultPromptBuilder()
+	if o.promptMutate != nil {
+		o.promptMutate(app.promptBuilder)
+	}
+
 	runnerCfg := agent.RunnerConfig{
-		Provider: provider,
-		Tools:    runnerTools,
-		// Dynamic system prompt: cfg.Instructions plus the eager/catalog blocks
-		// of the currently-connected servers, recomputed each turn so a
-		// late-connecting server's skills appear without a restart.
-		InstructionsFunc: app.buildInstructions,
+		Provider:         provider,
+		Tools:            runnerTools,
+		InstructionsFunc: app.promptBuilder.Build,
 		MaxSteps:         cfg.MaxSteps,
 		TracerProvider:   o.tp,
 	}
