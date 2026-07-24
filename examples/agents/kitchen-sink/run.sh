@@ -48,8 +48,8 @@ for probe in demo:8788 runbooks:8789 community:8790 events:8791; do
 done
 if [ -n "$down" ]; then
 	echo "MCP server(s) not reachable:$down" >&2
-	echo "  -> start them first:  just servers-up      (they run independently of the chat)" >&2
-	echo "     or just one:        just servers-up demo" >&2
+	echo "  -> start them first:  just servers-up-bg   (detached, so this terminal can run the chat)" >&2
+	echo "     or watch logs:     just servers-up      (foreground, in a separate terminal)" >&2
 	# Until the agent connects asynchronously (idea 2), a down server fails the
 	# launch, so stop here with a clear message instead of an opaque connect error.
 	exit 1
