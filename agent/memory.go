@@ -69,9 +69,13 @@ type MemoryStore interface {
 
 // PutMemoryRequest carries the item to store. A zero CreatedAt is stamped
 // with the store clock at Put time (caller-set wins, mirroring
-// Message.Timestamp).
+// Message.Timestamp). Namespace scopes the item to one independent scratchpad
+// (a session id, a user id, ...); empty is the default/global scratchpad. It is
+// the per-request session-scope seam (issue 1003) — a caller that never sets it
+// gets the single shared scratchpad, unchanged.
 type PutMemoryRequest struct {
-	Item MemoryItem
+	Item      MemoryItem
+	Namespace string
 }
 
 // PutMemoryResponse is empty today; it exists so the method can grow
@@ -79,10 +83,13 @@ type PutMemoryRequest struct {
 type PutMemoryResponse struct{}
 
 // ListMemoriesRequest filters by Query (empty means all) and caps the result
-// at Limit (0 means no cap). Limit is the k of a top-k recall.
+// at Limit (0 means no cap). Limit is the k of a top-k recall. Namespace scopes
+// the listing to one scratchpad (empty = the default/global scratchpad); recall
+// never crosses namespaces.
 type ListMemoriesRequest struct {
-	Query string
-	Limit int
+	Query     string
+	Limit     int
+	Namespace string
 }
 
 // ListMemoriesResponse carries the matching items, most-relevant first.
@@ -103,9 +110,11 @@ type ScoredMemory struct {
 	Score float64
 }
 
-// DeleteMemoryRequest identifies the item to forget by Key.
+// DeleteMemoryRequest identifies the item to forget by Key, within Namespace
+// (empty = the default/global scratchpad).
 type DeleteMemoryRequest struct {
-	Key string
+	Key       string
+	Namespace string
 }
 
 // DeleteMemoryResponse reports whether an item was actually removed.
@@ -119,13 +128,25 @@ type DeleteMemoryResponse struct {
 // follow-up (mirroring the ToolResultStore redis/gorm arc). An optional
 // entry cap (WithMaxMemories) evicts the oldest item when exceeded.
 type InMemoryMemoryStore struct {
-	mu    sync.Mutex
-	items map[string]MemoryItem
-	// order tracks insertion order so listings and the summary are
-	// deterministic regardless of CreatedAt tie-breaks; front is oldest.
-	order      *list.List
-	elems      map[string]*list.Element
+	mu sync.Mutex
+	// ns partitions the store by namespace (the request's Namespace; "" is the
+	// default scratchpad), so recall never crosses namespaces. maxEntries caps
+	// each namespace independently.
+	ns         map[string]*nsMemory
 	maxEntries int
+}
+
+// nsMemory is one namespace's scratchpad. order tracks insertion order so
+// listings and the summary are deterministic regardless of CreatedAt tie-breaks
+// (front is oldest).
+type nsMemory struct {
+	items map[string]MemoryItem
+	order *list.List
+	elems map[string]*list.Element
+}
+
+func newNSMemory() *nsMemory {
+	return &nsMemory{items: map[string]MemoryItem{}, order: list.New(), elems: map[string]*list.Element{}}
 }
 
 // MemoryStoreOption configures an InMemoryMemoryStore.
@@ -144,15 +165,22 @@ func WithMaxMemories(n int) MemoryStoreOption {
 
 // NewInMemoryMemoryStore returns an empty in-memory store.
 func NewInMemoryMemoryStore(opts ...MemoryStoreOption) *InMemoryMemoryStore {
-	s := &InMemoryMemoryStore{
-		items: map[string]MemoryItem{},
-		order: list.New(),
-		elems: map[string]*list.Element{},
-	}
+	s := &InMemoryMemoryStore{ns: map[string]*nsMemory{}}
 	for _, o := range opts {
 		o(s)
 	}
 	return s
+}
+
+// bucket returns the sub-store for a namespace, creating it on first use. The
+// caller holds s.mu.
+func (s *InMemoryMemoryStore) bucket(ns string) *nsMemory {
+	m := s.ns[ns]
+	if m == nil {
+		m = newNSMemory()
+		s.ns[ns] = m
+	}
+	return m
 }
 
 // PutMemory implements MemoryStore.
@@ -163,17 +191,18 @@ func (s *InMemoryMemoryStore) PutMemory(ctx context.Context, req PutMemoryReques
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.items[item.Key]; !exists {
-		s.elems[item.Key] = s.order.PushBack(item.Key)
-		for s.maxEntries > 0 && s.order.Len() > s.maxEntries {
-			oldest := s.order.Front()
+	m := s.bucket(req.Namespace)
+	if _, exists := m.items[item.Key]; !exists {
+		m.elems[item.Key] = m.order.PushBack(item.Key)
+		for s.maxEntries > 0 && m.order.Len() > s.maxEntries {
+			oldest := m.order.Front()
 			key := oldest.Value.(string)
-			s.order.Remove(oldest)
-			delete(s.elems, key)
-			delete(s.items, key)
+			m.order.Remove(oldest)
+			delete(m.elems, key)
+			delete(m.items, key)
 		}
 	}
-	s.items[item.Key] = item
+	m.items[item.Key] = item
 	return PutMemoryResponse{}, nil
 }
 
@@ -184,12 +213,13 @@ func (s *InMemoryMemoryStore) ListMemories(ctx context.Context, req ListMemories
 	q := strings.ToLower(req.Query)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	m := s.bucket(req.Namespace)
 	var out []ScoredMemory
-	for e := s.order.Front(); e != nil; e = e.Next() {
+	for e := m.order.Front(); e != nil; e = e.Next() {
 		if req.Limit > 0 && len(out) >= req.Limit {
 			break
 		}
-		item := s.items[e.Value.(string)]
+		item := m.items[e.Value.(string)]
 		if q == "" || strings.Contains(strings.ToLower(item.Key), q) || strings.Contains(strings.ToLower(item.Value), q) {
 			out = append(out, ScoredMemory{Item: item, Score: 1})
 		}
@@ -201,13 +231,14 @@ func (s *InMemoryMemoryStore) ListMemories(ctx context.Context, req ListMemories
 func (s *InMemoryMemoryStore) DeleteMemory(ctx context.Context, req DeleteMemoryRequest) (DeleteMemoryResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.items[req.Key]; !ok {
+	m := s.bucket(req.Namespace)
+	if _, ok := m.items[req.Key]; !ok {
 		return DeleteMemoryResponse{Deleted: false}, nil
 	}
-	delete(s.items, req.Key)
-	if e, ok := s.elems[req.Key]; ok {
-		s.order.Remove(e)
-		delete(s.elems, req.Key)
+	delete(m.items, req.Key)
+	if e, ok := m.elems[req.Key]; ok {
+		m.order.Remove(e)
+		delete(m.elems, req.Key)
 	}
 	return DeleteMemoryResponse{Deleted: true}, nil
 }
@@ -225,6 +256,28 @@ func (s *InMemoryMemoryStore) DeleteMemory(ctx context.Context, req DeleteMemory
 type MemorySource struct {
 	store MemoryStore
 	fs    *FuncSource
+	// nsFn, when set, returns the namespace for each store operation (evaluated
+	// per call so it can track the live session id). Nil = the default/global
+	// scratchpad, so a host that does not opt into session-scoping is unchanged.
+	nsFn func() string
+}
+
+// MemorySourceOption configures a MemorySource.
+type MemorySourceOption func(*MemorySource)
+
+// WithMemoryNamespaceFunc scopes every memory operation to the namespace fn
+// returns at call time — pass a func that returns the current session/run id to
+// make working memory per-session, or omit it for one shared scratchpad.
+func WithMemoryNamespaceFunc(fn func() string) MemorySourceOption {
+	return func(m *MemorySource) { m.nsFn = fn }
+}
+
+// ns is the current namespace for a store operation.
+func (m *MemorySource) ns() string {
+	if m.nsFn != nil {
+		return m.nsFn()
+	}
+	return ""
 }
 
 type rememberArgs struct {
@@ -247,8 +300,11 @@ type forgetArgs struct {
 
 // NewMemorySource builds a MemorySource over store and registers its three
 // tools. The store is required.
-func NewMemorySource(store MemoryStore) (*MemorySource, error) {
+func NewMemorySource(store MemoryStore, opts ...MemorySourceOption) (*MemorySource, error) {
 	m := &MemorySource{store: store, fs: NewFuncSource()}
+	for _, o := range opts {
+		o(m)
+	}
 	if err := AddFunc(m.fs, RememberToolName,
 		"Save a note to your working memory so you can recall it on a later turn. Provide a short key to label it (optional; used to update or forget it later) and the value to store.",
 		m.remember); err != nil {
@@ -272,14 +328,14 @@ func (m *MemorySource) remember(ctx context.Context, in rememberArgs) (string, e
 	if key == "" {
 		key = "mem-" + randHex(4)
 	}
-	if _, err := m.store.PutMemory(ctx, PutMemoryRequest{Item: MemoryItem{Key: key, Value: in.Value}}); err != nil {
+	if _, err := m.store.PutMemory(ctx, PutMemoryRequest{Item: MemoryItem{Key: key, Value: in.Value}, Namespace: m.ns()}); err != nil {
 		return "", err
 	}
 	return "remembered: " + key, nil
 }
 
 func (m *MemorySource) recall(ctx context.Context, in recallArgs) (string, error) {
-	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{Query: in.Query})
+	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{Query: in.Query, Namespace: m.ns()})
 	if err != nil {
 		return "", err
 	}
@@ -303,7 +359,7 @@ func itemsOf(sms []ScoredMemory) []MemoryItem {
 }
 
 func (m *MemorySource) forget(ctx context.Context, in forgetArgs) (string, error) {
-	resp, err := m.store.DeleteMemory(ctx, DeleteMemoryRequest{Key: in.Key})
+	resp, err := m.store.DeleteMemory(ctx, DeleteMemoryRequest{Key: in.Key, Namespace: m.ns()})
 	if err != nil {
 		return "", err
 	}
@@ -345,7 +401,7 @@ type SummaryOptions struct {
 // budget. It returns "" when memory is empty (or the budget admits nothing)
 // so the host injects nothing.
 func (m *MemorySource) Summary(ctx context.Context, opts SummaryOptions) (string, error) {
-	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{})
+	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{Namespace: m.ns()})
 	if err != nil {
 		return "", err
 	}
@@ -386,7 +442,7 @@ func (m *MemorySource) RecallRelevant(ctx context.Context, query string, opts Re
 	if topK <= 0 {
 		topK = DefaultRecallTopK
 	}
-	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{Query: query, Limit: topK})
+	resp, err := m.store.ListMemories(ctx, ListMemoriesRequest{Query: query, Limit: topK, Namespace: m.ns()})
 	if err != nil {
 		return "", err
 	}
