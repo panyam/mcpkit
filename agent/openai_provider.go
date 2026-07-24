@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,7 +77,9 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ProviderRequest) (Strea
 		return nil, err
 	}
 	_, safeToReal := toolNameMaps(req.Tools)
-	return &openaiStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body), nameMap: safeToReal}, nil
+	st := &openaiStream{nameMap: safeToReal}
+	st.sseStream = sseStream{ctx: ctx, body: resp.Body, events: ssehttp.NewSSEEventReader(resp.Body), decode: st.decode}
+	return st, nil
 }
 
 // Generate implements Provider with a non-streaming request. When
@@ -276,73 +277,44 @@ type oaChunk struct {
 // comment skipping). Recv keeps a small queue because one SSE event can
 // expand to several Deltas.
 type openaiStream struct {
-	ctx     context.Context
-	body    io.ReadCloser
-	events  *ssehttp.SSEEventReader
-	queue   []Delta
+	sseStream
 	started map[int]bool
-	done    bool
 	nameMap map[string]string // safe→real tool name, to reverse sanitized names on tool_call deltas
 }
 
-// Recv implements Stream.
-func (s *openaiStream) Recv() (Delta, error) {
-	for {
-		if len(s.queue) > 0 {
-			d := s.queue[0]
-			s.queue = s.queue[1:]
-			return d, nil
-		}
-		if s.done {
-			return Delta{}, io.EOF
-		}
-		if err := s.ctx.Err(); err != nil {
-			return Delta{}, err
-		}
-		ev, err := s.events.ReadEvent()
-		if err != nil {
-			if ctxErr := s.ctx.Err(); ctxErr != nil {
-				return Delta{}, ctxErr
-			}
-			// A partial event can ride along with io.EOF; process it
-			// before surfacing EOF on the next call.
-			if !errors.Is(err, io.EOF) || ev.Data == "" {
-				return Delta{}, err
-			}
-			s.done = true
-		}
-		payload := strings.TrimSpace(ev.Data)
-		if payload == "" {
-			continue
-		}
-		if payload == "[DONE]" {
-			s.done = true
-			continue
-		}
-		var chunk oaChunk
-		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
-			return Delta{}, fmt.Errorf("agent: bad SSE chunk: %w", err)
-		}
-		s.enqueue(chunk)
+// decode turns one SSE data payload into Deltas. The "[DONE]" sentinel ends the
+// stream; otherwise the chunk is unmarshalled and expanded via chunkDeltas.
+func (s *openaiStream) decode(payload string) ([]Delta, bool, error) {
+	if payload == "[DONE]" {
+		return nil, true, nil
 	}
+	var chunk oaChunk
+	if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+		return nil, false, fmt.Errorf("agent: bad SSE chunk: %w", err)
+	}
+	return s.chunkDeltas(chunk), false, nil
 }
 
-func (s *openaiStream) enqueue(chunk oaChunk) {
+// chunkDeltas expands one chat-completions chunk into Deltas. It keeps the
+// per-index started map so a tool call's first fragment is a DeltaToolCallStart
+// and the rest are DeltaToolCallArgs.
+func (s *openaiStream) chunkDeltas(chunk oaChunk) []Delta {
+	var out []Delta
 	if chunk.Usage != nil {
-		s.queue = append(s.queue, Delta{Kind: DeltaUsage, Usage: &Usage{
+		out = append(out, Delta{Kind: DeltaUsage, Usage: &Usage{
 			InputTokens:  chunk.Usage.PromptTokens,
 			OutputTokens: chunk.Usage.CompletionTokens,
 		}})
 	}
 	if len(chunk.Choices) == 0 {
-		return
+		return out
 	}
 	choice := chunk.Choices[0]
 	if choice.Delta.Content != "" {
-		s.queue = append(s.queue, Delta{Kind: DeltaText, Text: choice.Delta.Content})
+		out = append(out, Delta{Kind: DeltaText, Text: choice.Delta.Content})
 	}
 	if r := choice.Delta.ReasoningContent + choice.Delta.Reasoning; r != "" {
-		s.queue = append(s.queue, Delta{Kind: DeltaReasoning, Text: r})
+		out = append(out, Delta{Kind: DeltaReasoning, Text: r})
 	}
 	for _, tc := range choice.Delta.ToolCalls {
 		if s.started == nil {
@@ -350,7 +322,7 @@ func (s *openaiStream) enqueue(chunk oaChunk) {
 		}
 		if !s.started[tc.Index] {
 			s.started[tc.Index] = true
-			s.queue = append(s.queue, Delta{
+			out = append(out, Delta{
 				Kind:       DeltaToolCallStart,
 				Index:      tc.Index,
 				ToolCallID: tc.ID,
@@ -360,15 +332,11 @@ func (s *openaiStream) enqueue(chunk oaChunk) {
 			continue
 		}
 		if tc.Function.Arguments != "" {
-			s.queue = append(s.queue, Delta{Kind: DeltaToolCallArgs, Index: tc.Index, Text: tc.Function.Arguments})
+			out = append(out, Delta{Kind: DeltaToolCallArgs, Index: tc.Index, Text: tc.Function.Arguments})
 		}
 	}
 	if choice.FinishReason != nil && *choice.FinishReason != "" {
-		s.queue = append(s.queue, Delta{Kind: DeltaFinish, FinishReason: *choice.FinishReason})
+		out = append(out, Delta{Kind: DeltaFinish, FinishReason: *choice.FinishReason})
 	}
-}
-
-// Close implements Stream.
-func (s *openaiStream) Close() error {
-	return s.body.Close()
+	return out
 }
