@@ -7,8 +7,9 @@
 # started here, survive agentchat restarts, and are torn down explicitly.
 #
 # Usage:
-#   servers.sh up      [name]   # build + start all servers detached (or just <name>)
-#   servers.sh up-fg   [name]   # start + tail logs in the foreground (Ctrl+C stops them)
+#   servers.sh up      [name]   # build + start detached, then tail logs (Ctrl+C leaves them up)
+#   servers.sh up-fg   [name]   # start + tail; Ctrl+C brings the servers DOWN
+#   servers.sh restart [name]   # down then up (+ tail)
 #   servers.sh down    [name]   # stop all (or just <name>)
 #   servers.sh status  [name]   # probe ports; show up/down
 #
@@ -88,23 +89,25 @@ status_one() {
 	if port_up "$port"; then echo "  [up]   $name :$port"; else echo "  [down] $name :$port"; fi
 }
 
-# up_fg starts the servers (reusing the reliable detached start + pidfiles) and
-# then tails all their logs in the FOREGROUND, so you can watch every server's
-# output live in one terminal. Ctrl+C stops the tail AND brings the servers down
-# — this window owns their lifetime, unlike the detached `up`. Run agentchat in a
-# SEPARATE terminal: its inline TUI and these interleaved logs would fight for the
-# same screen.
+# tail_logs follows the .log files of the current $names in the foreground.
+# -F follows across truncation/rotation and waits for a not-yet-created log (a
+# server still building); multiple files print a "==> name.log <==" header.
+tail_logs() {
+	local n logs=""
+	for n in $names; do logs="$logs $STATE/$n.log"; done
+	echo "==> tailing $(echo $names | wc -w | tr -d ' ') server log(s)"
+	# shellcheck disable=SC2086
+	tail -n +1 -F $logs
+}
+
+# up_fg starts the servers and tails their logs in the FOREGROUND, but Ctrl+C
+# brings the servers DOWN — this window owns their lifetime, unlike `up` (where
+# Ctrl+C only stops watching and the detached servers keep running).
 up_fg() {
 	local n
 	trap 'echo; echo "==> stopping servers (foreground window closed)"; for n in $names; do down_one "$n"; done; exit 0' INT TERM
 	for n in $names; do up_one "$n" || true; done
-	local logs=""
-	for n in $names; do logs="$logs $STATE/$n.log"; done
-	echo "==> tailing $(echo $names | wc -w | tr -d ' ') server log(s) — Ctrl+C stops them all"
-	# -F follows across truncation/rotation and waits for a not-yet-created log
-	# (a server still building); multiple files print a "==> name.log <==" header.
-	# shellcheck disable=SC2086
-	tail -n +1 -F $logs
+	tail_logs
 }
 
 cmd="${1:-status}"
@@ -112,10 +115,20 @@ target="${2:-}"
 names="$ORDER"
 [ -n "$target" ] && names="$target"
 
+# watch tails the logs after an up/restart when stdout is a terminal (Ctrl+C
+# stops watching; the detached servers keep running). Skipped for pipes/CI so a
+# non-interactive `up` stays fire-and-forget.
+watch_after_up() {
+	[ -t 1 ] || return 0
+	echo "==> servers running detached — Ctrl+C stops watching (they keep running)"
+	tail_logs
+}
+
 case "$cmd" in
-up)     for n in $names; do up_one "$n"; done ;;
-up-fg)  up_fg ;;
-down)   for n in $names; do down_one "$n"; done ;;
-status) echo "kitchen-sink MCP servers"; for n in $names; do status_one "$n"; done ;;
-*) echo "usage: servers.sh <up|up-fg|down|status> [name]" >&2; exit 2 ;;
+up)      for n in $names; do up_one "$n"; done; watch_after_up ;;
+up-fg)   up_fg ;;
+restart) for n in $names; do down_one "$n"; done; for n in $names; do up_one "$n"; done; watch_after_up ;;
+down)    for n in $names; do down_one "$n"; done ;;
+status)  echo "kitchen-sink MCP servers"; for n in $names; do status_one "$n"; done ;;
+*) echo "usage: servers.sh <up|up-fg|restart|down|status> [name]" >&2; exit 2 ;;
 esac
