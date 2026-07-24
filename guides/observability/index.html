@@ -434,6 +434,76 @@ vocabulary as the SEP-414 spans, and exemplars are wired by default so<br />
 Grafana&rsquo;s metric → trace pivot works without per-call configuration.<br />
 See <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/README.md"><code>ext/otel/README.md</code></a> § Metrics for the wiring snippet and<br />
 <a href="https://github.com/panyam/mcpkit/blob/main/server/metrics_middleware.go"><code>server/metrics_middleware.go</code></a> for the dispatch-side instrumentation.</p>
+<h3 id="agent-runner-metrics--landed-issue-1023">Agent Runner metrics — landed (issue 1023) <a class="anchor" href="#agent-runner-metrics--landed-issue-1023">¶</a></h3>
+<p>The <code>agent.Runner</code> emits through the same <code>core.MeterProvider</code> seam, the<br />
+metrics sibling of its SEP-414 spans. <code>RunnerConfig.MeterProvider</code> opts<br />
+it in; nil or <code>core.NoopMeterProvider</code> is zero overhead. Instruments are<br />
+built once in <code>NewRunner</code> (<a href="https://github.com/panyam/mcpkit/blob/main/agent/metrics.go"><code>agent/metrics.go</code></a>) and recorded at the same<br />
+points the spans are (<a href="https://github.com/panyam/mcpkit/blob/main/agent/runner.go"><code>agent/runner.go</code></a>): turn end and each tool call.</p>
+<table>
+<thead>
+<tr>
+<th>Instrument</th>
+<th>Kind</th>
+<th>Attributes</th>
+<th>Recorded</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent.turns</code></td>
+<td>counter</td>
+<td><code>agent.finish_reason</code></td>
+<td>one per completed turn</td>
+</tr>
+<tr>
+<td><code>agent.turn.duration</code></td>
+<td>histogram (<code>s</code>)</td>
+<td>—</td>
+<td>turn wall-clock</td>
+</tr>
+<tr>
+<td><code>agent.steps</code></td>
+<td>counter</td>
+<td>—</td>
+<td>model round-trips, at turn end</td>
+</tr>
+<tr>
+<td><code>agent.tokens</code></td>
+<td>counter</td>
+<td><code>direction</code> (<code>input</code>/<code>output</code>)</td>
+<td>tokens per turn</td>
+</tr>
+<tr>
+<td><code>agent.tool.calls</code></td>
+<td>counter</td>
+<td><code>tool</code>, <code>status</code></td>
+<td>one per tool call</td>
+</tr>
+<tr>
+<td><code>agent.tool.duration</code></td>
+<td>histogram (<code>s</code>)</td>
+<td><code>tool</code></td>
+<td>tool-call wall-clock</td>
+</tr>
+</tbody>
+</table>
+<p><code>status</code> is the terminal outcome: <code>ok</code>, <code>error</code>, <code>tool_error</code> (the<br />
+handler returned an error result), <code>denied</code> (approval policy), <code>cancelled</code><br />
+(per-call cancel), or <code>unavailable</code> (server down this turn). A deferred<br />
+<code>defer</code> in <code>callTool</code> records exactly one point per call regardless of<br />
+which outcome path returns, so the counter never double-counts or misses.</p>
+<p>The host threads it end to end: <code>host.WithMeterProvider</code> sets it on the<br />
+main Runner and every sub-agent persona; agentchat builds it from the<br />
+same <code>--exporter</code>/<code>--otlp-endpoint</code> decision as the tracer and logger<br />
+(<a href="https://github.com/panyam/mcpkit/blob/main/cmd/agentchat/telemetry_setup_meter.go"><code>cmd/agentchat/telemetry_setup_meter.go</code></a>, the meter sibling of<br />
+<code>SetupTelemetry</code>/<code>SetupLogs</code>). The OTLP path lands in Mimir; the<br />
+<code>mcpkit — agent</code> Grafana dashboard<br />
+(<a href="https://github.com/panyam/mcpkit/blob/main/docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json"><code>docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json</code></a>)<br />
+charts turn rate, latency, token throughput, and tool failure ratio out<br />
+of the box. Prometheus renames apply the usual OTel conventions: dots to<br />
+underscores, a <code>_total</code> suffix on counters, and the unit suffix on<br />
+histograms (<code>agent_turn_duration_seconds_bucket</code>).</p>
 <h2 id="p6--tracing-across-surfaces-auth--tasks--apps">P6 — tracing across surfaces (auth / tasks / apps) <a class="anchor" href="#p6--tracing-across-surfaces-auth--tasks--apps">¶</a></h2>
 <p>P1–P5 instrumented the <strong>dispatch spine</strong>: every JSON-RPC method gets one<br />
 inbound span plus W3C wire propagation, for free. P6 extends tracing into<br />
