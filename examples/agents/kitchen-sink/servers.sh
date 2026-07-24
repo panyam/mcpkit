@@ -7,9 +7,9 @@
 # started here, survive agentchat restarts, and are torn down explicitly.
 #
 # Usage:
-#   servers.sh up      [name]   # build + start detached, then tail logs (Ctrl+C leaves them up)
-#   servers.sh up-fg   [name]   # start + tail; Ctrl+C brings the servers DOWN
-#   servers.sh restart [name]   # down then up (+ tail)
+#   servers.sh up      [name]   # start + tail in the FOREGROUND (Ctrl+C brings them down)
+#   servers.sh up-bg   [name]   # start detached, no tail (fire-and-forget; survives restarts)
+#   servers.sh restart [name]   # down then up (foreground + tail)
 #   servers.sh down    [name]   # stop all (or just <name>)
 #   servers.sh status  [name]   # probe ports; show up/down
 #
@@ -100,14 +100,22 @@ tail_logs() {
 	tail -n +1 -F $logs
 }
 
-# up_fg starts the servers and tails their logs in the FOREGROUND, but Ctrl+C
-# brings the servers DOWN — this window owns their lifetime, unlike `up` (where
-# Ctrl+C only stops watching and the detached servers keep running).
-up_fg() {
+# start_fg is the default `up`: start the servers (reliable detached start +
+# pidfiles) and tail their logs in the FOREGROUND. Ctrl+C brings the servers
+# DOWN — this window owns their lifetime. Run agentchat in a SEPARATE terminal.
+start_fg() {
 	local n
-	trap 'echo; echo "==> stopping servers (foreground window closed)"; for n in $names; do down_one "$n"; done; exit 0' INT TERM
+	trap 'echo; echo "==> stopping servers (window closed)"; for n in $names; do down_one "$n"; done; exit 0' INT TERM
 	for n in $names; do up_one "$n" || true; done
 	tail_logs
+}
+
+# start_bg starts the servers detached and returns immediately (no tail). The
+# servers keep running after this command exits and survive agentchat restarts;
+# stop them with `down`. Use this to fire-and-forget or from a script.
+start_bg() {
+	local n
+	for n in $names; do up_one "$n"; done
 }
 
 cmd="${1:-status}"
@@ -115,20 +123,11 @@ target="${2:-}"
 names="$ORDER"
 [ -n "$target" ] && names="$target"
 
-# watch tails the logs after an up/restart when stdout is a terminal (Ctrl+C
-# stops watching; the detached servers keep running). Skipped for pipes/CI so a
-# non-interactive `up` stays fire-and-forget.
-watch_after_up() {
-	[ -t 1 ] || return 0
-	echo "==> servers running detached — Ctrl+C stops watching (they keep running)"
-	tail_logs
-}
-
 case "$cmd" in
-up)      for n in $names; do up_one "$n"; done; watch_after_up ;;
-up-fg)   up_fg ;;
-restart) for n in $names; do down_one "$n"; done; for n in $names; do up_one "$n"; done; watch_after_up ;;
+up)      start_fg ;;
+up-bg)   start_bg ;;
+restart) for n in $names; do down_one "$n"; done; start_fg ;;
 down)    for n in $names; do down_one "$n"; done ;;
 status)  echo "kitchen-sink MCP servers"; for n in $names; do status_one "$n"; done ;;
-*) echo "usage: servers.sh <up|up-fg|restart|down|status> [name]" >&2; exit 2 ;;
+*) echo "usage: servers.sh <up|up-bg|restart|down|status> [name]" >&2; exit 2 ;;
 esac
