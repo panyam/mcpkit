@@ -168,6 +168,15 @@ type MemoryConfig struct {
 	// from injecting the least-irrelevant notes when nothing truly matches).
 	// Zero means no floor.
 	RecallMinScore float64 `json:"recallMinScore,omitempty"`
+
+	// SessionScoped, when true, namespaces working memory by the active run
+	// id, so each session (RunStore run) gets its own scratchpad and recall
+	// never crosses sessions — a /sessions resume or fork carries its own
+	// memory on a durable backend. Opt-in: the default is one shared
+	// scratchpad across all sessions, which is often the point of persistent
+	// memory. A no-op without a RunStore (the run id is always "", so every
+	// turn shares the default namespace).
+	SessionScoped bool `json:"sessionScoped,omitempty"`
 }
 
 // summaryOptions maps the host config onto the agent-layer budget.
