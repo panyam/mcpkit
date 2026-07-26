@@ -57,7 +57,7 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Eval / scorer harness** | 🟡 #974,#932 | `agent/eval/` — `Case`/`Scorer`/`Suite`/`Scenario`; 8 deterministic scorers; `Judge` (build-tagged); LongMemEval *smoke* scenarios | external-benchmark adapter **⏳ #1015**; real LongMemEval loader **⏳ #1014** |
 | **Persistence (RunStore) + fork/rewind** | ✅ #960,#962,#963,#986 | `agent/runstore.go` — full interface + `InMemoryRunStore`; redis + gorm (pg/sqlite) backends; `ForkRun{AtMessage}` checkpoint fork; `ListRuns`; `Message.Timestamp` | retention/GC **⏳ #999** |
 | **Per-tool-call cancellation / interrupt** | ✅ #936,#937 | `runner.go` `TurnRequest`/`Control` channel (per-`CallID`); `EventToolCancelled` | — |
-| **Working memory** | ✅ #938 | `agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore` | durable/session-scoped backends **⏳ #1003** |
+| **Working memory** | ✅ #938,#1003,#1140 | `agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore`; durable + per-request `Namespace` backends (redis/gorm, #1003); session-scoping by run id (#1140) | sub-agent memory model (injection over shared store) **#1151** |
 | **Semantic recall (vector)** | ✅ #940,#1019 | `agent/embedder.go` (`Embedder`, `OpenAIEmbedder`), `agent/semantic_memory.go` (`InMemorySemanticStore`), gorm **pgvector** store; pre-turn recall auto-injection | standalone doc-RAG VectorStore **⏳ #1021**; reranker **⏳ #1020**; auto-distillation **⏳ #1022** |
 | **Compaction / summarization** | 🟡 #939,#1011 | `agent/compaction.go` — `SummarizingCompactor`, `TokenEstimator`/`CharTokenEstimator`, `EventCompaction`; pre-loop hook; budgeted summary injection | mid-turn compaction **⏳ #1006**; real tokenizer **⏳ #1007** |
 | **Tool-result offloading (context mgmt)** | ✅ #966,#971,#972 | `agent/offloading_source.go` + `ToolResultStore` (mem/redis/gorm); `read_tool_result` (offset/limit/grep) | streaming/handle-based very-large results **⏳ #980,#979** |
@@ -186,7 +186,7 @@ sufficient.
 - **Prompt caching + extended thinking:** #953 (Anthropic, provider-scoped) — note the documented
   cache-vs-`Selector` prefix-stability tension.
 - **Memory depth:** standalone doc-RAG `VectorStore` #1021, Scorer/Reranker seam #1020, auto-distillation
-  write-path #1022, durable/session-scoped MemoryStore #1003, faster cosine #1018.
+  write-path #1022, sub-agent memory model #1151, faster cosine #1018. (Durable/session-scoped MemoryStore #1003/#1140 shipped.)
 - **Compaction depth:** mid-turn compaction #1006, token-accurate estimator #1007.
 - **Sub-agent composition:** aggregate tree budget #1032, structured I/O + parallel fan-out #1033,
   async/task sub-agents #1035, upward signals / runner-control meta-tools #1036, dynamic agent catalog
