@@ -42,6 +42,27 @@ func (a *App) RunID() string {
 	return a.runID
 }
 
+// setRunID updates the active run id and its lock-free mirror together.
+// Caller holds turnMu (every write site does). Routing all four writers
+// (AttachRun, resumeLocked, Fork, ensureRunLocked) through here keeps
+// runIDAtomic from drifting out of sync with runID.
+func (a *App) setRunID(id string) {
+	a.runID = id
+	a.runIDAtomic.Store(id)
+}
+
+// currentRunID reads the active run id WITHOUT taking turnMu, so it is
+// safe to call from inside a turn (the memory namespace func runs while
+// RunTurn already holds turnMu — RunID would deadlock there). Returns ""
+// before any run is set, which the session-scoped namespace func maps to
+// the shared default scratchpad (the same as unscoped memory).
+func (a *App) currentRunID() string {
+	if v := a.runIDAtomic.Load(); v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
 // AttachRun binds the session to runID with create-or-resume semantics:
 // an existing run's history is loaded and threaded (resume), an absent
 // one is created empty. This is the startup path for surfaces that name
@@ -58,7 +79,7 @@ func (a *App) AttachRun(ctx context.Context, runID string) error {
 		return fmt.Errorf("host: attaching run %q: %w", runID, err)
 	}
 	if resp.Created {
-		a.runID = resp.RunID
+		a.setRunID(resp.RunID)
 		a.history = nil
 		return nil
 	}
@@ -176,7 +197,7 @@ func (a *App) resumeLocked(ctx context.Context, runID string) error {
 		return fmt.Errorf("host: run %q not found", runID)
 	}
 	a.history = resp.Run.Messages
-	a.runID = runID
+	a.setRunID(runID)
 	return nil
 }
 
@@ -210,7 +231,7 @@ func (a *App) Fork(ctx context.Context, newRunID string, atMessage int) (string,
 	if atMessage > 0 {
 		return resp.RunID, a.resumeLocked(ctx, resp.RunID)
 	}
-	a.runID = resp.RunID
+	a.setRunID(resp.RunID)
 	return resp.RunID, nil
 }
 
@@ -224,7 +245,7 @@ func (a *App) ensureRunLocked(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("host: creating run: %w", err)
 	}
-	a.runID = resp.RunID
+	a.setRunID(resp.RunID)
 	a.emit(HostEvent{Kind: HostSessionChanged, RunID: resp.RunID})
 	return nil
 }

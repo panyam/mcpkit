@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	gocurrent "github.com/panyam/gocurrent"
 	"github.com/panyam/mcpkit/agent"
@@ -47,6 +48,10 @@ type App struct {
 	// server's skills with the same instrumentation as the boot path.
 	tp core.TracerProvider
 
+	// log is the operational slog logger (WithLogger; discards by default),
+	// held for construction-time and lifecycle warnings.
+	log *slog.Logger
+
 	// Skills load in the ready-observer (late servers too), so their prompt
 	// blocks and load_skill catalog are shared mutable state read live: the
 	// dynamic system prompt (buildInstructions -> RunnerConfig.InstructionsFunc)
@@ -74,9 +79,16 @@ type App struct {
 
 	// store and runID are the persistence seam (WithRunStore): runID is
 	// the run turns append to, created lazily on the first persisted
-	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu.
+	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu; write
+	// through setRunID so runIDAtomic stays in sync.
 	store agent.RunStore
 	runID string
+
+	// runIDAtomic mirrors runID for a lock-free read (currentRunID). The
+	// session-scoped memory namespace func reads it during a turn while
+	// turnMu is already held, so it must NOT go through RunID (which takes
+	// turnMu and would deadlock). Written under turnMu via setRunID.
+	runIDAtomic atomic.Value
 
 	// sessionsMu guards sessionsCursor, the paging position the /sessions
 	// picker remembers so "/sessions more" advances (the store cursor is
@@ -277,7 +289,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
-		tp: o.tp, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
+		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
 	for _, sc := range cfg.Servers {
 		app.serverOrder = append(app.serverOrder, sc.ID)
 	}
