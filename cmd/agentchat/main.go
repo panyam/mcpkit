@@ -214,6 +214,7 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Bool("memory-inject-recall", false, "with --memory, inject notes relevant to each user message before the turn (auto-recall; best with --memory-embed-model)")
 	fl.Int("memory-recall-top-k", 0, "with --memory-inject-recall, max relevant notes to inject (0 = default 5)")
 	fl.Float64("memory-recall-min-score", 0, "with --memory-inject-recall, drop recalled notes below this relevance score (0 = no floor)")
+	fl.Bool("memory-session-scoped", false, "with --memory, give each session (--session id) its own memory scratchpad so recall never crosses sessions (needs --session-store; default = one shared scratchpad)")
 	fl.Int("compact-tokens", 0, "compact history when its estimated token count exceeds N: summarize the head, keep a recent tail (0 = off)")
 	fl.Int("compact-keep-recent", 0, "with --compact-tokens, how many trailing messages to keep verbatim (0 = default 6)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
@@ -333,6 +334,7 @@ func runChat(v *viper.Viper) error {
 			InjectRecall:    v.GetBool("memory-inject-recall"),
 			RecallTopK:      v.GetInt("memory-recall-top-k"),
 			RecallMinScore:  v.GetFloat64("memory-recall-min-score"),
+			SessionScoped:   v.GetBool("memory-session-scoped"),
 		}
 		// A semantic store makes recall similarity-ranked instead of
 		// substring. The embedder is resolved from the --memory-embed-model
