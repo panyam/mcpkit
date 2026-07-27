@@ -55,20 +55,25 @@ if [ -n "$down" ]; then
 	exit 1
 fi
 
-echo "==> launching agentchat (session=$SESSION, store=$SESSION_STORE)"
+# CONFIG selects the agent topology: the default single-agent kitchen-sink, or
+# kitchen-sink-team.json (handoff Team). MEMORY=0 drops the memory flags — team
+# mode is mutually exclusive with working memory.
+CONFIG="${CONFIG:-$DIR/kitchen-sink.json}"
+MEMORY="${MEMORY:-1}"
+echo "==> launching agentchat (config=$(basename "$CONFIG"), session=$SESSION, store=$SESSION_STORE)"
 cd "$ROOT/cmd/agentchat"
 args=(
-	--config "$DIR/kitchen-sink.json"
+	--config "$CONFIG"
 	--persist-config
 	--session-store "$SESSION_STORE"
 	--session "$SESSION"
 	--offload-threshold "$OFFLOAD_THRESHOLD"
-	--memory --memory-inject-recall
 	--compact-tokens "$COMPACT_TOKENS"
 	--exporter "$EXPORTER"
 	--otlp-endpoint "$OTLP_ENDPOINT"
 	--ui "$UI"
 )
+[ "$MEMORY" = "1" ] && args+=(--memory --memory-inject-recall)
 [ -n "$ACTIVE" ] && args+=(--active "$ACTIVE")
 # Only override the config's embedder role when EMBED_MODEL is set.
 if [ -n "$EMBED_MODEL" ]; then

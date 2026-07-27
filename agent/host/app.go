@@ -23,8 +23,16 @@ import (
 // parsing and signal handling. Construct with NewApp, converse with RunTurn
 // (one input, one rendered turn) or REPL (interactive loop).
 type App struct {
-	cfg       *Config
-	runner    *agent.Runner
+	cfg    *Config
+	runner *agent.Runner
+
+	// team drives the conversation as a handoff Team (Config.Team) instead of
+	// the single runner. activeTeamAgent is the persisted active member, so
+	// control stays where it was transferred across user turns. Both zero in
+	// single-agent mode. Guarded by turnMu.
+	team            *agent.Team
+	activeTeamAgent string
+
 	sources   *agent.MultiSource
 	clients   []*client.Client
 	history   []agent.Message
@@ -257,6 +265,9 @@ func errString(err error) string {
 // NewApp connects every configured server and assembles the agent. The
 // returned App owns the client connections; call Close when done.
 func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, error) {
+	if err := validateTeamExclusive(cfg); err != nil {
+		return nil, err
+	}
 	var o appOptions
 	for _, opt := range opts {
 		opt(&o)
@@ -307,7 +318,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// sub-agents — so a sub-agent or fan-out persona gets a filtered view of the
 	// servers without seeing the meta-tools or the other personas (which would
 	// let it recurse). Built only when personas are configured.
-	if len(cfg.SubAgents) > 0 || len(cfg.FanOut) > 0 {
+	if len(cfg.SubAgents) > 0 || len(cfg.FanOut) > 0 || cfg.Team != nil {
 		app.serverTools = agent.NewMultiSource()
 	}
 
@@ -474,6 +485,18 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			app.Close()
 			return nil, err
 		}
+	}
+
+	// Team mode: a handoff Team drives RunTurn instead of the single runner.
+	// Validated mutually exclusive with the single-agent features above.
+	if cfg.Team != nil {
+		team, err := app.buildTeam(app.serverTools, provider, o.tp, o.mp)
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		app.team = team
+		app.activeTeamAgent = team.StartAgent()
 	}
 
 	// Offloading wraps the whole aggregate, so one read_tool_result and
@@ -644,9 +667,23 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	}
 
 	// The memory summary is woven into the per-turn slice only, never into
-	// a.history — see withMemorySummaryLocked.
+	// a.history — see withMemorySummaryLocked (a no-op in team mode, which has
+	// no memory).
 	turnMsgs := a.withMemorySummaryLocked(ctx)
-	result, err := a.runner.Run(ctx, turnMsgs, emit)
+	var result *agent.TurnResult
+	var err error
+	if a.team != nil {
+		// Team mode: the active member (persisted across turns) drives the turn,
+		// looping handoffs internally; result.Messages spans every hop. Persist
+		// the ending active agent so control stays transferred next turn.
+		var active string
+		result, active, err = a.team.RunTurn(ctx, turnMsgs, a.activeTeamAgent, emit)
+		if err == nil {
+			a.activeTeamAgent = active
+		}
+	} else {
+		result, err = a.runner.Run(ctx, turnMsgs, emit)
+	}
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
 		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
