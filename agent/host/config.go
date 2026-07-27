@@ -81,6 +81,12 @@ type Config struct {
 	// view of the SAME server tools, with its own instructions — a persona,
 	// not a separately-configured agent. Empty means no sub-agents.
 	SubAgents []SubAgentConfig `json:"subAgents,omitempty"`
+
+	// FanOut declares parallel-ensemble tools: each group is a single tool the
+	// main agent calls once to broadcast a task to all its member personas
+	// concurrently, receiving one aggregated result (agent.FanOutSource).
+	// Empty means no fan-out tools.
+	FanOut []FanOutGroupConfig `json:"fanOut,omitempty"`
 }
 
 // SubAgentConfig is one delegatable persona. The host builds it into an
@@ -104,6 +110,22 @@ type SubAgentConfig struct {
 	// MaxDepth caps sub-agent nesting for this persona. Zero uses the agent
 	// default.
 	MaxDepth int `json:"maxDepth,omitempty"`
+}
+
+// FanOutGroupConfig declares one parallel-ensemble tool: the main agent calls
+// Name once and the task is broadcast to every Member persona concurrently, the
+// results aggregated in member order (agent.FanOutSource). Members are built
+// exactly like SubAgents (shared provider, serverTools-only, own instructions)
+// but are not also exposed as individual delegate tools — the group is one tool.
+type FanOutGroupConfig struct {
+	// Name is the tool the main agent calls to fan out. Required.
+	Name string `json:"name"`
+
+	// Description tells the main agent when to fan out to this group.
+	Description string `json:"description,omitempty"`
+
+	// Members are the personas the task is broadcast to. At least one required.
+	Members []SubAgentConfig `json:"members,omitempty"`
 }
 
 // CompactionConfig is the host's view of history compaction; it maps to an
