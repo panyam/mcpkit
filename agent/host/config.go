@@ -116,6 +116,17 @@ type SubAgentConfig struct {
 	// MaxDepth caps sub-agent nesting for this persona. Zero uses the agent
 	// default.
 	MaxDepth int `json:"maxDepth,omitempty"`
+
+	// InputSchema, when set, gives the persona a TYPED input tool instead of the
+	// default {task} — the parent must pass arguments matching this JSON schema,
+	// and the persona is seeded with them (structured input, 1033). Empty keeps
+	// {task: string}.
+	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+
+	// ResponseSchema, when set, makes the persona return a JSON value coerced to
+	// this schema instead of free text (structured output, 1033) — the parent
+	// gets typed output back. Empty returns text.
+	ResponseSchema json.RawMessage `json:"responseSchema,omitempty"`
 }
 
 // FanOutGroupConfig declares one parallel-ensemble tool: the main agent calls

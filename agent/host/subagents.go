@@ -51,6 +51,7 @@ func (a *App) buildPersonaSource(sub SubAgentConfig, serverTools *agent.MultiSou
 		Description: sub.Description,
 		Runner:      child,
 		MaxDepth:    sub.MaxDepth,
+		InputSchema: sub.InputSchema,
 		OnEvent:     func(e agent.SubAgentEvent) { a.emit(HostEvent{Kind: HostSubAgentEvent, SubAgent: e}) },
 	})
 }
@@ -77,6 +78,7 @@ func (a *App) personaRunnerConfig(sub SubAgentConfig, serverTools *agent.MultiSo
 		MaxSteps:       a.cfg.MaxSteps,
 		TracerProvider: tp,
 		MeterProvider:  mp,
+		ResponseSchema: core.NewRawJSON(sub.ResponseSchema),
 	}
 }
 

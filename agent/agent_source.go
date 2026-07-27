@@ -57,6 +57,14 @@ type AgentSourceConfig struct {
 	// every AgentSource in a tree to the same sink and the scope/depth
 	// disambiguate nested runs.
 	OnEvent func(SubAgentEvent)
+
+	// InputSchema, when set, replaces the default {task} schema the tool
+	// advertises, so a parent delegates a TYPED subtask. The child is seeded
+	// with the raw arguments JSON as its user turn (the schema shapes what the
+	// parent model must pass; the child reads it as its instruction). Nil keeps
+	// the {task: string} shape. Structured OUTPUT is orthogonal: build the child
+	// Runner with a ResponseSchema and Call returns its coerced JSON.
+	InputSchema json.RawMessage
 }
 
 // SubAgentEvent is the envelope that carries a sub-agent's event to the
@@ -89,8 +97,12 @@ func NewAgentSource(cfg AgentSourceConfig) (*AgentSource, error) {
 	if cfg.Runner == nil {
 		return nil, fmt.Errorf("agent: AgentSource %q requires a Runner", cfg.Name)
 	}
+	schemaJSON := cfg.InputSchema
+	if schemaJSON == nil {
+		schemaJSON = core.GenerateSchema[agentTaskArgs]()
+	}
 	var schema any
-	if err := json.Unmarshal(core.GenerateSchema[agentTaskArgs](), &schema); err != nil {
+	if err := json.Unmarshal(schemaJSON, &schema); err != nil {
 		return nil, fmt.Errorf("agent: schema for AgentSource %q: %w", cfg.Name, err)
 	}
 	maxDepth := cfg.MaxDepth
@@ -134,9 +146,15 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 	if err != nil {
 		return nil, fmt.Errorf("agent: encode args for sub-agent %q: %w", s.cfg.Name, err)
 	}
-	var in agentTaskArgs
-	if err := json.Unmarshal(raw, &in); err != nil || strings.TrimSpace(in.Task) == "" {
-		return errorToolResult(fmt.Sprintf("sub-agent %q requires a non-empty 'task'", s.cfg.Name)), nil
+	// seed is the child's user turn: the raw typed arguments when InputSchema is
+	// set (a typed subtask), else the required {task} string.
+	seed := string(raw)
+	if s.cfg.InputSchema == nil {
+		var in agentTaskArgs
+		if err := json.Unmarshal(raw, &in); err != nil || strings.TrimSpace(in.Task) == "" {
+			return errorToolResult(fmt.Sprintf("sub-agent %q requires a non-empty 'task'", s.cfg.Name)), nil
+		}
+		seed = in.Task
 	}
 
 	// Extend both ctx threads for the child: depth (guards) and scope (the
@@ -152,11 +170,17 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 		childDepth := depth + 1
 		emit = func(e Event) { s.cfg.OnEvent(SubAgentEvent{Scope: childScope, Depth: childDepth, Event: e}) }
 	}
-	result, err := s.cfg.Runner.Run(childCtx, []Message{{Role: RoleUser, Text: in.Task}}, emit)
+	result, err := s.cfg.Runner.Run(childCtx, []Message{{Role: RoleUser, Text: seed}}, emit)
 	if err != nil {
 		return errorToolResult(fmt.Sprintf("sub-agent %q failed: %v", s.cfg.Name, err)), nil
 	}
-	return &core.ToolResult{Content: []core.Content{{Type: "text", Text: result.Text}}}, nil
+	// Structured output when the child ran with a ResponseSchema (its coerced
+	// JSON), else the final text — so a parent gets typed output back.
+	out := result.Text
+	if result.Structured.Len() > 0 {
+		out = string(result.Structured.Raw())
+	}
+	return &core.ToolResult{Content: []core.Content{{Type: "text", Text: out}}}, nil
 }
 
 type agentDepthKey struct{}
