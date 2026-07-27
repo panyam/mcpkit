@@ -171,6 +171,51 @@ the composition primitives all wrap the Runner, and the *one* place we let a
 turn become re-entrant (the signal-driven interruptible turn) is explicit and
 opt-in.
 
+## Sub-agents and memory
+
+The injection-only boundary has a direct consequence: **a sub-agent gets no
+ambient parent state — no working memory, no shared store handle.** It receives
+exactly what crosses the boundary explicitly (task arguments + injected
+context) and returns exactly its answer.
+
+This is not a cleanliness preference; it falls out of the two axes. A
+sub-agent's location is not guaranteed. The in-process `AgentSource` is the
+*degenerate co-located case*; the general case is a child on another host,
+provider, or model. Shared parent memory assumes co-location, and A2
+wire-serializability already forbids non-serializable state (a pointer to the
+parent's store) from crossing the parent-to-child edge. So "what the child
+needs to know" is the orchestrator's job to distill and pass — the same
+"choose what crosses into the next context under a budget" problem
+`docs/AGENT_MEMORY_FLOW.md` frames for turn-to-turn memory, one level up.
+
+Consequences:
+
+- **A child that needs memory owns it entirely** — its store, persistence, and
+  namespace scheme configured on its own Runner, opaque to the parent. This is
+  the same encapsulation as a stateful MCP tool owning its own database: the
+  caller neither provisions nor knows it. A code-cleanup sub-agent that
+  remembers its past runs sets that up itself.
+- **The trap:** wiring a child with `WithMemoryNamespaceFunc(a.currentRunID)`
+  silently drops it into the *parent's* namespace — explicitly not the model. A
+  child's memory is never addressed by the parent's run id.
+- **Hierarchy** (a parent recalling across its children's memory) is deferred
+  behind a prefix/hierarchical namespace query the `MemoryStore` seam does not
+  have (exact-match today), and even then it is a query over serializable
+  results, not shared mutable access.
+- **`AgentSource` stays; colocation is contained, not removed.** It is the
+  in-process implementation of the location-independent `ToolSource` contract —
+  the zero-serialization fast path. A remote sub-agent is a *sibling*
+  implementation of the same seam (largely "a sub-agent published as an MCP
+  server, reached through the existing server-tools `ToolSource`"); what it adds
+  is carrying the composition metadata ctx threads for free in-process
+  (depth/budget, cancellation, the nested event stream) over the wire — the
+  surface of async sub-agents (1035), upward signals (1036), and dynamic
+  composition (1038). Enforcing the no-shared-memory rule now, while everything
+  is co-located, is what keeps the local and remote implementations
+  interchangeable from the parent's side.
+
+Decision captured in issue 1151; enforced by constraint A7.
+
 ## Constraints this model respects
 
 - **A6** (model-facing → `agent/`): `AgentSource`, `Team`, and the future
@@ -179,6 +224,9 @@ opt-in.
   envelope (scope/depth on the wrapper); `Event` stays flat.
 - **A1** (dependency direction): composition is pure `agent/` over `Runner` +
   `ToolSource`; no new upward deps.
+- **A7** (no shared sub-agent memory): a persona is built over the server-only
+  `serverTools`, never the memory-bearing aggregate; parent-to-child is params
+  + injection. See § Sub-agents and memory above.
 
 ## Status & sequencing
 
