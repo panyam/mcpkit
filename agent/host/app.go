@@ -57,7 +57,7 @@ type App struct {
 	// dynamic system prompt (buildInstructions -> RunnerConfig.InstructionsFunc)
 	// and the load_skill tool. serverOrder keeps assembly deterministic.
 	skillsMu     sync.Mutex
-	skillBlocks  map[string]string        // serverID -> system-prompt block (eager bodies or catalog listing)
+	skillBlocks  map[string]string         // serverID -> system-prompt block (eager bodies or catalog listing)
 	skillCatalog map[string][]catalogSkill // serverID -> catalog entries for load_skill
 	serverOrder  []string
 	loadSkillReg bool // load_skill registered once, lazily, on the first catalog skill
@@ -73,7 +73,7 @@ type App struct {
 	subs      map[string]*subscription
 	metaTools bool
 	turnMu    sync.Mutex
-	emitMu    sync.Mutex // serializes emit so concurrent server-connect events don't race the renderer
+	emitMu    sync.Mutex      // serializes emit so concurrent server-connect events don't race the renderer
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
@@ -304,10 +304,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	app.approval = cfg.Approval.buildApproval(ask)
 
 	// serverTools mirrors the server sources only — no meta-tools, no
-	// sub-agents — so a sub-agent persona gets a filtered view of the servers
-	// without seeing the meta-tools or the other personas (which would let it
-	// recurse). Built only when sub-agents are configured.
-	if len(cfg.SubAgents) > 0 {
+	// sub-agents — so a sub-agent or fan-out persona gets a filtered view of the
+	// servers without seeing the meta-tools or the other personas (which would
+	// let it recurse). Built only when personas are configured.
+	if len(cfg.SubAgents) > 0 || len(cfg.FanOut) > 0 {
 		app.serverTools = agent.NewMultiSource()
 	}
 
@@ -461,6 +461,16 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// meta-tools or its sibling personas.
 	if len(cfg.SubAgents) > 0 {
 		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
+	// Fan-out groups: one tool per group that broadcasts a task to its member
+	// personas concurrently (agent.FanOutSource). Members are built like
+	// sub-agents (serverTools-only), so the same memory-free rule holds.
+	if len(cfg.FanOut) > 0 {
+		if err := app.registerFanOut(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}

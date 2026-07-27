@@ -1,5 +1,5 @@
 {
-  "instructions": "You are a capable assistant with access to MCP tools and two specialist sub-agents (researcher, analyst). Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and keep answers concise.",
+  "instructions": "You are a capable assistant with access to MCP tools, two specialist sub-agents (researcher, analyst), and a review_team fan-out tool. Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and when asked for a review or multiple perspectives on a plan call review_team (it runs three reviewers in parallel and returns their combined take). Keep answers concise.",
   "connections": {
     "active": "deepseek-r1",
     "embedder": "openai-embed",
@@ -52,6 +52,29 @@
       "description": "Computes summary statistics for a list of numbers using the analyze tool.",
       "instructions": "You are a data analyst. Call the analyze tool on the numbers you are given and explain the result in one sentence.",
       "allow": ["analyze"]
+    }
+  ],
+  "fanOut": [
+    {
+      "name": "review_team",
+      "description": "Get every reviewer's take on a plan or proposal at once — security, performance, and cost reviewers run in parallel and their assessments are returned together.",
+      "members": [
+        {
+          "name": "security_reviewer",
+          "description": "reviews for security risk",
+          "instructions": "You are a security reviewer. Give a brief, pointed security assessment of what you are handed. Two or three sentences."
+        },
+        {
+          "name": "performance_reviewer",
+          "description": "reviews for performance and scalability",
+          "instructions": "You are a performance reviewer. Give a brief assessment of performance and scalability concerns. Two or three sentences."
+        },
+        {
+          "name": "cost_reviewer",
+          "description": "reviews for cost and resource efficiency",
+          "instructions": "You are a cost reviewer. Give a brief assessment of cost and resource-efficiency concerns. Two or three sentences."
+        }
+      ]
     }
   ]
 }

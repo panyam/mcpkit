@@ -133,37 +133,43 @@ Gemini). You can also swap chat models mid-session with `/provider`.
 2. **Sub-agents.** Ask: *"Have the analyst summarize these numbers: 3, 7, 7, 19, 2."*
    The main agent delegates to the `analyst` persona (its own child Runner that
    only sees the `analyze` tool), which returns the stats.
-3. **Semantic memory + durability.** Tell it: *"Remember that our prod region is
+3. **Parallel fan-out.** Ask: *"Have the review team look at this plan: migrate
+   the session store to Redis with a 24h TTL."* The model calls `review_team`
+   **once**, which broadcasts the task to three reviewer sub-agents (security,
+   performance, cost) that run **concurrently** — in `--ui notebook` you see
+   their events interleave under one fan-out call in the sub-agent tree — and
+   returns their assessments combined in one result.
+4. **Semantic memory + durability.** Tell it: *"Remember that our prod region is
    us-east-1."* It calls `remember`, which embeds and upserts a pgvector row.
    **Quit and `just run` again** (same `$SESSION`). Ask: *"Where do we run
    prod?"* `--memory-inject-recall` embeds your question, does ANN top-k against
    pgvector, and injects the note — it survived the restart.
-4. **Approval.** Type `/approval ask` to require confirmation before tool calls,
+5. **Approval.** Type `/approval ask` to require confirmation before tool calls,
    then trigger a tool and approve/deny it.
-5. **Traces.** With the observability stack up, open Grafana at
+6. **Traces.** With the observability stack up, open Grafana at
    http://localhost:3000 and find the trace for a turn (service `agentchat`).
-6. **Reasoning display.** `/provider local-thinker` switches to a local reasoning
+7. **Reasoning display.** `/provider local-thinker` switches to a local reasoning
    model (deepseek-r1 via LM Studio on :1234). Its inline `<think>…</think>` is
    re-tagged as reasoning by the connection's `thinkingHint` and streamed dimmed
    under a `· thinking:` line. Cloud OpenAI/Gemini models don't emit inline
    reasoning, so this only shows with a reasoning model + a `thinkingHint`.
-7. **Eager skills.** The `runbooks` server's skill is spliced into the system
+8. **Eager skills.** The `runbooks` server's skill is spliced into the system
    prompt at connect. Ask it to do what that skill covers (the skills-core
    `commit-helper` skill formats commit messages): *"Format a commit for a bug
    fix in the auth module."* The model follows the skill's guidance with no tool
    round-trip — the body was already in context.
-8. **Catalog skills.** The `community` server is catalog mode, so only skill
+9. **Catalog skills.** The `community` server is catalog mode, so only skill
    names + descriptions are in the prompt. Ask about one of its skills (*"Use the
    git-workflow skill to help me rebase."*). The model first calls `load_skill`
    to fetch that body (a tool call you'll see in the transcript), then acts on
    it. Turn on `/approval ask` first and you'll be prompted before the skill
    loads — catalog skills ride the tool-approval ladder.
-9. **Event injection.** The `events` server emits synthetic `chat.message` and
+10. **Event injection.** The `events` server emits synthetic `chat.message` and
    `alert.fired` every few seconds; the host subscribes at startup and injects
    them ahead of your next turn. After a short pause, ask: *"Anything happen
    while I was away?"* — the injected occurrences are in context, so the model
    can summarize them.
-10. **Config persistence.** `run.sh` passes `--persist-config`. Switch models
+11. **Config persistence.** `run.sh` passes `--persist-config`. Switch models
     with `/provider openai-5.1` (or set an approval mode with `/approve ask`) and
     those picks are written to `kitchen-sink.local.json` (gitignored). Quit and
     `just run` again: it comes back on your last-picked provider, not the
