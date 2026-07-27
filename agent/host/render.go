@@ -385,6 +385,8 @@ func (r *renderer) On(ev HostEvent) {
 		r.serverState(ev.ServerID, ev.ServerState, ev.Err)
 	case HostSubAgentEvent:
 		r.subAgent(ev.SubAgent)
+	case HostHandoff:
+		fmt.Fprintf(r.out, "%s\n", r.dim("→ handed off to "+ev.To))
 	}
 }
 
