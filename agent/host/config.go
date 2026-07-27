@@ -87,6 +87,12 @@ type Config struct {
 	// concurrently, receiving one aggregated result (agent.FanOutSource).
 	// Empty means no fan-out tools.
 	FanOut []FanOutGroupConfig `json:"fanOut,omitempty"`
+
+	// Team, when set, drives the conversation as a handoff Team (agent.Team)
+	// instead of the single main agent — control transfers between members and
+	// persists across user turns. Mutually exclusive with SubAgents, FanOut, and
+	// Memory (NewApp errors if combined). Nil means single-agent mode.
+	Team *HostTeamConfig `json:"team,omitempty"`
 }
 
 // SubAgentConfig is one delegatable persona. The host builds it into an
@@ -126,6 +132,36 @@ type FanOutGroupConfig struct {
 
 	// Members are the personas the task is broadcast to. At least one required.
 	Members []SubAgentConfig `json:"members,omitempty"`
+}
+
+// HostTeamConfig declares a handoff Team that drives the whole conversation
+// instead of the single main agent (agent.Team). Control transfers between
+// members and stays where it was transferred across user turns. Setting Team
+// replaces the single-agent loop, so it may NOT be combined with SubAgents,
+// FanOut, or Memory on the main agent (NewApp errors); team members are
+// serverTools-only personas.
+type HostTeamConfig struct {
+	// Members are the agents. At least one; Start must name one.
+	Members []TeamMemberConfig `json:"members,omitempty"`
+
+	// Start is the agent that receives a conversation's first turn. Required.
+	Start string `json:"start"`
+
+	// MaxHandoffs caps transfers within one user turn. Zero uses the agent
+	// default.
+	MaxHandoffs int `json:"maxHandoffs,omitempty"`
+}
+
+// TeamMemberConfig is one Team agent: a persona (SubAgentConfig — shared
+// provider, serverTools filtered by Allow, own instructions) plus the members
+// it may hand off to.
+type TeamMemberConfig struct {
+	SubAgentConfig
+
+	// HandoffTo lists the member names this agent may transfer control to. Each
+	// becomes a transfer_to_<name> tool offered only to this agent. Empty means
+	// a terminal agent that must answer rather than transfer.
+	HandoffTo []string `json:"handoffTo,omitempty"`
 }
 
 // CompactionConfig is the host's view of history compaction; it maps to an

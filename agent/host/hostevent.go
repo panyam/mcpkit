@@ -55,6 +55,10 @@ const (
 	// (ServerID, ServerState; Err on failed/needs-login) — the async
 	// graceful-degrade surface (see docs/AGENT_SERVER_STATE.md).
 	HostServerStateChanged HostEventKind = "server-state-changed"
+	// HostHandoff reports a Team transferring control from one agent to another
+	// (From, To) — Config.Team only. The active agent changes, so a surface
+	// renders "→ handed off to <To>" and can update which agent is answering.
+	HostHandoff HostEventKind = "handoff"
 )
 
 // HostEvent is one domain event the host announces: a thing that
@@ -99,6 +103,11 @@ type HostEvent struct {
 
 	// SubAgent is the nested sub-agent event on HostSubAgentEvent.
 	SubAgent agent.SubAgentEvent
+
+	// From and To name the agents on HostHandoff (the transfer source and the
+	// new active agent).
+	From string
+	To   string
 }
 
 // Observer receives the host's HostEvent stream and does whatever it

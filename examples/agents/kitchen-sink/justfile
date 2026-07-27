@@ -65,6 +65,12 @@ demo: run
 note:
     @UI=notebook bash run.sh
 
+# Handoff-Team topology (kitchen-sink-team.json): a triage router transfers you
+# to a billing or technical specialist; the active agent persists across turns.
+# Notebook UI so the handoff and the active agent are easy to see.
+team:
+    @CONFIG="{{justfile_directory()}}/kitchen-sink-team.json" MEMORY=0 UI=notebook bash run.sh
+
 # Bring up ALL stacks kitchen-sink can use (backends + observability).
 allup:
     cd ../../../docker/backends && just up
