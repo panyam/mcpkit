@@ -28,6 +28,15 @@ func (a *App) buildTeam(serverTools *agent.MultiSource, provider agent.Provider,
 		Start:       tc.Start,
 		MaxHandoffs: tc.MaxHandoffs,
 		OnHandoff:   func(from, to string) { a.emit(HostEvent{Kind: HostHandoff, From: from, To: to}) },
+		// Each member's events render attributed by agent name (HostSubAgentEvent)
+		// and are buffered for persistence via the per-turn sink, so the event log
+		// is unchanged while the surface can tell which agent is speaking.
+		OnEvent: func(e agent.SubAgentEvent) {
+			if a.teamEventSink != nil {
+				a.teamEventSink(e.Event)
+			}
+			a.emit(HostEvent{Kind: HostSubAgentEvent, SubAgent: e})
+		},
 	})
 }
 

@@ -63,6 +63,15 @@ func TestAppTeamDrivesRunTurnWithHandoff(t *testing.T) {
 	if len(handoffs) != 1 || handoffs[0].From != "triage" || handoffs[0].To != "specialist" {
 		t.Fatalf("expected one triage->specialist HostHandoff, got %+v", handoffs)
 	}
+	// team member events surface attributed by agent name (1033 tagging), not as
+	// untagged HostRunnerEvent.
+	scopes := map[string]bool{}
+	for _, e := range obs.kinds(HostSubAgentEvent) {
+		scopes[e.SubAgent.Scope] = true
+	}
+	if !scopes["triage"] || !scopes["specialist"] {
+		t.Fatalf("team events not attributed to both agents, saw %v", scopes)
+	}
 
 	// turn 2: starts from the persisted specialist — the triage provider turns
 	// are already consumed, so if turn 2 restarted at triage it would misroute.

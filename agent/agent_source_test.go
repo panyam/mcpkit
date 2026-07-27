@@ -202,3 +202,59 @@ func TestAgentSource_MissingTaskAndValidation(t *testing.T) {
 		t.Fatal("missing Name should error")
 	}
 }
+
+// TestAgentSource_TypedInput covers structured input (1033): with an InputSchema
+// set, the tool advertises that schema and the child is seeded with the raw
+// typed arguments JSON as its user turn, not the {task} string.
+func TestAgentSource_TypedInput(t *testing.T) {
+	ctx := context.Background()
+	childStub := NewStubProvider(StubTurn{Text: "done"})
+	child, _ := NewRunner(RunnerConfig{Provider: childStub})
+	schema := json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"},"depth":{"type":"integer"}},"required":["topic"]}`)
+	as, err := NewAgentSource(AgentSourceConfig{
+		Name: "researcher", Description: "typed research", Runner: child, InputSchema: schema,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// the tool advertises the caller-provided schema, not {task}
+	defs, _ := as.Tools(ctx)
+	sj, _ := json.Marshal(defs[0].InputSchema)
+	if !strings.Contains(string(sj), "topic") || strings.Contains(string(sj), "task") {
+		t.Fatalf("tool schema should be the typed input, got %s", sj)
+	}
+
+	if _, err := as.Call(ctx, "researcher", map[string]any{"topic": "caching", "depth": 3}); err != nil {
+		t.Fatal(err)
+	}
+	// the child's user turn is the raw typed args (a typed subtask), not a plucked task string
+	seed := childStub.Requests()[0].Messages[0].Text
+	if !strings.Contains(seed, "caching") || !strings.Contains(seed, "depth") {
+		t.Fatalf("child seed should carry the typed args, got %q", seed)
+	}
+}
+
+// TestAgentSource_StructuredOutput covers structured output (1033): a child whose
+// Runner has a ResponseSchema returns its coerced JSON from Call, not the text.
+func TestAgentSource_StructuredOutput(t *testing.T) {
+	ctx := context.Background()
+	schema := core.NewRawJSON(json.RawMessage(`{"type":"object","properties":{"score":{"type":"integer"}},"required":["score"]}`))
+	childStub := NewStubProvider(
+		StubTurn{Text: "the score is 7"}, // terminal text
+		StubTurn{Text: `{"score":7}`},    // finalizing coercion
+	)
+	child, err := NewRunner(RunnerConfig{Provider: childStub, ResponseSchema: schema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	as, _ := NewAgentSource(AgentSourceConfig{Name: "scorer", Description: "scores", Runner: child})
+
+	res, err := as.Call(ctx, "scorer", map[string]any{"task": "score this"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Content[0].Text; got != `{"score":7}` {
+		t.Fatalf("structured output should be the coerced JSON, got %q", got)
+	}
+}
