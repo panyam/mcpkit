@@ -231,16 +231,22 @@ Decision captured in issue 1151; enforced by constraint A7.
 ## Status & sequencing
 
 **Built (Phase 3):** `AgentSource` (941, agent-as-tool + depth/budget guards),
-`SubAgentEvent` nesting (942), `Team` handoff (943), and the
-`examples/agents/multi-agent` walkthrough (1031, part 1).
+`SubAgentEvent` nesting (942), `Team` handoff (943), the
+`examples/agents/multi-agent` walkthrough (1031, part 1), and **`FanOutSource`**
+(1033 — one tool broadcasts a task to N member sub-agents concurrently and
+returns their results aggregated in member order; the parallel-ensemble
+primitive, reusing `AgentSource` for per-member depth/budget/scope, host-wired
+as `Config.FanOut` and demoed in `examples/agents/kitchen-sink`).
 
 **Deferred, mapped to the axes:**
 
 - Context: handoff-via-injection + per-agent persistent context (the actor
   form above) — a generalization of `Team`.
 - Control: async sub-agents (1035), upward signals + runner-control meta-tools
-  + interruptible turn (1036), parallel fan-out ergonomics (1033),
-  aggregate step/token tree budget (1032).
+  + interruptible turn (1036), aggregate step/token tree budget (1032). The
+  remaining 1033 bits — structured sub-agent I/O (typed input + `ResponseSchema`
+  output) and map-style fan-out (distribute a list of distinct subtasks) — also
+  sit here; `FanOutSource` today broadcasts one task to all members.
 - Surface: declarative `agent/host` + agentchat multi-agent config and nested
   rendering (1031, part 2).
 
