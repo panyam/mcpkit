@@ -178,6 +178,28 @@ Gemini). You can also swap chat models mid-session with `/provider`.
     flag still wins (`ACTIVE=anthropic-opus just run` overrides the overlay for
     that run).
 
+## Handoff team (a second topology)
+
+The walkthrough above runs **one** main agent with sub-agents, fan-out, and
+memory attached to it. **Handoff** is the other multi-agent shape: control
+*transfers* between agents instead of one agent delegating. Because a team
+replaces the single main agent, it is a separate config (`kitchen-sink-team.json`)
+and its own recipe:
+
+```bash
+just team       # triage router -> billing / technical specialists (notebook UI)
+```
+
+Ask a billing question (*"I was double charged, can I get a refund?"*). The
+**triage** agent transfers you to **billing** — you'll see the `→ handed off to
+billing` line — and billing answers. Now ask a technical follow-up (*"also, the
+export button throws a 500"*); billing transfers you to **technical**. The
+**active agent persists across turns**: your next message goes straight to
+whoever holds the conversation, not back through triage. `MaxHandoffs` bounds
+ping-pong. (Team mode is mutually exclusive with the main agent's memory /
+sub-agents / fan-out — those attach to a single agent; agentchat errors if you
+combine them.)
+
 ## Inspecting state
 
 ```bash

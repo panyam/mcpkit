@@ -161,47 +161,76 @@ func buildTransferSource(from string, targets []string, members map[string]bool)
 	return fs, nil
 }
 
-// Run drives the conversation: the Start agent runs over the input, and each
-// time an agent transfers, the Team swaps the active agent and continues over
-// the carried-forward history until an agent answers without transferring (the
-// final result) or the handoff cap is hit (ErrMaxHandoffs). All agents share
-// one history (handoff transfers context); each brings its own instructions.
-// emit receives every agent's events; OnHandoff marks the transitions.
+// StartAgent is the member that receives the first turn — the seam a host uses
+// to initialize its persisted active agent before the first RunTurn.
+func (t *Team) StartAgent() string { return t.start }
+
+// Run drives a single-shot conversation from the Start agent over one input,
+// looping handoffs until an agent answers without transferring (the final
+// result) or the cap is hit (ErrMaxHandoffs). It is the convenience wrapper over
+// RunTurn for callers that do not thread history or persist the active agent.
 func (t *Team) Run(ctx context.Context, input string, emit func(Event)) (*TurnResult, error) {
+	result, _, err := t.RunTurn(ctx, []Message{{Role: RoleUser, Text: input}}, "", emit)
+	return result, err
+}
+
+// RunTurn drives one user turn over the carried history: the active agent (or
+// Start when active is "") runs, and each transfer swaps the active agent and
+// continues over the SAME history, until an agent answers without transferring
+// or the handoff cap is hit (ErrMaxHandoffs). All agents share the history
+// (handoff transfers context); each brings its own instructions.
+//
+// It returns the final result whose Messages hold EVERY message appended across
+// all hops this turn (so a caller threads them into its own history as one
+// turn), plus the agent active at the end. Persist that name and pass it back
+// as active next turn so control stays where it was transferred, rather than
+// re-starting from Start — the transfer-control (not re-route) semantic.
+//
+// emit receives every agent's events; OnHandoff marks the transitions. An
+// unknown active name is treated as Start (the caller's persisted value can lag
+// a config change without erroring).
+func (t *Team) RunTurn(ctx context.Context, history []Message, active string, emit func(Event)) (*TurnResult, string, error) {
 	if emit == nil {
 		emit = func(Event) {}
 	}
 	sig := &handoffSignal{}
 	ctx = withHandoffSignal(ctx, sig)
 
-	history := []Message{{Role: RoleUser, Text: input}}
-	active := t.members[t.start]
+	current, ok := t.members[active]
+	if !ok {
+		current = t.members[t.start]
+	}
+	work := append([]Message(nil), history...)
+	var appended []Message
 	handoffs := 0
 	for {
-		result, err := active.runner.Run(ctx, history, emit)
+		result, err := current.runner.Run(ctx, work, emit)
 		if err != nil {
-			return nil, err
+			return nil, current.name, err
 		}
-		history = append(history, result.Messages...)
+		work = append(work, result.Messages...)
+		appended = append(appended, result.Messages...)
 
 		target := sig.take()
 		if target == "" {
-			return result, nil
+			result.Messages = appended
+			return result, current.name, nil
 		}
 		next, ok := t.members[target]
 		if !ok {
 			// The transfer tools only offer real members, so this is
 			// unreachable; treat a stray target as "no transfer".
-			return result, nil
+			result.Messages = appended
+			return result, current.name, nil
 		}
 		if handoffs >= t.maxHandoffs {
-			return nil, fmt.Errorf("%w (%d) starting from %q", ErrMaxHandoffs, t.maxHandoffs, t.start)
+			return nil, current.name, fmt.Errorf("%w (%d) starting from %q", ErrMaxHandoffs, t.maxHandoffs, current.name)
 		}
 		handoffs++
 		if t.onHandoff != nil {
-			t.onHandoff(active.name, target)
+			t.onHandoff(current.name, target)
 		}
-		active = next
+		current = next
 	}
 }
 

@@ -41,23 +41,7 @@ func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider 
 // by registerSubAgents and registerFanOut so the two build personas identically
 // — including the serverTools-only rule that keeps a child memory-free (A7).
 func (a *App) buildPersonaSource(sub SubAgentConfig, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider, mp core.MeterProvider) (*agent.AgentSource, error) {
-	var tools agent.ToolSource = serverTools
-	if len(sub.Allow) > 0 {
-		allow := make(map[string]bool, len(sub.Allow))
-		for _, name := range sub.Allow {
-			allow[name] = true
-		}
-		tools = agent.NewFilterSource(serverTools, func(d core.ToolDef) bool { return allow[d.Name] })
-	}
-
-	child, err := agent.NewRunner(agent.RunnerConfig{
-		Provider:       provider,
-		Tools:          tools,
-		Instructions:   sub.Instructions,
-		MaxSteps:       a.cfg.MaxSteps,
-		TracerProvider: tp,
-		MeterProvider:  mp,
-	})
+	child, err := agent.NewRunner(a.personaRunnerConfig(sub, serverTools, provider, tp, mp))
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +53,31 @@ func (a *App) buildPersonaSource(sub SubAgentConfig, serverTools *agent.MultiSou
 		MaxDepth:    sub.MaxDepth,
 		OnEvent:     func(e agent.SubAgentEvent) { a.emit(HostEvent{Kind: HostSubAgentEvent, SubAgent: e}) },
 	})
+}
+
+// personaRunnerConfig builds the RunnerConfig shared by every persona shape
+// (sub-agent, fan-out member, team member): the child runs on the SHARED
+// provider over a serverTools-only view (Allow-narrowed), with its own
+// instructions — the serverTools-only rule keeping a child memory-free (A7).
+// Team needs the RunnerConfig (it builds the Runner itself, merging handoff
+// tools); the others wrap it in an AgentSource.
+func (a *App) personaRunnerConfig(sub SubAgentConfig, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider, mp core.MeterProvider) agent.RunnerConfig {
+	var tools agent.ToolSource = serverTools
+	if len(sub.Allow) > 0 {
+		allow := make(map[string]bool, len(sub.Allow))
+		for _, name := range sub.Allow {
+			allow[name] = true
+		}
+		tools = agent.NewFilterSource(serverTools, func(d core.ToolDef) bool { return allow[d.Name] })
+	}
+	return agent.RunnerConfig{
+		Provider:       provider,
+		Tools:          tools,
+		Instructions:   sub.Instructions,
+		MaxSteps:       a.cfg.MaxSteps,
+		TracerProvider: tp,
+		MeterProvider:  mp,
+	}
 }
 
 // registerFanOut builds each configured fan-out group as an agent.FanOutSource

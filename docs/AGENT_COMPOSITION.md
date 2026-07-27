@@ -148,7 +148,13 @@ flowchart TB
 ```
 
 - **Team (built)** uses a shared thread and swaps which stateless Runner reads
-  it — the minimal concrete handoff.
+  it — the minimal concrete handoff. Host-wired via `Config.Team` (1042):
+  `App.RunTurn` drives `Team.RunTurn` instead of the single Runner, and the
+  **active agent persists across user turns** (control stays transferred, it does
+  not re-route from Start each turn). Team mode replaces the single main agent,
+  so it is mutually exclusive with that agent's memory / sub-agents / fan-out
+  (integrating those into team members is deferred). `OnHandoff` surfaces as a
+  `HostHandoff` event; demoed in `examples/agents/kitchen-sink` (`just team`).
 - **The general form** gives each agent its *own persistent context* and makes
   transfer an **injection** into the target (the actor / message-passing
   idiom mcpkit already leans toward via triggers + events). More general —
@@ -237,6 +243,11 @@ Decision captured in issue 1151; enforced by constraint A7.
 returns their results aggregated in member order; the parallel-ensemble
 primitive, reusing `AgentSource` for per-member depth/budget/scope, host-wired
 as `Config.FanOut` and demoed in `examples/agents/kitchen-sink`).
+
+**Team-in-host (1042):** `Config.Team` drives the App loop; active agent
+persists across turns; `HostHandoff` event; `just team` demo. Mutually exclusive
+with the single-agent features (deferred: integrating memory/offloading into
+team members).
 
 **Deferred, mapped to the axes:**
 
