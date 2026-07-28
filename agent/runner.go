@@ -63,6 +63,15 @@ type RunnerConfig struct {
 	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
 	MaxSteps int
 
+	// TreeBudget caps aggregate steps/tokens across the whole sub-agent tree
+	// (parent + sub-agents + fan-out members + handoff rounds), complementing
+	// the per-Runner MaxSteps. The Runner installs it on ctx at the top of a
+	// turn ONLY if the ctx does not already carry one, so a top-level Runner's
+	// budget is inherited and shared by every child run (do not set it on
+	// sub-agent Runner configs — they inherit it). Zero (both dimensions) is no
+	// budget. Equivalent to calling WithTreeBudget on the turn ctx yourself.
+	TreeBudget TreeBudget
+
 	// TracerProvider opts the Runner into SEP 414 span emission:
 	// agent.turn per Run, agent.step per model call, agent.tool per
 	// dispatch, with ctx threading so client-side dispatch spans (and
@@ -259,6 +268,14 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			}
 		}()
 	}
+	// Install the aggregate tree budget only if one is not already threaded on
+	// ctx: the top-level Runner installs it and every sub-agent run inherits the
+	// same shared counter, so the totals are aggregate across the tree.
+	if !r.cfg.TreeBudget.zero() && treeBudgetFrom(ctx) == nil {
+		ctx = WithTreeBudget(ctx, r.cfg.TreeBudget)
+	}
+	treeBudget := treeBudgetFrom(ctx)
+
 	ctx, turnSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.turn")
 	defer turnSpan.End()
 	turnStart := time.Now()
@@ -287,6 +304,11 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 	var usage Usage
 
 	for step := 1; step <= r.cfg.MaxSteps; step++ {
+		// Aggregate tree budget: charge one step (and reject if prior steps
+		// already blew the token cap) before spending another model call.
+		if !treeBudget.consumeStep() {
+			return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w (aggregate across the agent tree)", ErrTreeBudget))
+		}
 		stepCtx, stepSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.step",
 			core.Attribute{Key: "agent.step", Value: fmt.Sprint(step)})
 
@@ -328,6 +350,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 		if resp.Usage != nil {
 			usage.InputTokens += resp.Usage.InputTokens
 			usage.OutputTokens += resp.Usage.OutputTokens
+			treeBudget.addTokens(resp.Usage.InputTokens + resp.Usage.OutputTokens)
 		}
 
 		assistant := Message{Role: RoleAssistant, Text: resp.Text, ToolCalls: resp.ToolCalls}
@@ -445,6 +468,7 @@ func (r *Runner) finalizeStructured(ctx context.Context, instructions string, ms
 		if resp.Usage != nil {
 			usage.InputTokens += resp.Usage.InputTokens
 			usage.OutputTokens += resp.Usage.OutputTokens
+			treeBudgetFrom(ctx).addTokens(resp.Usage.InputTokens + resp.Usage.OutputTokens)
 		}
 		last = resp.Text
 		if json.Valid([]byte(last)) {

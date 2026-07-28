@@ -276,7 +276,16 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
 - Context: handoff-via-injection + per-agent persistent context (the actor
   form above) — a generalization of `Team`.
 - Control: upward signals + runner-control meta-tools
-  + interruptible turn (1036), aggregate step/token tree budget (1032).
+  + interruptible turn (1036).
+  **`TreeBudget` shipped (1032):** a ctx-threaded aggregate cap on total model
+  **steps** and **tokens** across a turn's whole tree (parent + sub-agents +
+  fan-out members + handoff rounds), consulted by the Runner per step. The
+  top-level Runner installs it (`RunnerConfig.TreeBudget`, host `Config.MaxTree*`
+  / agentchat `--max-tree-*`); every child run inherits the same shared counter
+  through ctx. Exhaustion aborts with `ErrTreeBudget` (a sub-agent's becomes a
+  non-fatal `IsError` result). It completes the cost-guard set alongside the
+  per-source depth cap, the call-count budget (`WithAgentCallBudget`), and
+  per-Runner `MaxSteps`/`Team.MaxHandoffs`.
   **1033 is closed**: `AgentSource.InputSchema` (typed subtask in) + `Structured`
   output (a child with a `ResponseSchema` returns coerced JSON) + `Team.OnEvent`
   (member events tagged by active agent name, rendered attributed as
