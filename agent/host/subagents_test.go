@@ -90,6 +90,31 @@ func TestAppSubAgentPersonaDelegatesAndSurfaces(t *testing.T) {
 	}
 }
 
+// TestAppSubAgentSnakeCaseName guards the registration bug where a snake_case
+// persona name (e.g. deep_researcher) built a "subagent:deep_researcher" source
+// id, which MultiSource.Add rejects because "_" is the qualified-name separator.
+// The id is sanitized (underscores -> dashes) while the model-visible tool name
+// keeps its underscores.
+func TestAppSubAgentSnakeCaseName(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "ok"})
+
+	cfg := testConfig(ts.URL)
+	cfg.SubAgents = []SubAgentConfig{{
+		Name: "deep_researcher", Description: "researches deeply", Instructions: "You research.",
+	}}
+	app, err := NewApp(cfg, nil, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatalf("NewApp rejected a snake_case sub-agent name: %v", err)
+	}
+	defer app.Close()
+
+	defs, _ := app.sources.Tools(context.Background())
+	if !hasToolNamed(defs, "deep_researcher") {
+		t.Fatalf("snake_case sub-agent tool not offered under its own name: %v", toolDefNames(defs))
+	}
+}
+
 func hasToolNamed(defs []core.ToolDef, name string) bool {
 	for _, d := range defs {
 		if d.Name == name {
