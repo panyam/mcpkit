@@ -139,6 +139,15 @@ Gemini). You can also swap chat models mid-session with `/provider`.
    performance, cost) that run **concurrently** — in `--ui notebook` you see
    their events interleave under one fan-out call in the sub-agent tree — and
    returns their assessments combined in one result.
+   - **Async (background) sub-agent.** Ask: *"Kick off deep research on
+     event-driven architectures — I'll keep working."* The model calls
+     `deep_researcher`, which **acks immediately** ("started in the background")
+     so the turn finishes without waiting. Keep chatting; after the child
+     finishes you'll see *"sub-agent deep_researcher finished"*, and its report
+     is injected as context on your **next** turn (ask *"what did the research
+     find?"*). Contrast the synchronous `researcher` (step 2), which blocks the
+     turn until it answers — async is the spawn-and-continue Task form for work
+     you don't need this instant.
 4. **Semantic memory + durability.** Tell it: *"Remember that our prod region is
    us-east-1."* It calls `remember`, which embeds and upserts a pgvector row.
    **Quit and `just run` again** (same `$SESSION`). Ask: *"Where do we run

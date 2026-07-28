@@ -249,11 +249,33 @@ persists across turns; `HostHandoff` event; `just team` demo. Mutually exclusive
 with the single-agent features (deferred: integrating memory/offloading into
 team members).
 
+**`AsyncAgentSource` — the Task form (1035):** the spawn-and-continue counterpart
+to `AgentSource`'s blocking Tool form. `Call` returns an ack immediately and runs
+the child on a detached goroutine (`core.DetachForBackground` — it outlives the
+turn and makes server calls); on completion `OnComplete` delivers the result,
+which the host injects as a `subagent.completed` event (reusing the `tasks_bg.go`
+Ingest + trigger path), so the parent picks it up on a later turn. Depth/budget
+guards apply at spawn; `SubAgentEvent` still surfaces the background stream.
+Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
+`examples/agents/kitchen-sink`.
+
+**Tool vs Task vs *a real Task*:**
+- **Tool** (`AgentSource`): call-and-block, answer this turn. For short subtasks
+  the parent must have now.
+- **Task form** (`AsyncAgentSource`): ack-now, result later via injection. For
+  long-running or fan-out-and-continue work. But it is **not** an MCP task — no
+  wire presence, no model-visible poll/cancel, the goroutine is ephemeral (dies
+  with the process).
+- **A real (server-side) task** (`ext/tasks`): when you need the model to *poll*
+  or *cancel* the background work, or it must survive a restart. Heavier: a task
+  runtime + wire support. The async sub-agent is the no-runtime, ephemeral end of
+  the same spawn-and-continue spectrum whose durable/controllable end is a task.
+
 **Deferred, mapped to the axes:**
 
 - Context: handoff-via-injection + per-agent persistent context (the actor
   form above) — a generalization of `Team`.
-- Control: async sub-agents (1035), upward signals + runner-control meta-tools
+- Control: upward signals + runner-control meta-tools
   + interruptible turn (1036), aggregate step/token tree budget (1032).
   **1033 is closed**: `AgentSource.InputSchema` (typed subtask in) + `Structured`
   output (a child with a `ResponseSchema` returns coerced JSON) + `Team.OnEvent`
