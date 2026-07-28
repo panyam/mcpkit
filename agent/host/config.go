@@ -145,10 +145,11 @@ type SubAgentConfig struct {
 
 	// CanSignal, when true, gives the persona the signal_parent control tool
 	// (issue 1165), so it can raise an upward Signal to the main agent —
-	// "escalate" / "cancel_siblings" / "custom". The main agent reacts per
-	// Config.SignalPolicy (inject-and-continue by default). False (the default)
-	// keeps the persona server-tools-only. Ignored for async personas (a
-	// detached child has no live parent dispatch to signal).
+	// "escalate" or "custom" (reporting only its own state; it has no knowledge
+	// of sibling agents). The main agent reacts per Config.SignalPolicy
+	// (inject-and-continue by default). False (the default) keeps the persona
+	// server-tools-only. Ignored for async personas (a detached child has no
+	// live parent dispatch to signal).
 	CanSignal bool `json:"canSignal,omitempty"`
 
 	// Async, when true, builds the persona as the spawn-and-continue Task form

@@ -21,17 +21,19 @@ const (
 	// injected and the parent model decides.
 	SignalEscalate SignalKind = "escalate"
 
-	// SignalCancelSiblings asks the parent to cancel the child's in-flight
-	// siblings ("I found it; the others are wasted work"). In the
-	// non-interruptible turn (issue 1165) this intent is RECORDED and surfaced,
-	// but the siblings have already joined by the time the parent reads it at the
-	// dispatch barrier; acting on it mid-flight is the interruptible turn (issue
-	// 1167). Do not mistake it for working cancellation yet.
-	SignalCancelSiblings SignalKind = "cancel_siblings"
-
 	// SignalCustom carries an application-defined signal (named by Name, with an
 	// optional Data payload) for a SignalPolicy or the parent model to interpret.
 	SignalCustom SignalKind = "custom"
+
+	// A preemption signal ("I have a sufficient result; the parallel work is
+	// moot") is deliberately NOT defined here. It only has teeth once the parent
+	// can break the join barrier and cancel the other in-flight calls, which is
+	// the interruptible turn (issue 1167, piece C). It stays non-referential
+	// even there: the child reports its OWN sufficiency, and the parent — which
+	// alone holds the fan-out inventory — decides which siblings to cancel from
+	// its own prompt/policy. A child never names a sibling (it has no knowledge
+	// of them; A7). Defining it in piece A would ship a kind that no-ops (the
+	// siblings have already joined by the time the parent reads it).
 )
 
 // Signal is an upward message from a child agent to its parent Runner. It is
@@ -174,7 +176,7 @@ func RaiseSignal(ctx context.Context, sig Signal) bool {
 const SignalParentToolName = "signal_parent"
 
 type signalParentArgs struct {
-	// Kind is "escalate", "cancel_siblings", or "custom".
+	// Kind is "escalate" or "custom".
 	Kind string `json:"kind"`
 	// Note is a short reason surfaced to the parent.
 	Note string `json:"note,omitempty"`
@@ -189,13 +191,13 @@ type signalParentArgs struct {
 func NewSignalSource() *FuncSource {
 	fs := NewFuncSource()
 	_ = AddFunc(fs, SignalParentToolName,
-		"Raise a signal to the parent agent that spawned you. kind: 'escalate' (ask the parent to stop and handle your finding), 'cancel_siblings' (you found the answer; the parent's other in-flight sub-agents are wasted work), or 'custom' (a named signal). Use sparingly — only for a decisive result the parent must act on.",
+		"Raise a signal to the parent agent that spawned you. kind: 'escalate' (ask the parent to stop and handle your finding) or 'custom' (a named signal with your own findings). Report only your OWN state — you have no knowledge of other sub-agents; the parent decides what to do. Use sparingly, only for a decisive result the parent must act on.",
 		func(ctx context.Context, in signalParentArgs) (string, error) {
 			kind := SignalKind(in.Kind)
 			switch kind {
-			case SignalEscalate, SignalCancelSiblings, SignalCustom:
+			case SignalEscalate, SignalCustom:
 			default:
-				return "", fmt.Errorf("unknown signal kind %q (want escalate, cancel_siblings, or custom)", in.Kind)
+				return "", fmt.Errorf("unknown signal kind %q (want escalate or custom)", in.Kind)
 			}
 			if RaiseSignal(ctx, Signal{Kind: kind, Name: in.Name, Note: in.Note}) {
 				return fmt.Sprintf("signalled parent: %s", kind), nil
