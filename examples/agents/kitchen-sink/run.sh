@@ -28,6 +28,10 @@ COMPACT_TOKENS="${COMPACT_TOKENS:-8000}"
 EXPORTER="${EXPORTER:-otlp}"
 OTLP_ENDPOINT="${OTLP_ENDPOINT:-localhost:4317}"
 UI="${UI:-tui}"
+# Aggregate tree-budget rails (unset = unbounded). Kept as plain env passthrough
+# with an empty default so `set -u` doesn't abort when they aren't provided.
+MAX_TREE_STEPS="${MAX_TREE_STEPS:-}"
+MAX_TREE_TOKENS="${MAX_TREE_TOKENS:-}"
 
 bash "$DIR/preflight.sh"
 
