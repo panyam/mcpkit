@@ -36,6 +36,13 @@ export COMPACT_TOKENS := env_var_or_default("COMPACT_TOKENS", "8000")
 export EXPORTER      := env_var_or_default("EXPORTER", "otlp")
 export OTLP_ENDPOINT := env_var_or_default("OTLP_ENDPOINT", "localhost:4317")
 
+# --- aggregate tree budget -----------------------------------------------
+# Cap total model steps / tokens across the whole sub-agent tree (empty =
+# unbounded). Try MAX_TREE_STEPS=4 just run and ask for the review team + deep
+# research to see a chatty tree get capped.
+export MAX_TREE_STEPS  := env_var_or_default("MAX_TREE_STEPS", "")
+export MAX_TREE_TOKENS := env_var_or_default("MAX_TREE_TOKENS", "")
+
 # --- misc ----------------------------------------------------------------
 export UI      := env_var_or_default("UI", "tui")
 export PG_HOST := env_var_or_default("PG_HOST", "localhost")
