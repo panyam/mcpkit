@@ -127,6 +127,13 @@ type SubAgentConfig struct {
 	// this schema instead of free text (structured output, 1033) — the parent
 	// gets typed output back. Empty returns text.
 	ResponseSchema json.RawMessage `json:"responseSchema,omitempty"`
+
+	// Async, when true, builds the persona as the spawn-and-continue Task form
+	// (agent.AsyncAgentSource, 1035): the delegate tool acks immediately and the
+	// child runs in the background, its result injected as context on a later
+	// turn — for long-running subtasks the parent should not block on. False
+	// (the default) is the blocking Tool form (answer this turn).
+	Async bool `json:"async,omitempty"`
 }
 
 // FanOutGroupConfig declares one parallel-ensemble tool: the main agent calls

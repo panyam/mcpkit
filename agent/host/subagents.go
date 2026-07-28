@@ -1,7 +1,11 @@
 package host
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/core"
@@ -24,7 +28,13 @@ import (
 // Guarded by TestSubAgentCannotReachParentMemory.
 func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider, mp core.MeterProvider) error {
 	for _, sub := range a.cfg.SubAgents {
-		src, err := a.buildPersonaSource(sub, serverTools, provider, tp, mp)
+		var src agent.ToolSource
+		var err error
+		if sub.Async {
+			src, err = a.buildAsyncPersonaSource(sub, serverTools, provider, tp, mp)
+		} else {
+			src, err = a.buildPersonaSource(sub, serverTools, provider, tp, mp)
+		}
 		if err != nil {
 			return err
 		}
@@ -33,6 +43,56 @@ func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider 
 		}
 	}
 	return nil
+}
+
+// buildAsyncPersonaSource builds an async (Task-form) persona: an
+// agent.AsyncAgentSource whose delegate tool acks immediately and runs the child
+// in the background, its result injected on a later turn via onAsyncComplete.
+// The child is a persona like any other (serverTools-only, memory-free per A7).
+func (a *App) buildAsyncPersonaSource(sub SubAgentConfig, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider, mp core.MeterProvider) (*agent.AsyncAgentSource, error) {
+	child, err := agent.NewRunner(a.personaRunnerConfig(sub, serverTools, provider, tp, mp))
+	if err != nil {
+		return nil, err
+	}
+	return agent.NewAsyncAgentSource(agent.AsyncAgentSourceConfig{
+		Name:        sub.Name,
+		Description: sub.Description,
+		Runner:      child,
+		MaxDepth:    sub.MaxDepth,
+		InputSchema: sub.InputSchema,
+		OnEvent:     func(e agent.SubAgentEvent) { a.emit(HostEvent{Kind: HostSubAgentEvent, SubAgent: e}) },
+		OnComplete:  a.onAsyncComplete,
+	})
+}
+
+// onAsyncComplete delivers a finished async sub-agent's result back into the
+// conversation, mirroring the background-task completion path (tasks_bg.go):
+// build a subagent.completed event, Ingest it so it is injected on the next turn
+// (or a trigger fires a proactive turn), and notify the surface. Runs on the
+// child's goroutine — injection.Ingest, emit, and runProactiveTurn are each
+// safe to call from there.
+func (a *App) onAsyncComplete(name string, result *agent.TurnResult, err error) {
+	payload := map[string]any{"subAgent": name, "status": "completed"}
+	switch {
+	case err != nil:
+		payload["status"] = "failed"
+		payload["error"] = err.Error()
+	case result != nil:
+		payload["result"] = result.Text
+	}
+	raw, _ := json.Marshal(payload)
+	ev := agent.IncomingEvent{
+		Server: name,
+		Name:   "subagent.completed",
+		ID:     name,
+		Time:   time.Now(),
+		Data:   core.NewRawJSON(raw),
+	}
+	a.injection.Ingest(ev)
+	a.emit(HostEvent{Kind: HostMessage, Message: fmt.Sprintf("sub-agent %q finished; its result will be in context on your next turn", name)})
+	if firing := a.triggers.OnEvent(ev); firing != nil {
+		a.runProactiveTurn(context.Background(), firing)
+	}
 }
 
 // buildPersonaSource constructs one persona as an agent.AgentSource: a child

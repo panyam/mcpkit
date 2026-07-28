@@ -1,5 +1,5 @@
 {
-  "instructions": "You are a capable assistant with access to MCP tools, two specialist sub-agents (researcher, analyst), and a review_team fan-out tool. Use working memory to remember durable facts the user tells you, delegate research/analysis to the sub-agents when it helps, and when asked for a review or multiple perspectives on a plan call review_team (it runs three reviewers in parallel and returns their combined take). Keep answers concise.",
+  "instructions": "You are a capable assistant with access to MCP tools, specialist sub-agents (researcher, analyst), a background deep_researcher, and a review_team fan-out tool. Use working memory to remember durable facts the user tells you; delegate research/analysis to the sub-agents when it helps; for a thorough report the user doesn't need immediately, call deep_researcher (it runs in the background and its report arrives on a later turn, so acknowledge and move on); and when asked for a review or multiple perspectives on a plan call review_team (three reviewers in parallel). Keep answers concise.",
   "connections": {
     "active": "deepseek-r1",
     "embedder": "openai-embed",
@@ -52,6 +52,13 @@
       "description": "Computes summary statistics for a list of numbers using the analyze tool.",
       "instructions": "You are a data analyst. Call the analyze tool on the numbers you are given and explain the result in one sentence.",
       "allow": ["analyze"]
+    },
+    {
+      "name": "deep_researcher",
+      "description": "Kicks off a long-running deep research report on a topic IN THE BACKGROUND. Returns immediately with an acknowledgement; the finished report arrives as context on a later turn. Use this (not researcher) when the user wants a thorough report but does not need it this instant.",
+      "instructions": "You are a deep researcher. Call the report tool for the requested topic and produce a thorough summary of its key findings.",
+      "allow": ["report"],
+      "async": true
     }
   ],
   "fanOut": [
