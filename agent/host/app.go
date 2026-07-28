@@ -536,6 +536,9 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		MaxSteps:         cfg.MaxSteps,
 		TracerProvider:   o.tp,
 		MeterProvider:    o.mp,
+		// Only the main Runner carries the tree budget; sub-agent / fan-out /
+		// team member Runners inherit the shared counter through ctx.
+		TreeBudget: agent.TreeBudget{MaxSteps: cfg.MaxTreeSteps, MaxTokens: cfg.MaxTreeTokens},
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.

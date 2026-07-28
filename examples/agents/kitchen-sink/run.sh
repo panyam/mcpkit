@@ -75,6 +75,11 @@ args=(
 )
 [ "$MEMORY" = "1" ] && args+=(--memory --memory-inject-recall)
 [ -n "$ACTIVE" ] && args+=(--active "$ACTIVE")
+# Aggregate cost rail across the sub-agent tree (unset = unbounded). Try
+# MAX_TREE_STEPS=4 just run and ask for the review team + deep research to see a
+# chatty tree get capped.
+[ -n "$MAX_TREE_STEPS" ] && args+=(--max-tree-steps "$MAX_TREE_STEPS")
+[ -n "$MAX_TREE_TOKENS" ] && args+=(--max-tree-tokens "$MAX_TREE_TOKENS")
 # Only override the config's embedder role when EMBED_MODEL is set.
 if [ -n "$EMBED_MODEL" ]; then
 	args+=(--memory-embed-model "$EMBED_MODEL" --memory-embed-url "$EMBED_URL" --memory-embed-dim "$EMBED_DIM")

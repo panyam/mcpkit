@@ -193,6 +193,8 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.String("api-key-env", "", "env var holding the model API key")
 	fl.String("instructions", "You are a helpful assistant with access to tools.", "system prompt (when no config)")
 	fl.Int("max-steps", 0, "max model calls per turn (0 = default)")
+	fl.Int("max-tree-steps", 0, "cap total model steps across a turn's whole sub-agent tree (0 = unbounded)")
+	fl.Int("max-tree-tokens", 0, "cap total tokens across a turn's whole sub-agent tree (0 = unbounded)")
 	fl.String("active", "", "override the active chat connection at startup (a name in the config's connections; default = the config's active)")
 	fl.Bool("persist-config", false, "persist runtime picks (/provider, /approve) to a sibling <config>.local.json overlay, merged over the base config on the next start (needs --config)")
 	fl.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off)")
@@ -240,6 +242,14 @@ func runChat(v *viper.Viper) error {
 	)
 	if err != nil {
 		return err
+	}
+	// Tree-budget flags override the config (and apply to the flag-built config
+	// too), so the aggregate cost rail can be set without editing JSON.
+	if n := v.GetInt("max-tree-steps"); n > 0 {
+		cfg.MaxTreeSteps = n
+	}
+	if n := v.GetInt("max-tree-tokens"); n > 0 {
+		cfg.MaxTreeTokens = n
 	}
 	// --active overrides the config's chat connection at startup, so a real
 	// provider can be selected by env/flag without editing the config
