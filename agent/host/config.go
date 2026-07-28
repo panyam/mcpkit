@@ -25,6 +25,13 @@ type Config struct {
 	// MaxSteps caps model calls per turn. Zero uses the agent default.
 	MaxSteps int `json:"maxSteps,omitempty"`
 
+	// MaxTreeSteps and MaxTreeTokens cap the AGGREGATE model steps / tokens
+	// across a turn's whole sub-agent tree (parent + sub-agents + fan-out
+	// members + handoff rounds), not just per-Runner MaxSteps. Zero means
+	// unbounded. The safety rail for deep or chatty multi-agent trees.
+	MaxTreeSteps  int `json:"maxTreeSteps,omitempty"`
+	MaxTreeTokens int `json:"maxTreeTokens,omitempty"`
+
 	// Servers lists the MCP servers to connect.
 	Servers []ServerConfig `json:"servers"`
 
