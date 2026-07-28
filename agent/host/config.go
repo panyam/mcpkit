@@ -32,6 +32,14 @@ type Config struct {
 	MaxTreeSteps  int `json:"maxTreeSteps,omitempty"`
 	MaxTreeTokens int `json:"maxTreeTokens,omitempty"`
 
+	// SignalPolicy selects how the main agent reacts to an upward Signal a
+	// signalling sub-agent raises (issue 1165), read at the dispatch join:
+	//   - "" / "inject" — inject the signal as context and continue (default).
+	//   - "abort_on_escalate" — end the turn when a child raises "escalate".
+	// Either way the signal is injected so the main model sees it. Only meaningful
+	// alongside a sub-agent with CanSignal.
+	SignalPolicy string `json:"signalPolicy,omitempty"`
+
 	// Servers lists the MCP servers to connect.
 	Servers []ServerConfig `json:"servers"`
 
@@ -134,6 +142,14 @@ type SubAgentConfig struct {
 	// this schema instead of free text (structured output, 1033) — the parent
 	// gets typed output back. Empty returns text.
 	ResponseSchema json.RawMessage `json:"responseSchema,omitempty"`
+
+	// CanSignal, when true, gives the persona the signal_parent control tool
+	// (issue 1165), so it can raise an upward Signal to the main agent —
+	// "escalate" / "cancel_siblings" / "custom". The main agent reacts per
+	// Config.SignalPolicy (inject-and-continue by default). False (the default)
+	// keeps the persona server-tools-only. Ignored for async personas (a
+	// detached child has no live parent dispatch to signal).
+	CanSignal bool `json:"canSignal,omitempty"`
 
 	// Async, when true, builds the persona as the spawn-and-continue Task form
 	// (agent.AsyncAgentSource, 1035): the delegate tool acks immediately and the
