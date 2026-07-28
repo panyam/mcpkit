@@ -87,6 +87,8 @@ func (r *renderer) handle(e agent.Event) {
 		fmt.Fprintf(r.out, "%s\n", r.dim("  ◼ "+e.ToolCall.Name+" cancelled: "+snippet(e.Reason, 120)))
 	case agent.EventToolUnavailable:
 		fmt.Fprintf(r.out, "%s\n", r.dim("  ⊘ "+e.ToolCall.Name+" unavailable: "+snippet(e.Reason, 120)))
+	case agent.EventSignal:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ▲ signal "+string(e.Signal.Kind)+" from "+e.Signal.Source+": "+snippet(e.Signal.Note, 120)))
 	case agent.EventError:
 		r.breakLine()
 	}

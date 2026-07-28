@@ -10,6 +10,16 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
+// signalPolicyFor maps a Config.SignalPolicy string to an agent.SignalPolicy:
+// "abort_on_escalate" -> agent.AbortOnEscalate; "" / "inject" / anything else
+// -> nil (inject-and-continue, the default).
+func signalPolicyFor(name string) agent.SignalPolicy {
+	if name == "abort_on_escalate" {
+		return agent.AbortOnEscalate
+	}
+	return nil
+}
+
 // registerSubAgents builds each configured persona as an agent.AgentSource and
 // adds it to the aggregate, so the main agent delegates to it as a tool. Each
 // persona runs a child Runner on the SHARED provider over a FilterSource-
@@ -129,6 +139,15 @@ func (a *App) personaRunnerConfig(sub SubAgentConfig, serverTools *agent.MultiSo
 			allow[name] = true
 		}
 		tools = agent.NewFilterSource(serverTools, func(d core.ToolDef) bool { return allow[d.Name] })
+	}
+	// A signalling persona gets the signal_parent control tool alongside its
+	// (filtered) server tools. It is a control channel, not ambient parent state,
+	// so it does not violate A7 (memory-free personas).
+	if sub.CanSignal && !sub.Async {
+		agg := agent.NewMultiSource()
+		_ = agg.Add("persona-tools", tools)
+		_ = agg.Add("signal", agent.NewSignalSource())
+		tools = agg
 	}
 	return agent.RunnerConfig{
 		Provider:       provider,
