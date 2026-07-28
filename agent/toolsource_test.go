@@ -101,7 +101,7 @@ func TestMultiSourceCollisionQualifiesAllClaimants(t *testing.T) {
 	got := toolNames(tools)
 	// Qualified forms sorted by sourceID regardless of add order; bare
 	// "search" must not appear.
-	want := []string{"alpha_search", "beta_search", "solo"}
+	want := []string{"alpha/search", "beta/search", "solo"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
@@ -128,7 +128,7 @@ func TestMultiSourceCallAmbiguousWithoutResolverFails(t *testing.T) {
 	m.Add("alpha", &fakeSource{defs: defsNamed("search")})
 	m.Add("beta", &fakeSource{defs: defsNamed("search")})
 	_, err := m.Call(context.Background(), "search", nil)
-	if err == nil || !strings.Contains(err.Error(), "alpha_search") || !strings.Contains(err.Error(), "beta_search") {
+	if err == nil || !strings.Contains(err.Error(), "alpha/search") || !strings.Contains(err.Error(), "beta/search") {
 		t.Fatalf("want ambiguity error naming qualified forms, got %v", err)
 	}
 }
@@ -157,7 +157,7 @@ func TestMultiSourceCallQualifiedName(t *testing.T) {
 	m := NewMultiSource()
 	m.Add("alpha", alpha)
 	m.Add("beta", &fakeSource{defs: defsNamed("search")})
-	if _, err := m.Call(context.Background(), "alpha_search", nil); err != nil {
+	if _, err := m.Call(context.Background(), "alpha/search", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(alpha.calls) != 1 || alpha.calls[0] != "search" {
@@ -165,10 +165,19 @@ func TestMultiSourceCallQualifiedName(t *testing.T) {
 	}
 }
 
-func TestMultiSourceRejectsUnderscoreIDs(t *testing.T) {
+func TestMultiSourceRejectsSlashIDs(t *testing.T) {
 	m := NewMultiSource()
-	if err := m.Add("bad_id", &fakeSource{}); err == nil {
-		t.Fatal("want error for underscore in source id")
+	if err := m.Add("bad/id", &fakeSource{}); err == nil {
+		t.Fatal("want error for slash in source id")
+	}
+}
+
+// Underscores are the common id shape (snake_case config names like
+// "subagent:deep_researcher") and must be accepted now that "/" is the separator.
+func TestMultiSourceAcceptsUnderscoreIDs(t *testing.T) {
+	m := NewMultiSource()
+	if err := m.Add("subagent:deep_researcher", &fakeSource{defs: defsNamed("analyze")}); err != nil {
+		t.Fatalf("underscore id rejected: %v", err)
 	}
 }
 

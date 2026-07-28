@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
@@ -38,11 +37,7 @@ func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider 
 		if err != nil {
 			return err
 		}
-		// The tool name (sub.Name) may be snake_case; the MultiSource source id
-		// may not contain underscores (they are the qualified-name separator), so
-		// sanitize the id only — the model-visible tool keeps its underscores.
-		id := "subagent:" + strings.ReplaceAll(sub.Name, "_", "-")
-		if err := multi.Add(id, src); err != nil {
+		if err := multi.Add("subagent:"+sub.Name, src); err != nil {
 			return err
 		}
 	}
@@ -170,10 +165,7 @@ func (a *App) registerFanOut(multi, serverTools *agent.MultiSource, provider age
 		if err != nil {
 			return err
 		}
-		// The tool name (group.Name) may be snake_case; the MultiSource source
-		// id may not contain underscores, so sanitize the id only.
-		id := "fanout:" + strings.ReplaceAll(group.Name, "_", "-")
-		if err := multi.Add(id, fo); err != nil {
+		if err := multi.Add("fanout:"+group.Name, fo); err != nil {
 			return err
 		}
 	}
