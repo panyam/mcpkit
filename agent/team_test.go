@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/panyam/mcpkit/core"
@@ -189,5 +190,42 @@ func TestTeam_RunTurnPersistsActiveAgent(t *testing.T) {
 	}
 	if n := len(triage.Requests()); n != triageBefore {
 		t.Fatalf("triage was consulted again on turn 2 (%d -> %d); it must start from the persisted specialist, not Start", triageBefore, n)
+	}
+}
+
+// TestTeam_OnEventTagsByActiveAgent covers per-agent event tagging (1033): each
+// member's events are forwarded tagged with the active agent's name, so a
+// surface attributes them without inferring from OnHandoff.
+func TestTeam_OnEventTagsByActiveAgent(t *testing.T) {
+	triage := NewStubProvider(transferCall("c1", "specialist"), StubTurn{Text: "connecting"})
+	specialist := NewStubProvider(StubTurn{Text: "the answer"})
+
+	var mu sync.Mutex
+	scopes := map[string]bool{}
+	depths := map[int]bool{}
+	team, err := NewTeam(TeamConfig{
+		Start: "triage",
+		Members: []TeamMember{
+			{Name: "triage", Config: RunnerConfig{Provider: triage}, HandoffTo: []string{"specialist"}},
+			{Name: "specialist", Config: RunnerConfig{Provider: specialist}},
+		},
+		OnEvent: func(e SubAgentEvent) {
+			mu.Lock()
+			scopes[e.Scope] = true
+			depths[e.Depth] = true
+			mu.Unlock()
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := team.Run(context.Background(), "help", func(Event) {}); err != nil {
+		t.Fatal(err)
+	}
+	if !scopes["triage"] || !scopes["specialist"] {
+		t.Fatalf("events not tagged by both agents, saw scopes %v", scopes)
+	}
+	if !depths[1] || len(depths) != 1 {
+		t.Fatalf("team member events should be depth 1, saw %v", depths)
 	}
 }

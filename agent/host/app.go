@@ -33,6 +33,13 @@ type App struct {
 	team            *agent.Team
 	activeTeamAgent string
 
+	// teamEventSink is the per-turn persistence tap for team member events: the
+	// Team forwards them tagged (HostSubAgentEvent renders the attribution),
+	// while this buffers the flat Event into the turn's PersistingEmit so the
+	// event log is unchanged. Set under turnMu for the duration of a team turn,
+	// nil otherwise.
+	teamEventSink func(agent.Event)
+
 	sources   *agent.MultiSource
 	clients   []*client.Client
 	history   []agent.Message
@@ -662,8 +669,15 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 			a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 			return err
 		}
-		pe = NewPersistingEmit(a.store, a.runID, emit)
-		emit = pe.Emit
+		if a.team != nil {
+			// Team member events render attributed via OnEvent, so the persisting
+			// tap must NOT also render (that would double-render) — a nil next
+			// makes pe buffer-only; teamEventSink feeds it below.
+			pe = NewPersistingEmit(a.store, a.runID, nil)
+		} else {
+			pe = NewPersistingEmit(a.store, a.runID, emit)
+			emit = pe.Emit
+		}
 	}
 
 	// The memory summary is woven into the per-turn slice only, never into
@@ -674,10 +688,17 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	var err error
 	if a.team != nil {
 		// Team mode: the active member (persisted across turns) drives the turn,
-		// looping handoffs internally; result.Messages spans every hop. Persist
-		// the ending active agent so control stays transferred next turn.
+		// looping handoffs internally; result.Messages spans every hop. Member
+		// events flow through the Team's OnEvent (attributed render + persist via
+		// the sink), so the emit passed here is unused. Persist the ending active
+		// agent so control stays transferred next turn.
+		a.teamEventSink = func(agent.Event) {}
+		if pe != nil {
+			a.teamEventSink = pe.Emit
+		}
 		var active string
 		result, active, err = a.team.RunTurn(ctx, turnMsgs, a.activeTeamAgent, emit)
+		a.teamEventSink = nil
 		if err == nil {
 			a.activeTeamAgent = active
 		}

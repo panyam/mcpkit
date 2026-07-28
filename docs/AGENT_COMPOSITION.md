@@ -254,10 +254,13 @@ team members).
 - Context: handoff-via-injection + per-agent persistent context (the actor
   form above) — a generalization of `Team`.
 - Control: async sub-agents (1035), upward signals + runner-control meta-tools
-  + interruptible turn (1036), aggregate step/token tree budget (1032). The
-  remaining 1033 bits — structured sub-agent I/O (typed input + `ResponseSchema`
-  output) and map-style fan-out (distribute a list of distinct subtasks) — also
-  sit here; `FanOutSource` today broadcasts one task to all members.
+  + interruptible turn (1036), aggregate step/token tree budget (1032).
+  **1033 is closed**: `AgentSource.InputSchema` (typed subtask in) + `Structured`
+  output (a child with a `ResponseSchema` returns coerced JSON) + `Team.OnEvent`
+  (member events tagged by active agent name, rendered attributed as
+  `HostSubAgentEvent`). Map-style fan-out (distribute distinct subtasks) was NOT
+  part of 1033 — `FanOutSource` broadcasts one task to all members; a distinct-
+  subtask variant is a separate future item if wanted.
 - Surface: declarative `agent/host` + agentchat multi-agent config and nested
   rendering (1031, part 2).
 

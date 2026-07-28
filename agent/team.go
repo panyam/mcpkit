@@ -33,6 +33,7 @@ type Team struct {
 	start       string
 	maxHandoffs int
 	onHandoff   func(from, to string)
+	onEvent     func(SubAgentEvent)
 }
 
 type teamMember struct {
@@ -74,6 +75,14 @@ type TeamConfig struct {
 	// OnHandoff, when set, is called on each transfer (from, to) — the seam a
 	// surface renders "→ handed off to X" through.
 	OnHandoff func(from, to string)
+
+	// OnEvent, when set, receives every member's events tagged with the active
+	// agent's name (SubAgentEvent{Scope: name, Depth: 1, Event}), so a surface
+	// attributes team activity to the agent that produced it without inferring
+	// from OnHandoff. It REPLACES the raw emit passed to Run/RunTurn for member
+	// events (the tagged envelope carries the same Event); leave it nil to use
+	// the untagged emit. Mirrors AgentSourceConfig.OnEvent.
+	OnEvent func(SubAgentEvent)
 }
 
 // NewTeam validates cfg and builds each agent's Runner with its transfer tools
@@ -102,6 +111,7 @@ func NewTeam(cfg TeamConfig) (*Team, error) {
 		start:       cfg.Start,
 		maxHandoffs: cfg.MaxHandoffs,
 		onHandoff:   cfg.OnHandoff,
+		onEvent:     cfg.OnEvent,
 	}
 	if t.maxHandoffs <= 0 {
 		t.maxHandoffs = DefaultMaxHandoffs
@@ -204,7 +214,14 @@ func (t *Team) RunTurn(ctx context.Context, history []Message, active string, em
 	var appended []Message
 	handoffs := 0
 	for {
-		result, err := current.runner.Run(ctx, work, emit)
+		// Tag each member's events with the active agent's name when OnEvent is
+		// set (the attributed path); else the raw emit.
+		memberEmit := emit
+		if t.onEvent != nil {
+			name := current.name
+			memberEmit = func(e Event) { t.onEvent(SubAgentEvent{Scope: name, Depth: 1, Event: e}) }
+		}
+		result, err := current.runner.Run(ctx, work, memberEmit)
 		if err != nil {
 			return nil, current.name, err
 		}
