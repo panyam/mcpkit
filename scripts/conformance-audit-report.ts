@@ -315,7 +315,15 @@ function renderGroup(g: SEPGroup): string {
   const heading = g.sep === 'Core / Unattributed'
     ? `### Core / Unattributed (${g.scenarios.length} scenarios)`
     : `### [${g.sep}](${g.url ?? '#'}) (${g.scenarios.length} scenarios)`;
+  // Stable, guessable anchor per SEP section (e.g. #sep-2663) so external
+  // references (upstream issues, WG threads) can deep-link a group without
+  // depending on the markdown renderer's heading-slug algorithm.
+  const anchor = g.sep === 'Core / Unattributed'
+    ? 'core-unattributed'
+    : g.sep.toLowerCase();
   return [
+    `<a id="${anchor}"></a>`,
+    '',
     heading,
     '',
     '| Scenario | Surface | Status | Checks | Note |',
@@ -326,12 +334,19 @@ function renderGroup(g: SEPGroup): string {
 }
 
 function renderSummaryTable(server: SurfaceStats, client: SurfaceStats): string {
+  // "Graded" counts only assertion rows (pass/fail/warn/skipped). INFO rows
+  // are the harness's request/response wire log — invaluable for debugging,
+  // but counting them as "checks" made the totals read ~2x larger than the
+  // real assertion surface.
+  const graded = (s: SurfaceStats) => s.checks - s.info;
   return [
-    '| Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |',
+    '| Surface | Scenarios | Graded checks | Pass | Fail | Warn | Skipped | Log rows (info) | Harness-gap |',
     '|---|---:|---:|---:|---:|---:|---:|---:|---:|',
-    `| Server | ${server.scenarios} | ${server.checks} | ${server.pass} | ${server.fail} | ${server.warning} | ${server.info} | ${server.skipped} | ${server.harnessGap} |`,
-    `| Client | ${client.scenarios} | ${client.checks} | ${client.pass} | ${client.fail} | ${client.warning} | ${client.info} | ${client.skipped} | ${client.harnessGap} |`,
-    `| **Total** | **${server.scenarios + client.scenarios}** | **${server.checks + client.checks}** | **${server.pass + client.pass}** | **${server.fail + client.fail}** | **${server.warning + client.warning}** | **${server.info + client.info}** | **${server.skipped + client.skipped}** | **${server.harnessGap + client.harnessGap}** |`,
+    `| Server | ${server.scenarios} | ${graded(server)} | ${server.pass} | ${server.fail} | ${server.warning} | ${server.skipped} | ${server.info} | ${server.harnessGap} |`,
+    `| Client | ${client.scenarios} | ${graded(client)} | ${client.pass} | ${client.fail} | ${client.warning} | ${client.skipped} | ${client.info} | ${client.harnessGap} |`,
+    `| **Total** | **${server.scenarios + client.scenarios}** | **${graded(server) + graded(client)}** | **${server.pass + client.pass}** | **${server.fail + client.fail}** | **${server.warning + client.warning}** | **${server.skipped + client.skipped}** | **${server.info + client.info}** | **${server.harnessGap + client.harnessGap}** |`,
+    '',
+    '_Log rows are the harness\'s own request/response trace (`incoming-request` / `outgoing-response` entries in each scenario\'s `checks.json`) — diagnostic context, not graded assertions._',
   ].join('\n');
 }
 
