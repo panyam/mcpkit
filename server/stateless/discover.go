@@ -26,6 +26,14 @@ import (
 type DiscoverResult struct {
 	SupportedVersions []string                `json:"supportedVersions"`
 	Capabilities      core.ServerCapabilities `json:"capabilities"`
+
+	// TTLMs and CacheScope are required on DiscoverResult in the
+	// 2026-07-28 final schema (the SEP-2549 hints extended to
+	// server/discover). Always emitted; the defaults mirror the
+	// conformant-by-default list-response posture from issue 496:
+	// immediately stale, publicly cacheable.
+	TTLMs      int    `json:"ttlMs"`
+	CacheScope string `json:"cacheScope"`
 }
 
 // handleDiscover assembles the discover response from the backend. The
@@ -35,5 +43,7 @@ func (d *Dispatcher) handleDiscover(id json.RawMessage) *core.Response {
 	return core.NewResponse(id, DiscoverResult{
 		SupportedVersions: d.Backend.SupportedVersions(),
 		Capabilities:      d.Backend.Capabilities(),
+		TTLMs:             0,
+		CacheScope:        core.CacheScopePublic,
 	})
 }
