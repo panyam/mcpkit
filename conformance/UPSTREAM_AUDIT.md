@@ -11,17 +11,21 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 ## Summary
 
-| Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |
+| Surface | Scenarios | Graded checks | Pass | Fail | Warn | Skipped | Log rows (info) | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 61 | 231 | 197 | 19 | 8 | 6 | 1 | 0 |
-| Client | 43 | 1536 | 536 | 8 | 0 | 990 | 2 | 0 |
-| **Total** | **104** | **1767** | **733** | **27** | **8** | **996** | **3** | **0** |
+| Server | 61 | 225 | 197 | 19 | 8 | 1 | 6 | 0 |
+| Client | 43 | 546 | 536 | 8 | 0 | 2 | 990 | 0 |
+| **Total** | **104** | **771** | **733** | **27** | **8** | **3** | **996** | **0** |
+
+_Log rows are the harness's own request/response trace (`incoming-request` / `outgoing-response` entries in each scenario's `checks.json`) — diagnostic context, not graded assertions._
 
 ## Harness gaps
 
 _None — every scenario produced results._
 
 ## By SEP
+
+<a id="core-unattributed"></a>
 
 ### Core / Unattributed (53 scenarios)
 
@@ -81,17 +85,23 @@ _None — every scenario produced results._
 | `tools-call-with-logging` | server | pass | 2 pass |  |
 | `tools-call-with-progress` | server | pass | 2 pass |  |
 
+<a id="sep-986"></a>
+
 ### [SEP-986](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `tools-list` | server | pass | 3 pass |  |
 
+<a id="sep-990-enterprise-managed-oauth"></a>
+
 ### [SEP-990-ENTERPRISE-MANAGED-OAUTH](https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/enterprise-managed-authorization.mdx) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `auth/enterprise-managed-authorization` | client | pass | 13 pass / 28 info |  |
+
+<a id="sep-1034"></a>
 
 ### [SEP-1034](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1034) (2 scenarios)
 
@@ -100,6 +110,8 @@ _None — every scenario produced results._
 | `elicitation-sep1034-client-defaults` | client | pass | 5 pass / 20 info |  |
 | `elicitation-sep1034-defaults` | server | pass | 6 pass |  |
 
+<a id="sep-1046-client-credentials"></a>
+
 ### [SEP-1046-CLIENT-CREDENTIALS](https://github.com/modelcontextprotocol/ext-auth/blob/main/specification/draft/oauth-client-credentials.mdx) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
@@ -107,17 +119,23 @@ _None — every scenario produced results._
 | `auth/client-credentials-basic` | client | pass | 14 pass / 34 info |  |
 | `auth/client-credentials-jwt` | client | pass | 12 pass / 28 info |  |
 
+<a id="sep-1330"></a>
+
 ### [SEP-1330](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1330) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `elicitation-sep1330-enums` | server | pass | 6 pass |  |
 
+<a id="sep-1613"></a>
+
 ### [SEP-1613](https://github.com/modelcontextprotocol/specification/pull/655) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `json-schema-2020-12` | server | pass | 8 pass |  |
+
+<a id="sep-1699"></a>
 
 ### [SEP-1699](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1699) (3 scenarios)
 
@@ -127,6 +145,8 @@ _None — every scenario produced results._
 | `server-sse-polling` | server | pass | 3 warn / 6 info |  |
 | `sse-retry` | client | pass | 3 pass / 17 info |  |
 
+<a id="sep-1932-dpop"></a>
+
 ### [SEP-1932-DPOP](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1932) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
@@ -134,11 +154,15 @@ _None — every scenario produced results._
 | `auth/dpop` | client | partial | 9 pass / 3 fail / 34 info |  |
 | `auth/dpop-nonce` | client | partial | 9 pass / 5 fail / 34 info |  |
 
+<a id="sep-1933-workload-identity-federation"></a>
+
 ### [SEP-1933-WORKLOAD-IDENTITY-FEDERATION](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1933) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `auth/wif-jwt-bearer` | client | pass | 12 pass / 28 info |  |
+
+<a id="sep-2106"></a>
 
 ### [SEP-2106](https://modelcontextprotocol.io/seps/2106-json-schema-2020-12#security-implications) (1 scenarios)
 
@@ -146,11 +170,15 @@ _None — every scenario produced results._
 |---|---|---|---|---|
 | `json-schema-ref-no-deref` | client | pass | 1 pass |  |
 
+<a id="sep-2164"></a>
+
 ### [SEP-2164](https://modelcontextprotocol.io/specification/draft/server/resources#error-handling) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `sep-2164-resource-not-found` | server | pass | 3 pass / 1 warn |  |
+
+<a id="sep-2207-refresh-token-guidance"></a>
 
 ### [SEP-2207-REFRESH-TOKEN-GUIDANCE](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2207) (2 scenarios)
 
@@ -159,6 +187,8 @@ _None — every scenario produced results._
 | `auth/offline-access-not-supported` | client | pass | 12 pass / 18 info |  |
 | `auth/offline-access-scope` | client | pass | 9 pass / 18 info |  |
 
+<a id="sep-2243-custom-headers"></a>
+
 ### [SEP-2243-CUSTOM-HEADERS](https://modelcontextprotocol.io/specification/draft/basic/transports#server-behavior-for-custom-headers) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
@@ -166,11 +196,15 @@ _None — every scenario produced results._
 | `http-custom-header-server-validation` | server | partial | 1 pass / 5 fail |  |
 | `http-custom-headers` | client | pass | 18 pass |  |
 
+<a id="sep-2243-server-validation"></a>
+
 ### [SEP-2243-SERVER-VALIDATION](https://modelcontextprotocol.io/specification/draft/basic/transports#server-validation) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `http-header-validation` | server | partial | 12 pass / 1 fail / 1 warn |  |
+
+<a id="sep-2243"></a>
 
 ### [SEP-2243](https://modelcontextprotocol.io/seps/2243-http-standardization) (1 scenarios)
 
@@ -178,17 +212,23 @@ _None — every scenario produced results._
 |---|---|---|---|---|
 | `tasks-request-headers` | server | partial | 4 pass / 1 fail |  |
 
+<a id="sep-2243-x-mcp-header"></a>
+
 ### [SEP-2243-X-MCP-HEADER](https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `http-invalid-tool-headers` | client | pass | 11 pass |  |
 
+<a id="sep-2243-standard-headers"></a>
+
 ### [SEP-2243-STANDARD-HEADERS](https://modelcontextprotocol.io/specification/draft/basic/transports#standard-mcp-request-headers) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `http-standard-headers` | client | pass | 11 pass |  |
+
+<a id="sep-2322"></a>
 
 ### [SEP-2322](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) (16 scenarios)
 
@@ -211,17 +251,23 @@ _None — every scenario produced results._
 | `input-required-result-unsupported-methods` | server | pass | 2 pass |  |
 | `input-required-result-validate-input` | server | pass | 2 pass / 1 warn |  |
 
+<a id="sep-2322-mrtr"></a>
+
 ### [SEP-2322-MRTR](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `sep-2322-client-request-state` | client | pass | 5 pass |  |
 
+<a id="sep-2549"></a>
+
 ### [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `caching` | server | pass | 8 pass |  |
+
+<a id="sep-2575"></a>
 
 ### [SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575) (3 scenarios)
 
@@ -230,6 +276,8 @@ _None — every scenario produced results._
 | `server-stateless` | server | fork-covered | 23 pass / 5 fail / 2 warn | Also graded by `testconf-stateless` |
 | `request-metadata` | client | pass | 6 pass / 2 skip |  |
 | `tasks-required-task-error` | server | pass | 3 pass |  |
+
+<a id="sep-2663"></a>
 
 ### [SEP-2663](https://modelcontextprotocol.io/seps/2663-tasks-extension) (6 scenarios)
 
