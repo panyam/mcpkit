@@ -193,7 +193,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-custom-header-server-validation` | server | partial | 1 pass / 5 fail |  |
+| `http-custom-header-server-validation` | server | partial | 1 pass / 5 fail | [tracked](https://github.com/panyam/mcpkit/issues/1111) — Server-side x-mcp-header param validation not implemented and cmd/testserver has no annotated tool; scoped in issue 1111, activates when ups… |
 | `http-custom-headers` | client | pass | 18 pass |  |
 
 <a id="sep-2243-server-validation"></a>
@@ -202,7 +202,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-header-validation` | server | partial | 12 pass / 1 fail / 1 warn |  |
+| `http-header-validation` | server | partial | 12 pass / 1 fail / 1 warn | [tracked](https://github.com/modelcontextprotocol/conformance/issues/323) — The single remaining fail is fail-open on a missing Mcp-Method header, disputed upstream (mcpkit matches the TypeScript SDK). Deliberately n… |
 
 <a id="sep-2243"></a>
 
