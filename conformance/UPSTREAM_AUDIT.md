@@ -288,7 +288,7 @@ _None — every scenario produced results._
 | `tasks-lifecycle` | server | partial | 8 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
 | `tasks-request-state-removal` | server | partial | 2 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
 | `tasks-wire-fields` | server | partial | 3 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
-| `tasks-status-notifications` | server | pass | 1 skip |  |
+| `tasks-status-notifications` | server | pass | 1 skip | [tracked](https://github.com/panyam/mcpkit/issues/433) — Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen (se… |
 
 
 ## Methodology

@@ -7,6 +7,9 @@
 #
 # Schema:
 #   scenarios:
+  "tasks-status-notifications":
+    issue: "https://github.com/panyam/mcpkit/issues/433"
+    note: "Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen (server/stateless/subscriptions.go) and is ready to be graded."
 #     <scenario-id>:           # exact upstream scenario name after timestamp
 #       issue: <link>          #   normalization (e.g. "tools-dynamic")
 #       note: <one line>
