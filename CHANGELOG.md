@@ -53,6 +53,19 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **Generalized `resultType` discriminator + DiscoverResult caching hints
+  (2026-07-28 final revision, issue 1174).** Every result the server emits on
+  the 2026-07-28 wire now carries the required `resultType` field (stamped
+  `"complete"` when a result type doesn't set its own; the MRTR
+  `"input_required"` and tasks `"task"` variants keep their values), via a
+  new `core.InjectResultTypeIntoResult` applied at both dispatch chokepoints
+  — always on the stateless wire, feature-gated on the legacy wire so
+  pre-draft sessions keep byte-identical output. `DiscoverResult` gains the
+  now-required `ttlMs` + `cacheScope` fields (conformant defaults: 0,
+  public). Clears 11 of the 13 wire-schema-valid failures surfaced by
+  upstream conformance's new per-version schema validation; the remaining
+  task-envelope errors are an upstream validator gap (no `resultType: task`
+  branch), annotated in `conformance/known-gaps.yaml`.
 - **CIMD advertised-support gate + SEP-2207 refresh-token registration.**
   `OAuthTokenSource` now prefers its configured `ClientMetadataURL` as the
   client_id exactly when the AS advertises
