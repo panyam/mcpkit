@@ -65,6 +65,14 @@ type ProtocolFeatures struct {
 	// opt out of the strict check with WithAllowLegacyOnDraft (see
 	// Dispatcher.allowLegacyOnDraft), which is applied by the caller.
 	StatelessMetaRequired bool
+
+	// GeneralizedResultType stamps the 2026-07-28 final-revision
+	// `resultType` discriminator on every result the dispatcher emits
+	// (absent field defaults to "complete"; the MRTR and tasks variants
+	// keep their own values). Gated so pre-draft wire output stays
+	// byte-identical — clients on earlier versions are specified to
+	// treat the absent field as "complete" anyway.
+	GeneralizedResultType bool
 }
 
 // featuresForVersion resolves the version-gated feature set for a negotiated
@@ -76,6 +84,7 @@ func featuresForVersion(version string) ProtocolFeatures {
 		return ProtocolFeatures{
 			RoutingHeaderValidation: true,
 			StatelessMetaRequired:   true,
+			GeneralizedResultType:   true,
 		}
 	default:
 		return ProtocolFeatures{}

@@ -189,6 +189,40 @@ func InjectServerInfoIntoResult(result any, info ServerInfo) any {
 	return json.RawMessage(out)
 }
 
+// InjectResultTypeIntoResult stamps the generalized `resultType`
+// discriminator onto a result object when absent. The 2026-07-28 final
+// revision requires the field on every result a server emits; clients
+// treat absence from servers on earlier versions as "complete", which is
+// exactly the value stamped here. A caller-set discriminator (the MRTR
+// "input_required" and tasks "task" variants) always wins because the
+// stamp only fires when the key is missing. Same best-effort contract as
+// InjectServerInfoIntoResult: a non-object result or any marshal failure
+// returns the input unchanged — stamping is decoration, never a dispatch
+// error.
+func InjectResultTypeIntoResult(result any) any {
+	raw, err := MarshalJSON(result)
+	if err != nil {
+		return result
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || obj == nil {
+		return result
+	}
+	if _, present := obj["resultType"]; present {
+		return result
+	}
+	rt, err := json.Marshal(ResultTypeComplete)
+	if err != nil {
+		return result
+	}
+	obj["resultType"] = rt
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return result
+	}
+	return json.RawMessage(out)
+}
+
 // UnsupportedProtocolVersionData is the structured error payload returned
 // when a stateless request advertises a protocol version this server does
 // not implement. Supported lists the server's full SupportedStatelessVersions

@@ -442,3 +442,56 @@ func TestRequestMetaFromContext(t *testing.T) {
 		t.Errorf("RequestMetaFromContext: got %+v, want %+v", got, meta)
 	}
 }
+
+// 2026-07-28 final revision: every result carries the generalized resultType
+// discriminator, and DiscoverResult additionally carries the SEP-2549 caching
+// hints as required fields.
+func TestDispatch_GeneralizedResultType(t *testing.T) {
+	caps := core.ServerCapabilities{Tools: &core.ToolsCap{}}
+	info := core.ServerInfo{Name: "test", Version: "0.0.1"}
+	d := New(&fakeBackend{info: info, caps: caps})
+
+	t.Run("discover carries resultType and caching hints", func(t *testing.T) {
+		req := &core.Request{
+			JSONRPC: "2.0",
+			ID:      json.RawMessage("40"),
+			Method:  "server/discover",
+			Params:  core.NewRawJSON(validMetaParams(t)),
+		}
+		resp, _ := d.Dispatch(context.Background(), req)
+		if resp == nil || resp.Error != nil {
+			t.Fatalf("server/discover failed: %+v", resp)
+		}
+		raw, _ := json.Marshal(resp.Result)
+		var got map[string]any
+		json.Unmarshal(raw, &got)
+		if got["resultType"] != "complete" {
+			t.Errorf("resultType = %v, want complete", got["resultType"])
+		}
+		if _, ok := got["ttlMs"]; !ok {
+			t.Error("ttlMs missing from DiscoverResult")
+		}
+		if got["cacheScope"] != "public" {
+			t.Errorf("cacheScope = %v, want public", got["cacheScope"])
+		}
+	})
+
+	t.Run("tools list carries resultType", func(t *testing.T) {
+		req := &core.Request{
+			JSONRPC: "2.0",
+			ID:      json.RawMessage("41"),
+			Method:  "tools/list",
+			Params:  core.NewRawJSON(validMetaParams(t)),
+		}
+		resp, _ := d.Dispatch(context.Background(), req)
+		if resp == nil || resp.Error != nil {
+			t.Fatalf("tools/list failed: %+v", resp)
+		}
+		raw, _ := json.Marshal(resp.Result)
+		var got map[string]any
+		json.Unmarshal(raw, &got)
+		if got["resultType"] != "complete" {
+			t.Errorf("resultType = %v, want complete", got["resultType"])
+		}
+	})
+}

@@ -337,3 +337,36 @@ func TestErrorCodeConstants(t *testing.T) {
 		t.Errorf("ErrCodeUnsupportedProtocolVersion = %d, want -32022", ErrCodeUnsupportedProtocolVersion)
 	}
 }
+
+func TestInjectResultTypeIntoResult(t *testing.T) {
+	t.Run("absent gets complete", func(t *testing.T) {
+		out := InjectResultTypeIntoResult(map[string]any{"tools": []any{}})
+		raw, ok := out.(json.RawMessage)
+		if !ok {
+			t.Fatalf("expected json.RawMessage, got %T", out)
+		}
+		var obj map[string]any
+		json.Unmarshal(raw, &obj)
+		if got := obj["resultType"]; got != "complete" {
+			t.Errorf("resultType = %v, want complete", got)
+		}
+	})
+	t.Run("caller-set discriminator wins", func(t *testing.T) {
+		in := map[string]any{"taskId": "t1", "resultType": "task"}
+		out := InjectResultTypeIntoResult(in)
+		raw, err := MarshalJSON(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var obj map[string]any
+		json.Unmarshal(raw, &obj)
+		if got := obj["resultType"]; got != "task" {
+			t.Errorf("resultType = %v, want task preserved", got)
+		}
+	})
+	t.Run("non-object result unchanged", func(t *testing.T) {
+		if out := InjectResultTypeIntoResult("not-an-object"); out != "not-an-object" {
+			t.Errorf("non-object result mutated: %v", out)
+		}
+	})
+}
