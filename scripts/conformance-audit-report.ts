@@ -308,7 +308,43 @@ function renderScenarioRow(s: ScenarioResult): string {
     const msg = s.checks[0].errorMessage.replace(/\|/g, '\\|').replace(/`/g, '\'');
     note = '`' + msg.slice(0, 100) + (msg.length > 100 ? '…' : '') + '`';
   }
+  const gap = knownGapNote(s.scenarioId);
+  if (gap) {
+    note = note ? `${note} · ${gap}` : gap;
+  }
   return `| \`${s.scenarioId}\` | ${s.surface} | ${STATUS_LABEL[cat]} | ${counts} | ${note} |`;
+}
+
+// Known-gaps annotations, keyed by scenario id. Populated in main() from
+// conformance/known-gaps.yaml (resolved next to the report path) so failing
+// and partial rows carry their tracking link in the Note column — the same
+// join CONFORMANCE.md's Open Gaps table does, without which an annotated
+// upstream bug is invisible on this page. Parsed with a shape-anchored
+// regex rather than a yaml dependency: the file's schema comment pins the
+// exact two-line entry form, and tools/conformance-report already validates
+// the file properly in CI.
+let KNOWN_GAPS = new Map<string, { issue: string; note: string }>();
+
+function loadKnownGaps(reportPath: string): Map<string, { issue: string; note: string }> {
+  const p = join(reportPath, '..', 'known-gaps.yaml');
+  const out = new Map<string, { issue: string; note: string }>();
+  if (!existsSync(p)) return out;
+  const text = readFileSync(p, 'utf-8');
+  const re = /^ {2}"([^"]+)":\n {4}issue: "([^"]*)"\n {4}note: "([^"]*)"/gm;
+  for (const m of text.matchAll(re)) {
+    out.set(m[1], { issue: m[2], note: m[3] });
+  }
+  return out;
+}
+
+function knownGapNote(scenarioId: string): string {
+  const kg = KNOWN_GAPS.get(scenarioId);
+  if (!kg) return '';
+  const link = /^https?:\/\//.test(kg.issue)
+    ? `[tracked](${kg.issue})`
+    : kg.issue;
+  const note = kg.note.length > 140 ? kg.note.slice(0, 140) + '…' : kg.note;
+  return `${link} — ${note.replace(/\|/g, '\\|')}`;
 }
 
 function renderGroup(g: SEPGroup): string {
@@ -366,6 +402,7 @@ function main() {
     console.error('usage: conformance-audit-report.ts <audit-out-dir> <report-path>');
     process.exit(2);
   }
+  KNOWN_GAPS = loadKnownGaps(reportPath);
 
   // Capture upstream commit for traceability.
   const upstreamBase = process.env.MCPCONFORMANCE_BASE_PATH ?? '';
