@@ -151,8 +151,8 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `auth/dpop` | client | partial | 9 pass / 3 fail / 34 info |  |
-| `auth/dpop-nonce` | client | partial | 9 pass / 5 fail / 34 info |  |
+| `auth/dpop` | client | partial | 9 pass / 3 fail / 34 info | [tracked](https://github.com/panyam/mcpkit/issues/803) — Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft. |
+| `auth/dpop-nonce` | client | partial | 9 pass / 5 fail / 34 info | [tracked](https://github.com/panyam/mcpkit/issues/803) — Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant. |
 
 <a id="sep-1933-workload-identity-federation"></a>
 
@@ -210,7 +210,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `tasks-request-headers` | server | partial | 4 pass / 1 fail |  |
+| `tasks-request-headers` | server | partial | 4 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
 
 <a id="sep-2243-x-mcp-header"></a>
 
@@ -234,8 +234,8 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `tasks-mrtr-composition` | server | partial | 1 pass / 1 fail |  |
-| `tasks-mrtr-input` | server | partial | 3 pass / 1 fail |  |
+| `tasks-mrtr-composition` | server | partial | 1 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-mrtr-input` | server | partial | 3 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
 | `input-required-result-basic-elicitation` | server | pass | 3 pass |  |
 | `input-required-result-basic-list-roots` | server | pass | 3 pass |  |
 | `input-required-result-basic-sampling` | server | pass | 3 pass |  |
@@ -273,7 +273,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `server-stateless` | server | fork-covered | 23 pass / 5 fail / 2 warn | Also graded by `testconf-stateless` |
+| `server-stateless` | server | fork-covered | 23 pass / 5 fail / 2 warn | Also graded by `testconf-stateless` · upstream conformance test bug — ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Track… |
 | `request-metadata` | client | pass | 6 pass / 2 skip |  |
 | `tasks-required-task-error` | server | pass | 3 pass |  |
 
@@ -283,11 +283,11 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `tasks-capability-negotiation` | server | partial | 4 pass / 1 fail |  |
-| `tasks-dispatch-and-envelope` | server | partial | 8 pass / 1 fail |  |
-| `tasks-lifecycle` | server | partial | 8 pass / 1 fail |  |
-| `tasks-request-state-removal` | server | partial | 2 pass / 1 fail |  |
-| `tasks-wire-fields` | server | partial | 3 pass / 1 fail |  |
+| `tasks-capability-negotiation` | server | partial | 4 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-dispatch-and-envelope` | server | partial | 8 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-lifecycle` | server | partial | 8 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-request-state-removal` | server | partial | 2 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-wire-fields` | server | partial | 3 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
 | `tasks-status-notifications` | server | pass | 1 skip |  |
 
 
