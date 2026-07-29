@@ -109,12 +109,23 @@ var ErrSignalAbort = errors.New("agent: turn aborted by child signal")
 type signalSink struct {
 	mu      sync.Mutex
 	signals []Signal
+
+	// notify, when non-nil, is closed exactly once on the first raise, so an
+	// interruptible dispatch (issue 1167) can break its join barrier the moment a
+	// child signals. Nil in the default (non-interruptible) path — signals are
+	// then only read at the join.
+	notify chan struct{}
+	once   sync.Once
 }
 
 func (s *signalSink) raise(sig Signal) {
 	s.mu.Lock()
 	s.signals = append(s.signals, sig)
+	n := s.notify
 	s.mu.Unlock()
+	if n != nil {
+		s.once.Do(func() { close(n) })
+	}
 }
 
 // drain returns the collected signals and clears the sink.

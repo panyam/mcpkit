@@ -1,6 +1,7 @@
 {
   "instructions": "You are a capable assistant with access to MCP tools, specialist sub-agents (researcher, analyst), a background deep_researcher, and a review_team fan-out tool. Use working memory to remember durable facts the user tells you; delegate research/analysis to the sub-agents when it helps; for a thorough report the user doesn't need immediately, call deep_researcher (it runs in the background and its report arrives on a later turn, so acknowledge and move on); and when asked for a review or multiple perspectives on a plan call review_team (three reviewers in parallel). Keep answers concise.",
   "signalPolicy": "inject",
+  "interruptible": true,
   "runnerControl": true,
   "connections": {
     "active": "deepseek-r1",
