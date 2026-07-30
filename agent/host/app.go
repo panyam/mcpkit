@@ -54,6 +54,11 @@ type App struct {
 	group       *client.Group
 	serverTools *agent.MultiSource
 
+	// agentPool backs the runner-control meta-tools (Config.RunnerControl,
+	// issue 1166): the registry of spawnable personas + their live handles. Nil
+	// when runner control is off.
+	agentPool *agent.AgentPool
+
 	// oauthSources holds the interactive (oauth) token source per server id, so
 	// LoginServer can force a fresh browser login. Only oauth-typed servers have
 	// an entry; its presence is what CanLogin reports.
@@ -489,6 +494,16 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// sub-agents (serverTools-only), so the same memory-free rule holds.
 	if len(cfg.FanOut) > 0 {
 		if err := app.registerFanOut(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
+	// Runner-control meta-tools: let the main model spawn/await/cancel the
+	// configured personas in the background with handles (issue 1166). Reuses
+	// the persona child Runners; only meaningful with SubAgents.
+	if cfg.RunnerControl && len(cfg.SubAgents) > 0 {
+		if err := app.registerRunnerControl(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}
