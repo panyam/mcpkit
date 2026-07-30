@@ -32,6 +32,14 @@ type Config struct {
 	MaxTreeSteps  int `json:"maxTreeSteps,omitempty"`
 	MaxTreeTokens int `json:"maxTreeTokens,omitempty"`
 
+	// RunnerControl, when true, gives the main agent the runner-control
+	// meta-tools (issue 1166): spawn_agent / await_agent / cancel_agent /
+	// list_agents, over the configured sub-agent personas. The model can run a
+	// persona in the background, get a handle, and await or cancel it — the
+	// model-driven, handle-based counterpart to calling a persona as a blocking
+	// tool. Only meaningful alongside SubAgents. False (the default) omits them.
+	RunnerControl bool `json:"runnerControl,omitempty"`
+
 	// SignalPolicy selects how the main agent reacts to an upward Signal a
 	// signalling sub-agent raises (issue 1165), read at the dispatch join:
 	//   - "" / "inject" — inject the signal as context and continue (default).
