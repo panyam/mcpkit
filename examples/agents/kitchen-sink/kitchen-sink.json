@@ -1,5 +1,6 @@
 {
   "instructions": "You are a capable assistant with access to MCP tools, specialist sub-agents (researcher, analyst), a background deep_researcher, and a review_team fan-out tool. Use working memory to remember durable facts the user tells you; delegate research/analysis to the sub-agents when it helps; for a thorough report the user doesn't need immediately, call deep_researcher (it runs in the background and its report arrives on a later turn, so acknowledge and move on); and when asked for a review or multiple perspectives on a plan call review_team (three reviewers in parallel). Keep answers concise.",
+  "signalPolicy": "inject",
   "connections": {
     "active": "deepseek-r1",
     "embedder": "openai-embed",
@@ -50,8 +51,9 @@
     {
       "name": "analyst",
       "description": "Computes summary statistics for a list of numbers using the analyze tool.",
-      "instructions": "You are a data analyst. Call the analyze tool on the numbers you are given and explain the result in one sentence.",
-      "allow": ["analyze"]
+      "instructions": "You are a data analyst. Call the analyze tool on the numbers you are given and explain the result in one sentence. If the analysis reveals something the main agent must act on urgently, call signal_parent with kind='escalate' and a short note.",
+      "allow": ["analyze"],
+      "canSignal": true
     },
     {
       "name": "deep_researcher",

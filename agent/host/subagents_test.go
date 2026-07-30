@@ -115,6 +115,50 @@ func TestAppSubAgentSnakeCaseName(t *testing.T) {
 	}
 }
 
+// TestAppSubAgentSignalsSurface: a CanSignal persona raises signal_parent, and
+// the main agent surfaces it as an EventSignal (wrapped in HostRunnerEvent) and
+// continues (default inject-and-continue policy). Guards the host wiring of
+// issue 1165 — the persona gets the control tool and the main Runner reacts.
+func TestAppSubAgentSignalsSurface(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "d1", Name: "worker",
+			Args: core.NewRawJSON(json.RawMessage(`{"task":"go"}`))}}},
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "s1", Name: agent.SignalParentToolName,
+			Args: core.NewRawJSON(json.RawMessage(`{"kind":"escalate","note":"found it"}`))}}},
+		agent.StubTurn{Text: "child done"},
+		agent.StubTurn{Text: "synthesized"},
+	)
+
+	cfg := testConfig(ts.URL)
+	cfg.SubAgents = []SubAgentConfig{{
+		Name: "worker", Description: "does work", Instructions: "You work.", CanSignal: true,
+	}}
+	obs := &collectObserver{}
+	app, err := NewApp(cfg, nil, strings.NewReader(""), WithProvider(stub), WithObserver(obs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "delegate to worker"); err != nil {
+		t.Fatal(err)
+	}
+
+	var found *agent.Signal
+	for _, e := range obs.kinds(HostRunnerEvent) {
+		if e.RunnerEvent.Kind == agent.EventSignal {
+			found = e.RunnerEvent.Signal
+		}
+	}
+	if found == nil {
+		t.Fatal("no EventSignal surfaced; the persona could not signal the main agent")
+	}
+	if found.Kind != agent.SignalEscalate || found.Source != "worker" {
+		t.Fatalf("surfaced signal = %+v, want escalate from 'worker'", found)
+	}
+}
+
 func hasToolNamed(defs []core.ToolDef, name string) bool {
 	for _, d := range defs {
 		if d.Name == name {

@@ -164,6 +164,12 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 		childScope = parent + "/" + s.cfg.Name
 	}
 	childCtx := withAgentScope(withAgentDepth(ctx, depth+1), childScope)
+	// Hand the child the sink of the dispatch that spawned it (issue 1165), so
+	// the child's signal_parent raises to THIS parent — the child's own dispatch
+	// would otherwise shadow it. nil at the top level (no parent to signal).
+	if ps := dispatchSinkFrom(ctx); ps != nil {
+		childCtx = withParentSink(childCtx, ps)
+	}
 
 	emit := func(Event) {}
 	if s.cfg.OnEvent != nil {

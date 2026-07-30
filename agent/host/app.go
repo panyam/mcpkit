@@ -539,6 +539,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		// Only the main Runner carries the tree budget; sub-agent / fan-out /
 		// team member Runners inherit the shared counter through ctx.
 		TreeBudget: agent.TreeBudget{MaxSteps: cfg.MaxTreeSteps, MaxTokens: cfg.MaxTreeTokens},
+		// The main agent is the parent that reacts to upward sub-agent signals
+		// (issue 1165); sub-agent Runners do not set a policy (they raise, they
+		// do not react). Nil for the inject-and-continue default.
+		SignalPolicy: signalPolicyFor(cfg.SignalPolicy),
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.
