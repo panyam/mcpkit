@@ -117,6 +117,15 @@ type RunnerConfig struct {
 	// pre-loop.
 	Compactor Compactor
 
+	// SignalPolicy, when non-nil, decides how this Runner (as a parent) reacts
+	// to the upward Signals its children raised during a dispatch, read at the
+	// join (issue 1165). It runs after the fan-out has joined, so it chooses
+	// only whether to abort the turn (SignalAction.AbortTurn -> ErrSignalAbort);
+	// the signals are injected into the next step as a RoleSystem note either
+	// way, so the parent model sees them. Nil means inject-and-continue. See
+	// AbortOnEscalate for the built-in deterministic policy.
+	SignalPolicy SignalPolicy
+
 	// ResponseSchema, when set, coerces the turn's final answer into
 	// structured output. After the tool loop reaches its terminal
 	// no-tool-call text, the Runner makes one additional Generate call with
@@ -384,13 +393,36 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			return result, nil
 		}
 
-		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit, reg)
+		toolMsgs, signals := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit, reg)
 		stepSpan.End()
 		if err := ctx.Err(); err != nil {
 			return nil, r.failSpan(emit, turnSpan, err)
 		}
+		// Tool results must immediately follow the assistant message that
+		// requested them (providers pair RoleTool with the assistant's tool
+		// calls), so append them first; a signal note goes after.
 		msgs = append(msgs, toolMsgs...)
 		added = append(added, toolMsgs...)
+		if len(signals) > 0 {
+			for i := range signals {
+				emit(Event{Kind: EventSignal, Step: step, Signal: &signals[i]})
+			}
+			if r.cfg.SignalPolicy != nil {
+				if act := r.cfg.SignalPolicy(signals); act.AbortTurn {
+					reason := act.Reason
+					if reason == "" {
+						reason = "child signalled abort"
+					}
+					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w: %s", ErrSignalAbort, reason))
+				}
+			}
+			// Inject the signals as a RoleSystem note so the parent model sees
+			// them on the next step. Drained once from the sink, appended once —
+			// no transient-stacking (unlike a re-derived snapshot).
+			sigMsg := Message{Role: RoleSystem, Text: renderSignals(signals)}
+			msgs = append(msgs, sigMsg)
+			added = append(added, sigMsg)
+		}
 	}
 
 	return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w (%d steps)", ErrMaxSteps, r.cfg.MaxSteps))
@@ -516,10 +548,15 @@ func (g *callCancels) cancel(id string) {
 
 // dispatch runs the step's tool calls concurrently, serializes event
 // emission, and returns RoleTool messages in call order regardless of
-// completion order. When reg is non-nil each call runs under its own
-// child context registered by call ID, so a Control can cancel one call
-// without touching its siblings or the turn.
-func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) []Message {
+// completion order, plus any upward Signals the calls' sub-agents raised.
+// When reg is non-nil each call runs under its own child context registered by
+// call ID, so a Control can cancel one call without touching its siblings or
+// the turn. A fresh signal sink is installed per dispatch (not shared across
+// the tree): a sub-agent spawned by one of these calls raises into THIS sink,
+// its immediate parent's, and a nested dispatch shadows it for grandchildren.
+func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) ([]Message, []Signal) {
+	sink := &signalSink{}
+	ctx = withDispatchSink(ctx, sink)
 	results := make([]Message, len(calls))
 	var emitMu sync.Mutex
 	locked := func(ev Event) {
@@ -552,7 +589,7 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 		}(i, call)
 	}
 	wg.Wait()
-	return results
+	return results, sink.drain()
 }
 
 // toolReadOnly reports whether the named tool declares the readOnlyHint

@@ -36,13 +36,17 @@ model manages its own async through meta-tools today: `create_trigger`,
 
 - **Down** — `Control` (issue 936): an outside caller cancels an in-flight
   call, cleanly, across all outcome shapes.
-- **Up** — **signals** (issue 1036, deferred): a child raises an
+- **Up** — **signals** (issue 1165, piece A of 1036): a child raises an
   exception/signal to its parent — "stop the siblings," "escalate" — itself
-  just a tool call from the child's side.
-- **Model-driven** — **runner-control meta-tools** (deferred): `spawn_agent`,
-  `cancel_agent`, `await_agent`, `transfer_to`, `schedule` — the async-control
-  plane extended to sub-agents, so "supervision/orchestration" is *a Runner
-  whose tools control other Runners*, not a separate engine.
+  just a tool call from the child's side, writing to a ctx-threaded upward sink
+  the parent reads at the join. This is the *mechanism*; reacting mid-fan-out
+  is the interruptible turn below.
+- **Model-driven** — **runner-control meta-tools** (issue 1166, piece B of
+  1036): `spawn_agent`, `cancel_agent`, `await_agent`, `transfer_to`,
+  `schedule` — the async-control plane extended to sub-agents, so
+  "supervision/orchestration" is *a Runner whose tools control other Runners*,
+  not a separate engine. Host-layer over a running-agent registry; no Runner
+  change.
 - **Composition-via-tools** — the same principle one level up: not just steering
   *execution* but mutating the *graph*. Membership is **static today** (`Team`
   declares its members at construction; a fixed, validated handoff graph), and
@@ -52,9 +56,18 @@ model manages its own async through meta-tools today: `create_trigger`,
   composition trades the static graph's determinism, so the depth / budget /
   handoff caps matter *more* — a model that grows its own tree needs hard
   bounds.
-- **Interruptible turn** (opt-in) — reacting to a signal or a partial result
-  mid-fan-out breaks the join barrier. Gated so the default fan-out-then-join
-  stays deterministic; only a signal-wired turn becomes interruptible.
+- **Interruptible turn** (opt-in — issue 1167, piece C of 1036) — reacting to a
+  signal or a partial result mid-fan-out breaks the join barrier. Gated so the
+  default fan-out-then-join stays deterministic; only a signal-wired turn
+  becomes interruptible. The one structural Runner change of the three; requires
+  A (a signal to react to).
+
+The 1036 epic decomposes into these three separable pieces — **A** upward
+signals (1165, the mechanism, no barrier break), **B** runner-control meta-tools
+(1166, host-layer), **C** the interruptible turn (1167, the gated exception).
+Sequence is A -> C (C needs a signal to react to); B is independent. A is the
+keystone: it forces the signal-payload design B and C both consume, and it is
+what the interaction mediator (1157) needs.
 
 ### A note on the third channel — observability (not an axis)
 
@@ -275,8 +288,9 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
 
 - Context: handoff-via-injection + per-agent persistent context (the actor
   form above) — a generalization of `Team`.
-- Control: upward signals + runner-control meta-tools
-  + interruptible turn (1036).
+- Control: the 1036 epic, now split into three tracked pieces — upward signals
+  (1165, A), runner-control meta-tools (1166, B), interruptible turn (1167, C);
+  sequence A -> C, B independent.
   **`TreeBudget` shipped (1032):** a ctx-threaded aggregate cap on total model
   **steps** and **tokens** across a turn's whole tree (parent + sub-agents +
   fan-out members + handoff rounds), consulted by the Runner per step. The
