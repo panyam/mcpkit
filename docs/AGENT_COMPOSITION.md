@@ -316,10 +316,11 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
   cancellable `callBase = WithCancel(parent)`; non-interruptible mode keeps
   `callBase == parent` so the default path is byte-identical), so cancelled
   siblings read "cancelled by user" instead of a turn abort; `wg.Wait()` still
-  fills every result slot (providers require a result per tool call). Follow-ups
-  filed as candidates (unfiled yet): a `preempt` signal kind, per-`TurnRequest`
-  interruptible override, reacting to a partial result mid-fan-out, signals from
-  async sub-agents.
+  fills every result slot (providers require a result per tool call). Follow-ups:
+  the **`preempt` signal kind** (#1176) makes the interruptible break kind-aware
+  — `preempt`/`escalate` cancel the losers, a `custom` FYI signal no longer does;
+  still-unfiled candidates are a per-`TurnRequest` interruptible override,
+  reacting to a partial result mid-fan-out, and signals from async sub-agents.
   **`TreeBudget` shipped (1032):** a ctx-threaded aggregate cap on total model
   **steps** and **tokens** across a turn's whole tree (parent + sub-agents +
   fan-out members + handoff rounds), consulted by the Runner per step. The

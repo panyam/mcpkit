@@ -23,18 +23,32 @@ const (
 
 	// SignalCustom carries an application-defined signal (named by Name, with an
 	// optional Data payload) for a SignalPolicy or the parent model to interpret.
+	// It is FYI-only: it is collected and injected into the parent's next step,
+	// but does NOT break an interruptible dispatch's join barrier (see interrupts).
 	SignalCustom SignalKind = "custom"
 
-	// A preemption signal ("I have a sufficient result; the parallel work is
-	// moot") is deliberately NOT defined here. It only has teeth once the parent
-	// can break the join barrier and cancel the other in-flight calls, which is
-	// the interruptible turn (issue 1167, piece C). It stays non-referential
-	// even there: the child reports its OWN sufficiency, and the parent — which
-	// alone holds the fan-out inventory — decides which siblings to cancel from
-	// its own prompt/policy. A child never names a sibling (it has no knowledge
-	// of them; A7). Defining it in piece A would ship a kind that no-ops (the
-	// siblings have already joined by the time the parent reads it).
+	// SignalPreempt reports "I have a sufficient result; the parallel work is
+	// moot." It only has teeth in an interruptible turn (issue 1167, piece C):
+	// there it breaks the fan-out join barrier so the parent cancels the other
+	// in-flight (loser) calls and re-plans with the sufficient result. It stays
+	// non-referential — the child reports its OWN sufficiency, and the parent,
+	// which alone holds the fan-out inventory, decides which siblings to cancel
+	// from its own prompt/policy; a child never names a sibling (A7). In a
+	// non-interruptible turn it degrades to inject-and-continue (the siblings
+	// have already joined by the time the parent reads it), same as any signal.
+	SignalPreempt SignalKind = "preempt"
 )
+
+// interrupts reports whether a signal of this kind breaks an interruptible
+// dispatch's join barrier (issue 1167, piece C) the moment a child raises it,
+// cancelling the remaining in-flight calls. SignalPreempt ("sufficient result,
+// stop the parallel work") and SignalEscalate ("stop and handle my finding")
+// interrupt; SignalCustom is FYI-only and never cancels siblings. It has no
+// effect in a non-interruptible turn, where every signal is read only at the
+// join.
+func (k SignalKind) interrupts() bool {
+	return k == SignalPreempt || k == SignalEscalate
+}
 
 // Signal is an upward message from a child agent to its parent Runner. It is
 // wire-serializable (constraint A2) so a remote child raises it identically to
@@ -110,10 +124,12 @@ type signalSink struct {
 	mu      sync.Mutex
 	signals []Signal
 
-	// notify, when non-nil, is closed exactly once on the first raise, so an
-	// interruptible dispatch (issue 1167) can break its join barrier the moment a
-	// child signals. Nil in the default (non-interruptible) path — signals are
-	// then only read at the join.
+	// notify, when non-nil, is closed exactly once on the first INTERRUPTING
+	// raise (SignalKind.interrupts — preempt/escalate), so an interruptible
+	// dispatch (issue 1167) can break its join barrier the moment a child
+	// signals a preemption. A SignalCustom raise is collected but leaves notify
+	// open (FYI-only, never cancels siblings). Nil in the default
+	// (non-interruptible) path — signals are then only read at the join.
 	notify chan struct{}
 	once   sync.Once
 }
@@ -123,7 +139,7 @@ func (s *signalSink) raise(sig Signal) {
 	s.signals = append(s.signals, sig)
 	n := s.notify
 	s.mu.Unlock()
-	if n != nil {
+	if n != nil && sig.Kind.interrupts() {
 		s.once.Do(func() { close(n) })
 	}
 }
@@ -187,7 +203,7 @@ func RaiseSignal(ctx context.Context, sig Signal) bool {
 const SignalParentToolName = "signal_parent"
 
 type signalParentArgs struct {
-	// Kind is "escalate" or "custom".
+	// Kind is "escalate", "preempt", or "custom".
 	Kind string `json:"kind"`
 	// Note is a short reason surfaced to the parent.
 	Note string `json:"note,omitempty"`
@@ -202,13 +218,13 @@ type signalParentArgs struct {
 func NewSignalSource() *FuncSource {
 	fs := NewFuncSource()
 	_ = AddFunc(fs, SignalParentToolName,
-		"Raise a signal to the parent agent that spawned you. kind: 'escalate' (ask the parent to stop and handle your finding) or 'custom' (a named signal with your own findings). Report only your OWN state — you have no knowledge of other sub-agents; the parent decides what to do. Use sparingly, only for a decisive result the parent must act on.",
+		"Raise a signal to the parent agent that spawned you. kind: 'escalate' (ask the parent to stop and handle your finding), 'preempt' (you have a sufficient result and the parallel work is now moot — ask the parent to stop the other sub-agents and proceed with yours), or 'custom' (a named, FYI signal carrying your own findings). Report only your OWN state — you have no knowledge of other sub-agents; the parent decides what to do. Use sparingly, only for a decisive result the parent must act on.",
 		func(ctx context.Context, in signalParentArgs) (string, error) {
 			kind := SignalKind(in.Kind)
 			switch kind {
-			case SignalEscalate, SignalCustom:
+			case SignalEscalate, SignalPreempt, SignalCustom:
 			default:
-				return "", fmt.Errorf("unknown signal kind %q (want escalate or custom)", in.Kind)
+				return "", fmt.Errorf("unknown signal kind %q (want escalate, preempt, or custom)", in.Kind)
 			}
 			if RaiseSignal(ctx, Signal{Kind: kind, Name: in.Name, Note: in.Note}) {
 				return fmt.Sprintf("signalled parent: %s", kind), nil
