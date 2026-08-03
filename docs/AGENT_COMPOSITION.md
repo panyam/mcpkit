@@ -317,7 +317,7 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
   `callBase == parent` so the default path is byte-identical), so cancelled
   siblings read "cancelled by user" instead of a turn abort; `wg.Wait()` still
   fills every result slot (providers require a result per tool call). Follow-ups:
-  the **`preempt` signal kind** (#1176) is **parent-granted, not
+  the **`preempt` signal kind** (#1176, shipped) is **parent-granted, not
   child-authoritative** — a child's preempt is an *advisory* claim (under A7 it
   cannot know the global goal), so it breaks the barrier and cancels the losers
   only when the parent's `RunnerConfig.PreemptGrant` honors it; with no grant
