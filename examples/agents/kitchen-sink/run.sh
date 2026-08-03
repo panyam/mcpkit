@@ -28,6 +28,10 @@ COMPACT_TOKENS="${COMPACT_TOKENS:-8000}"
 EXPORTER="${EXPORTER:-otlp}"
 OTLP_ENDPOINT="${OTLP_ENDPOINT:-localhost:4317}"
 UI="${UI:-tui}"
+# Aggregate tree-budget rails (unset = unbounded). Kept as plain env passthrough
+# with an empty default so `set -u` doesn't abort when they aren't provided.
+MAX_TREE_STEPS="${MAX_TREE_STEPS:-}"
+MAX_TREE_TOKENS="${MAX_TREE_TOKENS:-}"
 
 bash "$DIR/preflight.sh"
 
@@ -48,28 +52,38 @@ for probe in demo:8788 runbooks:8789 community:8790 events:8791; do
 done
 if [ -n "$down" ]; then
 	echo "MCP server(s) not reachable:$down" >&2
-	echo "  -> start them first:  just servers-up      (they run independently of the chat)" >&2
-	echo "     or just one:        just servers-up demo" >&2
+	echo "  -> start them first:  just servers-up-bg   (detached, so this terminal can run the chat)" >&2
+	echo "     or watch logs:     just servers-up      (foreground, in a separate terminal)" >&2
 	# Until the agent connects asynchronously (idea 2), a down server fails the
 	# launch, so stop here with a clear message instead of an opaque connect error.
 	exit 1
 fi
 
-echo "==> launching agentchat (session=$SESSION, store=$SESSION_STORE)"
+# CONFIG selects the agent topology: the default single-agent kitchen-sink, or
+# kitchen-sink-team.json (handoff Team). MEMORY=0 drops the memory flags — team
+# mode is mutually exclusive with working memory.
+CONFIG="${CONFIG:-$DIR/kitchen-sink.json}"
+MEMORY="${MEMORY:-1}"
+echo "==> launching agentchat (config=$(basename "$CONFIG"), session=$SESSION, store=$SESSION_STORE)"
 cd "$ROOT/cmd/agentchat"
 args=(
-	--config "$DIR/kitchen-sink.json"
+	--config "$CONFIG"
 	--persist-config
 	--session-store "$SESSION_STORE"
 	--session "$SESSION"
 	--offload-threshold "$OFFLOAD_THRESHOLD"
-	--memory --memory-inject-recall
 	--compact-tokens "$COMPACT_TOKENS"
 	--exporter "$EXPORTER"
 	--otlp-endpoint "$OTLP_ENDPOINT"
 	--ui "$UI"
 )
+[ "$MEMORY" = "1" ] && args+=(--memory --memory-inject-recall)
 [ -n "$ACTIVE" ] && args+=(--active "$ACTIVE")
+# Aggregate cost rail across the sub-agent tree (unset = unbounded). Try
+# MAX_TREE_STEPS=4 just run and ask for the review team + deep research to see a
+# chatty tree get capped.
+[ -n "$MAX_TREE_STEPS" ] && args+=(--max-tree-steps "$MAX_TREE_STEPS")
+[ -n "$MAX_TREE_TOKENS" ] && args+=(--max-tree-tokens "$MAX_TREE_TOKENS")
 # Only override the config's embedder role when EMBED_MODEL is set.
 if [ -n "$EMBED_MODEL" ]; then
 	args+=(--memory-embed-model "$EMBED_MODEL" --memory-embed-url "$EMBED_URL" --memory-embed-dim "$EMBED_DIM")

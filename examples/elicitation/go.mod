@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/elicitation
 
-go 1.26.4
+go 1.26.5
 
 replace github.com/panyam/mcpkit => ../..
 
@@ -10,7 +10,7 @@ replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 
 require (
 	github.com/panyam/demokit v0.0.30
-	github.com/panyam/mcpkit v0.4.0-b3
+	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/servicekit v0.1.2
 )

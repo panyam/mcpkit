@@ -17,6 +17,12 @@ import {
 
 const here = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
+// repoConformance points at the real committed conformance/ dir (test file is
+// at tools/conformance-report/test/, so up three levels is the repo root).
+const repoConformance = fileURLToPath(
+  new URL('../../../conformance/', import.meta.url)
+);
+
 function loadFixtures() {
   return {
     scorecard: loadScorecard(join(here, 'scorecard.json')),
@@ -136,5 +142,30 @@ describe('spliceGeneratedRegion', () => {
     expect(merged).toContain('marker convention inline');
     expect(merged).toContain('NEW BLOCK');
     expect(merged).not.toContain('OLD BLOCK');
+  });
+});
+
+// Guards the real committed overlay files so a malformed hand-edit (e.g. an
+// entry placed at the wrong indent) fails here — in the fast `npm test` step —
+// instead of only in the heavy full-refresh render, where it read as an opaque
+// "Unexpected scalar" YAML error and silently held CI red.
+describe('committed conformance overlays parse', () => {
+  it('known-gaps.yaml loads with well-formed scenarios and checks', () => {
+    const gaps = loadKnownGaps(join(repoConformance, 'known-gaps.yaml'));
+    expect(gaps).toBeTypeOf('object');
+    for (const section of ['scenarios', 'checks'] as const) {
+      const entries = (gaps as Record<string, unknown>)[section];
+      if (entries === undefined) continue;
+      expect(entries, `${section} must be a mapping`).toBeTypeOf('object');
+      for (const [id, body] of Object.entries(entries as object)) {
+        expect(body, `${section}.${id} must be a mapping`).toBeTypeOf('object');
+      }
+    }
+  });
+
+  it('local-suites.yaml loads without throwing', () => {
+    expect(() =>
+      loadLocalSuites(join(repoConformance, 'local-suites.yaml'))
+    ).not.toThrow();
   });
 });

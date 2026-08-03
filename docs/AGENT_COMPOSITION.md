@@ -36,13 +36,25 @@ model manages its own async through meta-tools today: `create_trigger`,
 
 - **Down** — `Control` (issue 936): an outside caller cancels an in-flight
   call, cleanly, across all outcome shapes.
-- **Up** — **signals** (issue 1036, deferred): a child raises an
-  exception/signal to its parent — "stop the siblings," "escalate" — itself
-  just a tool call from the child's side.
-- **Model-driven** — **runner-control meta-tools** (deferred): `spawn_agent`,
-  `cancel_agent`, `await_agent`, `transfer_to`, `schedule` — the async-control
-  plane extended to sub-agents, so "supervision/orchestration" is *a Runner
-  whose tools control other Runners*, not a separate engine.
+- **Up** — **signals** (issue 1165, piece A of 1036; **SHIPPED PR 1168**): a
+  child raises a **non-referential** signal to its parent — "escalate," a
+  custom note — itself just a tool call (`signal_parent`) from the child's
+  side, writing to a ctx-threaded upward sink the parent reads at the join.
+  The child reports only its OWN state and never names a sibling (A7
+  isolation); the PARENT, which holds the fan-out inventory, decides what to do
+  about the other children (`RunnerConfig.SignalPolicy` / injection). This is
+  the *mechanism*; reacting mid-fan-out is the interruptible turn below. See
+  § Control axis — upward signals (1036 A) for the two-key sink and the
+  non-referential decision.
+- **Model-driven** — **runner-control meta-tools** (issue 1166, piece B of
+  1036; **SHIPPED PR 1169**): `spawn_agent`, `await_agent`, `cancel_agent`,
+  `list_agents` — the async-control plane extended to sub-agents, so
+  "supervision/orchestration" is *a Runner whose tools control other Runners*,
+  not a separate engine. Backed by `agent.AgentPool` (agent-layer, beside
+  `AgentSource` — background runs need the unexported depth/scope/detach
+  plumbing) + `NewSpawnSource`; host is thin wiring, no Runner change. Pull-based
+  (`await_agent`) is the distinct value over the auto-injecting `AsyncAgentSource`.
+  `transfer_to` stays Team's (943), not duplicated here.
 - **Composition-via-tools** — the same principle one level up: not just steering
   *execution* but mutating the *graph*. Membership is **static today** (`Team`
   declares its members at construction; a fixed, validated handoff graph), and
@@ -52,9 +64,23 @@ model manages its own async through meta-tools today: `create_trigger`,
   composition trades the static graph's determinism, so the depth / budget /
   handoff caps matter *more* — a model that grows its own tree needs hard
   bounds.
-- **Interruptible turn** (opt-in) — reacting to a signal or a partial result
-  mid-fan-out breaks the join barrier. Gated so the default fan-out-then-join
-  stays deterministic; only a signal-wired turn becomes interruptible.
+- **Interruptible turn** (opt-in — issue 1167, piece C of 1036; **SHIPPED
+  PR 1170**) — `RunnerConfig.Interruptible` (default off) lets `dispatch` break
+  the fan-out join barrier on the first mid-flight signal, cancel the remaining
+  calls (they feed back "cancelled by user"), and return partial results; the
+  existing `RunTurn` loop then re-plans. Gated so the default fan-out-then-join
+  stays deterministic; only a signal-wired, opt-in turn becomes interruptible.
+  The one structural Runner change of the three, and even it needs no `RunTurn`
+  change — re-entry falls out of the existing post-dispatch loop. Requires A
+  (a signal to react to).
+
+The 1036 epic decomposed into these three separable pieces — **A** upward
+signals (1165, the mechanism, no barrier break), **B** runner-control meta-tools
+(1166, agent-layer pool + host wiring), **C** the interruptible turn (1167, the
+gated exception). Sequence was A -> C (C needs a signal to react to); B was
+independent. A was the keystone: it forced the signal-payload design B and C both
+consume, and it is what the interaction mediator (1157) needs. **All three
+shipped (PRs 1168/1169/1170); epic 1036 closed.**
 
 ### A note on the third channel — observability (not an axis)
 
@@ -148,7 +174,13 @@ flowchart TB
 ```
 
 - **Team (built)** uses a shared thread and swaps which stateless Runner reads
-  it — the minimal concrete handoff.
+  it — the minimal concrete handoff. Host-wired via `Config.Team` (1042):
+  `App.RunTurn` drives `Team.RunTurn` instead of the single Runner, and the
+  **active agent persists across user turns** (control stays transferred, it does
+  not re-route from Start each turn). Team mode replaces the single main agent,
+  so it is mutually exclusive with that agent's memory / sub-agents / fan-out
+  (integrating those into team members is deferred). `OnHandoff` surfaces as a
+  `HostHandoff` event; demoed in `examples/agents/kitchen-sink` (`just team`).
 - **The general form** gives each agent its *own persistent context* and makes
   transfer an **injection** into the target (the actor / message-passing
   idiom mcpkit already leans toward via triggers + events). More general —
@@ -171,6 +203,51 @@ the composition primitives all wrap the Runner, and the *one* place we let a
 turn become re-entrant (the signal-driven interruptible turn) is explicit and
 opt-in.
 
+## Sub-agents and memory
+
+The injection-only boundary has a direct consequence: **a sub-agent gets no
+ambient parent state — no working memory, no shared store handle.** It receives
+exactly what crosses the boundary explicitly (task arguments + injected
+context) and returns exactly its answer.
+
+This is not a cleanliness preference; it falls out of the two axes. A
+sub-agent's location is not guaranteed. The in-process `AgentSource` is the
+*degenerate co-located case*; the general case is a child on another host,
+provider, or model. Shared parent memory assumes co-location, and A2
+wire-serializability already forbids non-serializable state (a pointer to the
+parent's store) from crossing the parent-to-child edge. So "what the child
+needs to know" is the orchestrator's job to distill and pass — the same
+"choose what crosses into the next context under a budget" problem
+`docs/AGENT_MEMORY_FLOW.md` frames for turn-to-turn memory, one level up.
+
+Consequences:
+
+- **A child that needs memory owns it entirely** — its store, persistence, and
+  namespace scheme configured on its own Runner, opaque to the parent. This is
+  the same encapsulation as a stateful MCP tool owning its own database: the
+  caller neither provisions nor knows it. A code-cleanup sub-agent that
+  remembers its past runs sets that up itself.
+- **The trap:** wiring a child with `WithMemoryNamespaceFunc(a.currentRunID)`
+  silently drops it into the *parent's* namespace — explicitly not the model. A
+  child's memory is never addressed by the parent's run id.
+- **Hierarchy** (a parent recalling across its children's memory) is deferred
+  behind a prefix/hierarchical namespace query the `MemoryStore` seam does not
+  have (exact-match today), and even then it is a query over serializable
+  results, not shared mutable access.
+- **`AgentSource` stays; colocation is contained, not removed.** It is the
+  in-process implementation of the location-independent `ToolSource` contract —
+  the zero-serialization fast path. A remote sub-agent is a *sibling*
+  implementation of the same seam (largely "a sub-agent published as an MCP
+  server, reached through the existing server-tools `ToolSource`"); what it adds
+  is carrying the composition metadata ctx threads for free in-process
+  (depth/budget, cancellation, the nested event stream) over the wire — the
+  surface of async sub-agents (1035), upward signals (1036), and dynamic
+  composition (1038). Enforcing the no-shared-memory rule now, while everything
+  is co-located, is what keeps the local and remote implementations
+  interchangeable from the parent's side.
+
+Decision captured in issue 1151; enforced by constraint A7.
+
 ## Constraints this model respects
 
 - **A6** (model-facing → `agent/`): `AgentSource`, `Team`, and the future
@@ -179,20 +256,92 @@ opt-in.
   envelope (scope/depth on the wrapper); `Event` stays flat.
 - **A1** (dependency direction): composition is pure `agent/` over `Runner` +
   `ToolSource`; no new upward deps.
+- **A7** (no shared sub-agent memory): a persona is built over the server-only
+  `serverTools`, never the memory-bearing aggregate; parent-to-child is params
+  + injection. See § Sub-agents and memory above.
 
 ## Status & sequencing
 
 **Built (Phase 3):** `AgentSource` (941, agent-as-tool + depth/budget guards),
-`SubAgentEvent` nesting (942), `Team` handoff (943), and the
-`examples/agents/multi-agent` walkthrough (1031, part 1).
+`SubAgentEvent` nesting (942), `Team` handoff (943), the
+`examples/agents/multi-agent` walkthrough (1031, part 1), and **`FanOutSource`**
+(1033 — one tool broadcasts a task to N member sub-agents concurrently and
+returns their results aggregated in member order; the parallel-ensemble
+primitive, reusing `AgentSource` for per-member depth/budget/scope, host-wired
+as `Config.FanOut` and demoed in `examples/agents/kitchen-sink`).
+
+**Team-in-host (1042):** `Config.Team` drives the App loop; active agent
+persists across turns; `HostHandoff` event; `just team` demo. Mutually exclusive
+with the single-agent features (deferred: integrating memory/offloading into
+team members).
+
+**`AsyncAgentSource` — the Task form (1035):** the spawn-and-continue counterpart
+to `AgentSource`'s blocking Tool form. `Call` returns an ack immediately and runs
+the child on a detached goroutine (`core.DetachForBackground` — it outlives the
+turn and makes server calls); on completion `OnComplete` delivers the result,
+which the host injects as a `subagent.completed` event (reusing the `tasks_bg.go`
+Ingest + trigger path), so the parent picks it up on a later turn. Depth/budget
+guards apply at spawn; `SubAgentEvent` still surfaces the background stream.
+Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
+`examples/agents/kitchen-sink`.
+
+**Tool vs Task vs *a real Task*:**
+- **Tool** (`AgentSource`): call-and-block, answer this turn. For short subtasks
+  the parent must have now.
+- **Task form** (`AsyncAgentSource`): ack-now, result later via injection. For
+  long-running or fan-out-and-continue work. But it is **not** an MCP task — no
+  wire presence, no model-visible poll/cancel, the goroutine is ephemeral (dies
+  with the process).
+- **A real (server-side) task** (`ext/tasks`): when you need the model to *poll*
+  or *cancel* the background work, or it must survive a restart. Heavier: a task
+  runtime + wire support. The async sub-agent is the no-runtime, ephemeral end of
+  the same spawn-and-continue spectrum whose durable/controllable end is a task.
 
 **Deferred, mapped to the axes:**
 
 - Context: handoff-via-injection + per-agent persistent context (the actor
   form above) — a generalization of `Team`.
-- Control: async sub-agents (1035), upward signals + runner-control meta-tools
-  + interruptible turn (1036), parallel fan-out ergonomics (1033),
-  aggregate step/token tree budget (1032).
+- Control: the 1036 epic — upward signals (1165, A, PR 1168), runner-control
+  meta-tools (1166, B, PR 1169), interruptible turn (1167, C, PR 1170) — all
+  **SHIPPED, epic closed**. Load-bearing facts: (A) signals are
+  **non-referential** — a child reports only its own state, never names a
+  sibling; the parent holds the fan-out inventory and decides. The ctx sink is
+  **two-key** (`agent/signal.go`): `dispatchSinkKey` (a dispatch's sink for its
+  own children) + `parentSinkKey` (snapshotted by `AgentSource.Call`), so a
+  child raises to its *spawner*, not its own dispatch sink — a grandchild
+  reaches its immediate parent (a single-key design was a real bug caught before
+  tests). (B) The pool is agent-layer, not host, because background runs need
+  the unexported `withAgentDepth`/`withAgentScope`/`core.DetachForBackground`
+  plumbing. (C) A fan cancel leaves the *step* ctx live (calls run under a
+  cancellable `callBase = WithCancel(parent)`; non-interruptible mode keeps
+  `callBase == parent` so the default path is byte-identical), so cancelled
+  siblings read "cancelled by user" instead of a turn abort; `wg.Wait()` still
+  fills every result slot (providers require a result per tool call). Follow-ups:
+  the **`preempt` signal kind** (#1176, shipped) is **parent-granted, not
+  child-authoritative** — a child's preempt is an *advisory* claim (under A7 it
+  cannot know the global goal), so it breaks the barrier and cancels the losers
+  only when the parent's `RunnerConfig.PreemptGrant` honors it; with no grant
+  (the default) a preempt is injected like `custom` and the model decides, so a
+  rogue or prompt-injected child cannot unilaterally kill its siblings.
+  `escalate` still breaks unconditionally (its must-handle contract); a `custom`
+  FYI signal never breaks. Deferred: letting the grant/policy select *which*
+  in-flight calls to cancel (#1177), a per-`TurnRequest` interruptible override,
+  reacting to a partial result mid-fan-out, and signals from async sub-agents.
+  **`TreeBudget` shipped (1032):** a ctx-threaded aggregate cap on total model
+  **steps** and **tokens** across a turn's whole tree (parent + sub-agents +
+  fan-out members + handoff rounds), consulted by the Runner per step. The
+  top-level Runner installs it (`RunnerConfig.TreeBudget`, host `Config.MaxTree*`
+  / agentchat `--max-tree-*`); every child run inherits the same shared counter
+  through ctx. Exhaustion aborts with `ErrTreeBudget` (a sub-agent's becomes a
+  non-fatal `IsError` result). It completes the cost-guard set alongside the
+  per-source depth cap, the call-count budget (`WithAgentCallBudget`), and
+  per-Runner `MaxSteps`/`Team.MaxHandoffs`.
+  **1033 is closed**: `AgentSource.InputSchema` (typed subtask in) + `Structured`
+  output (a child with a `ResponseSchema` returns coerced JSON) + `Team.OnEvent`
+  (member events tagged by active agent name, rendered attributed as
+  `HostSubAgentEvent`). Map-style fan-out (distribute distinct subtasks) was NOT
+  part of 1033 — `FanOutSource` broadcasts one task to all members; a distinct-
+  subtask variant is a separate future item if wanted.
 - Surface: declarative `agent/host` + agentchat multi-agent config and nested
   rendering (1031, part 2).
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
@@ -32,6 +34,17 @@ type nbCellMsg nbCell
 // nbLiveMsg carries the growing in-flight turn (the not-yet-finished assistant
 // cell) so it renders live at the bottom.
 type nbLiveMsg string
+
+// liveFlushMsg is the debounce tick that re-renders the viewport for the
+// accumulated live text. Streaming sends one nbLiveMsg per token, and each
+// re-renders the whole transcript; doing that per token starves keystroke
+// render frames, so the model coalesces them behind this tick (the "alternate
+// keystrokes swallowed while streaming" report).
+type liveFlushMsg struct{}
+
+// liveFlushInterval caps live re-renders during streaming (~25 fps): smooth to
+// read, slow enough that typing stays responsive.
+const liveFlushInterval = 40 * time.Millisecond
 
 // nbCell is one collapsible block in the transcript. rendered holds the
 // glamour-formatted body for assistant cells (issue 1063 B2); body stays the
@@ -157,9 +170,23 @@ func (s *nbObserver) render(ev host.HostEvent) []tea.Msg {
 			s.openTools++
 		}
 
+		// Reasoning renders as its own verbatim cell. The terminal renderer dims it
+		// with ANSI; folded into the glamoured assistant prose, glamour garbles the
+		// escape codes into literal "[2m" text (glamour must never see ANSI). So cut
+		// the prose so far at begin, close a verbatim "thinking" cell at end.
+		if re.Kind == agent.EventThinkingBegin {
+			if txt := seg(); txt != "" {
+				msgs = append(msgs, s.cell("assistant", txt))
+			}
+			s.buf.Reset()
+		}
+
 		s.term.On(ev) // render this event into buf
 
 		switch re.Kind {
+		case agent.EventThinkingEnd:
+			msgs = append(msgs, s.cell("thinking", seg())) // verbatim: cell() only glamours "assistant"
+			s.buf.Reset()
 		case agent.EventToolEnd, agent.EventToolError, agent.EventToolDenied, agent.EventToolCancelled, agent.EventToolUnavailable:
 			if s.openTools > 0 {
 				s.openTools--
@@ -227,10 +254,12 @@ type notebookModel struct {
 	modalHost // an open interactive dialog (/mcp, /sessions) as the focused layer
 	showAll bool // ? toggled the full-help view
 
-	nav      bool // false = insert, true = nav
-	sel      int  // selected cell index in nav mode
-	running  bool
-	atBottom bool // whether the viewport is scrolled to the end (for auto-follow)
+	nav           bool // false = insert, true = nav
+	raw           bool // ctrl+o: show cells as raw markdown, not glamour-rendered (1083)
+	sel           int  // selected cell index in nav mode
+	running       bool
+	atBottom      bool // whether the viewport is scrolled to the end (for auto-follow)
+	liveScheduled bool // a liveFlushMsg tick is pending (coalesces per-token renders)
 
 	history []string
 	histIdx int
@@ -304,7 +333,18 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case nbLiveMsg:
+		// Coalesce per-token updates: record the latest live text but debounce the
+		// (whole-transcript) re-render behind a single pending tick, so streaming
+		// does not starve keystroke render frames.
 		m.live = string(msg)
+		if m.liveScheduled {
+			return m, nil
+		}
+		m.liveScheduled = true
+		return m, tea.Tick(liveFlushInterval, func(time.Time) tea.Msg { return liveFlushMsg{} })
+
+	case liveFlushMsg:
+		m.liveScheduled = false
 		m.refresh()
 		return m, nil
 
@@ -364,6 +404,13 @@ func (m notebookModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case out.Line != "":
 				return m.submit(out.Line)
 			}
+			return m, nil
+		}
+		// ctrl+o toggles the whole transcript between rich and raw markdown, in
+		// place (issue 1083) — works in both INS and NAV modes.
+		if key.Matches(msg, m.keys.Raw) {
+			m.raw = !m.raw
+			m.refresh()
 			return m, nil
 		}
 		if m.nav {
@@ -507,6 +554,9 @@ func (m notebookModel) statusBar() string {
 	} else {
 		hint = "INS  " + m.help.ShortHelpView(m.keys.insertBar())
 	}
+	if m.raw {
+		hint = "RAW  " + hint
+	}
 	if m.running {
 		hint = "working…  " + hint
 	}
@@ -561,10 +611,12 @@ func (m notebookModel) renderCells() string {
 		b.WriteString("\n")
 		if !c.collapsed && c.body != "" {
 			display := c.body
-			if c.rendered != "" {
+			// ctrl+o (m.raw) shows raw markdown for copy fidelity; otherwise the
+			// glamour-rendered form when there is one (issue 1083).
+			if c.rendered != "" && !m.raw {
 				display = c.rendered
 			}
-			b.WriteString(indentBlock(display))
+			b.WriteString(indentBlock(wrapCell(display, m.contentWidth())))
 			b.WriteString("\n")
 		}
 	}
@@ -574,13 +626,15 @@ func (m notebookModel) renderCells() string {
 			b.WriteString("\n")
 		}
 		b.WriteString("▾ assistant\n")
-		b.WriteString(indentBlock(m.live))
+		b.WriteString(indentBlock(wrapCell(m.live, m.contentWidth())))
 	}
 	return b.String()
 }
 
-// hrule is a faint full-width horizontal delimiter drawn between cells.
-func (m notebookModel) hrule() string {
+// contentWidth is the viewport width the transcript renders into (falling back
+// to the last window width, then a floor), the single width both the hrule and
+// cell wrapping measure against.
+func (m notebookModel) contentWidth() int {
 	w := m.vp.Width
 	if w <= 0 {
 		w = m.width
@@ -588,7 +642,26 @@ func (m notebookModel) hrule() string {
 	if w <= 0 {
 		w = 40
 	}
-	return lipgloss.NewStyle().Faint(true).Render(strings.Repeat("─", w))
+	return w
+}
+
+// hrule is a faint full-width horizontal delimiter drawn between cells.
+func (m notebookModel) hrule() string {
+	return lipgloss.NewStyle().Faint(true).Render(strings.Repeat("─", m.contentWidth()))
+}
+
+// wrapCell soft-wraps a cell body to the viewport width before it is indented,
+// so wide lines (a long error, unwrapped tool output, raw JSON) stay inside the
+// viewport instead of being clipped at the right edge — the viewport does not
+// wrap on its own. ansi.Wrap preserves styling, is grapheme-width aware, and
+// hard-breaks tokens longer than the width (JSON with no spaces). The width is
+// reduced by the two-space indent indentBlock adds.
+func wrapCell(s string, width int) string {
+	w := width - 2
+	if w < 1 {
+		w = 1
+	}
+	return ansi.Wrap(s, w, "")
 }
 
 func indentBlock(s string) string {

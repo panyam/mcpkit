@@ -49,12 +49,12 @@ const DefaultEmbeddingDimensions = 1536
 // privileges the store should not assume); docker/backends' init SQL creates
 // it, and NewSemanticMemoryStore fails clearly if the type is unknown.
 //
-// Scope: a namespace column lets one table hold many independent scratchpads
-// (WithNamespace binds a store instance to one, empty = the global
-// namespace). The per-request Namespace field is deferred to issue 1003; the
-// column is already here so that additive interface change costs no schema
-// migration — this store will read req.Namespace with the constructed value
-// as the fallback.
+// Scope: a namespace column lets one table hold many independent scratchpads.
+// The effective namespace of an operation is the per-request Namespace (issue
+// 1003) when set, else the store's instance-level WithMemoryNamespace default
+// (empty = the global namespace) — see effNS. So one store can serve many
+// sessions by threading req.Namespace, and a store built per-scratchpad still
+// works with no per-request field.
 //
 // Concurrency: safe for concurrent use (the DB serializes). Embedding runs
 // outside any transaction — a hosted Embedder is a network call, never held
@@ -68,6 +68,17 @@ type SemanticMemoryStore struct {
 }
 
 var _ agent.MemoryStore = (*SemanticMemoryStore)(nil)
+
+// effNS resolves the namespace for one operation: the per-request Namespace
+// (issue 1003) when set, else the store's instance-level default
+// (WithMemoryNamespace). This lets one store serve many sessions by request
+// while a store built per-scratchpad still works with no per-request field.
+func (s *SemanticMemoryStore) effNS(reqNS string) string {
+	if reqNS != "" {
+		return reqNS
+	}
+	return s.namespace
+}
 
 type memoryConfig struct {
 	skipAutoMigrate bool
@@ -202,7 +213,7 @@ func (s *SemanticMemoryStore) PutMemory(ctx context.Context, req agent.PutMemory
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (namespace, key) DO UPDATE SET body = EXCLUDED.body, embedding = EXCLUDED.embedding`, s.table)
 	err = s.db.WithContext(ctx).Exec(sql,
-		s.namespace, item.Key, string(body), pgvector.NewVector(vecs[0]), item.CreatedAt.UTC(),
+		s.effNS(req.Namespace), item.Key, string(body), pgvector.NewVector(vecs[0]), item.CreatedAt.UTC(),
 	).Error
 	if err != nil {
 		return agent.PutMemoryResponse{}, err
@@ -218,7 +229,7 @@ func (s *SemanticMemoryStore) PutMemory(ctx context.Context, req agent.PutMemory
 // is no query to rank against.
 func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req agent.ListMemoriesRequest) (agent.ListMemoriesResponse, error) {
 	if req.Query == "" {
-		return s.listAll(ctx, req.Limit)
+		return s.listAll(ctx, s.effNS(req.Namespace), req.Limit)
 	}
 	qvecs, err := s.embedder.Embed(ctx, []string{req.Query})
 	if err != nil {
@@ -230,7 +241,7 @@ func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req agent.ListMe
 	sql := fmt.Sprintf(`SELECT body, 1 - (embedding <=> ?) AS score
 		FROM %q WHERE namespace = ?
 		ORDER BY embedding <=> ?`, s.table)
-	args := []any{pgvector.NewVector(qvecs[0]), s.namespace, pgvector.NewVector(qvecs[0])}
+	args := []any{pgvector.NewVector(qvecs[0]), s.effNS(req.Namespace), pgvector.NewVector(qvecs[0])}
 	if req.Limit > 0 {
 		sql += " LIMIT ?"
 		args = append(args, req.Limit)
@@ -238,10 +249,10 @@ func (s *SemanticMemoryStore) ListMemories(ctx context.Context, req agent.ListMe
 	return s.scanScored(ctx, sql, args)
 }
 
-func (s *SemanticMemoryStore) listAll(ctx context.Context, limit int) (agent.ListMemoriesResponse, error) {
+func (s *SemanticMemoryStore) listAll(ctx context.Context, ns string, limit int) (agent.ListMemoriesResponse, error) {
 	sql := fmt.Sprintf(`SELECT body, 0 AS score FROM %q WHERE namespace = ?
 		ORDER BY created_at, key`, s.table)
-	args := []any{s.namespace}
+	args := []any{ns}
 	if limit > 0 {
 		sql += " LIMIT ?"
 		args = append(args, limit)
@@ -276,7 +287,7 @@ func (s *SemanticMemoryStore) scanScored(ctx context.Context, sql string, args [
 // Deleted=false, not an error (the MemoryStore contract).
 func (s *SemanticMemoryStore) DeleteMemory(ctx context.Context, req agent.DeleteMemoryRequest) (agent.DeleteMemoryResponse, error) {
 	sql := fmt.Sprintf(`DELETE FROM %q WHERE namespace = ? AND key = ?`, s.table)
-	res := s.db.WithContext(ctx).Exec(sql, s.namespace, req.Key)
+	res := s.db.WithContext(ctx).Exec(sql, s.effNS(req.Namespace), req.Key)
 	if res.Error != nil {
 		return agent.DeleteMemoryResponse{}, res.Error
 	}

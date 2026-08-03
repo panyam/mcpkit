@@ -308,14 +308,58 @@ function renderScenarioRow(s: ScenarioResult): string {
     const msg = s.checks[0].errorMessage.replace(/\|/g, '\\|').replace(/`/g, '\'');
     note = '`' + msg.slice(0, 100) + (msg.length > 100 ? '…' : '') + '`';
   }
+  const gap = knownGapNote(s.scenarioId);
+  if (gap) {
+    note = note ? `${note} · ${gap}` : gap;
+  }
   return `| \`${s.scenarioId}\` | ${s.surface} | ${STATUS_LABEL[cat]} | ${counts} | ${note} |`;
+}
+
+// Known-gaps annotations, keyed by scenario id. Populated in main() from
+// conformance/known-gaps.yaml (resolved next to the report path) so failing
+// and partial rows carry their tracking link in the Note column — the same
+// join CONFORMANCE.md's Open Gaps table does, without which an annotated
+// upstream bug is invisible on this page. Parsed with a shape-anchored
+// regex rather than a yaml dependency: the file's schema comment pins the
+// exact two-line entry form, and tools/conformance-report already validates
+// the file properly in CI.
+let KNOWN_GAPS = new Map<string, { issue: string; note: string }>();
+
+function loadKnownGaps(reportPath: string): Map<string, { issue: string; note: string }> {
+  const p = join(reportPath, '..', 'known-gaps.yaml');
+  const out = new Map<string, { issue: string; note: string }>();
+  if (!existsSync(p)) return out;
+  const text = readFileSync(p, 'utf-8');
+  const re = /^ {2}"([^"]+)":\n {4}issue: "([^"]*)"\n {4}note: "([^"]*)"/gm;
+  for (const m of text.matchAll(re)) {
+    out.set(m[1], { issue: m[2], note: m[3] });
+  }
+  return out;
+}
+
+function knownGapNote(scenarioId: string): string {
+  const kg = KNOWN_GAPS.get(scenarioId);
+  if (!kg) return '';
+  const link = /^https?:\/\//.test(kg.issue)
+    ? `[tracked](${kg.issue})`
+    : kg.issue;
+  const note = kg.note.length > 140 ? kg.note.slice(0, 140) + '…' : kg.note;
+  return `${link} — ${note.replace(/\|/g, '\\|')}`;
 }
 
 function renderGroup(g: SEPGroup): string {
   const heading = g.sep === 'Core / Unattributed'
     ? `### Core / Unattributed (${g.scenarios.length} scenarios)`
     : `### [${g.sep}](${g.url ?? '#'}) (${g.scenarios.length} scenarios)`;
+  // Stable, guessable anchor per SEP section (e.g. #sep-2663) so external
+  // references (upstream issues, WG threads) can deep-link a group without
+  // depending on the markdown renderer's heading-slug algorithm.
+  const anchor = g.sep === 'Core / Unattributed'
+    ? 'core-unattributed'
+    : g.sep.toLowerCase();
   return [
+    `<a id="${anchor}"></a>`,
+    '',
     heading,
     '',
     '| Scenario | Surface | Status | Checks | Note |',
@@ -326,12 +370,19 @@ function renderGroup(g: SEPGroup): string {
 }
 
 function renderSummaryTable(server: SurfaceStats, client: SurfaceStats): string {
+  // "Graded" counts only assertion rows (pass/fail/warn/skipped). INFO rows
+  // are the harness's request/response wire log — invaluable for debugging,
+  // but counting them as "checks" made the totals read ~2x larger than the
+  // real assertion surface.
+  const graded = (s: SurfaceStats) => s.checks - s.info;
   return [
-    '| Surface | Scenarios | Checks | Pass | Fail | Warn | Info | Skipped | Harness-gap |',
+    '| Surface | Scenarios | Graded checks | Pass | Fail | Warn | Skipped | Log rows (info) | Harness-gap |',
     '|---|---:|---:|---:|---:|---:|---:|---:|---:|',
-    `| Server | ${server.scenarios} | ${server.checks} | ${server.pass} | ${server.fail} | ${server.warning} | ${server.info} | ${server.skipped} | ${server.harnessGap} |`,
-    `| Client | ${client.scenarios} | ${client.checks} | ${client.pass} | ${client.fail} | ${client.warning} | ${client.info} | ${client.skipped} | ${client.harnessGap} |`,
-    `| **Total** | **${server.scenarios + client.scenarios}** | **${server.checks + client.checks}** | **${server.pass + client.pass}** | **${server.fail + client.fail}** | **${server.warning + client.warning}** | **${server.info + client.info}** | **${server.skipped + client.skipped}** | **${server.harnessGap + client.harnessGap}** |`,
+    `| Server | ${server.scenarios} | ${graded(server)} | ${server.pass} | ${server.fail} | ${server.warning} | ${server.skipped} | ${server.info} | ${server.harnessGap} |`,
+    `| Client | ${client.scenarios} | ${graded(client)} | ${client.pass} | ${client.fail} | ${client.warning} | ${client.skipped} | ${client.info} | ${client.harnessGap} |`,
+    `| **Total** | **${server.scenarios + client.scenarios}** | **${graded(server) + graded(client)}** | **${server.pass + client.pass}** | **${server.fail + client.fail}** | **${server.warning + client.warning}** | **${server.skipped + client.skipped}** | **${server.info + client.info}** | **${server.harnessGap + client.harnessGap}** |`,
+    '',
+    '_Log rows are the harness\'s own request/response trace (`incoming-request` / `outgoing-response` entries in each scenario\'s `checks.json`) — diagnostic context, not graded assertions._',
   ].join('\n');
 }
 
@@ -351,6 +402,7 @@ function main() {
     console.error('usage: conformance-audit-report.ts <audit-out-dir> <report-path>');
     process.exit(2);
   }
+  KNOWN_GAPS = loadKnownGaps(reportPath);
 
   // Capture upstream commit for traceability.
   const upstreamBase = process.env.MCPCONFORMANCE_BASE_PATH ?? '';

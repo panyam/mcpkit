@@ -8,6 +8,7 @@ import (
 	"io"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -62,12 +63,29 @@ type RunnerConfig struct {
 	// MaxSteps caps model calls per turn. Zero means DefaultMaxSteps.
 	MaxSteps int
 
+	// TreeBudget caps aggregate steps/tokens across the whole sub-agent tree
+	// (parent + sub-agents + fan-out members + handoff rounds), complementing
+	// the per-Runner MaxSteps. The Runner installs it on ctx at the top of a
+	// turn ONLY if the ctx does not already carry one, so a top-level Runner's
+	// budget is inherited and shared by every child run (do not set it on
+	// sub-agent Runner configs — they inherit it). Zero (both dimensions) is no
+	// budget. Equivalent to calling WithTreeBudget on the turn ctx yourself.
+	TreeBudget TreeBudget
+
 	// TracerProvider opts the Runner into SEP 414 span emission:
 	// agent.turn per Run, agent.step per model call, agent.tool per
 	// dispatch, with ctx threading so client-side dispatch spans (and
 	// through them server spans) stitch as children. Nil or
 	// core.NoopTracerProvider means zero overhead, the repo-wide pattern.
 	TracerProvider core.TracerProvider
+
+	// MeterProvider opts the Runner into OTel metric emission (issue 1023),
+	// the metrics sibling of the trace spans: a turn counter + duration
+	// histogram, a steps counter, a tokens counter (by direction), and a
+	// tool-call counter + duration histogram (by tool and status). Emitted
+	// at the same points the spans are. Nil or core.NoopMeterProvider means
+	// zero overhead, the same repo-wide pattern as TracerProvider.
+	MeterProvider core.MeterProvider
 
 	// Selector, when non-nil, narrows the tools offered to the model each
 	// step. It runs on the freshly listed set with the full history, so
@@ -99,6 +117,43 @@ type RunnerConfig struct {
 	// pre-loop.
 	Compactor Compactor
 
+	// Interruptible opts this Runner's turn into breaking the fan-out join
+	// barrier when a child raises an upward Signal mid-flight (issue 1167, piece
+	// C of the 1036 control axis). Default false keeps the turn a pure
+	// fan-out-then-join — the property resume / fork / eval / compaction rely on;
+	// only a signal-wired turn should set it. When true, the first barrier-
+	// breaking signal a child raises during a dispatch (see shouldBreakOn:
+	// escalate always, preempt only when PreemptGrant honors it, custom never)
+	// cancels the remaining in-flight calls (they feed back "cancelled by user")
+	// and the dispatch returns the partial results, so the turn's step loop
+	// re-enters the model to re-plan. With no breaking signal, an interruptible
+	// turn still waits for every call, identical to the default. The re-entry
+	// ordering is the one bounded-nondeterminism exception to the pure turn;
+	// every emitted event still projects 1:1 (A2).
+	Interruptible bool
+
+	// SignalPolicy, when non-nil, decides how this Runner (as a parent) reacts
+	// to the upward Signals its children raised during a dispatch, read at the
+	// join (issue 1165). It runs after the fan-out has joined, so it chooses
+	// only whether to abort the turn (SignalAction.AbortTurn -> ErrSignalAbort);
+	// the signals are injected into the next step as a RoleSystem note either
+	// way, so the parent model sees them. Nil means inject-and-continue. See
+	// AbortOnEscalate for the built-in deterministic policy.
+	SignalPolicy SignalPolicy
+
+	// PreemptGrant gates whether a child's advisory SignalPreempt breaks the
+	// interruptible join barrier (cancelling the other in-flight calls). It is
+	// the parent's authority over a claim the child cannot actually verify (a
+	// child under A7 isolation cannot know the global goal). Nil (the default)
+	// means a preempt never breaks — it is injected like any signal and the
+	// parent model decides on re-plan, so a rogue or prompt-injected child
+	// cannot unilaterally cancel its siblings. Non-nil is consulted per preempt
+	// signal (it may inspect Source/Note to honor only trusted children);
+	// returning true grants the preemption. Must be pure and goroutine-safe (it
+	// is called from a child's raise). Only consulted when Interruptible is set;
+	// it does not gate SignalEscalate, which breaks unconditionally.
+	PreemptGrant func(sig Signal) bool
+
 	// ResponseSchema, when set, coerces the turn's final answer into
 	// structured output. After the tool loop reaches its terminal
 	// no-tool-call text, the Runner makes one additional Generate call with
@@ -121,7 +176,8 @@ type ToolSelector func(ctx context.Context, history []Message, tools []core.Tool
 // answers in text. Safe for concurrent use; each Run call is an independent
 // turn.
 type Runner struct {
-	cfg RunnerConfig
+	cfg     RunnerConfig
+	metrics *runnerMetrics
 }
 
 // NewRunner validates cfg and returns a Runner.
@@ -135,7 +191,10 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 	if cfg.TracerProvider == nil {
 		cfg.TracerProvider = core.NoopTracerProvider{}
 	}
-	return &Runner{cfg: cfg}, nil
+	if cfg.MeterProvider == nil {
+		cfg.MeterProvider = core.NoopMeterProvider{}
+	}
+	return &Runner{cfg: cfg, metrics: newRunnerMetrics(cfg.MeterProvider)}, nil
 }
 
 // TurnResult is the completed turn. Messages holds exactly the entries the
@@ -246,8 +305,17 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			}
 		}()
 	}
+	// Install the aggregate tree budget only if one is not already threaded on
+	// ctx: the top-level Runner installs it and every sub-agent run inherits the
+	// same shared counter, so the totals are aggregate across the tree.
+	if !r.cfg.TreeBudget.zero() && treeBudgetFrom(ctx) == nil {
+		ctx = WithTreeBudget(ctx, r.cfg.TreeBudget)
+	}
+	treeBudget := treeBudgetFrom(ctx)
+
 	ctx, turnSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.turn")
 	defer turnSpan.End()
+	turnStart := time.Now()
 	emit(Event{Kind: EventTurnBegin})
 
 	// The system prompt is resolved once per turn (dynamic when InstructionsFunc
@@ -273,6 +341,11 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 	var usage Usage
 
 	for step := 1; step <= r.cfg.MaxSteps; step++ {
+		// Aggregate tree budget: charge one step (and reject if prior steps
+		// already blew the token cap) before spending another model call.
+		if !treeBudget.consumeStep() {
+			return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w (aggregate across the agent tree)", ErrTreeBudget))
+		}
 		stepCtx, stepSpan := r.cfg.TracerProvider.StartSpan(ctx, "agent.step",
 			core.Attribute{Key: "agent.step", Value: fmt.Sprint(step)})
 
@@ -314,6 +387,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 		if resp.Usage != nil {
 			usage.InputTokens += resp.Usage.InputTokens
 			usage.OutputTokens += resp.Usage.OutputTokens
+			treeBudget.addTokens(resp.Usage.InputTokens + resp.Usage.OutputTokens)
 		}
 
 		assistant := Message{Role: RoleAssistant, Text: resp.Text, ToolCalls: resp.ToolCalls}
@@ -342,17 +416,41 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			turnSpan.SetAttribute("agent.finish_reason", resp.FinishReason)
 			turnSpan.SetAttribute("agent.tokens.input", fmt.Sprint(usage.InputTokens))
 			turnSpan.SetAttribute("agent.tokens.output", fmt.Sprint(usage.OutputTokens))
+			r.metrics.turnDone(ctx, step, usage.InputTokens, usage.OutputTokens, resp.FinishReason, time.Since(turnStart))
 			emit(Event{Kind: EventTurnEnd, Result: result})
 			return result, nil
 		}
 
-		toolMsgs := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit, reg)
+		toolMsgs, signals := r.dispatch(stepCtx, step, resp.ToolCalls, tools, emit, reg)
 		stepSpan.End()
 		if err := ctx.Err(); err != nil {
 			return nil, r.failSpan(emit, turnSpan, err)
 		}
+		// Tool results must immediately follow the assistant message that
+		// requested them (providers pair RoleTool with the assistant's tool
+		// calls), so append them first; a signal note goes after.
 		msgs = append(msgs, toolMsgs...)
 		added = append(added, toolMsgs...)
+		if len(signals) > 0 {
+			for i := range signals {
+				emit(Event{Kind: EventSignal, Step: step, Signal: &signals[i]})
+			}
+			if r.cfg.SignalPolicy != nil {
+				if act := r.cfg.SignalPolicy(signals); act.AbortTurn {
+					reason := act.Reason
+					if reason == "" {
+						reason = "child signalled abort"
+					}
+					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w: %s", ErrSignalAbort, reason))
+				}
+			}
+			// Inject the signals as a RoleSystem note so the parent model sees
+			// them on the next step. Drained once from the sink, appended once —
+			// no transient-stacking (unlike a re-derived snapshot).
+			sigMsg := Message{Role: RoleSystem, Text: renderSignals(signals)}
+			msgs = append(msgs, sigMsg)
+			added = append(added, sigMsg)
+		}
 	}
 
 	return nil, r.failSpan(emit, turnSpan, fmt.Errorf("%w (%d steps)", ErrMaxSteps, r.cfg.MaxSteps))
@@ -430,6 +528,7 @@ func (r *Runner) finalizeStructured(ctx context.Context, instructions string, ms
 		if resp.Usage != nil {
 			usage.InputTokens += resp.Usage.InputTokens
 			usage.OutputTokens += resp.Usage.OutputTokens
+			treeBudgetFrom(ctx).addTokens(resp.Usage.InputTokens + resp.Usage.OutputTokens)
 		}
 		last = resp.Text
 		if json.Valid([]byte(last)) {
@@ -475,12 +574,51 @@ func (g *callCancels) cancel(id string) {
 	}
 }
 
+// shouldBreakOn decides whether a signal a child raised mid-flight breaks this
+// (interruptible) dispatch's join barrier. Escalate always breaks (its
+// must-handle contract); a custom FYI signal never does; a preempt breaks only
+// when the parent grants it via PreemptGrant — the parent's authority over a
+// claim the child cannot verify, so an untrusted child cannot unilaterally
+// cancel its siblings. Installed as the sink's breakOn and called from a child's
+// raise, so it must stay a pure read of config.
+func (r *Runner) shouldBreakOn(sig Signal) bool {
+	if !sig.Kind.interrupts() {
+		return false
+	}
+	if sig.Kind == SignalPreempt {
+		return r.cfg.PreemptGrant != nil && r.cfg.PreemptGrant(sig)
+	}
+	return true
+}
+
 // dispatch runs the step's tool calls concurrently, serializes event
 // emission, and returns RoleTool messages in call order regardless of
-// completion order. When reg is non-nil each call runs under its own
-// child context registered by call ID, so a Control can cancel one call
-// without touching its siblings or the turn.
-func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) []Message {
+// completion order, plus any upward Signals the calls' sub-agents raised.
+// When reg is non-nil each call runs under its own child context registered by
+// call ID, so a Control can cancel one call without touching its siblings or
+// the turn. A fresh signal sink is installed per dispatch (not shared across
+// the tree): a sub-agent spawned by one of these calls raises into THIS sink,
+// its immediate parent's, and a nested dispatch shadows it for grandchildren.
+//
+// In an interruptible turn (RunnerConfig.Interruptible, issue 1167), the first
+// barrier-breaking signal a child raises (shouldBreakOn: escalate always,
+// preempt only when PreemptGrant honors it, custom never) cancels the remaining
+// in-flight calls (they feed back "cancelled by user") and dispatch returns the
+// partial results, so the step loop re-enters the model. parent stays the
+// (sink-installed) step ctx and the calls run under a cancellable child of it,
+// so a fan cancel reads as a per-call "cancelled by user" (parent live), never
+// a turn abort.
+func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) ([]Message, []Signal) {
+	sink := &signalSink{}
+	parent := withDispatchSink(ctx, sink)
+	callBase := parent
+	var cancelFan context.CancelFunc
+	if r.cfg.Interruptible {
+		sink.notify = make(chan struct{})
+		sink.breakOn = r.shouldBreakOn
+		callBase, cancelFan = context.WithCancel(parent)
+		defer cancelFan()
+	}
 	results := make([]Message, len(calls))
 	var emitMu sync.Mutex
 	locked := func(ev Event) {
@@ -494,10 +632,10 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 		wg.Add(1)
 		go func(i int, call ToolCall) {
 			defer wg.Done()
-			callCtx := ctx
+			callCtx := callBase
 			if reg != nil {
 				var cancel context.CancelFunc
-				callCtx, cancel = context.WithCancel(ctx)
+				callCtx, cancel = context.WithCancel(callBase)
 				reg.add(call.ID, cancel)
 				defer func() {
 					reg.remove(call.ID)
@@ -507,13 +645,29 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(callCtx, "agent.tool",
 				core.Attribute{Key: "agent.tool.name", Value: call.Name})
 			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
-			text := r.callTool(toolCtx, ctx, step, call, tools, locked, toolSpan)
+			text := r.callTool(toolCtx, parent, step, call, tools, locked, toolSpan)
 			toolSpan.End()
 			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
 		}(i, call)
 	}
-	wg.Wait()
-	return results
+
+	if cancelFan == nil {
+		wg.Wait()
+		return results, sink.drain()
+	}
+	// Interruptible: stop waiting the moment a child signals, cancel the rest,
+	// then still wg.Wait for the cancelled calls to unwind so every result slot
+	// is filled (providers require a result per tool call). No signal => the
+	// select falls through on allDone, identical to the default barrier.
+	allDone := make(chan struct{})
+	go func() { wg.Wait(); close(allDone) }()
+	select {
+	case <-allDone:
+	case <-sink.notify:
+		cancelFan()
+		<-allDone
+	}
+	return results, sink.drain()
 }
 
 // toolReadOnly reports whether the named tool declares the readOnlyHint
@@ -543,8 +697,16 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	// a transport surfaces a cancelled call as an error, an in-process
 	// source as an IsError result, and a tool racing the cancel may
 	// even return success; the user's cancel wins over all three.
+	// status is the terminal outcome recorded on the tool-call metric; the
+	// closures and branches below set it as they resolve. Deferred so every
+	// return path (including the early ones) is counted exactly once.
+	start := time.Now()
+	status := "ok"
+	defer func() { r.metrics.toolDone(ctx, call.Name, status, time.Since(start)) }()
+
 	cancelled := func() bool { return ctx.Err() != nil && parent.Err() == nil }
 	cancelledText := func() string {
+		status = "cancelled"
 		span.SetAttribute("agent.tool.cancelled", "true")
 		emit(Event{Kind: EventToolCancelled, Step: step, ToolCall: &call, Reason: "cancelled by user"})
 		return "cancelled by user"
@@ -553,6 +715,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 		if cancelled() {
 			return cancelledText()
 		}
+		status = "error"
 		span.RecordError(err)
 		emit(Event{Kind: EventToolError, Step: step, ToolCall: &call, Error: err.Error()})
 		return fmt.Sprintf("tool call failed: %v", err)
@@ -576,6 +739,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 			if reason == "" {
 				reason = "denied by approval policy"
 			}
+			status = "denied"
 			span.SetAttribute("agent.tool.denied", "true")
 			emit(Event{Kind: EventToolDenied, Step: step, ToolCall: &call, Reason: reason})
 			return "tool call not permitted: " + reason
@@ -594,6 +758,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 		// a failure: the model is told and the turn continues (mirrors denial /
 		// cancellation). Reason (not Error) so error-keyed scorers don't count it.
 		if errors.Is(err, ErrNotAvailableNow) && !cancelled() {
+			status = "unavailable"
 			span.SetAttribute("agent.tool.unavailable", "true")
 			emit(Event{Kind: EventToolUnavailable, Step: step, ToolCall: &call, Reason: err.Error()})
 			return err.Error()
@@ -607,6 +772,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	emit(Event{Kind: EventToolEnd, Step: step, ToolCall: &call, ToolResult: res})
 	text := toolResultText(res)
 	if res.IsError {
+		status = "tool_error"
 		return "tool reported an error: " + text
 	}
 	return text

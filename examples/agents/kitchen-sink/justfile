@@ -36,6 +36,13 @@ export COMPACT_TOKENS := env_var_or_default("COMPACT_TOKENS", "8000")
 export EXPORTER      := env_var_or_default("EXPORTER", "otlp")
 export OTLP_ENDPOINT := env_var_or_default("OTLP_ENDPOINT", "localhost:4317")
 
+# --- aggregate tree budget -----------------------------------------------
+# Cap total model steps / tokens across the whole sub-agent tree (empty =
+# unbounded). Try MAX_TREE_STEPS=4 just run and ask for the review team + deep
+# research to see a chatty tree get capped.
+export MAX_TREE_STEPS  := env_var_or_default("MAX_TREE_STEPS", "")
+export MAX_TREE_TOKENS := env_var_or_default("MAX_TREE_TOKENS", "")
+
 # --- misc ----------------------------------------------------------------
 export UI      := env_var_or_default("UI", "tui")
 export PG_HOST := env_var_or_default("PG_HOST", "localhost")
@@ -64,6 +71,12 @@ demo: run
 # Same as run, but the alt-screen notebook UI (scrollable, foldable cells).
 note:
     @UI=notebook bash run.sh
+
+# Handoff-Team topology (kitchen-sink-team.json): a triage router transfers you
+# to a billing or technical specialist; the active agent persists across turns.
+# Notebook UI so the handoff and the active agent are easy to see.
+team:
+    @CONFIG="{{justfile_directory()}}/kitchen-sink-team.json" MEMORY=0 UI=notebook bash run.sh
 
 # Bring up ALL stacks kitchen-sink can use (backends + observability).
 allup:
@@ -97,9 +110,17 @@ mem:
 # These run independently of agentchat and survive chat restarts. `just run`
 # only checks they are up; it never starts or stops them.
 
-# Start all MCP servers the config connects to, or one: `just servers-up demo`.
+# Start + tail the MCP servers in the FOREGROUND; Ctrl+C brings them down. Or: `just servers-up demo`.
 servers-up name="":
     @bash servers.sh up {{name}}
+
+# Start the servers detached (no tail); they survive restarts. Stop with servers-down.
+servers-up-bg name="":
+    @bash servers.sh up-bg {{name}}
+
+# Restart the servers (down then up), foreground + tail. Or one: `just servers-restart demo`.
+servers-restart name="":
+    @bash servers.sh restart {{name}}
 
 # Stop all MCP servers, or one: `just servers-down events`.
 servers-down name="":

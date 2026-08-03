@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/whole-enchilada/events/poller
 
-go 1.26.4
+go 1.26.5
 
 replace (
 	github.com/panyam/mcpkit => ../../../..
@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.4.0-b3
+	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0-00010101000000-000000000000
 )
 

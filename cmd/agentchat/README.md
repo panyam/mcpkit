@@ -101,7 +101,10 @@ Both interactive surfaces (`tui`, `notebook`) render the assistant's finished
 prose as **markdown** — headings, lists, and fenced code are formatted once when
 the block commits, while it streams raw. Tool lines and the turn footer pass
 through verbatim, and `NO_COLOR` falls back to raw text (as does `plain`, which
-never renders markdown).
+never renders markdown). `ctrl+o` gives back the raw markdown for copying: in
+`notebook` it toggles the whole transcript rich↔raw in place, in `tui` it dumps
+the last reply's raw markdown to scrollback (native scrollback can't re-render,
+so use `notebook` for the in-place toggle).
 - **`notebook`** (alt-screen): a managed viewport with its own scroll and a
   transcript of **collapsible cells** — the assistant text, each tool call
   (parallel calls group into one), and command / info lines each fold on their

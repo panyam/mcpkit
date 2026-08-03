@@ -2,7 +2,7 @@
 
 **What this is.** A living assessment of the mcpkit `agent/` host layer against (a) general agent
 frameworks (Mastra, Eino, Genkit-Go, langchaingo, swarmgo, agno-Go) and (b) real coding-agent loops
-(Claude Code, Cursor, Gemini CLI, aider, Codex, OpenCode). The first edition (below the fold) framed
+(Claude Code, Cursor, Gemini CLI, aider, Codex, OpenCode, and the Pi / oh-my-pi line). The first edition (below the fold) framed
 these as "what would it take to build a complete agent SDK." **Most of that roadmap has now shipped**
 — this edition re-baselines to *where we actually stand* and *what is genuinely still missing*,
 distinguishing **tracked** gaps (open issues) from **untracked** ones.
@@ -34,6 +34,15 @@ guardrails** (#1052: prompt-injection spotlighting #1058). The items the previou
 Phase-7 extensions are now filed as #1060/#1061). Beyond the phases, a rich refinement backlog on the
 shipped primitives remains (mostly tracked).
 
+**Coding-agent re-survey (2026-07).** A pass over the strongest current open coding agent, oh-my-pi
+(`can1357/oh-my-pi`, a TS+Rust batteries-included fork of Pi), confirms the picture and surfaces two
+genuinely new **agent-layer** primitives we lack — **mid-turn stream-rule steering** (#1147) and a
+**critic/observer model role** (#1148) — now filed. The rest of that product's moat (hash-anchored edit
+format, LSP-in-writes, DAP, a ~55k-LoC in-process Rust tool core, browser) is the **coding-surface**
+layer we deliberately scope to a coding agent built *on* `agent/`, not `agent/` itself (#1059). It is
+the clearest evidence yet that #1059 is a real decision, and that harness/tool quality is a first-order
+differentiator. See §4.
+
 ---
 
 ## 2. Status scorecard
@@ -48,13 +57,13 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Eval / scorer harness** | 🟡 #974,#932 | `agent/eval/` — `Case`/`Scorer`/`Suite`/`Scenario`; 8 deterministic scorers; `Judge` (build-tagged); LongMemEval *smoke* scenarios | external-benchmark adapter **⏳ #1015**; real LongMemEval loader **⏳ #1014** |
 | **Persistence (RunStore) + fork/rewind** | ✅ #960,#962,#963,#986 | `agent/runstore.go` — full interface + `InMemoryRunStore`; redis + gorm (pg/sqlite) backends; `ForkRun{AtMessage}` checkpoint fork; `ListRuns`; `Message.Timestamp` | retention/GC **⏳ #999** |
 | **Per-tool-call cancellation / interrupt** | ✅ #936,#937 | `runner.go` `TurnRequest`/`Control` channel (per-`CallID`); `EventToolCancelled` | — |
-| **Working memory** | ✅ #938 | `agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore` | durable/session-scoped backends **⏳ #1003** |
+| **Working memory** | ✅ #938,#1003,#1140 | `agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore`; durable + per-request `Namespace` backends (redis/gorm, #1003); session-scoping by run id (#1140) | sub-agent memory model (injection over shared store) **#1151** |
 | **Semantic recall (vector)** | ✅ #940,#1019 | `agent/embedder.go` (`Embedder`, `OpenAIEmbedder`), `agent/semantic_memory.go` (`InMemorySemanticStore`), gorm **pgvector** store; pre-turn recall auto-injection | standalone doc-RAG VectorStore **⏳ #1021**; reranker **⏳ #1020**; auto-distillation **⏳ #1022** |
 | **Compaction / summarization** | 🟡 #939,#1011 | `agent/compaction.go` — `SummarizingCompactor`, `TokenEstimator`/`CharTokenEstimator`, `EventCompaction`; pre-loop hook; budgeted summary injection | mid-turn compaction **⏳ #1006**; real tokenizer **⏳ #1007** |
 | **Tool-result offloading (context mgmt)** | ✅ #966,#971,#972 | `agent/offloading_source.go` + `ToolResultStore` (mem/redis/gorm); `read_tool_result` (offset/limit/grep) | streaming/handle-based very-large results **⏳ #980,#979** |
-| **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031 | `agent/agent_source.go` (`AgentSource`, depth+budget caps), `SubAgentEvent` nesting, `agent/team.go` (`Team` handoff), declarative host personas | richer composition (structured I/O, parallel fan-out, async/task sub-agents, dynamic catalog) **⏳ #1032,#1033,#1035,#1036,#1038,#1043** |
+| **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031,#1032,#1033,#1035,#1036,#1042 | `agent/agent_source.go` (`AgentSource`, depth+budget caps, structured I/O), `agent/async_agent_source.go` (`AsyncAgentSource` Task form, #1035), `agent/fanout_source.go` (`FanOutSource`, #1033), `agent/team.go` (`Team` handoff + host wiring + tagging, #1042), `agent/tree_budget.go` (`TreeBudget` aggregate cap, #1032), `agent/signal.go` + `agent/agent_pool.go` (upward signals + runner-control pool + interruptible turn, #1036), `SubAgentEvent` nesting, declarative host personas | dynamic catalog #1038, nested config #1043, interaction mediator #1157, map-style fan-out (unfiled) |
 | **Host surface** | ✅ #984–#992 | slash-command registry, `ConnectionRegistry` + runtime `/provider`, `HostEvent`/`Observer` render seam, notebook renderer (#1001), interactive `/mcp` + `/sessions` overlay (#1095, `focusLayer`/`modalHost` seam + `client.Group.Reconnect`), per-server tool view (#1117) + oauth login action / authorization-code auth type (#1116, #907), dialog stack for nested-overlay back-nav (#1124), color accessibility (#1125), bubbletea TUI, playground | context-assembly pipeline **⏳ #1024,#1026**; remaining TUI-track items (dimmed-base compositing, grapheme width, `WindowSizeMsg` fan-out) **⏳ #1063** |
-| **Observability** | 🟡 | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) | OTel **metrics** seam (counters/histograms) **⏳ #1023** |
+| **Observability** | ✅ | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) + OTel **metrics** (#1023 — turn/step/token/tool counters + duration histograms via `RunnerConfig.MeterProvider`, `host.WithMeterProvider`, agentchat `SetupMeter`, `mcpkit-agent` Grafana dashboard) | — |
 | **Durable workflows / graphs (Phase 4)** | ⏳ #928 | — | engine **#944**, `SuspendNode` via TriggerPolicy+RunStore **#945**, `ModelNode`/`ToolNode` **#946** |
 | **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044**, confidence-gated cascade **#1057** (Phase 6) |
 | **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 | structured output via finalizing `Generate` only | logprob exposure **#1053**, grammar/guided decoding **#1054**, Anthropic caching/thinking **#953** |
@@ -103,6 +112,54 @@ lifecycle **hooks** (PreToolUse/PostToolUse), **sandboxing** of tool execution, 
 **LSP-in-loop**, and a soft **tool-call budget gate**. These are coding-*surface* features; whether
 they belong in `agent/` or in a coding-agent built on it is a scoping decision (see §5).
 
+### 4a. The coding-agent field, re-surveyed against oh-my-pi
+
+Two related things share the name. **Pi** (pi.dev, `@earendil-works/pi-coding-agent`, `badlogic/pi-mono`,
+Mario Zechner / Earendil Inc.) is the *minimal upstream* harness — "many agent harnesses but this one is
+yours," four modes (TUI/print/RPC/SDK), tree-structured history, mid-session steering — and it
+**deliberately omits MCP, sub-agents, permission popups, plan mode, todos, and background bash**, leaving
+them as extension points. **oh-my-pi** (`can1357/oh-my-pi`, Can Bölük) is a TS+Rust, batteries-included
+**fork** that *adds* exactly what Pi omits — MCP, 32 tools, subagents, LSP/DAP, the hash-anchored edit
+format, a ~55k-LoC Rust core — and is currently the most feature-complete *open* coding-agent surface.
+
+The pairing is instructive for us in two ways. First, **Pi is the closer philosophical peer to
+`agent/`** (a lean, embeddable, extension-first harness with the same four surfaces), while oh-my-pi is
+precisely the *coding agent built on top* — the #1059 shape. Second, **mcpkit is already ahead of
+upstream Pi on MCP-native operation and sub-agents**: Pi omits both by design; the fork had to bolt them
+on, and MCP is one integration among many rather than the native fabric. So the comparison below is
+really against oh-my-pi *the product*, on the coding-agent axis (Claude Code / Cursor), not against a
+Mastra/Eino-style library.
+
+oh-my-pi's explicit thesis — *the harness, not the model, decides* — is worth taking seriously: it
+reports multi-fold first-attempt-edit and token-efficiency lifts on the *same weights* purely from a
+better edit format and tool ergonomics. That validates our tool-layer investment, but it also draws the
+line sharply: **`agent/` ships no tool implementations at all** (it is the SDK substrate), so most of
+what makes that product good is the coding-*surface* layer we scope to #1059.
+
+Mapping its surface onto our status and the A6 layering line:
+
+| oh-my-pi capability | Nature | mcpkit `agent/` status |
+|---|---|---|
+| Hash-anchored edit format (content-hash anchors, stale-anchor reject) | coding-surface | out of SDK scope → **#1059** (the SDK has no edit tool; a coding agent built on it would) |
+| LSP-in-writes (rename via `willRenameFiles`), DAP debugger, AST edits | coding-surface | out of scope → **#1059** |
+| ~55k-LoC in-process Rust core (ripgrep/glob/shell/PTY/AST, no fork-exec) | coding-surface / perf | out of scope → **#1059**; `agent/` is provider+loop, transport-agnostic by design |
+| Browser / computer-use, web_search, GitHub-as-filesystem, `://` resource schemes | coding-surface | out of scope → tool authoring on top of the SDK |
+| **Mid-turn stream-rule steering** (regex/AST over the *output* stream → abort → inject rule → retry within the turn; fired-state survives compaction) | **agent-layer** | **not shipped → newly filed #1147.** Our injection is turn-boundary only; the delta scanner (#989) is the hook |
+| **Critic/observer model** (second model on its own context reviews each turn, injects graded steering: aside/concern/blocker; cannot approve/deny) | **agent-layer** | **not shipped → newly filed #1148.** Composable on Observer #992 + AgentSource #941 + Control #936, but not a role yet |
+| Deterministic image-frame compaction ("snapcompact" — renders discarded history to per-model-sized PNG frames to exploit image-token billing) | agent-layer (novel) | we have `SummarizingCompactor` (#939); this is an exotic provider-billing optimization, noted under compaction depth #1006/#1007, not a parity gap |
+| Subagents: agent-as-tool with **schema-validated structured results** (3-level schema precedence), per-agent model/tool/depth, peer **hub** for inter-agent messaging | agent-layer | **at rough parity behind tracked gaps** — AgentSource #941, per-Runner provider, MaxDepth/budget; structured I/O + fan-out #1033; peer messaging ≈ upward-signals #1036 |
+| Memory: pluggable SQLite backends, first-turn recall injection, periodic retain, **offline cross-session consolidation into a "mental model" loaded on turn 1**, polyphonic (vector/graph/fact/temporal) recall | agent-layer | **at rough parity behind tracked gaps** — MemorySource #938, semantic recall #940/#1019, injection #1011; consolidation = auto-distillation #1022; multi-signal recall = reranker #1020; durable backends #1003 |
+| Provider routing: per-role models, path-scoped model sets, fallback chains, round-robin credentials | agent-layer | **they ship what we have tracked** — only `FailoverProvider` today; per-role/path routing is #991, presets #1044 |
+| ACP surface (editor-drivable), RPC (NDJSON stdio), collab live-share | surface | ACP is a notable coding-surface integration we do not have; collab is out of scope |
+
+**Reading of it.** On the *loop* primitives — memory, compaction, multi-agent, structured output — we
+are at or behind-by-a-tracked-issue, not behind in kind. Two real agent-layer gaps came out of the pass
+(#1147, #1148) and are filed. Everything else that makes the product impressive is coding-surface or
+provider-routing-we-have-scheduled. The strategic signal is not "we are behind on the SDK"; it is that
+**the coding-surface layer (#1059) is where a large share of end-user value lives**, and a product-grade
+coding agent on top of `agent/` is the thing that would actually compete — the SDK is necessary but not
+sufficient.
+
 ---
 
 ## 5. What's still missing
@@ -129,16 +186,20 @@ they belong in `agent/` or in a coding-agent built on it is a scoping decision (
 - **Prompt caching + extended thinking:** #953 (Anthropic, provider-scoped) — note the documented
   cache-vs-`Selector` prefix-stability tension.
 - **Memory depth:** standalone doc-RAG `VectorStore` #1021, Scorer/Reranker seam #1020, auto-distillation
-  write-path #1022, durable/session-scoped MemoryStore #1003, faster cosine #1018.
+  write-path #1022, sub-agent memory model #1151, faster cosine #1018. (Durable/session-scoped MemoryStore #1003/#1140 shipped.)
 - **Compaction depth:** mid-turn compaction #1006, token-accurate estimator #1007.
-- **Sub-agent composition:** aggregate tree budget #1032, structured I/O + parallel fan-out #1033,
-  async/task sub-agents #1035, upward signals / runner-control meta-tools #1036, dynamic agent catalog
-  + transfer graph #1038, full nested per-agent config #1043, Team config in the App loop #1042.
+- **Sub-agent composition:** upward signals / runner-control meta-tools + interruptible turn #1036 **✅ SHIPPED**
+  (A #1165/PR 1168, B #1166/PR 1169, C #1167/PR 1170); dynamic agent catalog
+  + transfer graph #1038, full nested per-agent config #1043, cross-agent interaction mediator #1157.
 - **Context assembly:** explicit pre-turn pipeline #1026, unified injection budget with a final arbiter
   #1024.
 - **Eval:** external eval/conformance adapter seam #1015 (see §6), real LongMemEval loader #1014.
-- **Ops:** OTel metrics seam #1023, RunStore retention/GC #999, large/binary tool results #980/#979,
-  thinking-hint stream parser #989, session-picker paging #1000.
+- **Ops:** RunStore retention/GC #999, large/binary tool results #980/#979,
+  thinking-hint stream parser #989, session-picker paging #1000. (OTel metrics seam #1023 shipped.)
+- **Mid-turn steering & critique (from the coding-agent re-survey, §4a):** stream-rule steering —
+  scan the output stream, abort/inject/retry within the turn #1147 (builds on the #989 scanner); a
+  first-class critic/observer model role that injects graded steering #1148 (composable on Observer
+  #992 + AgentSource #941 + Control #936). Both are agent-layer, A6-clean.
 
 ### 5b. Untracked (no issue yet)
 
@@ -146,7 +207,9 @@ Nothing. The six gaps this section previously listed — logprob exposure, gramm
 sampling/vote helper, the prompt-injection guardrail, the `FailoverProvider` quality-score trigger, and
 the coding-surface scoping call — are now tracked phase children (Phases 5–7 and #1059; see §5a), and
 the two Phase-7 extensions (AgentDojo eval suite #1060, constitutional critique gate #1061) have been
-filed. Everything identified is tracked; new gaps get filed as they surface.
+filed. The 2026-07 coding-agent re-survey (§4a) surfaced two further agent-layer gaps — mid-turn
+stream-rule steering and a critic/observer model role — and they were filed on discovery as #1147 and
+#1148. Everything identified is tracked; new gaps get filed as they surface.
 
 ---
 

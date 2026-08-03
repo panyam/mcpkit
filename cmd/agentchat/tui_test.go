@@ -388,6 +388,51 @@ func TestTUIObserver_GlamoursProseKeepsToolLinesVerbatim(t *testing.T) {
 	}
 }
 
+func TestTUIObserver_RawDumpIsProseOnly(t *testing.T) {
+	obs := newTUIObserver(true)
+	obs.renderMD = stubMD
+	if obs.rawDump() != "" {
+		t.Fatal("rawDump should be empty before any turn is committed")
+	}
+
+	_ = tuiCommit(obs,
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "- item one"}),
+		runnerEv(agent.Event{Kind: agent.EventToolBegin, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventToolEnd, ToolCall: &agent.ToolCall{Name: "greet"}}),
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "- item two"}),
+		turnDoneEv(),
+	)
+	raw := obs.rawDump()
+	if !strings.Contains(raw, "- item one") || !strings.Contains(raw, "- item two") {
+		t.Fatalf("rawDump should carry both raw prose runs: %q", raw)
+	}
+	if strings.Contains(raw, "MD{") {
+		t.Fatalf("rawDump must be raw markdown, not glamoured: %q", raw)
+	}
+	if strings.Contains(raw, "greet") {
+		t.Fatalf("rawDump must exclude tool/meta lines: %q", raw)
+	}
+}
+
+func TestTUIModel_CtrlORawDump(t *testing.T) {
+	obs := newTUIObserver(true)
+	obs.renderMD = stubMD
+	m := newTUIModel(nil, obs, 0)
+
+	// no committed turn yet → ctrl+o is a no-op
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO}); cmd != nil {
+		t.Fatal("ctrl+o with nothing committed should be a no-op")
+	}
+	// after a turn commits, ctrl+o returns a Println command (the raw dump)
+	_ = tuiCommit(obs,
+		runnerEv(agent.Event{Kind: agent.EventTextDelta, Text: "hello"}),
+		turnDoneEv(),
+	)
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlO}); cmd == nil {
+		t.Fatal("ctrl+o after a committed turn should return a Println command")
+	}
+}
+
 func TestTUIObserver_TextOnlyTurnIsGlamoured(t *testing.T) {
 	obs := newTUIObserver(true)
 	obs.renderMD = stubMD

@@ -25,6 +25,47 @@ type Config struct {
 	// MaxSteps caps model calls per turn. Zero uses the agent default.
 	MaxSteps int `json:"maxSteps,omitempty"`
 
+	// MaxTreeSteps and MaxTreeTokens cap the AGGREGATE model steps / tokens
+	// across a turn's whole sub-agent tree (parent + sub-agents + fan-out
+	// members + handoff rounds), not just per-Runner MaxSteps. Zero means
+	// unbounded. The safety rail for deep or chatty multi-agent trees.
+	MaxTreeSteps  int `json:"maxTreeSteps,omitempty"`
+	MaxTreeTokens int `json:"maxTreeTokens,omitempty"`
+
+	// Interruptible opts the main agent's turn into breaking the fan-out join
+	// barrier when a sub-agent raises a Signal mid-flight (issue 1167): the first
+	// signal cancels the remaining in-flight calls and the model re-plans with
+	// the partial results, instead of waiting for every sub-agent. Only useful
+	// with signalling sub-agents (SubAgents + CanSignal). False (the default)
+	// keeps the pure fan-out-then-join. Pairs with SignalPolicy: leave it unset
+	// (inject) so the turn re-plans rather than aborts.
+	Interruptible bool `json:"interruptible,omitempty"`
+
+	// RunnerControl, when true, gives the main agent the runner-control
+	// meta-tools (issue 1166): spawn_agent / await_agent / cancel_agent /
+	// list_agents, over the configured sub-agent personas. The model can run a
+	// persona in the background, get a handle, and await or cancel it — the
+	// model-driven, handle-based counterpart to calling a persona as a blocking
+	// tool. Only meaningful alongside SubAgents. False (the default) omits them.
+	RunnerControl bool `json:"runnerControl,omitempty"`
+
+	// SignalPolicy selects how the main agent reacts to an upward Signal a
+	// signalling sub-agent raises (issue 1165), read at the dispatch join:
+	//   - "" / "inject" — inject the signal as context and continue (default).
+	//   - "abort_on_escalate" — end the turn when a child raises "escalate".
+	// Either way the signal is injected so the main model sees it. Only meaningful
+	// alongside a sub-agent with CanSignal.
+	SignalPolicy string `json:"signalPolicy,omitempty"`
+
+	// AllowPreempt lets a sub-agent's advisory "preempt" signal actually break
+	// the interruptible barrier (cancel the other in-flight sub-agents) instead
+	// of only being injected for the model to weigh (issue 1176). False (the
+	// default) is safe: a preempt cannot cancel siblings, so a rogue or
+	// prompt-injected sub-agent cannot unilaterally kill the parallel work — the
+	// main model decides on re-plan. Only meaningful with Interruptible +
+	// signalling sub-agents; "escalate" is unaffected (it always breaks).
+	AllowPreempt bool `json:"allowPreempt,omitempty"`
+
 	// Servers lists the MCP servers to connect.
 	Servers []ServerConfig `json:"servers"`
 
@@ -81,6 +122,18 @@ type Config struct {
 	// view of the SAME server tools, with its own instructions — a persona,
 	// not a separately-configured agent. Empty means no sub-agents.
 	SubAgents []SubAgentConfig `json:"subAgents,omitempty"`
+
+	// FanOut declares parallel-ensemble tools: each group is a single tool the
+	// main agent calls once to broadcast a task to all its member personas
+	// concurrently, receiving one aggregated result (agent.FanOutSource).
+	// Empty means no fan-out tools.
+	FanOut []FanOutGroupConfig `json:"fanOut,omitempty"`
+
+	// Team, when set, drives the conversation as a handoff Team (agent.Team)
+	// instead of the single main agent — control transfers between members and
+	// persists across user turns. Mutually exclusive with SubAgents, FanOut, and
+	// Memory (NewApp errors if combined). Nil means single-agent mode.
+	Team *HostTeamConfig `json:"team,omitempty"`
 }
 
 // SubAgentConfig is one delegatable persona. The host builds it into an
@@ -104,6 +157,79 @@ type SubAgentConfig struct {
 	// MaxDepth caps sub-agent nesting for this persona. Zero uses the agent
 	// default.
 	MaxDepth int `json:"maxDepth,omitempty"`
+
+	// InputSchema, when set, gives the persona a TYPED input tool instead of the
+	// default {task} — the parent must pass arguments matching this JSON schema,
+	// and the persona is seeded with them (structured input, 1033). Empty keeps
+	// {task: string}.
+	InputSchema json.RawMessage `json:"inputSchema,omitempty"`
+
+	// ResponseSchema, when set, makes the persona return a JSON value coerced to
+	// this schema instead of free text (structured output, 1033) — the parent
+	// gets typed output back. Empty returns text.
+	ResponseSchema json.RawMessage `json:"responseSchema,omitempty"`
+
+	// CanSignal, when true, gives the persona the signal_parent control tool
+	// (issue 1165), so it can raise an upward Signal to the main agent —
+	// "escalate" or "custom" (reporting only its own state; it has no knowledge
+	// of sibling agents). The main agent reacts per Config.SignalPolicy
+	// (inject-and-continue by default). False (the default) keeps the persona
+	// server-tools-only. Ignored for async personas (a detached child has no
+	// live parent dispatch to signal).
+	CanSignal bool `json:"canSignal,omitempty"`
+
+	// Async, when true, builds the persona as the spawn-and-continue Task form
+	// (agent.AsyncAgentSource, 1035): the delegate tool acks immediately and the
+	// child runs in the background, its result injected as context on a later
+	// turn — for long-running subtasks the parent should not block on. False
+	// (the default) is the blocking Tool form (answer this turn).
+	Async bool `json:"async,omitempty"`
+}
+
+// FanOutGroupConfig declares one parallel-ensemble tool: the main agent calls
+// Name once and the task is broadcast to every Member persona concurrently, the
+// results aggregated in member order (agent.FanOutSource). Members are built
+// exactly like SubAgents (shared provider, serverTools-only, own instructions)
+// but are not also exposed as individual delegate tools — the group is one tool.
+type FanOutGroupConfig struct {
+	// Name is the tool the main agent calls to fan out. Required.
+	Name string `json:"name"`
+
+	// Description tells the main agent when to fan out to this group.
+	Description string `json:"description,omitempty"`
+
+	// Members are the personas the task is broadcast to. At least one required.
+	Members []SubAgentConfig `json:"members,omitempty"`
+}
+
+// HostTeamConfig declares a handoff Team that drives the whole conversation
+// instead of the single main agent (agent.Team). Control transfers between
+// members and stays where it was transferred across user turns. Setting Team
+// replaces the single-agent loop, so it may NOT be combined with SubAgents,
+// FanOut, or Memory on the main agent (NewApp errors); team members are
+// serverTools-only personas.
+type HostTeamConfig struct {
+	// Members are the agents. At least one; Start must name one.
+	Members []TeamMemberConfig `json:"members,omitempty"`
+
+	// Start is the agent that receives a conversation's first turn. Required.
+	Start string `json:"start"`
+
+	// MaxHandoffs caps transfers within one user turn. Zero uses the agent
+	// default.
+	MaxHandoffs int `json:"maxHandoffs,omitempty"`
+}
+
+// TeamMemberConfig is one Team agent: a persona (SubAgentConfig — shared
+// provider, serverTools filtered by Allow, own instructions) plus the members
+// it may hand off to.
+type TeamMemberConfig struct {
+	SubAgentConfig
+
+	// HandoffTo lists the member names this agent may transfer control to. Each
+	// becomes a transfer_to_<name> tool offered only to this agent. Empty means
+	// a terminal agent that must answer rather than transfer.
+	HandoffTo []string `json:"handoffTo,omitempty"`
 }
 
 // CompactionConfig is the host's view of history compaction; it maps to an
@@ -168,6 +294,15 @@ type MemoryConfig struct {
 	// from injecting the least-irrelevant notes when nothing truly matches).
 	// Zero means no floor.
 	RecallMinScore float64 `json:"recallMinScore,omitempty"`
+
+	// SessionScoped, when true, namespaces working memory by the active run
+	// id, so each session (RunStore run) gets its own scratchpad and recall
+	// never crosses sessions — a /sessions resume or fork carries its own
+	// memory on a durable backend. Opt-in: the default is one shared
+	// scratchpad across all sessions, which is often the point of persistent
+	// memory. A no-op without a RunStore (the run id is always "", so every
+	// turn shares the default namespace).
+	SessionScoped bool `json:"sessionScoped,omitempty"`
 }
 
 // summaryOptions maps the host config onto the agent-layer budget.

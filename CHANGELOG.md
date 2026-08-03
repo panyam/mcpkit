@@ -7,15 +7,9 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each release also has a fuller write-up under [`docs/releases/`](docs/releases/).
 Releases before 0.3.0 were tag-only and are not back-filled here.
 
-## [0.4.0] - Unreleased
+## [0.4.0] - 2026-08-03
 
 Full notes: [`docs/releases/v0.4.0.md`](docs/releases/v0.4.0.md).
-
-> **Not tagged as `v0.4.0` yet.** This entry is the accumulating target for the
-> breaking bundle. Work-in-progress lands under intermediate **`v0.3.x`** tags
-> while the issues below are worked through; the `v0.4.0` tag is cut only once
-> the full bundle is complete. Until then, treat this section as the running
-> plan, not a shipped release.
 
 API-breaking bundle. 0.4.0 gathers the backward-incompatible API changes we
 had queued behind a version boundary while mcpkit still has no external clients
@@ -53,6 +47,30 @@ targeted spec version.
   for external `QuotaStore` implementors (experimental surface). (issue 774)
 
 ### Added / Fixed
+- **Go toolchain floor raised to 1.26.5** across the root module and every
+  sub-module. Clears **GO-2026-5856** (Encrypted Client Hello privacy leak in
+  the `crypto/tls` standard library, reachable from `server.ListenAndServe` and
+  `client.DoWithAuthRetry`), fixed in go1.26.5. `just audit`'s govulncheck stage
+  is green on the shipped toolchain.
+- **Fixed a data race on `Client.transport`.** `doConnect` published the
+  transport field while a concurrent `Close` (reachable via `client.Group`'s
+  async connect) read it, both unsynchronized. Both accesses now go through the
+  existing `Client` mutex, with the lock scoped to the field read/write so a
+  `Close` racing an in-flight connect still cancels without blocking. Surfaced
+  by `go test -race` under the go1.26.5 scheduler.
+- **Generalized `resultType` discriminator + DiscoverResult caching hints
+  (2026-07-28 final revision, issue 1174).** Every result the server emits on
+  the 2026-07-28 wire now carries the required `resultType` field (stamped
+  `"complete"` when a result type doesn't set its own; the MRTR
+  `"input_required"` and tasks `"task"` variants keep their values), via a
+  new `core.InjectResultTypeIntoResult` applied at both dispatch chokepoints
+  — always on the stateless wire, feature-gated on the legacy wire so
+  pre-draft sessions keep byte-identical output. `DiscoverResult` gains the
+  now-required `ttlMs` + `cacheScope` fields (conformant defaults: 0,
+  public). Clears 11 of the 13 wire-schema-valid failures surfaced by
+  upstream conformance's new per-version schema validation; the remaining
+  task-envelope errors are an upstream validator gap (no `resultType: task`
+  branch), annotated in `conformance/known-gaps.yaml`.
 - **CIMD advertised-support gate + SEP-2207 refresh-token registration.**
   `OAuthTokenSource` now prefers its configured `ClientMetadataURL` as the
   client_id exactly when the AS advertises

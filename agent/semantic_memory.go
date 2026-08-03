@@ -32,14 +32,35 @@ type InMemorySemanticStore struct {
 	embedder Embedder
 	tp       core.TracerProvider
 
-	mu    sync.Mutex
+	mu sync.Mutex
+	// ns partitions the store by namespace (req.Namespace; "" = default), so
+	// recall never crosses namespaces. maxEntries caps each namespace.
+	ns         map[string]*nsSemantic
+	maxEntries int
+}
+
+// nsSemantic is one namespace's semantic scratchpad: items + their vectors, with
+// insertion order for the empty-query listing and the cap (front is oldest).
+type nsSemantic struct {
 	items map[string]MemoryItem
 	vecs  map[string]Embedding
-	// order tracks insertion order for the Query-empty listing and the cap,
-	// mirroring InMemoryMemoryStore; front is oldest.
-	order      *list.List
-	elems      map[string]*list.Element
-	maxEntries int
+	order *list.List
+	elems map[string]*list.Element
+}
+
+func newNSSemantic() *nsSemantic {
+	return &nsSemantic{items: map[string]MemoryItem{}, vecs: map[string]Embedding{}, order: list.New(), elems: map[string]*list.Element{}}
+}
+
+// bucket returns the sub-store for a namespace, creating it on first use. The
+// caller holds s.mu.
+func (s *InMemorySemanticStore) bucket(ns string) *nsSemantic {
+	m := s.ns[ns]
+	if m == nil {
+		m = newNSSemantic()
+		s.ns[ns] = m
+	}
+	return m
 }
 
 // InMemorySemanticStoreOption configures a InMemorySemanticStore.
@@ -75,10 +96,7 @@ func NewInMemorySemanticStore(embedder Embedder, opts ...InMemorySemanticStoreOp
 	s := &InMemorySemanticStore{
 		embedder: embedder,
 		tp:       core.NoopTracerProvider{},
-		items:    map[string]MemoryItem{},
-		vecs:     map[string]Embedding{},
-		order:    list.New(),
-		elems:    map[string]*list.Element{},
+		ns:       map[string]*nsSemantic{},
 	}
 	for _, o := range opts {
 		o(s)
@@ -106,19 +124,20 @@ func (s *InMemorySemanticStore) PutMemory(ctx context.Context, req PutMemoryRequ
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, exists := s.items[item.Key]; !exists {
-		s.elems[item.Key] = s.order.PushBack(item.Key)
-		for s.maxEntries > 0 && s.order.Len() > s.maxEntries {
-			oldest := s.order.Front()
+	m := s.bucket(req.Namespace)
+	if _, exists := m.items[item.Key]; !exists {
+		m.elems[item.Key] = m.order.PushBack(item.Key)
+		for s.maxEntries > 0 && m.order.Len() > s.maxEntries {
+			oldest := m.order.Front()
 			key := oldest.Value.(string)
-			s.order.Remove(oldest)
-			delete(s.elems, key)
-			delete(s.items, key)
-			delete(s.vecs, key)
+			m.order.Remove(oldest)
+			delete(m.elems, key)
+			delete(m.items, key)
+			delete(m.vecs, key)
 		}
 	}
-	s.items[item.Key] = item
-	s.vecs[item.Key] = vec
+	m.items[item.Key] = item
+	m.vecs[item.Key] = vec
 	return PutMemoryResponse{}, nil
 }
 
@@ -127,7 +146,7 @@ func (s *InMemorySemanticStore) PutMemory(ctx context.Context, req PutMemoryRequ
 // summary uses — there is no query to score against). Limit caps the result.
 func (s *InMemorySemanticStore) ListMemories(ctx context.Context, req ListMemoriesRequest) (ListMemoriesResponse, error) {
 	if req.Query == "" {
-		return s.listAll(req.Limit), nil
+		return s.listAll(req.Namespace, req.Limit), nil
 	}
 
 	qvecs, err := s.embedder.Embed(ctx, []string{req.Query})
@@ -144,10 +163,11 @@ func (s *InMemorySemanticStore) ListMemories(ctx context.Context, req ListMemori
 	defer span.End()
 
 	s.mu.Lock()
-	scored := make([]ScoredMemory, 0, len(s.items))
-	for e := s.order.Front(); e != nil; e = e.Next() {
+	m := s.bucket(req.Namespace)
+	scored := make([]ScoredMemory, 0, len(m.items))
+	for e := m.order.Front(); e != nil; e = e.Next() {
 		key := e.Value.(string)
-		scored = append(scored, ScoredMemory{Item: s.items[key], Score: qvec.Cosine(s.vecs[key])})
+		scored = append(scored, ScoredMemory{Item: m.items[key], Score: qvec.Cosine(m.vecs[key])})
 	}
 	s.mu.Unlock()
 
@@ -162,15 +182,16 @@ func (s *InMemorySemanticStore) ListMemories(ctx context.Context, req ListMemori
 	return ListMemoriesResponse{Items: scored}, nil
 }
 
-func (s *InMemorySemanticStore) listAll(limit int) ListMemoriesResponse {
+func (s *InMemorySemanticStore) listAll(ns string, limit int) ListMemoriesResponse {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]ScoredMemory, 0, s.order.Len())
-	for e := s.order.Front(); e != nil; e = e.Next() {
+	m := s.bucket(ns)
+	out := make([]ScoredMemory, 0, m.order.Len())
+	for e := m.order.Front(); e != nil; e = e.Next() {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		out = append(out, ScoredMemory{Item: s.items[e.Value.(string)]})
+		out = append(out, ScoredMemory{Item: m.items[e.Value.(string)]})
 	}
 	return ListMemoriesResponse{Items: out}
 }
@@ -180,14 +201,15 @@ func (s *InMemorySemanticStore) listAll(limit int) ListMemoriesResponse {
 func (s *InMemorySemanticStore) DeleteMemory(ctx context.Context, req DeleteMemoryRequest) (DeleteMemoryResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.items[req.Key]; !ok {
+	m := s.bucket(req.Namespace)
+	if _, ok := m.items[req.Key]; !ok {
 		return DeleteMemoryResponse{Deleted: false}, nil
 	}
-	delete(s.items, req.Key)
-	delete(s.vecs, req.Key)
-	if e, ok := s.elems[req.Key]; ok {
-		s.order.Remove(e)
-		delete(s.elems, req.Key)
+	delete(m.items, req.Key)
+	delete(m.vecs, req.Key)
+	if e, ok := m.elems[req.Key]; ok {
+		m.order.Remove(e)
+		delete(m.elems, req.Key)
 	}
 	return DeleteMemoryResponse{Deleted: true}, nil
 }

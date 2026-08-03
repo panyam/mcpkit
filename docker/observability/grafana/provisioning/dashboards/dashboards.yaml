@@ -1,9 +1,9 @@
-# Grafana dashboard provisioning — empty for now. Dashboards land
-# alongside the surface-OTel work that produces the data they
-# visualize: P6 children 658 (ext/auth) / 659 (ext/tasks) /
-# 660 (ext/ui) / 664 (server reverse-call), plus the future metrics
-# / logs umbrella. Each surface PR drops its dashboards under
-# ./files/ for Grafana to pick up automatically on next restart.
+# Grafana dashboard provisioning. Dashboards land alongside the
+# OTel work that produces the data they visualize; each drops a JSON
+# under ./files/ for Grafana to pick up automatically on next restart.
+# Present: mcpkit-overview (server dispatch metrics), mcpkit-agent
+# (agent Runner metrics, issue 1023). Still to come: the P6 surface
+# dashboards (ext/auth / ext/tasks / ext/ui / server reverse-call).
 
 apiVersion: 1
 
