@@ -32,6 +32,15 @@ type Config struct {
 	MaxTreeSteps  int `json:"maxTreeSteps,omitempty"`
 	MaxTreeTokens int `json:"maxTreeTokens,omitempty"`
 
+	// Interruptible opts the main agent's turn into breaking the fan-out join
+	// barrier when a sub-agent raises a Signal mid-flight (issue 1167): the first
+	// signal cancels the remaining in-flight calls and the model re-plans with
+	// the partial results, instead of waiting for every sub-agent. Only useful
+	// with signalling sub-agents (SubAgents + CanSignal). False (the default)
+	// keeps the pure fan-out-then-join. Pairs with SignalPolicy: leave it unset
+	// (inject) so the turn re-plans rather than aborts.
+	Interruptible bool `json:"interruptible,omitempty"`
+
 	// RunnerControl, when true, gives the main agent the runner-control
 	// meta-tools (issue 1166): spawn_agent / await_agent / cancel_agent /
 	// list_agents, over the configured sub-agent personas. The model can run a

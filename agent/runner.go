@@ -117,6 +117,19 @@ type RunnerConfig struct {
 	// pre-loop.
 	Compactor Compactor
 
+	// Interruptible opts this Runner's turn into breaking the fan-out join
+	// barrier when a child raises an upward Signal mid-flight (issue 1167, piece
+	// C of the 1036 control axis). Default false keeps the turn a pure
+	// fan-out-then-join — the property resume / fork / eval / compaction rely on;
+	// only a signal-wired turn should set it. When true, the first signal a
+	// child raises during a dispatch cancels the remaining in-flight calls
+	// (they feed back "cancelled by user") and the dispatch returns the partial
+	// results, so the turn's step loop re-enters the model to re-plan. With no
+	// signal, an interruptible turn still waits for every call, identical to the
+	// default. The re-entry ordering is the one bounded-nondeterminism exception
+	// to the pure turn; every emitted event still projects 1:1 (A2).
+	Interruptible bool
+
 	// SignalPolicy, when non-nil, decides how this Runner (as a parent) reacts
 	// to the upward Signals its children raised during a dispatch, read at the
 	// join (issue 1165). It runs after the fan-out has joined, so it chooses
@@ -554,9 +567,23 @@ func (g *callCancels) cancel(id string) {
 // the turn. A fresh signal sink is installed per dispatch (not shared across
 // the tree): a sub-agent spawned by one of these calls raises into THIS sink,
 // its immediate parent's, and a nested dispatch shadows it for grandchildren.
+//
+// In an interruptible turn (RunnerConfig.Interruptible, issue 1167), the first
+// signal a child raises cancels the remaining in-flight calls (they feed back
+// "cancelled by user") and dispatch returns the partial results, so the step
+// loop re-enters the model. parent stays the (sink-installed) step ctx and the
+// calls run under a cancellable child of it, so a fan cancel reads as a per-call
+// "cancelled by user" (parent live), never a turn abort.
 func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) ([]Message, []Signal) {
 	sink := &signalSink{}
-	ctx = withDispatchSink(ctx, sink)
+	parent := withDispatchSink(ctx, sink)
+	callBase := parent
+	var cancelFan context.CancelFunc
+	if r.cfg.Interruptible {
+		sink.notify = make(chan struct{})
+		callBase, cancelFan = context.WithCancel(parent)
+		defer cancelFan()
+	}
 	results := make([]Message, len(calls))
 	var emitMu sync.Mutex
 	locked := func(ev Event) {
@@ -570,10 +597,10 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 		wg.Add(1)
 		go func(i int, call ToolCall) {
 			defer wg.Done()
-			callCtx := ctx
+			callCtx := callBase
 			if reg != nil {
 				var cancel context.CancelFunc
-				callCtx, cancel = context.WithCancel(ctx)
+				callCtx, cancel = context.WithCancel(callBase)
 				reg.add(call.ID, cancel)
 				defer func() {
 					reg.remove(call.ID)
@@ -583,12 +610,28 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 			toolCtx, toolSpan := r.cfg.TracerProvider.StartSpan(callCtx, "agent.tool",
 				core.Attribute{Key: "agent.tool.name", Value: call.Name})
 			locked(Event{Kind: EventToolBegin, Step: step, ToolCall: &call})
-			text := r.callTool(toolCtx, ctx, step, call, tools, locked, toolSpan)
+			text := r.callTool(toolCtx, parent, step, call, tools, locked, toolSpan)
 			toolSpan.End()
 			results[i] = Message{Role: RoleTool, ToolCallID: call.ID, Text: text}
 		}(i, call)
 	}
-	wg.Wait()
+
+	if cancelFan == nil {
+		wg.Wait()
+		return results, sink.drain()
+	}
+	// Interruptible: stop waiting the moment a child signals, cancel the rest,
+	// then still wg.Wait for the cancelled calls to unwind so every result slot
+	// is filled (providers require a result per tool call). No signal => the
+	// select falls through on allDone, identical to the default barrier.
+	allDone := make(chan struct{})
+	go func() { wg.Wait(); close(allDone) }()
+	select {
+	case <-allDone:
+	case <-sink.notify:
+		cancelFan()
+		<-allDone
+	}
 	return results, sink.drain()
 }
 
