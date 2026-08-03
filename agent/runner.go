@@ -569,11 +569,13 @@ func (g *callCancels) cancel(id string) {
 // its immediate parent's, and a nested dispatch shadows it for grandchildren.
 //
 // In an interruptible turn (RunnerConfig.Interruptible, issue 1167), the first
-// signal a child raises cancels the remaining in-flight calls (they feed back
-// "cancelled by user") and dispatch returns the partial results, so the step
-// loop re-enters the model. parent stays the (sink-installed) step ctx and the
-// calls run under a cancellable child of it, so a fan cancel reads as a per-call
-// "cancelled by user" (parent live), never a turn abort.
+// INTERRUPTING signal a child raises (SignalKind.interrupts — preempt/escalate;
+// a custom FYI signal does not break the barrier) cancels the remaining
+// in-flight calls (they feed back "cancelled by user") and dispatch returns the
+// partial results, so the step loop re-enters the model. parent stays the
+// (sink-installed) step ctx and the calls run under a cancellable child of it,
+// so a fan cancel reads as a per-call "cancelled by user" (parent live), never
+// a turn abort.
 func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) ([]Message, []Signal) {
 	sink := &signalSink{}
 	parent := withDispatchSink(ctx, sink)
