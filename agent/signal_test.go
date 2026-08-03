@@ -53,6 +53,37 @@ func TestSignalSource_TopLevelGraceful(t *testing.T) {
 	}
 }
 
+func TestRunner_ShouldBreakOn(t *testing.T) {
+	mk := func(grant func(Signal) bool) *Runner {
+		r, err := NewRunner(RunnerConfig{Provider: NewStubProvider(), PreemptGrant: grant})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	esc := Signal{Kind: SignalEscalate}
+	pre := Signal{Kind: SignalPreempt}
+	cus := Signal{Kind: SignalCustom}
+
+	// Escalate always breaks; custom never — regardless of the grant.
+	if !mk(nil).shouldBreakOn(esc) {
+		t.Error("escalate should always break the barrier")
+	}
+	if mk(func(Signal) bool { return true }).shouldBreakOn(cus) {
+		t.Error("custom must never break the barrier")
+	}
+	// Preempt is gated by PreemptGrant: nil or false => no break, true => break.
+	if mk(nil).shouldBreakOn(pre) {
+		t.Error("preempt must not break without a grant (safe default)")
+	}
+	if mk(func(Signal) bool { return false }).shouldBreakOn(pre) {
+		t.Error("a denied preempt must not break")
+	}
+	if !mk(func(Signal) bool { return true }).shouldBreakOn(pre) {
+		t.Error("a granted preempt should break")
+	}
+}
+
 func TestSignalKind_Interrupts(t *testing.T) {
 	cases := []struct {
 		kind SignalKind

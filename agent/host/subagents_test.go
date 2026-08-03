@@ -115,6 +115,18 @@ func TestAppSubAgentSnakeCaseName(t *testing.T) {
 	}
 }
 
+func TestPreemptGrantFor(t *testing.T) {
+	// AllowPreempt false (the default) => no grant, so a preempt stays advisory.
+	if preemptGrantFor(false) != nil {
+		t.Error("AllowPreempt=false should map to a nil PreemptGrant (safe default)")
+	}
+	// AllowPreempt true => a grant that honors preempts.
+	grant := preemptGrantFor(true)
+	if grant == nil || !grant(agent.Signal{Kind: agent.SignalPreempt}) {
+		t.Error("AllowPreempt=true should map to a grant that honors a preempt")
+	}
+}
+
 // TestAppSubAgentSignalsSurface: a CanSignal persona raises signal_parent, and
 // the main agent surfaces it as an EventSignal (wrapped in HostRunnerEvent) and
 // continues (default inject-and-continue policy). Guards the host wiring of

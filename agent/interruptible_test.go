@@ -17,6 +17,18 @@ import (
 // the caller (blocking or normal). interruptible toggles the gate.
 func twoChildParent(t *testing.T, a, b *AgentSource, interruptible bool) (*Runner, *StubProvider) {
 	t.Helper()
+	return twoChildParentCfg(t, a, b, RunnerConfig{Interruptible: interruptible})
+}
+
+// twoChildParentGranting builds an interruptible parent whose PreemptGrant
+// honors preempts per grant — the "parent authorises the preemption" fixture.
+func twoChildParentGranting(t *testing.T, a, b *AgentSource, grant func(Signal) bool) (*Runner, *StubProvider) {
+	t.Helper()
+	return twoChildParentCfg(t, a, b, RunnerConfig{Interruptible: true, PreemptGrant: grant})
+}
+
+func twoChildParentCfg(t *testing.T, a, b *AgentSource, cfg RunnerConfig) (*Runner, *StubProvider) {
+	t.Helper()
 	tools := NewMultiSource()
 	if err := tools.Add("a-src", a); err != nil {
 		t.Fatal(err)
@@ -31,7 +43,9 @@ func twoChildParent(t *testing.T, a, b *AgentSource, interruptible bool) (*Runne
 		}},
 		StubTurn{Text: "re-planned"},
 	)
-	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: tools, Interruptible: interruptible})
+	cfg.Provider = stub
+	cfg.Tools = tools
+	r, err := NewRunner(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,14 +166,13 @@ func TestInterruptibleOff_IgnoresSignalForBarrier(t *testing.T) {
 	}
 }
 
-// TestInterruptibleTurn_PreemptBreaksBarrier: a preempt signal ("sufficient
-// result, the parallel work is moot") breaks the interruptible barrier exactly
-// like escalate — child A preempts, the blocking child B is cancelled, and the
-// parent re-plans instead of hanging on B.
-func TestInterruptibleTurn_PreemptBreaksBarrier(t *testing.T) {
+// TestInterruptibleTurn_PreemptGrantedBreaksBarrier: when the parent grants
+// preemption (PreemptGrant returns true), a child's preempt breaks the barrier
+// like escalate — the blocking child B is cancelled and the parent re-plans.
+func TestInterruptibleTurn_PreemptGrantedBreaksBarrier(t *testing.T) {
 	a := signalingChild(t, "A", "preempt", "enough")
 	b := blockingChild(t, "B")
-	parent, _ := twoChildParent(t, a, b, true)
+	parent, _ := twoChildParentGranting(t, a, b, func(Signal) bool { return true })
 
 	var mu sync.Mutex
 	var sawSignal bool
@@ -174,7 +187,7 @@ func TestInterruptibleTurn_PreemptBreaksBarrier(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Text != "re-planned" {
-		t.Fatalf("parent final = %q, want it to re-plan after the preempt", result.Text)
+		t.Fatalf("parent final = %q, want it to re-plan after the granted preempt", result.Text)
 	}
 	if !sawSignal {
 		t.Fatal("no EventSignal; the interrupt was not signal-driven")
@@ -182,6 +195,46 @@ func TestInterruptibleTurn_PreemptBreaksBarrier(t *testing.T) {
 	// B blocks forever, so its only possible terminal result is a cancellation.
 	if !containsSubstr(toolTexts(result), "cancelled by user") {
 		t.Fatalf("no cancelled sibling among %v; B was not preempted", toolTexts(result))
+	}
+}
+
+// TestInterruptibleTurn_PreemptNotGrantedDoesNotBreak: with no PreemptGrant (the
+// default), a child's preempt is advisory only — it must NOT break the barrier
+// or cancel siblings. B runs to completion; the preempt is still injected. This
+// is the safe-by-default guard: a child cannot unilaterally kill its siblings.
+func TestInterruptibleTurn_PreemptNotGrantedDoesNotBreak(t *testing.T) {
+	release := make(chan struct{})
+	a := signalingChild(t, "A", "preempt", "enough")
+	b := releasableChild(t, "B", release)
+	parent, _ := twoChildParent(t, a, b, true) // interruptible, but no grant
+
+	var mu sync.Mutex
+	var sawSignal bool
+	var once sync.Once
+	result, err := parent.Run(context.Background(), []Message{{Role: RoleUser, Text: "go"}}, func(e Event) {
+		if e.Kind == EventSignal {
+			mu.Lock()
+			sawSignal = true
+			mu.Unlock()
+		}
+		if e.Kind == EventToolEnd && e.ToolCall != nil && e.ToolCall.ID == "ca" {
+			once.Do(func() { close(release) })
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	texts := toolTexts(result)
+	if containsSubstr(texts, "cancelled by user") {
+		t.Fatalf("B was cancelled by an ungranted preempt: %v", texts)
+	}
+	if !containsSubstr(texts, "B done") {
+		t.Fatalf("B did not complete: %v", texts)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !sawSignal {
+		t.Fatal("preempt should still be recorded/injected even without a grant")
 	}
 }
 
