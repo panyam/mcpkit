@@ -558,6 +558,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		// (issue 1165); sub-agent Runners do not set a policy (they raise, they
 		// do not react). Nil for the inject-and-continue default.
 		SignalPolicy: signalPolicyFor(cfg.SignalPolicy),
+		// The main agent's turn may break the fan-out barrier on a mid-flight
+		// signal and re-plan (issue 1167); off by default. Sub-agent Runners
+		// stay pure fan-out-then-join.
+		Interruptible: cfg.Interruptible,
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.
