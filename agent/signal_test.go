@@ -53,6 +53,81 @@ func TestSignalSource_TopLevelGraceful(t *testing.T) {
 	}
 }
 
+func TestRunner_ShouldBreakOn(t *testing.T) {
+	mk := func(grant func(Signal) bool) *Runner {
+		r, err := NewRunner(RunnerConfig{Provider: NewStubProvider(), PreemptGrant: grant})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	esc := Signal{Kind: SignalEscalate}
+	pre := Signal{Kind: SignalPreempt}
+	cus := Signal{Kind: SignalCustom}
+
+	// Escalate always breaks; custom never — regardless of the grant.
+	if !mk(nil).shouldBreakOn(esc) {
+		t.Error("escalate should always break the barrier")
+	}
+	if mk(func(Signal) bool { return true }).shouldBreakOn(cus) {
+		t.Error("custom must never break the barrier")
+	}
+	// Preempt is gated by PreemptGrant: nil or false => no break, true => break.
+	if mk(nil).shouldBreakOn(pre) {
+		t.Error("preempt must not break without a grant (safe default)")
+	}
+	if mk(func(Signal) bool { return false }).shouldBreakOn(pre) {
+		t.Error("a denied preempt must not break")
+	}
+	if !mk(func(Signal) bool { return true }).shouldBreakOn(pre) {
+		t.Error("a granted preempt should break")
+	}
+}
+
+func TestSignalKind_Interrupts(t *testing.T) {
+	cases := []struct {
+		kind SignalKind
+		want bool
+	}{
+		{SignalPreempt, true},
+		{SignalEscalate, true},
+		{SignalCustom, false},
+		{SignalKind("unknown"), false},
+	}
+	for _, c := range cases {
+		if got := c.kind.interrupts(); got != c.want {
+			t.Errorf("%q.interrupts() = %v, want %v", c.kind, got, c.want)
+		}
+	}
+}
+
+func TestSignalSource_AcceptsPreempt(t *testing.T) {
+	fs := NewSignalSource()
+	res, err := fs.Call(context.Background(), SignalParentToolName, map[string]any{"kind": "preempt", "note": "enough"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No parent sink here, so it reports "no parent" — but crucially NOT an
+	// error, which proves "preempt" is an accepted kind (it passed validation).
+	if res.IsError {
+		t.Fatalf("preempt kind rejected: %+v", res)
+	}
+	if !strings.Contains(res.Content[0].Text, "no parent") {
+		t.Fatalf("preempt result = %q, want the graceful no-parent path", res.Content[0].Text)
+	}
+}
+
+func TestSignalSource_RejectsUnknownKind(t *testing.T) {
+	fs := NewSignalSource()
+	res, err := fs.Call(context.Background(), SignalParentToolName, map[string]any{"kind": "bogus", "note": "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError || !strings.Contains(res.Content[0].Text, "unknown signal kind") {
+		t.Fatalf("unknown kind = %+v, want an IsError result naming the bad kind", res)
+	}
+}
+
 // signalingChild builds an AgentSource whose child raises signal_parent(kind,
 // note) on its first turn, then answers. It is the reusable "a sub-agent that
 // signals up" fixture.

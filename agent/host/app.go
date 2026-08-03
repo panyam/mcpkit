@@ -562,6 +562,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		// signal and re-plan (issue 1167); off by default. Sub-agent Runners
 		// stay pure fan-out-then-join.
 		Interruptible: cfg.Interruptible,
+		// Grant sub-agent "preempt" signals the authority to cancel siblings only
+		// when the operator opts in (issue 1176); nil (default) keeps preempt
+		// advisory-only. GrantAllPreempts trusts every configured persona equally.
+		PreemptGrant: preemptGrantFor(cfg.AllowPreempt),
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.
