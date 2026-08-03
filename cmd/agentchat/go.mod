@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/muesli/termenv v0.16.0
-	github.com/panyam/mcpkit v0.4.0-b3
+	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.3.1
 	github.com/redis/go-redis/v9 v9.7.0

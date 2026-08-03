@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/agent
 go 1.26.5
 
 require (
-	github.com/panyam/mcpkit v0.4.0-b3
+	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/servicekit v0.1.2
 )
 
