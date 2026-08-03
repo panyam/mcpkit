@@ -9,6 +9,7 @@ SUB_MODS_TO_TAG := \
 	agent agent/host agent/store/redis agent/store/gorm \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
+	experimental/ext/agents experimental/ext/agents/clients/go \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
@@ -186,6 +187,8 @@ test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	@bash scripts/test-e2e.sh
 
 test-experimental: ## Run all experimental POC tests
+	@bash experimental/scripts/test-agents.sh
+	@bash experimental/scripts/test-agents-clients-go.sh
 	@bash experimental/scripts/test-events.sh
 	@bash experimental/scripts/test-events-clients-go.sh
 	@bash experimental/scripts/test-events-stores-gorm.sh
