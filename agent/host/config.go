@@ -57,6 +57,15 @@ type Config struct {
 	// alongside a sub-agent with CanSignal.
 	SignalPolicy string `json:"signalPolicy,omitempty"`
 
+	// AllowPreempt lets a sub-agent's advisory "preempt" signal actually break
+	// the interruptible barrier (cancel the other in-flight sub-agents) instead
+	// of only being injected for the model to weigh (issue 1176). False (the
+	// default) is safe: a preempt cannot cancel siblings, so a rogue or
+	// prompt-injected sub-agent cannot unilaterally kill the parallel work — the
+	// main model decides on re-plan. Only meaningful with Interruptible +
+	// signalling sub-agents; "escalate" is unaffected (it always breaks).
+	AllowPreempt bool `json:"allowPreempt,omitempty"`
+
 	// Servers lists the MCP servers to connect.
 	Servers []ServerConfig `json:"servers"`
 

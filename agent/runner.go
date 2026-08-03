@@ -121,13 +121,15 @@ type RunnerConfig struct {
 	// barrier when a child raises an upward Signal mid-flight (issue 1167, piece
 	// C of the 1036 control axis). Default false keeps the turn a pure
 	// fan-out-then-join — the property resume / fork / eval / compaction rely on;
-	// only a signal-wired turn should set it. When true, the first signal a
-	// child raises during a dispatch cancels the remaining in-flight calls
-	// (they feed back "cancelled by user") and the dispatch returns the partial
-	// results, so the turn's step loop re-enters the model to re-plan. With no
-	// signal, an interruptible turn still waits for every call, identical to the
-	// default. The re-entry ordering is the one bounded-nondeterminism exception
-	// to the pure turn; every emitted event still projects 1:1 (A2).
+	// only a signal-wired turn should set it. When true, the first barrier-
+	// breaking signal a child raises during a dispatch (see shouldBreakOn:
+	// escalate always, preempt only when PreemptGrant honors it, custom never)
+	// cancels the remaining in-flight calls (they feed back "cancelled by user")
+	// and the dispatch returns the partial results, so the turn's step loop
+	// re-enters the model to re-plan. With no breaking signal, an interruptible
+	// turn still waits for every call, identical to the default. The re-entry
+	// ordering is the one bounded-nondeterminism exception to the pure turn;
+	// every emitted event still projects 1:1 (A2).
 	Interruptible bool
 
 	// SignalPolicy, when non-nil, decides how this Runner (as a parent) reacts
@@ -138,6 +140,19 @@ type RunnerConfig struct {
 	// way, so the parent model sees them. Nil means inject-and-continue. See
 	// AbortOnEscalate for the built-in deterministic policy.
 	SignalPolicy SignalPolicy
+
+	// PreemptGrant gates whether a child's advisory SignalPreempt breaks the
+	// interruptible join barrier (cancelling the other in-flight calls). It is
+	// the parent's authority over a claim the child cannot actually verify (a
+	// child under A7 isolation cannot know the global goal). Nil (the default)
+	// means a preempt never breaks — it is injected like any signal and the
+	// parent model decides on re-plan, so a rogue or prompt-injected child
+	// cannot unilaterally cancel its siblings. Non-nil is consulted per preempt
+	// signal (it may inspect Source/Note to honor only trusted children);
+	// returning true grants the preemption. Must be pure and goroutine-safe (it
+	// is called from a child's raise). Only consulted when Interruptible is set;
+	// it does not gate SignalEscalate, which breaks unconditionally.
+	PreemptGrant func(sig Signal) bool
 
 	// ResponseSchema, when set, coerces the turn's final answer into
 	// structured output. After the tool loop reaches its terminal
@@ -559,6 +574,23 @@ func (g *callCancels) cancel(id string) {
 	}
 }
 
+// shouldBreakOn decides whether a signal a child raised mid-flight breaks this
+// (interruptible) dispatch's join barrier. Escalate always breaks (its
+// must-handle contract); a custom FYI signal never does; a preempt breaks only
+// when the parent grants it via PreemptGrant — the parent's authority over a
+// claim the child cannot verify, so an untrusted child cannot unilaterally
+// cancel its siblings. Installed as the sink's breakOn and called from a child's
+// raise, so it must stay a pure read of config.
+func (r *Runner) shouldBreakOn(sig Signal) bool {
+	if !sig.Kind.interrupts() {
+		return false
+	}
+	if sig.Kind == SignalPreempt {
+		return r.cfg.PreemptGrant != nil && r.cfg.PreemptGrant(sig)
+	}
+	return true
+}
+
 // dispatch runs the step's tool calls concurrently, serializes event
 // emission, and returns RoleTool messages in call order regardless of
 // completion order, plus any upward Signals the calls' sub-agents raised.
@@ -569,11 +601,13 @@ func (g *callCancels) cancel(id string) {
 // its immediate parent's, and a nested dispatch shadows it for grandchildren.
 //
 // In an interruptible turn (RunnerConfig.Interruptible, issue 1167), the first
-// signal a child raises cancels the remaining in-flight calls (they feed back
-// "cancelled by user") and dispatch returns the partial results, so the step
-// loop re-enters the model. parent stays the (sink-installed) step ctx and the
-// calls run under a cancellable child of it, so a fan cancel reads as a per-call
-// "cancelled by user" (parent live), never a turn abort.
+// barrier-breaking signal a child raises (shouldBreakOn: escalate always,
+// preempt only when PreemptGrant honors it, custom never) cancels the remaining
+// in-flight calls (they feed back "cancelled by user") and dispatch returns the
+// partial results, so the step loop re-enters the model. parent stays the
+// (sink-installed) step ctx and the calls run under a cancellable child of it,
+// so a fan cancel reads as a per-call "cancelled by user" (parent live), never
+// a turn abort.
 func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools []core.ToolDef, emit func(Event), reg *callCancels) ([]Message, []Signal) {
 	sink := &signalSink{}
 	parent := withDispatchSink(ctx, sink)
@@ -581,6 +615,7 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 	var cancelFan context.CancelFunc
 	if r.cfg.Interruptible {
 		sink.notify = make(chan struct{})
+		sink.breakOn = r.shouldBreakOn
 		callBase, cancelFan = context.WithCancel(parent)
 		defer cancelFan()
 	}

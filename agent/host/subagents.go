@@ -20,6 +20,18 @@ func signalPolicyFor(name string) agent.SignalPolicy {
 	return nil
 }
 
+// preemptGrantFor maps Config.AllowPreempt to a RunnerConfig.PreemptGrant:
+// true -> agent.GrantAllPreempts (a preempt may cancel siblings); false ->
+// nil (a preempt is advisory only, the safe default). A config knob is
+// deliberately coarse (trust all or none); a per-child grant is a code-level
+// PreemptGrant predicate.
+func preemptGrantFor(allow bool) func(agent.Signal) bool {
+	if allow {
+		return agent.GrantAllPreempts
+	}
+	return nil
+}
+
 // registerSubAgents builds each configured persona as an agent.AgentSource and
 // adds it to the aggregate, so the main agent delegates to it as a tool. Each
 // persona runs a child Runner on the SHARED provider over a FilterSource-
