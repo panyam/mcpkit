@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/experimental/ext/events/clients/go
 
-go 1.26.4
+go 1.26.5
 
 replace (
 	github.com/panyam/mcpkit => ../../../../..

@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/agents/agent-async
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/panyam/mcpkit v0.4.0-b3
