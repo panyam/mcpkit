@@ -151,7 +151,7 @@ jobs:
         with:
           node-version: '22'
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           working-directory: mcpkit
