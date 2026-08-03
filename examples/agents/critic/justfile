@@ -1,0 +1,7 @@
+# critic — a second model watches the primary agent's turns and injects graded
+# steering notes, composed entirely from public primitives (issue 1148).
+import '../common.just'
+
+# Show available recipes
+default:
+    @just --list --unsorted
