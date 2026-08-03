@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/agent/host
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/panyam/gocurrent v0.1.1

@@ -605,8 +605,15 @@ func isCommandOrStdioAdapter(t clientTransport) bool {
 
 // doConnect performs the actual transport connection and MCP handshake.
 func (c *Client) doConnect() error {
-	// Create transport (skip if already set, e.g., by WithInMemoryServer)
-	if c.transport == nil {
+	// Create transport (skip if already set, e.g., by WithInMemoryServer).
+	// c.transport is guarded by c.mu because a concurrent Close() may read it
+	// while this connect runs on another goroutine (Group's async connect). The
+	// lock only covers the field read/write, never the blocking connect() below,
+	// so a Close racing an in-flight connect still cancels without blocking.
+	c.mu.Lock()
+	tr := c.transport
+	c.mu.Unlock()
+	if tr == nil {
 		if c.commandName != "" {
 			ct := NewCommandTransport(c.commandName, c.commandArgs, c.commandOpts...)
 			ct.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
@@ -618,7 +625,7 @@ func (c *Client) doConnect() error {
 					adapter(method, json.RawMessage(params))
 				}
 			}
-			c.transport = &coreTransportAdapter{inner: ct}
+			tr = &coreTransportAdapter{inner: ct}
 		} else if c.stdioReader != nil && c.stdioWriter != nil {
 			st := NewStdioTransport(c.stdioReader, c.stdioWriter)
 			st.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
@@ -630,7 +637,7 @@ func (c *Client) doConnect() error {
 					adapter(method, json.RawMessage(params))
 				}
 			}
-			c.transport = &coreTransportAdapter{inner: st}
+			tr = &coreTransportAdapter{inner: st}
 		} else if c.useSSE {
 			st := newSSEClientTransport(c.url, c.tokenSource)
 			st.client = c
@@ -640,7 +647,7 @@ func (c *Client) doConnect() error {
 			if c.needsNotifyAdapter() {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
-			c.transport = st
+			tr = st
 		} else {
 			st := newStreamableClientTransport(c.url, c.tokenSource)
 			st.client = c
@@ -651,16 +658,22 @@ func (c *Client) doConnect() error {
 			if c.needsNotifyAdapter() {
 				st.notifyHandler = c.makeNotifyAdapter()
 			}
-			c.transport = st
+			tr = st
 		}
 
 		// Wrap with logging if configured
 		if c.logger != nil {
-			c.transport = &loggingTransport{inner: c.transport, logger: c.logger}
+			tr = &loggingTransport{inner: tr, logger: c.logger}
 		}
+
+		// Publish the built transport under the lock so a concurrent Close()
+		// observes a fully-constructed transport (or none), never a torn write.
+		c.mu.Lock()
+		c.transport = tr
+		c.mu.Unlock()
 	}
 
-	if err := c.transport.connect(); err != nil {
+	if err := tr.connect(); err != nil {
 		return fmt.Errorf("transport connect: %w", err)
 	}
 
@@ -833,8 +846,14 @@ func (c *Client) Close() error {
 			_ = closer.Close()
 		}
 	}
-	if c.transport != nil {
-		return c.transport.close()
+	// Snapshot the transport under c.mu; a Group's async connect may be
+	// publishing it concurrently (see doConnect). Close outside the lock so a
+	// blocking transport close never stalls other c.mu users.
+	c.mu.Lock()
+	tr := c.transport
+	c.mu.Unlock()
+	if tr != nil {
+		return tr.close()
 	}
 	return nil
 }
