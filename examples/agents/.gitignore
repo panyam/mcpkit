@@ -3,3 +3,4 @@ llm.local.json
 # built binaries
 agent-async/agent-async
 multi-agent/multi-agent
+critic/critic

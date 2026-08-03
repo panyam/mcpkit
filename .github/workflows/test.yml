@@ -65,6 +65,9 @@ jobs:
       - name: Run multi-agent example test
         run: cd examples/agents/multi-agent && go test ./... -v
 
+      - name: Run critic example test
+        run: cd examples/agents/critic && go test ./... -v
+
       - name: Run skills agent-mode test
         run: cd examples/skills && go test ./... -v -run TestAgentScenario
 
