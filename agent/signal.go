@@ -27,25 +27,28 @@ const (
 	// but does NOT break an interruptible dispatch's join barrier (see interrupts).
 	SignalCustom SignalKind = "custom"
 
-	// SignalPreempt reports "I have a sufficient result; the parallel work is
-	// moot." It only has teeth in an interruptible turn (issue 1167, piece C):
-	// there it breaks the fan-out join barrier so the parent cancels the other
-	// in-flight (loser) calls and re-plans with the sufficient result. It stays
-	// non-referential — the child reports its OWN sufficiency, and the parent,
-	// which alone holds the fan-out inventory, decides which siblings to cancel
-	// from its own prompt/policy; a child never names a sibling (A7). In a
-	// non-interruptible turn it degrades to inject-and-continue (the siblings
-	// have already joined by the time the parent reads it), same as any signal.
+	// SignalPreempt is a child's *advisory* claim that its result may make the
+	// parallel work unnecessary. It is deliberately NOT authoritative: a child
+	// under A7 isolation cannot know the parent's global goal or what its
+	// siblings are doing, so "the parallel work is moot" is its assertion, never
+	// ground truth. A preempt therefore breaks the interruptible join barrier
+	// (cancelling the other in-flight calls) ONLY when the parent grants it via
+	// RunnerConfig.PreemptGrant; with no grant (the default) a preempt is merely
+	// collected and injected like any signal, and the parent model decides on
+	// re-plan — so a rogue or prompt-injected child cannot unilaterally kill its
+	// siblings. It stays non-referential either way: the child names no sibling;
+	// the parent, which alone holds the fan-out inventory, decides.
 	SignalPreempt SignalKind = "preempt"
 )
 
-// interrupts reports whether a signal of this kind breaks an interruptible
-// dispatch's join barrier (issue 1167, piece C) the moment a child raises it,
-// cancelling the remaining in-flight calls. SignalPreempt ("sufficient result,
-// stop the parallel work") and SignalEscalate ("stop and handle my finding")
-// interrupt; SignalCustom is FYI-only and never cancels siblings. It has no
-// effect in a non-interruptible turn, where every signal is read only at the
-// join.
+// interrupts reports whether a signal of this kind is a *candidate* to break an
+// interruptible dispatch's join barrier (issue 1167, piece C). SignalEscalate
+// ("stop and handle my finding") and SignalPreempt qualify; SignalCustom is
+// FYI-only and never breaks. Being a candidate is necessary but not sufficient
+// for preempt: whether a preempt actually breaks is the parent's call
+// (RunnerConfig.PreemptGrant) — see Runner.shouldBreakOn. Escalate breaks
+// unconditionally (its must-handle contract). No effect in a non-interruptible
+// turn, where every signal is read only at the join.
 func (k SignalKind) interrupts() bool {
 	return k == SignalPreempt || k == SignalEscalate
 }
@@ -112,6 +115,13 @@ func AbortOnEscalate(signals []Signal) SignalAction {
 // Check with errors.Is; the wrapped message carries the policy's Reason.
 var ErrSignalAbort = errors.New("agent: turn aborted by child signal")
 
+// GrantAllPreempts is a built-in RunnerConfig.PreemptGrant that honors every
+// child's preempt — appropriate when the parent trusts all its sub-agents
+// equally. For a finer policy (honor a preempt only from a given Source, or
+// carrying a given Note), pass your own predicate instead. Nil PreemptGrant
+// (the default) honors none.
+func GrantAllPreempts(Signal) bool { return true }
+
 // signalSink collects the signals raised by the sub-agents one dispatch
 // spawned. Two ctx keys keep the direction right (the subtle part): a dispatch
 // installs its sink under dispatchSinkKey (where it collects its OWN children's
@@ -124,22 +134,29 @@ type signalSink struct {
 	mu      sync.Mutex
 	signals []Signal
 
-	// notify, when non-nil, is closed exactly once on the first INTERRUPTING
-	// raise (SignalKind.interrupts — preempt/escalate), so an interruptible
-	// dispatch (issue 1167) can break its join barrier the moment a child
-	// signals a preemption. A SignalCustom raise is collected but leaves notify
-	// open (FYI-only, never cancels siblings). Nil in the default
-	// (non-interruptible) path — signals are then only read at the join.
+	// notify, when non-nil, is closed exactly once on the first raise that
+	// breakOn admits, so an interruptible dispatch (issue 1167) can break its
+	// join barrier the moment a child raises a barrier-breaking signal. Nil in
+	// the default (non-interruptible) path — signals are then only read at the
+	// join.
 	notify chan struct{}
 	once   sync.Once
+
+	// breakOn decides whether a given raised signal breaks the barrier. Set by
+	// an interruptible dispatch (Runner.shouldBreakOn: escalate always, preempt
+	// only when granted, custom never); nil otherwise. Keeping the decision here
+	// rather than in raise lets the parent Runner, not the child's kind alone,
+	// gate a preemption.
+	breakOn func(Signal) bool
 }
 
 func (s *signalSink) raise(sig Signal) {
 	s.mu.Lock()
 	s.signals = append(s.signals, sig)
 	n := s.notify
+	b := s.breakOn
 	s.mu.Unlock()
-	if n != nil && sig.Kind.interrupts() {
+	if n != nil && b != nil && b(sig) {
 		s.once.Do(func() { close(n) })
 	}
 }
@@ -218,7 +235,7 @@ type signalParentArgs struct {
 func NewSignalSource() *FuncSource {
 	fs := NewFuncSource()
 	_ = AddFunc(fs, SignalParentToolName,
-		"Raise a signal to the parent agent that spawned you. kind: 'escalate' (ask the parent to stop and handle your finding), 'preempt' (you have a sufficient result and the parallel work is now moot — ask the parent to stop the other sub-agents and proceed with yours), or 'custom' (a named, FYI signal carrying your own findings). Report only your OWN state — you have no knowledge of other sub-agents; the parent decides what to do. Use sparingly, only for a decisive result the parent must act on.",
+		"Raise a signal to the parent agent that spawned you. kind: 'escalate' (ask the parent to stop and handle your finding), 'preempt' (suggest that your result may make the parallel work unnecessary — the parent decides whether to stop the other sub-agents; you cannot stop them yourself), or 'custom' (a named, FYI signal carrying your own findings). Report only your OWN state — you have no knowledge of other sub-agents; the parent decides what to do. Use sparingly, only for a decisive result the parent must act on.",
 		func(ctx context.Context, in signalParentArgs) (string, error) {
 			kind := SignalKind(in.Kind)
 			switch kind {

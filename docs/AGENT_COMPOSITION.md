@@ -317,9 +317,15 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
   `callBase == parent` so the default path is byte-identical), so cancelled
   siblings read "cancelled by user" instead of a turn abort; `wg.Wait()` still
   fills every result slot (providers require a result per tool call). Follow-ups:
-  the **`preempt` signal kind** (#1176) makes the interruptible break kind-aware
-  — `preempt`/`escalate` cancel the losers, a `custom` FYI signal no longer does;
-  still-unfiled candidates are a per-`TurnRequest` interruptible override,
+  the **`preempt` signal kind** (#1176) is **parent-granted, not
+  child-authoritative** — a child's preempt is an *advisory* claim (under A7 it
+  cannot know the global goal), so it breaks the barrier and cancels the losers
+  only when the parent's `RunnerConfig.PreemptGrant` honors it; with no grant
+  (the default) a preempt is injected like `custom` and the model decides, so a
+  rogue or prompt-injected child cannot unilaterally kill its siblings.
+  `escalate` still breaks unconditionally (its must-handle contract); a `custom`
+  FYI signal never breaks. Deferred: letting the grant/policy select *which*
+  in-flight calls to cancel (#1177), a per-`TurnRequest` interruptible override,
   reacting to a partial result mid-fan-out, and signals from async sub-agents.
   **`TreeBudget` shipped (1032):** a ctx-threaded aggregate cap on total model
   **steps** and **tokens** across a turn's whole tree (parent + sub-agents +
