@@ -12,8 +12,10 @@ const memorySourceID = "memory"
 
 // WithMemoryStore supplies the backing store for working memory
 // (Config.Memory). Omitted, memory uses an in-memory store that dies with
-// the process; a durable, session-scoped backend is a follow-up. Ignored
-// when Config.Memory is nil.
+// the process; pass a durable one (agent/store/redis, agent/store/gorm) to
+// survive restarts. Per-session isolation is orthogonal — set
+// MemoryConfig.SessionScoped to namespace the store by run id. Ignored when
+// Config.Memory is nil.
 func WithMemoryStore(store agent.MemoryStore) AppOption {
 	return func(o *appOptions) { o.memoryStore = store }
 }
@@ -26,7 +28,17 @@ func (a *App) registerMemory(multi *agent.MultiSource, store agent.MemoryStore) 
 	if store == nil {
 		store = agent.NewInMemoryMemoryStore()
 	}
-	src, err := agent.NewMemorySource(store)
+	var opts []agent.MemorySourceOption
+	if a.cfg.Memory != nil && a.cfg.Memory.SessionScoped {
+		// currentRunID is lock-free: it runs during a turn while turnMu is
+		// already held (both the memory tools and the summary/recall injection),
+		// so RunID would deadlock here.
+		opts = append(opts, agent.WithMemoryNamespaceFunc(a.currentRunID))
+		if a.store == nil {
+			a.log.Warn("host: memory sessionScoped is set but no RunStore is configured; every session shares the default scratchpad (add WithRunStore / --session-store to isolate)")
+		}
+	}
+	src, err := agent.NewMemorySource(store, opts...)
 	if err != nil {
 		return err
 	}

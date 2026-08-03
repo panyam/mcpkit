@@ -72,6 +72,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (*core.Res
 	resp, err := d.dispatch(ctx, req)
 	if err == nil && resp != nil && resp.Error == nil {
 		resp.Result = core.InjectServerInfoIntoResult(resp.Result, d.Backend.ServerInfo())
+		// Generalized resultType (2026-07-28 final revision). The
+		// stateless wire only speaks the draft line, so no version gate:
+		// every success result carries the discriminator, with the MRTR
+		// and tasks variants keeping their caller-set values.
+		resp.Result = core.InjectResultTypeIntoResult(resp.Result)
 	}
 	return resp, err
 }

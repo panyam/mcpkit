@@ -377,6 +377,18 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 		}
 	}()
 
+	// 2026-07-28 final revision: every result carries the generalized
+	// resultType discriminator. Stamped at this single exit point so every
+	// branch below is covered; version-gated through the feature table so
+	// pre-draft sessions keep byte-identical wire output. Registered after
+	// the recovery defer (LIFO: runs before it), so a panic-recovery error
+	// response is never stamped — the Error guard covers the normal path.
+	defer func() {
+		if resp != nil && resp.Error == nil && d.protocolFeatures().GeneralizedResultType {
+			resp.Result = core.InjectResultTypeIntoResult(resp.Result)
+		}
+	}()
+
 	switch req.Method {
 	case "initialize":
 		return d.handleInitialize(id, req.Params.Raw())

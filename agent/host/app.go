@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	gocurrent "github.com/panyam/gocurrent"
 	"github.com/panyam/mcpkit/agent"
@@ -22,8 +23,23 @@ import (
 // parsing and signal handling. Construct with NewApp, converse with RunTurn
 // (one input, one rendered turn) or REPL (interactive loop).
 type App struct {
-	cfg       *Config
-	runner    *agent.Runner
+	cfg    *Config
+	runner *agent.Runner
+
+	// team drives the conversation as a handoff Team (Config.Team) instead of
+	// the single runner. activeTeamAgent is the persisted active member, so
+	// control stays where it was transferred across user turns. Both zero in
+	// single-agent mode. Guarded by turnMu.
+	team            *agent.Team
+	activeTeamAgent string
+
+	// teamEventSink is the per-turn persistence tap for team member events: the
+	// Team forwards them tagged (HostSubAgentEvent renders the attribution),
+	// while this buffers the flat Event into the turn's PersistingEmit so the
+	// event log is unchanged. Set under turnMu for the duration of a team turn,
+	// nil otherwise.
+	teamEventSink func(agent.Event)
+
 	sources   *agent.MultiSource
 	clients   []*client.Client
 	history   []agent.Message
@@ -38,6 +54,11 @@ type App struct {
 	group       *client.Group
 	serverTools *agent.MultiSource
 
+	// agentPool backs the runner-control meta-tools (Config.RunnerControl,
+	// issue 1166): the registry of spawnable personas + their live handles. Nil
+	// when runner control is off.
+	agentPool *agent.AgentPool
+
 	// oauthSources holds the interactive (oauth) token source per server id, so
 	// LoginServer can force a fresh browser login. Only oauth-typed servers have
 	// an entry; its presence is what CanLogin reports.
@@ -47,12 +68,16 @@ type App struct {
 	// server's skills with the same instrumentation as the boot path.
 	tp core.TracerProvider
 
+	// log is the operational slog logger (WithLogger; discards by default),
+	// held for construction-time and lifecycle warnings.
+	log *slog.Logger
+
 	// Skills load in the ready-observer (late servers too), so their prompt
 	// blocks and load_skill catalog are shared mutable state read live: the
 	// dynamic system prompt (buildInstructions -> RunnerConfig.InstructionsFunc)
 	// and the load_skill tool. serverOrder keeps assembly deterministic.
 	skillsMu     sync.Mutex
-	skillBlocks  map[string]string        // serverID -> system-prompt block (eager bodies or catalog listing)
+	skillBlocks  map[string]string         // serverID -> system-prompt block (eager bodies or catalog listing)
 	skillCatalog map[string][]catalogSkill // serverID -> catalog entries for load_skill
 	serverOrder  []string
 	loadSkillReg bool // load_skill registered once, lazily, on the first catalog skill
@@ -68,15 +93,22 @@ type App struct {
 	subs      map[string]*subscription
 	metaTools bool
 	turnMu    sync.Mutex
-	emitMu    sync.Mutex // serializes emit so concurrent server-connect events don't race the renderer
+	emitMu    sync.Mutex      // serializes emit so concurrent server-connect events don't race the renderer
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
 	// store and runID are the persistence seam (WithRunStore): runID is
 	// the run turns append to, created lazily on the first persisted
-	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu.
+	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu; write
+	// through setRunID so runIDAtomic stays in sync.
 	store agent.RunStore
 	runID string
+
+	// runIDAtomic mirrors runID for a lock-free read (currentRunID). The
+	// session-scoped memory namespace func reads it during a turn while
+	// turnMu is already held, so it must NOT go through RunID (which takes
+	// turnMu and would deadlock). Written under turnMu via setRunID.
+	runIDAtomic atomic.Value
 
 	// sessionsMu guards sessionsCursor, the paging position the /sessions
 	// picker remembers so "/sessions more" advances (the store cursor is
@@ -103,6 +135,11 @@ type App struct {
 	// through (Dispatch / Commands). Built in NewApp.
 	commands *CommandRegistry
 
+	// promptBuilder assembles the per-turn system prompt from ordered sections
+	// (base instructions + per-server skills by default; customizable via
+	// WithSystemPromptBuilder). Wired as RunnerConfig.InstructionsFunc.
+	promptBuilder *SystemPromptBuilder
+
 	// overlay persists mutable config picks (active connection, approval
 	// mode) back to a local-overlay file when WithConfigOverlay is set; nil
 	// means runtime changes are session-only.
@@ -117,6 +154,7 @@ type appOptions struct {
 	provider        agent.Provider
 	ui              agent.ElicitationUI
 	tp              core.TracerProvider
+	mp              core.MeterProvider
 	logger          *slog.Logger
 	store           agent.RunStore
 	toolResultStore agent.ToolResultStore
@@ -124,6 +162,25 @@ type appOptions struct {
 	providerBuilder ProviderBuilder
 	observers       []Observer
 	configPath      string
+	promptMutate    func(*SystemPromptBuilder)
+	browserOpener   func(string) error
+}
+
+// WithBrowserOpener overrides how the interactive (oauth) auth type opens the
+// authorization URL. Nil (the default) uses the platform browser. A headless or
+// kiosk deployment injects its own launcher; a test injects a scripted
+// redirect-follower so the authorization-code flow runs without a real browser.
+func WithBrowserOpener(fn func(string) error) AppOption {
+	return func(o *appOptions) { o.browserOpener = fn }
+}
+
+// WithSystemPromptBuilder customizes per-turn system-prompt assembly. The
+// mutator receives the default builder (base instructions, then per-server skill
+// blocks) after it is assembled in NewApp, so a caller can reorder sections,
+// insert profile/domain-guide sections, or replace Sections wholesale. It runs
+// once at construction; the resulting builder's Build runs each turn.
+func WithSystemPromptBuilder(mutate func(*SystemPromptBuilder)) AppOption {
+	return func(o *appOptions) { o.promptMutate = mutate }
 }
 
 // WithProvider overrides the OpenAI-compatible provider built from config.
@@ -141,6 +198,15 @@ func WithElicitationUI(ui agent.ElicitationUI) AppOption {
 // activation spans. Nil means noop.
 func WithTracerProvider(tp core.TracerProvider) AppOption {
 	return func(o *appOptions) { o.tp = tp }
+}
+
+// WithMeterProvider opts the agent Runner (and its sub-agents) into OTel metric
+// emission (issue 1023): the per-turn and per-tool-call instruments that back
+// the mcpkit-agent Grafana dashboard. Pair it with WithTracerProvider off the
+// same OTLP endpoint so traces and metrics land in one collector. Nil means
+// noop.
+func WithMeterProvider(mp core.MeterProvider) AppOption {
+	return func(o *appOptions) { o.mp = mp }
 }
 
 // WithLogger sets the operational slog logger (failover transitions, future
@@ -211,12 +277,18 @@ func errString(err error) string {
 // NewApp connects every configured server and assembles the agent. The
 // returned App owns the client connections; call Close when done.
 func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, error) {
+	if err := validateTeamExclusive(cfg); err != nil {
+		return nil, err
+	}
 	var o appOptions
 	for _, opt := range opts {
 		opt(&o)
 	}
 	if o.tp == nil {
 		o.tp = core.NoopTracerProvider{}
+	}
+	if o.mp == nil {
+		o.mp = core.NoopMeterProvider{}
 	}
 	if o.logger == nil {
 		o.logger = slog.New(slog.DiscardHandler)
@@ -240,7 +312,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
-		tp: o.tp, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
+		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
 	for _, sc := range cfg.Servers {
 		app.serverOrder = append(app.serverOrder, sc.ID)
 	}
@@ -255,10 +327,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	app.approval = cfg.Approval.buildApproval(ask)
 
 	// serverTools mirrors the server sources only — no meta-tools, no
-	// sub-agents — so a sub-agent persona gets a filtered view of the servers
-	// without seeing the meta-tools or the other personas (which would let it
-	// recurse). Built only when sub-agents are configured.
-	if len(cfg.SubAgents) > 0 {
+	// sub-agents — so a sub-agent or fan-out persona gets a filtered view of the
+	// servers without seeing the meta-tools or the other personas (which would
+	// let it recurse). Built only when personas are configured.
+	if len(cfg.SubAgents) > 0 || len(cfg.FanOut) > 0 || cfg.Team != nil {
 		app.serverTools = agent.NewMultiSource()
 	}
 
@@ -286,7 +358,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			client.WithToolsListChangedHandler(multi.Invalidate),
 			client.WithTracerProvider(o.tp),
 		}
-		authOpt, loginSrc, err := authOption(sc)
+		authOpt, loginSrc, err := authOption(sc, o.browserOpener)
 		if err != nil {
 			app.Close()
 			return nil, err
@@ -411,10 +483,42 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// a filtered view of serverTools (built above), so it never sees the
 	// meta-tools or its sibling personas.
 	if len(cfg.SubAgents) > 0 {
-		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp); err != nil {
+		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}
+	}
+
+	// Fan-out groups: one tool per group that broadcasts a task to its member
+	// personas concurrently (agent.FanOutSource). Members are built like
+	// sub-agents (serverTools-only), so the same memory-free rule holds.
+	if len(cfg.FanOut) > 0 {
+		if err := app.registerFanOut(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
+	// Runner-control meta-tools: let the main model spawn/await/cancel the
+	// configured personas in the background with handles (issue 1166). Reuses
+	// the persona child Runners; only meaningful with SubAgents.
+	if cfg.RunnerControl && len(cfg.SubAgents) > 0 {
+		if err := app.registerRunnerControl(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+			app.Close()
+			return nil, err
+		}
+	}
+
+	// Team mode: a handoff Team drives RunTurn instead of the single runner.
+	// Validated mutually exclusive with the single-agent features above.
+	if cfg.Team != nil {
+		team, err := app.buildTeam(app.serverTools, provider, o.tp, o.mp)
+		if err != nil {
+			app.Close()
+			return nil, err
+		}
+		app.team = team
+		app.activeTeamAgent = team.StartAgent()
 	}
 
 	// Offloading wraps the whole aggregate, so one read_tool_result and
@@ -431,15 +535,37 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		runnerTools = agent.NewOffloadingSource(multi, store, cfg.Offload.toAgent())
 	}
 
+	// The default system prompt is base instructions followed by the connected
+	// servers' skill blocks; both are recomputed each turn so a late-connecting
+	// server's skills appear without a restart. WithSystemPromptBuilder can
+	// reorder or extend it.
+	app.promptBuilder = app.defaultPromptBuilder()
+	if o.promptMutate != nil {
+		o.promptMutate(app.promptBuilder)
+	}
+
 	runnerCfg := agent.RunnerConfig{
-		Provider: provider,
-		Tools:    runnerTools,
-		// Dynamic system prompt: cfg.Instructions plus the eager/catalog blocks
-		// of the currently-connected servers, recomputed each turn so a
-		// late-connecting server's skills appear without a restart.
-		InstructionsFunc: app.buildInstructions,
+		Provider:         provider,
+		Tools:            runnerTools,
+		InstructionsFunc: app.promptBuilder.Build,
 		MaxSteps:         cfg.MaxSteps,
 		TracerProvider:   o.tp,
+		MeterProvider:    o.mp,
+		// Only the main Runner carries the tree budget; sub-agent / fan-out /
+		// team member Runners inherit the shared counter through ctx.
+		TreeBudget: agent.TreeBudget{MaxSteps: cfg.MaxTreeSteps, MaxTokens: cfg.MaxTreeTokens},
+		// The main agent is the parent that reacts to upward sub-agent signals
+		// (issue 1165); sub-agent Runners do not set a policy (they raise, they
+		// do not react). Nil for the inject-and-continue default.
+		SignalPolicy: signalPolicyFor(cfg.SignalPolicy),
+		// The main agent's turn may break the fan-out barrier on a mid-flight
+		// signal and re-plan (issue 1167); off by default. Sub-agent Runners
+		// stay pure fan-out-then-join.
+		Interruptible: cfg.Interruptible,
+		// Grant sub-agent "preempt" signals the authority to cancel siblings only
+		// when the operator opts in (issue 1176); nil (default) keeps preempt
+		// advisory-only. GrantAllPreempts trusts every configured persona equally.
+		PreemptGrant: preemptGrantFor(cfg.AllowPreempt),
 	}
 	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
 	// the interface would read as non-nil and gate every call to a deny.
@@ -573,14 +699,42 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 			a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 			return err
 		}
-		pe = NewPersistingEmit(a.store, a.runID, emit)
-		emit = pe.Emit
+		if a.team != nil {
+			// Team member events render attributed via OnEvent, so the persisting
+			// tap must NOT also render (that would double-render) — a nil next
+			// makes pe buffer-only; teamEventSink feeds it below.
+			pe = NewPersistingEmit(a.store, a.runID, nil)
+		} else {
+			pe = NewPersistingEmit(a.store, a.runID, emit)
+			emit = pe.Emit
+		}
 	}
 
 	// The memory summary is woven into the per-turn slice only, never into
-	// a.history — see withMemorySummaryLocked.
+	// a.history — see withMemorySummaryLocked (a no-op in team mode, which has
+	// no memory).
 	turnMsgs := a.withMemorySummaryLocked(ctx)
-	result, err := a.runner.Run(ctx, turnMsgs, emit)
+	var result *agent.TurnResult
+	var err error
+	if a.team != nil {
+		// Team mode: the active member (persisted across turns) drives the turn,
+		// looping handoffs internally; result.Messages spans every hop. Member
+		// events flow through the Team's OnEvent (attributed render + persist via
+		// the sink), so the emit passed here is unused. Persist the ending active
+		// agent so control stays transferred next turn.
+		a.teamEventSink = func(agent.Event) {}
+		if pe != nil {
+			a.teamEventSink = pe.Emit
+		}
+		var active string
+		result, active, err = a.team.RunTurn(ctx, turnMsgs, a.activeTeamAgent, emit)
+		a.teamEventSink = nil
+		if err == nil {
+			a.activeTeamAgent = active
+		}
+	} else {
+		result, err = a.runner.Run(ctx, turnMsgs, emit)
+	}
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
 		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})

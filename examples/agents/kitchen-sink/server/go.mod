@@ -1,10 +1,10 @@
 module github.com/panyam/mcpkit/examples/agents/kitchen-sink/server
 
-go 1.26.4
+go 1.26.5
 
 replace github.com/panyam/mcpkit => ../../../..
 
-require github.com/panyam/mcpkit v0.4.0-b3
+require github.com/panyam/mcpkit v0.4.0
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect

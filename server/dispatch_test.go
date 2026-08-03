@@ -1046,3 +1046,45 @@ func TestInitializeWithClientExtensions(t *testing.T) {
 		t.Errorf("stability = %q, want %q", uiExt["stability"], "experimental")
 	}
 }
+
+// 2026-07-28 final revision: the generalized resultType discriminator is
+// stamped on every legacy-wire result once the session negotiates the draft
+// version, and NOT on earlier versions (pre-draft wire output must stay
+// byte-identical).
+func TestDispatch_GeneralizedResultType_VersionGated(t *testing.T) {
+	pingResult := func(d *Dispatcher) map[string]any {
+		resp := d.Dispatch(context.Background(), &core.Request{
+			JSONRPC: "2.0", ID: json.RawMessage(`9`), Method: "ping",
+		})
+		raw, _ := json.Marshal(resp.Result)
+		var got map[string]any
+		json.Unmarshal(raw, &got)
+		return got
+	}
+
+	t.Run("2025-11-25 does not stamp", func(t *testing.T) {
+		srv := NewServer(core.ServerInfo{Name: "t", Version: "1"})
+		d := srv.dispatcher
+		d.allowReinitialize = true
+		d.Dispatch(context.Background(), &core.Request{
+			JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize",
+			Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}`)),
+		})
+		if got := pingResult(d); got["resultType"] != nil {
+			t.Errorf("resultType = %v on 2025-11-25, want absent", got["resultType"])
+		}
+	})
+
+	t.Run("2026-07-28 stamps complete", func(t *testing.T) {
+		srv := NewServer(core.ServerInfo{Name: "t", Version: "1"}, WithAllowLegacyOnDraft())
+		d := srv.dispatcher
+		d.allowReinitialize = true
+		d.Dispatch(context.Background(), &core.Request{
+			JSONRPC: "2.0", ID: json.RawMessage(`0`), Method: "initialize",
+			Params: core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"t","version":"1"}}`)),
+		})
+		if got := pingResult(d); got["resultType"] != "complete" {
+			t.Errorf("resultType = %v on draft, want complete", got["resultType"])
+		}
+	})
+}

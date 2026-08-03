@@ -16,7 +16,7 @@ import (
 // a loginSource so the host can force a fresh login later; the other types
 // return a nil loginSource. Config validation has already checked env presence;
 // this only assembles.
-func authOption(sc ServerConfig) (client.ClientOption, loginSource, error) {
+func authOption(sc ServerConfig, opener func(string) error) (client.ClientOption, loginSource, error) {
 	if sc.Auth == nil {
 		return nil, nil, nil
 	}
@@ -26,7 +26,7 @@ func authOption(sc ServerConfig) (client.ClientOption, loginSource, error) {
 	case "client-credentials":
 		return client.WithTokenSource(clientCredentialsSource(sc)), nil, nil
 	case "oauth":
-		src := oauthSource(sc)
+		src := oauthSource(sc, opener)
 		return client.WithTokenSource(src), src, nil
 	default:
 		return nil, nil, fmt.Errorf("agentchat: server %s: unsupported auth type %q", sc.ID, sc.Auth.Type)
@@ -37,11 +37,15 @@ func authOption(sc ServerConfig) (client.ClientOption, loginSource, error) {
 // self-registers via DCR when no client is pre-registered, else pins the
 // client from clientIdEnv (+ optional clientSecretEnv). Scopes stay empty by
 // default so acquisition follows the server's 401 WWW-Authenticate challenge.
-func oauthSource(sc ServerConfig) *extauth.OAuthTokenSource {
+// opener overrides how the authorization URL is opened; nil uses the platform
+// default browser (WithBrowserOpener injects a custom one — a headless launcher
+// or, in tests, a scripted redirect-follower).
+func oauthSource(sc ServerConfig, opener func(string) error) *extauth.OAuthTokenSource {
 	s := &extauth.OAuthTokenSource{
 		ServerURL:     sc.URL,
 		Scopes:        sc.Auth.Scopes,
 		AllowInsecure: sc.Auth.AllowInsecure,
+		OpenBrowser:   opener,
 	}
 	if sc.Auth.ClientIDEnv != "" {
 		s.ClientID = os.Getenv(sc.Auth.ClientIDEnv)

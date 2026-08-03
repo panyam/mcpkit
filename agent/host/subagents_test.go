@@ -90,6 +90,87 @@ func TestAppSubAgentPersonaDelegatesAndSurfaces(t *testing.T) {
 	}
 }
 
+// TestAppSubAgentSnakeCaseName guards the registration bug where a snake_case
+// persona name (e.g. deep_researcher) built a "subagent:deep_researcher" source
+// id, which MultiSource.Add rejects because "_" is the qualified-name separator.
+// The id is sanitized (underscores -> dashes) while the model-visible tool name
+// keeps its underscores.
+func TestAppSubAgentSnakeCaseName(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "ok"})
+
+	cfg := testConfig(ts.URL)
+	cfg.SubAgents = []SubAgentConfig{{
+		Name: "deep_researcher", Description: "researches deeply", Instructions: "You research.",
+	}}
+	app, err := NewApp(cfg, nil, strings.NewReader(""), WithProvider(stub))
+	if err != nil {
+		t.Fatalf("NewApp rejected a snake_case sub-agent name: %v", err)
+	}
+	defer app.Close()
+
+	defs, _ := app.sources.Tools(context.Background())
+	if !hasToolNamed(defs, "deep_researcher") {
+		t.Fatalf("snake_case sub-agent tool not offered under its own name: %v", toolDefNames(defs))
+	}
+}
+
+func TestPreemptGrantFor(t *testing.T) {
+	// AllowPreempt false (the default) => no grant, so a preempt stays advisory.
+	if preemptGrantFor(false) != nil {
+		t.Error("AllowPreempt=false should map to a nil PreemptGrant (safe default)")
+	}
+	// AllowPreempt true => a grant that honors preempts.
+	grant := preemptGrantFor(true)
+	if grant == nil || !grant(agent.Signal{Kind: agent.SignalPreempt}) {
+		t.Error("AllowPreempt=true should map to a grant that honors a preempt")
+	}
+}
+
+// TestAppSubAgentSignalsSurface: a CanSignal persona raises signal_parent, and
+// the main agent surfaces it as an EventSignal (wrapped in HostRunnerEvent) and
+// continues (default inject-and-continue policy). Guards the host wiring of
+// issue 1165 — the persona gets the control tool and the main Runner reacts.
+func TestAppSubAgentSignalsSurface(t *testing.T) {
+	ts := startTestServer(t)
+	stub := agent.NewStubProvider(
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "d1", Name: "worker",
+			Args: core.NewRawJSON(json.RawMessage(`{"task":"go"}`))}}},
+		agent.StubTurn{ToolCalls: []agent.ToolCall{{ID: "s1", Name: agent.SignalParentToolName,
+			Args: core.NewRawJSON(json.RawMessage(`{"kind":"escalate","note":"found it"}`))}}},
+		agent.StubTurn{Text: "child done"},
+		agent.StubTurn{Text: "synthesized"},
+	)
+
+	cfg := testConfig(ts.URL)
+	cfg.SubAgents = []SubAgentConfig{{
+		Name: "worker", Description: "does work", Instructions: "You work.", CanSignal: true,
+	}}
+	obs := &collectObserver{}
+	app, err := NewApp(cfg, nil, strings.NewReader(""), WithProvider(stub), WithObserver(obs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+
+	if err := app.RunTurn(context.Background(), "delegate to worker"); err != nil {
+		t.Fatal(err)
+	}
+
+	var found *agent.Signal
+	for _, e := range obs.kinds(HostRunnerEvent) {
+		if e.RunnerEvent.Kind == agent.EventSignal {
+			found = e.RunnerEvent.Signal
+		}
+	}
+	if found == nil {
+		t.Fatal("no EventSignal surfaced; the persona could not signal the main agent")
+	}
+	if found.Kind != agent.SignalEscalate || found.Source != "worker" {
+		t.Fatalf("surfaced signal = %+v, want escalate from 'worker'", found)
+	}
+}
+
 func hasToolNamed(defs []core.ToolDef, name string) bool {
 	for _, d := range defs {
 		if d.Name == name {

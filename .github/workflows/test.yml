@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
@@ -44,7 +44,7 @@ jobs:
   test-agent:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
@@ -77,7 +77,7 @@ jobs:
   test-auth:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
@@ -92,7 +92,7 @@ jobs:
   test-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
@@ -117,7 +117,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout mcpkit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: mcpkit
 
@@ -126,7 +126,7 @@ jobs:
         working-directory: mcpkit
         run: |
           # Stamp line shape: "<!-- generated against upstream-conformance@<sha> · protocol <ver> · ... -->"
-          # Requires the full 40-char SHA — actions/checkout@v4 cannot resolve
+          # Requires the full 40-char SHA — actions/checkout@v7 cannot resolve
           # short SHAs as refs (it tries to fetch them as branch/tag names).
           # The regex restricts capture to hex chars, so a maliciously crafted
           # body cannot inject anything into the `ref:` parameter below.
@@ -140,7 +140,7 @@ jobs:
           echo "Pinned upstream-conformance@$SHA"
 
       - name: Checkout modelcontextprotocol/conformance at pinned SHA
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: modelcontextprotocol/conformance
           ref: ${{ steps.pin.outputs.sha }}
@@ -154,7 +154,7 @@ jobs:
         with:
           node-version: '22'
 
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           working-directory: mcpkit
@@ -196,7 +196,7 @@ jobs:
       contents: read
       issues: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:

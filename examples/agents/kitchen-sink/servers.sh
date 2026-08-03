@@ -7,7 +7,9 @@
 # started here, survive agentchat restarts, and are torn down explicitly.
 #
 # Usage:
-#   servers.sh up      [name]   # build + start all servers (or just <name>)
+#   servers.sh up      [name]   # start + tail in the FOREGROUND (Ctrl+C brings them down)
+#   servers.sh up-bg   [name]   # start detached, no tail (fire-and-forget; survives restarts)
+#   servers.sh restart [name]   # down then up (foreground + tail)
 #   servers.sh down    [name]   # stop all (or just <name>)
 #   servers.sh status  [name]   # probe ports; show up/down
 #
@@ -87,14 +89,45 @@ status_one() {
 	if port_up "$port"; then echo "  [up]   $name :$port"; else echo "  [down] $name :$port"; fi
 }
 
+# tail_logs follows the .log files of the current $names in the foreground.
+# -F follows across truncation/rotation and waits for a not-yet-created log (a
+# server still building); multiple files print a "==> name.log <==" header.
+tail_logs() {
+	local n logs=""
+	for n in $names; do logs="$logs $STATE/$n.log"; done
+	echo "==> tailing $(echo $names | wc -w | tr -d ' ') server log(s)"
+	# shellcheck disable=SC2086
+	tail -n +1 -F $logs
+}
+
+# start_fg is the default `up`: start the servers (reliable detached start +
+# pidfiles) and tail their logs in the FOREGROUND. Ctrl+C brings the servers
+# DOWN — this window owns their lifetime. Run agentchat in a SEPARATE terminal.
+start_fg() {
+	local n
+	trap 'echo; echo "==> stopping servers (window closed)"; for n in $names; do down_one "$n"; done; exit 0' INT TERM
+	for n in $names; do up_one "$n" || true; done
+	tail_logs
+}
+
+# start_bg starts the servers detached and returns immediately (no tail). The
+# servers keep running after this command exits and survive agentchat restarts;
+# stop them with `down`. Use this to fire-and-forget or from a script.
+start_bg() {
+	local n
+	for n in $names; do up_one "$n"; done
+}
+
 cmd="${1:-status}"
 target="${2:-}"
 names="$ORDER"
 [ -n "$target" ] && names="$target"
 
 case "$cmd" in
-up)     for n in $names; do up_one "$n"; done ;;
-down)   for n in $names; do down_one "$n"; done ;;
-status) echo "kitchen-sink MCP servers"; for n in $names; do status_one "$n"; done ;;
-*) echo "usage: servers.sh <up|down|status> [name]" >&2; exit 2 ;;
+up)      start_fg ;;
+up-bg)   start_bg ;;
+restart) for n in $names; do down_one "$n"; done; start_fg ;;
+down)    for n in $names; do down_one "$n"; done ;;
+status)  echo "kitchen-sink MCP servers"; for n in $names; do status_one "$n"; done ;;
+*) echo "usage: servers.sh <up|up-bg|restart|down|status> [name]" >&2; exit 2 ;;
 esac

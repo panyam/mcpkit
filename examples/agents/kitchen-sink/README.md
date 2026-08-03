@@ -32,7 +32,7 @@ flag, because it is a separate endpoint from the chat model.
 `kitchen-sink.json` connects to four servers, and the host is a **pure client**:
 it connects to them by URL, it does not manage them. Their lifecycle is
 decoupled from the agent (root `CONSTRAINTS.md` C6) — you start them once with
-`just servers-up` and they survive chat restarts. This mirrors an
+`just servers-up-bg` and they survive chat restarts. This mirrors an
 `.mcp.json`-style connect-list.
 
 | Server | Port | Serves | Why |
@@ -50,11 +50,19 @@ ride the approval ladder).
 Manage the servers independently of the chat:
 
 ```bash
-just servers-up            # start all four (built to .servers/bin, run detached)
+just servers-up            # start + tail all four in the FOREGROUND; Ctrl+C brings them down
+just servers-up-bg         # start detached, no tail — they survive restarts (stop with servers-down)
+just servers-restart       # down then up (foreground + tail) — bounce them in one command
 just servers               # status: which are up
-just servers-up events     # start just one
+just servers-up-bg events  # start just one, detached
 just servers-down          # stop all
 ```
+
+`servers-up` (and `servers-restart`) run the servers in the **foreground** and
+tail their logs, so this terminal owns them — Ctrl+C brings them down. Run
+`just run` (agentchat) in a **second** terminal (the inline TUI and the
+interleaved logs would fight for the same screen). For a fire-and-forget start
+that survives restarts and needs no dedicated terminal, use `servers-up-bg`.
 
 `just run` only *checks* these ports and tells you to `just servers-up` if any
 are down — it never boots or kills them. Having the agent spawn them from the
@@ -81,15 +89,19 @@ already owns stdio subprocess lifecycle, only the config surface is missing.
 Three layers, brought up separately (backends → MCP servers → agent):
 
 ```bash
-just allup      # postgres+pgvector + observability stacks
-just servers-up # the four MCP servers (independent of the chat)
-just check      # probe backends; prints how to fix whatever is down
-just run        # preflight, verify servers are up, launch agentchat (inline TUI)
-just note       # same, but the alt-screen notebook UI (scrollable, foldable cells)
+just allup        # postgres+pgvector + observability stacks
+just servers-up-bg # the four MCP servers, detached (independent of the chat)
+just check        # probe backends; prints how to fix whatever is down
+just run          # preflight, verify servers are up, launch agentchat (inline TUI)
+just note         # same, but the alt-screen notebook UI (scrollable, foldable cells)
 # ... chat, quit, `just run` again — the servers are still up ...
 just servers-down  # stop the MCP servers
 just alldown       # tear the stacks back down
 ```
+
+`servers-up-bg` here starts the servers detached so this same terminal can go on
+to `just run`. Prefer `just servers-up` in a dedicated terminal when you want to
+watch the server logs live (Ctrl+C there brings the servers down).
 
 `just run` fails fast if postgres is down (the config depends on it) or if any
 MCP server is unreachable (it tells you to `just servers-up`), and warns if
@@ -121,37 +133,52 @@ Gemini). You can also swap chat models mid-session with `/provider`.
 2. **Sub-agents.** Ask: *"Have the analyst summarize these numbers: 3, 7, 7, 19, 2."*
    The main agent delegates to the `analyst` persona (its own child Runner that
    only sees the `analyze` tool), which returns the stats.
-3. **Semantic memory + durability.** Tell it: *"Remember that our prod region is
+3. **Parallel fan-out.** Ask: *"Have the review team look at this plan: migrate
+   the session store to Redis with a 24h TTL."* The model calls `review_team`
+   **once**, which broadcasts the task to three reviewer sub-agents (security,
+   performance, cost) that run **concurrently** — in `--ui notebook` you see
+   their events interleave under one fan-out call in the sub-agent tree — and
+   returns their assessments combined in one result.
+   - **Async (background) sub-agent.** Ask: *"Kick off deep research on
+     event-driven architectures — I'll keep working."* The model calls
+     `deep_researcher`, which **acks immediately** ("started in the background")
+     so the turn finishes without waiting. Keep chatting; after the child
+     finishes you'll see *"sub-agent deep_researcher finished"*, and its report
+     is injected as context on your **next** turn (ask *"what did the research
+     find?"*). Contrast the synchronous `researcher` (step 2), which blocks the
+     turn until it answers — async is the spawn-and-continue Task form for work
+     you don't need this instant.
+4. **Semantic memory + durability.** Tell it: *"Remember that our prod region is
    us-east-1."* It calls `remember`, which embeds and upserts a pgvector row.
    **Quit and `just run` again** (same `$SESSION`). Ask: *"Where do we run
    prod?"* `--memory-inject-recall` embeds your question, does ANN top-k against
    pgvector, and injects the note — it survived the restart.
-4. **Approval.** Type `/approval ask` to require confirmation before tool calls,
+5. **Approval.** Type `/approval ask` to require confirmation before tool calls,
    then trigger a tool and approve/deny it.
-5. **Traces.** With the observability stack up, open Grafana at
+6. **Traces.** With the observability stack up, open Grafana at
    http://localhost:3000 and find the trace for a turn (service `agentchat`).
-6. **Reasoning display.** `/provider local-thinker` switches to a local reasoning
+7. **Reasoning display.** `/provider local-thinker` switches to a local reasoning
    model (deepseek-r1 via LM Studio on :1234). Its inline `<think>…</think>` is
    re-tagged as reasoning by the connection's `thinkingHint` and streamed dimmed
    under a `· thinking:` line. Cloud OpenAI/Gemini models don't emit inline
    reasoning, so this only shows with a reasoning model + a `thinkingHint`.
-7. **Eager skills.** The `runbooks` server's skill is spliced into the system
+8. **Eager skills.** The `runbooks` server's skill is spliced into the system
    prompt at connect. Ask it to do what that skill covers (the skills-core
    `commit-helper` skill formats commit messages): *"Format a commit for a bug
    fix in the auth module."* The model follows the skill's guidance with no tool
    round-trip — the body was already in context.
-8. **Catalog skills.** The `community` server is catalog mode, so only skill
+9. **Catalog skills.** The `community` server is catalog mode, so only skill
    names + descriptions are in the prompt. Ask about one of its skills (*"Use the
    git-workflow skill to help me rebase."*). The model first calls `load_skill`
    to fetch that body (a tool call you'll see in the transcript), then acts on
    it. Turn on `/approval ask` first and you'll be prompted before the skill
    loads — catalog skills ride the tool-approval ladder.
-9. **Event injection.** The `events` server emits synthetic `chat.message` and
+10. **Event injection.** The `events` server emits synthetic `chat.message` and
    `alert.fired` every few seconds; the host subscribes at startup and injects
    them ahead of your next turn. After a short pause, ask: *"Anything happen
    while I was away?"* — the injected occurrences are in context, so the model
    can summarize them.
-10. **Config persistence.** `run.sh` passes `--persist-config`. Switch models
+11. **Config persistence.** `run.sh` passes `--persist-config`. Switch models
     with `/provider openai-5.1` (or set an approval mode with `/approve ask`) and
     those picks are written to `kitchen-sink.local.json` (gitignored). Quit and
     `just run` again: it comes back on your last-picked provider, not the
@@ -159,6 +186,28 @@ Gemini). You can also swap chat models mid-session with `/provider`.
     `kitchen-sink.json` at startup, so it never touches the base file; a launch
     flag still wins (`ACTIVE=anthropic-opus just run` overrides the overlay for
     that run).
+
+## Handoff team (a second topology)
+
+The walkthrough above runs **one** main agent with sub-agents, fan-out, and
+memory attached to it. **Handoff** is the other multi-agent shape: control
+*transfers* between agents instead of one agent delegating. Because a team
+replaces the single main agent, it is a separate config (`kitchen-sink-team.json`)
+and its own recipe:
+
+```bash
+just team       # triage router -> billing / technical specialists (notebook UI)
+```
+
+Ask a billing question (*"I was double charged, can I get a refund?"*). The
+**triage** agent transfers you to **billing** — you'll see the `→ handed off to
+billing` line — and billing answers. Now ask a technical follow-up (*"also, the
+export button throws a 500"*); billing transfers you to **technical**. The
+**active agent persists across turns**: your next message goes straight to
+whoever holds the conversation, not back through triage. `MaxHandoffs` bounds
+ping-pong. (Team mode is mutually exclusive with the main agent's memory /
+sub-agents / fan-out — those attach to a single agent; agentchat errors if you
+combine them.)
 
 ## Inspecting state
 

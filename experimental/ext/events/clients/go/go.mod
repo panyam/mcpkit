@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/experimental/ext/events/clients/go
 
-go 1.26.4
+go 1.26.5
 
 replace (
 	github.com/panyam/mcpkit => ../../../../..
@@ -8,7 +8,7 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.4.0-b3
+	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/stretchr/testify v1.11.1
 )

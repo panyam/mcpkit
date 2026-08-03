@@ -76,11 +76,12 @@ func NewMultiSource(opts ...MultiOption) *MultiSource {
 }
 
 // Add registers a source under id. IDs must be unique and must not contain
-// "_", which is reserved as the qualified-name separator; rejecting it keeps
-// "sourceID_name" parsing unambiguous.
+// "/", which is reserved as the qualified-name separator; rejecting it keeps
+// "sourceID/name" parsing unambiguous. Underscores are fine — id namespaces are
+// commonly snake_case (e.g. "subagent:deep_researcher").
 func (m *MultiSource) Add(id string, src ToolSource) error {
-	if strings.Contains(id, "_") {
-		return fmt.Errorf("agent: source id %q must not contain underscores", id)
+	if strings.Contains(id, "/") {
+		return fmt.Errorf("agent: source id %q must not contain %q", id, "/")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -272,12 +273,19 @@ func (m *MultiSource) gatherLocked(ctx context.Context) (map[string][]ToolOwner,
 	return claims, orderNames, nil
 }
 
+// qualifiedName joins a source id and a tool name into the disambiguated form
+// used when multiple sources claim the same name. "/" is the separator because
+// it appears in neither source ids (Add forbids it) nor conventional MCP tool
+// names, so splitQualified recovers the pair unambiguously. The separator need
+// not be wire-legal: providers sanitize it for the request and restore the real
+// name from a full-string bijection before dispatch, so the split always runs
+// on this real name, never the sanitized wire form.
 func qualifiedName(sourceID, name string) string {
-	return sourceID + "_" + name
+	return sourceID + "/" + name
 }
 
 func splitQualified(name string) (sourceID, bare string, ok bool) {
-	i := strings.Index(name, "_")
+	i := strings.Index(name, "/")
 	if i <= 0 || i == len(name)-1 {
 		return "", "", false
 	}

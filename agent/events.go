@@ -43,8 +43,14 @@ const (
 	// carries the before/after message counts. Surfaces can render a
 	// "compacted context" note; evals can assert it happened.
 	EventCompaction EventKind = "compaction"
-	EventTurnEnd    EventKind = "turn-end"
-	EventError      EventKind = "error"
+	// EventSignal marks that a child agent raised an upward Signal, observed by
+	// the parent Runner at the dispatch join (issue 1165). Signal carries the
+	// raised signal. It is the observability projection of the control-axis "up"
+	// channel — a surface renders "child escalated"; the signal's effect on the
+	// turn (inject / abort) is the SignalPolicy's job, not this event's.
+	EventSignal  EventKind = "signal"
+	EventTurnEnd EventKind = "turn-end"
+	EventError   EventKind = "error"
 )
 
 // Event is one increment of a running turn, the payload surfaces consume
@@ -87,6 +93,9 @@ type Event struct {
 
 	// Compaction carries the before/after message counts on compaction.
 	Compaction *CompactionInfo `json:"compaction,omitempty"`
+
+	// Signal is the upward signal a child raised, on EventSignal.
+	Signal *Signal `json:"signal,omitempty"`
 }
 
 // CompactionInfo reports what a compaction pass did: the message count
