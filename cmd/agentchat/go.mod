@@ -62,6 +62,8 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pgvector/pgvector-go v0.4.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -140,6 +142,10 @@ replace github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
 
 replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
+
+replace github.com/panyam/mcpkit/experimental/ext/agents => ../../experimental/ext/agents
+
+replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../experimental/ext/agents/clients/go
 
 replace github.com/panyam/mcpkit/experimental/ext/events => ../../experimental/ext/events
 

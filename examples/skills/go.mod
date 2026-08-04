@@ -21,6 +21,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
@@ -117,6 +119,10 @@ replace github.com/panyam/mcpkit/agent/host => ../../agent/host
 replace github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 
 replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
+
+replace github.com/panyam/mcpkit/experimental/ext/agents => ../../experimental/ext/agents
+
+replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../experimental/ext/agents/clients/go
 
 replace github.com/panyam/mcpkit/experimental/ext/events => ../../experimental/ext/events
 

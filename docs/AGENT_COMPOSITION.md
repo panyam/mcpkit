@@ -248,6 +248,48 @@ Consequences:
 
 Decision captured in issue 1151; enforced by constraint A7.
 
+## Server-advertised agents (experimental)
+
+A server can advertise a roster of specialist agents it hosts, and a supervisor
+builds each one *locally* and loops its tool calls back to that server. This is
+the MCP Agents WG execution model (epic 1142), and it maps almost exactly onto
+`AgentSource` — the bridge is an adapter, not new engine work.
+
+Two layers, split on A6:
+
+- **Wire primitive → `experimental/ext/agents`** (issue 1143): the discovery
+  surface. `capabilities.extensions[io.modelcontextprotocol/agents]` (level 1),
+  `agents/list` returns a roster of routing tuples with no tool schemas (level
+  2), `agents/get {agentId}` resolves one agent's instructions + scoped tools
+  (level 3). Same progressive-disclosure shape as two-tier skills (#910). It
+  traffics only in protocol objects, so it is not agent-layer.
+
+- **Bridge → `agent/` + `agent/host`** (issue 1144): consuming a resolved
+  agent needs a model + a turn, so it is agent-layer.
+  - `agent.NewServerAgentSource` (adapter, dep-free of the experimental module)
+    takes the *decoded pieces* — `Instructions string`, `Tools []core.ToolDef`,
+    and a `Backing ToolSource` — and returns an `AgentSource` over a child
+    Runner. The child's ToolSource is a **scoped source**: it advertises the
+    agent's scoped tool schemas and dispatches a call to the backing (the
+    advertising server) **only for a scoped name**. A tool the server has but
+    the agent's definition did not scope is `ErrUnknownTool` from the child —
+    the capability boundary that keeps a server-advertised agent to its declared
+    scope, not the server's whole `tools/list`.
+  - The host (`agent/host/server_agents.go`) discovers each connected server's
+    roster and adds a **lazy delegate per agent** (`serverAgentSource`) to the
+    main aggregate. `agents/get` fires only on first delegation (cached after),
+    so the scoped schemas resolve into the *child* Runner and never enter the
+    supervisor's context — the progressive-disclosure win, mirroring
+    catalog-mode skills. Per-server, opt-out via `ServerConfig.Agents`.
+
+Invocation is not new wire surface: the child's scoped tool calls go back over
+the existing `tools/call`. The WG's server-side `delegateTool` (run the agent on
+the server) is the alternative path; the bridge is the host-side-execution path,
+which is what composes with the rest of this model (depth/budget/scope/signal
+plumbing all apply to the delegate unchanged). Observability spans for the
+extension itself are issue 1145; the child Runner already carries the standard
+SEP-414 spans/metrics.
+
 ## Constraints this model respects
 
 - **A6** (model-facing → `agent/`): `AgentSource`, `Team`, and the future

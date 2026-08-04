@@ -499,6 +499,13 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		}
 	}
 
+	// Server-advertised agents (experimental/ext/agents, issue 1144): discover
+	// each connected server's roster (agents/list) and add a lazy delegate per
+	// agent to the main aggregate. Resolution (agents/get: instructions +
+	// scoped tools) is deferred to first delegation, so scoped schemas never
+	// bloat the supervisor's context. Degrades to a warning per server.
+	app.registerServerAgents(multi, provider, o.tp, o.mp, cfg.Servers, clientByID)
+
 	// Runner-control meta-tools: let the main model spawn/await/cancel the
 	// configured personas in the background with handles (issue 1166). Reuses
 	// the persona child Runners; only meaningful with SubAgents.
