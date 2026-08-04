@@ -3,6 +3,7 @@ package agents
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/panyam/mcpkit/core"
@@ -19,6 +20,18 @@ type Config struct {
 	// unique; Register drops later duplicates with a returned error. May be
 	// empty and populated at runtime via Registry.AddAgent.
 	Agents []AgentDef
+
+	// TracerProvider opts the discovery handlers into SEP-414 spans
+	// (agents.list / agents.get). Nil or core.NoopTracerProvider{} — the
+	// default — skips emission with zero allocation, the same opt-in contract
+	// ext/tasks and events use. The extension depends only on the core tracing
+	// abstraction, never on ext/otel: hand it any core.TracerProvider (in
+	// production, ext/otel.NewProvider(otelTP)).
+	//
+	// This traces only discovery. A sub-agent's own execution is traced by the
+	// Runner the host builds from an agents/get result (agent.turn / step /
+	// tool spans), wired independently through the bridge's TracerProvider.
+	TracerProvider core.TracerProvider
 }
 
 // Registry is the runtime handle Register returns. It owns the thread-safe
@@ -38,6 +51,10 @@ type Registry struct {
 	byID  map[string]AgentDef
 	order []string
 	srv   *server.Server
+	// tp is the discovery TracerProvider, defaulted to core.NoopTracerProvider{}
+	// by Register so the handlers can StartSpan unconditionally without a nil
+	// check.
+	tp core.TracerProvider
 }
 
 // Register declares the agents extension on cfg.Server and wires the
@@ -50,9 +67,14 @@ type Registry struct {
 // still wired and the Registry is usable — the error is advisory so a typo in
 // one agent does not take the whole server down.
 func Register(cfg Config) (*Registry, error) {
+	tp := cfg.TracerProvider
+	if tp == nil {
+		tp = core.NoopTracerProvider{}
+	}
 	r := &Registry{
 		byID: make(map[string]AgentDef),
 		srv:  cfg.Server,
+		tp:   tp,
 	}
 
 	var dupes []string
@@ -110,12 +132,17 @@ func (r *Registry) RemoveAgent(agentID string) {
 // handleList answers agents/list with the roster of summaries (no tool
 // schemas). Params are ignored — the roster is unfiltered today.
 func (r *Registry) handleList(ctx core.MethodContext, id json.RawMessage, _ json.RawMessage) *core.Response {
+	_, span := r.tp.StartSpan(ctx, "agents.list")
+	defer span.End()
+
 	r.mu.RLock()
 	summaries := make([]AgentSummary, 0, len(r.order))
 	for _, agentID := range r.order {
 		summaries = append(summaries, r.byID[agentID].Summary())
 	}
 	r.mu.RUnlock()
+
+	span.SetAttribute("agents.count", strconv.Itoa(len(summaries)))
 	return core.NewResponse(id, ListResult{Agents: summaries})
 }
 
@@ -124,12 +151,17 @@ func (r *Registry) handleList(ctx core.MethodContext, id json.RawMessage, _ json
 // A known agentId returns the full AgentDetail (summary + instructions +
 // scoped tools).
 func (r *Registry) handleGet(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
+	_, span := r.tp.StartSpan(ctx, "agents.get")
+	defer span.End()
+	span.SetAttribute("agents.found", "false")
+
 	var p GetParams
 	if len(params) > 0 {
 		if err := json.Unmarshal(params, &p); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "agents/get: invalid params: "+err.Error())
 		}
 	}
+	span.SetAttribute("mcp.agent.id", p.AgentID)
 	if p.AgentID == "" {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "agents/get: agentId is required")
 	}
@@ -140,5 +172,6 @@ func (r *Registry) handleGet(ctx core.MethodContext, id json.RawMessage, params 
 	if !ok {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, fmt.Sprintf("agents/get: unknown agentId %q", p.AgentID))
 	}
+	span.SetAttribute("agents.found", "true")
 	return core.NewResponse(id, GetResult{Agent: def.Detail()})
 }

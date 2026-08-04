@@ -785,6 +785,27 @@ Coverage:
 
 **Runnable demo**: `examples/skills/walkthrough.go` exercises the wrap span + Activate path with the `--exporter=stdout` (or `--exporter=otlp`) flag pair. Run with `EXPORTER=stdout just serve` + `EXPORTER=stdout just demo`.
 
+### `experimental/ext/agents` discovery spans — landed (issue 1145)
+
+The server-declared agents primitive (`experimental/ext/agents`, epic 1142) advertises a roster via `agents/list` and resolves a specialist's instructions plus scoped tools via `agents/get`. The WG frames MCP's subagent gap versus ACP as an observability gap, so tracing the discovery + delegation lifecycle is part of the primitive's value, not a parity afterthought.
+
+The pass follows the established opt-in contract. `agents.Config.TracerProvider core.TracerProvider` defaults to `core.NoopTracerProvider{}` (zero allocation, no spans), and the extension depends only on the core tracing abstraction, never on `ext/otel`.
+
+**Server side — discovery spans** (`experimental/ext/agents/registry.go`):
+
+| Handler | Span name | Attributes |
+|---|---|---|
+| `agents/list` | `agents.list` | `agents.count` (roster size) |
+| `agents/get` | `agents.get` | `mcp.agent.id`, `agents.found` (`true` / `false`) |
+
+`agents.found` is set on every path (including empty / unknown `agentId`), so a failed lookup is visible in the trace rather than silent.
+
+**Host side — delegation edge** (`agent/host/server_agents.go`). The host's lazy `serverAgentSource.resolve` wraps the first-use `agents/get` + child build in an `agents.resolve` span carrying `mcp.agent.id`. Cache hits are not spanned. This ties the three pieces a delegation trace should show: `supervisor turn -> agents.resolve(agent.id) -> agents.get -> child turn`.
+
+**Sub-agent execution reuses the Runner's own spans.** A resolved specialist is a normal `agent.AgentSource` over a child `Runner`, so its work already emits `agent.turn` / `agent.step` / `agent.tool` spans (the same instrumentation any Runner gets). The host threads its `TracerProvider` through the bridge (`ServerAgentConfig.TracerProvider`), so no separate execution-span machinery is needed. The in-process delegation runs synchronously inside the supervisor's tool-call span, so those child spans nest naturally under it. A new-root-span + link shape (like `task.execute`) would only be warranted for an async delegation form (`AsyncAgentSource`) whose run outlives the dispatch; that is deferred until a demo needs it.
+
+Coverage: `experimental/ext/agents/tracing_test.go` pins the discovery spans (list count, get found / not-found, and the zero-overhead nil-TracerProvider path); `agent/host/server_agents_test.go` pins the `agents.resolve` span (emitted on first delegation, not on the cached second).
+
 ## Downstream consumers of the Phase 1 contract
 
 - **`experimental/ext/events/` cross-replica bus (issue #629).** The
