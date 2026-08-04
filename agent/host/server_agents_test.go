@@ -195,6 +195,70 @@ func TestApp_DiscoversAndDelegatesToServerAgent(t *testing.T) {
 	}
 }
 
+// hostRecSpan / hostRecTP are a local recording TracerProvider for asserting
+// the host-side agents.resolve span without pulling in ext/otel.
+type hostRecSpan struct {
+	name  string
+	attrs map[string]string
+}
+
+func (s *hostRecSpan) End()                     {}
+func (s *hostRecSpan) SetAttribute(k, v string) { s.attrs[k] = v }
+func (s *hostRecSpan) RecordError(error)        {}
+func (s *hostRecSpan) AddLink(core.Link)        {}
+
+type hostRecTP struct{ spans []*hostRecSpan }
+
+func (p *hostRecTP) StartSpan(ctx context.Context, name string, attrs ...core.Attribute) (context.Context, core.Span) {
+	sp := &hostRecSpan{name: name, attrs: make(map[string]string, len(attrs))}
+	for _, a := range attrs {
+		sp.attrs[a.Key] = a.Value
+	}
+	p.spans = append(p.spans, sp)
+	return core.WithActiveSpan(ctx, sp), sp
+}
+
+// TestServerAgentSource_ResolveSpan asserts the first delegation to an agent
+// emits an agents.resolve span tagged with the agent id, and that a cached
+// second delegation does not emit another (only the resolving call is spanned).
+func TestServerAgentSource_ResolveSpan(t *testing.T) {
+	tp := &hostRecTP{}
+	get := func(ctx context.Context, id string) (agents.AgentDetail, error) {
+		return agents.AgentDetail{
+			AgentSummary: agents.AgentSummary{AgentID: id},
+			Instructions: "you are " + id,
+			Tools:        []core.ToolDef{{Name: "search", InputSchema: map[string]any{"type": "object"}}},
+		}, nil
+	}
+	src := newServerAgentSource(serverAgentDeps{
+		summaries: rosterFixture(),
+		get:       get,
+		backing:   &fakeBacking{},
+		provider:  agent.NewStubProvider(agent.StubTurn{Text: "done"}, agent.StubTurn{Text: "done"}),
+		tp:        tp,
+	})
+
+	if _, err := src.Call(context.Background(), "research", map[string]any{"task": "hi"}); err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if _, err := src.Call(context.Background(), "research", map[string]any{"task": "again"}); err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+
+	var resolves []*hostRecSpan
+	for _, sp := range tp.spans {
+		if sp.name == "agents.resolve" {
+			resolves = append(resolves, sp)
+		}
+	}
+	if len(resolves) != 1 {
+		t.Fatalf("agents.resolve spans = %d, want 1 (first delegation only, cached after)", len(resolves))
+	}
+	if got := resolves[0].attrs["mcp.agent.id"]; got != "research" {
+		t.Fatalf("agents.resolve mcp.agent.id = %q, want %q", got, "research")
+	}
+}
+
 func hasTool(defs []core.ToolDef, name string) bool {
 	for _, d := range defs {
 		if d.Name == name {
