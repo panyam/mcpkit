@@ -527,6 +527,19 @@ type ServerConfig struct {
 	// Events lists the event streams to open on this server. Each event
 	// feeds the injection policy (and any trigger bindings that match).
 	Events []EventConfig `json:"events,omitempty"`
+
+	// Agents controls experimental server-advertised agent discovery
+	// (experimental/ext/agents). Nil or true auto-detects: a server that
+	// advertises the io.modelcontextprotocol/agents extension has its roster
+	// (agents/list) pulled and each agent added as a lazy delegate tool the
+	// main agent can call; a server without the capability is skipped
+	// silently. False opts out even when the server advertises it. Resolution
+	// (agents/get: instructions + scoped tools) is deferred to first
+	// delegation, so scoped tool schemas never enter the supervisor's context
+	// (progressive disclosure, mirroring catalog-mode skills). The delegated
+	// agent runs as a local child Runner whose tool calls loop back to the
+	// advertising server — an agent.AgentSource like any other sub-agent.
+	Agents *bool `json:"agents,omitempty"`
 }
 
 // EventConfig subscribes one event name and optionally overrides its

@@ -6,6 +6,8 @@ require (
 	github.com/panyam/gocurrent v0.1.1
 	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/agent v0.0.0
+	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0
+	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
@@ -55,6 +57,10 @@ replace github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
 
 replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
+
+replace github.com/panyam/mcpkit/experimental/ext/agents => ../../experimental/ext/agents
+
+replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../experimental/ext/agents/clients/go
 
 replace github.com/panyam/mcpkit/experimental/ext/events => ../../experimental/ext/events
 
