@@ -9,7 +9,7 @@
 EXAMPLES_DIR := justfile_directory()
 
 # Run every infra-free example test
-test: test-agents-async test-agents-multi test-skills test-tasks-v2 test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server
+test: test-agents-async test-agents-multi test-agents-deep-supervisor test-skills test-tasks-v2 test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server
 
 # agents/agent-async
 test-agents-async:
@@ -18,6 +18,10 @@ test-agents-async:
 # agents/multi-agent
 test-agents-multi:
     cd {{EXAMPLES_DIR}}/agents/multi-agent && go test ./... -count=1 -timeout 60s
+
+# agents/deep-agent-supervisor (server-advertised roster wiring)
+test-agents-deep-supervisor:
+    cd {{EXAMPLES_DIR}}/agents/deep-agent-supervisor/server && go test ./... -count=1 -timeout 60s
 
 # skills (agent scenario + SEP-2640 security harness)
 test-skills:
