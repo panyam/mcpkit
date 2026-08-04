@@ -72,6 +72,14 @@ question and a data point on where the resource-fetch bound belongs.
 | 3. Resource-fetch byte budget | An over-cap read is rejected before decode (`ErrResourceTooLarge`) | threat model T6 · `experimental-ext-skills#831` · mcpkit #867 |
 | 4. Cross-origin scheme rejection | A `file://` resource URI is refused (`ErrInvalidScheme`) | threat model T5 (`adv-file-url`) |
 
+The same four defenses also appear as steps in the demokit walkthrough
+(`just demo` / `WALKTHROUGH.md`, "Threat-model defenses" section), so they show
+up in the narrated, screen-shareable flow alongside the rest of the extension.
+The walkthrough runs against the external `just serve` process, so its
+digest-mismatch step forces the mismatch with a wrong pin; the `just security`
+harness is the one that stages a real post-listing on-disk tamper (it owns its
+in-process server).
+
 Deliberately not covered: whole-set / signed attestation (a separate build
 track). Host-side origin tagging and per-origin name resolution (PR #1185) could
 be added as a step 5 once demoing those is in scope.
