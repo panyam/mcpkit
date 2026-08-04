@@ -58,6 +58,17 @@ handlers. The returned `Registry` supports runtime `AddAgent` / `RemoveAgent`.
 first wins). An unknown `agentId` on `agents/get` is a `-32602` InvalidParams
 error.
 
+### Tracing (SEP-414)
+
+Set `Config.TracerProvider` to opt the discovery handlers into spans:
+`agents.list` (attribute `agents.count`) and `agents.get` (`mcp.agent.id`,
+`agents.found`). Nil or `core.NoopTracerProvider{}` — the default — emits
+nothing with zero allocation, and the extension depends only on the core
+tracing abstraction, never on `ext/otel`. A resolved specialist's own execution
+is traced by the child `Runner` the host builds from an `agents/get` result;
+the host also emits an `agents.resolve` span tying delegation to discovery. See
+`docs/SEP_414_OTEL.md` § "experimental/ext/agents discovery spans".
+
 ## Client side (`clients/go`)
 
 ```go
