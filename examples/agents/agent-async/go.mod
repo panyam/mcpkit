@@ -22,6 +22,8 @@ require (
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/panyam/gocurrent v0.1.1 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect
@@ -59,6 +61,10 @@ replace github.com/panyam/mcpkit/ext/skills => ../../../ext/skills
 replace github.com/panyam/mcpkit/ext/auth => ../../../ext/auth
 
 replace github.com/panyam/mcpkit/ext/otel => ../../../ext/otel
+
+replace github.com/panyam/mcpkit/experimental/ext/agents => ../../../experimental/ext/agents
+
+replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../../experimental/ext/agents/clients/go
 
 replace github.com/panyam/mcpkit/experimental/ext/events => ../../../experimental/ext/events
 
