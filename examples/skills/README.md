@@ -50,6 +50,32 @@ The whole run is deterministic, so it doubles as a golden-transcript test
 (`agent_scenario_test.go`). With `MODEL=... just agent-live` a real model derives the same
 answers from the injected blocks instead of reciting scripted ones.
 
+### Security & conformance harness
+
+```bash
+just security        # run the harness (no LLM, non-interactive, screen-shareable)
+just security-test   # the same, as a Go regression test
+```
+
+`just security` runs the SEP-2640 host-side defenses over this fixture against
+an in-process server (`security_demo.go`). Each step prints its anchor and a
+`PASS`/`REJECT` outcome; the integrity, byte-budget, and scheme-rejection steps
+assert the SEP-mandated rejection, so the harness doubles as a regression guard
+(`security_demo_test.go`, wired into CI alongside the agent test). It was built
+for the skills-over-MCP WG as a working answer to the open progressive-disclosure
+question and a data point on where the resource-fetch bound belongs.
+
+| Step | Shows | Anchor |
+|------|-------|--------|
+| 1. Progressive disclosure | Catalog carries frontmatter only; the body arrives on demand, digest-verified | SEP-2640 progressive disclosure · `experimental-ext-skills#85` · mcpkit #910 |
+| 2. Supporting-file integrity | A pinned file verifies; an unlisted file is refused (`ErrSupportingFileUnpinned`); a post-listing tamper is rejected (`ErrDigestMismatch`) | threat model B1 · mcpkit #866 |
+| 3. Resource-fetch byte budget | An over-cap read is rejected before decode (`ErrResourceTooLarge`) | threat model T6 · `experimental-ext-skills#831` · mcpkit #867 |
+| 4. Cross-origin scheme rejection | A `file://` resource URI is refused (`ErrInvalidScheme`) | threat model T5 (`adv-file-url`) |
+
+Deliberately not covered: whole-set / signed attestation (a separate build
+track). Host-side origin tagging and per-origin name resolution (PR #1185) could
+be added as a step 5 once demoing those is in scope.
+
 ### Other server modes
 
 ```bash

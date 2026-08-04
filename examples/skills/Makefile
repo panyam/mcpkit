@@ -8,6 +8,12 @@ agent-live: ## Run the agent scenario against a live model (MODEL=<name> [BASE_U
 agent-test: ## Run the agent golden-transcript test
 	go test ./... -count=1 -run TestAgentScenario
 
+security: ## Run the SEP-2640 security/conformance harness (no LLM, non-interactive)
+	go run . --security
+
+security-test: ## Run the security harness as a regression test
+	go test ./... -count=1 -run TestSecurityDemo
+
 demo: ## Run the demokit walkthrough (text, non-interactive). Server must be up via `make serve` in another terminal.
 	go run . --tui
 
