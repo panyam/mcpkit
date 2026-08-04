@@ -948,13 +948,143 @@ for _, f := range files {
 			return nil
 		})
 
+	demo.Section("Threat-model defenses",
+		"The digest contract above is one of several host-side guards SEP-2640's Security Implications and the merged threat model require. These steps exercise the rejections directly against the running server: an over-budget fetch, an unpinned supporting file, a digest mismatch, and a cross-origin scheme. The standalone `just security` harness proves the same set against an in-process server, including a real post-listing on-disk tamper this two-terminal walkthrough can't stage.",
+	)
+
+	demo.Step("Reject an over-budget resource fetch (threat model T6)").
+		Arrow("Host", "Server", "resources/read (client capped via WithMaxResourceBytes)").
+		Note("A host bounds how many bytes a skill read may pull before decoding, so a hostile or runaway server can't exhaust it. mcpkit puts the bound at the fetch layer; an over-cap read fails with ErrResourceTooLarge before the body is decoded. Anchor: threat model T6 · experimental-ext-skills#831 · issue 867.").
+		VerbatimVariants("Reproduce in Go",
+			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
+idx, _ := sc.ListSkills(ctx.Ctx)
+e, _ := findManifestEntry(idx, uriRefundsManifest)
+full, _ := sc.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+capped := skills.NewClient(c, skills.WithMaxResourceBytes(int64(len(full.Bytes)/2)))
+_, err := capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)   // -> ErrResourceTooLarge`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			sc := skills.NewClient(c)
+			idx, err := sc.ListSkills(ctx.Ctx)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return nil
+			}
+			e, ok := findManifestEntry(idx, uriRefundsManifest)
+			if !ok {
+				fmt.Printf("    ERROR: %s not in index\n", uriRefundsManifest)
+				return nil
+			}
+			full, err := sc.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return nil
+			}
+			capBytes := max(int64(len(full.Bytes)/2), 1)
+			capped := skills.NewClient(c, skills.WithMaxResourceBytes(capBytes))
+			_, err = capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+			reportGuard(errors.Is(err, skills.ErrResourceTooLarge), err,
+				fmt.Sprintf("cap=%d bytes vs body≈%d bytes → ErrResourceTooLarge before decode", capBytes, len(full.Bytes)))
+			return nil
+		})
+
+	demo.Step("Refuse an unpinned supporting file (threat model B1)").
+		Note("ReadSkillFileVerified only reads supporting files the index pins a digest for. A path not in the index — an attacker's extra file, or a typo — is refused with ErrSupportingFileUnpinned rather than read unverified. Anchor: threat model B1 · issue 866.").
+		VerbatimVariants("Reproduce in Go",
+			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
+idx, _ := sc.ListSkills(ctx.Ctx)
+e, _ := findManifestEntry(idx, uriRefundsManifest)
+m, _ := sc.ReadSkillManifest(ctx.Ctx, e.URL)
+_, err := sc.ReadSkillFileVerified(ctx.Ctx, e, m, "templates/ghost.md")   // -> ErrSupportingFileUnpinned`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			sc := skills.NewClient(c)
+			idx, err := sc.ListSkills(ctx.Ctx)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return nil
+			}
+			e, ok := findManifestEntry(idx, uriRefundsManifest)
+			if !ok {
+				fmt.Printf("    ERROR: %s not in index\n", uriRefundsManifest)
+				return nil
+			}
+			m, err := sc.ReadSkillManifest(ctx.Ctx, e.URL)
+			if err != nil {
+				fmt.Printf("    ERROR: %v\n", err)
+				return nil
+			}
+			_, err = sc.ReadSkillFileVerified(ctx.Ctx, e, m, "templates/ghost.md")
+			reportGuard(errors.Is(err, skills.ErrSupportingFileUnpinned), err,
+				"unlisted templates/ghost.md → ErrSupportingFileUnpinned")
+			return nil
+		})
+
+	demo.Step("Reject a digest mismatch (threat model B1)").
+		Arrow("Host", "Server", "resources/read uri=skill://acme/billing/refunds/SKILL.md").
+		Note("If a server returns bytes that don't match the pinned digest — corruption or tampering — ReadAndVerify returns ErrDigestMismatch and the host MUST NOT use the content. Here the mismatch is forced by verifying against a deliberately wrong pin; `just security` proves the same rejection with a real post-listing on-disk swap. Anchor: threat model B1.").
+		VerbatimVariants("Reproduce in Go",
+			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
+_, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat("0", 64))   // -> ErrDigestMismatch`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			if c == nil {
+				return nil
+			}
+			sc := skills.NewClient(c)
+			_, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat("0", 64))
+			reportGuard(errors.Is(err, skills.ErrDigestMismatch), err,
+				"served bytes vs a wrong pin → ErrDigestMismatch (host MUST NOT use)")
+			return nil
+		})
+
+	demo.Step("Reject a cross-origin resource scheme (threat model T5)").
+		Note("Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI — the threat model's adv-file-url — is rejected by ParseURI with ErrInvalidScheme, so a skill can't redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).").
+		VerbatimVariants("Reproduce in Go",
+			demokit.MakeVariant("go", "go", `_, err := skills.ParseURI("file:///etc/passwd")   // -> ErrInvalidScheme`),
+		).
+		Run(func(ctx demokit.StepContext) *demokit.StepResult {
+			_, err := skills.ParseURI("file:///etc/passwd")
+			reportGuard(errors.Is(err, skills.ErrInvalidScheme), err,
+				"file:///etc/passwd → ErrInvalidScheme")
+			return nil
+		})
+
 	demo.Section("Wrap-up",
-		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), and exercised the mode-specific read flow. The same client code paths served both — only the URI shape and the post-fetch unpack step differ.",
+		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, scheme rejection). The same client code paths served both distribution modes — only the URI shape and the post-fetch unpack step differ.",
 	)
 
 	_ = serverInfo
 	common.SetupRenderer(demo)
 	demo.Execute()
+}
+
+// findManifestEntry returns the index entry whose URL matches url (a skill's
+// SKILL.md URI), used by the threat-model steps to pin their reads.
+func findManifestEntry(idx skills.Index, url string) (skills.IndexEntry, bool) {
+	for _, e := range idx.Skills {
+		if e.URL == url {
+			return e, true
+		}
+	}
+	return skills.IndexEntry{}, false
+}
+
+// reportGuard prints a threat-model step's outcome: ok true means the SEP-
+// mandated guard fired (REJECT is the intended result); false means it did not,
+// which the walkthrough surfaces rather than passing over silently.
+func reportGuard(ok bool, got error, msg string) {
+	if ok {
+		fmt.Printf("    ✓ REJECT — %s (%v)\n", msg, got)
+		return
+	}
+	fmt.Printf("    ✗ NOT REJECTED — expected a guard to fire: %s (got %v)\n", msg, got)
 }
 
 // wireLabel returns a human-readable wire-mode name for the walkthrough
