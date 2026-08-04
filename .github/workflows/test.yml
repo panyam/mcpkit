@@ -68,8 +68,8 @@ jobs:
       - name: Run critic example test
         run: cd examples/agents/critic && go test ./... -v
 
-      - name: Run skills agent-mode test
-        run: cd examples/skills && go test ./... -v -run TestAgentScenario
+      - name: Run skills agent-mode + security tests
+        run: cd examples/skills && go test ./... -v -run 'TestAgentScenario|TestSecurityDemo'
 
       - name: Run tasks-v2 agent-mode test
         run: cd examples/tasks-v2 && go test ./... -v -run TestAgentScenario
