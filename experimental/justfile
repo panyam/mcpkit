@@ -17,7 +17,15 @@
 EXPERIMENTAL_DIR := justfile_directory()
 
 # Run all experimental POC tests
-test: test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram
+test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram
+
+# Run experimental ext/agents library tests
+test-agents:
+    @bash {{EXPERIMENTAL_DIR}}/scripts/test-agents.sh
+
+# Run experimental ext/agents Go client SDK tests
+test-agents-clients-go:
+    @bash {{EXPERIMENTAL_DIR}}/scripts/test-agents-clients-go.sh
 
 # Run experimental ext/events library tests
 test-events:
