@@ -114,6 +114,9 @@ type serverAgentSource struct {
 }
 
 func newServerAgentSource(deps serverAgentDeps) *serverAgentSource {
+	if deps.tp == nil {
+		deps.tp = core.NoopTracerProvider{}
+	}
 	s := &serverAgentSource{
 		deps:   deps,
 		byTool: make(map[string]agents.AgentSummary, len(deps.summaries)),
@@ -198,8 +201,16 @@ func (s *serverAgentSource) resolve(ctx context.Context, summary agents.AgentSum
 	}
 	s.mu.Unlock()
 
+	// One span per first-use resolution ties the supervisor's delegation to the
+	// agents/get discovery span (on the server) and the child Runner's turn
+	// spans, so a trace reads supervisor -> resolve(agent.id) -> get -> child.
+	// Cache hits (the common case after warm-up) are not spanned.
+	ctx, span := s.deps.tp.StartSpan(ctx, "agents.resolve", core.Attribute{Key: "mcp.agent.id", Value: id})
+	defer span.End()
+
 	detail, err := s.deps.get(ctx, id)
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 	child, err := agent.NewServerAgentSource(agent.ServerAgentConfig{
