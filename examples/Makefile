@@ -33,8 +33,8 @@ test-agents-async: ## agents/agent-async
 test-agents-multi: ## agents/multi-agent
 	cd $(EXAMPLES_DIR)/agents/multi-agent && go test ./... -count=1 -timeout 60s
 
-test-skills: ## skills (agent scenario)
-	cd $(EXAMPLES_DIR)/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario
+test-skills: ## skills (agent scenario + SEP-2640 security harness)
+	cd $(EXAMPLES_DIR)/skills && go test ./... -count=1 -timeout 60s -run 'TestAgentScenario|TestSecurityDemo'
 
 test-tasks-v2: ## tasks-v2 (agent scenario)
 	cd $(EXAMPLES_DIR)/tasks-v2 && go test ./... -count=1 -timeout 60s -run TestAgentScenario

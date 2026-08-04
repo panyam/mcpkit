@@ -17,6 +17,14 @@ agent-live:
 agent-test:
 	go test ./... -count=1 -run TestAgentScenario
 
+# Run the SEP-2640 security/conformance harness (no LLM, non-interactive)
+security:
+	go run . --security
+
+# Run the security harness as a regression test
+security-test:
+	go test ./... -count=1 -run TestSecurityDemo
+
 # Run the demokit walkthrough (text, non-interactive). Server must be up via `just serve` in another terminal.
 demo:
 	go run . --tui

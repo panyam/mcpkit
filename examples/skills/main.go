@@ -57,9 +57,25 @@ func main() {
 		case "--agent":
 			runAgent()
 			return
+		case "--security":
+			runSecurity()
+			return
 		}
 	}
 	runDemo()
+}
+
+// runSecurity plays the non-interactive SEP-2640 security/conformance harness
+// against an in-process skills server and exits non-zero if any step's outcome
+// differs from the SEP-mandated one. See security_demo.go.
+func runSecurity() {
+	ok, err := runSecurityDemo(os.Stdout)
+	if err != nil {
+		log.Fatalf("skills security: %v", err)
+	}
+	if !ok {
+		os.Exit(1)
+	}
 }
 
 // runAgent plays the scripted agent scenario (or, with --model, a live model)
