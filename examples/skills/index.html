@@ -272,6 +272,57 @@ git question by the team&rsquo;s <code>git-workflow</code> conventions and a PDF
 The whole run is deterministic, so it doubles as a golden-transcript test<br />
 (<code>agent_scenario_test.go</code>). With <code>MODEL=... just agent-live</code> a real model derives the same<br />
 answers from the injected blocks instead of reciting scripted ones.</p>
+<h3 id="security--conformance-harness">Security &amp; conformance harness <a class="anchor" href="#security--conformance-harness">¶</a></h3>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just security        <span style="color:#998;font-style:italic"># run the harness (no LLM, non-interactive, screen-shareable)</span>
+</span></span><span style="display:flex;"><span>just security-test   <span style="color:#998;font-style:italic"># the same, as a Go regression test</span>
+</span></span></code></pre><p><code>just security</code> runs the SEP-2640 host-side defenses over this fixture against<br />
+an in-process server (<code>security_demo.go</code>). Each step prints its anchor and a<br />
+<code>PASS</code>/<code>REJECT</code> outcome; the integrity, byte-budget, and scheme-rejection steps<br />
+assert the SEP-mandated rejection, so the harness doubles as a regression guard<br />
+(<code>security_demo_test.go</code>, wired into CI alongside the agent test). It was built<br />
+for the skills-over-MCP WG as a working answer to the open progressive-disclosure<br />
+question and a data point on where the resource-fetch bound belongs.</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Shows</th>
+<th>Anchor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Progressive disclosure</td>
+<td>Catalog carries frontmatter only; the body arrives on demand, digest-verified</td>
+<td>SEP-2640 progressive disclosure · <code>experimental-ext-skills#85</code> · mcpkit #910</td>
+</tr>
+<tr>
+<td>2. Supporting-file integrity</td>
+<td>A pinned file verifies; an unlisted file is refused (<code>ErrSupportingFileUnpinned</code>); a post-listing tamper is rejected (<code>ErrDigestMismatch</code>)</td>
+<td>threat model B1 · mcpkit #866</td>
+</tr>
+<tr>
+<td>3. Resource-fetch byte budget</td>
+<td>An over-cap read is rejected before decode (<code>ErrResourceTooLarge</code>)</td>
+<td>threat model T6 · <code>experimental-ext-skills#831</code> · mcpkit #867</td>
+</tr>
+<tr>
+<td>4. Cross-origin scheme rejection</td>
+<td>A <code>file://</code> resource URI is refused (<code>ErrInvalidScheme</code>)</td>
+<td>threat model T5 (<code>adv-file-url</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The same four defenses also appear as steps in the demokit walkthrough<br />
+(<code>just demo</code> / <code>WALKTHROUGH.md</code>, &ldquo;Threat-model defenses&rdquo; section), so they show<br />
+up in the narrated, screen-shareable flow alongside the rest of the extension.<br />
+The walkthrough runs against the external <code>just serve</code> process, so its<br />
+digest-mismatch step forces the mismatch with a wrong pin; the <code>just security</code><br />
+harness is the one that stages a real post-listing on-disk tamper (it owns its<br />
+in-process server).</p>
+<p>Deliberately not covered: whole-set / signed attestation (a separate build<br />
+track). Host-side origin tagging and per-origin name resolution (PR #1185) could<br />
+be added as a step 5 once demoing those is in scope.</p>
 <h3 id="other-server-modes">Other server modes <a class="anchor" href="#other-server-modes">¶</a></h3>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve-archive   <span style="color:#998;font-style:italic"># publishes each skill as one .tar.gz resource</span>
 </span></span><span style="display:flex;"><span>just serve-zip       <span style="color:#998;font-style:italic"># publishes each skill as one .zip resource</span>
@@ -382,6 +433,10 @@ classes are tracked under mcpkit#567.</p>
 <li><strong>List a directory inside a skill and recurse into a subdirectory</strong> — Subdirectories surface with mimeType inode/directory; the client descends by issuing a second call. The SDK wraps this into a single call; the curl below shows both round trips explicitly.</li>
 <li><strong>Wrap reads in skills.NewClient(&hellip;) and call Client.Activate</strong> — Activate is intra-process — no wire traffic. Run with <code>just serve EXPORTER=stdout</code> + <code>just demo EXPORTER=stdout</code> to see spans.</li>
 <li><strong>Read pdf-processing archive, verify digest, unpack, list recovered files</strong> — Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.</li>
+<li><strong>Reject an over-budget resource fetch (threat model T6)</strong> — A host bounds how many bytes a skill read may pull before decoding, so a hostile or runaway server can&rsquo;t exhaust it. mcpkit puts the bound at the fetch layer; an over-cap read fails with ErrResourceTooLarge before the body is decoded. Anchor: threat model T6 · experimental-ext-skills#831 · issue 867.</li>
+<li><strong>Refuse an unpinned supporting file (threat model B1)</strong> — ReadSkillFileVerified only reads supporting files the index pins a digest for. A path not in the index — an attacker&rsquo;s extra file, or a typo — is refused with ErrSupportingFileUnpinned rather than read unverified. Anchor: threat model B1 · issue 866.</li>
+<li><strong>Reject a digest mismatch (threat model B1)</strong> — If a server returns bytes that don&rsquo;t match the pinned digest — corruption or tampering — ReadAndVerify returns ErrDigestMismatch and the host MUST NOT use the content. Here the mismatch is forced by verifying against a deliberately wrong pin; <code>just security</code> proves the same rejection with a real post-listing on-disk swap. Anchor: threat model B1.</li>
+<li><strong>Reject a cross-origin resource scheme (threat model T5)</strong> — Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI — the threat model&rsquo;s adv-file-url — is rejected by ParseURI with ErrInvalidScheme, so a skill can&rsquo;t redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -457,6 +512,16 @@ classes are tracked under mcpkit#567.</p>
     Note over Host,Server: Step 17: Read pdf-processing archive, verify digest, unpack, list recovered files
     Host-&gt;&gt;Server: resources/read uri=skill://pdf-processing.tar.gz (or .zip)
     Server--&gt;&gt;Host: application/gzip OR application/zip blob
+
+    Note over Host,Server: Step 18: Reject an over-budget resource fetch (threat model T6)
+    Host-&gt;&gt;Server: resources/read (client capped via WithMaxResourceBytes)
+
+    Note over Host,Server: Step 19: Refuse an unpinned supporting file (threat model B1)
+
+    Note over Host,Server: Step 20: Reject a digest mismatch (threat model B1)
+    Host-&gt;&gt;Server: resources/read uri=skill://acme/billing/refunds/SKILL.md
+
+    Note over Host,Server: Step 21: Reject a cross-origin resource scheme (threat model T5)
 </code></pre>
 <h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
 <h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
@@ -686,8 +751,36 @@ Terminal 2:  just demo          # this walkthrough (--tui interactive)
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Verify and list:</span>
 </span></span><span style="display:flex;"><span>shasum -a <span style="color:#099">256</span> /tmp/pdf.tgz                 <span style="color:#998;font-style:italic"># compare against index entry digest</span>
 </span></span><span style="display:flex;"><span>tar -tzf /tmp/pdf.tgz                      <span style="color:#998;font-style:italic"># recovered file tree</span>
-</span></span></code></pre><h3 id="wrap-up">Wrap-up <a class="anchor" href="#wrap-up">¶</a></h3>
-<p>Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), and exercised the mode-specific read flow. The same client code paths served both — only the URI shape and the post-fetch unpack step differ.</p>
+</span></span></code></pre><h3 id="threat-model-defenses">Threat-model defenses <a class="anchor" href="#threat-model-defenses">¶</a></h3>
+<p>The digest contract above is one of several host-side guards SEP-2640&rsquo;s Security Implications and the merged threat model require. These steps exercise the rejections directly against the running server: an over-budget fetch, an unpinned supporting file, a digest mismatch, and a cross-origin scheme. The standalone <code>just security</code> harness proves the same set against an in-process server, including a real post-listing on-disk tamper this two-terminal walkthrough can&rsquo;t stage.</p>
+<h3 id="step-18-reject-an-over-budget-resource-fetch-threat-model-t6">Step 18: Reject an over-budget resource fetch (threat model T6) <a class="anchor" href="#step-18-reject-an-over-budget-resource-fetch-threat-model-t6">¶</a></h3>
+<p>A host bounds how many bytes a skill read may pull before decoding, so a hostile or runaway server can&rsquo;t exhaust it. mcpkit puts the bound at the fetch layer; an over-cap read fails with ErrResourceTooLarge before the body is decoded. Anchor: threat model T6 · experimental-ext-skills#831 · issue 867.</p>
+<h4 id="reproduce-in-go">Reproduce in Go <a class="anchor" href="#reproduce-in-go">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>sc <span style="color:#000;font-weight:bold">:=</span> skills.<span style="color:#900;font-weight:bold">NewClient</span>(c)
+</span></span><span style="display:flex;"><span>idx, _ <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ListSkills</span>(ctx.Ctx)
+</span></span><span style="display:flex;"><span>e, _ <span style="color:#000;font-weight:bold">:=</span> <span style="color:#900;font-weight:bold">findManifestEntry</span>(idx, uriRefundsManifest)
+</span></span><span style="display:flex;"><span>full, _ <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ReadAndVerify</span>(ctx.Ctx, e.URL, e.Digest)
+</span></span><span style="display:flex;"><span>capped <span style="color:#000;font-weight:bold">:=</span> skills.<span style="color:#900;font-weight:bold">NewClient</span>(c, skills.<span style="color:#900;font-weight:bold">WithMaxResourceBytes</span>(<span style="color:#0086b3">int64</span>(<span style="color:#0086b3">len</span>(full.Bytes)<span style="color:#000;font-weight:bold">/</span><span style="color:#099">2</span>)))
+</span></span><span style="display:flex;"><span>_, err <span style="color:#000;font-weight:bold">:=</span> capped.<span style="color:#900;font-weight:bold">ReadAndVerify</span>(ctx.Ctx, e.URL, e.Digest)   <span style="color:#998;font-style:italic">// -&gt; ErrResourceTooLarge
+</span></span></span></code></pre><h3 id="step-19-refuse-an-unpinned-supporting-file-threat-model-b1">Step 19: Refuse an unpinned supporting file (threat model B1) <a class="anchor" href="#step-19-refuse-an-unpinned-supporting-file-threat-model-b1">¶</a></h3>
+<p>ReadSkillFileVerified only reads supporting files the index pins a digest for. A path not in the index — an attacker&rsquo;s extra file, or a typo — is refused with ErrSupportingFileUnpinned rather than read unverified. Anchor: threat model B1 · issue 866.</p>
+<h4 id="reproduce-in-go-1">Reproduce in Go <a class="anchor" href="#reproduce-in-go-1">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>sc <span style="color:#000;font-weight:bold">:=</span> skills.<span style="color:#900;font-weight:bold">NewClient</span>(c)
+</span></span><span style="display:flex;"><span>idx, _ <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ListSkills</span>(ctx.Ctx)
+</span></span><span style="display:flex;"><span>e, _ <span style="color:#000;font-weight:bold">:=</span> <span style="color:#900;font-weight:bold">findManifestEntry</span>(idx, uriRefundsManifest)
+</span></span><span style="display:flex;"><span>m, _ <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ReadSkillManifest</span>(ctx.Ctx, e.URL)
+</span></span><span style="display:flex;"><span>_, err <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ReadSkillFileVerified</span>(ctx.Ctx, e, m, <span style="color:#d14">&#34;templates/ghost.md&#34;</span>)   <span style="color:#998;font-style:italic">// -&gt; ErrSupportingFileUnpinned
+</span></span></span></code></pre><h3 id="step-20-reject-a-digest-mismatch-threat-model-b1">Step 20: Reject a digest mismatch (threat model B1) <a class="anchor" href="#step-20-reject-a-digest-mismatch-threat-model-b1">¶</a></h3>
+<p>If a server returns bytes that don&rsquo;t match the pinned digest — corruption or tampering — ReadAndVerify returns ErrDigestMismatch and the host MUST NOT use the content. Here the mismatch is forced by verifying against a deliberately wrong pin; <code>just security</code> proves the same rejection with a real post-listing on-disk swap. Anchor: threat model B1.</p>
+<h4 id="reproduce-in-go-2">Reproduce in Go <a class="anchor" href="#reproduce-in-go-2">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>sc <span style="color:#000;font-weight:bold">:=</span> skills.<span style="color:#900;font-weight:bold">NewClient</span>(c)
+</span></span><span style="display:flex;"><span>_, err <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ReadAndVerify</span>(ctx.Ctx, uriRefundsManifest, <span style="color:#d14">&#34;sha256:&#34;</span><span style="color:#000;font-weight:bold">+</span>strings.<span style="color:#900;font-weight:bold">Repeat</span>(<span style="color:#d14">&#34;0&#34;</span>, <span style="color:#099">64</span>))   <span style="color:#998;font-style:italic">// -&gt; ErrDigestMismatch
+</span></span></span></code></pre><h3 id="step-21-reject-a-cross-origin-resource-scheme-threat-model-t5">Step 21: Reject a cross-origin resource scheme (threat model T5) <a class="anchor" href="#step-21-reject-a-cross-origin-resource-scheme-threat-model-t5">¶</a></h3>
+<p>Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI — the threat model&rsquo;s adv-file-url — is rejected by ParseURI with ErrInvalidScheme, so a skill can&rsquo;t redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).</p>
+<h4 id="reproduce-in-go-3">Reproduce in Go <a class="anchor" href="#reproduce-in-go-3">¶</a></h4>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>_, err <span style="color:#000;font-weight:bold">:=</span> skills.<span style="color:#900;font-weight:bold">ParseURI</span>(<span style="color:#d14">&#34;file:///etc/passwd&#34;</span>)   <span style="color:#998;font-style:italic">// -&gt; ErrInvalidScheme
+</span></span></span></code></pre><h3 id="wrap-up">Wrap-up <a class="anchor" href="#wrap-up">¶</a></h3>
+<p>Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, scheme rejection). The same client code paths served both distribution modes — only the URI shape and the post-fetch unpack step differ.</p>
 <h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/skills/
 </span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
