@@ -44,14 +44,24 @@ export function Conversation(props: { store: ConversationStore; compact?: boolea
         <For each={s.turns()}>
           {(t) => (
             <div class={`conv-turn conv-${t.role}`}>
-              <span class="conv-role">{t.role}</span>
+              <span class="conv-role">
+                {t.role}
+                <Show when={t.from}>
+                  <span class="conv-from"> · from {t.from}</span>
+                </Show>
+              </span>
               <div class="conv-text">{t.text}</div>
             </div>
           )}
         </For>
         <Show when={s.streaming()}>
           <div class="conv-turn conv-assistant conv-streaming">
-            <span class="conv-role">assistant</span>
+            <span class="conv-role">
+              assistant
+              <Show when={s.fromOther()}>
+                <span class="conv-from"> · from another surface</span>
+              </Show>
+            </span>
             <div class="conv-text">{s.streaming()}</div>
           </div>
         </Show>
@@ -60,6 +70,16 @@ export function Conversation(props: { store: ConversationStore; compact?: boolea
         </Show>
         <Show when={s.error()}>
           <div class="conv-error">{s.error()}</div>
+        </Show>
+        <Show when={s.resolved()}>
+          {(r) => (
+            <div class="conv-resolved">
+              <span class="conv-resolved-msg">{r().text}</span>
+              <button type="button" class="conv-resolved-dismiss" aria-label="Dismiss" onClick={() => s.dismissResolved()}>
+                ✕
+              </button>
+            </div>
+          )}
         </Show>
       </div>
 
