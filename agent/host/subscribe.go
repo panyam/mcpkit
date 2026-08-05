@@ -34,14 +34,23 @@ func (a *App) Subscribe(ctx context.Context) <-chan HostEvent {
 		offset := 0
 		for {
 			events, next := a.eventLog.ReadFrom(offset)
-			offset = next
-			for _, ev := range events {
+			for i, ev := range events {
+				// The ask id is the event-log offset the ask was announced at
+				// (E2's offset-based RespondToAsk resolves that offset via the
+				// log barrier). HostElicitRequest is emitted without an id, so
+				// stamp the offset onto the delivered copy here — HostEvent is a
+				// value, so this never mutates the stored log entry — letting a
+				// remote surface read the id off the frame and answer.
+				if ev.Kind == HostElicitRequest {
+					ev.AskID = int64(offset + i)
+				}
 				select {
 				case out <- ev:
 				case <-ctx.Done():
 					return
 				}
 			}
+			offset = next
 			select {
 			case <-sub.Notify():
 			case <-ctx.Done():

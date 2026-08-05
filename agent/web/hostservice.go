@@ -96,7 +96,12 @@ func (s *HostService) RespondToAsk(_ context.Context, req *connect.Request[agent
 	if by == "" {
 		by = "web"
 	}
-	if err := s.app.RespondToAsk(req.Msg.GetAskId(), result, by); err != nil {
+	// ask_id carries the event-log offset the ask was announced at (E2's
+	// offset-based RespondToAsk); cast int64→int at the boundary. Resolution
+	// rides the log barrier, so a stale or already-answered offset returns the
+	// log's ErrAlreadyResolved / ErrOffsetOutOfRange (app state, reported as a
+	// failed precondition, not a transport failure).
+	if err := s.app.RespondToAsk(int(req.Msg.GetAskId()), result, by); err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewResponse(&agentwebv1.RespondToAskResponse{}), nil
