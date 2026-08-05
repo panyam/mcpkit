@@ -2,113 +2,77 @@ package host
 
 import (
 	"context"
-	"fmt"
-	"sync"
 
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/core"
 )
 
 // elicitResolution is a pending ask's answer, delivered by whichever surface
-// responds first. err is the surface-presentation error (not a decline, which
-// is an ElicitationResult.Action); by names the resolving surface.
+// responds first (the barrier resolution value on the event log). err is a
+// surface-presentation failure (not a decline, which is an
+// ElicitationResult.Action); by names the resolving surface.
 type elicitResolution struct {
 	res core.ElicitationResult
 	err error
 	by  string
 }
 
-// pendingAsk is one outstanding elicitation awaiting a response. once makes the
-// first responder win: later Resolve calls are dropped.
-type pendingAsk struct {
-	ch   chan elicitResolution
-	once sync.Once
-}
-
-// registerAsk allocates an ask id and its one-shot resolution channel.
-func (a *App) registerAsk() (int64, *pendingAsk) {
-	a.asksMu.Lock()
-	defer a.asksMu.Unlock()
-	a.askSeq++
-	id := a.askSeq
-	p := &pendingAsk{ch: make(chan elicitResolution, 1)}
-	a.asks[id] = p
-	return id, p
-}
-
-func (a *App) clearAsk(id int64) {
-	a.asksMu.Lock()
-	delete(a.asks, id)
-	a.asksMu.Unlock()
-}
-
-func (a *App) lookupAsk(id int64) *pendingAsk {
-	a.asksMu.Lock()
-	defer a.asksMu.Unlock()
-	return a.asks[id]
-}
-
-// RespondToAsk resolves a pending elicitation (identified by the AskID a
-// surface read off the HostElicitRequest event) with a surface-supplied answer.
-// The first responder wins; a response to an unknown or already-answered ask
-// returns an error (app state, so a surface can report "already answered" or
-// "no such ask" rather than fail). This is the data-only capability a web
-// surface's respond RPC calls (issue 1196); the local terminal UI resolves the
-// same ask through the barrier below.
-func (a *App) RespondToAsk(id int64, res core.ElicitationResult, by string) error {
-	p := a.lookupAsk(id)
-	if p == nil {
-		return fmt.Errorf("host: no pending ask %d", id)
-	}
-	if !p.resolve(elicitResolution{res: res, by: by}) {
-		return fmt.Errorf("host: ask %d already answered", id)
-	}
-	return nil
-}
-
-// resolve delivers r to the ask exactly once; it reports whether this caller
-// was the winner.
-func (p *pendingAsk) resolve(r elicitResolution) bool {
-	won := false
-	p.once.Do(func() {
-		p.ch <- r
-		won = true
-	})
-	return won
+// RespondToAsk resolves a pending elicitation, identified by the event-log
+// offset the ask was announced at (a surface reads that offset from its Watch
+// frame). Resolution rides the log's barrier, so the first responder wins and a
+// stale or already-answered offset returns the log's ErrAlreadyResolved /
+// ErrOffsetOutOfRange. This is the data-only capability a web surface's respond
+// RPC calls (issue 1196); the local terminal UI resolves the same ask through
+// barrierElicit below.
+func (a *App) RespondToAsk(askOffset int, res core.ElicitationResult, by string) error {
+	return a.eventLog.Resolve(askOffset, elicitResolution{res: res, by: by})
 }
 
 // barrierElicit wraps a local ElicitationUI so an elicitation is broadcast to
-// every surface (HostElicitRequest) and resolved by the first responder. The
-// local UI runs as one responder, racing any surface that calls RespondToAsk;
-// whichever answers first wins and the other is cancelled. A HostElicitResolved
-// event then tells every surface to retract its prompt. With no other surface
-// attached the local UI always wins, so single-surface behavior is unchanged.
+// every surface (HostElicitRequest, at a known log offset) and resolved by the
+// first responder. The ask is a log entry; its resolution is the log's barrier
+// on that entry's offset. The local UI runs as one responder, racing any
+// surface that calls RespondToAsk on that offset; the log's Resolve makes the
+// first win and cancels the loser. A HostElicitResolved event then tells every
+// surface to retract. With no other surface attached the local UI always wins,
+// so single-surface behavior is unchanged.
 func (a *App) barrierElicit(local agent.ElicitationUI) agent.ElicitationUI {
 	return func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
-		id, p := a.registerAsk()
-		defer a.clearAsk(id)
-
 		reqCopy := req
-		a.emit(HostEvent{Kind: HostElicitRequest, AskID: id, Elicit: &reqCopy})
+		off := a.emit(HostEvent{Kind: HostElicitRequest, Elicit: &reqCopy})
 
-		// The local UI is one responder; cancel it when a remote surface wins.
+		// The local UI is one responder; cancel it when another surface wins.
 		localCtx, cancelLocal := context.WithCancel(ctx)
 		defer cancelLocal()
 		go func() {
 			res, err := local(localCtx, req)
-			if localCtx.Err() != nil {
-				return // cancelled because a remote surface already won
+			if localCtx.Err() == nil {
+				a.eventLog.Resolve(off, elicitResolution{res: res, err: err, by: "local"})
 			}
-			p.resolve(elicitResolution{res: res, err: err, by: "local"})
 		}()
 
+		// AwaitResolution has no ctx, so run it on a goroutine and abort a
+		// cancelled turn by resolving the ask ourselves (the goroutine then
+		// unblocks and exits; the buffered channel means it never leaks).
+		resolved := make(chan elicitResolution, 1)
+		go func() { resolved <- a.eventLog.AwaitResolution(off).(elicitResolution) }()
+
 		select {
-		case r := <-p.ch:
+		case r := <-resolved:
 			cancelLocal()
-			a.emit(HostEvent{Kind: HostElicitResolved, AskID: id, By: r.by})
+			if r.by == askCancelled {
+				return core.ElicitationResult{}, r.err
+			}
+			a.emit(HostEvent{Kind: HostElicitResolved, AskID: int64(off), By: r.by})
 			return r.res, r.err
 		case <-ctx.Done():
+			a.eventLog.Resolve(off, elicitResolution{err: ctx.Err(), by: askCancelled})
 			return core.ElicitationResult{}, ctx.Err()
 		}
 	}
 }
+
+// askCancelled is the resolver tag for a turn cancelled before any surface
+// answered; it unblocks the AwaitResolution goroutine without emitting a
+// HostElicitResolved (nothing was answered).
+const askCancelled = "cancelled"

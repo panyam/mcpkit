@@ -10,43 +10,37 @@ import (
 )
 
 func newAskApp() *App {
-	rec := &recordObserver{}
 	return &App{
 		eventLog:  gocurrent.NewQueue[HostEvent](),
-		asks:      map[int64]*pendingAsk{},
-		observers: []Observer{rec},
+		observers: []Observer{&recordObserver{}},
 	}
 }
 
 func askRecorder(a *App) *recordObserver { return a.observers[0].(*recordObserver) }
 
-// waitAskID returns the AskID of the pending HostElicitRequest, waiting for the
-// barrier to emit it (barrierElicit runs the awaiting select on the caller's
-// goroutine, so a concurrent responder needs the id first).
-func waitAskID(t *testing.T, rec *recordObserver) int64 {
+// waitAskOffset returns the log offset of the pending HostElicitRequest — the
+// ask id a surface reads from its stream position and passes to RespondToAsk.
+func waitAskOffset(t *testing.T, a *App) int {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		rec.mu.Lock()
-		for _, e := range rec.evs {
-			if e.Kind == HostElicitRequest {
-				id := e.AskID
-				rec.mu.Unlock()
-				return id
+		evs, _ := a.eventLog.ReadFrom(0)
+		for i := range evs {
+			if evs[i].Kind == HostElicitRequest {
+				return i
 			}
 		}
-		rec.mu.Unlock()
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("no HostElicitRequest was emitted")
 	return 0
 }
 
-func resolvedBy(rec *recordObserver, id int64) (string, bool) {
+func resolvedBy(rec *recordObserver, off int) (string, bool) {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	for _, e := range rec.evs {
-		if e.Kind == HostElicitResolved && e.AskID == id {
+		if e.Kind == HostElicitResolved && e.AskID == int64(off) {
 			return e.By, true
 		}
 	}
@@ -54,9 +48,9 @@ func resolvedBy(rec *recordObserver, id int64) (string, bool) {
 }
 
 // TestAsk_RemoteResponderWinsFirst is the E2 acceptance: with the local UI
-// still waiting, another surface answers via RespondToAsk, its answer is
-// returned, the local responder is cancelled, and a resolved event names the
-// winning surface so other surfaces retract.
+// still waiting, another surface answers via RespondToAsk on the ask's log
+// offset; its answer is returned, the local responder is cancelled, and a
+// resolved event names the winning surface so others retract.
 func TestAsk_RemoteResponderWinsFirst(t *testing.T) {
 	a := newAskApp()
 	rec := askRecorder(a)
@@ -79,9 +73,9 @@ func TestAsk_RemoteResponderWinsFirst(t *testing.T) {
 		done <- out{res, err}
 	}()
 
-	id := waitAskID(t, rec)
+	off := waitAskOffset(t, a)
 	remote := core.ElicitationResult{Action: "accept", Content: map[string]any{"confirm": true}}
-	if err := a.RespondToAsk(id, remote, "web"); err != nil {
+	if err := a.RespondToAsk(off, remote, "web"); err != nil {
 		t.Fatalf("RespondToAsk: %v", err)
 	}
 
@@ -97,7 +91,7 @@ func TestAsk_RemoteResponderWinsFirst(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("local responder was not cancelled after remote won")
 	}
-	if by, ok := resolvedBy(rec, id); !ok || by != "web" {
+	if by, ok := resolvedBy(rec, off); !ok || by != "web" {
 		t.Fatalf("resolved event = (%q, %v), want (web, true)", by, ok)
 	}
 }
@@ -119,26 +113,27 @@ func TestAsk_LocalResponderWins(t *testing.T) {
 	if res.Action != "accept" {
 		t.Fatalf("local answer not returned: %+v", res)
 	}
-	id := waitAskID(t, rec)
-	if by, ok := resolvedBy(rec, id); !ok || by != "local" {
+	off := waitAskOffset(t, a)
+	if by, ok := resolvedBy(rec, off); !ok || by != "local" {
 		t.Fatalf("resolved event = (%q, %v), want (local, true)", by, ok)
 	}
 }
 
 // TestRespondToAsk_Errors pins the app-state errors a surface reports rather
-// than fails on: an unknown ask and an already-answered ask.
+// than fails on, carried straight from the log's barrier: an out-of-range
+// offset and an already-answered ask.
 func TestRespondToAsk_Errors(t *testing.T) {
 	a := newAskApp()
 
-	if err := a.RespondToAsk(999, core.ElicitationResult{}, "web"); err == nil {
-		t.Fatal("expected an error responding to an unknown ask")
+	if err := a.RespondToAsk(999999, core.ElicitationResult{}, "web"); err == nil {
+		t.Fatal("expected an error responding to an out-of-range offset")
 	}
 
-	id, p := a.registerAsk()
-	if !p.resolve(elicitResolution{by: "first"}) {
-		t.Fatal("first resolve should win")
+	off := a.eventLog.Append(HostEvent{Kind: HostElicitRequest})
+	if err := a.RespondToAsk(off, core.ElicitationResult{}, "first"); err != nil {
+		t.Fatalf("first response should win: %v", err)
 	}
-	if err := a.RespondToAsk(id, core.ElicitationResult{}, "second"); err == nil {
+	if err := a.RespondToAsk(off, core.ElicitationResult{}, "second"); err == nil {
 		t.Fatal("expected an already-answered error")
 	}
 }

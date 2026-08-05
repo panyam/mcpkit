@@ -106,13 +106,6 @@ type App struct {
 	// variant is a follow-up before long multi-subscriber sessions are common.
 	eventLog *gocurrent.Queue[HostEvent]
 
-	// asks holds pending elicitations awaiting a response, so any surface can
-	// resolve one via RespondToAsk (the multi-surface ask barrier, issue 1195).
-	// askSeq mints ids. Guarded by asksMu.
-	asksMu sync.Mutex
-	asks   map[int64]*pendingAsk
-	askSeq int64
-
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
@@ -330,7 +323,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
-		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}, asks: map[int64]*pendingAsk{}}
+		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
 	app.eventLog = gocurrent.NewQueue[HostEvent]()
@@ -832,13 +825,14 @@ func (a *App) SwitchProvider(name string) error {
 // once emit returns). Serialized by emitMu: the async server connections (Group
 // observer), the turn goroutine, and event goroutines all emit, so the lock
 // keeps the not-inherently-concurrent terminal renderer from racing.
-func (a *App) emit(ev HostEvent) {
-	a.eventLog.Append(ev)
+func (a *App) emit(ev HostEvent) (offset int) {
+	offset = a.eventLog.Append(ev)
 	a.emitMu.Lock()
 	defer a.emitMu.Unlock()
 	for _, o := range a.observers {
 		o.On(ev)
 	}
+	return offset
 }
 
 // promptREPL draws the terminal REPL's input marker. The prompt is
