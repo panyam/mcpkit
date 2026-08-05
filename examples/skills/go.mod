@@ -76,7 +76,7 @@ require (
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
-	github.com/panyam/servicekit v0.1.2 // indirect
+	github.com/panyam/servicekit v0.1.3 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
