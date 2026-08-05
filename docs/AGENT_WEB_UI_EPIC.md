@@ -203,13 +203,30 @@ event fold, and the dock reconcile.
 - Accept (met): the browser renders live turns from the same `App`; the layout persists across reload
   (localStorage); the mobile mode presents the same panel as an overlay.
 
-### E5 (1198) — Observability panels
-The payoff. Each panel is a Solid island fed by a Frame projection, shipped incrementally:
-sub-agent tree (`SubAgentEvent` scope/depth), activity/event timeline, memory inspector (recall /
-injection / compaction events + `ListMemories` query), tool-call & offload-blob inspector
-(`read_tool_result`), budget/token gauges (tree budget + provider usage).
-- Accept: during a `kitchen-sink` run each panel reflects live agent state; adding a panel does not
-  re-crowd existing users' saved layouts (reconcile).
+### E5 (1198) — Observability panels — SHIPPED
+The payoff. Five Solid islands, each a projection of the one Watch/`HostEvent` stream, added to the
+DockView registry (`web/src/dock.ts`) via the saved-layout reconcile so they appear in the Panels menu:
+- **Sub-agent tree** (`web/src/subagents.ts` + `SubAgentPanel.tsx`) — `HostSubAgentEvent` scope/depth
+  assembled into a nested pre-order tree with per-node status + tool-call count.
+- **Activity timeline** (`timeline.ts` + `TimelinePanel.tsx`) — the whole `HostEvent` stream as a
+  bounded, kind-filterable ledger.
+- **Memory inspector** (`memory.ts` + `MemoryPanel.tsx`) — compaction events off the runner stream plus
+  an on-demand `Dispatch("/memory")` read. Recall / injection are transient pre-turn transforms with no
+  event, so compaction is the event-driven half.
+- **Tool-call & offload inspector** (`tools.ts` + `ToolsPanel.tsx`) — the tool lifecycle matched
+  begin to end by call id, with an offload stub's ref surfaced (the blob is fetched internally via
+  `read_tool_result`, not exposed on the web bridge).
+- **Budget / token gauges** (`budget.ts` + `BudgetPanel.tsx`) — per-turn provider usage + steps
+  accumulated across turns, with an input/output split bar.
+
+One `WatchStream` now feeds a `PanelStores` bundle (`stores.ts`) whose `ingest` fans each event to every
+projection; the mobile overlay grows one launcher tile per panel. New panels register in `DOCK_PANELS`
+(so they show in the menu and in a fresh default layout) but are gated out of `RECONCILE_AUTO_OPEN`, so a
+user's saved #1197 arrangement is not re-crowded. Vitest covers the trickier projections (sub-agent tree
+assembly, timeline reduce, tool matching/offload detection, budget fold). The `--demo` provider was
+extended to delegate to two personas so a single demo turn populates every panel.
+- Accept: during a demo (or `kitchen-sink`) run each panel reflects live agent state; adding a panel does
+  not re-crowd existing users' saved layouts (reconcile). ✓
 
 ### E6 (1199) — Multi-surface elicitation UX + symmetric submission
 Wire E2's barrier end to end across web (`RespondToAsk`) and TUI so a real elicitation/approval
