@@ -106,6 +106,13 @@ type App struct {
 	// variant is a follow-up before long multi-subscriber sessions are common.
 	eventLog *gocurrent.Queue[HostEvent]
 
+	// asks holds pending elicitations awaiting a response, so any surface can
+	// resolve one via RespondToAsk (the multi-surface ask barrier, issue 1195).
+	// askSeq mints ids. Guarded by asksMu.
+	asksMu sync.Mutex
+	asks   map[int64]*pendingAsk
+	askSeq int64
+
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
@@ -320,14 +327,16 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	if elicUI == nil {
 		elicUI = terminalElicitationUI(bufio.NewReader(in), out)
 	}
-	coord := agent.NewElicitationCoordinator(elicUI)
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
-		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
+		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}, asks: map[int64]*pendingAsk{}}
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
 	app.eventLog = gocurrent.NewQueue[HostEvent]()
+	// Elicitations broadcast to every surface via the event log and resolve on
+	// the first responder; the local UI is one responder (barrierElicit).
+	coord := agent.NewElicitationCoordinator(app.barrierElicit(elicUI))
 	for _, sc := range cfg.Servers {
 		app.serverOrder = append(app.serverOrder, sc.ID)
 	}
