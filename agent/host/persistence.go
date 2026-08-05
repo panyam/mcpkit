@@ -264,7 +264,16 @@ func (a *App) persistTurnLocked(ctx context.Context, msgs []agent.Message, pe *P
 	}
 	if err := pe.Flush(ctx); err != nil {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: err.Error()})
+		return
 	}
+	// The turn's events are now in the RunStore, so mark the event log as
+	// persisted through its current length: everything appended up to here
+	// (this turn's runner events among them) is covered by the store, and
+	// Subscribe drains the Queue only from this offset forward. Advancing only
+	// on a successful Flush keeps unpersisted events in the Queue-tail half of
+	// the replay (no gap). eventLog.Len() is the absolute offset space, so this
+	// stays correct under a bounded (evicting) log.
+	a.persistedOffset.Store(int64(a.eventLog.Len()))
 }
 
 // PersistingEmit tees a Runner event stream into a RunStore event log.
