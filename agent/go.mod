@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/panyam/mcpkit v0.4.0
-	github.com/panyam/servicekit v0.1.2
+	github.com/panyam/servicekit v0.1.3
 )
 
 require (
