@@ -53,12 +53,16 @@ just serve
 just demo
 ```
 
-The supervisor's model comes from `deep-agent-supervisor.json` (active `local`,
-an LM Studio endpoint). Override it with a stronger model for better routing:
+The supervisor's model comes from `deep-agent-supervisor.json` (active
+`deepseek-r1`, DeepSeek's `deepseek-reasoner`, keyed on `DEEPSEEK_API_KEY`).
+Override it with any connection in the config:
 
 ```bash
-ACTIVE=anthropic-sonnet just demo      # or openai-5.1, gemini-3-pro, ...
+ACTIVE=anthropic-sonnet just demo      # or openai-5.1, gemini-3-pro, local, ...
 ```
+
+`local` (an LM Studio endpoint) is included for an offline run — load a model
+in LM Studio first, then `ACTIVE=local just demo`.
 
 Then ask things that route to different specialists, e.g.:
 
