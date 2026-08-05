@@ -68,6 +68,9 @@ jobs:
       - name: Run critic example test
         run: cd examples/agents/critic && go test ./... -v
 
+      - name: Run deep-agent-supervisor roster test
+        run: cd examples/agents/deep-agent-supervisor/server && go test ./... -v
+
       - name: Run skills agent-mode + security tests
         run: cd examples/skills && go test ./... -v -run 'TestAgentScenario|TestSecurityDemo'
 
