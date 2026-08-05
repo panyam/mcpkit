@@ -1,0 +1,28 @@
+{
+  "name": "agentweb",
+  "private": true,
+  "type": "module",
+  "description": "agentweb frontend: server-rendered shell + SolidJS islands in a DockView layout over the HostService Connect bridge (issue 1197)",
+  "scripts": {
+    "gen": "buf generate ../protos --template buf.gen.web.yaml",
+    "typecheck": "tsc --noEmit",
+    "build": "node build.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.13.0",
+    "@connectrpc/connect": "^2.1.0",
+    "@connectrpc/connect-web": "^2.1.0",
+    "@panyam/tsappkit": "^0.0.5",
+    "@panyam/tsappkit-solid": "^0.0.1",
+    "dockview-core": "^4.13.1",
+    "solid-js": "^1.9.7"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^2.13.0",
+    "esbuild": "^0.25.0",
+    "esbuild-plugin-solid": "^0.6.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  }
+}
