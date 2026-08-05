@@ -320,7 +320,6 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	if elicUI == nil {
 		elicUI = terminalElicitationUI(bufio.NewReader(in), out)
 	}
-	coord := agent.NewElicitationCoordinator(elicUI)
 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
@@ -328,6 +327,9 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
 	app.eventLog = gocurrent.NewQueue[HostEvent]()
+	// Elicitations broadcast to every surface via the event log and resolve on
+	// the first responder; the local UI is one responder (barrierElicit).
+	coord := agent.NewElicitationCoordinator(app.barrierElicit(elicUI))
 	for _, sc := range cfg.Servers {
 		app.serverOrder = append(app.serverOrder, sc.ID)
 	}
@@ -823,13 +825,14 @@ func (a *App) SwitchProvider(name string) error {
 // once emit returns). Serialized by emitMu: the async server connections (Group
 // observer), the turn goroutine, and event goroutines all emit, so the lock
 // keeps the not-inherently-concurrent terminal renderer from racing.
-func (a *App) emit(ev HostEvent) {
-	a.eventLog.Append(ev)
+func (a *App) emit(ev HostEvent) (offset int) {
+	offset = a.eventLog.Append(ev)
 	a.emitMu.Lock()
 	defer a.emitMu.Unlock()
 	for _, o := range a.observers {
 		o.On(ev)
 	}
+	return offset
 }
 
 // promptREPL draws the terminal REPL's input marker. The prompt is

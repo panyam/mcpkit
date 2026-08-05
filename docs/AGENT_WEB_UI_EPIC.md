@@ -125,28 +125,47 @@ moved to E3 — see "Do we still need Observer?" for why async local delivery ra
   live ones; `emit` still delivers to local observers synchronously and in order; `just test-agent`
   green with `-race`; no TUI behavior change.
 
-### E2 (1195) — Pending-ask barrier (`agent/host`)
-Generalize the elicitation/approval ask path so an ask is `AppendBarrier`'d onto the session log and
-resolved by the first responder via `Resolve(offset, response)`, with the resolution committed so every
-subscriber can retract. The TUI `AskFunc`/`ElicitationCoordinator.Confirm` becomes a responder that
-races local input against the resolved-broadcast. Realizes the mediator idea from issue 1157.
-- Accept: two in-process responders on one ask, first wins, loser observes `ErrAlreadyResolved` and the
-  committed resolution; the coordinator stays the single serialization point.
+### E2 (1195) — Pending-ask barrier (`agent/host`) — SHIPPED
+`barrierElicit` (`agent/host/ask.go`) wraps the local `ElicitationUI` the coordinator drives: it emits a
+`HostElicitRequest{Elicit}` (appended to the log at offset `off`), runs the local UI as one responder,
+and races it against `RespondToAsk(off, result, by)` from any other surface. **Resolution rides the
+event log's own barrier**: local and remote responders both call `eventLog.Resolve(off, ...)`, so the
+first writer wins and `RespondToAsk` gets `ErrAlreadyResolved` / `ErrOffsetOutOfRange` for free; the
+loser's context is cancelled; a `HostElicitResolved{AskID: off, By}` tells every surface to retract.
+With no other surface attached the local UI always wins, so single-surface behavior is unchanged.
+
+**Design note**: the ask is identified by its **log offset** (the position a surface reads from its
+`Watch` frame), not a minted id, so it needs no id field in the request event. This is simpler than a
+separate pending-ask registry and reuses the log's tested first-writer-wins barrier; a late-joining
+surface can even call `eventLog.Resolution(off)` to see an ask was already answered. Two small costs:
+`AwaitResolution` is not ctx-cancellable, so a cancelled turn resolves the ask itself to unblock the
+awaiter; and `emit` now returns the append offset.
+- Accept: two responders on one ask, first wins, loser cancelled, resolved event names the winner;
+  out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
+  `-race`.
 
 ### E3 (1196) — `agent/web` submodule + Connect bridge
-New submodule + `cmd/agentweb serve`. Proto `HostService`: server-streaming `Watch` (drains the E1 log
-into Frame envelopes), unary `Submit` (turn), `Dispatch` (command → `CmdResult`), `RespondToAsk`
-(resolve the E2 barrier), and query methods mirroring the host data methods. goapplib serve of shell +
-`/static` + Connect handlers. Settle the Frame envelope shape here.
-- Accept: a raw Connect client can `Watch` a live session and `Submit` a turn; a TUI and a web client
-  attached to the same `App` both see the same stream simultaneously.
+New submodule + `cmd/agentweb serve`. **Transport: Connect + buf + `@panyam/massrelay` for the live
+stream** — the stack the user's own web apps use (`~/projects/diffpp/main/web`, `~/work/hw/Agni`), and
+mcpkit already pulls in `servicekit` + `templar` (goapplib serving) so only `connectrpc`/`buf` are new.
+Proto `HostService`: a streaming `Watch` (drains the E1 log via massrelay), unary `Submit` (turn),
+`Dispatch` (command → `CmdResult`), `RespondToAsk` (the E2 registry), and query methods mirroring the
+host data methods. goapplib/`servicekit` serve of shell + `/static` + Connect handlers.
+- **Frame envelope, reconciled with A2**: the wire frame is a thin proto `{kind, payload bytes}` where
+  `payload` is the event's own A2 JSON — a 1:1 projection, no per-kind proto schema to drift (A2 forbids
+  a translation layer). `HostEvent`'s remaining live-pointer fields (`TaskStatus`, `Task`, failover)
+  need serializable snapshots first — that is the already-filed issue 994, a dependency of `Watch`.
+- Accept: a Connect client can `Watch` a live session and `Submit` a turn; a TUI and a web client on the
+  same `App` see the same stream simultaneously.
 
 ### E4 (1197) — Frontend shell (DockView + Solid islands)
-Port Agni's dock shell: `dockview-core`, park-container adopt/dispose, saved-layout reconcile with the
-panel-id version marker, `tsappkit-solid` islands, Connect-Web clients from the E3 proto. First slice:
-one Conversation panel streaming the live turn + a prompt box that `Submit`s.
-- Accept: the browser renders live turns from the same `App` the TUI is on; closing and reopening the
-  Conversation panel preserves the island; layout persists across reload.
+Model on **`~/projects/diffpp/main/web`** (preferred over Agni): `dockview-core` v4, `tsappkit-solid`
+islands, `@panyam/massrelay` + Connect-Web clients from the E3 proto, and **`MobileOverlays` for the
+mobile mode** (the dockview-vs-mobile mode switch the user wants). Saved-layout reconcile carries over.
+First slice: one Conversation panel streaming the live turn + a prompt box that `Submit`s, in both the
+dockview desktop mode and the mobile-overlay mode.
+- Accept: the browser renders live turns from the same `App` the TUI is on; the layout persists across
+  reload; the mobile mode presents the same panel as an overlay.
 
 ### E5 (1198) — Observability panels
 The payoff. Each panel is a Solid island fed by a Frame projection, shipped incrementally:
