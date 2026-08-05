@@ -59,6 +59,14 @@ const (
 	// (From, To) — Config.Team only. The active agent changes, so a surface
 	// renders "→ handed off to <To>" and can update which agent is answering.
 	HostHandoff HostEventKind = "handoff"
+	// HostElicitRequest announces a pending elicitation/approval ask to every
+	// surface (AskID, Elicit). Unlike the fire-and-forget kinds this one is
+	// answerable: any surface reads it and calls RespondToAsk(AskID, ...); the
+	// first responder wins. The local terminal UI is one such responder.
+	HostElicitRequest HostEventKind = "elicit-request"
+	// HostElicitResolved reports that a pending ask (AskID) was answered, by
+	// which surface (By), so every other surface retracts its prompt.
+	HostElicitResolved HostEventKind = "elicit-resolved"
 )
 
 // HostEvent is one domain event the host announces: a thing that
@@ -108,6 +116,13 @@ type HostEvent struct {
 	// new active agent).
 	From string
 	To   string
+
+	// AskID identifies a pending ask on HostElicitRequest / HostElicitResolved;
+	// a surface passes it back to RespondToAsk. Elicit carries the request on
+	// HostElicitRequest; By names the resolving surface on HostElicitResolved.
+	AskID  int64
+	Elicit *core.ElicitationRequest
+	By     string
 }
 
 // Observer receives the host's HostEvent stream and does whatever it
