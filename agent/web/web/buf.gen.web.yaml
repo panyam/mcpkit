@@ -1,0 +1,10 @@
+version: v2
+clean: true
+plugins:
+  # TypeScript message types + the HostService descriptor. connect-es v2 builds
+  # the browser client off the descriptor protoc-gen-es emits (createClient), so
+  # no separate connect plugin is needed — this mirrors diffpp/web.
+  - local: protoc-gen-es
+    out: src/gen
+    opt:
+      - target=ts
