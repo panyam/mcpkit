@@ -1,0 +1,46 @@
+# deep-agent-supervisor — mcpkit host as a deep-agent supervisor over a
+# server-advertised agent roster (epic 1142, issue 1146).
+#
+# Two terminals:
+#   Terminal 1:  just serve   # roster MCP server on :8795
+#   Terminal 2:  just demo    # agentchat supervisor against deep-agent-supervisor.json
+#
+# Emit traces (discovery + delegation) by setting an exporter on BOTH sides:
+#   Terminal 1:  EXPORTER=otlp just serve
+#   Terminal 2:  EXPORTER=otlp just demo
+#
+# ACTIVE overrides the config's active chat connection, e.g.
+#   ACTIVE=anthropic-sonnet just demo
+
+export ACTIVE        := env_var_or_default("ACTIVE", "")
+export EXPORTER      := env_var_or_default("EXPORTER", "")
+export OTLP_ENDPOINT := env_var_or_default("OTLP_ENDPOINT", "localhost:4317")
+export UI            := env_var_or_default("UI", "tui")
+
+# List targets (default).
+default:
+    @just --list
+
+# Serve the roster MCP server on :8795 (foreground; Ctrl+C stops).
+serve:
+    cd server && go run . --exporter="$EXPORTER" --otlp-endpoint="$OTLP_ENDPOINT"
+
+# Launch the supervisor host against deep-agent-supervisor.json (needs `just serve`).
+demo:
+    @bash run.sh
+
+# Alias for demo.
+run: demo
+
+# Same as demo, but the alt-screen notebook UI (foldable cells make the
+# supervisor -> specialist delegation easy to follow).
+note:
+    @UI=notebook bash run.sh
+
+# Compile-check the roster server.
+build:
+    cd server && go build ./...
+
+# Run the roster wiring tests.
+test:
+    cd server && go test ./... -count=1

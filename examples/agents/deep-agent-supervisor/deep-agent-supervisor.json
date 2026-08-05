@@ -1,0 +1,22 @@
+{
+  "instructions": "You are a supervisor agent. A connected server advertises a small ROSTER of specialist agents, and you see each one only as a short description plus a delegate tool — never their internal tools. Route each request to the right specialist by calling its delegate tool: use the research specialist for open-ended questions that need sources and a briefing, the workflow specialist for CI/CD pipeline inspection and runs, and the insights specialist for metrics and anomalies. You may delegate to more than one and combine their answers. Synthesize the specialists' results into a concise final answer; do not try to do a specialist's job yourself.",
+  "connections": {
+    "active": "deepseek-r1",
+    "connections": {
+      "local":       { "type": "lmstudio", "model": "qwen2.5-7b-instruct" },
+      "deepseek-r1": { "baseUrl": "https://api.deepseek.com", "model": "deepseek-reasoner", "apiKeyEnv": "DEEPSEEK_API_KEY" },
+
+      "openai-5.1":      { "type": "openai", "model": "gpt-5.1", "apiKeyEnv": "OPENAI_API_KEY" },
+      "openai-4o-mini":  { "type": "openai", "model": "gpt-4o-mini", "apiKeyEnv": "OPENAI_API_KEY" },
+
+      "gemini-3-pro":    { "type": "gemini", "model": "gemini-3-pro", "apiKeyEnv": "GEMINI_API_KEY" },
+      "gemini-2.5-flash":{ "type": "gemini", "model": "gemini-2.5-flash", "apiKeyEnv": "GEMINI_API_KEY" },
+
+      "anthropic-sonnet":{ "type": "anthropic", "model": "claude-sonnet-5", "apiKeyEnv": "ANTHROPIC_API_KEY" },
+      "anthropic-haiku": { "type": "anthropic", "model": "claude-haiku-4-5-20251001", "apiKeyEnv": "ANTHROPIC_API_KEY" }
+    }
+  },
+  "servers": [
+    { "id": "specialists", "url": "http://localhost:8795/mcp" }
+  ]
+}
