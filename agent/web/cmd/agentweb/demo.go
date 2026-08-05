@@ -8,7 +8,30 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/core"
 )
+
+// demoElicitDelay is how long the scripted "terminal" responder waits before it
+// auto-approves a pending ask. A web surface can answer the prompt itself inside
+// this window (the first responder wins and the others retract); if nobody does,
+// the scripted terminal answers and every web surface retracts with an "answered
+// on terminal" receipt — the multi-surface retraction the demo exists to show.
+const demoElicitDelay = 8 * time.Second
+
+// demoElicitUI is the local (terminal) elicitation responder for `--demo`. The
+// real terminal UI reads a line, but the demo has no terminal input wired, so a
+// line-reading UI would hit EOF and resolve instantly, denying a web surface any
+// chance to answer. This one blocks for demoElicitDelay then accepts, standing
+// in for a human approving at the terminal so the cross-surface retract is
+// demonstrable with no second surface to script.
+func demoElicitUI(ctx context.Context, _ core.ElicitationRequest) (core.ElicitationResult, error) {
+	select {
+	case <-time.After(demoElicitDelay):
+		return core.ElicitationResult{Action: "accept"}, nil
+	case <-ctx.Done():
+		return core.ElicitationResult{}, ctx.Err()
+	}
+}
 
 // demoProvider is an inexhaustible, offline Provider for `agentweb --demo`. It
 // is scripted so the whole surface — not just the Conversation panel — visibly
