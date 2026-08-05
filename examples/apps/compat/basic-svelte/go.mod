@@ -13,7 +13,7 @@ require (
 	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/examples/common v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
-	github.com/panyam/servicekit v0.1.2
+	github.com/panyam/servicekit v0.1.3
 )
 
 require (
