@@ -147,7 +147,7 @@ For best performance, configure your authorization server to use **ES256 (ECDSA 
 
 ## Dependencies
 
-- `servicekit` v0.1.2 — SSE hub, graceful shutdown, HTTP error types
+- `servicekit` v0.1.3 — SSE hub, graceful shutdown, HTTP error types
 - `oneauth` v0.1.31 — JWT/OIDC (only via `ext/auth` sub-module)
 
 ## Star History
