@@ -172,43 +172,114 @@ awaiter; and `emit` now returns the append offset.
   out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
   `-race`.
 
-### E3 (1196) — `agent/web` submodule + Connect bridge
-New submodule + `cmd/agentweb serve`. **Transport: Connect + buf + `@panyam/massrelay` for the live
-stream** — the stack the user's own web apps use (`~/projects/diffpp/main/web`, `~/work/hw/Agni`), and
-mcpkit already pulls in `servicekit` + `templar` (goapplib serving) so only `connectrpc`/`buf` are new.
-Proto `HostService`: a streaming `Watch` (drains the E1 log via massrelay), unary `Submit` (turn),
-`Dispatch` (command → `CmdResult`), `RespondToAsk` (the E2 registry), and query methods mirroring the
-host data methods. goapplib/`servicekit` serve of shell + `/static` + Connect handlers.
-- **Frame envelope, reconciled with A2**: the wire frame is a thin proto `{kind, payload bytes}` where
-  `payload` is the event's own A2 JSON — a 1:1 projection, no per-kind proto schema to drift (A2 forbids
-  a translation layer). `HostEvent`'s remaining live-pointer fields (`TaskStatus`, `Task`, failover)
-  need serializable snapshots first — that is the already-filed issue 994, a dependency of `Watch`.
-- Accept: a Connect client can `Watch` a live session and `Submit` a turn; a TUI and a web client on the
-  same `App` see the same stream simultaneously.
+### E3 (1196) — `agent/web` submodule + Connect bridge — SHIPPED
+New submodule (`agent/web`, own go.mod, module `github.com/panyam/mcpkit/agent/web`) + a thin
+`cmd/agentweb` serve binary (inside the module, mirroring how `cmd/agentchat` is thin over the host).
+**Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `agent/web/protos/`, generated
+Go + Connect committed under `agent/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
+new `App.Subscribe` seam), unary `Submit` (turn), `Dispatch` (command → `CmdResult`), `RespondToAsk`
+(the E2 offset barrier), and two trivial queries `ListSessions` + `GetStatus`. `servicekit/http` serves
+the placeholder shell + `/static` + the Connect handlers on one listener.
 
-### E4 (1197) — Frontend shell (DockView + Solid islands)
-Model on **`~/projects/diffpp/main/web`** (preferred over Agni): `dockview-core` v4, `tsappkit-solid`
-islands, `@panyam/massrelay` + Connect-Web clients from the E3 proto, and **`MobileOverlays` for the
-mobile mode** (the dockview-vs-mobile mode switch the user wants). Saved-layout reconcile carries over.
-First slice: one Conversation panel streaming the live turn + a prompt box that `Submit`s, in both the
-dockview desktop mode and the mobile-overlay mode.
-- Accept: the browser renders live turns from the same `App` the TUI is on; the layout persists across
-  reload; the mobile mode presents the same panel as an overlay.
+- **`App.Subscribe(ctx) <-chan HostEvent` (`agent/host/subscribe.go`)** — the async subscriber adapter
+  E1 deferred. It replays the retained log from offset 0 then follows `Notify()`, on a drain goroutine
+  scoped to ctx. A slow consumer cannot block `emit`: `emit` only `Append`s (non-blocking) and fans out
+  to local observers, while the drain reads the retained log at its own pace, so back-pressure stays
+  contained to the one subscriber and nothing is lost. Local observers stay synchronous (unchanged).
+  It also stamps the **ask id** — E2's event-log offset — onto the delivered `HostElicitRequest` copy
+  (the stored entry is emitted without it), so a remote surface reads the id off its Watch frame and
+  answers via `RespondToAsk(offset, …)`; the frame's `ask_id` is that offset, cast at the RPC boundary.
+- **Frame envelope, reconciled with A2**: `Frame{kind, payload bytes}` where `payload =
+  json.Marshal(HostEvent)` — a 1:1 projection, no per-kind proto schema to drift. `Dispatch` reuses the
+  same `{kind, json}` shape for `CmdResult`. The pointer-bearing kinds (`TaskStatus`, `Task`, the
+  failover inside a command result — issue 994) fall back to a minimal `{kind}` payload on a marshal
+  failure so one un-serializable event never stalls the stream.
+- **Deviations from the brief**: (1) `Watch` is an idiomatic **Connect server-streaming RPC**, not a
+  `@panyam/massrelay` room. massrelay is the E4 *frontend* consumption transport (WebSocket fan-out, as
+  in diffpp); its `AppMessage{Kind, Payload}` shape is exactly this `Frame`, so E4 bridges Frame → room
+  1:1. Keeping the server side a plain Connect stream is what makes the whole bridge testable in-process
+  with a Go Connect client (no WebSocket, no browser). (2) `Watch` sends an empty-`kind` ready sentinel
+  as its first frame: the Connect protocol flushes response headers on the first `Send`, so without it a
+  client attaching to an idle session blocks on `Watch` until the first event; the sentinel opens the
+  stream promptly. Clients skip an empty-kind frame. (3) The shell is a minimal inline HTML page, not a
+  templar template — the real templar/DockView shell is E4.
+- Accept (met): a Connect client `Watch`es a live session and `Submit`s a turn; a local Observer and a
+  Watch client on the same `App` see the same stream, including replay-from-offset-0; a `RespondToAsk`
+  over the wire wins an ask the local UI is blocking on (`agent/web/host_bridge_test.go`, run with
+  `-race`). The serve binary serves the shell, `/static`, and the Connect endpoints (`GetStatus`
+  returns the model label; `ListSessions` returns `failed_precondition` with no RunStore).
 
-### E5 (1198) — Observability panels
-The payoff. Each panel is a Solid island fed by a Frame projection, shipped incrementally:
-sub-agent tree (`SubAgentEvent` scope/depth), activity/event timeline, memory inspector (recall /
-injection / compaction events + `ListMemories` query), tool-call & offload-blob inspector
-(`read_tool_result`), budget/token gauges (tree budget + provider usage).
-- Accept: during a `kitchen-sink` run each panel reflects live agent state; adding a panel does not
-  re-crowd existing users' saved layouts (reconcile).
+### E4 (1197) — Frontend shell (DockView + Solid islands) — SHIPPED
+Modeled on **`~/projects/diffpp/main/web`**: `dockview-core` v4, `tsappkit-solid` islands, Connect-Web
+clients generated from the E3 proto, and **`MobileOverlays` for the mobile mode** (the dockview-vs-mobile
+switch). Saved-layout reconcile carries over. The frontend lives in `agent/web/web/`; the built esbuild
+bundle is committed under `agent/web/static/` (Go embeds it, so `just test-agent` needs no Node step).
 
-### E6 (1199) — Multi-surface elicitation UX + symmetric submission
+**Scope change from the plan: massrelay is deferred.** The browser consumes the E3 Connect `Watch`
+server-stream **directly** via connect-web (`web/src/watch.ts` — decode each `Frame` payload to a
+`HostEvent`, reconnect with backoff; replay-from-0 makes a re-subscription safe). Reintroducing massrelay
+for a shared multi-tab room is a later follow-up, not needed for the single-surface live stream.
+
+What shipped: the placeholder shell is replaced by a server-rendered shell (`shell.go`, stdlib
+`html/template` — island holes + `data-layout`, no goapplib/templar dep for one static page); one
+**Conversation** panel (streams the live turn off `Watch`, a prompt box that `Submit`s, an approval prompt
+on `HostElicitRequest` answered via `RespondToAsk(AskID, …)`); a framework-neutral panel registry +
+saved-layout reconcile (`web/src/dock.ts`) ready for E5 to add panels; the DockView desktop layout and the
+mobile-overlay layout over one shared store; and a `--demo` mode on `cmd/agentweb` (offline streaming
+provider) + `agent/web/run.sh` as the runnable proof. Unit tests (vitest) cover Frame-decode/dispatch, the
+event fold, and the dock reconcile.
+- Accept (met): the browser renders live turns from the same `App`; the layout persists across reload
+  (localStorage); the mobile mode presents the same panel as an overlay.
+
+### E5 (1198) — Observability panels — SHIPPED
+The payoff. Five Solid islands, each a projection of the one Watch/`HostEvent` stream, added to the
+DockView registry (`web/src/dock.ts`) via the saved-layout reconcile so they appear in the Panels menu:
+- **Sub-agent tree** (`web/src/subagents.ts` + `SubAgentPanel.tsx`) — `HostSubAgentEvent` scope/depth
+  assembled into a nested pre-order tree with per-node status + tool-call count.
+- **Activity timeline** (`timeline.ts` + `TimelinePanel.tsx`) — the whole `HostEvent` stream as a
+  bounded, kind-filterable ledger.
+- **Memory inspector** (`memory.ts` + `MemoryPanel.tsx`) — compaction events off the runner stream plus
+  an on-demand `Dispatch("/memory")` read. Recall / injection are transient pre-turn transforms with no
+  event, so compaction is the event-driven half.
+- **Tool-call & offload inspector** (`tools.ts` + `ToolsPanel.tsx`) — the tool lifecycle matched
+  begin to end by call id, with an offload stub's ref surfaced (the blob is fetched internally via
+  `read_tool_result`, not exposed on the web bridge).
+- **Budget / token gauges** (`budget.ts` + `BudgetPanel.tsx`) — per-turn provider usage + steps
+  accumulated across turns, with an input/output split bar.
+
+One `WatchStream` now feeds a `PanelStores` bundle (`stores.ts`) whose `ingest` fans each event to every
+projection; the mobile overlay grows one launcher tile per panel. New panels register in `DOCK_PANELS`
+(so they show in the menu and in a fresh default layout) but are gated out of `RECONCILE_AUTO_OPEN`, so a
+user's saved #1197 arrangement is not re-crowded. Vitest covers the trickier projections (sub-agent tree
+assembly, timeline reduce, tool matching/offload detection, budget fold). The `--demo` provider was
+extended to delegate to two personas so a single demo turn populates every panel.
+- Accept: during a demo (or `kitchen-sink`) run each panel reflects live agent state; adding a panel does
+  not re-crowd existing users' saved layouts (reconcile). ✓
+
+### E6 (1199) — Multi-surface elicitation UX + symmetric submission — SHIPPED
 Wire E2's barrier end to end across web (`RespondToAsk`) and TUI so a real elicitation/approval
 broadcasts to all surfaces, first answer wins, others dismiss with "answered by <surface>". Any surface
 can submit a turn (turnMu already serializes); everyone watches it stream.
-- Accept: a `kitchen-sink` approval-ladder prompt answered in the browser dismisses the TUI prompt and
-  vice versa; two near-simultaneous turn submissions serialize cleanly and both surfaces see both turns.
+
+The web side is a projection off the one Watch stream, in `web/src/conversation.ts`:
+- **Retraction with a receipt.** A `HostElicitResolved{AskID, By}` retracts the shown prompt and, when
+  another surface answered, shows a receipt: `answered on terminal` (the terminal responder resolves as
+  `local`) or `answered in another browser tab` (a peer web surface resolves as `web`). A self-answer
+  just retracts, no receipt. The reducer keeps `activeAskId` after an optimistic retract and tracks the
+  offsets this tab answered, so the race where this tab clicked but another surface won first still
+  reads the correct receipt (`By` names the winner, not the clicker).
+- **Symmetric submission.** A `turn-begin` with no local submit pending is a turn from elsewhere; the
+  transcript tags it (`· from another surface`) on the streaming bubble and the committed turn. Local
+  turns are untagged. The origin badge is best-effort (two surfaces submitting in the same instant can
+  mis-attribute one cosmetic badge); control serialization is the ask barrier's job, not the badge's.
+- Vitest covers both reducers (`conversation.test.ts`): request → resolved-by-other → retracted +
+  receipt; the local-answer path; the this-tab-clicked-but-terminal-won race; stale-receipt clearing;
+  and the remote-vs-local origin tagging.
+- `--demo` gates the `researcher` delegate behind an approval `ask` and stands in a scripted terminal
+  responder (`demoElicitUI`, an 8s auto-accept), so a single browser demonstrates the prompt and the
+  cross-surface "answered on terminal" retraction with no second surface to script.
+- Accept: an approval-ladder prompt answered in the browser dismisses the TUI prompt and vice versa;
+  two near-simultaneous turn submissions serialize cleanly and both surfaces see both turns.
 
 ## Suggested slice order
 
