@@ -93,7 +93,19 @@ type App struct {
 	subs      map[string]*subscription
 	metaTools bool
 	turnMu    sync.Mutex
-	emitMu    sync.Mutex      // serializes emit so concurrent server-connect events don't race the renderer
+	emitMu    sync.Mutex // serializes emit's synchronous local delivery (the Group, turn, and event goroutines all emit)
+
+	// eventLog is the retained per-session event log. emit appends every
+	// HostEvent here in addition to delivering it synchronously to the local
+	// observers, so the log is the single source of truth a web surface
+	// subscribes onto (replay from offset 0 + live) and the barrier seam for
+	// multi-surface asks. Local observers stay synchronous because the terminal
+	// renderer writes to a caller-visible io.Writer; the async subscriber
+	// adapter that isolates a remote surface lands with that surface (issue
+	// 1196). Unbounded for now (issue 1194, Option A); a bounded gocurrent
+	// variant is a follow-up before long multi-subscriber sessions are common.
+	eventLog *gocurrent.Queue[HostEvent]
+
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
@@ -313,6 +325,9 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	multi := agent.NewMultiSource()
 	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
 		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
+	// Bring the retained event log up before anything can emit (the
+	// server-connect hooks below capture app and fire asynchronously).
+	app.eventLog = gocurrent.NewQueue[HostEvent]()
 	for _, sc := range cfg.Servers {
 		app.serverOrder = append(app.serverOrder, sc.ID)
 	}
@@ -801,12 +816,15 @@ func (a *App) SwitchProvider(name string) error {
 	return nil
 }
 
-// emit fans a host event out to every registered observer. Fire-and-forget:
-// observers render, trace, or push it; none reply. Serialized: the async server
-// connections (Group observer), the turn goroutine, and event goroutines all
-// emit, so the lock keeps a not-inherently-concurrent observer (the terminal
-// renderer writing to one io.Writer) from racing.
+// emit records a host event on the retained log and delivers it synchronously
+// to every local observer. The append is the source of truth a web surface
+// replays and subscribes onto; the synchronous fan-out preserves the terminal
+// rendering contract (a caller reading the renderer's io.Writer sees the event
+// once emit returns). Serialized by emitMu: the async server connections (Group
+// observer), the turn goroutine, and event goroutines all emit, so the lock
+// keeps the not-inherently-concurrent terminal renderer from racing.
 func (a *App) emit(ev HostEvent) {
+	a.eventLog.Append(ev)
 	a.emitMu.Lock()
 	defer a.emitMu.Unlock()
 	for _, o := range a.observers {

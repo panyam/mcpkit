@@ -112,10 +112,13 @@ type HostEvent struct {
 
 // Observer receives the host's HostEvent stream and does whatever it
 // wants with it — render to a terminal, emit spans, push to a socket,
-// record for a test. The host fans every event out to all registered
-// observers (WithObserver), so a renderer and a tracer coexist. On is
-// called from the turn goroutine and from event goroutines; an Observer
-// that is not inherently serialized must guard its own state.
+// record for a test. Every event is also recorded on the retained event
+// log (which a web surface replays and subscribes onto); an Observer is
+// the synchronous local delivery of that same stream. The host fans every
+// event out to all registered observers (WithObserver), so a renderer and
+// a tracer coexist. On is called from the turn goroutine and from event
+// goroutines; an Observer that is not inherently serialized must guard its
+// own state.
 //
 // This is the fire-and-forget half of the host's I/O. It is deliberately
 // NOT the input path: getting user input back is either surface-driven
