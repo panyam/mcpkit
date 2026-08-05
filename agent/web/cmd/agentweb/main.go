@@ -49,7 +49,19 @@ func main() {
 // (output to io.Discard) — events reach clients through Subscribe / Watch.
 func buildApp(configPath string, demo bool) (*host.App, error) {
 	if demo {
-		cfg := &host.Config{Model: host.ModelConfig{BaseURL: "http://demo", Model: "agentweb-demo"}}
+		// Wire two delegate personas + a low offload threshold so a demo turn
+		// exercises the whole observability surface: the scripted provider fans
+		// out to researcher/analyst (sub-agent tree + tool calls), the
+		// researcher's long reply comes back offloaded (tool inspector stub),
+		// and reported usage moves the budget gauges.
+		cfg := &host.Config{
+			Model: host.ModelConfig{BaseURL: "http://demo", Model: "agentweb-demo"},
+			SubAgents: []host.SubAgentConfig{
+				{Name: "researcher", Description: "gathers background on a topic", Instructions: "You are a research sub-agent."},
+				{Name: "analyst", Description: "assesses risks and trade-offs", Instructions: "You are a risk-analysis sub-agent."},
+			},
+			Offload: &host.OffloadConfig{ThresholdBytes: 300, PreviewLen: 120},
+		}
 		return host.NewApp(cfg, io.Discard, strings.NewReader(""), host.WithProvider(demoProvider{}))
 	}
 	if configPath == "" {
