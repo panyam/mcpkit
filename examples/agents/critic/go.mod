@@ -18,7 +18,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/panyam/gocurrent v0.1.1 // indirect
+	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
