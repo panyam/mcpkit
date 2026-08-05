@@ -1,0 +1,13 @@
+version: v2
+clean: true
+plugins:
+  # Message and enum types.
+  - local: protoc-gen-go
+    out: ../gen/go
+    opt: paths=source_relative
+
+  # Connect handlers + clients — the browser-friendly wrapper over the same
+  # HostService, plus the in-process Go client the bridge test drives.
+  - local: protoc-gen-connect-go
+    out: ../gen/go
+    opt: paths=source_relative
