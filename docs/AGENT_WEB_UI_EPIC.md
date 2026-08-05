@@ -126,20 +126,22 @@ moved to E3 — see "Do we still need Observer?" for why async local delivery ra
   green with `-race`; no TUI behavior change.
 
 ### E2 (1195) — Pending-ask barrier (`agent/host`) — SHIPPED
-`barrierElicit` (`agent/host/ask.go`) wraps the local `ElicitationUI` the coordinator drives: it mints
-an `AskID`, emits a `HostElicitRequest{AskID, Elicit}` to every surface, runs the local UI as one
-responder, and races it against `RespondToAsk(AskID, result, by)` from any other surface. The first
-responder wins (a one-shot `sync.Once` per ask); the loser is cancelled; a `HostElicitResolved{AskID,
-By}` then tells every surface to retract. With no other surface attached the local UI always wins, so
-single-surface behavior is unchanged.
+`barrierElicit` (`agent/host/ask.go`) wraps the local `ElicitationUI` the coordinator drives: it emits a
+`HostElicitRequest{Elicit}` (appended to the log at offset `off`), runs the local UI as one responder,
+and races it against `RespondToAsk(off, result, by)` from any other surface. **Resolution rides the
+event log's own barrier**: local and remote responders both call `eventLog.Resolve(off, ...)`, so the
+first writer wins and `RespondToAsk` gets `ErrAlreadyResolved` / `ErrOffsetOutOfRange` for free; the
+loser's context is cancelled; a `HostElicitResolved{AskID: off, By}` tells every surface to retract.
+With no other surface attached the local UI always wins, so single-surface behavior is unchanged.
 
-**Design note**: this uses a host-owned pending-ask registry keyed by a minted `AskID`, **not**
-`gocurrent`'s offset-keyed `AppendBarrier`/`Resolve`. The reason is the id has to travel *in* the
-broadcast `HostElicitRequest` event so a surface knows what to answer, but a log offset is only known
-after `Append` returns (chicken-and-egg). The registry mints the id up front; the log still carries the
-request/resolved events for rendering and replay.
+**Design note**: the ask is identified by its **log offset** (the position a surface reads from its
+`Watch` frame), not a minted id, so it needs no id field in the request event. This is simpler than a
+separate pending-ask registry and reuses the log's tested first-writer-wins barrier; a late-joining
+surface can even call `eventLog.Resolution(off)` to see an ask was already answered. Two small costs:
+`AwaitResolution` is not ctx-cancellable, so a cancelled turn resolves the ask itself to unblock the
+awaiter; and `emit` now returns the append offset.
 - Accept: two responders on one ask, first wins, loser cancelled, resolved event names the winner;
-  unknown / already-answered `RespondToAsk` returns an app-state error; `just test-agent` green with
+  out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
   `-race`.
 
 ### E3 (1196) — `agent/web` submodule + Connect bridge
