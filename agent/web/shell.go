@@ -107,6 +107,9 @@ body { font: 14px/1.5 system-ui, -apple-system, sans-serif; background: var(--bg
 .conv-streaming .conv-text { border-style: dashed; }
 .conv-activity { color: var(--muted); font-size: 12px; font-style: italic; }
 .conv-error { color: var(--err); font-size: 13px; }
+.conv-from { color: var(--muted); font-size: 10px; text-transform: none; letter-spacing: 0; font-style: italic; }
+.conv-resolved { display: flex; align-items: center; gap: .5rem; align-self: center; color: var(--muted); font-size: 12px; font-style: italic; padding: .1rem .2rem; }
+.conv-resolved-dismiss { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12px; line-height: 1; padding: 0 .2rem; }
 .conv-ask { border-top: 1px solid var(--line); background: var(--sys); padding: .7rem 1rem; display: flex; flex-direction: column; gap: .5rem; }
 .conv-ask-msg { font-weight: 500; }
 .conv-ask-actions { display: flex; gap: .5rem; }

@@ -61,8 +61,17 @@ func buildApp(configPath string, demo bool) (*host.App, error) {
 				{Name: "analyst", Description: "assesses risks and trade-offs", Instructions: "You are a risk-analysis sub-agent."},
 			},
 			Offload: &host.OffloadConfig{ThresholdBytes: 300, PreviewLen: 120},
+			// Gate the researcher delegate behind an approval "ask" (everything
+			// else auto-runs) so a demo turn raises exactly one elicitation. The
+			// prompt broadcasts to every surface; answering it on any surface
+			// retracts it on the others, which is what this build (issue 1199)
+			// exists to demonstrate.
+			Approval: &host.ApprovalConfig{Mode: "allow", Rules: map[string]string{"researcher": "ask"}},
 		}
-		return host.NewApp(cfg, io.Discard, strings.NewReader(""), host.WithProvider(demoProvider{}))
+		return host.NewApp(cfg, io.Discard, strings.NewReader(""),
+			host.WithProvider(demoProvider{}),
+			host.WithElicitationUI(demoElicitUI),
+		)
 	}
 	if configPath == "" {
 		return nil, fmt.Errorf("--config <path> is required (or pass --demo for the offline streaming demo)")
