@@ -24,11 +24,15 @@ distinctive strengths still hold and are now better supported: the **async contr
 (triggers/events/tasks as model-facing meta-tools), **MCP-native wire-agnosticism**, **A2
 wire-serializability**, and **zero-overhead SEP-414 tracing**.
 
-**Four structural phases are now open as epics**, in rough dependency order: **Phase 4 — durable
-workflows** (#928), **Phase 5 — provider control & decoding fidelity** (#1050: logprob #1053, grammar
-decoding #1054, +caching/thinking #953), **Phase 6 — test-time compute & routing reliability** (#1051:
-sampling/vote #1056, confidence-gated cascades #1057; adjacent routing #991), **Phase 7 — safety &
-guardrails** (#1052: prompt-injection spotlighting #1058). The items the previous edition listed as
+**Structural phases.** ~~Phase 4 — durable workflows (#928)~~ **was evaluated and dropped (2026-08-04,
+not-planned).** A code-driven workflow engine has no AI in it, is a commodity (Temporal / Step Functions
+territory), is the *dual* of the model-driven agent loop rather than an extension of it, and the
+canonical workflow patterns already build on shipped primitives (§7). The decision is recorded as
+constraint **A8** in `agent/CONSTRAINTS.md`. The remaining phases stay open as epics: **Phase 5 —
+provider control & decoding fidelity** (#1050: logprob #1053, grammar decoding #1054, +caching/thinking
+#953), **Phase 6 — test-time compute & routing reliability** (#1051: sampling/vote #1056,
+confidence-gated cascades #1057; adjacent routing #991), **Phase 7 — safety & guardrails** (#1052:
+prompt-injection spotlighting #1058). The items the previous edition listed as
 *untracked* (logprob/grammar, guardrails, sampling/vote, cascade trigger, coding-surface) have all been
 **promoted to tracked phase children** — see §5a. Nothing identified is left untracked (the two opt-in
 Phase-7 extensions are now filed as #1060/#1061). Beyond the phases, a rich refinement backlog on the
@@ -64,17 +68,18 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031,#1032,#1033,#1035,#1036,#1042 | `agent/agent_source.go` (`AgentSource`, depth+budget caps, structured I/O), `agent/async_agent_source.go` (`AsyncAgentSource` Task form, #1035), `agent/fanout_source.go` (`FanOutSource`, #1033), `agent/team.go` (`Team` handoff + host wiring + tagging, #1042), `agent/tree_budget.go` (`TreeBudget` aggregate cap, #1032), `agent/signal.go` + `agent/agent_pool.go` (upward signals + runner-control pool + interruptible turn, #1036), `SubAgentEvent` nesting, declarative host personas | dynamic catalog #1038, nested config #1043, interaction mediator #1157, map-style fan-out (unfiled) |
 | **Host surface** | ✅ #984–#992 | slash-command registry, `ConnectionRegistry` + runtime `/provider`, `HostEvent`/`Observer` render seam, notebook renderer (#1001), interactive `/mcp` + `/sessions` overlay (#1095, `focusLayer`/`modalHost` seam + `client.Group.Reconnect`), per-server tool view (#1117) + oauth login action / authorization-code auth type (#1116, #907), dialog stack for nested-overlay back-nav (#1124), color accessibility (#1125), bubbletea TUI, playground | context-assembly pipeline **⏳ #1024,#1026**; remaining TUI-track items (dimmed-base compositing, grapheme width, `WindowSizeMsg` fan-out) **⏳ #1063** |
 | **Observability** | ✅ | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) + OTel **metrics** (#1023 — turn/step/token/tool counters + duration histograms via `RunnerConfig.MeterProvider`, `host.WithMeterProvider`, agentchat `SetupMeter`, `mcpkit-agent` Grafana dashboard) | — |
-| **Durable workflows / graphs (Phase 4)** | ⏳ #928 | — | engine **#944**, `SuspendNode` via TriggerPolicy+RunStore **#945**, `ModelNode`/`ToolNode` **#946** |
+| **Durable workflows / graphs (Phase 4)** | ❌ **dropped (not-planned, 2026-08-04)** | — | Not building an engine (constraint A8). Workflow patterns build on shipped primitives (§7); durable orchestration → integrate a dedicated engine. #928/#944/#945/#946 closed not-planned. |
 | **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044**, confidence-gated cascade **#1057** (Phase 6) |
 | **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 | structured output via finalizing `Generate` only | logprob exposure **#1053**, grammar/guided decoding **#1054**, Anthropic caching/thinking **#953** |
 | **Test-time compute (Phase 6)** | ⏳ #1051 | achievable by host loop; `#1033` covers sub-agent fan-out only | sampling/vote helper **#1056**, `FailoverProvider` quality trigger **#1057** |
 | **Safety & guardrails (Phase 7)** | ⏳ #1052 | approval ladder (#929); event stages exist (`stages.go`) but no shipped guardrail Transform | prompt-injection spotlighting **#1058**; opt-in extensions (AgentDojo eval, constitutional gate) unfiled |
 | **Coding-surface: sandboxing, hooks, repo map, LSP** | ⏳ #1059 | — | scope decision (agent/ vs coding agent built on it) **#1059** |
 
-**Bottom line:** Phases 0–3 are effectively **done**. Four structural phases are open and fully scoped
-in issues: **Phase 4** (workflows, the last big engine piece) plus **Phases 5–7** (provider decoding
-control, test-time compute, safety) which promote the former §5b "untracked" gaps into tracked epics.
-Everything else open is refinement of shipped primitives.
+**Bottom line:** Phases 0–3 are effectively **done**. Phase 4 (workflows) was evaluated and **dropped**
+— not a gap, a deliberate non-goal (constraint A8). Three structural phases stay open and fully scoped
+in issues: **Phases 5–7** (provider decoding control, test-time compute, safety), which promote the
+former §5b "untracked" gaps into tracked epics. Everything else open is refinement of shipped
+primitives.
 
 ---
 
@@ -87,7 +92,7 @@ Everything else open is refinement of shipped primitives.
 | Eval / scorer framework | Mastra, Genkit *(rare in Go)* | ✅ **shipped** (#974) — a **differentiator vs the Go field**; external-suite adapter tracked (#1015) |
 | Native providers beyond OpenAI-compat | all | ✅ Anthropic (#930); caching tracked (#953) |
 | Structured output *inside the loop* | Mastra, Genkit, Eino | ✅ **shipped** (#931) |
-| Durable suspend/resume workflows; branch/parallel | Mastra, Eino, agno-Go, Genkit | ⏳ **the remaining parity gap** — Phase 4 (#928/#944/#945/#946) |
+| Durable suspend/resume workflows; branch/parallel | Mastra, Eino, agno-Go, Genkit | ❌ **deliberate non-goal** (A8) — not a parity gap; patterns build on shipped primitives (§7), durable orchestration is integrated, not reimplemented |
 | RAG pipeline (chunk/embed/retrieve/index) | Mastra, Eino, Genkit, agno-Go | 🟡 recall path shipped; standalone doc-RAG VectorStore tracked (#1021) |
 | Prompt versioning / templating | Genkit (Dotprompt) | ❌ still minimal (`Instructions` + skills) — no issue |
 | Voice (STT/TTS) | Mastra only | ❌ non-goal (no Go competitor either) |
@@ -166,9 +171,13 @@ sufficient.
 
 ### 5a. Tracked (open issues — planned work)
 
-**The four structural phases (epics):**
-- **Phase 4 — durable workflows:** epic #928 → engine #944, `SuspendNode` (reuses TriggerPolicy +
-  RunStore) #945, `ModelNode`/`ToolNode` adapters #946. *The last structural engine gap.*
+**The structural phases (epics):**
+- **Phase 4 — durable workflows: DROPPED (not-planned, 2026-08-04; constraint A8).** #928/#944/#945/#946
+  closed. A workflow engine is code-driven orchestration with no AI in it — the commodity dual of the
+  model-driven agent loop, not an extension of it. The canonical workflow patterns already build on
+  shipped primitives (§7); when real durable orchestration is needed, integrate a dedicated engine
+  (Temporal, Step Functions) rather than reimplement one. #945's one durable idea (the trigger machinery
+  *is* the suspend/resume primitive) is already realized by `TriggerPolicy` + `IncomingEvent`.
 - **Phase 5 — provider control & decoding fidelity:** epic #1050 → logprob/token-confidence on the
   `Provider` seam #1053, grammar-constrained/guided decoding passthrough #1054; +Anthropic prompt
   caching & extended thinking #953. Capability-optional fields, nil = today's behavior (A2/CONSTRAINTS).
