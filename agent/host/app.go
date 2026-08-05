@@ -102,9 +102,23 @@ type App struct {
 	// multi-surface asks. Local observers stay synchronous because the terminal
 	// renderer writes to a caller-visible io.Writer; the async subscriber
 	// adapter that isolates a remote surface lands with that surface (issue
-	// 1196). Unbounded for now (issue 1194, Option A); a bounded gocurrent
-	// variant is a follow-up before long multi-subscriber sessions are common.
+	// 1196). Bounded when Config.MaxEventLogRetention > 0 (issue 1200): the
+	// oldest entries evict while offsets stay absolute, and Subscribe deep
+	// replays evicted-but-persisted turns from the RunStore. Unbounded by
+	// default (issue 1194, Option A).
 	eventLog *gocurrent.Queue[HostEvent]
+
+	// persistedOffset is the eventLog offset through which the run's events
+	// have been written to the RunStore: eventLog[0, persistedOffset) is
+	// covered by the store (its runner events are in RunStore.Events; any
+	// non-runner HostEvents in that range are ephemeral). Advanced at the
+	// turn-end persist site (persistTurnLocked) once AppendEvents succeeds,
+	// and read by Subscribe to split its replay between the RunStore (deep
+	// history) and the Queue tail (unpersisted, still in the retained window).
+	// Written and the deep-replay snapshot read under turnMu; atomic so a
+	// lock-free reader stays safe. Stays 0 when no RunStore is configured, so
+	// Subscribe falls back to replaying the whole retained window.
+	persistedOffset atomic.Int64
 
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
@@ -326,7 +340,14 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
-	app.eventLog = gocurrent.NewQueue[HostEvent]()
+	// MaxEventLogRetention 0 keeps the unbounded log; a positive value caps the
+	// retained window (NewBoundedQueue evicts the oldest, offsets stay absolute
+	// so Subscribe's deep replay still stitches).
+	if cfg.MaxEventLogRetention > 0 {
+		app.eventLog = gocurrent.NewBoundedQueue[HostEvent](cfg.MaxEventLogRetention)
+	} else {
+		app.eventLog = gocurrent.NewQueue[HostEvent]()
+	}
 	// Elicitations broadcast to every surface via the event log and resolve on
 	// the first responder; the local UI is one responder (barrierElicit).
 	coord := agent.NewElicitationCoordinator(app.barrierElicit(elicUI))

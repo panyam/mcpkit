@@ -59,9 +59,8 @@ ordering) read that buffer synchronously right after an emit. Nothing needs the 
 the only remote consumer, the web streamer, does not exist until E3. So E1 keeps `emit` a **synchronous
 local fan-out** (unchanged behavior, `emitMu` retained) while **also appending to the retained log**.
 The async subscriber adapter, which a remote surface genuinely wants for backpressure isolation, lands
-with that surface in **E3**. Retention is unbounded for now (Option A); because `PersistingEmit`
-already writes each turn's events to `RunStore`, a bounded in-memory window with deep replay from the
-store is the filed follow-up.
+with that surface in **E3**. Retention was unbounded in the first cut (Option A); the bounded window
+with deep replay from the `RunStore` **shipped** (issue 1200) — see the E1 retention note below.
 
 ### Three wire categories
 
@@ -118,12 +117,41 @@ and the Solid/DockView frontend assets. A thin `cmd/agentweb serve` over it, mir
 Make a per-session `gocurrent.Queue[HostEvent]` the retained event substrate: `emit` appends every
 event to it *and* keeps delivering synchronously to the local observers (`emitMu` retained), so the
 terminal rendering contract is unchanged. The log is what a web surface (E3) subscribes onto (replay
-from offset 0 + live) and the barrier seam E2 builds on. Retention unbounded (Option A); a bounded
-gocurrent variant with deep replay from `RunStore` is a filed follow-up. The async subscriber adapter
+from offset 0 + live) and the barrier seam E2 builds on. The async subscriber adapter
 moved to E3 — see "Do we still need Observer?" for why async local delivery races the terminal contract.
 - Accept: a subscriber attached after events were emitted replays them from offset 0 and is notified of
   live ones; `emit` still delivers to local observers synchronously and in order; `just test-agent`
   green with `-race`; no TUI behavior change.
+
+#### E1 retention follow-up (1200) — bounded event log + `RunStore` deep replay — SHIPPED
+The unbounded first cut (Option A) is now bounded on gocurrent v0.1.2's `NewBoundedQueue`, and
+`App.Subscribe` deep-replays evicted-but-persisted turns from the `RunStore` so a subscriber attaching
+after eviction still sees full history.
+- `Config.MaxEventLogRetention` (0 = unbounded, today's behavior for embedders; positive caps the
+  retained window). `NewApp` builds `NewBoundedQueue(n)` when set. agentchat `--max-event-log`
+  defaults to a generous 100000, so a single turn never exceeds the window; a config value wins, and
+  `--max-event-log 0` opts back into unbounded.
+- `App.Subscribe(ctx) <-chan HostEvent` stitches replay from two sources that meet exactly at
+  `persistedOffset` (the event-log offset through which the run's events are in the store, advanced at
+  the turn-end persist site once `AppendEvents` succeeds): (a) the run's persisted `agent.Event`s from
+  the `RunStore`, each wrapped as `HostEvent{Kind: HostRunnerEvent}` — the deep history that may have
+  evicted from the Queue; (b) the Queue tail from `persistedOffset` forward — the unpersisted
+  in-progress/recent events, still in the retained window; then (c) live via `Notify`. No dup (the
+  store covers `[0, persistedOffset)`, the drain starts AT `persistedOffset`) and no gap. Non-runner
+  `HostEvent`s (server-state, skills) before `persistedOffset` are ephemeral and intentionally not
+  replayed — the store only holds the runner stream.
+- **Consistency (the persist race):** the snapshot — Queue `Subscribe`, reading `persistedOffset`, and
+  reading the `RunStore` — is taken under `turnMu`, which the persist site also holds while it advances
+  `persistedOffset` and writes `AppendEvents` together. So a turn-end persist can never interleave the
+  snapshot: `RunStore` contents and `persistedOffset` are always read as one consistent pair, ruling
+  out both the dup (store ahead of the offset) and the gap (offset ahead of the store) a two-step read
+  would race. Subscribing before releasing `turnMu` means no live `Append` is missed. Delivery then
+  happens off-lock in a goroutine, so a slow subscriber never blocks a turn (the same store-under-
+  `turnMu` shape `Resume`/`Fork`/`AttachRun` already use).
+- Accept: with a small retention the log evicts and caps; a subscriber attaching after eviction (with a
+  `RunStore`) replays the full conversation with no dup and no missing turn; without a `RunStore` it
+  gets the retained window then live; `persistedOffset` advances at turn end; `just test-agent` green
+  with `-race`.
 
 ### E2 (1195) — Pending-ask barrier (`agent/host`) — SHIPPED
 `barrierElicit` (`agent/host/ask.go`) wraps the local `ElicitationUI` the coordinator drives: it emits a

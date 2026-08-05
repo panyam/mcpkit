@@ -92,7 +92,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/panyam/gocurrent v0.1.1 // indirect
+	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/agent/store/gorm v0.0.0
