@@ -1,12 +1,18 @@
 import { DockviewComponent, themeDark, themeLight } from "dockview-core";
 import type { DockviewApi } from "dockview-core";
 import type { PanelId } from "./panels.js";
-import type { ConversationStore } from "./conversation.js";
+import type { PanelStores } from "./stores.js";
 import { conversationIsland } from "./ConversationPanel.js";
+import { subAgentIsland } from "./SubAgentPanel.js";
+import { timelineIsland } from "./TimelinePanel.js";
+import { memoryIsland } from "./MemoryPanel.js";
+import { toolsIsland } from "./ToolsPanel.js";
+import { budgetIsland } from "./BudgetPanel.js";
 import {
   DEFAULT_DOCK_LAYOUT,
   DOCK_LAYOUT_KEY,
   DOCK_PANELS,
+  RECONCILE_AUTO_OPEN,
   loadDockLayout,
   panelsToReconcile,
   resolveTheme,
@@ -15,14 +21,29 @@ import {
 
 const PANELS: PanelId[] = [...DOCK_PANELS];
 
-// mountIsland mounts one panel's island into its detached host. Only the
-// conversation panel exists this slice; #1198's panels extend this switch. The
-// island renders into the host whether or not it is in the DOM yet, so building
-// the islands before dockview adopts them is free.
-function mountIsland(id: PanelId, host: HTMLElement, store: ConversationStore): void {
+// mountIsland mounts one panel's island into its detached host, handing it the
+// panel's own projection off the shared PanelStores bundle. The island renders
+// into the host whether or not it is in the DOM yet, so building the islands
+// before dockview adopts them is free.
+function mountIsland(id: PanelId, host: HTMLElement, stores: PanelStores): void {
   switch (id) {
     case "conversation":
-      conversationIsland(host, store);
+      conversationIsland(host, stores.conversation);
+      break;
+    case "subagents":
+      subAgentIsland(host, stores.subAgents);
+      break;
+    case "timeline":
+      timelineIsland(host, stores.timeline);
+      break;
+    case "memory":
+      memoryIsland(host, stores.memory);
+      break;
+    case "tools":
+      toolsIsland(host, stores.tools);
+      break;
+    case "budget":
+      budgetIsland(host, stores.budget);
       break;
   }
 }
@@ -40,7 +61,7 @@ export class DockviewWorkspace {
 
   constructor(
     private readonly container: HTMLElement,
-    private readonly store: ConversationStore,
+    private readonly stores: PanelStores,
   ) {}
 
   mount(): void {
@@ -48,7 +69,7 @@ export class DockviewWorkspace {
       const el = document.createElement("div");
       el.className = "ws-dock-panel";
       this.hosts[id] = el;
-      mountIsland(id, el, this.store);
+      mountIsland(id, el, this.stores);
     }
 
     const dock = new DockviewComponent(this.container, {
@@ -104,15 +125,31 @@ export class DockviewWorkspace {
 
   private buildDefaultLayout(): void {
     for (const spec of DEFAULT_DOCK_LAYOUT) {
-      this.dockview.addPanel({ id: spec.id, component: spec.id, title: spec.title, position: spec.position });
+      this.dockview.addPanel({
+        id: spec.id,
+        component: spec.id,
+        title: spec.title,
+        position: spec.position,
+        initialWidth: spec.initialWidth,
+        initialHeight: spec.initialHeight,
+      });
     }
+    // At mount the container may still be zero-width, so addPanel's initial
+    // proportions can collapse the reference (conversation) pane. Once a frame
+    // has laid the grid out, set the conversation column to a usable width; the
+    // onDidLayoutChange save then persists it. Fresh-layout only — a restored
+    // layout keeps the user's own sizing.
+    const conv = this.dockview.getPanel("conversation");
+    requestAnimationFrame(() => conv?.api.setSize({ width: 440 }));
   }
 
   // reconcile opens registry panels a later feature added since the layout was
-  // saved: those absent from the saved registry and not already open. Panels the
-  // user closed stay closed (they are in savedPanels).
+  // saved, restricted to RECONCILE_AUTO_OPEN so the observability panels (#1198)
+  // land in the menu without popping open over an existing arrangement. Panels
+  // the user closed stay closed (they are in savedPanels).
   private reconcile(savedPanels: PanelId[]): void {
     for (const id of panelsToReconcile(savedPanels)) {
+      if (!RECONCILE_AUTO_OPEN.includes(id)) continue;
       if (this.dockview.getPanel(id)) continue;
       this.openPanel(id);
     }

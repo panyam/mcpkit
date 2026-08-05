@@ -4,4 +4,4 @@
 // (sub-agent tree, activity timeline, memory, tool/offload, budgets) by
 // extending this union and the registry in dock.ts — the saved-layout reconcile
 // makes a newly added panel appear without disturbing existing arrangements.
-export type PanelId = "conversation";
+export type PanelId = "conversation" | "subagents" | "timeline" | "memory" | "tools" | "budget";
