@@ -144,19 +144,42 @@ awaiter; and `emit` now returns the append offset.
   out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
   `-race`.
 
-### E3 (1196) — `agent/web` submodule + Connect bridge
-New submodule + `cmd/agentweb serve`. **Transport: Connect + buf + `@panyam/massrelay` for the live
-stream** — the stack the user's own web apps use (`~/projects/diffpp/main/web`, `~/work/hw/Agni`), and
-mcpkit already pulls in `servicekit` + `templar` (goapplib serving) so only `connectrpc`/`buf` are new.
-Proto `HostService`: a streaming `Watch` (drains the E1 log via massrelay), unary `Submit` (turn),
-`Dispatch` (command → `CmdResult`), `RespondToAsk` (the E2 registry), and query methods mirroring the
-host data methods. goapplib/`servicekit` serve of shell + `/static` + Connect handlers.
-- **Frame envelope, reconciled with A2**: the wire frame is a thin proto `{kind, payload bytes}` where
-  `payload` is the event's own A2 JSON — a 1:1 projection, no per-kind proto schema to drift (A2 forbids
-  a translation layer). `HostEvent`'s remaining live-pointer fields (`TaskStatus`, `Task`, failover)
-  need serializable snapshots first — that is the already-filed issue 994, a dependency of `Watch`.
-- Accept: a Connect client can `Watch` a live session and `Submit` a turn; a TUI and a web client on the
-  same `App` see the same stream simultaneously.
+### E3 (1196) — `agent/web` submodule + Connect bridge — SHIPPED
+New submodule (`agent/web`, own go.mod, module `github.com/panyam/mcpkit/agent/web`) + a thin
+`cmd/agentweb` serve binary (inside the module, mirroring how `cmd/agentchat` is thin over the host).
+**Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `agent/web/protos/`, generated
+Go + Connect committed under `agent/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
+new `App.Subscribe` seam), unary `Submit` (turn), `Dispatch` (command → `CmdResult`), `RespondToAsk`
+(the E2 offset barrier), and two trivial queries `ListSessions` + `GetStatus`. `servicekit/http` serves
+the placeholder shell + `/static` + the Connect handlers on one listener.
+
+- **`App.Subscribe(ctx) <-chan HostEvent` (`agent/host/subscribe.go`)** — the async subscriber adapter
+  E1 deferred. It replays the retained log from offset 0 then follows `Notify()`, on a drain goroutine
+  scoped to ctx. A slow consumer cannot block `emit`: `emit` only `Append`s (non-blocking) and fans out
+  to local observers, while the drain reads the retained log at its own pace, so back-pressure stays
+  contained to the one subscriber and nothing is lost. Local observers stay synchronous (unchanged).
+  It also stamps the **ask id** — E2's event-log offset — onto the delivered `HostElicitRequest` copy
+  (the stored entry is emitted without it), so a remote surface reads the id off its Watch frame and
+  answers via `RespondToAsk(offset, …)`; the frame's `ask_id` is that offset, cast at the RPC boundary.
+- **Frame envelope, reconciled with A2**: `Frame{kind, payload bytes}` where `payload =
+  json.Marshal(HostEvent)` — a 1:1 projection, no per-kind proto schema to drift. `Dispatch` reuses the
+  same `{kind, json}` shape for `CmdResult`. The pointer-bearing kinds (`TaskStatus`, `Task`, the
+  failover inside a command result — issue 994) fall back to a minimal `{kind}` payload on a marshal
+  failure so one un-serializable event never stalls the stream.
+- **Deviations from the brief**: (1) `Watch` is an idiomatic **Connect server-streaming RPC**, not a
+  `@panyam/massrelay` room. massrelay is the E4 *frontend* consumption transport (WebSocket fan-out, as
+  in diffpp); its `AppMessage{Kind, Payload}` shape is exactly this `Frame`, so E4 bridges Frame → room
+  1:1. Keeping the server side a plain Connect stream is what makes the whole bridge testable in-process
+  with a Go Connect client (no WebSocket, no browser). (2) `Watch` sends an empty-`kind` ready sentinel
+  as its first frame: the Connect protocol flushes response headers on the first `Send`, so without it a
+  client attaching to an idle session blocks on `Watch` until the first event; the sentinel opens the
+  stream promptly. Clients skip an empty-kind frame. (3) The shell is a minimal inline HTML page, not a
+  templar template — the real templar/DockView shell is E4.
+- Accept (met): a Connect client `Watch`es a live session and `Submit`s a turn; a local Observer and a
+  Watch client on the same `App` see the same stream, including replay-from-offset-0; a `RespondToAsk`
+  over the wire wins an ask the local UI is blocking on (`agent/web/host_bridge_test.go`, run with
+  `-race`). The serve binary serves the shell, `/static`, and the Connect endpoints (`GetStatus`
+  returns the model label; `ListSessions` returns `failed_precondition` with no RunStore).
 
 ### E4 (1197) — Frontend shell (DockView + Solid islands)
 Model on **`~/projects/diffpp/main/web`** (preferred over Agni): `dockview-core` v4, `tsappkit-solid`
