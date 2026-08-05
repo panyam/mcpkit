@@ -64,15 +64,19 @@ func availablePersonas(req agent.ProviderRequest) []string {
 // a long passage (over the demo offload threshold, so it comes back as an
 // offloaded stub in the tool inspector); the analyst returns a short note.
 func personaReply(task string) string {
-	if strings.Contains(strings.ToLower(task), "research") {
+	lower := strings.ToLower(task)
+	if strings.Contains(lower, "analyz") || strings.Contains(lower, "risk") {
+		return "Risk note: the rollout is low risk. The web surface reuses the terminal host verbatim, so its behavior is already exercised by the agentchat tests."
+	}
+	if strings.Contains(lower, "research") {
 		return "Research summary: agentweb is the browser analogue of the terminal agentchat, a thin surface over the same agent/host.App. " +
 			"It streams host events over a Connect Watch stream into a DockView workspace of Solid islands. The observability panels project " +
-			"that one event stream five ways — a sub-agent tree, a filterable activity timeline, a memory inspector, a tool and offload " +
-			"inspector, and token and budget gauges — so an operator can watch a turn fan out across delegated agents, see each tool call and " +
+			"that one event stream five ways. A sub-agent tree, a filterable activity timeline, a memory inspector, a tool and offload " +
+			"inspector, and token and budget gauges let an operator watch a turn fan out across delegated agents, see each tool call and " +
 			"its result, and track token spend, all without leaving the page. This passage is deliberately long so it trips the demo offload " +
 			"threshold and shows up as a stored stub with a ref in the tool inspector panel."
 	}
-	return "Risk note: the rollout is low risk. The web surface reuses the terminal host verbatim, so its behavior is already exercised by the agentchat tests."
+	return "Sub-agent reply: " + task
 }
 
 func (d demoProvider) reply(req agent.ProviderRequest) string {
@@ -84,13 +88,16 @@ func (d demoProvider) reply(req agent.ProviderRequest) string {
 }
 
 func (d demoProvider) Stream(_ context.Context, req agent.ProviderRequest) (agent.Stream, error) {
-	// A top-level first pass with delegate tools available fans out to the
-	// personas; everything else (a persona's own turn, or the follow-up after
-	// tool results) streams the text reply.
+	// Three cases, keyed on the last message role and whether delegate tools are
+	// present: a top-level first pass (RoleUser + persona tools) fans out to the
+	// personas; a persona's own turn (RoleUser, no tools) streams its persona
+	// reply (the researcher's is long enough to be offloaded); the follow-up
+	// after tool results (RoleTool) streams the top-level answer.
 	if lastRole(req) == agent.RoleUser {
 		if personas := availablePersonas(req); len(personas) > 0 {
 			return &demoStream{delegateTo: personas, task: lastUserText(req)}, nil
 		}
+		return &demoStream{words: strings.Fields(personaReply(lastUserText(req)))}, nil
 	}
 	return &demoStream{words: strings.Fields(d.reply(req))}, nil
 }
