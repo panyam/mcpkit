@@ -21,7 +21,14 @@ export interface DockPanelSpec {
 // DEFAULT_DOCK_LAYOUT is the first-run arrangement, applied only when no saved
 // layout exists. This slice ships one panel; #1198's panels are added here (each
 // positioned relative to conversation) and appear for existing users via reconcile.
-export const DEFAULT_DOCK_LAYOUT: DockPanelSpec[] = [{ id: "conversation", title: "Conversation" }];
+export const DEFAULT_DOCK_LAYOUT: DockPanelSpec[] = [
+  { id: "conversation", title: "Conversation" },
+  { id: "subagents", title: "Sub-agents", position: { direction: "right", referencePanel: "conversation" } },
+  { id: "timeline", title: "Activity", position: { direction: "below", referencePanel: "subagents" } },
+  { id: "tools", title: "Tools & Offload", position: { direction: "within", referencePanel: "timeline" } },
+  { id: "memory", title: "Memory", position: { direction: "within", referencePanel: "timeline" } },
+  { id: "budget", title: "Budget", position: { direction: "below", referencePanel: "conversation" } },
+];
 
 // DOCK_LAYOUT_KEY is the localStorage key the rearranged dockview layout persists
 // under, so a reload restores the user's arrangement.
@@ -30,7 +37,17 @@ export const DOCK_LAYOUT_KEY = "agentweb-dock-layout";
 // DOCK_PANELS is the panel registry the dock is built from, in a stable order.
 // Persisted with each saved layout as its "version marker" (see SavedLayout): a
 // self-updating one, derived from the registry rather than a hand-bumped integer.
-export const DOCK_PANELS: readonly PanelId[] = ["conversation"];
+// Every id here shows in the Panels menu and counts toward reconcile.
+export const DOCK_PANELS: readonly PanelId[] = ["conversation", "subagents", "timeline", "tools", "memory", "budget"];
+
+// RECONCILE_AUTO_OPEN is the subset a reconcile pass OPENS for an existing saved
+// layout when the panel is new since the save. The observability panels (#1198)
+// are deliberately NOT here: they ship in the menu and in a fresh default
+// layout, but a user who already arranged their workspace under #1197 keeps it
+// as-is — the new panels appear in the Panels menu without popping open over
+// their arrangement. A fresh user (no saved layout) still gets the full
+// DEFAULT_DOCK_LAYOUT.
+export const RECONCILE_AUTO_OPEN: readonly PanelId[] = ["conversation"];
 
 // DockStorage is the minimal Web Storage subset dock persistence needs, so tests
 // inject a fake without a DOM. localStorage satisfies it directly.
@@ -93,9 +110,10 @@ export function loadDockLayout(storage: DockStorage, key: string): LoadedLayout 
 }
 
 // panelsToReconcile returns registry panels absent from a restored layout's saved
-// registry: panels a later feature added since the save. The caller opens the
-// ones not already present, so a saved layout no longer freezes the panel set. A
-// panel the user closed stays closed (it is in savedPanels).
+// registry: panels a later feature added since the save. A panel the user closed
+// stays closed (it is in savedPanels). The caller decides which of these to open
+// (see RECONCILE_AUTO_OPEN) — a newly added observability panel is registered in
+// the menu without being auto-opened over an existing arrangement.
 export function panelsToReconcile(savedPanels: PanelId[]): PanelId[] {
   return DOCK_PANELS.filter((id) => !savedPanels.includes(id));
 }
