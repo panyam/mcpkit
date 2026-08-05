@@ -28,11 +28,12 @@ wire-serializability**, and **zero-overhead SEP-414 tracing**.
 not-planned).** A code-driven workflow engine has no AI in it, is a commodity (Temporal / Step Functions
 territory), is the *dual* of the model-driven agent loop rather than an extension of it, and the
 canonical workflow patterns already build on shipped primitives (§7). The decision is recorded as
-constraint **A8** in `agent/CONSTRAINTS.md`. The remaining phases stay open as epics: **Phase 5 —
-provider control & decoding fidelity** (#1050: logprob #1053, grammar decoding #1054, +caching/thinking
-#953), **Phase 6 — test-time compute & routing reliability** (#1051: sampling/vote #1056,
-confidence-gated cascades #1057; adjacent routing #991), **Phase 7 — safety & guardrails** (#1052:
-prompt-injection spotlighting #1058). The items the previous edition listed as
+constraint **A8** in `agent/CONSTRAINTS.md`. The remaining phases stay open as epics, with **Phase 5
+re-scoped by constraint A9** (its Anthropic caching/thinking child #953 was dropped as loop-invisible;
+logprob #1053 stays as a loop-visible agent capability; grammar #1054 is a marginal deferred enhancement):
+**Phase 5 — provider control & decoding fidelity** (#1050: logprob #1053, grammar decoding #1054), **Phase 6 —
+test-time compute & routing reliability** (#1051: sampling/vote #1056, confidence-gated cascades #1057;
+adjacent routing #991), **Phase 7 — safety & guardrails** (#1052: prompt-injection spotlighting #1058). The items the previous edition listed as
 *untracked* (logprob/grammar, guardrails, sampling/vote, cascade trigger, coding-surface) have all been
 **promoted to tracked phase children** — see §5a. Nothing identified is left untracked (the two opt-in
 Phase-7 extensions are now filed as #1060/#1061). Beyond the phases, a rich refinement backlog on the
@@ -56,7 +57,7 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | Area | Status | As-built (file) | Remaining |
 |---|---|---|---|
 | **Tool-call approval / permission ladder** | ✅ #929 | `agent/approval.go` — `ApprovalPolicy`, `TieredApproval`, `ApprovalMode` {AlwaysAsk/ReadOnlyAuto/AlwaysAllow} + per-tool `RuleAsk/Allow/Deny`; "ask" routes through `ElicitationCoordinator.Confirm`; `EventToolDenied`; host `/approve` | — |
-| **Anthropic-native provider** | 🟡 #930 | `agent/anthropic_provider.go` — no-SDK, content-block↔Delta, `thinking_delta`→reasoning; structured output via forced synthetic tool | prompt caching + extended-thinking **⏳ #953** |
+| **Anthropic-native provider** | ✅ #930 | `agent/anthropic_provider.go` — no-SDK, content-block↔Delta, `thinking_delta`→reasoning; structured output via forced synthetic tool | Deliberately **minimal** (constraint A9). Caching/extended-thinking **dropped (not-planned, #953)** — provider-client features below the loop; wrap the official SDK if ever needed. |
 | **Structured output in the loop** | ✅ #931 | finalizing `Generate` (`runner.go` `finalizeStructured`, retry×2); `RunnerConfig.ResponseSchema` → `TurnResult.Structured` | — |
 | **Eval / scorer harness** | 🟡 #974,#932 | `agent/eval/` — `Case`/`Scorer`/`Suite`/`Scenario`; 8 deterministic scorers; `Judge` (build-tagged); LongMemEval *smoke* scenarios | external-benchmark adapter **⏳ #1015**; real LongMemEval loader **⏳ #1014** |
 | **Persistence (RunStore) + fork/rewind** | ✅ #960,#962,#963,#986 | `agent/runstore.go` — full interface + `InMemoryRunStore`; redis + gorm (pg/sqlite) backends; `ForkRun{AtMessage}` checkpoint fork; `ListRuns`; `Message.Timestamp` | retention/GC **⏳ #999** |
@@ -70,7 +71,7 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Observability** | ✅ | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) + OTel **metrics** (#1023 — turn/step/token/tool counters + duration histograms via `RunnerConfig.MeterProvider`, `host.WithMeterProvider`, agentchat `SetupMeter`, `mcpkit-agent` Grafana dashboard) | — |
 | **Durable workflows / graphs (Phase 4)** | ❌ **dropped (not-planned, 2026-08-04)** | — | Not building an engine (constraint A8). Workflow patterns build on shipped primitives (§7); durable orchestration → integrate a dedicated engine. #928/#944/#945/#946 closed not-planned. |
 | **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044**, confidence-gated cascade **#1057** (Phase 6) |
-| **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 | structured output via finalizing `Generate` only | logprob exposure **#1053**, grammar/guided decoding **#1054**, Anthropic caching/thinking **#953** |
+| **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 (re-scoped by A9) | structured output via finalizing `Generate` only | logprob/token-confidence **#1053** — **loop-visible** (routing/abstention/cascade), kept as agent-SDK work; OpenAI-wire/local, not Anthropic. Grammar/guided decoding **#1054** — deferred (marginal). Anthropic caching/thinking **dropped (#953, loop-invisible)**. |
 | **Test-time compute (Phase 6)** | ⏳ #1051 | achievable by host loop; `#1033` covers sub-agent fan-out only | sampling/vote helper **#1056**, `FailoverProvider` quality trigger **#1057** |
 | **Safety & guardrails (Phase 7)** | ⏳ #1052 | approval ladder (#929); event stages exist (`stages.go`) but no shipped guardrail Transform | prompt-injection spotlighting **#1058**; opt-in extensions (AgentDojo eval, constitutional gate) unfiled |
 | **Coding-surface: sandboxing, hooks, repo map, LSP** | ⏳ #1059 | — | scope decision (agent/ vs coding agent built on it) **#1059** |
@@ -90,7 +91,7 @@ primitives.
 | Tiered memory: working + semantic recall + compaction | Mastra, langchaingo, agno-Go | ✅ **at parity** (#938/#940/#939) + pgvector (#1019); reranker/distillation tracked (#1020/#1022) |
 | Multi-agent / handoffs / sub-agents | all five + Mastra | ✅ **at parity** (AgentSource #941, Team #943); richer composition tracked (#1032–#1038) |
 | Eval / scorer framework | Mastra, Genkit *(rare in Go)* | ✅ **shipped** (#974) — a **differentiator vs the Go field**; external-suite adapter tracked (#1015) |
-| Native providers beyond OpenAI-compat | all | ✅ Anthropic (#930); caching tracked (#953) |
+| Native providers beyond OpenAI-compat | all | ✅ Anthropic (#930), kept minimal (A9); caching/thinking **dropped (#953)** — provider-agnostic is the thesis, OpenAI-wire is the common case |
 | Structured output *inside the loop* | Mastra, Genkit, Eino | ✅ **shipped** (#931) |
 | Durable suspend/resume workflows; branch/parallel | Mastra, Eino, agno-Go, Genkit | ❌ **deliberate non-goal** (A8) — not a parity gap; patterns build on shipped primitives (§7), durable orchestration is integrated, not reimplemented |
 | RAG pipeline (chunk/embed/retrieve/index) | Mastra, Eino, Genkit, agno-Go | 🟡 recall path shipped; standalone doc-RAG VectorStore tracked (#1021) |
@@ -178,9 +179,20 @@ sufficient.
   shipped primitives (§7); when real durable orchestration is needed, integrate a dedicated engine
   (Temporal, Step Functions) rather than reimplement one. #945's one durable idea (the trigger machinery
   *is* the suspend/resume primitive) is already realized by `TriggerPolicy` + `IncomingEvent`.
-- **Phase 5 — provider control & decoding fidelity:** epic #1050 → logprob/token-confidence on the
-  `Provider` seam #1053, grammar-constrained/guided decoding passthrough #1054; +Anthropic prompt
-  caching & extended thinking #953. Capability-optional fields, nil = today's behavior (A2/CONSTRAINTS).
+- **Phase 5 — provider control & decoding fidelity:** re-scoped by constraint A9 (loop-visible capability
+  vs loop-invisible optimization):
+  - **logprob / token-confidence #1053 — KEPT as agent-SDK work.** Loop-visible: token confidence feeds
+    routing, abstention, and the Phase 6 confidence-gated cascade (#1057). It's an OpenAI-wire /
+    local-inference capability (Anthropic doesn't expose logprobs), so it serves the common providers, not
+    a niche vendor. Exposed capability-optionally on the `Provider` seam (nil = unsupported).
+  - **grammar-constrained / guided decoding #1054 — deferred.** Loop-visible but marginal: a stronger
+    guarantee than the forced-tool structured-output path already shipped, gated on provider support
+    (vLLM/SGLang). Pick up on a concrete need.
+  - **Anthropic prompt caching & extended thinking #953 — dropped (not-planned).** Loop-invisible
+    optimization; the API-drift treadmill (its `budget_tokens` premise already 400s on current models) is
+    the cautionary case for growing the no-SDK client.
+  - The phase's original "provider control" framing was too provider-flavored; A9 is the durable line.
+    Capability-optional fields, nil = today's behavior (A2/CONSTRAINTS).
 - **Phase 6 — test-time compute & routing reliability:** epic #1051 → sampling+aggregate helper
   (self-consistency / Best-of-N + verifier rerank) #1056, `FailoverProvider` quality-score trigger for
   confidence-gated cascades #1057. Complements upfront routing #991 (selection vs escalation).
@@ -192,8 +204,9 @@ sufficient.
 **Refinement backlog on shipped primitives:**
 - **Provider routing / cascades:** #991 (per-turn/per-role model selection over `ConnectionRegistry`),
   #1044 (openrouter/litellm presets). Today only `FailoverProvider` (failure-triggered).
-- **Prompt caching + extended thinking:** #953 (Anthropic, provider-scoped) — note the documented
-  cache-vs-`Selector` prefix-stability tension.
+- **Prompt caching + extended thinking:** ~~#953~~ **dropped (not-planned, constraint A9)** — provider-
+  client features below the agent loop; the native provider stays minimal, deep provider features wrap the
+  official SDK behind the `Provider` seam only when a concrete need appears.
 - **Memory depth:** standalone doc-RAG `VectorStore` #1021, Scorer/Reranker seam #1020, auto-distillation
   write-path #1022, sub-agent memory model #1151, faster cosine #1018. (Durable/session-scoped MemoryStore #1003/#1140 shipped.)
 - **Compaction depth:** mid-turn compaction #1006, token-accurate estimator #1007.
