@@ -1,5 +1,5 @@
 import { hostClient } from "./api.js";
-import { createConversationStore } from "./conversation.js";
+import { createPanelStores } from "./stores.js";
 import { WatchStream } from "./watch.js";
 import { mobileOverlaysIsland } from "./MobileOverlays.js";
 
@@ -12,11 +12,12 @@ import { mobileOverlaysIsland } from "./MobileOverlays.js";
 
 async function boot(rootEl: HTMLElement): Promise<void> {
   const client = hostClient();
-  const store = createConversationStore(client);
+  const stores = createPanelStores(client);
 
   // Live event stream: replay from offset 0 then live, decoded to HostEvents and
-  // folded into the store. One subscription backs whichever layout is mounted.
-  const watch = new WatchStream(client, (ev) => store.ingest(ev));
+  // fanned to every panel projection. One subscription backs whichever layout is
+  // mounted, so a turn streamed once lands in all open panels.
+  const watch = new WatchStream(client, (ev) => stores.ingest(ev));
   watch.start();
   window.addEventListener("beforeunload", () => watch.stop());
 
@@ -25,7 +26,7 @@ async function boot(rootEl: HTMLElement): Promise<void> {
   void client
     .getStatus({})
     .then((st) => {
-      store.setStatus({ model: st.modelLabel, session: st.runId });
+      stores.conversation.setStatus({ model: st.modelLabel, session: st.runId });
       const line = document.getElementById("status-line");
       if (line) {
         const sess = st.runId ? ` · session ${st.runId}` : "";
@@ -35,14 +36,14 @@ async function boot(rootEl: HTMLElement): Promise<void> {
     .catch(() => {});
 
   if (rootEl.dataset.layout === "mobile") {
-    mobileOverlaysIsland(rootEl, store);
+    mobileOverlaysIsland(rootEl, stores);
     return;
   }
 
   const container = document.getElementById("dockview-container");
   if (!container) return;
   const { DockviewWorkspace } = await import("./DockviewWorkspace.js");
-  new DockviewWorkspace(container, store).mount();
+  new DockviewWorkspace(container, stores).mount();
 }
 
 // Wire the layout <select> (desktop dock vs mobile): switching reloads with the
