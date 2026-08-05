@@ -150,14 +150,17 @@ New submodule (`agent/web`, own go.mod, module `github.com/panyam/mcpkit/agent/w
 **Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `agent/web/protos/`, generated
 Go + Connect committed under `agent/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
 new `App.Subscribe` seam), unary `Submit` (turn), `Dispatch` (command → `CmdResult`), `RespondToAsk`
-(the E2 registry), and two trivial queries `ListSessions` + `GetStatus`. `servicekit/http` serves the
-placeholder shell + `/static` + the Connect handlers on one listener.
+(the E2 offset barrier), and two trivial queries `ListSessions` + `GetStatus`. `servicekit/http` serves
+the placeholder shell + `/static` + the Connect handlers on one listener.
 
 - **`App.Subscribe(ctx) <-chan HostEvent` (`agent/host/subscribe.go`)** — the async subscriber adapter
   E1 deferred. It replays the retained log from offset 0 then follows `Notify()`, on a drain goroutine
   scoped to ctx. A slow consumer cannot block `emit`: `emit` only `Append`s (non-blocking) and fans out
   to local observers, while the drain reads the retained log at its own pace, so back-pressure stays
   contained to the one subscriber and nothing is lost. Local observers stay synchronous (unchanged).
+  It also stamps the **ask id** — E2's event-log offset — onto the delivered `HostElicitRequest` copy
+  (the stored entry is emitted without it), so a remote surface reads the id off its Watch frame and
+  answers via `RespondToAsk(offset, …)`; the frame's `ask_id` is that offset, cast at the RPC boundary.
 - **Frame envelope, reconciled with A2**: `Frame{kind, payload bytes}` where `payload =
   json.Marshal(HostEvent)` — a 1:1 projection, no per-kind proto schema to drift. `Dispatch` reuses the
   same `{kind, json}` shape for `CmdResult`. The pointer-bearing kinds (`TaskStatus`, `Task`, the
