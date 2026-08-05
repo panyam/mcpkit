@@ -16,6 +16,12 @@ export interface DockPanelSpec {
     direction: "left" | "right" | "above" | "below" | "within";
     referencePanel?: PanelId;
   };
+  // initialWidth/initialHeight seed the split proportions for the first-run
+  // default layout so the panes open at sensible sizes (dockview's own default
+  // split leaves the reference panel too narrow). Users resize from there and
+  // the arrangement persists.
+  initialWidth?: number;
+  initialHeight?: number;
 }
 
 // DEFAULT_DOCK_LAYOUT is the first-run arrangement, applied only when no saved
@@ -23,11 +29,11 @@ export interface DockPanelSpec {
 // positioned relative to conversation) and appear for existing users via reconcile.
 export const DEFAULT_DOCK_LAYOUT: DockPanelSpec[] = [
   { id: "conversation", title: "Conversation" },
-  { id: "subagents", title: "Sub-agents", position: { direction: "right", referencePanel: "conversation" } },
-  { id: "timeline", title: "Activity", position: { direction: "below", referencePanel: "subagents" } },
+  { id: "subagents", title: "Sub-agents", position: { direction: "right", referencePanel: "conversation" }, initialWidth: 1000 },
+  { id: "timeline", title: "Activity", position: { direction: "below", referencePanel: "subagents" }, initialHeight: 430 },
   { id: "tools", title: "Tools & Offload", position: { direction: "within", referencePanel: "timeline" } },
   { id: "memory", title: "Memory", position: { direction: "within", referencePanel: "timeline" } },
-  { id: "budget", title: "Budget", position: { direction: "below", referencePanel: "conversation" } },
+  { id: "budget", title: "Budget", position: { direction: "below", referencePanel: "conversation" }, initialHeight: 470 },
 ];
 
 // DOCK_LAYOUT_KEY is the localStorage key the rearranged dockview layout persists

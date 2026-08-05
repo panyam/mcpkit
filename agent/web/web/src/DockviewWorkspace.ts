@@ -125,8 +125,22 @@ export class DockviewWorkspace {
 
   private buildDefaultLayout(): void {
     for (const spec of DEFAULT_DOCK_LAYOUT) {
-      this.dockview.addPanel({ id: spec.id, component: spec.id, title: spec.title, position: spec.position });
+      this.dockview.addPanel({
+        id: spec.id,
+        component: spec.id,
+        title: spec.title,
+        position: spec.position,
+        initialWidth: spec.initialWidth,
+        initialHeight: spec.initialHeight,
+      });
     }
+    // At mount the container may still be zero-width, so addPanel's initial
+    // proportions can collapse the reference (conversation) pane. Once a frame
+    // has laid the grid out, set the conversation column to a usable width; the
+    // onDidLayoutChange save then persists it. Fresh-layout only — a restored
+    // layout keeps the user's own sizing.
+    const conv = this.dockview.getPanel("conversation");
+    requestAnimationFrame(() => conv?.api.setSize({ width: 440 }));
   }
 
   // reconcile opens registry panels a later feature added since the layout was
