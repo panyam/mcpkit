@@ -247,7 +247,7 @@ func (a *App) onServerSkills(sc ServerConfig, c *client.Client) {
 	if c == nil || (sc.Skills != nil && !*sc.Skills) {
 		return
 	}
-	block, cat, err := loadSkillsForServer(c, sc.ID, sc.SkillsMode, sc.SkillsAllow, a.emit, a.tp)
+	block, cat, err := loadSkillsForServer(c, sc.ID, sc.SkillsMode, sc.SkillsAllow, func(ev HostEvent) { a.emit(ev) }, a.tp)
 	if err != nil {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("load skills for %s: %v", sc.ID, err)})
 		return
