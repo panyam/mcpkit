@@ -228,12 +228,30 @@ extended to delegate to two personas so a single demo turn populates every panel
 - Accept: during a demo (or `kitchen-sink`) run each panel reflects live agent state; adding a panel does
   not re-crowd existing users' saved layouts (reconcile). ✓
 
-### E6 (1199) — Multi-surface elicitation UX + symmetric submission
+### E6 (1199) — Multi-surface elicitation UX + symmetric submission — SHIPPED
 Wire E2's barrier end to end across web (`RespondToAsk`) and TUI so a real elicitation/approval
 broadcasts to all surfaces, first answer wins, others dismiss with "answered by <surface>". Any surface
 can submit a turn (turnMu already serializes); everyone watches it stream.
-- Accept: a `kitchen-sink` approval-ladder prompt answered in the browser dismisses the TUI prompt and
-  vice versa; two near-simultaneous turn submissions serialize cleanly and both surfaces see both turns.
+
+The web side is a projection off the one Watch stream, in `web/src/conversation.ts`:
+- **Retraction with a receipt.** A `HostElicitResolved{AskID, By}` retracts the shown prompt and, when
+  another surface answered, shows a receipt: `answered on terminal` (the terminal responder resolves as
+  `local`) or `answered in another browser tab` (a peer web surface resolves as `web`). A self-answer
+  just retracts, no receipt. The reducer keeps `activeAskId` after an optimistic retract and tracks the
+  offsets this tab answered, so the race where this tab clicked but another surface won first still
+  reads the correct receipt (`By` names the winner, not the clicker).
+- **Symmetric submission.** A `turn-begin` with no local submit pending is a turn from elsewhere; the
+  transcript tags it (`· from another surface`) on the streaming bubble and the committed turn. Local
+  turns are untagged. The origin badge is best-effort (two surfaces submitting in the same instant can
+  mis-attribute one cosmetic badge); control serialization is the ask barrier's job, not the badge's.
+- Vitest covers both reducers (`conversation.test.ts`): request → resolved-by-other → retracted +
+  receipt; the local-answer path; the this-tab-clicked-but-terminal-won race; stale-receipt clearing;
+  and the remote-vs-local origin tagging.
+- `--demo` gates the `researcher` delegate behind an approval `ask` and stands in a scripted terminal
+  responder (`demoElicitUI`, an 8s auto-accept), so a single browser demonstrates the prompt and the
+  cross-surface "answered on terminal" retraction with no second surface to script.
+- Accept: an approval-ladder prompt answered in the browser dismisses the TUI prompt and vice versa;
+  two near-simultaneous turn submissions serialize cleanly and both surfaces see both turns.
 
 ## Suggested slice order
 
