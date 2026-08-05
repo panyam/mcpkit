@@ -27,7 +27,7 @@ require (
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect
 	github.com/panyam/oneauth v0.1.36 // indirect
-	github.com/panyam/servicekit v0.1.2 // indirect
+	github.com/panyam/servicekit v0.1.3 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
