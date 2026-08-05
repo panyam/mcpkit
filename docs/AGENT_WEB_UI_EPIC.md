@@ -181,14 +181,27 @@ the placeholder shell + `/static` + the Connect handlers on one listener.
   `-race`). The serve binary serves the shell, `/static`, and the Connect endpoints (`GetStatus`
   returns the model label; `ListSessions` returns `failed_precondition` with no RunStore).
 
-### E4 (1197) — Frontend shell (DockView + Solid islands)
-Model on **`~/projects/diffpp/main/web`** (preferred over Agni): `dockview-core` v4, `tsappkit-solid`
-islands, `@panyam/massrelay` + Connect-Web clients from the E3 proto, and **`MobileOverlays` for the
-mobile mode** (the dockview-vs-mobile mode switch the user wants). Saved-layout reconcile carries over.
-First slice: one Conversation panel streaming the live turn + a prompt box that `Submit`s, in both the
-dockview desktop mode and the mobile-overlay mode.
-- Accept: the browser renders live turns from the same `App` the TUI is on; the layout persists across
-  reload; the mobile mode presents the same panel as an overlay.
+### E4 (1197) — Frontend shell (DockView + Solid islands) — SHIPPED
+Modeled on **`~/projects/diffpp/main/web`**: `dockview-core` v4, `tsappkit-solid` islands, Connect-Web
+clients generated from the E3 proto, and **`MobileOverlays` for the mobile mode** (the dockview-vs-mobile
+switch). Saved-layout reconcile carries over. The frontend lives in `agent/web/web/`; the built esbuild
+bundle is committed under `agent/web/static/` (Go embeds it, so `just test-agent` needs no Node step).
+
+**Scope change from the plan: massrelay is deferred.** The browser consumes the E3 Connect `Watch`
+server-stream **directly** via connect-web (`web/src/watch.ts` — decode each `Frame` payload to a
+`HostEvent`, reconnect with backoff; replay-from-0 makes a re-subscription safe). Reintroducing massrelay
+for a shared multi-tab room is a later follow-up, not needed for the single-surface live stream.
+
+What shipped: the placeholder shell is replaced by a server-rendered shell (`shell.go`, stdlib
+`html/template` — island holes + `data-layout`, no goapplib/templar dep for one static page); one
+**Conversation** panel (streams the live turn off `Watch`, a prompt box that `Submit`s, an approval prompt
+on `HostElicitRequest` answered via `RespondToAsk(AskID, …)`); a framework-neutral panel registry +
+saved-layout reconcile (`web/src/dock.ts`) ready for E5 to add panels; the DockView desktop layout and the
+mobile-overlay layout over one shared store; and a `--demo` mode on `cmd/agentweb` (offline streaming
+provider) + `agent/web/run.sh` as the runnable proof. Unit tests (vitest) cover Frame-decode/dispatch, the
+event fold, and the dock reconcile.
+- Accept (met): the browser renders live turns from the same `App`; the layout persists across reload
+  (localStorage); the mobile mode presents the same panel as an overlay.
 
 ### E5 (1198) — Observability panels
 The payoff. Each panel is a Solid island fed by a Frame projection, shipped incrementally:
