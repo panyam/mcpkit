@@ -55,21 +55,23 @@ function snippet(s: string, n = 160): string {
 export function createToolStore(): ToolStore {
   const [calls, setCalls] = createSignal<ToolCallEntry[]>([]);
   let ring: ToolCallEntry[] = [];
-  const byId = new Map<string, ToolCallEntry>();
+  const idx = new Map<string, number>();
 
-  const emit = () => setCalls([...ring]);
-
-  // upsert finds the entry for a call id, creating one if a terminal event
-  // arrives without a preceding tool-begin (defensive over a replay boundary).
-  const upsert = (id: string, name: string): ToolCallEntry => {
-    let e = byId.get(id);
-    if (!e) {
-      e = { id, name, args: "", status: "running", preview: "", offloaded: false, ref: "" };
-      byId.set(id, e);
-      ring = [...ring, e];
+  // update writes a NEW entry object for id (creating one if a terminal event
+  // arrives without a preceding tool-begin, defensive over a replay boundary),
+  // then re-emits. New objects, not in-place mutation: Solid's <For> keys rows
+  // by reference, so a mutated-in-place entry would never re-render.
+  const update = (id: string, name: string, patch: Partial<ToolCallEntry>): void => {
+    const base: ToolCallEntry =
+      idx.has(id) ? ring[idx.get(id)!] : { id, name: name || "tool", args: "", status: "running", preview: "", offloaded: false, ref: "" };
+    const next = { ...base, ...patch };
+    if (name && !next.name) next.name = name;
+    if (idx.has(id)) ring = ring.map((e, i) => (i === idx.get(id)! ? next : e));
+    else {
+      idx.set(id, ring.length);
+      ring = [...ring, next];
     }
-    if (name && !e.name) e.name = name;
-    return e;
+    setCalls(ring);
   };
 
   const ingest = (ev: HostEvent): void => {
@@ -78,45 +80,35 @@ export function createToolStore(): ToolStore {
     if (!re) return;
     const tc = re.toolCall;
     const id = tc?.id ?? "";
+    const name = tc?.name ?? "tool";
     switch (re.kind) {
-      case EventKind.ToolBegin: {
-        if (!id) return;
-        const e = upsert(id, tc?.name ?? "tool");
-        e.args = tc?.args === undefined ? "" : snippet(JSON.stringify(tc.args), 200);
-        emit();
+      case EventKind.ToolBegin:
+        if (id) update(id, name, { args: tc?.args === undefined ? "" : snippet(JSON.stringify(tc.args), 200) });
         break;
-      }
       case EventKind.ToolEnd: {
         if (!id) return;
-        const e = upsert(id, tc?.name ?? "tool");
         const text = resultText(re.toolResult);
-        e.status = re.toolResult?.isError ? "error" : "ok";
-        e.preview = snippet(text);
         const ref = detectOffload(text);
-        if (ref) {
-          e.offloaded = true;
-          e.ref = ref;
-        }
-        emit();
+        update(id, name, {
+          status: re.toolResult?.isError ? "error" : "ok",
+          preview: snippet(text),
+          offloaded: ref !== "",
+          ref,
+        });
         break;
       }
       case EventKind.ToolError:
-        if (id) {
-          upsert(id, tc?.name ?? "tool").status = "error";
-          byId.get(id)!.preview = snippet(re.error ?? "");
-          emit();
-        }
+        if (id) update(id, name, { status: "error", preview: snippet(re.error ?? "") });
         break;
       case EventKind.ToolDenied:
-      case EventKind.ToolCancelled:
-      case EventKind.ToolUnavailable: {
-        if (!id) return;
-        const e = upsert(id, tc?.name ?? "tool");
-        e.status = re.kind === EventKind.ToolDenied ? "denied" : re.kind === EventKind.ToolCancelled ? "cancelled" : "unavailable";
-        e.preview = snippet(re.reason ?? "");
-        emit();
+        if (id) update(id, name, { status: "denied", preview: snippet(re.reason ?? "") });
         break;
-      }
+      case EventKind.ToolCancelled:
+        if (id) update(id, name, { status: "cancelled", preview: snippet(re.reason ?? "") });
+        break;
+      case EventKind.ToolUnavailable:
+        if (id) update(id, name, { status: "unavailable", preview: snippet(re.reason ?? "") });
+        break;
     }
   };
 
@@ -126,7 +118,7 @@ export function createToolStore(): ToolStore {
     ingest,
     reset: () => {
       ring = [];
-      byId.clear();
+      idx.clear();
       setCalls([]);
     },
   };
