@@ -53,7 +53,7 @@ just tag-push vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; pr
 
 ## Sub-Modules
 
-`agent/`, `agent/host/`, `agent/store/redis/`, `agent/store/gorm/`, `ext/auth/`, `ext/tasks/`, `ext/ui/`, `ext/otel/`, `experimental/ext/protogen/`, `experimental/ext/agents/`, `experimental/ext/agents/clients/go/`, `docs/site/` have separate `go.mod` — `just test` does NOT cover them. Run `just tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
+`agent/`, `agent/host/`, `agent/web/`, `agent/store/redis/`, `agent/store/gorm/`, `ext/auth/`, `ext/tasks/`, `ext/ui/`, `ext/otel/`, `experimental/ext/protogen/`, `experimental/ext/agents/`, `experimental/ext/agents/clients/go/`, `docs/site/` have separate `go.mod` — `just test` does NOT cover them. Run `just tidy-all` after touching `core/` imports. `docs/site/` is the GitHub Pages renderer (issue 508); it is a tool, not a library, and is excluded from `SUB_MODS_TO_TAG`.
 
 ## Constraints
 
