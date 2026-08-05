@@ -32,6 +32,18 @@ type Config struct {
 	MaxTreeSteps  int `json:"maxTreeSteps,omitempty"`
 	MaxTreeTokens int `json:"maxTreeTokens,omitempty"`
 
+	// MaxEventLogRetention bounds the in-memory session event log (the
+	// gocurrent.Queue emit appends to and Subscribe replays). Zero (the
+	// default) keeps the log unbounded, preserving the pre-bound behavior for
+	// embedders that never need eviction. A positive value caps the retained
+	// window to that many entries, evicting the oldest as the session runs so
+	// a long-lived process bounds its memory. Eviction is lossless for a
+	// persisted session: Subscribe deep-replays turns already written to the
+	// RunStore, so a subscriber attaching after eviction still sees full
+	// history. Set it generously enough that a single turn never exceeds the
+	// window (agentchat defaults to 100000 via --max-event-log).
+	MaxEventLogRetention int `json:"maxEventLogRetention,omitempty"`
+
 	// Interruptible opts the main agent's turn into breaking the fan-out join
 	// barrier when a sub-agent raises a Signal mid-flight (issue 1167): the first
 	// signal cancels the remaining in-flight calls and the model re-plans with
