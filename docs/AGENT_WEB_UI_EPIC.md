@@ -168,6 +168,19 @@ separate pending-ask registry and reuses the log's tested first-writer-wins barr
 surface can even call `eventLog.Resolution(off)` to see an ask was already answered. Two small costs:
 `AwaitResolution` is not ctx-cancellable, so a cancelled turn resolves the ask itself to unblock the
 awaiter; and `emit` now returns the append offset.
+
+**Invariant — at most one pending input at a time.** The barrier per offset can in principle handle N
+concurrent pending asks, but there is never more than one: the `ElicitationCoordinator` FIFO-serializes
+*every* ask (elicitations and approvals alike) onto one UI via a single baton, and `barrierElicit` runs
+*inside* that baton, so a second ask (even from a parallel tool call in the same turn) blocks in the
+coordinator and its `HostElicitRequest` is never even emitted until the first resolves. The log is
+therefore always `… req_A … resolved_A … req_B …`, never two live asks. So the consumer side never has
+a queue of pending inputs to reconcile, and the FIFO stream stays non-blocking for consumers (they
+render the ask and keep draining; only the producer's tool call blocks). The one scenario that would
+create concurrent inputs is multi-user / multi-surface routing (different asks to different users, the
+issue-1157 mediator's territory) — and the per-offset barrier already scales to that with zero change,
+so keying resolution on the log offset is both simpler now and the right bet later. The load-bearing
+fact is the coordinator invariant; the barrier does not depend on it.
 - Accept: two responders on one ask, first wins, loser cancelled, resolved event names the winner;
   out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
   `-race`.
