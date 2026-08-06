@@ -567,11 +567,18 @@ setup-tools:
     go install honnef.co/go/tools/cmd/staticcheck@latest
     go install github.com/gitleaks/gitleaks/v8@latest
 
-# Install git hooks (runs scripts/pre-push-hook.sh — skips tests when only test-report artifacts changed)
+# Install git hooks (pre-push runs tests; pre-commit rejects compiled binaries)
 setup-hooks:
     @cp scripts/pre-push-hook.sh .git/hooks/pre-push
     @chmod +x .git/hooks/pre-push
     @echo "Installed .git/hooks/pre-push -> scripts/pre-push-hook.sh"
+    @cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
+    @chmod +x .git/hooks/pre-commit
+    @echo "Installed .git/hooks/pre-commit -> scripts/pre-commit-hook.sh"
+
+# CI gate — fail if any tracked file is a compiled executable
+check-no-binaries:
+    @./scripts/check-no-binaries.sh
 
 # Full development setup
 setup: setup-tools setup-hooks

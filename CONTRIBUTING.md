@@ -16,8 +16,23 @@ examples, docs, and new SEP implementations — are all welcome.
 ```bash
 git clone https://github.com/panyam/mcpkit
 cd mcpkit
+just setup-hooks   # recommended — see below
 just test          # core/server/client/testutil unit tests
 ```
+
+`just setup-hooks` installs two hooks. `pre-push` runs the test suite.
+`pre-commit` rejects compiled executables and files over 5 MB.
+
+The pre-commit hook is worth installing. A bare `go build` in a module
+directory drops an executable named after that directory, with no extension,
+which `git add -A` then sweeps into a commit. Several of these accumulated
+before anyone noticed, and removing them needed a history rewrite that took
+the repo from 466 MB to 23 MB. The hook detects them by magic bytes rather
+than filename, since these files have no distinguishing name.
+
+If a binary genuinely belongs in a commit, `git commit --no-verify` bypasses
+it. CI runs the same check over the whole tree (`just check-no-binaries`), so
+hooks are a fast local signal rather than the enforcement point.
 
 Go 1.26+ and [`just`](https://github.com/casey/just) are required. The base
 conformance suite additionally needs Node.js 22+. The task runner is moving

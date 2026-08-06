@@ -20,6 +20,13 @@ jobs:
         with:
           node-version: '22'
 
+      # Enforces what scripts/pre-commit-hook.sh checks locally. The hook is
+      # opt-in (just setup-hooks) and bypassable with --no-verify, so this is
+      # the gate that actually keeps binaries off main. Runs before the tests
+      # because it is ~1s and its failure is unambiguous.
+      - name: No committed binaries
+        run: ./scripts/check-no-binaries.sh
+
       - name: Run unit tests
         run: go test ./... -v
 

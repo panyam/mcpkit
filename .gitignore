@@ -13,6 +13,13 @@ bin
 *.out
 coverage.html
 
+# Session handoff notes — written by the /handoff workflow, transient by
+# design and personal to whoever generated them. Twice swept into unrelated
+# commits by `git add -A` before this entry existed. Use `git add -f` to
+# commit one deliberately.
+HANDOFF.md
+HANDOFF_*.md
+
 # Test-run reports — written by `make test*`, transient by design.
 # Kept untracked so re-running locally doesn't show up as drift.
 tests/reports/*.log
