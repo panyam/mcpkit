@@ -16,7 +16,7 @@ REPORT_DIR := "tests/reports"
 # Discovers every sub-module go.mod (root excluded). Kept as a command string
 # (not a backtick expression) so `find` only runs when a consuming recipe
 # executes, not on every just invocation. Consumers: tidy-all, bump-root.
-SUB_MODS_FIND := "find . -name go.mod -not -path '*/node_modules/*' -not -path './go.mod' | sed 's|^\\./||;s|/go.mod$||' | sort"
+SUB_MODS_FIND := "find . -name go.mod -not -path '*/node_modules/*' -not -path '*/.claude/*' -not -path './go.mod' | sed 's|^\\./||;s|/go.mod$||' | sort"
 
 # Keycloak (for interop tests)
 KC_IMAGE := "quay.io/keycloak/keycloak:26.0"
