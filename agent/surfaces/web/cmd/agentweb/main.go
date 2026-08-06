@@ -21,7 +21,9 @@ import (
 
 	skhttp "github.com/panyam/servicekit/http"
 
+	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/agent/host"
+	agentsurfaces "github.com/panyam/mcpkit/agent/surfaces"
 	web "github.com/panyam/mcpkit/agent/surfaces/web"
 )
 
@@ -29,17 +31,40 @@ func main() {
 	addr := flag.String("addr", ":8090", "address to listen on")
 	configPath := flag.String("config", "", "path to a host config JSON (servers, model, policies)")
 	demo := flag.Bool("demo", false, "run over an offline streaming demo provider (no config needed)")
+	sessionStore := flag.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off, sessions live only in memory)")
 	flag.Parse()
 
+	// A configured --session-store makes web sessions durable: session_id is a
+	// run id, and a session dropped by a restart rehydrates from the store on
+	// the next request. Empty leaves the manager as a pure in-memory cache.
+	store, err := agentsurfaces.RunStoreFromSpec(*sessionStore)
+	if err != nil {
+		log.Fatalf("agentweb: %v", err)
+	}
+
 	// One factory builds a fresh App per web session from the same config, so a
-	// CreateSession over the wire mints an independent conversation. The
+	// CreateSession over the wire mints an independent conversation. Every App
+	// attaches the same store (buildApp), so a session it hosts persists. The
 	// SessionManager holds them all; its default session (created at startup)
 	// backs an empty session_id, keeping the single-surface flow unchanged.
-	factory := func(ctx context.Context) (*host.App, error) { return buildApp(*configPath, *demo) }
-	mgr := web.NewSessionManager(factory)
+	factory := func(ctx context.Context) (*host.App, error) { return buildApp(*configPath, *demo, store) }
+	var mgr *web.SessionManager
+	if store != nil {
+		mgr = web.NewSessionManagerWithStore(factory, store)
+	} else {
+		mgr = web.NewSessionManager(factory)
+	}
 	defaultApp, err := factory(context.Background())
 	if err != nil {
 		log.Fatalf("agentweb: %v", err)
+	}
+	if store != nil {
+		// Give the default session a run too, so single-surface use (an empty
+		// session_id) also survives a restart. AttachRun is create-or-resume, so
+		// a restart with the same store resumes the prior default conversation.
+		if err := defaultApp.AttachRun(context.Background(), web.DefaultSessionID); err != nil {
+			log.Fatalf("agentweb: attaching default session run: %v", err)
+		}
 	}
 	mgr.SetDefault(defaultApp)
 	defer mgr.CloseAll()
@@ -55,8 +80,15 @@ func main() {
 // session and every CreateSession. In demo mode it wires the offline demo
 // provider; otherwise it loads the host config. The web surface renders in the
 // browser off the event stream, so the App's own terminal renderer is discarded
-// (output to io.Discard) — events reach clients through Subscribe / Watch.
-func buildApp(configPath string, demo bool) (*host.App, error) {
+// (output to io.Discard) — events reach clients through Subscribe / Watch. A
+// non-nil store is attached to every App (host.WithRunStore) so each session,
+// including the default, persists its turns — the invariant the store-backed
+// SessionManager relies on when it rehydrates a dropped session.
+func buildApp(configPath string, demo bool, store agent.RunStore) (*host.App, error) {
+	var storeOpt []host.AppOption
+	if store != nil {
+		storeOpt = append(storeOpt, host.WithRunStore(store))
+	}
 	if demo {
 		// Wire two delegate personas + a low offload threshold so a demo turn
 		// exercises the whole observability surface: the scripted provider fans
@@ -78,8 +110,10 @@ func buildApp(configPath string, demo bool) (*host.App, error) {
 			Approval: &host.ApprovalConfig{Mode: "allow", Rules: map[string]string{"researcher": "ask"}},
 		}
 		return host.NewApp(cfg, io.Discard, strings.NewReader(""),
-			host.WithProvider(demoProvider{}),
-			host.WithElicitationUI(demoElicitUI),
+			append(storeOpt,
+				host.WithProvider(demoProvider{}),
+				host.WithElicitationUI(demoElicitUI),
+			)...,
 		)
 	}
 	if configPath == "" {
@@ -89,5 +123,5 @@ func buildApp(configPath string, demo bool) (*host.App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
-	return host.NewApp(cfg, io.Discard, strings.NewReader(""))
+	return host.NewApp(cfg, io.Discard, strings.NewReader(""), storeOpt...)
 }
