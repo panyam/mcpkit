@@ -119,6 +119,26 @@ func WithElicitationURLSupport() ClientOption {
 	return func(c *Client) { c.elicitationURLSupport = true }
 }
 
+// WithElicitationValidation controls whether accepted elicitation responses are
+// checked against the server's requestedSchema before being sent. Enabled by
+// default, mirroring the server, which validates inbound tool and prompt
+// arguments against their advertised schemas.
+//
+// The client is the only party that sees both the schema and the user's input,
+// so it is the only one that can catch a mismatch. When validation fails the
+// request is answered with -32602 and a structured error list rather than
+// forwarding content the server asked not to receive.
+//
+// A malformed or uncompilable schema is never an error: the defect is the
+// server's and the user answered in good faith, so validation is skipped.
+//
+// Pass false to send whatever the handler produced:
+//
+//	c := client.NewClient(url, info, client.WithElicitationValidation(false))
+func WithElicitationValidation(enabled bool) ClientOption {
+	return func(c *Client) { c.skipElicitationValidation = !enabled }
+}
+
 // WithElicitationCompleteHandler registers a handler for
 // notifications/elicitation/complete notifications (SEP-1036).
 func WithElicitationCompleteHandler(h ElicitationCompleteHandler) ClientOption {
@@ -418,6 +438,7 @@ type Client struct {
 	samplingHandler            SamplingHandler
 	elicitationHandler         ElicitationHandler
 	elicitationURLSupport      bool
+	skipElicitationValidation  bool
 	fileInputs                 bool
 	elicitationCompleteHandler ElicitationCompleteHandler
 	rootsHandler               RootsHandler
@@ -1027,6 +1048,17 @@ func (c *Client) dispatchServerRequest(ctx context.Context, req *core.Request) *
 		if result.Action == "accept" {
 			defaults := extractElicitationDefaults(params.RequestedSchema)
 			result.Content = mergeElicitationDefaults(result.Content, defaults)
+
+			// Validate what we are about to send against the schema the
+			// server asked for. Runs after the defaults merge because a
+			// schema-declared default can be what satisfies a `required`
+			// property. Opt out with WithElicitationValidation(false).
+			if !c.skipElicitationValidation {
+				if ve := validateElicitationContent(params.RequestedSchema, result.Content); ve != nil {
+					return core.NewErrorResponseWithData(req.ID, core.ErrCodeInvalidParams,
+						"elicitation response does not match requestedSchema", ve)
+				}
+			}
 		}
 		return core.NewResponse(req.ID, result)
 

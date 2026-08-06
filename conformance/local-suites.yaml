@@ -51,9 +51,10 @@ suites:
       default_path: ../conf-upstream-main
 
   - suite: testconf-file-inputs
-    sep: SEP-2356 File inputs
+    sep: SEP-2356 File inputs (withdrawn upstream)
     stage: 8f
     status: PASS
+    tracking: "mcpkit 827"
     source:
       repo: panyam/mcpconformance
       branch: pending

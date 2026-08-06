@@ -96,11 +96,13 @@ mcpkit passes the [official MCP conformance suite](https://github.com/modelconte
 | MRTR | [SEP-2322](https://github.com/modelcontextprotocol/conformance) | **3/3** negative (upstream) |
 | Stateless wire | [SEP-2575](https://github.com/modelcontextprotocol/conformance) | **30/30** (upstream) |
 | List-TTL | SEP-2549 | **5/5** |
-| File-Inputs | SEP-2356 | **7/7** |
+| File-Inputs | SEP-2356 (withdrawn upstream, see below) | **7/7** |
 | Skills | SEP-2640 | fixture-driven |
 | Keycloak interop | — | **12/12** |
 
 Tasks v2, MRTR, and the SEP-2575 stateless wire all run against [`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance) `main` directly (merged upstream). The full per-SEP rollup is published at [panyam.github.io/mcpkit/conformance](https://panyam.github.io/mcpkit/conformance/).
+
+**On SEP-2356:** the working group closed it on 2026-06-26 in favour of SEP-2631 (File Objects and Transfer), which is still in draft. The file-input surface mcpkit ships and the scenarios above continue to work and are still exercised in CI; the row is kept so the behaviour stays covered, not as a claim of conformance to a live proposal. Migration to SEP-2631 is tracked in issue 827.
 
 Three artifacts describe mcpkit's conformance posture at increasing granularity:
 
