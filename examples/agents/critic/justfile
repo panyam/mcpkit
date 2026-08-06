@@ -1,7 +1,19 @@
 # critic — a second model watches the primary agent's turns and injects graded
 # steering notes, composed entirely from public primitives (issue 1148).
+#
+# Surfaces:
+#   just agent   # deterministic scripted scenario, no LLM (the golden test)
+#   just serve   # the ops MCP server on :8786 (for chat / web)
+#   just chat    # agentchat CLI against config.json (needs just serve)
+#   just web     # agentweb browser surface against config.json (needs just serve)
+# config.json drives the primary agent + server; the critic loop itself is
+# code-level composition (see README) and runs only under `just agent` / `just demo`.
 import '../common.just'
 
 # Show available recipes
 default:
     @just --list --unsorted
+
+# Serve the ops MCP server (run_shell) on :8786.
+serve:
+    go run . --serve --addr :8786

@@ -1,6 +1,18 @@
 # multi-agent — Phase 3 composition: sub-agents-as-tools + handoff.
+#
+# Surfaces:
+#   just agent   # deterministic scripted scenario, no LLM (the golden test)
+#   just serve   # the demo MCP server (web_search + run_code) on :8785
+#   just chat    # agentchat CLI against config.json (needs just serve)
+#   just web     # agentweb browser surface against config.json (needs just serve)
+# config.json is the declarative host counterpart (subAgents personas) to the
+# hand-wired composition the golden scenario runs; see README.
 import '../common.just'
 
 # Show available recipes
 default:
     @just --list --unsorted
+
+# Serve the demo MCP server (web_search + run_code) on :8785.
+serve:
+    go run . --serve --addr :8785
