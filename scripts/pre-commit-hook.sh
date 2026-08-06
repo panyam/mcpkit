@@ -52,14 +52,23 @@ while IFS= read -r f; do
     blob=$(git rev-parse ":$f" 2>/dev/null) || continue
 
     # Magic bytes, read from the staged blob:
-    #   7f454c46  ELF        (Linux)
-    #   cffaedfe  Mach-O 64  (macOS, little-endian)
-    #   cefaedfe  Mach-O 32
+    #   7f454c46  ELF          (Linux)
+    #   cffaedfe  Mach-O 64    (macOS, little-endian)
+    #   cefaedfe  Mach-O 32    (little-endian)
+    #   feedfacf  Mach-O 64    (big-endian, cross-compiled)
+    #   feedface  Mach-O 32    (big-endian)
     #   cafebabe  Mach-O universal / Java class
-    #   4d5a      MZ         (Windows PE)
+    #   4d5a      MZ           (Windows PE)
+    #   0061736d  wasm         (GOOS=js GOARCH=wasm)
+    #   213c6172  !<arch>      (ar static archive, -buildmode=archive / cgo)
+    #
+    # The last four came from probing the check with one file per format: an
+    # ELF/Mach-O-LE/PE-only list let big-endian Mach-O, wasm, and ar archives
+    # through. wasm matters here because this repo has a web surface, so a
+    # js/wasm build target is not hypothetical.
     magic=$(git cat-file blob "$blob" 2>/dev/null | od -An -tx1 -N4 | tr -d ' \n')
     case "$magic" in
-        7f454c46|cffaedfe|cefaedfe|cafebabe|4d5a*)
+        7f454c46|cffaedfe|cefaedfe|feedfacf|feedface|cafebabe|4d5a*|0061736d|213c6172)
             bad_exec="$bad_exec  $f\n"
             continue
             ;;

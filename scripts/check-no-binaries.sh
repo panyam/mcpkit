@@ -19,9 +19,12 @@ found=""
 # -z + tr so paths with spaces survive.
 for f in $(git ls-files -z | tr '\0' '\n'); do
     [ -f "$f" ] || continue
+    # ELF / Mach-O (both byte orders) / universal / PE / wasm / ar archive.
+    # Kept in sync with scripts/pre-commit-hook.sh, which documents each byte
+    # sequence and why it is listed.
     magic=$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d ' \n')
     case "$magic" in
-        7f454c46|cffaedfe|cefaedfe|cafebabe|4d5a*)
+        7f454c46|cffaedfe|cefaedfe|feedfacf|feedface|cafebabe|4d5a*|0061736d|213c6172)
             found="$found  $f\n"
             ;;
     esac
