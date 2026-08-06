@@ -6,8 +6,8 @@ The root module (`core/`, `server/`, `client/`) stays dependency-light. Heavier 
 
 ## Update cadence
 
-- Dependabot (`.github/dependabot.yml`) opens weekly update PRs for the root module, the `ext/*` sub-modules, and GitHub Actions.
-- Sub-modules not covered by Dependabot are swept manually with `just tidy-all`, which runs whenever `core/` imports change and before every release.
+- Dependabot (`.github/dependabot.yml`) opens weekly update PRs for the root module, every published library and binary sub-module (`agent/*`, `cmd/*`, `ext/*`, `stores/*`, `experimental/ext/*`), the two shipped npm trees (`ext/ui/assets`, `agent/web/web`), and GitHub Actions.
+- Two categories are deliberately outside Dependabot's scope: modules under `examples/`, which are demos rather than modules anyone imports (~60 of them would bury the signal), and the `tests/*` harnesses, which are tagged only to keep the release tag set consistent. Both are still swept by `just tidy-all` and, more importantly, still scanned by `just vulncheck`, which loops over the full `SUB_MODS_TO_TAG` set. Freshness PRs are scoped to what users consume; vulnerability scanning is not scoped at all.
 - Cross-module pins are bumped in lock-step. For example, a `oneauth` bump touches all dependent modules in one PR so CI's module-resolution stays consistent.
 
 ## Security updates
