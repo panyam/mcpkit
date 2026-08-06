@@ -290,8 +290,26 @@ lint: ## Run staticcheck (install: go install honnef.co/go/tools/cmd/staticcheck
 # Security audit
 # =============================================================================
 
-vulncheck: ## Check dependencies for known vulnerabilities
-	govulncheck ./...
+# `govulncheck ./...` is module-scoped and does NOT descend into nested modules,
+# so the root scan alone left every published sub-module unscanned. Mirrors the
+# `just vulncheck` recipe; examples stay out of scope.
+vulncheck: ## Check dependencies for known vulnerabilities (root + published sub-modules)
+	@failed=""; \
+	echo "==> govulncheck root"; \
+	govulncheck ./... || failed="$$failed root"; \
+	for mod in $(SUB_MODS_TO_TAG); do \
+		if [ -f "$$mod/go.mod" ]; then \
+			echo ""; \
+			echo "==> govulncheck $$mod"; \
+			(cd $$mod && govulncheck ./...) || failed="$$failed $$mod"; \
+		fi; \
+	done; \
+	echo ""; \
+	if [ -n "$$failed" ]; then \
+		echo "=== govulncheck FAILED in:$$failed ==="; \
+		exit 1; \
+	fi; \
+	echo "=== govulncheck clean: root + published sub-modules ==="
 
 seccheck: ## Run gosec security scanner (install: go install github.com/securego/gosec/v2/cmd/gosec@latest)
 	gosec -quiet -severity=medium ./...
