@@ -32,6 +32,24 @@ demo:
 # Alias for demo.
 run: demo
 
+# Alias for demo (the agentchat CLI surface).
+chat: demo
+
+# agentweb uses the config's active connection (ACTIVE/EXPORTER are agentchat-only);
+# ADDR overrides the listen address (:8090). Needs `just serve`.
+# Launch the supervisor over the BROWSER surface (agentweb) against the config.
+web:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    DIR="{{justfile_directory()}}"
+    ROOT="$(cd "$DIR/../../.." && pwd)"
+    if ! (exec 3<>"/dev/tcp/localhost/8795") 2>/dev/null; then
+        echo "roster server not reachable on :8795 -> start it first: just serve" >&2
+        exit 1
+    fi
+    cd "$ROOT/agent/web"
+    exec go run ./cmd/agentweb --config "$DIR/deep-agent-supervisor.json" --addr "${ADDR:-:8090}"
+
 # Same as demo, but the alt-screen notebook UI (foldable cells make the
 # supervisor -> specialist delegation easy to follow).
 note:

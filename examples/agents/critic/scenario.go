@@ -21,6 +21,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http/httptest"
 	"strings"
 
@@ -48,6 +49,14 @@ func buildServer() *server.Server {
 			return "ran: " + in.Cmd, nil
 		}))
 	return srv
+}
+
+// serve runs the ops server as a standalone streamable-HTTP MCP server so the
+// live chat/web surfaces (config.json points at it) have a real tool to drive.
+// The scripted scenario uses the same buildServer over httptest instead.
+func serve(addr string) error {
+	log.Printf("critic demo server on http://localhost%s/mcp", addr)
+	return buildServer().Run(addr)
 }
 
 // primaryScript is the primary model's scripted side: turn 1 runs an
@@ -96,10 +105,16 @@ func runScenario(out *syncWriter, primary, criticProvider agent.Provider) (*runR
 	}
 	primaryStub, _ := primary.(*agent.StubProvider)
 
-	cfg := &host.Config{
-		Model:   host.ModelConfig{BaseURL: "http://stub", Model: "stub"},
-		Servers: []host.ServerConfig{{ID: "ops", URL: ts.URL + "/mcp"}},
+	// Load the SAME config.json the live chat/web surfaces use (instructions,
+	// the ops server), then point its server at the in-process httptest
+	// instance for the deterministic run. config.json's model is bypassed by
+	// WithProvider (the scripted StubProvider) below; the critic loop itself is
+	// code-level composition and has no config.json representation (see README).
+	cfg, err := host.LoadConfig("config.json")
+	if err != nil {
+		return nil, err
 	}
+	cfg.Servers[0].URL = ts.URL + "/mcp"
 
 	// The observer hands us the primary's per-turn transcript delta. This is
 	// the whole "watch the turn stream" half — entirely public API.

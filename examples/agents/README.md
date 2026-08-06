@@ -4,13 +4,32 @@ Agent-focused examples grouped together, sharing a common demo harness.
 
 - **`agent-async`** — an agent managing async work (events + tasks) through chat.
 - **`multi-agent`** — Phase 3 composition: sub-agents-as-tools + handoff.
+- **`critic`** — a second model watches the primary agent's turns and injects graded steering notes.
+- **`deep-agent-supervisor`** — a supervisor over a server-advertised roster of specialist agents.
+- **`kitchen-sink`** — every agent feature wired at once.
 
-## Running
+## One config per example, shared across surfaces
 
-Each example is deterministic offline (`just agent` — scripted StubProviders,
-no LLM). To drive it with a live model, `just demo` resolves the model and
-endpoint from `llm.json` (or a gitignored `llm.local.json` override) when
-`MODEL` / `BASE_URL` aren't set.
+Every example runs off **one host config** that all its surfaces load:
+
+| Recipe | Surface | What it does |
+|---|---|---|
+| `just agent` | scripted | deterministic StubProviders, no LLM (the golden test) |
+| `just demo` | CLI (live) | a live model against the same server; resolves model/endpoint from `llm.json` |
+| `just serve` | server | boots the demo MCP server the live surfaces point at |
+| `just chat` | CLI (`agentchat`) | the terminal surface, `--config <config>.json` |
+| `just web` | browser (`agentweb`) | the browser surface, `--config <config>.json --addr :8090` |
+
+`chat` and `web` are shared recipes in `common.just`, parameterized by `CONFIG`
+(default `config.json`) and `ADDR`. The already-config-driven examples
+(`deep-agent-supervisor`, `kitchen-sink`, `examples/playground`) carry their own
+variable-driven justfiles and gained the same `web` surface.
+
+The three code-driven examples (`agent-async`, `multi-agent`, `critic`) each
+ship a `config.json` too. Their deterministic scenario loads that same
+`config.json` and keeps only the piece JSON cannot express in code — the
+scripted `StubProvider` (and, for `multi-agent`/`critic`, the hand-wired
+composition). Each example's README documents its own split.
 
 ## `llm.json` — providers, no secrets
 
