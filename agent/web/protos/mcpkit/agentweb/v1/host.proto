@@ -13,6 +13,15 @@ option go_package = "github.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v
 //   - Dispatch      — a slash command (App.Dispatch -> CmdResult).
 //   - RespondToAsk  — the multi-surface ask barrier (App.RespondToAsk).
 //   - queries       — point-to-point reads of host state (ListSessions, GetStatus).
+//
+// One agentweb server can host many concurrent conversations, each its own
+// live host.App. Every request carries a session_id routing field on its
+// envelope that selects the App it acts on (an empty session_id routes to a
+// default session created at startup, so a client that predates multi-session
+// keeps working unchanged). The web-session lifecycle RPCs (CreateSession,
+// ListWebSessions, CloseSession) mint, enumerate, and tear down those Apps.
+// Note session_id is a routing field on each request, never part of an event
+// payload — the Frame stays event-flat (agent/CONSTRAINTS A2).
 service HostService {
   // Watch streams host events: the retained backlog replayed from offset 0,
   // then live events, until the client disconnects. It drains App.Subscribe;
@@ -36,9 +45,28 @@ service HostService {
   // GetStatus returns the active model label and run id (App.ModelLabel /
   // App.RunID) — the status-line read.
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+
+  // CreateSession mints a fresh conversation (a new host.App built from the
+  // server's config) and returns its session_id. Subsequent requests carrying
+  // that session_id route to the new App.
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+
+  // ListWebSessions returns the session_ids of every live web session (App)
+  // the server currently hosts, including the default one. This is the roster
+  // of concurrent conversations, distinct from ListSessions (which pages the
+  // persisted RunStore runs inside one App).
+  rpc ListWebSessions(ListWebSessionsRequest) returns (ListWebSessionsResponse);
+
+  // CloseSession closes the App for session_id and drops it from the roster.
+  // An unknown session_id is CodeNotFound.
+  rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
 }
 
-message WatchRequest {}
+message WatchRequest {
+  // session_id selects the conversation (App) to stream. Empty routes to the
+  // default session.
+  string session_id = 1;
+}
 
 // Frame is one host event on the wire. kind is the HostEvent.Kind
 // discriminator; payload is the event's own JSON, json.Marshal(HostEvent). It
@@ -54,11 +82,15 @@ message Frame {
 
 message SubmitRequest {
   string input = 1;
+  // session_id selects the conversation (App). Empty routes to the default.
+  string session_id = 2;
 }
 message SubmitResponse {}
 
 message DispatchRequest {
   string line = 1;
+  // session_id selects the conversation (App). Empty routes to the default.
+  string session_id = 2;
 }
 // kind is CmdResult.Kind; payload is json.Marshal(CmdResult) — the same
 // data-only projection as Frame, so a web surface renders a command result the
@@ -74,11 +106,17 @@ message RespondToAskRequest {
   // result is json.Marshal(core.ElicitationResult).
   bytes result = 2;
   string by = 3;
+  // session_id selects the conversation (App) whose ask is being answered.
+  // Empty routes to the default.
+  string session_id = 4;
 }
 message RespondToAskResponse {}
 
 message ListSessionsRequest {
   string cursor = 1;
+  // session_id selects the conversation (App) whose persisted runs are paged.
+  // Empty routes to the default.
+  string session_id = 2;
 }
 // runs is json.Marshal([]agent.RunInfo); active_run_id is the current session.
 message ListSessionsResponse {
@@ -87,8 +125,29 @@ message ListSessionsResponse {
   string active_run_id = 3;
 }
 
-message GetStatusRequest {}
+message GetStatusRequest {
+  // session_id selects the conversation (App). Empty routes to the default.
+  string session_id = 1;
+}
 message GetStatusResponse {
   string model_label = 1;
   string run_id = 2;
 }
+
+message CreateSessionRequest {}
+message CreateSessionResponse {
+  // session_id of the freshly created conversation (App).
+  string session_id = 1;
+}
+
+message ListWebSessionsRequest {}
+message ListWebSessionsResponse {
+  // session_ids of every live web session (App), including the default.
+  repeated string session_ids = 1;
+}
+
+message CloseSessionRequest {
+  // session_id of the conversation (App) to close.
+  string session_id = 1;
+}
+message CloseSessionResponse {}
