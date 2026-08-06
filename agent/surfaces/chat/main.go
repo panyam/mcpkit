@@ -22,52 +22,12 @@ import (
 	"github.com/panyam/mcpkit/agent/host"
 	gormstore "github.com/panyam/mcpkit/agent/store/gorm"
 	redisstore "github.com/panyam/mcpkit/agent/store/redis"
+	"github.com/panyam/mcpkit/agent/surfaces"
 	"github.com/panyam/mcpkit/core"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
-
-// buildRunStore maps --session-store to a backend: "" is persistence
-// off, "memory" gives in-process resume/fork (dies with the process),
-// and the rest give restart-surviving sessions — sqlite needs no server
-// at all (a local file), redis and postgres point at running ones.
-func buildRunStore(spec string) (agent.RunStore, error) {
-	switch {
-	case spec == "":
-		return nil, nil
-	case spec == "memory":
-		return agent.NewInMemoryRunStore(), nil
-	case strings.HasPrefix(spec, "redis://"):
-		addr := strings.TrimPrefix(spec, "redis://")
-		if addr == "" {
-			return nil, fmt.Errorf("agentchat: --session-store redis:// needs host:port")
-		}
-		return redisstore.New(redis.NewClient(&redis.Options{Addr: addr})), nil
-	case strings.HasPrefix(spec, "sqlite://"):
-		path := strings.TrimPrefix(spec, "sqlite://")
-		if path == "" {
-			return nil, fmt.Errorf("agentchat: --session-store sqlite:// needs a file path")
-		}
-		return openGormStore(sqlite.Open(path + "?_busy_timeout=5000"))
-	case strings.HasPrefix(spec, "postgres://") || strings.HasPrefix(spec, "postgresql://"):
-		// gorm's postgres driver accepts the URL DSN verbatim.
-		return openGormStore(postgres.Open(spec))
-	default:
-		return nil, fmt.Errorf("agentchat: unknown --session-store %q (want memory, sqlite://path.db, redis://host:port, or postgres://user:pass@host:port/db)", spec)
-	}
-}
-
-// openGormStore opens the dialector with SQL logging silenced (the
-// transcript is the CLI's output; slow-query noise does not belong in
-// it) and wraps it in the RunStore.
-func openGormStore(dial gorm.Dialector) (agent.RunStore, error) {
-	db, err := openGormDB(dial)
-	if err != nil {
-		return nil, err
-	}
-	return gormstore.New(db)
-}
 
 // openGormDB opens a GORM handle with SQL logging silenced, shared by the
 // run store and the tool-result store so a single --session-store spec
@@ -324,7 +284,7 @@ func runChat(v *viper.Viper) error {
 		appOpts = append(appOpts, host.WithObserver(host.NewTerminalRendererColor(os.Stdout, colorEnabled)))
 	}
 	sessionStore := v.GetString("session-store")
-	store, err := buildRunStore(sessionStore)
+	store, err := surfaces.RunStoreFromSpec(sessionStore)
 	if err != nil {
 		return err
 	}
