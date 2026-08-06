@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http/httptest"
 	"strings"
 	"time"
@@ -69,6 +70,15 @@ func buildServer() (*server.Server, func(context.Context, userData) error, *[]st
 	return srv, yield, &sent
 }
 
+// serve runs the app-domain server as a standalone streamable-HTTP MCP server
+// so the live chat/web surfaces (config.json points at it) have real tools to
+// drive. The scripted scenario uses the same buildServer over httptest instead.
+func serve(addr string) error {
+	srv, _, _ := buildServer()
+	log.Printf("agent-async demo server on http://localhost%s/mcp", addr)
+	return srv.Run(addr)
+}
+
 // stubScript is the model's scripted side of the conversation: the moves a
 // real model would make, pinned so the demo is deterministic.
 func stubScript() *agent.StubProvider {
@@ -98,11 +108,16 @@ func runScenario(out *syncWriter, provider agent.Provider) error {
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 
-	cfg := &host.Config{
-		Model:     host.ModelConfig{BaseURL: "http://stub", Model: "stub"},
-		MetaTools: true,
-		Servers:   []host.ServerConfig{{ID: "app", URL: ts.URL + "/mcp"}},
+	// Load the SAME config.json the live chat/web surfaces use (instructions,
+	// metaTools, the app server), then point its server at the in-process
+	// httptest instance for the deterministic run. The scripted StubProvider
+	// (below) is the one piece that cannot live in JSON; config.json's model is
+	// for a live model and is bypassed by WithProvider here.
+	cfg, err := host.LoadConfig("config.json")
+	if err != nil {
+		return err
 	}
+	cfg.Servers[0].URL = ts.URL + "/mcp"
 	opts := []host.AppOption{}
 	if provider != nil {
 		opts = append(opts, host.WithProvider(provider))

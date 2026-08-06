@@ -45,6 +45,7 @@ export MAX_TREE_TOKENS := env_var_or_default("MAX_TREE_TOKENS", "")
 
 # --- misc ----------------------------------------------------------------
 export UI      := env_var_or_default("UI", "tui")
+export ADDR    := env_var_or_default("ADDR", ":8090")
 export PG_HOST := env_var_or_default("PG_HOST", "localhost")
 export PG_PORT := env_var_or_default("PG_PORT", "5432")
 export PG_DB   := env_var_or_default("PG_DB", "agent")
@@ -71,6 +72,14 @@ demo: run
 # Same as run, but the alt-screen notebook UI (scrollable, foldable cells).
 note:
     @UI=notebook bash run.sh
+
+# agentweb loads only what the config JSON expresses (connections, servers,
+# sub-agents) — the durable session / offload / semantic-memory / tree-budget
+# knobs are agentchat CLI flags (see run.sh); use `just run` for those. Start
+# the MCP servers first (just servers-up-bg). ADDR overrides the listen address.
+# Browser surface (agentweb) against kitchen-sink.json.
+web:
+    cd ../../../agent/web && go run ./cmd/agentweb --config "{{justfile_directory()}}/kitchen-sink.json" --addr "$ADDR"
 
 # Handoff-Team topology (kitchen-sink-team.json): a triage router transfers you
 # to a billing or technical specialist; the active agent persists across turns.

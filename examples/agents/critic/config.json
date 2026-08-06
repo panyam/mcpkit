@@ -1,0 +1,12 @@
+{
+  "instructions": "You are an operations agent. Use the run_shell tool to carry out requests. When you are handed a note from a reviewer, weigh it rather than blindly obeying it.",
+  "connections": {
+    "active": "local",
+    "connections": {
+      "local": { "type": "lmstudio", "model": "qwen2.5-7b-instruct" }
+    }
+  },
+  "servers": [
+    { "id": "ops", "url": "http://localhost:8786/mcp" }
+  ]
+}

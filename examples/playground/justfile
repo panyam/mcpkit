@@ -1,0 +1,30 @@
+# playground — the interactive agentchat / agentweb surface over playground.json.
+#
+#   just serve   # demo MCP server (getting-started 'greet') on :8787
+#   just chat    # agentchat CLI against playground.json (needs just serve)
+#   just web     # agentweb browser surface against playground.json (needs just serve)
+#
+# `just pg` at the repo root wraps chat with a sqlite session store + offload dir
+# (see scripts/playground.sh); the recipes here are the plain config-driven form.
+
+# Host config both surfaces load.
+CONFIG := justfile_directory() / "playground.json"
+
+# Address the agentweb browser surface listens on.
+ADDR := env_var_or_default("ADDR", ":8090")
+
+# Show available recipes.
+default:
+    @just --list --unsorted
+
+# Serve the demo MCP server (getting-started 'greet') on :8787.
+serve:
+    cd ../getting-started && go run ./server
+
+# Chat with the CLI surface (agentchat) off playground.json (needs just serve).
+chat:
+    cd ../../cmd/agentchat && go run . --config "{{CONFIG}}"
+
+# Serve the browser surface (agentweb) off playground.json (needs just serve).
+web:
+    cd ../../agent/web && go run ./cmd/agentweb --config "{{CONFIG}}" --addr "{{ADDR}}"
