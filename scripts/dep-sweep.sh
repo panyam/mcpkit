@@ -56,7 +56,7 @@ python3 scripts/check_dep_consistency.py --unify
 
 echo ""
 echo "==> tidy-all (reconciles every module, including the ones Dependabot cannot reach)"
-just tidy-all
+make tidy-all
 
 # One-way ratchet: drop baseline entries the sweep just resolved, never add.
 echo ""

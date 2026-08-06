@@ -4,30 +4,33 @@ Go library for building production-grade MCP servers and clients.
 
 ## Quick Commands
 
+`make` is the supported runner and the only one CI uses. Justfiles mirroring
+these names exist but are an experiment; `make` is authoritative.
+
 ```bash
-just test              # Core tests (core/server/client/testutil)
-just test-agent        # agent/ sub-module (host layer)
-just test-auth         # ext/auth sub-module
-just test-ui           # ext/ui sub-module
-just test-e2e          # E2E tests (auth + apps)
-just testconf          # MCP conformance suite (needs Node.js)
-just testconfauth      # Auth conformance (client OAuth)
-just testconf-client   # Full client conformance (core + auth + extensions) — same set tier-check --client-cmd runs
-just testconf-tasks    # Tasks v1 conformance (27 scenarios, local; 26 pass + 1 skip — v1 sampling push vs 2.0 SDK client)
-just testconf-tasks-v2 # SEP-2663 — upstream @ MCPCONFORMANCE_TASKS_V2_PATH + mcpkit-local stricter sentinel
-just testconf-mrtr     # SEP-2322 — upstream @ MCPCONFORMANCE_MRTR_PATH + mcpkit-local stricter sentinel
-just testconf-file-inputs # SEP-2356 — fork @ MCPCONFORMANCE_FILE_INPUTS_PATH (7 checks)
-just testconf-auth-server # MCP authz 2025-11-25 — fork @ MCPCONFORMANCE_AUTH_PATH (6 scenarios, 23 checks: 18 active, 5 SKIPPED gaps for unsupported features)
-just testconf-stateless # SEP-2575 — upstream @ MCPCONFORMANCE_STATELESS_PATH; drives examples/stateless fixture (25 pass / 1 known upstream-test fail)
-just testconf-skills   # SEP-2640 — fork @ MCPCONFORMANCE_SKILLS_PATH; drives examples/skills fixture
-just testconf-upstream-audit # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational scenario-level pass/fail; runs in the conformance umbrella but exits 0 by design)
-just refresh-conformance # Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Driver: scripts/refresh-conformance.sh, renderer: tools/conformance-report.
-just check-conformance-stale # CI gate — refresh + git diff --exit-code CONFORMANCE.md (issue #498). Wired into .github/workflows/test.yml on every PR.
-just testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML report
+make test              # Core tests (core/server/client/testutil)
+make test-agent        # agent/ sub-module (host layer)
+make test-auth         # ext/auth sub-module
+make test-ui           # ext/ui sub-module
+make test-e2e          # E2E tests (auth + apps)
+make testconf          # MCP conformance suite (needs Node.js)
+make testconfauth      # Auth conformance (client OAuth)
+make testconf-client   # Full client conformance (core + auth + extensions) — same set tier-check --client-cmd runs
+make testconf-tasks    # Tasks v1 conformance (27 scenarios, local; 26 pass + 1 skip — v1 sampling push vs 2.0 SDK client)
+make testconf-tasks-v2 # SEP-2663 — upstream @ MCPCONFORMANCE_TASKS_V2_PATH + mcpkit-local stricter sentinel
+make testconf-mrtr     # SEP-2322 — upstream @ MCPCONFORMANCE_MRTR_PATH + mcpkit-local stricter sentinel
+make testconf-file-inputs # SEP-2356 — fork @ MCPCONFORMANCE_FILE_INPUTS_PATH (7 checks)
+make testconf-auth-server # MCP authz 2025-11-25 — fork @ MCPCONFORMANCE_AUTH_PATH (6 scenarios, 23 checks: 18 active, 5 SKIPPED gaps for unsupported features)
+make testconf-stateless # SEP-2575 — upstream @ MCPCONFORMANCE_STATELESS_PATH; drives examples/stateless fixture (25 pass / 1 known upstream-test fail)
+make testconf-skills   # SEP-2640 — fork @ MCPCONFORMANCE_SKILLS_PATH; drives examples/skills fixture
+make testconf-upstream-audit # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational scenario-level pass/fail; runs in the conformance umbrella but exits 0 by design)
+make refresh-conformance # Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Driver: scripts/refresh-conformance.sh, renderer: tools/conformance-report.
+make check-conformance-stale # CI gate — refresh + git diff --exit-code CONFORMANCE.md (issue #498). Wired into .github/workflows/test.yml on every PR.
+make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML report
                        # stage 5a/5b cover ext/otel + examples/otel/stdout (issue 634 wiring)
                        # stage 7d covers experimental/ext/events/stores/redis (issue 634 wiring)
-just audit             # govulncheck + gosec + gitleaks + race
-just tag-push vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; pre-release form is vX.Y.Z-bN)
+make audit             # govulncheck + gosec + gitleaks + race
+make tag-push vX.Y.Z # Tag root + all sub-modules and push (see RELEASING.md; pre-release form is vX.Y.Z-bN)
 ```
 
 ## Package Layout
@@ -92,7 +95,7 @@ Project-wide: `CONSTRAINTS.md`. Per-package: `core/CONSTRAINTS.md`, `server/CONS
   - **Session scoping (1140)**: `MemoryConfig.SessionScoped` (opt-in) makes `registerMemory` pass `WithMemoryNamespaceFunc(a.currentRunID)`, so each RunStore run gets its own scratchpad. **The deadlock trap**: the namespace func runs *inside a turn while `turnMu` is held* (both the memory tools and the summary/recall injection), so `App.RunID()` (takes `turnMu`) would re-enter and deadlock. Fix: a **lock-free `currentRunID()` backed by an `atomic.Value` mirror** of `runID`; all four writers (`AttachRun`, `resumeLocked`, `Fork`, `ensureRunLocked`) route through one **`setRunID`** so the mirror never drifts. agentchat: `--memory-session-scoped` (default off — cross-session shared memory is often the point; a no-op + warning without a `--session-store`). `App` gained a `log *slog.Logger` field for the warning.
   - **Sub-agent memory model = injection over shared store — ENFORCED (issue 1151; PR 1153)**: sub-agents have **no** working memory (the source is on the main `multi`, personas get a filtered `serverTools` view + `AgentSource.Call` bypasses the injection). Now a hard invariant: **`agent/CONSTRAINTS.md` A7** ("no ambient parent state") + the **`TestSubAgentCannotReachParentMemory`** guard (a persona's `remember` hits an unknown tool, the parent store stays empty; proven to fail if personas are handed `multi`). The principle: a child's location is not guaranteed (in-process `AgentSource` is the degenerate co-located case), so shared parent memory assumes co-location that A2 wire-serializability already forbids. If a child needs memory it **owns its own setup entirely** (its store/namespace, configured by whoever builds the child — same encapsulation as a stateful MCP tool owning its DB), never a `WithMemoryNamespaceFunc(a.currentRunID)` into the *parent's* namespace (the trap). Parent→child transfer is params + injection. **`AgentSource` stays; colocation is contained, not removed** — it is the in-process impl of a location-independent `ToolSource` contract; a remote sub-agent is a *sibling* impl (largely "a sub-agent published as an MCP server, reached via the existing server-tools `ToolSource`"), and what it adds is carrying the composition metadata ctx threads for free in-process (depth/budget, cancellation, nested event stream) over the wire = the surface of async sub-agents (1035) / upward signals (1036) / dynamic composition (1038). Hierarchy (parent recall across children) is deferred behind a prefix/hierarchical namespace query the seam lacks (exact-match today). Lifecycle is **decomposed, not centralized** (no `SubagentManager`); a real lifecycle owner emerges only in the async/Task form (1035). Full rationale: `docs/AGENT_COMPOSITION.md` § Sub-agents and memory.
 - **Agent Runner OTel metrics SHIPPED (issue 1023; PR 1141)** — the metrics sibling of the SEP-414 spans, through the existing `core.MeterProvider` seam (no new seam). `RunnerConfig.MeterProvider` opts in (nil = `NoopMeterProvider`, branch-free zero overhead); instruments built once in `NewRunner` (`agent/metrics.go`), recorded at the same points as the spans: **turn end** (`agent.turns` by `agent.finish_reason`, `agent.turn.duration`, `agent.steps`, `agent.tokens` by `direction`) and **each tool call** (`agent.tool.calls` by `tool`+`status`, `agent.tool.duration` by `tool`). `status` ∈ {ok, error, tool_error, denied, cancelled, unavailable}, set on each outcome path and emitted by a **single `defer` in `callTool`** so no path double-counts or misses. Host threads it via `host.WithMeterProvider` (main Runner + every sub-agent persona); agentchat builds it from the same `--exporter`/`--otlp-endpoint` decision as the tracer/logger via **`SetupMeter`** (the meter sibling of `SetupTelemetry`/`SetupLogs`, `cmd/agentchat/telemetry_setup_meter.go`; new deps `otlpmetricgrpc`+`stdoutmetric`). The **`mcpkit — agent`** Grafana dashboard (`docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json`, uid `mcpkit-agent`) charts turn rate, latency, token throughput, and tool failure ratio off Mimir (OTel Prometheus rename: dots→underscores, `_total` on counters, unit suffix on histograms → `agent_turn_duration_seconds_bucket`). Deferred: a memory-tracks metrics seam (embed/recall/compaction counters) + exemplars on the agent instruments.
-- **`CAPABILITIES.md` was retired (commit `ebc41058`)** — checkpoint/start_pr must NOT sync or recreate it; fold learnings into CLAUDE.md + the design docs (`docs/AGENT_*.md`) + the roadmap. **Makefile → justfile migration landed (PR 1009)** but the `Makefile` still exists, so `make test-agent` etc. still work.
+- **`CAPABILITIES.md` was retired (commit `ebc41058`)** — checkpoint/start_pr must NOT sync or recreate it; fold learnings into CLAUDE.md + the design docs (`docs/AGENT_*.md`) + the roadmap. **`make` is the supported runner and the only one CI uses** (the justfiles from PR 1009 remain as an experiment; `make` is authoritative when they disagree). CI installs no task runner.
 - **`experimental/ext/agents` — server-declared agent discovery wire primitive SHIPPED (epic 1142; issue 1143, PR 1181)**. Pre-SEP research surface (agents-wg#20) under `experimental/ext/` (own go.mod, mirrors `experimental/ext/events`); promote to `ext/agents` only when a SEP merges. Load-bearing facts:
   - **What it is**: a server that hosts a fleet of specialist agents advertises them as a small roster of tuples for routing, so a supervisor host never eager-loads a flat `tools/list` of every specialist's schemas. **Three-level progressive disclosure** (same shape as two-tier skills #910): (1) `capabilities.extensions["io.modelcontextprotocol/agents"]` advertised via the `core.ExtensionProvider` mechanism, (2) `agents/list` → roster of `AgentSummary` (agentId/description/capabilities/exampleTasks/delegateTool/tasksEnabled/skillUri, **no tool schemas**), (3) `agents/get {agentId}` → `AgentDetail` (summary **embedded** + instructions + scoped `tools[]`). **Only discovery is new wire surface** — invocation rides on the existing `tools/call` via each agent's advertised `delegateTool`.
   - **Advertised via the extension mechanism, NOT a new `core.ServerCapabilities.Agents` field** — matches skills/tasks/ui, reuses `ServerSupportsExtension`, keeps a churning pre-SEP surface out of `core/`. The issue title's "capabilities.agents" is the conceptual capability, realized as the advertised extension entry.
