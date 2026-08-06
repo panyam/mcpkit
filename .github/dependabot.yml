@@ -1,18 +1,38 @@
 version: 2
+
+# Go modules are deliberately NOT listed here. Dependabot opens one PR per
+# directory and cannot touch modules outside its globs, but ~60 modules under
+# examples/ and tests/ depend on the published ones through `replace`
+# directives. So every grouped gomod PR left their go.mod stale and broke
+# test-agent and test-auth with "updates to go.mod needed" (PR 1225: a
+# 9-directory bump needed 57 further modules tidied in lock-step).
+#
+# DEPENDENCY_POLICY.md requires lock-step pins, which per-directory PRs cannot
+# deliver. Go updates are owned by .github/workflows/dep-sweep.yml, which
+# updates every module and reconciles the whole tree in one PR.
+#
+# Two things still cover the gap between monthly sweeps:
+#   - Dependabot SECURITY updates, a repository setting independent of this
+#     file, still open CVE PRs immediately.
+#   - .github/workflows/vulncheck.yml scans the published surface weekly.
 updates:
-  - package-ecosystem: gomod
+  # The Bridge JS in ext/ui/assets ships into end users' browsers, so it is the
+  # one dependency tree here with a direct client-side blast radius. agent/web's
+  # frontend (dockview / solid / connect-web / esbuild) is served from the agent
+  # web surface. Dev-only trees (conformance/, tools/*, ext/ui/tests/playwright,
+  # the example apps) are left out on the same demos-are-not-artifacts rule.
+  - package-ecosystem: npm
     directories:
-      - "/"
-      - "/ext/auth"
-      - "/ext/tasks"
-      - "/ext/ui"
-      - "/ext/otel"
+      - "/ext/ui/assets"
+      - "/agent/web/web"
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     groups:
-      go-deps:
+      npm-deps:
         patterns:
           - "*"
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
