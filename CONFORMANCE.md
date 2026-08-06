@@ -60,7 +60,7 @@ _Scenarios authored by this project, typically in the `panyam/mcpconformance` fo
 
 | Suite | Covers | Stage | Status | Source | Tracking |
 |---|---|:---:|:---:|---|---|
-| `testconf-file-inputs` | SEP-2356 File inputs | 8f | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
+| `testconf-file-inputs` | SEP-2356 File inputs (withdrawn upstream) | 8f | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | mcpkit 827 |
 | `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
 | `testconf-skills` | SEP-2640 Skills | 8h | _INFO_<sup>3</sup> | [`panyam/mcpconformance@chore/sep-2640-yaml`](https://github.com/panyam/mcpconformance/tree/chore/sep-2640-yaml) | mcpkit 567 |
 

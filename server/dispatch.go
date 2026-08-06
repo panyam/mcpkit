@@ -640,7 +640,7 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	// WithSchemaValidation(false) and perform validation in their own
 	// handler, returning whatever response shape they need.
 	if !d.skipSchemaValidation && entry.schema != nil {
-		if ve := entry.schema.validate(envelope.Arguments); ve != nil {
+		if ve := entry.schema.Validate(envelope.Arguments); ve != nil {
 			return core.NewResponse(id, toolValidationErrorResult(envelope.Name, ve))
 		}
 	}
@@ -936,7 +936,7 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 	if !d.skipSchemaValidation && len(entry.argSchemas) > 0 {
 		var allErrors []ValidationError
 		for argName, sch := range entry.argSchemas {
-			ve := sch.validateValue(envelope.Arguments[argName])
+			ve := sch.ValidateValue(envelope.Arguments[argName])
 			if ve == nil {
 				continue
 			}

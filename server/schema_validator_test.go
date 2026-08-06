@@ -79,7 +79,7 @@ func TestValidateTypeMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	raw := json.RawMessage(`{"age": "twenty"}`)
-	ve := c.validate(raw)
+	ve := c.Validate(raw)
 	require.NotNil(t, ve, "expected validation errors")
 	require.NotEmpty(t, ve.Errors)
 
@@ -110,7 +110,7 @@ func TestValidateMissingRequired(t *testing.T) {
 	require.NoError(t, err)
 
 	raw := json.RawMessage(`{"other": "value"}`)
-	ve := c.validate(raw)
+	ve := c.Validate(raw)
 	require.NotNil(t, ve)
 	require.NotEmpty(t, ve.Errors)
 }
@@ -129,7 +129,7 @@ func TestValidateSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	raw := json.RawMessage(`{"name": "alice", "age": 30}`)
-	ve := c.validate(raw)
+	ve := c.Validate(raw)
 	assert.Nil(t, ve)
 }
 
@@ -143,7 +143,7 @@ func TestValidateEmptyArgs(t *testing.T) {
 	c, err := compileSchema(schema)
 	require.NoError(t, err)
 
-	ve := c.validate(nil)
+	ve := c.Validate(nil)
 	assert.Nil(t, ve)
 }
 
@@ -179,12 +179,12 @@ func TestValidate2020_12Features(t *testing.T) {
 
 	// Valid input
 	raw := json.RawMessage(`{"contact":"alice@example.com","tags":["active",42]}`)
-	assert.Nil(t, c.validate(raw), "valid 2020-12 input should pass")
+	assert.Nil(t, c.Validate(raw), "valid 2020-12 input should pass")
 
 	// Invalid: contact is not an email (basic check — format assertions
 	// vary by library config, so we test a stronger invariant: type)
 	bad := json.RawMessage(`{"contact":42}`)
-	ve := c.validate(bad)
+	ve := c.Validate(bad)
 	require.NotNil(t, ve)
 	require.NotEmpty(t, ve.Errors)
 }

@@ -67,20 +67,26 @@ An `enum` makes the client render a fixed choice instead of a free-text field. `
 }}
 ```
 
-## mcpkit does not validate the response
+## The response is validated against your schema
 
-The schema tells the client what to collect. It is not enforced on the way back: mcpkit does not check `result.Content` against `requestedSchema` before handing it to your handler.
+An accepted response is checked against `requestedSchema` before it is sent. A handler that returns a string where you asked for an `integer`, omits a `required` property, or supplies a value outside a declared `enum` produces a `-32602` error with a structured list of violations, rather than handing you content you did not ask for.
 
-So a handler that asked for an `integer` can receive a string, and one that offered three enum values can receive a fourth. Validate anything you are going to act on:
+The client is the only party in a position to catch this. It is the one that saw both the schema and the user's input; by the time the response reaches you, the schema is just a memory of what you requested.
+
+Validation runs **after** the defaults merge, so a schema-declared default can be what satisfies `required`.
+
+Two things it deliberately does not do:
+
+- **A malformed or uncompilable schema is not an error.** If your schema cannot be compiled, validation is skipped and the user's answer goes through. The defect is on the server side and the user answered in good faith, so refusing their input would punish the wrong party.
+- **Only `accept` is validated.** Content is undefined for decline and cancel.
+
+Turn it off with `client.WithElicitationValidation(false)`, which sends whatever the handler produced. This mirrors the server, where `WithSchemaValidation(false)` opts out of validating inbound tool and prompt arguments. Both default to on.
+
+Content values are decoded JSON, so numbers arrive as `float64` and objects as `map[string]any`, the same as prompt arguments. Validation confirms the shape; it does not convert types for you:
 
 ```go
-env, ok := result.Content["env"].(string)
-if !ok || !slices.Contains([]string{"dev", "staging", "prod"}, env) {
-    return core.ErrorResult("invalid environment"), nil
-}
+replicas, ok := result.Content["replicas"].(float64)  // not int, even for "type": "integer"
 ```
-
-Content values are decoded JSON, so numbers arrive as `float64` and objects as `map[string]any`, the same as prompt arguments.
 
 ## URL mode
 
