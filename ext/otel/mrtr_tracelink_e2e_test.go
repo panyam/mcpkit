@@ -77,7 +77,7 @@ func TestMRTRTracelink_E2E_RoundTwoLinksToRoundOne(t *testing.T) {
 			return core.ElicitationResult{Action: "accept", Content: map[string]any{"name": "Alice"}}, nil
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	res, err := client.CallToolWithInputs(context.Background(), c,

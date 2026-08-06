@@ -73,7 +73,7 @@ func runSecurityDemo(out io.Writer) (bool, error) {
 	defer ts.Close()
 
 	mcp := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "security-demo", Version: "0.1.0"})
-	if err := mcp.Connect(); err != nil {
+	if err := mcp.Connect(context.Background()); err != nil {
 		return false, fmt.Errorf("connect: %w", err)
 	}
 	defer mcp.Close()

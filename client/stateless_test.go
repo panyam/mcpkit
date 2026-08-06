@@ -206,7 +206,7 @@ func TestClient_AdaptiveAgainstStatelessServer(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(url, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeAdaptive))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	if !c.useStatelessWire {
@@ -248,7 +248,7 @@ func TestClient_DiscoverBodyServerInfoFallback(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(url, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeAdaptive))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	if c.ServerInfo.Name != "pre-3002" {
@@ -293,7 +293,7 @@ func TestClient_AdaptiveAgainstLegacyServer(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(url, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeAdaptive))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	if c.useStatelessWire {
@@ -332,7 +332,7 @@ func TestClient_StatelessModeDiscoverlessBestEffort(t *testing.T) {
 	defer ts.Close()
 
 	c := NewClient(url, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeStateless))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("stateless Connect against a discover-less server should succeed, got %v", err)
 	}
 	if !c.useStatelessWire {
@@ -348,9 +348,9 @@ func TestClient_StatelessModeDiscoverlessBestEffort(t *testing.T) {
 // envelope and the MCP-Protocol-Version HTTP header.
 func TestClient_StatelessWire_SendsMetaAndHeader(t *testing.T) {
 	type observed struct {
-		method  string
-		params  json.RawMessage
-		header  string
+		method string
+		params json.RawMessage
+		header string
 	}
 	var seen []observed
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,7 +378,7 @@ func TestClient_StatelessWire_SendsMetaAndHeader(t *testing.T) {
 		case "tools/list":
 			out, _ := json.Marshal(map[string]any{
 				"jsonrpc": "2.0", "id": 2,
-				"result":  map[string]any{"tools": []any{}},
+				"result": map[string]any{"tools": []any{}},
 			})
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(200)
@@ -388,7 +388,7 @@ func TestClient_StatelessWire_SendsMetaAndHeader(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeAdaptive))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	if _, err := c.ListTools(t.Context()); err != nil {
@@ -460,7 +460,7 @@ func TestClient_4xxJSONRPCErrorParsed(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, core.ClientInfo{Name: "t", Version: "1"}, WithClientMode(ClientModeAdaptive))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	_, err := c.ListTools(t.Context())
@@ -519,7 +519,7 @@ func TestAdaptiveProbe_SendsProtocolVersionHeader(t *testing.T) {
 
 	c := NewClient(srv.URL, core.ClientInfo{Name: "t", Version: "1"},
 		WithClientMode(ClientModeAdaptive))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("adaptive Connect against strict stateless server: %v", err)
 	}
 	defer c.Close()

@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	client "github.com/panyam/mcpkit/client"
-	core "github.com/panyam/mcpkit/core"
-	server "github.com/panyam/mcpkit/server"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	client "github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
+	server "github.com/panyam/mcpkit/server"
 )
 
 // Reference json and fmt to keep imports.
@@ -58,7 +59,7 @@ func TestSampleNotSupported(t *testing.T) {
 // The tool returns the LLM response as text.
 func TestSampleRoundTrip(t *testing.T) {
 	forAllSamplingTransports(t, func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("sample-tool", map[string]any{})
+		text, err := c.ToolCall(t.Context(), "sample-tool", map[string]any{})
 		if err != nil {
 			t.Fatalf("ToolCall failed: %v", err)
 		}
@@ -84,13 +85,13 @@ func TestSampleTimeout(t *testing.T) {
 			return core.CreateMessageResult{Model: "slow", Role: "assistant", Content: core.Content{Type: "text", Text: "too late"}}, nil
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
 	// The tool call should timeout (the server's tool has a 200ms context timeout)
-	_, err := c.ToolCall("sample-timeout-tool", map[string]any{})
+	_, err := c.ToolCall(t.Context(), "sample-timeout-tool", map[string]any{})
 	if err == nil {
 		t.Fatal("expected error from timeout, got nil")
 	}
@@ -109,12 +110,12 @@ func TestSampleClientError(t *testing.T) {
 			return core.CreateMessageResult{}, fmt.Errorf("LLM unavailable")
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	_, err := c.ToolCall("sample-tool", map[string]any{})
+	_, err := c.ToolCall(t.Context(), "sample-tool", map[string]any{})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -198,7 +199,7 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithSamplingHandler(samplingHandler))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
@@ -212,7 +213,7 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithSSEClient(), client.WithSamplingHandler(samplingHandler))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			ts.Close()
 			t.Fatalf("SSE Connect failed: %v", err)
 		}
@@ -234,7 +235,7 @@ func forAllSamplingTransports(t *testing.T, fn func(t *testing.T, c *client.Clie
 			}),
 		)
 		c.SetTransport(transport)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })

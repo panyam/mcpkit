@@ -42,7 +42,7 @@ func streamStack(t *testing.T, heartbeat time.Duration) (*client.Client, func(co
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	return c, yield
 }
 

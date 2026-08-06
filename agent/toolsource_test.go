@@ -288,7 +288,7 @@ func TestClientSourceAgainstInProcessServer(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "agent-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -325,7 +325,7 @@ func TestClientSourceComposesUnderMultiSource(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "agent-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

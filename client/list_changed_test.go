@@ -34,7 +34,7 @@ func TestWithToolsListChangedHandler_DynamicRegistration(t *testing.T) {
 			}
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -75,7 +75,7 @@ func TestWithoutToolsListChangedHandler_NoFire(t *testing.T) {
 			}
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

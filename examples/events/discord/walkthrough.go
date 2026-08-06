@@ -113,7 +113,7 @@ fmt.Printf("Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`),
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "discord-events-host", Version: "1.0"},
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(context.Background()); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
@@ -147,7 +147,7 @@ if err != nil {
 fmt.Printf("events/list response:\n%s\n", string(res.Raw))`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			res, err := c.Call("events/list", map[string]any{})
+			res, err := c.Call(context.Background(), "events/list", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -261,7 +261,7 @@ fmt.Printf("events/poll response:\n%s\n", string(res.Raw))`),
 			}
 			// Flat top-level shape per spec §"Poll-Based Delivery"
 			// → "Request: events/poll" L139-149.
-			res, err := c.Call("events/poll", map[string]any{
+			res, err := c.Call(context.Background(), "events/poll", map[string]any{
 				"name":   "discord.message",
 				"cursor": cursor,
 			})
@@ -501,7 +501,7 @@ defer c.Call("events/unsubscribe", map[string]any{
 				// events/unsubscribe" L509) — (name, params,
 				// delivery.url). The derived id is not accepted
 				// as input.
-				_, _ = c.Call("events/unsubscribe", map[string]any{
+				_, _ = c.Call(ctx, "events/unsubscribe", map[string]any{
 					"name":     "discord.message",
 					"delivery": map[string]any{"url": hookSrv.URL},
 				})
@@ -596,7 +596,7 @@ if err != nil {
 
 			subscribe := func(channelLabel string) (string, error) {
 				supplied := events.GenerateSecret()
-				res, err := c.Call("events/subscribe", map[string]any{
+				res, err := c.Call(context.Background(), "events/subscribe", map[string]any{
 					"name":   "discord.message",
 					"params": map[string]any{"channel_id": channelLabel},
 					"delivery": map[string]any{
@@ -634,12 +634,12 @@ if err != nil {
 
 			// Eager unsubscribe on both at the end.
 			defer func() {
-				_, _ = c.Call("events/unsubscribe", map[string]any{
+				_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
 					"name":     "discord.message",
 					"params":   map[string]any{"channel_id": "alpha"},
 					"delivery": map[string]any{"url": recv.URL},
 				})
-				_, _ = c.Call("events/unsubscribe", map[string]any{
+				_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
 					"name":     "discord.message",
 					"params":   map[string]any{"channel_id": "beta"},
 					"delivery": map[string]any{"url": recv.URL},
@@ -767,13 +767,13 @@ _ = res2`),
 			// Initial subscribe — first call has no priorities, no
 			// deliveryStatus block per spec L548 ("Omitted on first
 			// subscribe — there's nothing to report").
-			res, err := c.Call("events/subscribe", subParams)
+			res, err := c.Call(context.Background(), "events/subscribe", subParams)
 			if err != nil {
 				fmt.Printf("    ERROR: initial subscribe failed: %v\n", err)
 				return
 			}
 			defer func() {
-				_, _ = c.Call("events/unsubscribe", map[string]any{
+				_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
 					"name":     "discord.message",
 					"params":   map[string]any{"role": "health-demo"},
 					"delivery": map[string]any{"url": deadReceiver.URL},
@@ -807,7 +807,7 @@ _ = res2`),
 
 			// Re-subscribe (refresh) on same canonical tuple — response
 			// should now carry deliveryStatus per spec L425-460.
-			res2, err := c.Call("events/subscribe", subParams)
+			res2, err := c.Call(context.Background(), "events/subscribe", subParams)
 			if err != nil {
 				fmt.Printf("    ERROR: refresh subscribe failed: %v\n", err)
 				return
@@ -871,7 +871,7 @@ _, err := c.Call("events/subscribe", map[string]any{
 rpcErr := err.(*client.RPCError) // code == -32602, delivery.secret is required`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			_, err := c.Call("events/subscribe", map[string]any{
+			_, err := c.Call(context.Background(), "events/subscribe", map[string]any{
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode": "webhook",
@@ -914,7 +914,7 @@ _, err := c.Call("events/subscribe", map[string]any{
 rpcErr := err.(*client.RPCError) // code == -32602, must start with the whsec_ prefix`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			_, err := c.Call("events/subscribe", map[string]any{
+			_, err := c.Call(context.Background(), "events/subscribe", map[string]any{
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode":   "webhook",
@@ -959,7 +959,7 @@ _, err := c.Call("events/subscribe", map[string]any{
 rpcErr := err.(*client.RPCError) // code == -32602, client-supplied id is not accepted`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
-			_, err := c.Call("events/subscribe", map[string]any{
+			_, err := c.Call(context.Background(), "events/subscribe", map[string]any{
 				"id":   "client-picked-id",
 				"name": "discord.message",
 				"delivery": map[string]any{
@@ -1020,7 +1020,7 @@ c.Call("events/unsubscribe", map[string]any{
 			supplied := events.GenerateSecret()
 			fmt.Printf("    supplied secret:  %s...\n", truncate(supplied, 16))
 
-			res, err := c.Call("events/subscribe", map[string]any{
+			res, err := c.Call(context.Background(), "events/subscribe", map[string]any{
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode":   "webhook",
@@ -1041,7 +1041,7 @@ c.Call("events/unsubscribe", map[string]any{
 			// §"Unsubscribing: events/unsubscribe" L509, no id) so
 			// the subscription doesn't tie up a delivery target
 			// for a TTL window after the demo ends.
-			_, _ = c.Call("events/unsubscribe", map[string]any{
+			_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
 				"name":     "discord.message",
 				"delivery": map[string]any{"url": "http://localhost:1/sink"},
 			})
@@ -1214,4 +1214,3 @@ func truncate(s string, n int) string {
 	}
 	return s[:n]
 }
-

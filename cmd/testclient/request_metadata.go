@@ -36,7 +36,7 @@ func driveRequestMetadata(serverURL string) error {
 		client.WithClientMode(client.ClientModeStateless),
 		client.WithElicitationHandler(conformanceElicitationHandler),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		return err
 	}
 	defer c.Close()

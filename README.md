@@ -39,7 +39,32 @@ srv.RegisterTool(core.ToolDef{
     return core.TextResult("Hello, " + args.Name + "!"), nil
 })
 
-srv.Run(":8787") // Streamable HTTP
+srv.Run(":8787") // Streamable HTTP — blocks
+```
+
+`Run` blocks. When you start it in a goroutine, wait for `Ready()` instead of
+sleeping — it closes once the listener is bound and the port is accepting:
+
+```go
+go srv.Run(":8787")
+<-srv.Ready()
+// safe to connect; srv.Addr() has the bound address (useful with ":0")
+```
+
+A client mirrors it. Every method that talks to the server takes a context:
+
+```go
+ctx := context.Background()
+
+c := client.NewClient("http://localhost:8787/mcp",
+    core.ClientInfo{Name: "my-client", Version: "0.1.0"},
+)
+if err := c.Connect(ctx); err != nil { // bounds the handshake, not the session
+    log.Fatal(err)
+}
+defer c.Close()
+
+out, err := c.ToolCall(ctx, "greet", map[string]any{"name": "world"})
 ```
 
 ## Packages

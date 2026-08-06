@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -12,16 +13,22 @@ import (
 )
 
 func main() {
+	// Every client method that talks to the server takes a context, so
+	// cancellation and timeouts work the same way everywhere.
+	ctx := context.Background()
+
 	c := client.NewClient("http://localhost:8787/mcp",
 		core.ClientInfo{Name: "getting-started-client", Version: "0.1.0"},
 	)
-	if err := c.Connect(); err != nil {
+	// Connect's context bounds the handshake only. The session it opens
+	// outlives that context; use Close to end it.
+	if err := c.Connect(ctx); err != nil {
 		log.Fatalf("connect: %v", err)
 	}
 	defer c.Close()
 
 	// ToolCall sends tools/call and returns the tool's text output directly.
-	out, err := c.ToolCall("greet", map[string]any{"name": "world"})
+	out, err := c.ToolCall(ctx, "greet", map[string]any{"name": "world"})
 	if err != nil {
 		log.Fatalf("greet: %v", err)
 	}

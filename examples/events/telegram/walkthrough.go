@@ -95,7 +95,7 @@ if err := c.Connect(); err != nil { /* handle */ }`),
 			c = client.NewClient(mcpURL,
 				core.ClientInfo{Name: "telegram-events-host", Version: "1.0"},
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(context.Background()); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
@@ -272,7 +272,7 @@ sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 				sub.Stop()
 				// Unsubscribe by tuple per spec §"Unsubscribing:
 				// events/unsubscribe" L509.
-				_, _ = c.Call("events/unsubscribe", map[string]any{
+				_, _ = c.Call(ctx, "events/unsubscribe", map[string]any{
 					"name":     "telegram.message",
 					"delivery": map[string]any{"url": hookSrv.URL},
 				})
@@ -424,4 +424,3 @@ func truncate(s string, n int) string {
 	}
 	return s[:n]
 }
-

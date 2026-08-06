@@ -34,11 +34,11 @@ func TestStreamableHTTPEventsHaveIDs(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithGetSSEStream())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Make a tool call — this should produce SSE events with IDs
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hello"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "echo: hello")
 
@@ -130,10 +130,10 @@ func TestSSETransportEventsHaveIDs(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithSSEClient())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// Make a tool call
-	result, err := c.ToolCall("echo", map[string]any{"message": "sse-test"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "sse-test"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "echo: sse-test")
 

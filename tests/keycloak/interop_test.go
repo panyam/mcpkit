@@ -41,10 +41,10 @@ func TestKeycloak_MCPServer_ValidToken(t *testing.T) {
 		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
 		client.WithClientBearerToken(tok.AccessToken),
 	)
-	require.NoError(t, client.Connect())
+	require.NoError(t, client.Connect(t.Context()))
 	defer client.Close()
 
-	result, err := client.ToolCall("echo", map[string]any{"msg": "from-keycloak"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "from-keycloak"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "from-keycloak")
 }
@@ -86,10 +86,10 @@ func TestKeycloak_MCPServer_ScopeAllowed(t *testing.T) {
 		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
 		client.WithClientBearerToken(tok.AccessToken),
 	)
-	require.NoError(t, client.Connect())
+	require.NoError(t, client.Connect(t.Context()))
 	defer client.Close()
 
-	result, err := client.ToolCall("scoped-tool", nil)
+	result, err := client.ToolCall(t.Context(), "scoped-tool", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", result)
 }
@@ -109,10 +109,10 @@ func TestKeycloak_MCPServer_ScopeDenied(t *testing.T) {
 		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
 		client.WithClientBearerToken(tok.AccessToken),
 	)
-	require.NoError(t, client.Connect())
+	require.NoError(t, client.Connect(t.Context()))
 	defer client.Close()
 
-	result, err := client.ToolCall("scoped-tool", nil)
+	result, err := client.ToolCall(t.Context(), "scoped-tool", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "error")
 }
@@ -178,10 +178,10 @@ func TestKeycloak_MCPServer_PasswordGrant(t *testing.T) {
 		core.ClientInfo{Name: "keycloak-test", Version: "0.1.0"},
 		client.WithClientBearerToken(tok.AccessToken),
 	)
-	require.NoError(t, client.Connect())
+	require.NoError(t, client.Connect(t.Context()))
 	defer client.Close()
 
-	result, err := client.ToolCall("echo", map[string]any{"msg": "from-user"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "from-user"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "from-user")
 

@@ -294,7 +294,7 @@ func bootFSWatcherTest(t *testing.T, dir string, providerOpts ...skills.Provider
 		client.WithNotificationCallback(wrapper.onNotify),
 	)
 	wrapper.Client = c
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

@@ -8,8 +8,8 @@ import (
 
 	client "github.com/panyam/mcpkit/client"
 	core "github.com/panyam/mcpkit/core"
-	server "github.com/panyam/mcpkit/server"
 	ui "github.com/panyam/mcpkit/ext/ui"
+	server "github.com/panyam/mcpkit/server"
 )
 
 // TestUIExtensionNegotiationE2E verifies the full extension negotiation flow
@@ -51,7 +51,7 @@ func TestUIExtensionNegotiationE2E(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "ui-test-client", Version: "1.0"},
 		client.WithUIExtension(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -62,7 +62,7 @@ func TestUIExtensionNegotiationE2E(t *testing.T) {
 	}
 
 	// Call the tool to check ClientSupportsUI from handler context
-	text, err := c.ToolCall("check_ui", nil)
+	text, err := c.ToolCall(t.Context(), "check_ui", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -86,14 +86,14 @@ func TestServerAdvertisesUIExtensionE2E(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "ui-test-client", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
 	// The ServerInfo is populated after Connect — verify extensions came through
 	// by re-initializing via raw Call and checking the response
-	initResult, err := c.Call("initialize", map[string]any{
+	initResult, err := c.Call(t.Context(), "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "test", "version": "1.0"},

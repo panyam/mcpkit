@@ -40,11 +40,11 @@ func TestE2E_Reconnect_WithTokenRefresh(t *testing.T) {
 	)
 
 	// Connect should succeed: 401 on expired token → refresh → retry succeeds
-	err := client.Connect()
+	err := client.Connect(t.Context())
 	require.NoError(t, err, "should connect after token refresh")
 	defer client.Close()
 
-	result, err := client.ToolCall("echo", map[string]any{"msg": "reconnected"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "reconnected"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "reconnected")
 }
@@ -68,7 +68,7 @@ func TestE2E_Reconnect_TransientErrorClassification(t *testing.T) {
 
 	// Should fail fast (auth error, not transient) — no reconnection attempts
 	start := time.Now()
-	err := client.Connect()
+	err := client.Connect(t.Context())
 	elapsed := time.Since(start)
 
 	require.Error(t, err, "should fail with auth error")
@@ -109,12 +109,12 @@ func TestE2E_Reconnect_RecentlyExpiredJWT(t *testing.T) {
 	)
 
 	// Connect with the short-lived token (still valid)
-	err = client.Connect()
+	err = client.Connect(t.Context())
 	require.NoError(t, err)
 	defer client.Close()
 
 	// First call should work (token still valid)
-	result, err := client.ToolCall("echo", map[string]any{"msg": "alive"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "alive"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "alive")
 	callCount++
@@ -123,7 +123,7 @@ func TestE2E_Reconnect_RecentlyExpiredJWT(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Next call: token expired → 401 → auth retry with refreshed token → success
-	result, err = client.ToolCall("echo", map[string]any{"msg": "refreshed"})
+	result, err = client.ToolCall(t.Context(), "echo", map[string]any{"msg": "refreshed"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "refreshed")
 	callCount++

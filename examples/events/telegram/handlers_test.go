@@ -62,7 +62,7 @@ func newConnectedClient(t *testing.T, source *events.YieldingSource[TelegramEven
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	return c, ts
 }
 
@@ -85,7 +85,7 @@ func TestEventsPollCursorPagination(t *testing.T) {
 
 	// Flat events/poll request shape per spec §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
-	result, err := c.Call("events/poll", map[string]any{
+	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    "0",
 		"maxEvents": 5,
@@ -98,7 +98,7 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	require.NotNil(t, resp.Cursor)
 	assert.Equal(t, "5", *resp.Cursor)
 
-	result2, err := c.Call("events/poll", map[string]any{
+	result2, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    *resp.Cursor,
 		"maxEvents": 5,
@@ -118,7 +118,7 @@ func TestEventsPollEmptyStore(t *testing.T) {
 	source, _ := newTelegramSource()
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
 
-	result, err := c.Call("events/poll", map[string]any{
+	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "telegram.message",
 		"cursor": "0",
 	})
@@ -139,7 +139,7 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 	source, _ := newTelegramSource()
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
 
-	_, err := c.Call("events/poll", map[string]any{
+	_, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "nonexistent.event",
 		"cursor": "0",
 	})
@@ -155,7 +155,7 @@ func TestResourceRecentMessages(t *testing.T) {
 	source, _ := preloadedSource(3)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
 
-	text, err := c.ReadResource("telegram://messages/recent")
+	text, err := c.ReadResource(t.Context(), "telegram://messages/recent")
 	require.NoError(t, err)
 
 	var payloads []TelegramEventData
@@ -170,7 +170,7 @@ func TestResourceMessageByCursor(t *testing.T) {
 	source, _ := preloadedSource(3)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
 
-	text, err := c.ReadResource("telegram://message/2")
+	text, err := c.ReadResource(t.Context(), "telegram://message/2")
 	require.NoError(t, err)
 
 	var payload TelegramEventData
@@ -244,7 +244,7 @@ func TestEventsPollHasMore(t *testing.T) {
 	source, _ := preloadedSource(5)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
 
-	result, err := c.Call("events/poll", map[string]any{
+	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    "0",
 		"maxEvents": 3,
@@ -256,7 +256,7 @@ func TestEventsPollHasMore(t *testing.T) {
 	assert.Len(t, resp.Events, 3)
 	assert.True(t, resp.HasMore)
 
-	result2, err := c.Call("events/poll", map[string]any{
+	result2, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    *resp.Cursor,
 		"maxEvents": 3,
@@ -277,7 +277,7 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	c, _ := newConnectedClient(t, source, webhooks)
 
-	result, err := c.Call("events/subscribe", map[string]any{
+	result, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": "http://example.com/hook", "secret": events.GenerateSecret()},
 	})

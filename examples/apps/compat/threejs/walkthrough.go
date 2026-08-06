@@ -86,7 +86,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "threejs-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -118,7 +118,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s  hasUI=%v\n", t.Name, t.Meta["ui"] != nil)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -161,7 +161,7 @@ for _, t := range out.Tools {
 		`tr, _ := c.ToolCallFull("show_threejs_scene", map[string]any{})
 fmt.Printf("structuredContent: %v, isError: %v\n", tr.StructuredContent, tr.IsError)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("show_threejs_scene", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "show_threejs_scene", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -214,7 +214,7 @@ curl -s -X POST `+serverURL+`/mcp \
 })
 fmt.Printf("structuredContent: %v\n", tr.StructuredContent)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("show_threejs_scene", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "show_threejs_scene", map[string]any{
 			"code":   sampleCode,
 			"height": 500,
 		})
@@ -241,7 +241,7 @@ fmt.Printf("structuredContent: %v\n", tr.StructuredContent)`,
 		`tr, _ := c.ToolCallFull("learn_threejs", map[string]any{})
 fmt.Printf("%d bytes of docs:\n%s\n", len(tr.Content[0].Text), tr.Content[0].Text[:200])`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("learn_threejs", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "learn_threejs", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -273,7 +273,7 @@ fmt.Printf("%d bytes of docs:\n%s\n", len(tr.Content[0].Text), tr.Content[0].Tex
 		`text, _ := c.ReadResource("ui://threejs/mcp-app.html")
 fmt.Printf("%d bytes total; first 200:\n%.200s\n", len(text), text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://threejs/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://threejs/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

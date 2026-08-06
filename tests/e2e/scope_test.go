@@ -19,7 +19,7 @@ func TestE2E_Scope_Allowed(t *testing.T) {
 	token := env.MintToken(t, "user-scoped", []string{"tools:read", "tools:call"})
 
 	client := env.ConnectMCPClient(t, token)
-	result, err := client.ToolCall("scoped-tool", nil)
+	result, err := client.ToolCall(t.Context(), "scoped-tool", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", result)
 }
@@ -33,7 +33,7 @@ func TestE2E_Scope_Denied(t *testing.T) {
 	token := env.MintToken(t, "user-limited", []string{"tools:read"})
 
 	client := env.ConnectMCPClient(t, token)
-	result, err := client.ToolCall("scoped-tool", nil)
+	result, err := client.ToolCall(t.Context(), "scoped-tool", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "error")
 	assert.Contains(t, result, "insufficient scope")
@@ -47,7 +47,7 @@ func TestE2E_AdminScope_Denied(t *testing.T) {
 	token := env.MintToken(t, "user-nonadmin", []string{"tools:read", "tools:call"})
 
 	client := env.ConnectMCPClient(t, token)
-	result, err := client.ToolCall("admin-tool", nil)
+	result, err := client.ToolCall(t.Context(), "admin-tool", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "error")
 	assert.Contains(t, result, "insufficient scope")

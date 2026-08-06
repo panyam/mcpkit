@@ -7,6 +7,66 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Each release also has a fuller write-up under [`docs/releases/`](docs/releases/).
 Releases before 0.3.0 were tag-only and are not back-filled here.
 
+## [Unreleased]
+
+Ergonomics pass on the client and server entry points, from external feedback
+on the SDK's first-run experience. Migration guide:
+[`docs/CLIENT_CONTEXT_MIGRATION.md`](docs/CLIENT_CONTEXT_MIGRATION.md).
+
+### Fixed
+- **`ListTools(nil)` no longer panics.** Passing an untyped `nil` for a
+  `context.Context` crashed with a nil-pointer dereference in the pagination
+  loop's per-item cancellation check (`client/iterators.go`). Go permits `nil`
+  for a `context.Context` parameter and neither the compiler nor `go vet` flags
+  it, so this compiled and then crashed at run time. Every exported method that
+  accepts a context now normalizes `nil` to `context.Background()`. It is a
+  crash guard, not an endorsement — pass a real context so cancellation works.
+- **`Server.Register` no longer drops unsupported values silently.** The type
+  switch had no `default`, so anything that was not a `Tool`, `Resource`,
+  `ResourceTemplate`, `Prompt`, or `core.TypedToolResult` was discarded with no
+  error, no log, and no failure until a caller hit the missing name. Writing
+  `&server.Tool{...}` instead of `server.Tool{...}` was enough to lose a tool.
+  It now panics with the offending type and argument index. `Register` takes
+  `...any` so a single call can mix primitive kinds, which is why the type
+  system cannot catch this; registration is a start-up action, so a panic
+  surfaces it immediately.
+
+### Added
+- **`Server.Ready() <-chan struct{}` and `Server.Addr() string`.** `Run` and
+  `ListenAndServe` block and bound their listener inside the goroutine they
+  start, so a caller had no way to know when the port was reachable and had to
+  sleep before connecting. `Ready` closes once the listener is bound; `Addr`
+  reports the address it bound, which makes `":0"` usable. `Ready` never closes
+  if the bind fails, so select on it together with the error from `Run`.
+- **`Server.RunWithListener(ln net.Listener, opts ...TransportOption)`** serves
+  on a listener the caller has already bound, so the port is accepting before
+  serving starts and there is no window to race at all.
+
+### Breaking
+- **Every `client.Client` method that performs I/O now takes a
+  `context.Context` first.** Previously the list methods took one and
+  `ToolCall` / `ReadResource` / `Call` / `Connect` did not, which left the most
+  common calls with no way to time out or cancel, and made the `nil`-context
+  crash above easy to hit. Affects `Connect`, `Call`, `CallContext`, `ToolCall`,
+  `ToolCallFull`, `ReadResource`, `ReadResourceFull`, `SubscribeResource`,
+  `UnsubscribeResource`, `SetLogLevel`, `NotifyRootsChanged`, the four
+  `ListXPage` helpers, and the package-level `ToolCall` / `ToolCallTyped` /
+  task helpers (`GetTask`, `UpdateTask`, `CancelTask`, `GetTaskV1`,
+  `GetTaskPayloadV1`, `ListTasksV1`, `CancelTaskV1`, `ToolCallAsTaskV1`).
+  Accessors are unchanged. The compiler flags every call site; see the
+  migration guide for the full before/after table, including the two shapes
+  (variadic and generic helpers) that surface as type errors rather than
+  "not enough arguments".
+- **`Connect(ctx)` bounds the handshake, not the session** — mirroring
+  `grpc.DialContext`. Once it returns `nil` the session outlives the context,
+  so a short timeout is safe. `WithConnectTimeout` still applies and composes;
+  whichever fires first wins. Use `Close` to end a session.
+
+### Changed
+- Requires `github.com/panyam/servicekit` v0.1.4 for its new
+  `http.WithListener` option, which is what lets mcpkit bind before serving and
+  report readiness honestly.
+
 ## [0.4.0] - 2026-08-03
 
 Full notes: [`docs/releases/v0.4.0.md`](docs/releases/v0.4.0.md).

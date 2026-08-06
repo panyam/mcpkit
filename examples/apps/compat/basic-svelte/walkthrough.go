@@ -15,13 +15,13 @@ import (
 //
 // Walks four steps:
 //
-//   1. Connect to the fixture (POST /mcp initialize → session)
-//   2. tools/list — verify get-time is advertised + the _meta.ui carries
-//      the resourceUri the iframe loads
-//   3. tools/call get-time — capture structuredContent and confirm the
-//      ISO 8601 timestamp shape
-//   4. resources/read on the resourceUri — verify the iframe HTML is
-//      served (sanity-check the App→server round trip without basic-host)
+//  1. Connect to the fixture (POST /mcp initialize → session)
+//  2. tools/list — verify get-time is advertised + the _meta.ui carries
+//     the resourceUri the iframe loads
+//  3. tools/call get-time — capture structuredContent and confirm the
+//     ISO 8601 timestamp shape
+//  4. resources/read on the resourceUri — verify the iframe HTML is
+//     served (sanity-check the App→server round trip without basic-host)
 //
 // Each step attaches two unboxed Verbatim blocks via common.WireRecipe:
 // a curl form (copy-pastable into a terminal) and a Go form (the
@@ -81,7 +81,7 @@ fmt.Printf("connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`,
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "basic-svelte-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -113,7 +113,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s: %v\n", t.Name, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -152,7 +152,7 @@ for _, t := range out.Tools {
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-time", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-time", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -176,7 +176,7 @@ fmt.Println(string(pretty))`,
 		`text, _ := c.ReadResource("ui://get-time/mcp-app.html")
 fmt.Printf("first 200 bytes: %.200s\n", text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://get-time/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://get-time/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

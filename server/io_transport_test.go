@@ -44,10 +44,10 @@ func TestRunIO_EchoTool(t *testing.T) {
 	c := client.NewClient("io://test", core.ClientInfo{Name: "io-client", Version: "1.0"},
 		client.WithIOTransport(cr, cw),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(ctx))
 
 	// Call the echo tool.
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello pipes"})
+	result, err := c.ToolCall(ctx, "echo", map[string]any{"message": "hello pipes"})
 	require.NoError(t, err)
 	assert.Equal(t, "echo: hello pipes", result)
 
@@ -83,12 +83,12 @@ func TestRunIO_MultipleToolCalls(t *testing.T) {
 	c := client.NewClient("io://test", core.ClientInfo{Name: "io-client", Version: "1.0"},
 		client.WithIOTransport(cr, cw),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(ctx))
 	defer func() { c.Close(); cancel() }()
 
 	// Multiple calls on the same connection.
 	for i := 0; i < 5; i++ {
-		result, err := c.ToolCall("add", map[string]any{"a": i, "b": 10})
+		result, err := c.ToolCall(ctx, "add", map[string]any{"a": i, "b": 10})
 		require.NoError(t, err)
 		assert.Equal(t, fmt.Sprintf("%d", i+10), result)
 	}

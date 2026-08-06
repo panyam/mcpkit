@@ -238,7 +238,7 @@ tools, _ := readClient.ListTools(ctx.Ctx) // JWKS validation passed; scope just 
 				client.WithClientBearerToken(tokRead),
 				client.WithTracerProvider(tp),
 			)
-			if err := readClient.Connect(); err != nil {
+			if err := readClient.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
@@ -271,7 +271,7 @@ text, err := readClient.ToolCall("read_document",
     map[string]any{"docId": "doc-123"})`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			text, err := readClient.ToolCall("read_document", map[string]any{"docId": "doc-123"})
+			text, err := readClient.ToolCall(ctx.Ctx, "read_document", map[string]any{"docId": "doc-123"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -308,7 +308,7 @@ if errors.As(err, &authErr) {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			_, err := readClient.ToolCallFull("update_document", map[string]any{
+			_, err := readClient.ToolCallFull(ctx.Ctx, "update_document", map[string]any{
 				"docId": "doc-123", "content": "Updated content",
 			})
 			if err == nil {
@@ -407,13 +407,13 @@ text, err := callClient.ToolCall("update_document", map[string]any{
 				client.WithClientBearerToken(tokReadCall),
 				client.WithTracerProvider(tp),
 			)
-			if err := callClient.Connect(); err != nil {
+			if err := callClient.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
 			fmt.Printf("    New session connected\n\n")
 
-			text, err := callClient.ToolCall("update_document", map[string]any{
+			text, err := callClient.ToolCall(ctx.Ctx, "update_document", map[string]any{
 				"docId": "doc-123", "content": "Updated content",
 			})
 			if err != nil {
@@ -474,7 +474,7 @@ if errors.As(err, &rpcErr) {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			_, err := callClient.ToolCall("initiate_payment", map[string]any{
+			_, err := callClient.ToolCall(ctx.Ctx, "initiate_payment", map[string]any{
 				"amount":   "150.00",
 				"currency": "EUR",
 				"payee":    "ACME Corp",
@@ -596,13 +596,13 @@ text, err := payClient.ToolCall("initiate_payment", map[string]any{
 				client.WithClientBearerToken(tokPayment),
 				client.WithTracerProvider(tp),
 			)
-			if err := payClient.Connect(); err != nil {
+			if err := payClient.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
 			fmt.Printf("    New session with RAR token connected\n\n")
 
-			text, err := payClient.ToolCall("initiate_payment", map[string]any{
+			text, err := payClient.ToolCall(ctx.Ctx, "initiate_payment", map[string]any{
 				"amount":   "150.00",
 				"currency": "EUR",
 				"payee":    "ACME Corp",

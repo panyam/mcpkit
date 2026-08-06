@@ -121,10 +121,10 @@ func TestHTTPStatusError_HeaderExposed(t *testing.T) {
 	t.Cleanup(proxy.Close)
 
 	c := client.NewClient(proxy.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 
-	_, err := c.ToolCall("echo", map[string]any{"message": "fail"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "fail"})
 	require.Error(t, err)
 
 	var httpErr *client.HTTPStatusError
@@ -148,7 +148,7 @@ func TestHTTPStatusError_429WithRetryAfter(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	err := c.Connect()
+	err := c.Connect(t.Context())
 
 	// Connect sends initialize which will get 429
 	require.Error(t, err)
@@ -209,11 +209,11 @@ func TestStreamable_5xxReturnsHTTPStatusError(t *testing.T) {
 	t.Cleanup(proxy.Close)
 
 	c := client.NewClient(proxy.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 
 	// This call should hit the 503 proxy response
-	_, err := c.ToolCall("echo", map[string]any{"message": "fail"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "fail"})
 	require.Error(t, err)
 
 	// Verify it's an HTTPStatusError
@@ -243,7 +243,7 @@ func TestStreamable_5xxNotifyReturnsError(t *testing.T) {
 	// Create a client — we can't Connect() since initialize will fail,
 	// so test at the transport level by checking the error type directly.
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	err := c.Connect()
+	err := c.Connect(t.Context())
 
 	// Connect sends initialize which will get 500 — should be HTTPStatusError
 	require.Error(t, err)
@@ -265,10 +265,10 @@ func TestSSE_ReaderDeathDoesNotBlock(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithSSEClient())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// First call should succeed
-	result, err := c.ToolCall("echo", map[string]any{"message": "alive"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "alive"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "alive")
 
@@ -285,7 +285,7 @@ func TestSSE_ReaderDeathDoesNotBlock(t *testing.T) {
 	// Use a timeout to guard against the old blocking behavior.
 	done := make(chan error, 1)
 	go func() {
-		_, err := c.ToolCall("echo", map[string]any{"message": "dead"})
+		_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "dead"})
 		done <- err
 	}()
 
@@ -314,7 +314,7 @@ func TestSSE_ReaderDeathCallReturnsTransientError(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithSSEClient())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// Force-close server-side connections to kill the SSE stream
 	ts.CloseClientConnections()
@@ -323,7 +323,7 @@ func TestSSE_ReaderDeathCallReturnsTransientError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Call should return an error classified as transient
-	_, err := c.ToolCall("echo", map[string]any{"message": "dead"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "dead"})
 	require.Error(t, err, "call after reader death should return error")
 	assert.True(t, client.IsTransientError(err),
 		"error after reader death should be transient, got: %v", err)
@@ -360,11 +360,11 @@ func TestStreamable_5xxWithReconnect(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithMaxRetries(1),
 		client.WithReconnectBackoff(10*time.Millisecond))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 
 	// Should fail on first attempt (503), reconnect, and succeed on retry
-	result, err := c.ToolCall("echo", map[string]any{"message": "recovered"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "recovered"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "recovered")
 }

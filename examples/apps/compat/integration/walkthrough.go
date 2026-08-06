@@ -74,7 +74,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "integration-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -101,7 +101,7 @@ resources, _ := c.Call("resources/list", map[string]any{})
 fmt.Printf("tools: %s\n", string(tools.Raw))
 fmt.Printf("resources: %s\n", string(resources.Raw))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		toolsRes, err := c.Call("tools/list", map[string]any{})
+		toolsRes, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -116,7 +116,7 @@ fmt.Printf("resources: %s\n", string(resources.Raw))`,
 		for _, t := range tl.Tools {
 			fmt.Printf("    tool: %s  _meta=%v\n", t.Name, t.Meta)
 		}
-		resRes, err := c.Call("resources/list", map[string]any{})
+		resRes, err := c.Call(ctx.Ctx, "resources/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -148,7 +148,7 @@ fmt.Printf("resources: %s\n", string(resources.Raw))`,
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-time", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-time", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -170,7 +170,7 @@ fmt.Println(string(pretty))`,
 		`text, _ := c.ReadResource("resource:///sample-report.txt")
 fmt.Println(text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("resource:///sample-report.txt")
+		text, err := c.ReadResource(ctx.Ctx, "resource:///sample-report.txt")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -191,7 +191,7 @@ fmt.Println(text)`,
 		`text, _ := c.ReadResource("ui://get-time/mcp-app.html")
 fmt.Printf("%d bytes; first 200:\n%.200s\n", len(text), text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://get-time/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://get-time/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

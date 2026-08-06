@@ -13,7 +13,7 @@ import (
 func TestUIResourceServesHTML(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	result, err := c.Call("resources/read", map[string]string{"uri": "ui://dashboard/view"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://dashboard/view"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestUIResourceServesHTML(t *testing.T) {
 func TestUIResourceContent(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	result, err := c.Call("resources/read", map[string]string{"uri": "ui://dashboard/view"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://dashboard/view"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestUIResourceContent(t *testing.T) {
 func TestUITemplateResource(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	result, err := c.Call("resources/read", map[string]string{"uri": "ui://apps/42/view"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://apps/42/view"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestUITemplateResource(t *testing.T) {
 func TestPlainResourceNoMeta(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	result, err := c.Call("resources/read", map[string]string{"uri": "test://plain-resource"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "test://plain-resource"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestPlainResourceNoMeta(t *testing.T) {
 func TestResourceMetaPrecedence(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	result, err := c.Call("resources/read", map[string]string{"uri": "ui://dashboard/view"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://dashboard/view"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}

@@ -33,10 +33,10 @@ func TestToolCall(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCallFull("books_search", map[string]any{
+	result, err := c.ToolCallFull(t.Context(), "books_search", map[string]any{
 		"query":       "programming",
 		"max_results": 2,
 		"genre":       "programming",
@@ -60,10 +60,10 @@ func TestResourceRead(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	text, err := c.ReadResource("book://1")
+	text, err := c.ReadResource(t.Context(), "book://1")
 	require.NoError(t, err)
 	assert.Contains(t, text, "The Go Programming Language")
 }
@@ -76,11 +76,11 @@ func TestPromptGet(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// List prompts.
-	result, err := c.Call("prompts/list", nil)
+	result, err := c.Call(t.Context(), "prompts/list", nil)
 	require.NoError(t, err)
 
 	var listResult core.PromptsListResult
@@ -111,7 +111,7 @@ func TestListTools(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	tools, err := c.ListTools(t.Context())
@@ -133,11 +133,11 @@ func TestListResources(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Template resources show up in resources/templates/list.
-	result, err := c.Call("resources/templates/list", nil)
+	result, err := c.Call(t.Context(), "resources/templates/list", nil)
 	require.NoError(t, err)
 
 	var templResult core.ResourceTemplatesListResult
@@ -160,11 +160,11 @@ func TestCompletion(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Complete book_id on the resource template.
-	result, err := c.Call("completion/complete", map[string]any{
+	result, err := c.Call(t.Context(), "completion/complete", map[string]any{
 		"ref": map[string]any{
 			"type": "ref/resource",
 			"uri":  "book://{book_id}",

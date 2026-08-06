@@ -116,7 +116,7 @@ func TestParseToolCallResult_InputRequired(t *testing.T) {
 	c, _ := connectMRTRClient(t, srv)
 
 	// Bare ToolCall — should surface InputRequired on round 1.
-	res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
+	res, err := client.ToolCall(t.Context(), c, "test_tool_with_elicitation", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -174,7 +174,7 @@ func connectMRTRClient(t *testing.T, srv *server.Server, opts ...client.ClientOp
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "mrtr-client-test", Version: "0.0.1"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -224,8 +224,8 @@ func (mrtrNoopSpan) AddLink(_ core.Link)      {}
 // client actually stamped on the wire. Records every tools/call request
 // in arrival order.
 type mrtrParamsCaptureMiddleware struct {
-	mu      sync.Mutex
-	rounds  []json.RawMessage
+	mu     sync.Mutex
+	rounds []json.RawMessage
 }
 
 func (m *mrtrParamsCaptureMiddleware) middleware() server.Middleware {

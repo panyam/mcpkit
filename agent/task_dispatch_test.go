@@ -122,7 +122,7 @@ func connectTaskSource(t *testing.T, f *taskFixture, ui ElicitationUI) (*ClientS
 	coord := NewElicitationCoordinator(ui)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "task-test", Version: "1.0"},
 		client.WithElicitationHandler(coord.Handler()))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })

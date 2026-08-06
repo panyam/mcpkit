@@ -35,9 +35,11 @@ func TestClient_Streamable_401Integration(t *testing.T) {
 	srv.RegisterTool(
 		core.ToolDef{Name: "echo", Description: "echo", InputSchema: map[string]any{"type": "object", "properties": map[string]any{"message": map[string]any{"type": "string"}}}},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var p struct{ Message string `json:"message"` }
+			var p struct {
+				Message string `json:"message"`
+			}
 			req.Bind(&p)
-			return core.TextResult("echo: "+p.Message), nil
+			return core.TextResult("echo: " + p.Message), nil
 		},
 	)
 	handler := srv.Handler(server.WithStreamableHTTP(true))
@@ -49,11 +51,11 @@ func TestClient_Streamable_401Integration(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTokenSource(tokenSrc))
 
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	require.NoError(t, err, "Connect should succeed after 401 retry")
 	defer c.Close()
 
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hello"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "hello")
 }
@@ -76,7 +78,7 @@ func TestClient_Streamable_AuthErrorType(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithClientBearerToken("wrong-token"))
 
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "401", "error should mention 401")
 }

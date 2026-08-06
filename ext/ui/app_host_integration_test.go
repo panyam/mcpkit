@@ -35,7 +35,7 @@ func TestAppHost_EndToEnd(t *testing.T) {
 		client.WithTransport(xport),
 		client.WithUIExtension(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	defer c.Close()

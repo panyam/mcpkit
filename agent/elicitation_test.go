@@ -26,7 +26,7 @@ func startServer(t *testing.T, srv *server.Server) *httptest.Server {
 func connectClient(t *testing.T, url string, opts ...client.ClientOption) *client.Client {
 	t.Helper()
 	c := client.NewClient(url+"/mcp", core.ClientInfo{Name: "agent-elicit-test", Version: "1.0"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

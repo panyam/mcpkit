@@ -96,7 +96,7 @@ func runDemo() {
 				core.ClientInfo{Name: "file-inputs-host", Version: "1.0"},
 				opts...,
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
@@ -109,7 +109,7 @@ func runDemo() {
 		DashedArrow("Server", "Host", "tools[] with x-mcp-file marked properties").
 		Note("`client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`\"image\"`); array-of-files shapes land under `name[]` (`\"documents[]\"`) so callers can disambiguate without re-walking the schema.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			page, err := c.ListToolsPage("")
+			page, err := c.ListToolsPage(ctx.Ctx, "")
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -139,7 +139,7 @@ func runDemo() {
 			fmt.Printf("    encoded data URI: %d bytes (preview: %s…)\n",
 				len(uri), shortPreview(uri, 80))
 
-			out, err := c.ToolCall("upload_image", map[string]any{
+			out, err := c.ToolCall(ctx.Ctx, "upload_image", map[string]any{
 				"image":   uri,
 				"caption": "24×24 gradient swatch",
 			})
@@ -162,7 +162,7 @@ func runDemo() {
 				core.EncodeDataURI(fixtureContractPDF, "application/pdf", "contract.pdf"),
 				core.EncodeDataURI(fixtureAppendixPDF, "application/pdf", "appendix.pdf"),
 			}
-			out, err := c.ToolCall("analyze_documents", map[string]any{
+			out, err := c.ToolCall(ctx.Ctx, "analyze_documents", map[string]any{
 				"documents": pdfs,
 			})
 			if err != nil {
@@ -180,7 +180,7 @@ func runDemo() {
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			previewFile("README.txt", "text/plain", fixtureREADME)
 			uri := core.EncodeDataURI(fixtureREADME, "text/plain", "README.txt")
-			out, err := c.ToolCall("process_any_file", map[string]any{
+			out, err := c.ToolCall(ctx.Ctx, "process_any_file", map[string]any{
 				"file": uri,
 			})
 			if err != nil {
@@ -205,7 +205,7 @@ func runDemo() {
 			// we send a payload that satisfies whatever constraints the
 			// server actually advertised — no risk of a stale local copy
 			// drifting from the descriptor's accept list.
-			tools, err := c.ListToolsPage("")
+			tools, err := c.ListToolsPage(ctx.Ctx, "")
 			if err != nil {
 				fmt.Printf("    ERROR listing tools: %v\n", err)
 				return nil
@@ -220,7 +220,7 @@ func runDemo() {
 			}
 			fmt.Printf("    %s prepared (%d bytes encoded)\n", filepath.Base(path), len(uri))
 
-			out, err := c.ToolCall("upload_image", map[string]any{
+			out, err := c.ToolCall(ctx.Ctx, "upload_image", map[string]any{
 				"image": uri,
 			})
 			if err != nil {
@@ -274,7 +274,7 @@ _, err := c.Call("tools/call", map[string]any{
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			uri := core.EncodeDataURI([]byte("hello"), "text/plain", "x.txt")
 			fmt.Printf("    sending: data URI with mediaType=text/plain (%d bytes total)\n", len(uri))
-			_, err := c.Call("tools/call", map[string]any{
+			_, err := c.Call(ctx.Ctx, "tools/call", map[string]any{
 				"name":      "upload_image",
 				"arguments": map[string]any{"image": uri},
 			})
@@ -315,7 +315,7 @@ _, err := c.Call("tools/call", map[string]any{
 			big := make([]byte, 6*1024*1024) // 6 MiB of zeros
 			uri := core.EncodeDataURI(big, "image/png", "big.png")
 			fmt.Printf("    sending: 6 MiB image/png payload (server cap is 5 MiB)\n")
-			_, err := c.Call("tools/call", map[string]any{
+			_, err := c.Call(ctx.Ctx, "tools/call", map[string]any{
 				"name":      "upload_image",
 				"arguments": map[string]any{"image": uri},
 			})
@@ -358,7 +358,7 @@ _, err := c.Call("tools/call", map[string]any{
 			good := core.EncodeDataURI([]byte("%PDF-1.4\n%%EOF\n"), "application/pdf", "ok.pdf")
 			bad := core.EncodeDataURI([]byte("hello"), "text/plain", "bad.txt")
 			fmt.Printf("    sending: 2 documents (index 0: valid PDF, index 1: text/plain)\n")
-			_, err := c.Call("tools/call", map[string]any{
+			_, err := c.Call(ctx.Ctx, "tools/call", map[string]any{
 				"name":      "analyze_documents",
 				"arguments": map[string]any{"documents": []string{good, bad}},
 			})

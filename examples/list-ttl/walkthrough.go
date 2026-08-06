@@ -98,7 +98,7 @@ if err := c.Connect(); err != nil { /* server not up — run: just serve */ }`),
 				core.ClientInfo{Name: "list-ttl-host", Version: "1.0"},
 				opts...,
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
@@ -124,7 +124,7 @@ _ = page.CacheScope // "" defaults to "public"
 _ = page.Tools`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			page, err := c.ListToolsPage("")
+			page, err := c.ListToolsPage(ctx.Ctx, "")
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -155,7 +155,7 @@ _ = resources.CacheScope
 _ = templates.TTLMs`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			prompts, err := c.ListPromptsPage("")
+			prompts, err := c.ListPromptsPage(ctx.Ctx, "")
 			if err != nil {
 				fmt.Printf("    ERROR prompts: %v\n", err)
 				return
@@ -163,7 +163,7 @@ _ = templates.TTLMs`),
 			fmt.Printf("    prompts/list:                  ttlMs=%s, scope=%s, count=%d\n",
 				formatTTLMs(prompts.TTLMs), formatScope(prompts.CacheScope), len(prompts.Prompts))
 
-			resources, err := c.ListResourcesPage("")
+			resources, err := c.ListResourcesPage(ctx.Ctx, "")
 			if err != nil {
 				fmt.Printf("    ERROR resources: %v\n", err)
 				return
@@ -171,7 +171,7 @@ _ = templates.TTLMs`),
 			fmt.Printf("    resources/list:                ttlMs=%s, scope=%s, count=%d\n",
 				formatTTLMs(resources.TTLMs), formatScope(resources.CacheScope), len(resources.Resources))
 
-			templates, err := c.ListResourceTemplatesPage("")
+			templates, err := c.ListResourceTemplatesPage(ctx.Ctx, "")
 			if err != nil {
 				fmt.Printf("    ERROR templates: %v\n", err)
 				return
@@ -199,7 +199,7 @@ _ = rr.CacheScope
 _ = rr.Contents`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			rr, err := c.ReadResourceFull("file:///fixture")
+			rr, err := c.ReadResourceFull(ctx.Ctx, "file:///fixture")
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -215,7 +215,7 @@ _ = rr.Contents`),
 		DashedArrow("Server", "Host", "raw JSON: ttlMs + cacheScope wire-format check").
 		Note("Bypass the typed helper and decode the raw response body to verify the wire shape — `\"ttlMs\": 60000` as a JSON number and `\"cacheScope\"` as a string, sitting alongside `\"tools\"` and (when paginated) `\"nextCursor\"`.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			raw, err := c.Call("tools/list", nil)
+			raw, err := c.Call(ctx.Ctx, "tools/list", nil)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return

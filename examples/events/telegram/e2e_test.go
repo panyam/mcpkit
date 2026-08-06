@@ -98,7 +98,7 @@ func TestE2EPollDelivery(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "poll-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	require.NoError(t, yieldText(yield, 100, "alice", "hello"))
 	require.NoError(t, yieldText(yield, 100, "bob", "world"))
@@ -106,7 +106,7 @@ func TestE2EPollDelivery(t *testing.T) {
 
 	// Flat events/poll request shape per spec §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
-	result, err := c.Call("events/poll", map[string]any{
+	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
 		"cursor":    "0",
 		"maxEvents": 2,
@@ -119,7 +119,7 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NotNil(t, resp.Cursor)
 	assert.Equal(t, "2", *resp.Cursor)
 
-	result2, err := c.Call("events/poll", map[string]any{
+	result2, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "telegram.message",
 		"cursor": *resp.Cursor,
 	})
@@ -144,7 +144,7 @@ func TestE2EStreamDelivery(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "stream-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -187,7 +187,7 @@ func TestE2EStreamCursorless(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "cursorless-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -251,10 +251,10 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "webhook-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	clientSecret := events.GenerateSecret()
-	subResult, err := c.Call("events/subscribe", map[string]any{
+	subResult, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -324,10 +324,10 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "stdhdr-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	clientSecret := events.GenerateSecret()
-	_, err := c.Call("events/subscribe", map[string]any{
+	_, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -382,10 +382,10 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "mcphdr-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	clientSecret := events.GenerateSecret()
-	_, err := c.Call("events/subscribe", map[string]any{
+	_, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "telegram.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -412,9 +412,9 @@ func TestE2EEventsList(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "list-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
-	result, err := c.Call("events/list", map[string]any{})
+	result, err := c.Call(t.Context(), "events/list", map[string]any{})
 	require.NoError(t, err)
 
 	var resp struct {
@@ -464,9 +464,9 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	tsrv := httptest.NewServer(handler)
 	defer tsrv.Close()
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-wh", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
-	raw, err := c.Call("events/subscribe", map[string]any{
+	raw, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "telegram.typing",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": events.GenerateSecret()},
 	})
@@ -498,12 +498,12 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	tsrv := httptest.NewServer(handler)
 	defer tsrv.Close()
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "multi-sub", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// The legacy {subscriptions: [...]} wrapper is rejected with a
 	// helpful error pointing at the spec change (§"Poll-Based
 	// Delivery" → "Request: events/poll" L139-149).
-	_, err := c.Call("events/poll", map[string]any{
+	_, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"subscriptions": []map[string]any{
 			{"name": "telegram.message", "cursor": "0"},
 		},
@@ -522,11 +522,11 @@ func TestE2EResourceReadViaClient(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "resource-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	require.NoError(t, yieldText(yield, 100, "alice", "resource test"))
 
-	text, err := c.ReadResource("telegram://messages/recent")
+	text, err := c.ReadResource(t.Context(), "telegram://messages/recent")
 	require.NoError(t, err)
 	assert.Contains(t, text, "resource test")
 

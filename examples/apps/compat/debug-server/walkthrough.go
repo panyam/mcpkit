@@ -80,7 +80,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "debug-server-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -109,7 +109,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s  ui=%v\n", t.Name, t.Meta["ui"])
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -144,7 +144,7 @@ for _, t := range out.Tools {
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("debug-tool", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "debug-tool", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -172,7 +172,7 @@ fmt.Println(string(pretty))`,
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("debug-tool", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "debug-tool", map[string]any{
 			"largeInput":  "hello world",
 			"delayMs":     200,
 			"contentType": "text",
@@ -200,7 +200,7 @@ fmt.Println(string(pretty))`,
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("debug-refresh", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "debug-refresh", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -226,7 +226,7 @@ fmt.Println(string(pretty))`,
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("debug-log", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "debug-log", map[string]any{
 			"type":    "click",
 			"payload": map[string]any{"buttonId": "refresh", "timestamp": "2026-06-08T00:00:00Z"},
 		})

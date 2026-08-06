@@ -109,9 +109,9 @@ func (c *Client) Prompts(ctx context.Context) iter.Seq2[core.PromptDef, error] {
 // for the auto-paginating item iterator when you don't need the envelope
 // metadata, or the zero-arg ListTools() if you only want the items from
 // the first page.
-func (c *Client) ListToolsPage(cursor string) (*core.ToolsListResult, error) {
+func (c *Client) ListToolsPage(ctx context.Context, cursor string) (*core.ToolsListResult, error) {
 	var out core.ToolsListResult
-	if err := callListPage(c, "tools/list", cursor, &out); err != nil {
+	if err := callListPage(ctx, c, "tools/list", cursor, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -120,9 +120,9 @@ func (c *Client) ListToolsPage(cursor string) (*core.ToolsListResult, error) {
 // ListResourcesPage fetches one page of resources/list and returns the
 // typed result including the SEP-2549 ttlMs / cacheScope hints and
 // pagination cursor.
-func (c *Client) ListResourcesPage(cursor string) (*core.ResourcesListResult, error) {
+func (c *Client) ListResourcesPage(ctx context.Context, cursor string) (*core.ResourcesListResult, error) {
 	var out core.ResourcesListResult
-	if err := callListPage(c, "resources/list", cursor, &out); err != nil {
+	if err := callListPage(ctx, c, "resources/list", cursor, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -131,9 +131,9 @@ func (c *Client) ListResourcesPage(cursor string) (*core.ResourcesListResult, er
 // ListResourceTemplatesPage fetches one page of resources/templates/list
 // and returns the typed result including the SEP-2549 ttlMs / cacheScope
 // hints and pagination cursor.
-func (c *Client) ListResourceTemplatesPage(cursor string) (*core.ResourceTemplatesListResult, error) {
+func (c *Client) ListResourceTemplatesPage(ctx context.Context, cursor string) (*core.ResourceTemplatesListResult, error) {
 	var out core.ResourceTemplatesListResult
-	if err := callListPage(c, "resources/templates/list", cursor, &out); err != nil {
+	if err := callListPage(ctx, c, "resources/templates/list", cursor, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -142,9 +142,9 @@ func (c *Client) ListResourceTemplatesPage(cursor string) (*core.ResourceTemplat
 // ListPromptsPage fetches one page of prompts/list and returns the typed
 // result including the SEP-2549 ttlMs / cacheScope hints and pagination
 // cursor.
-func (c *Client) ListPromptsPage(cursor string) (*core.PromptsListResult, error) {
+func (c *Client) ListPromptsPage(ctx context.Context, cursor string) (*core.PromptsListResult, error) {
 	var out core.PromptsListResult
-	if err := callListPage(c, "prompts/list", cursor, &out); err != nil {
+	if err := callListPage(ctx, c, "prompts/list", cursor, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -154,12 +154,12 @@ func (c *Client) ListPromptsPage(cursor string) (*core.PromptsListResult, error)
 // helpers — all four list endpoints take an optional cursor param and
 // unmarshal into a typed result. Centralized so the cursor encoding
 // stays consistent with what `paginate` (the iterator helper) sends.
-func callListPage(c *Client, method, cursor string, out any) error {
+func callListPage(ctx context.Context, c *Client, method, cursor string, out any) error {
 	var params any
 	if cursor != "" {
 		params = map[string]string{"cursor": cursor}
 	}
-	result, err := c.Call(method, params)
+	result, err := c.Call(ctx, method, params)
 	if err != nil {
 		return err
 	}
@@ -173,9 +173,14 @@ func callListPage(c *Client, method, cursor string, out any) error {
 // or the per-client max page count (c.maxListPages, configured via
 // WithMaxListPages) would be exceeded — the latter yields a typed
 // ErrListPaginationOverrun before returning.
+// A nil ctx is normalized to context.Background rather than dereferenced —
+// see ctxOrBackground. The cancellation check below runs per item, so a nil
+// ctx would otherwise panic only after the first page came back, making the
+// crash depend on server behavior.
 func paginate[T any](ctx context.Context, c *Client, method string,
 	extract func(*CallResult) ([]T, string, error),
 ) iter.Seq2[T, error] {
+	ctx = ctxOrBackground(ctx)
 	return func(yield func(T, error) bool) {
 		var cursor string
 		pageCount := 0
@@ -192,7 +197,7 @@ func paginate[T any](ctx context.Context, c *Client, method string,
 				params = map[string]string{"cursor": cursor}
 			}
 
-			result, err := c.Call(method, params)
+			result, err := c.Call(ctx, method, params)
 			if err != nil {
 				var zero T
 				yield(zero, err)

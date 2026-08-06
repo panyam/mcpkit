@@ -59,7 +59,7 @@ func TestCallContext_NotifyHookFiresOnCallStreamNotifications(t *testing.T) {
 			globalCalls = append(globalCalls, method)
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	hook := func(method string, _ json.RawMessage) {
@@ -69,7 +69,7 @@ func TestCallContext_NotifyHookFiresOnCallStreamNotifications(t *testing.T) {
 	}
 
 	cc := client.NewCallContext(context.Background()).WithNotifyHook(hook)
-	_, err := c.CallContext(cc, "tools/call", map[string]any{
+	_, err := c.CallContext(t.Context(), cc, "tools/call", map[string]any{
 		"name":      "emit-then-return",
 		"arguments": map[string]any{},
 	})
@@ -114,12 +114,12 @@ func TestCallContext_NoHook_GlobalStillFires(t *testing.T) {
 			seen = append(seen, method)
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// CallContext with a bare context must behave identically to Call.
 	cc := client.NewCallContext(context.Background())
-	_, err := c.CallContext(cc, "tools/call", map[string]any{
+	_, err := c.CallContext(t.Context(), cc, "tools/call", map[string]any{
 		"name":      "emit-then-return",
 		"arguments": map[string]any{},
 	})

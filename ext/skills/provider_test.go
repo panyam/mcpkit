@@ -289,7 +289,7 @@ func TestProvider_Integration(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -315,7 +315,7 @@ func TestProvider_Integration(t *testing.T) {
 	}
 
 	// resources/read on the git-workflow manifest returns the file contents.
-	body, err := c.ReadResource("skill://git-workflow/SKILL.md")
+	body, err := c.ReadResource(t.Context(), "skill://git-workflow/SKILL.md")
 	if err != nil {
 		t.Fatalf("ReadResource manifest: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestProvider_Integration(t *testing.T) {
 	}
 
 	// resources/read on a supporting file works the same way.
-	body, err = c.ReadResource("skill://pdf-processing/references/FORMS.md")
+	body, err = c.ReadResource(t.Context(), "skill://pdf-processing/references/FORMS.md")
 	if err != nil {
 		t.Fatalf("ReadResource supporting file: %v", err)
 	}
@@ -351,7 +351,7 @@ func TestProvider_RejectsTraversalURIs(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -364,7 +364,7 @@ func TestProvider_RejectsTraversalURIs(t *testing.T) {
 	}
 	for _, uri := range cases {
 		t.Run(uri, func(t *testing.T) {
-			_, err := c.ReadResource(uri)
+			_, err := c.ReadResource(t.Context(), uri)
 			if err == nil {
 				t.Fatalf("ReadResource(%q) succeeded; want InvalidParams traversal error", uri)
 			}
@@ -438,12 +438,12 @@ func TestProvider_NotifyChanged_InvalidatesIndexCache(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	first, err := c.ReadResource(skills.IndexURI)
+	first, err := c.ReadResource(t.Context(), skills.IndexURI)
 	if err != nil {
 		t.Fatalf("ReadResource initial: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestProvider_NotifyChanged_InvalidatesIndexCache(t *testing.T) {
 		t.Fatalf("Refresh: %v", err)
 	}
 
-	second, err := c.ReadResource(skills.IndexURI)
+	second, err := c.ReadResource(t.Context(), skills.IndexURI)
 	if err != nil {
 		t.Fatalf("ReadResource after Refresh: %v", err)
 	}
@@ -480,12 +480,12 @@ func TestIndex_VersionUnderMeta(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-test-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	body, err := c.ReadResource(skills.IndexURI)
+	body, err := c.ReadResource(t.Context(), skills.IndexURI)
 	if err != nil {
 		t.Fatalf("ReadResource: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestProvider_NotifyChanged_BroadcastsListChanged(t *testing.T) {
 			}
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -807,7 +807,7 @@ func bootBroadcastTest(t *testing.T, providerOpts ...skills.ProviderOption) (*se
 		client.WithNotificationCallback(wrapper.onNotify),
 	)
 	wrapper.Client = c
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

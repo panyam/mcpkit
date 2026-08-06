@@ -67,7 +67,9 @@ func newConformanceServer() *server.Server {
 			},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var args struct{ Page string `json:"page"` }
+			var args struct {
+				Page string `json:"page"`
+			}
 			req.Bind(&args)
 			return core.TextResult("Navigated to " + args.Page), nil
 		},
@@ -177,7 +179,7 @@ func setupConformanceClient(t *testing.T) *client.Client {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "apps-conformance-client", Version: "1.0"},
 		client.WithUIExtension(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -197,7 +199,7 @@ func setupConformanceClientWithNotify(t *testing.T, onNotify func(method string,
 		client.WithUIExtension(),
 		client.WithNotificationCallback(onNotify),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

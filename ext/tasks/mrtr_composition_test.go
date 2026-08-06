@@ -10,8 +10,8 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
-	. "github.com/panyam/mcpkit/server"
 	tasks "github.com/panyam/mcpkit/ext/tasks"
+	. "github.com/panyam/mcpkit/server"
 )
 
 // TestMRTR_TaskComposition exercises the SEP-2322 + SEP-2663 composition that
@@ -76,13 +76,13 @@ func TestMRTR_TaskComposition(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "mrtr-task-comp-test", Version: "0.0.1"},
 		client.WithTasksExtension(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
 	// Round 1: no inputResponses. Expect InputRequiredResult, no task.
-	r1, err := c.Call("tools/call", map[string]any{
+	r1, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_tool_with_task",
 		"arguments": map[string]any{},
 	})
@@ -108,7 +108,7 @@ func TestMRTR_TaskComposition(t *testing.T) {
 
 	// Round 2: echo back the elicit response (+ requestState). Expect
 	// CreateTaskResult — the handler returned GoAsync after the MRTR loop.
-	r2, err := c.Call("tools/call", map[string]any{
+	r2, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_tool_with_task",
 		"arguments": map[string]any{},
 		"inputResponses": map[string]any{
@@ -148,7 +148,7 @@ func TestMRTR_TaskComposition(t *testing.T) {
 	defer cancel()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		gres, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
+		gres, err := c.Call(ctx, "tasks/get", map[string]any{"taskId": ctr.TaskID})
 		if err != nil {
 			t.Fatalf("tasks/get: %v", err)
 		}

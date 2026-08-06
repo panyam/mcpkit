@@ -39,7 +39,7 @@ func TestWithListTTLMs_AppliesToAllFourEndpoints(t *testing.T) {
 				"resources/list",
 				"resources/templates/list",
 			} {
-				res, err := c.Call(method, nil)
+				res, err := c.Call(t.Context(), method, nil)
 				if err != nil {
 					t.Fatalf("%s: %v", method, err)
 				}
@@ -76,7 +76,7 @@ func TestWithListCacheControl_SetsTTLAndScope(t *testing.T) {
 		"resources/list",
 		"resources/templates/list",
 	} {
-		res, err := c.Call(method, nil)
+		res, err := c.Call(t.Context(), method, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", method, err)
 		}
@@ -101,7 +101,7 @@ func TestWithListCacheControl_SetsTTLAndScope(t *testing.T) {
 func TestListToolsPage_ExposesTTLMs(t *testing.T) {
 	c := newListTTLClient(t, WithListTTLMs(120000))
 
-	page, err := c.ListToolsPage("")
+	page, err := c.ListToolsPage(t.Context(), "")
 	if err != nil {
 		t.Fatalf("ListToolsPage: %v", err)
 	}
@@ -119,19 +119,19 @@ func TestListToolsPage_ExposesTTLMs(t *testing.T) {
 func TestListXPage_HelpersAllSurfaceTTLMs(t *testing.T) {
 	c := newListTTLClient(t, WithListTTLMs(60000))
 
-	t1, err := c.ListToolsPage("")
+	t1, err := c.ListToolsPage(t.Context(), "")
 	if err != nil || t1.TTLMs == nil || *t1.TTLMs != 60000 {
 		t.Errorf("ListToolsPage TTLMs = %v, err = %v", t1.TTLMs, err)
 	}
-	r1, err := c.ListResourcesPage("")
+	r1, err := c.ListResourcesPage(t.Context(), "")
 	if err != nil || r1.TTLMs == nil || *r1.TTLMs != 60000 {
 		t.Errorf("ListResourcesPage TTLMs = %v, err = %v", r1.TTLMs, err)
 	}
-	rt1, err := c.ListResourceTemplatesPage("")
+	rt1, err := c.ListResourceTemplatesPage(t.Context(), "")
 	if err != nil || rt1.TTLMs == nil || *rt1.TTLMs != 60000 {
 		t.Errorf("ListResourceTemplatesPage TTLMs = %v, err = %v", rt1.TTLMs, err)
 	}
-	p1, err := c.ListPromptsPage("")
+	p1, err := c.ListPromptsPage(t.Context(), "")
 	if err != nil || p1.TTLMs == nil || *p1.TTLMs != 60000 {
 		t.Errorf("ListPromptsPage TTLMs = %v, err = %v", p1.TTLMs, err)
 	}
@@ -144,7 +144,7 @@ func TestListXPage_HelpersAllSurfaceTTLMs(t *testing.T) {
 func TestReadResource_ServerDefaultCacheControl(t *testing.T) {
 	c := newReadTTLClient(t, nil, "", WithReadResourceCacheControl(30000, core.CacheScopePrivate))
 
-	res, err := c.Call("resources/read", map[string]any{"uri": "file:///fixture"})
+	res, err := c.Call(t.Context(), "resources/read", map[string]any{"uri": "file:///fixture"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestReadResource_ServerDefaultCacheControl(t *testing.T) {
 func TestReadResource_ConformantDefault(t *testing.T) {
 	t.Run("default surfaces ttlMs0 + private", func(t *testing.T) {
 		c := newReadTTLClient(t, nil, "")
-		res, err := c.Call("resources/read", map[string]any{"uri": "file:///fixture"})
+		res, err := c.Call(t.Context(), "resources/read", map[string]any{"uri": "file:///fixture"})
 		if err != nil {
 			t.Fatalf("resources/read: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestReadResource_ConformantDefault(t *testing.T) {
 	})
 	t.Run("opt-out omits both", func(t *testing.T) {
 		c := newReadTTLClient(t, nil, "", WithoutReadResourceCacheControl())
-		res, err := c.Call("resources/read", map[string]any{"uri": "file:///fixture"})
+		res, err := c.Call(t.Context(), "resources/read", map[string]any{"uri": "file:///fixture"})
 		if err != nil {
 			t.Fatalf("resources/read: %v", err)
 		}
@@ -203,7 +203,7 @@ func TestReadResource_HandlerOverridesCacheControl(t *testing.T) {
 	c := newReadTTLClient(t, core.IntPtr(5000), core.CacheScopePublic,
 		WithReadResourceCacheControl(30000, core.CacheScopePrivate))
 
-	res, err := c.Call("resources/read", map[string]any{"uri": "file:///fixture"})
+	res, err := c.Call(t.Context(), "resources/read", map[string]any{"uri": "file:///fixture"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestReadResource_HandlerOverridesCacheControl(t *testing.T) {
 func TestReadResourceFull_TypedCacheHints(t *testing.T) {
 	c := newReadTTLClient(t, nil, "", WithReadResourceCacheControl(45000, core.CacheScopePrivate))
 
-	rr, err := c.ReadResourceFull("file:///fixture")
+	rr, err := c.ReadResourceFull(t.Context(), "file:///fixture")
 	if err != nil {
 		t.Fatalf("ReadResourceFull: %v", err)
 	}
@@ -310,7 +310,7 @@ func connectListTTLClient(t *testing.T, srv *Server) *client.Client {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "list-ttl-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

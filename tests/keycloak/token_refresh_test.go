@@ -32,8 +32,8 @@ func TestKeycloak_TokenRefresh_PasswordGrant(t *testing.T) {
 		core.ClientInfo{Name: "refresh-test", Version: "1.0"},
 		client.WithClientBearerToken(tok.AccessToken),
 	)
-	require.NoError(t, c.Connect())
-	result, err := c.ToolCall("echo", map[string]any{"msg": "initial"})
+	require.NoError(t, c.Connect(t.Context()))
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"msg": "initial"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "initial")
 	c.Close()
@@ -56,9 +56,9 @@ func TestKeycloak_TokenRefresh_PasswordGrant(t *testing.T) {
 		core.ClientInfo{Name: "refresh-test", Version: "1.0"},
 		client.WithClientBearerToken(refreshed.AccessToken),
 	)
-	require.NoError(t, c2.Connect())
+	require.NoError(t, c2.Connect(t.Context()))
 	defer c2.Close()
-	result2, err := c2.ToolCall("echo", map[string]any{"msg": "refreshed"})
+	result2, err := c2.ToolCall(t.Context(), "echo", map[string]any{"msg": "refreshed"})
 	require.NoError(t, err)
 	assert.Contains(t, result2, "refreshed")
 }

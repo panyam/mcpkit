@@ -62,10 +62,10 @@ func TestE2E_StreamingToolResults(t *testing.T) {
 			mu.Unlock()
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("slow-analyze", nil)
+	result, err := c.ToolCall(t.Context(), "slow-analyze", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "Analysis complete")
 
@@ -112,10 +112,10 @@ func TestE2E_StreamingWithoutHandler(t *testing.T) {
 
 	// No WithContentChunkHandler — chunks should be silently ignored
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "e2e-no-handler", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("chatty-tool", nil)
+	result, err := c.ToolCall(t.Context(), "chatty-tool", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "final only")
 }
