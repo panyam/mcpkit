@@ -52,7 +52,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/panyam/demokit v0.0.30 // indirect
 	github.com/panyam/demokit/notebook v0.0.28 // indirect
-	github.com/panyam/gocurrent v0.1.1 // indirect
+	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit v0.4.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
