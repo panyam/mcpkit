@@ -478,8 +478,11 @@ UnmarshalJSON call site — the helper semantics do not change.</p>
 <li>Client sends <code>initialize</code> → server responds with capabilities and negotiated version</li>
 <li>Client sends <code>notifications/initialized</code> → server marks session as ready</li>
 <li>Only after step 2 does the server accept <code>tools/list</code>, <code>tools/call</code>, etc.</li>
-<li><code>ping</code> is exempt — allowed at any time</li>
+<li><code>ping</code> is exempt, allowed at any time</li>
 </ol>
+<h3 id="ping">Ping <a class="anchor" href="#ping">¶</a></h3>
+<p><code>ping</code> is a liveness check either side can send. It takes no parameters and the peer replies with an empty result, so a successful response means only that the connection is up and the peer is processing messages. It says nothing about session state.</p>
+<p>The exemption in step 4 above is what makes it useful: a client can ping before completing the handshake, and a long-lived connection can ping to distinguish an idle session from a dropped one. That matters most on the SSE and Streamable HTTP transports, where a silent TCP drop is otherwise indistinguishable from a server with nothing to say. Handling is built in; servers register nothing to support it.</p>
 <h2 id="server-to-client-notifications">Server-to-Client Notifications <a class="anchor" href="#server-to-client-notifications">¶</a></h2>
 <p>MCPKit supports server-initiated notifications via <code>NotifyFunc</code>, a generic <code>func(method string, params any)</code> callback. This is the foundation for logging, progress, and list-changed notifications.</p>
 <h3 id="how-it-works">How it works <a class="anchor" href="#how-it-works">¶</a></h3>
