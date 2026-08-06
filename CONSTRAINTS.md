@@ -116,4 +116,3 @@ Adopters deploying mcpkit at N>1 MUST either:
 The full architecture (Pattern B, NotificationRelay seam, NotificationRelayReceiver routing, per-surface end-to-end flows, scenario walkthroughs) is in `docs/MULTI_REPLICA.md`. Issue 755 tracks the work.
 
 **Verify:** there is no automated check today. The constraint is documented to prevent silent breakage, not enforced at build time. Adopters running N>1 should verify their wiring matches one of the recipes in `docs/MULTI_REPLICA.md` § Configuration recipes.
-

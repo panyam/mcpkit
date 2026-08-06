@@ -38,8 +38,8 @@ upstream changes to watch.
 | `core/` — Protocol types, typed contexts, session APIs | `core/README.md`, `core/CONSTRAINTS.md` |
 | `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md`, `server/NOTES.md` |
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
-| `ext/auth/` — JWT, PRM, OAuth | `ext/auth/docs/DESIGN.md`, `ext/auth/NOTES.md` |
-| `ext/tasks/` — SEP-2663 v2 tasks extension | `ext/tasks/README.md` |
+| `ext/auth/` — JWT, PRM, OAuth (separate go.mod) | `ext/auth/docs/DESIGN.md` |
+| `ext/tasks/` — SEP-2663 v2 tasks extension (separate go.mod) | `ext/tasks/README.md` |
 | `ext/skills/` — SEP-2640 skills (data-only, enforced) | `ext/skills/NOTES.md` |
 | `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `ext/ui/NOTES.md` |
 | `ext/otel/` — SEP-414 OpenTelemetry adapter | `ext/otel/README.md`, `docs/SEP_414_OTEL.md` |
