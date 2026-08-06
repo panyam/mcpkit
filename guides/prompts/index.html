@@ -19,8 +19,8 @@
       } catch {}
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Deep dives into how mcpkit implements the MCP protocol — session bring-up, transports, notifications, the request lifecycle, extension surfaces, reverse calls, MRTR, tracing, and events.">
-    <title>Concepts · mcpkit</title>
+    <meta name="description" content="Named, parameterised message templates: arguments, content types, and listing.">
+    <title>Prompts · mcpkit</title>
 
     <link rel="stylesheet" href="/mcpkit/static/css/main.css">
 </head>
@@ -221,67 +221,80 @@
 <article class="content">
     
     <header class="content-header">
-        <h1>Concepts</h1>
+        <h1>Prompts</h1>
         
-        <p class="lead">Deep dives into how mcpkit implements the MCP protocol — session bring-up, transports, notifications, the request lifecycle, extension surfaces, reverse calls, MRTR, tracing, and events.</p>
+        <p class="lead">Named, parameterised message templates: arguments, content types, and listing.</p>
         
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/PROMPTS.md"><code>docs/PROMPTS.md</code></a>
+        </p>
         
     </header>
     
 
     <div class="content-body">
         
-<section class="hero">
-    <h1>Concepts</h1>
-    <p class="hero-tagline">Nine deep dives into how mcpkit implements the protocol — not API reference, but the "why it works this way" behind each surface. Read them in order for a full tour, or jump to the one you need.</p>
-</section>
+<h1 id="prompts">Prompts <a class="anchor" href="#prompts">¶</a></h1>
+<p>A prompt is a named, parameterised message template your server hands to a client. The client shows it in a picker, collects any arguments, and drops the resulting messages into a conversation with a model.</p>
+<p>That makes prompts the one primitive the user invokes directly. Tools are chosen by a model and resources are read on demand, but a prompt is something a person picks from a menu. Name and describe them accordingly.</p>
+<h2 id="registering-a-prompt">Registering a prompt <a class="anchor" href="#registering-a-prompt">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterPrompt</span>(
+</span></span><span style="display:flex;"><span>    core.PromptDef{Name: <span style="color:#d14">&#34;changelog&#34;</span>, Description: <span style="color:#d14">&#34;Draft a changelog entry&#34;</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">func</span>(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.PromptResult{
+</span></span><span style="display:flex;"><span>            Description: <span style="color:#d14">&#34;Changelog draft&#34;</span>,
+</span></span><span style="display:flex;"><span>            Messages: []core.PromptMessage{{
+</span></span><span style="display:flex;"><span>                Role:    <span style="color:#d14">&#34;user&#34;</span>,
+</span></span><span style="display:flex;"><span>                Content: core.Content{Type: <span style="color:#d14">&#34;text&#34;</span>, Text: <span style="color:#d14">&#34;Draft a changelog entry.&#34;</span>},
+</span></span><span style="display:flex;"><span>            }},
+</span></span><span style="display:flex;"><span>        }, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p><code>Role</code> is <code>user</code> or <code>assistant</code>. Returning more than one message is how you supply a worked example: an assistant message showing the shape you want, followed by a user message with the real request.</p>
+<p>The handler returns <code>core.PromptResponse</code>, a sealed interface with two implementations. <code>core.PromptResult</code> is the sync answer and the one you write most of the time. <code>core.InputRequiredResult</code> is the MRTR variant: return it to ask the client for sampling, elicitation, or roots input mid-call, and the client re-sends the same <code>prompts/get</code> with the answers attached. See <a href="/mcpkit/guides/mrtr/">MRTR_TUTORIAL.md</a>.</p>
+<p>The interface is sealed through an unexported marker method, so an external type cannot impersonate a response variant.</p>
+<p>Runnable versions of everything on this page are in <a href="https://github.com/panyam/mcpkit/blob/main/server/example_prompts_test.go"><code>server/example_prompts_test.go</code></a> and run with the test suite.</p>
+<h2 id="arguments">Arguments <a class="anchor" href="#arguments">¶</a></h2>
+<p>Declare arguments on the definition so a client can prompt for them, then read them back in the handler:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>core.PromptDef{
+</span></span><span style="display:flex;"><span>    Name: <span style="color:#d14">&#34;review&#34;</span>,
+</span></span><span style="display:flex;"><span>    Arguments: []core.PromptArgument{
+</span></span><span style="display:flex;"><span>        {Name: <span style="color:#d14">&#34;lang&#34;</span>, Description: <span style="color:#d14">&#34;Source language&#34;</span>, Required: <span style="color:#000;font-weight:bold">true</span>,
+</span></span><span style="display:flex;"><span>         Schema: <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{<span style="color:#d14">&#34;type&#34;</span>: <span style="color:#d14">&#34;string&#34;</span>}},
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>lang, _ <span style="color:#000;font-weight:bold">:=</span> req.Arguments[<span style="color:#d14">&#34;lang&#34;</span>].(<span style="color:#458;font-weight:bold">string</span>)
+</span></span></code></pre><p>Two things to know.</p>
+<p><strong>Arguments are decoded JSON, not strings.</strong> <code>req.Arguments</code> is a <code>map[string]any</code> holding already-decoded values, so a JSON number arrives as <code>float64</code> and an object as <code>map[string]any</code>. String arguments need a type assertion.</p>
+<p><strong>A <code>Schema</code> turns on server-side validation.</strong> When an argument declares one, the dispatcher validates the incoming value before your handler runs and rejects a bad request with <code>-32602</code> and a structured error list. Arguments with no schema are passed through unchecked. Turn the call-time check off with <code>server.WithSchemaValidation(false)</code> if you would rather validate inside the handler.</p>
+<p>Marking an argument <code>Required</code> is advertisement, not enforcement. Give it a schema if you want the dispatcher to reject a missing value.</p>
+<h2 id="content-types">Content types <a class="anchor" href="#content-types">¶</a></h2>
+<p><code>PromptMessage.Content</code> is the same <code>core.Content</code> type tool results use, so a prompt can carry anything a tool result can.</p>
+<p>Text:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>core.Content{Type: <span style="color:#d14">&#34;text&#34;</span>, Text: <span style="color:#d14">&#34;Review this Go code.&#34;</span>}
+</span></span></code></pre><p>An image, base64 with a mime type:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>core.Content{Type: <span style="color:#d14">&#34;image&#34;</span>, Data: base64Data, MimeType: <span style="color:#d14">&#34;image/png&#34;</span>}
+</span></span></code></pre><p>An embedded resource:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>core.Content{
+</span></span><span style="display:flex;"><span>    Type: <span style="color:#d14">&#34;resource&#34;</span>,
+</span></span><span style="display:flex;"><span>    Resource: <span style="color:#000;font-weight:bold">&amp;</span>core.ResourceContent{
+</span></span><span style="display:flex;"><span>        URI:      <span style="color:#d14">&#34;file:///etc/app.conf&#34;</span>,
+</span></span><span style="display:flex;"><span>        MimeType: <span style="color:#d14">&#34;text/plain&#34;</span>,
+</span></span><span style="display:flex;"><span>        Text:     <span style="color:#d14">&#34;debug = true&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Prefer an embedded resource over inlined text when the content has a URI the client already knows about. It lets the client attribute the content, re-fetch it, or link to it, instead of treating it as anonymous prose. <code>Text</code> and <code>Blob</code> on the embedded resource are mutually exclusive; use <code>Blob</code> with base64 for binary.</p>
+<h2 id="listing">Listing <a class="anchor" href="#listing">¶</a></h2>
+<p><code>prompts/list</code> returns every registered definition with its description and arguments, which is what a client renders in its picker. mcpkit returns all prompts in a single page: <code>nextCursor</code> is always empty because the server&rsquo;s page size is fixed at &ldquo;no pagination&rdquo;. See <a href="/mcpkit/guides/completions/">COMPLETIONS.md</a> for suggesting values for a prompt argument once the user starts typing.</p>
+<p>Adding or removing a prompt at runtime through the registry broadcasts <code>notifications/prompts/list_changed</code>, so clients refresh without polling.</p>
+<h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/guides/completions/">Argument completion</a> for autocompleting prompt argument values</li>
+<li><a href="/mcpkit/get-started/">Getting started</a> for a first server end to end</li>
+<li><a href="/mcpkit/guides/transports/">Architecture</a> for where prompts sit in dispatch</li>
+</ul>
 
-<section class="pillars">
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/bringup/">Bring-up</a></h3>
-        <p>Session establishment: transport, auth, version negotiation, capabilities, and the initialized handshake.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></h3>
-        <p>How the streamable-HTTP and stdio transports move requests, responses, and server-initiated pushes.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/notifications/">Notifications</a></h3>
-        <p>The six notification families, their direction and capability gates, and per-session fan-out.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></h3>
-        <p>The end-to-end journey of a request through mcpkit's dispatch pipeline, step by step.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></h3>
-        <p>The four extension surfaces and how mcpkit organizes core / ext / experimental.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></h3>
-        <p>Server-initiated sampling, elicitation, and roots/list — and how the handler context gates them.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></h3>
-        <p>The InputRequiredResult envelope, signed requestState, and the client auto-loop.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/tracing/">Tracing</a></h3>
-        <p>W3C trace context across the MCP wire — off by default, zero-overhead when unconfigured.</p>
-    </div>
-
-    <div class="pillar">
-        <h3><a href="/mcpkit/concepts/events/">Events</a></h3>
-        <p>The experimental cross-replica events bus: push, poll, webhooks, and trace propagation.</p>
-    </div>
-</section>
 
     </div>
 </article>

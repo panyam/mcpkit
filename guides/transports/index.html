@@ -84,6 +84,8 @@
                 
                 <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
                 
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
                 <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
                 
                 <li><a href="/mcpkit/guides/observability/">Observability</a></li>
@@ -416,7 +418,8 @@
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> ResourceHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req ResourceRequest) (ResourceResult, <span style="color:#458;font-weight:bold">error</span>)
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> TemplateHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, uri <span style="color:#458;font-weight:bold">string</span>, params <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]<span style="color:#458;font-weight:bold">string</span>) (ResourceResult, <span style="color:#458;font-weight:bold">error</span>)
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> PromptHandler <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, req PromptRequest) (PromptResult, <span style="color:#458;font-weight:bold">error</span>)
-</span></span></code></pre><h3 id="content-cardinality-tolerance-81">Content Cardinality Tolerance (#81) <a class="anchor" href="#content-cardinality-tolerance-81">¶</a></h3>
+</span></span></code></pre><p>See <a href="/mcpkit/guides/prompts/">PROMPTS.md</a> for the prompt handler contract, argument validation, and the content types a prompt message can carry.</p>
+<h3 id="content-cardinality-tolerance-81">Content Cardinality Tolerance (#81) <a class="anchor" href="#content-cardinality-tolerance-81">¶</a></h3>
 <p>Several message types have a <code>content</code> field whose JSON cardinality varies in<br />
 the wild. MCPKit defensively accepts both forms on read and always emits<br />
 spec-canonical shape on write:</p>
