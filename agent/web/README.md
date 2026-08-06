@@ -20,8 +20,34 @@ Proto `mcpkit.agentweb.v1.HostService` (`protos/`, generated Go + Connect under
 | `Submit` | `App.RunTurn` | run one turn |
 | `Dispatch` | `App.Dispatch` | run a slash command → `CmdResult` |
 | `RespondToAsk` | `App.RespondToAsk` | answer a pending elicitation (first responder wins) |
-| `ListSessions` | `App.SessionsPage` | one page of persisted sessions |
+| `ListSessions` | `App.SessionsPage` | one page of an App's persisted RunStore runs |
 | `GetStatus` | `App.ModelLabel` / `App.RunID` | status-line read |
+| `CreateSession` | `SessionManager.Create` | mint a fresh conversation (App) → its `session_id` |
+| `ListWebSessions` | `SessionManager.List` | the roster of live conversations (App ids) |
+| `CloseSession` | `SessionManager.Close` | close one conversation and drop it |
+
+### Multi-session (epic 1193)
+
+One agentweb server hosts many concurrent conversations, each its own live
+`host.App`. Every request carries a `session_id` routing field on its envelope
+that selects the App it acts on. A `SessionManager` (`sessions.go`) owns the Apps
+keyed by id and builds new ones on demand from a factory (a fresh App from the
+server's config). `HostService` routes each RPC through it: an unknown
+`session_id` is `CodeNotFound`. An **empty** `session_id` resolves to a default
+session created at startup, so a client that predates multi-session (and sends no
+`session_id` — the current frontend) keeps working unchanged.
+
+`session_id` is a routing field on the request, never part of an event payload —
+the `Frame` stays event-flat (A2). `web.HandlerWithSessions(mgr)` serves the
+multi-session mux; `web.Handler(app)` remains the single-App shortcut (it wraps
+`app` as the default session with no factory, so `CreateSession` is unavailable).
+
+`ListSessions` (an App's persisted RunStore runs) and `ListWebSessions` (the
+roster of concurrent conversations) are distinct: the former pages history inside
+one conversation, the latter enumerates the conversations themselves.
+
+A browser session-switcher UI (open / list / switch conversations) is a
+follow-up; this slice is the backend + wire + tests.
 
 ### Frame envelope (A2)
 
