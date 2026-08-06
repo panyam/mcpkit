@@ -17,14 +17,14 @@ version: 2
 #   - .github/workflows/vulncheck.yml scans the published surface weekly.
 updates:
   # The Bridge JS in ext/ui/assets ships into end users' browsers, so it is the
-  # one dependency tree here with a direct client-side blast radius. agent/web's
+  # one dependency tree here with a direct client-side blast radius. agent/surfaces/web's
   # frontend (dockview / solid / connect-web / esbuild) is served from the agent
   # web surface. Dev-only trees (conformance/, tools/*, ext/ui/tests/playwright,
   # the example apps) are left out on the same demos-are-not-artifacts rule.
   - package-ecosystem: npm
     directories:
       - "/ext/ui/assets"
-      - "/agent/web/web"
+      - "/agent/surfaces/web/web"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

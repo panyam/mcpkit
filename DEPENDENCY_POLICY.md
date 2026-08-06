@@ -11,7 +11,7 @@ The root module (`core/`, `server/`, `client/`) stays dependency-light. Heavier 
 The sweep exists because per-directory updates cannot satisfy the lock-step rule below. Dependabot opens one PR per directory and cannot touch modules outside its globs, but the ~60 modules under `examples/` and `tests/` depend on the published ones through `replace` directives. A grouped Dependabot bump therefore left their `go.mod` stale and broke `test-agent` and `test-auth` with `updates to go.mod needed`. The worked example is PR 1225, where a 9-directory bump required 57 further modules to be tidied in lock-step.
 
 - **Cross-module pins are bumped in lock-step.** A `oneauth` bump touches all dependent modules in one PR so module resolution stays consistent. This is enforced, not just documented: `just check-dep-consistency` fails CI when a third-party dependency is pinned at two or more versions across the published modules. Known-and-accepted divergence lives in `scripts/dep-baseline.json`; regenerate with `just update-dep-baseline`.
-- **Dependabot still owns the single-directory trees** where per-directory PRs are the correct shape: the two shipped npm trees (`ext/ui/assets`, `agent/web/web`) and GitHub Actions.
+- **Dependabot still owns the single-directory trees** where per-directory PRs are the correct shape: the two shipped npm trees (`ext/ui/assets`, `agent/surfaces/web/web`) and GitHub Actions. `make check-dependabot-dirs` fails CI if one of those paths stops existing, because Dependabot ignores a directory it cannot find without warning.
 
 ## Security updates
 
