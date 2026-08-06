@@ -23,8 +23,8 @@ serve:
 
 # Chat with the CLI surface (agentchat) off playground.json (needs just serve).
 chat:
-    cd ../../cmd/agentchat && go run . --config "{{CONFIG}}"
+    cd ../../agent/surfaces/chat && go run . --config "{{CONFIG}}"
 
 # Serve the browser surface (agentweb) off playground.json (needs just serve).
 web:
-    cd ../../agent/web && go run ./cmd/agentweb --config "{{CONFIG}}" --addr "{{ADDR}}"
+    cd ../../agent/surfaces/web && go run ./cmd/agentweb --config "{{CONFIG}}" --addr "{{ADDR}}"

@@ -79,7 +79,7 @@ note:
 # the MCP servers first (just servers-up-bg). ADDR overrides the listen address.
 # Browser surface (agentweb) against kitchen-sink.json.
 web:
-    cd ../../../agent/web && go run ./cmd/agentweb --config "{{justfile_directory()}}/kitchen-sink.json" --addr "$ADDR"
+    cd ../../../agent/surfaces/web && go run ./cmd/agentweb --config "{{justfile_directory()}}/kitchen-sink.json" --addr "$ADDR"
 
 # Handoff-Team topology (kitchen-sink-team.json): a triage router transfers you
 # to a billing or technical specialist; the active agent persists across turns.

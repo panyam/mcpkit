@@ -1,0 +1,117 @@
+name: Dependency Sweep
+
+# Monthly repo-wide dependency update, opened as ONE pull request.
+#
+# This replaces per-directory Dependabot gomod PRs. Dependabot cannot reach
+# examples/ or tests/, but those modules depend on the published ones through
+# `replace` directives, so every grouped Dependabot bump left their go.mod stale
+# and broke test-agent and test-auth with "updates to go.mod needed". PR 1225 is
+# the worked example: a 9-directory bump needed 57 further modules tidied in
+# lock-step. Only a sweep that sees the whole tree can do that.
+#
+# Monthly rather than weekly because a minor-level sweep across 88 modules
+# produces a PR that deserves real review attention. Security-driven updates do
+# not wait for this: Dependabot security updates (a repository setting, separate
+# from dependabot.yml) still open PRs immediately, and vulncheck.yml scans
+# weekly.
+on:
+  schedule:
+    # 1st of the month, 05:00 UTC.
+    - cron: '0 5 1 * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Update aggressiveness'
+        type: choice
+        default: minor
+        options: [minor, patch]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: extractions/setup-just@v4
+
+      # MODE goes through env rather than being interpolated into the run: line.
+      # `choice` already constrains it to minor|patch, but keeping dispatch input
+      # out of the shell string is the cheap, unconditional habit.
+      - name: Sweep
+        id: sweep
+        env:
+          MODE: ${{ inputs.mode || 'minor' }}
+        run: bash scripts/dep-sweep.sh "$MODE"
+
+      - name: Check for changes
+        id: diff
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat | tail -1 >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The sweep runs the suites itself. A PR opened with GITHUB_TOKEN does not
+      # trigger workflows, so the sweep PR would otherwise carry no signal at
+      # all. Results are captured here and reported in the PR body. Non-fatal:
+      # a failing sweep is still worth surfacing, it just opens as a draft.
+      - name: Test
+        id: test
+        if: steps.diff.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          just check-dep-consistency 2>&1 | tee -a result.log
+          just test               2>&1 | tee -a result.log
+          just test-agent         2>&1 | tee -a result.log
+          just test-auth          2>&1 | tee -a result.log
+          just test-ui            2>&1 | tee -a result.log
+
+      - name: Open pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode || 'minor' }}
+          PASSED: ${{ steps.test.outcome == 'success' }}
+        run: |
+          branch="deps/sweep-$(date -u +%Y-%m)"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "build(deps): monthly dependency sweep ($MODE)"
+          git push -f origin "$branch"
+
+          if [ "$PASSED" = "true" ]; then
+            status="All suites passed in the sweep job."
+            draft=""
+          else
+            status="**Suites failed in the sweep job.** Opened as a draft; see the log tail below."
+            draft="--draft"
+          fi
+
+          {
+            echo "Automated monthly sweep (\`$MODE\`) across every Go module, reconciled with \`just tidy-all\`."
+            echo
+            echo "$status"
+            echo
+            echo "Checks are not attached: GitHub does not trigger workflows for pull requests opened with \`GITHUB_TOKEN\`, so the sweep job runs the suites itself. Push an empty commit to this branch to get normal CI."
+            echo
+            echo '```'
+            tail -c 6000 result.log 2>/dev/null || echo "(no test output)"
+            echo '```'
+          } > body.md
+
+          gh pr create --base main --head "$branch" $draft \
+            --title "build(deps): monthly dependency sweep ($MODE)" \
+            --body-file body.md

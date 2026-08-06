@@ -9,7 +9,7 @@
 # downstream can `go get <module>@vX.Y.Z` — `replace` directives are ignored
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
-SUB_MODS_TO_TAG := "agent agent/host agent/web agent/store/redis agent/store/gorm ext/auth ext/otel ext/ui ext/tasks ext/skills stores/redis experimental/ext/agents experimental/ext/agents/clients/go experimental/ext/events experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis experimental/ext/events/clients/go cmd/testclient cmd/common cmd/mcpskills cmd/agentchat examples/mcpskills-walkthrough tests/e2e tests/keycloak"
+SUB_MODS_TO_TAG := "agent agent/host agent/surfaces agent/surfaces/web agent/surfaces/chat agent/store/redis agent/store/gorm ext/auth ext/otel ext/ui ext/tasks ext/skills stores/redis experimental/ext/agents experimental/ext/agents/clients/go experimental/ext/events experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis experimental/ext/events/clients/go cmd/testclient cmd/common cmd/mcpskills examples/mcpskills-walkthrough tests/e2e tests/keycloak"
 
 REPORT_DIR := "tests/reports"
 
@@ -170,6 +170,18 @@ check-conformance-stale: check-local-suites-stale
 check-local-suites-stale:
     uv run scripts/check_local_suites.py
 
+# CI gate — fail if a third-party dep is pinned at 2+ versions across published modules
+check-dep-consistency:
+    python3 scripts/check_dep_consistency.py
+
+# Accept the current dependency divergence as the new baseline
+update-dep-baseline:
+    python3 scripts/check_dep_consistency.py --update-baseline
+
+# Repo-wide dependency sweep (usage: just dep-sweep [patch|minor]); see scripts/dep-sweep.sh
+dep-sweep MODE="minor":
+    bash scripts/dep-sweep.sh {{MODE}}
+
 # CI gate — fail if docs/GETTING_STARTED.md Go snippets drift from examples/getting-started/ (issue 853)
 check-snippets:
     go run ./tools/check-snippets
@@ -205,8 +217,9 @@ test-agent:
     @{{just_executable()}} _go-test agent/store/redis 60s
     @{{just_executable()}} _go-test agent/store/gorm 60s
     @{{just_executable()}} _go-test agent/host 60s
-    @{{just_executable()}} _go-test agent/web 90s
-    @{{just_executable()}} _go-test cmd/agentchat 60s
+    @{{just_executable()}} _go-test agent/surfaces 60s
+    @{{just_executable()}} _go-test agent/surfaces/web 90s
+    @{{just_executable()}} _go-test agent/surfaces/chat 60s
     @{{just_executable()}} _go-test examples/agents/agent-async 60s
     @{{just_executable()}} _go-test examples/agents/multi-agent 60s
     @{{just_executable()}} _go-test examples/skills 60s "-run TestAgentScenario"

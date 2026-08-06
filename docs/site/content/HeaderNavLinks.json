@@ -11,6 +11,7 @@
       { "name": "Auth",                "url": "guides/auth/" },
       { "name": "Long-running tasks",  "url": "guides/tasks/" },
       { "name": "MCP Apps",            "url": "guides/apps/" },
+      { "name": "Argument completion", "url": "guides/completions/" },
       { "name": "Observability",       "url": "guides/observability/" },
       { "name": "MRTR input-gathering","url": "guides/mrtr/" },
       { "name": "Deployment",          "url": "guides/deployment/" }

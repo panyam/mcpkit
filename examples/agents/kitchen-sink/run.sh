@@ -65,7 +65,7 @@ fi
 CONFIG="${CONFIG:-$DIR/kitchen-sink.json}"
 MEMORY="${MEMORY:-1}"
 echo "==> launching agentchat (config=$(basename "$CONFIG"), session=$SESSION, store=$SESSION_STORE)"
-cd "$ROOT/cmd/agentchat"
+cd "$ROOT/agent/surfaces/chat"
 args=(
 	--config "$CONFIG"
 	--persist-config

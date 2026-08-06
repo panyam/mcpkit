@@ -132,6 +132,7 @@ just/make test-apps-playwright  # ext-apps Playwright suite (needs Node.js)
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to build, test, and contribute |
 | [CLAUDE.md](CLAUDE.md) | Quick reference: commands, package structure, gotchas |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Transport design, type definitions, protocol details |
+| [docs/COMPLETIONS.md](docs/COMPLETIONS.md) | Argument completion for prompt arguments and resource URI templates |
 | [ext/auth/docs/DESIGN.md](ext/auth/docs/DESIGN.md) | Auth architecture, spec compliance (C1-C23, X1-X5) |
 | [docs/APPS_DESIGN.md](docs/APPS_DESIGN.md) | MCP Apps extension design, protocol flows, conformance strategy |
 

@@ -26,6 +26,13 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Catches a split third-party pin on the PR that introduces it. MVS
+      # resolves to the maximum required version, so divergence otherwise
+      # surfaces later as an unexplained failure in an unrelated module.
+      # Stdlib-only Python, so this needs no uv step in the repo's fastest job.
+      - name: Check dependency consistency
+        run: python3 scripts/check_dep_consistency.py
+
       - name: Start test server
         run: |
           STREAMABLE=1 PORT=18799 go run ./cmd/testserver &
@@ -56,8 +63,11 @@ jobs:
       - name: Run agent/host tests
         run: cd agent/host && go test ./... -v
 
-      - name: Run agentchat tests
-        run: cd cmd/agentchat && go test ./... -v
+      - name: Run agent/surfaces shared-module tests
+        run: cd agent/surfaces && go test ./... -v
+
+      - name: Run agentchat (agent/surfaces/chat) tests
+        run: cd agent/surfaces/chat && go test ./... -v
 
       - name: Run agent-async example test
         run: cd examples/agents/agent-async && go test ./... -v
