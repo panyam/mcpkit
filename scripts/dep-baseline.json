@@ -5,10 +5,6 @@
       "v1.1.0",
       "v1.1.1-0.20250404203927-76690c660834"
     ],
-    "github.com/panyam/gocurrent": [
-      "v0.1.1",
-      "v0.1.2"
-    ],
     "github.com/panyam/goutils": [
       "v0.1.13",
       "v0.1.8"
