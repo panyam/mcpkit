@@ -28,14 +28,14 @@ demo:
 chat:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "$(git rev-parse --show-toplevel)/cmd/agentchat"
+    cd "$(git rev-parse --show-toplevel)/agent/surfaces/chat"
     exec go run . --config "{{CONFIG}}"
 
 # Serve the browser surface (agentweb) off CONFIG on ADDR (start the server first: just serve).
 web:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd "$(git rev-parse --show-toplevel)/agent/web"
+    cd "$(git rev-parse --show-toplevel)/agent/surfaces/web"
     exec go run ./cmd/agentweb --config "{{CONFIG}}" --addr "{{ADDR}}"
 
 # Run the golden-transcript test

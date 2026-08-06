@@ -1,9 +1,0 @@
-version: v2
-lint:
-  use:
-    - STANDARD
-  except:
-    - FIELD_NOT_REQUIRED
-breaking:
-  use:
-    - FILE

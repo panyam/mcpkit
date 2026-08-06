@@ -6,14 +6,14 @@
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
 SUB_MODS_TO_TAG := \
-	agent agent/host agent/web agent/store/redis agent/store/gorm \
+	agent agent/host agent/surfaces agent/surfaces/web agent/surfaces/chat agent/store/redis agent/store/gorm \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
 	experimental/ext/agents experimental/ext/agents/clients/go \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
-	cmd/testclient cmd/common cmd/mcpskills cmd/agentchat \
+	cmd/testclient cmd/common cmd/mcpskills \
 	examples/mcpskills-walkthrough \
 	tests/e2e tests/keycloak
 
@@ -145,8 +145,9 @@ test-agent: ## Run agent sub-module tests
 	cd agent/store/redis && go test ./... -count=1 -timeout 60s
 	cd agent/store/gorm && go test ./... -count=1 -timeout 60s
 	cd agent/host && go test ./... -count=1 -timeout 60s
-	cd agent/web && go test ./... -count=1 -timeout 90s
-	cd cmd/agentchat && go test ./... -count=1 -timeout 60s
+	cd agent/surfaces && go test ./... -count=1 -timeout 60s
+	cd agent/surfaces/web && go test ./... -count=1 -timeout 90s
+	cd agent/surfaces/chat && go test ./... -count=1 -timeout 60s
 	cd examples/agents/agent-async && go test ./... -count=1 -timeout 60s
 	cd examples/agents/multi-agent && go test ./... -count=1 -timeout 60s
 	cd examples/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario

@@ -56,8 +56,11 @@ jobs:
       - name: Run agent/host tests
         run: cd agent/host && go test ./... -v
 
-      - name: Run agentchat tests
-        run: cd cmd/agentchat && go test ./... -v
+      - name: Run agent/surfaces shared-module tests
+        run: cd agent/surfaces && go test ./... -v
+
+      - name: Run agentchat (agent/surfaces/chat) tests
+        run: cd agent/surfaces/chat && go test ./... -v
 
       - name: Run agent-async example test
         run: cd examples/agents/agent-async && go test ./... -v
