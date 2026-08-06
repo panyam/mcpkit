@@ -2,7 +2,14 @@
 name = "mcpkit-scripts"
 version = "0.0.1"
 description = "Python tooling used by mcpkit's repo scripts (conformance gates, doc-site generators, fixture fetchers)."
-requires-python = ">=3.9"
+# 3.11, not 3.9. Pillow 12.x dropped 3.9, so a >=3.9 floor made uv keep a
+# second resolution of pillow 11.3.0 alive for old interpreters, and every
+# PYSEC advisory OSV reports against this repo traces to that one branch
+# (PYSEC-2026-165 and friends affect pillow <12.2.0). Nothing consumes this
+# env externally — it is repo tooling, not a published package — and every
+# script here works on 3.9 only incidentally. 3.9 went EOL in 2025-10 and
+# 3.10 goes EOL in 2026-10, so the floor buys nothing and costs a CVE branch.
+requires-python = ">=3.11"
 dependencies = [
     "PyYAML>=6.0.0",
     # Image processing for the apps-compat visual gallery — pixel diff +
