@@ -1,6 +1,16 @@
 # agent-async — an agent managing async work (events + tasks) through chat.
+#
+# Surfaces (all off config.json):
+#   just agent   # deterministic scripted scenario, no LLM (the golden test)
+#   just serve   # the app-domain MCP server on :8788 (for chat / web)
+#   just chat    # agentchat CLI against config.json (needs just serve)
+#   just web     # agentweb browser surface against config.json (needs just serve)
 import '../common.just'
 
 # Show available recipes
 default:
     @just --list --unsorted
+
+# Serve the app-domain MCP server (events + tasks + send_email) on :8788.
+serve:
+    go run . --serve --addr :8788

@@ -12,10 +12,22 @@ import (
 )
 
 func main() {
+	serveFlag := flag.Bool("serve", false, "run the demo MCP server (for the live chat/web surfaces) instead of the scripted scenario")
+	addr := flag.String("addr", ":8788", "listen address for --serve")
 	model := flag.String("model", "", "OpenAI-compatible model for a live run (default: deterministic stub)")
 	baseURL := flag.String("base-url", "http://localhost:1234/v1", "model endpoint for --model")
 	apiKeyEnv := flag.String("api-key-env", "", "env var holding the model API key (never the key itself)")
 	flag.Parse()
+
+	// --serve boots the app-domain MCP server the config.json surfaces point
+	// at (just chat / just web), so a live model has real tools to drive.
+	if *serveFlag {
+		if err := serve(*addr); err != nil {
+			fmt.Fprintln(os.Stderr, "agent-async:", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	out := &syncWriter{}
 	var provider agent.Provider
