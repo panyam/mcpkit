@@ -1,0 +1,25 @@
+{
+  "_comment": "Known dependency-version divergence across published modules. This should shrink to empty as the monthly sweep unifies pins; regenerate with: just update-dep-baseline",
+  "allowed": {
+    "github.com/charmbracelet/lipgloss": [
+      "v1.1.0",
+      "v1.1.1-0.20250404203927-76690c660834"
+    ],
+    "github.com/panyam/gocurrent": [
+      "v0.1.1",
+      "v0.1.2"
+    ],
+    "github.com/panyam/goutils": [
+      "v0.1.13",
+      "v0.1.8"
+    ],
+    "github.com/spf13/pflag": [
+      "v1.0.10",
+      "v1.0.9"
+    ],
+    "golang.org/x/sys": [
+      "v0.45.0",
+      "v0.47.0"
+    ]
+  }
+}
