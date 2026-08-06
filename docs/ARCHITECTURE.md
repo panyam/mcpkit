@@ -192,6 +192,8 @@ type TemplateHandler func(ctx context.Context, uri string, params map[string]str
 type PromptHandler func(ctx context.Context, req PromptRequest) (PromptResult, error)
 ```
 
+See [PROMPTS.md](PROMPTS.md) for the prompt handler contract, argument validation, and the content types a prompt message can carry.
+
 ### Content Cardinality Tolerance (#81)
 
 Several message types have a `content` field whose JSON cardinality varies in
