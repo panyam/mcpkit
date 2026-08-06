@@ -1,18 +1,54 @@
 version: 2
+
+# Coverage rule: if we tag and publish it, Dependabot monitors it.
+#
+# The directory globs below track SUB_MODS_TO_TAG (justfile) plus the root
+# module. Everything under examples/ is deliberately excluded: those are demos,
+# not modules anyone imports, and ~60 of them would bury the signal. They are
+# swept by `just tidy-all` and scanned by `just vulncheck`'s published-module
+# loop instead.
 updates:
   - package-ecosystem: gomod
     directories:
       - "/"
-      - "/ext/auth"
-      - "/ext/tasks"
-      - "/ext/ui"
-      - "/ext/otel"
+      - "/agent"
+      - "/agent/host"
+      - "/agent/web"
+      - "/agent/store/*"
+      - "/cmd/*"
+      - "/ext/*"
+      - "/stores/*"
+      - "/experimental/ext/*"
+      - "/experimental/ext/*/clients/go"
+      - "/experimental/ext/*/stores/*"
     schedule:
       interval: weekly
+    # One grouped PR per module per week. With ~24 modules the default limit of
+    # 5 would stall the tail indefinitely; 10 keeps the queue draining without
+    # flooding the PR list.
+    open-pull-requests-limit: 10
     groups:
       go-deps:
         patterns:
           - "*"
+
+  # The Bridge JS in ext/ui/assets ships into end users' browsers, so it is the
+  # one dependency tree here with a direct client-side blast radius. agent/web's
+  # frontend (dockview / solid / connect-web / esbuild) is served from the agent
+  # web surface. Dev-only trees (conformance/, tools/*, ext/ui/tests/playwright,
+  # the example apps) are left out on the same demos-are-not-artifacts rule.
+  - package-ecosystem: npm
+    directories:
+      - "/ext/ui/assets"
+      - "/agent/web/web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-deps:
+        patterns:
+          - "*"
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
