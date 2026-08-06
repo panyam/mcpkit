@@ -9,7 +9,7 @@
 # downstream can `go get <module>@vX.Y.Z` — `replace` directives are ignored
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
-SUB_MODS_TO_TAG := "agent agent/host agent/web agent/store/redis agent/store/gorm ext/auth ext/otel ext/ui ext/tasks ext/skills stores/redis experimental/ext/agents experimental/ext/agents/clients/go experimental/ext/events experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis experimental/ext/events/clients/go cmd/testclient cmd/common cmd/mcpskills cmd/agentchat examples/mcpskills-walkthrough tests/e2e tests/keycloak"
+SUB_MODS_TO_TAG := "agent agent/host agent/surfaces agent/surfaces/web agent/surfaces/chat agent/store/redis agent/store/gorm ext/auth ext/otel ext/ui ext/tasks ext/skills stores/redis experimental/ext/agents experimental/ext/agents/clients/go experimental/ext/events experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis experimental/ext/events/clients/go cmd/testclient cmd/common cmd/mcpskills examples/mcpskills-walkthrough tests/e2e tests/keycloak"
 
 REPORT_DIR := "tests/reports"
 
@@ -205,8 +205,9 @@ test-agent:
     @{{just_executable()}} _go-test agent/store/redis 60s
     @{{just_executable()}} _go-test agent/store/gorm 60s
     @{{just_executable()}} _go-test agent/host 60s
-    @{{just_executable()}} _go-test agent/web 90s
-    @{{just_executable()}} _go-test cmd/agentchat 60s
+    @{{just_executable()}} _go-test agent/surfaces 60s
+    @{{just_executable()}} _go-test agent/surfaces/web 90s
+    @{{just_executable()}} _go-test agent/surfaces/chat 60s
     @{{just_executable()}} _go-test examples/agents/agent-async 60s
     @{{just_executable()}} _go-test examples/agents/multi-agent 60s
     @{{just_executable()}} _go-test examples/skills 60s "-run TestAgentScenario"
