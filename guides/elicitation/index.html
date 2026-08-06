@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ask the user for structured input: schemas, SEP-1034 defaults, enums, URL mode.">
+    <title>Elicitation · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Elicitation</h1>
+        
+        <p class="lead">Ask the user for structured input: schemas, SEP-1034 defaults, enums, URL mode.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/ELICITATION.md"><code>docs/ELICITATION.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="elicitation">Elicitation <a class="anchor" href="#elicitation">¶</a></h1>
+<p>A tool handler that needs a decision from the user, not from the model, asks for it with elicitation. The server sends <code>elicitation/create</code> with a JSON Schema describing what it wants; the client renders a form, collects the answer, and sends it back.</p>
+<p>This is a server-to-client request, the reverse of the usual direction. The client must have declared elicitation support at handshake time, so a handler cannot rely on it being available.</p>
+<h2 id="asking-for-input">Asking for input <a class="anchor" href="#asking-for-input">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>result, err <span style="color:#000;font-weight:bold">:=</span> ctx.<span style="color:#900;font-weight:bold">Elicit</span>(core.ElicitationRequest{
+</span></span><span style="display:flex;"><span>    Message: <span style="color:#d14">&#34;Which database should I connect to?&#34;</span>,
+</span></span><span style="display:flex;"><span>    RequestedSchema: json.<span style="color:#900;font-weight:bold">RawMessage</span>(<span style="color:#d14">`{
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">        &#34;type&#34;: &#34;object&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">        &#34;properties&#34;: {
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">            &#34;database&#34;: {&#34;type&#34;: &#34;string&#34;, &#34;enum&#34;: [&#34;prod&#34;, &#34;staging&#34;, &#34;dev&#34;]}
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">        }
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">    }`</span>),
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p><code>result.Action</code> is <code>accept</code>, <code>decline</code>, or <code>cancel</code>. Check it before touching <code>result.Content</code>: on decline and cancel the content is undefined, and a user who cancelled has not given you a value to fall back on.</p>
+<p>Errors worth distinguishing:</p>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ErrElicitationNotSupported</code></td>
+<td>the client never declared the capability</td>
+</tr>
+<tr>
+<td><code>ErrNoRequestFunc</code></td>
+<td>no push channel, see the stateless note below</td>
+</tr>
+<tr>
+<td><code>context.DeadlineExceeded</code></td>
+<td>the user did not answer in time</td>
+</tr>
+</tbody>
+</table>
+<p>Runnable examples of the defaults behavior described below are in <a href="https://github.com/panyam/mcpkit/blob/main/client/example_elicitation_test.go"><code>client/example_elicitation_test.go</code></a>.</p>
+<h2 id="defaults">Defaults <a class="anchor" href="#defaults">¶</a></h2>
+<p>A schema property can declare a <code>default</code>. When the user accepts and leaves that field out, the client fills it in before the response goes back to the server:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{<span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;object&#34;</span>, <span style="color:#000080">&#34;properties&#34;</span>: {
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;env&#34;</span>:      {<span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;string&#34;</span>,  <span style="color:#000080">&#34;default&#34;</span>: <span style="color:#d14">&#34;dev&#34;</span>},
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;replicas&#34;</span>: {<span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;integer&#34;</span>, <span style="color:#000080">&#34;default&#34;</span>: <span style="color:#099">2</span>}
+</span></span><span style="display:flex;"><span>}}
+</span></span></code></pre><p>A handler that returns only <code>{&quot;env&quot;: &quot;prod&quot;}</code> produces <code>{&quot;env&quot;: &quot;prod&quot;, &quot;replicas&quot;: 2}</code> on the wire.</p>
+<p>The merge happens inside mcpkit&rsquo;s <code>elicitation/create</code> dispatch path, after your handler returns. Handler authors stay unaware of it: return what the user typed and the defaults land on their own.</p>
+<p>Four rules govern the merge:</p>
+<ul>
+<li><strong>User input always wins.</strong> Defaults fill absent keys only, so a supplied value is never overwritten, including one that equals its type&rsquo;s zero value.</li>
+<li><strong>Defaults apply only on <code>accept</code>.</strong> Filling them on decline or cancel would invent input the user never gave.</li>
+<li><strong>A default whose type contradicts its schema is dropped.</strong> An <code>integer</code> property declaring <code>&quot;default&quot;: &quot;two&quot;</code> sends no value at all, because forwarding it would put wire-invalid data in front of the server.</li>
+<li><strong><code>integer</code> accepts a whole number.</strong> JSON numbers all decode to <code>float64</code> in Go, so a default of <code>2</code> satisfies an <code>integer</code> property while <code>2.5</code> does not.</li>
+</ul>
+<p>This implements SEP-1034.</p>
+<h2 id="enums">Enums <a class="anchor" href="#enums">¶</a></h2>
+<p>An <code>enum</code> makes the client render a fixed choice instead of a free-text field. <code>enumNames</code> is optional and supplies display labels positionally; a client that does not understand it falls back to the raw values.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{<span style="color:#000080">&#34;env&#34;</span>: {
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;string&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;enum&#34;</span>: [<span style="color:#d14">&#34;dev&#34;</span>, <span style="color:#d14">&#34;staging&#34;</span>, <span style="color:#d14">&#34;prod&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;enumNames&#34;</span>: [<span style="color:#d14">&#34;Development&#34;</span>, <span style="color:#d14">&#34;Staging&#34;</span>, <span style="color:#d14">&#34;Production&#34;</span>],
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;default&#34;</span>: <span style="color:#d14">&#34;dev&#34;</span>
+</span></span><span style="display:flex;"><span>}}
+</span></span></code></pre><h2 id="mcpkit-does-not-validate-the-response">mcpkit does not validate the response <a class="anchor" href="#mcpkit-does-not-validate-the-response">¶</a></h2>
+<p>The schema tells the client what to collect. It is not enforced on the way back: mcpkit does not check <code>result.Content</code> against <code>requestedSchema</code> before handing it to your handler.</p>
+<p>So a handler that asked for an <code>integer</code> can receive a string, and one that offered three enum values can receive a fourth. Validate anything you are going to act on:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>env, ok <span style="color:#000;font-weight:bold">:=</span> result.Content[<span style="color:#d14">&#34;env&#34;</span>].(<span style="color:#458;font-weight:bold">string</span>)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> !ok <span style="color:#000;font-weight:bold">||</span> !slices.<span style="color:#900;font-weight:bold">Contains</span>([]<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;dev&#34;</span>, <span style="color:#d14">&#34;staging&#34;</span>, <span style="color:#d14">&#34;prod&#34;</span>}, env) {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">ErrorResult</span>(<span style="color:#d14">&#34;invalid environment&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Content values are decoded JSON, so numbers arrive as <code>float64</code> and objects as <code>map[string]any</code>, the same as prompt arguments.</p>
+<h2 id="url-mode">URL mode <a class="anchor" href="#url-mode">¶</a></h2>
+<p>Some flows cannot happen in a form: an OAuth consent screen, a payment step, a device pairing page. URL mode hands the user a link instead of a schema.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>core.<span style="color:#900;font-weight:bold">ElicitURL</span>(ctx, core.ElicitationRequest{
+</span></span><span style="display:flex;"><span>    Message:       <span style="color:#d14">&#34;Approve access in your browser&#34;</span>,
+</span></span><span style="display:flex;"><span>    Mode:          core.ElicitModeURL,
+</span></span><span style="display:flex;"><span>    URL:           <span style="color:#d14">&#34;https://example.com/consent/abc&#34;</span>,
+</span></span><span style="display:flex;"><span>    ElicitationID: <span style="color:#d14">&#34;abc&#34;</span>,
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>Note the shape: form-mode elicitation has a context method (<code>ctx.Elicit</code>), while <code>ElicitURL</code> is a package function taking the context as its first argument. A handler context embeds <code>context.Context</code>, so passing <code>ctx</code> straight through works.</p>
+<p><code>RequestedSchema</code> must not be set in URL mode, and the client must have opted in with <code>WithElicitationURLSupport</code>, separately from the form-mode handler. Without it the request is rejected as invalid params.</p>
+<p>The response only tells you the user acknowledged the link. When the out-of-band flow actually finishes, the server signals it with <code>NotifyElicitationComplete</code>, which sends <code>notifications/elicitation/complete</code> carrying the <code>elicitationId</code> so the client can correlate it with the original request and retry whatever was blocked. This is SEP-1036.</p>
+<h2 id="on-the-stateless-wire">On the stateless wire <a class="anchor" href="#on-the-stateless-wire">¶</a></h2>
+<p><code>ctx.Elicit</code> needs a server-to-client push channel, which the SEP-2575 stateless wire does not have: the spec forbids independent JSON-RPC requests on a <code>tools/call</code> response stream. Calling it there returns <code>ErrNoRequestFunc</code>.</p>
+<p>Stateless handlers ask through MRTR instead, which carries the request in the tool result and gets the answer on a follow-up call:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">return</span> ctx.<span style="color:#900;font-weight:bold">RequestInput</span>(core.InputRequests{
+</span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;which-db&#34;</span>: core.<span style="color:#900;font-weight:bold">NewElicitationInputRequest</span>(req),
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>See <a href="/mcpkit/guides/mrtr/">MRTR_TUTORIAL.md</a>. The client side needs no extra work: <code>DefaultInputHandler</code> routes an MRTR elicitation request to the same handler a push-mode request would reach.</p>
+<h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a> for the stateless and multi-round path</li>
+<li><a href="/mcpkit/guides/prompts/">Prompts</a> for the other place schemas describe user-supplied values</li>
+<li><code>examples/elicitation/</code> for a runnable two-terminal walkthrough including URL mode</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>
