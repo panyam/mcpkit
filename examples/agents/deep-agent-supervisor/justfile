@@ -47,7 +47,7 @@ web:
         echo "roster server not reachable on :8795 -> start it first: just serve" >&2
         exit 1
     fi
-    cd "$ROOT/agent/web"
+    cd "$ROOT/agent/surfaces/web"
     exec go run ./cmd/agentweb --config "$DIR/deep-agent-supervisor.json" --addr "${ADDR:-:8090}"
 
 # Same as demo, but the alt-screen notebook UI (foldable cells make the

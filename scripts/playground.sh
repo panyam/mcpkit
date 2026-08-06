@@ -21,7 +21,7 @@ for _ in $(seq 1 60); do
 done
 
 echo "==> launching agentchat playground (TUI). Edit examples/playground/playground.json for your model."
-cd "$ROOT/cmd/agentchat"
+cd "$ROOT/agent/surfaces/chat"
 go run . \
 	--config "$ROOT/examples/playground/playground.json" \
 	--session-store "sqlite://$DATA/pg.db" \
