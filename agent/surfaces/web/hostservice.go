@@ -20,8 +20,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/panyam/mcpkit/agent/host"
-	agentwebv1 "github.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1"
-	"github.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1/agentwebv1connect"
+	agentwebv1 "github.com/panyam/mcpkit/agent/surfaces/web/gen/go/mcpkit/agentweb/v1"
+	"github.com/panyam/mcpkit/agent/surfaces/web/gen/go/mcpkit/agentweb/v1/agentwebv1connect"
 	"github.com/panyam/mcpkit/core"
 )
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/panyam/mcpkit/agent/host"
-	agentwebv1 "github.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1"
+	agentwebv1 "github.com/panyam/mcpkit/agent/surfaces/web/gen/go/mcpkit/agentweb/v1"
 )
 
 // eventToFrame projects a HostEvent onto its wire Frame: kind is the

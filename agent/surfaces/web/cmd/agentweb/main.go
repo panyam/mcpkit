@@ -22,7 +22,7 @@ import (
 	skhttp "github.com/panyam/servicekit/http"
 
 	"github.com/panyam/mcpkit/agent/host"
-	web "github.com/panyam/mcpkit/agent/web"
+	web "github.com/panyam/mcpkit/agent/surfaces/web"
 )
 
 func main() {
