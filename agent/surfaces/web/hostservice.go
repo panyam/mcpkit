@@ -52,9 +52,11 @@ func NewHostServiceWithSessions(mgr *SessionManager) *HostService {
 
 // appFor resolves a request's session_id to its App, or a Connect CodeNotFound
 // error when no such session exists. An empty session_id resolves to the
-// default session.
-func (s *HostService) appFor(sessionID string) (*host.App, error) {
-	app, ok := s.sessions.Get(sessionID)
+// default session. ctx threads the store round-trips a store-backed manager
+// performs when it rehydrates a session that is not cached (e.g. after a
+// restart) — an unknown run is still CodeNotFound.
+func (s *HostService) appFor(ctx context.Context, sessionID string) (*host.App, error) {
+	app, ok := s.sessions.Get(ctx, sessionID)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session %q not found", sessionID))
 	}
@@ -66,7 +68,7 @@ func (s *HostService) appFor(sessionID string) (*host.App, error) {
 // The derived ctx is cancelled on return so the drain goroutine and its
 // Subscription exit even when Send fails before the request ctx is observed.
 func (s *HostService) Watch(ctx context.Context, req *connect.Request[agentwebv1.WatchRequest], stream *connect.ServerStream[agentwebv1.Frame]) error {
-	app, err := s.appFor(req.Msg.GetSessionId())
+	app, err := s.appFor(ctx, req.Msg.GetSessionId())
 	if err != nil {
 		return err
 	}
@@ -92,7 +94,7 @@ func (s *HostService) Watch(ctx context.Context, req *connect.Request[agentwebv1
 // turn maps to a Connect error (the same failure is also announced as a
 // HostTurnFailed frame on Watch).
 func (s *HostService) Submit(ctx context.Context, req *connect.Request[agentwebv1.SubmitRequest]) (*connect.Response[agentwebv1.SubmitResponse], error) {
-	app, err := s.appFor(req.Msg.GetSessionId())
+	app, err := s.appFor(ctx, req.Msg.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +108,7 @@ func (s *HostService) Submit(ctx context.Context, req *connect.Request[agentwebv
 // CmdResult as {kind, json}. An unknown command is CodeInvalidArgument (a client
 // can retry it as a turn); any other command error is CodeInternal.
 func (s *HostService) Dispatch(ctx context.Context, req *connect.Request[agentwebv1.DispatchRequest]) (*connect.Response[agentwebv1.DispatchResponse], error) {
-	app, err := s.appFor(req.Msg.GetSessionId())
+	app, err := s.appFor(ctx, req.Msg.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +130,8 @@ func (s *HostService) Dispatch(ctx context.Context, req *connect.Request[agentwe
 // AskID a client read off a Frame. First responder wins; an unknown or
 // already-answered ask is CodeFailedPrecondition (app state, not a transport
 // failure). An empty By defaults to "web" so the resolved frame names the surface.
-func (s *HostService) RespondToAsk(_ context.Context, req *connect.Request[agentwebv1.RespondToAskRequest]) (*connect.Response[agentwebv1.RespondToAskResponse], error) {
-	app, err := s.appFor(req.Msg.GetSessionId())
+func (s *HostService) RespondToAsk(ctx context.Context, req *connect.Request[agentwebv1.RespondToAskRequest]) (*connect.Response[agentwebv1.RespondToAskResponse], error) {
+	app, err := s.appFor(ctx, req.Msg.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +161,7 @@ func (s *HostService) RespondToAsk(_ context.Context, req *connect.Request[agent
 // app-state fact). This pages the runs inside one conversation; the roster of
 // concurrent conversations is ListWebSessions.
 func (s *HostService) ListSessions(ctx context.Context, req *connect.Request[agentwebv1.ListSessionsRequest]) (*connect.Response[agentwebv1.ListSessionsResponse], error) {
-	app, err := s.appFor(req.Msg.GetSessionId())
+	app, err := s.appFor(ctx, req.Msg.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -177,8 +179,8 @@ func (s *HostService) ListSessions(ctx context.Context, req *connect.Request[age
 
 // GetStatus returns the selected session's active model label and run id — the
 // status-line read.
-func (s *HostService) GetStatus(_ context.Context, req *connect.Request[agentwebv1.GetStatusRequest]) (*connect.Response[agentwebv1.GetStatusResponse], error) {
-	app, err := s.appFor(req.Msg.GetSessionId())
+func (s *HostService) GetStatus(ctx context.Context, req *connect.Request[agentwebv1.GetStatusRequest]) (*connect.Response[agentwebv1.GetStatusResponse], error) {
+	app, err := s.appFor(ctx, req.Msg.GetSessionId())
 	if err != nil {
 		return nil, err
 	}
@@ -203,11 +205,14 @@ func (s *HostService) CreateSession(ctx context.Context, _ *connect.Request[agen
 	return connect.NewResponse(&agentwebv1.CreateSessionResponse{SessionId: id}), nil
 }
 
-// ListWebSessions returns the session_ids of every live conversation (App) the
-// server hosts, including the default. This is the roster of concurrent
-// conversations, distinct from ListSessions (persisted runs inside one App).
-func (s *HostService) ListWebSessions(_ context.Context, _ *connect.Request[agentwebv1.ListWebSessionsRequest]) (*connect.Response[agentwebv1.ListWebSessionsResponse], error) {
-	return connect.NewResponse(&agentwebv1.ListWebSessionsResponse{SessionIds: s.sessions.List()}), nil
+// ListWebSessions returns the session_ids of every conversation the server
+// hosts. With a store configured this is the durable roster (every persisted
+// run id, so a restart still lists past sessions), merged with any live-only
+// ids; otherwise it is the live in-memory roster. The default is included. This
+// is the roster of conversations, distinct from ListSessions (persisted runs
+// inside one App).
+func (s *HostService) ListWebSessions(ctx context.Context, _ *connect.Request[agentwebv1.ListWebSessionsRequest]) (*connect.Response[agentwebv1.ListWebSessionsResponse], error) {
+	return connect.NewResponse(&agentwebv1.ListWebSessionsResponse{SessionIds: s.sessions.List(ctx)}), nil
 }
 
 // CloseSession closes the App for session_id and drops it from the roster. An
