@@ -1,37 +1,21 @@
 version: 2
 
-# Coverage rule: if we tag and publish it, Dependabot monitors it.
+# Go modules are deliberately NOT listed here. Dependabot opens one PR per
+# directory and cannot touch modules outside its globs, but ~60 modules under
+# examples/ and tests/ depend on the published ones through `replace`
+# directives. So every grouped gomod PR left their go.mod stale and broke
+# test-agent and test-auth with "updates to go.mod needed" (PR 1225: a
+# 9-directory bump needed 57 further modules tidied in lock-step).
 #
-# The directory globs below track SUB_MODS_TO_TAG (justfile) plus the root
-# module. Everything under examples/ is deliberately excluded: those are demos,
-# not modules anyone imports, and ~60 of them would bury the signal. They are
-# swept by `just tidy-all` and scanned by `just vulncheck`'s published-module
-# loop instead.
+# DEPENDENCY_POLICY.md requires lock-step pins, which per-directory PRs cannot
+# deliver. Go updates are owned by .github/workflows/dep-sweep.yml, which
+# updates every module and reconciles the whole tree in one PR.
+#
+# Two things still cover the gap between monthly sweeps:
+#   - Dependabot SECURITY updates, a repository setting independent of this
+#     file, still open CVE PRs immediately.
+#   - .github/workflows/vulncheck.yml scans the published surface weekly.
 updates:
-  - package-ecosystem: gomod
-    directories:
-      - "/"
-      - "/agent"
-      - "/agent/host"
-      - "/agent/web"
-      - "/agent/store/*"
-      - "/cmd/*"
-      - "/ext/*"
-      - "/stores/*"
-      - "/experimental/ext/*"
-      - "/experimental/ext/*/clients/go"
-      - "/experimental/ext/*/stores/*"
-    schedule:
-      interval: weekly
-    # One grouped PR per module per week. With ~24 modules the default limit of
-    # 5 would stall the tail indefinitely; 10 keeps the queue draining without
-    # flooding the PR list.
-    open-pull-requests-limit: 10
-    groups:
-      go-deps:
-        patterns:
-          - "*"
-
   # The Bridge JS in ext/ui/assets ships into end users' browsers, so it is the
   # one dependency tree here with a direct client-side blast radius. agent/web's
   # frontend (dockview / solid / connect-web / esbuild) is served from the agent
