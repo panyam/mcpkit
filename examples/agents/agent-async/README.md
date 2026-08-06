@@ -18,6 +18,24 @@ just test           # the golden-transcript test
 just demo qwen2.5-7b-instruct   # a live model improvising against the same server
 ```
 
+## One config, three surfaces
+
+`config.json` is the single host config both live surfaces load — the CLI
+(`agentchat`) and the browser (`agentweb`). Start the demo MCP server, then
+point either surface at it:
+
+```bash
+just serve   # the app-domain MCP server (events + tasks + send_email) on :8788
+just chat    # agentchat CLI against config.json (another terminal)
+just web     # agentweb browser surface against config.json (another terminal)
+```
+
+`config.json` carries the model connection, `metaTools`, and the server. The
+one piece it cannot hold is the scripted `StubProvider` that makes `just agent`
+deterministic, so `runScenario` loads the same `config.json` and only overrides
+the server URL to the in-process test server and injects the stub. The live
+surfaces use the config verbatim.
+
 ## What happens
 
 ```

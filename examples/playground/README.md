@@ -9,6 +9,16 @@ SQLite session store, and a filesystem offload dir.
 just pg
 ```
 
+`just pg` is the batteries-included wrapper (sqlite session store + offload
+dir). For the plain config-driven surfaces, this directory also has a justfile
+that runs both surfaces off `playground.json`:
+
+```bash
+just serve   # the demo MCP server (getting-started 'greet') on :8787
+just chat    # agentchat CLI against playground.json (another terminal)
+just web     # agentweb browser surface against playground.json (another terminal)
+```
+
 ## What you need
 
 A local OpenAI-compatible model endpoint. The bundled `playground.json`

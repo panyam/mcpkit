@@ -13,9 +13,29 @@ mcpkit's Phase 3 multi-agent composition, both modes, in one runnable demo:
 ## Run
 
 ```bash
-go run .            # deterministic StubProviders (no LLM, no network)
+just agent          # deterministic StubProviders (no LLM, no network)
+just test           # the golden transcript
 go run . --model X  # drive the supervisor with a live OpenAI-compatible model
 ```
+
+## One config, two surfaces
+
+`config.json` is the **declarative host counterpart** to the hand-wired
+composition above: the two sub-agents become `subAgents` personas that share
+the main provider and a filtered view of a demo MCP server's tools. Both the
+CLI (`agentchat`) and browser (`agentweb`) surfaces load it:
+
+```bash
+just serve   # the demo MCP server (web_search + run_code) on :8785
+just chat    # agentchat CLI against config.json (another terminal)
+just web     # agentweb browser surface against config.json (another terminal)
+```
+
+The golden scenario stays hand-wired (each sub-agent gets its own scripted
+`StubProvider` + `FuncSource`, which JSON cannot express); `config.json` is the
+config-driven version of the same supervisor → researcher/coder shape. Handoff
+(`Team`) has no host-config surface in this example and runs only under `just
+agent` / `--model`.
 
 Sample output:
 

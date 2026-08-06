@@ -41,6 +41,26 @@ Point real models at both roles independently:
 go run . --model qwen2.5 --critic-model llama3.2 --base-url http://localhost:1234/v1
 ```
 
+## One config, two surfaces (with a residual)
+
+`config.json` holds the **primary** agent's model connection, instructions, and
+the ops MCP server. Both live surfaces load it:
+
+```bash
+just serve   # the ops MCP server (run_shell) on :8786
+just chat    # agentchat CLI against config.json (another terminal)
+just web     # agentweb browser surface against config.json (another terminal)
+```
+
+The **critic loop itself is not config-expressible** — `host.Config` has no
+"observer model" seam; the second `Runner` + the anti-nag guard are code-level
+composition (that is the point of the example). So `config.json` drives the
+primary agent, and `just chat` / `just web` run it **without** the critic. The
+scripted `runScenario` loads the same `config.json` (overriding the server URL
+to the in-process test server, injecting the scripted providers) and adds the
+critic in code — the full watch-and-steer flow runs under `just agent` / `just
+demo`.
+
 ## The one rough edge: note delivery
 
 On top of `host.App` the pattern works, with a single gap. `App.RunTurn` accepts

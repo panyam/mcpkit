@@ -94,6 +94,7 @@ just servers-up-bg # the four MCP servers, detached (independent of the chat)
 just check        # probe backends; prints how to fix whatever is down
 just run          # preflight, verify servers are up, launch agentchat (inline TUI)
 just note         # same, but the alt-screen notebook UI (scrollable, foldable cells)
+just web          # the browser surface (agentweb) off kitchen-sink.json (config subset)
 # ... chat, quit, `just run` again — the servers are still up ...
 just servers-down  # stop the MCP servers
 just alldown       # tear the stacks back down
