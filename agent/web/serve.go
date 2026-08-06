@@ -19,9 +19,20 @@ import (
 // server streams over HTTP/1.1, so no h2c is required for local dev; a
 // production deployment behind HTTP/2 works unchanged.
 func Handler(app *host.App) http.Handler {
+	return handlerFor(NewHostService(app))
+}
+
+// HandlerWithSessions is Handler for a multi-session server: it serves the same
+// mux over a SessionManager, so one server hosts many concurrent conversations
+// (empty session_id routes to the manager's default, CreateSession mints more).
+func HandlerWithSessions(mgr *SessionManager) http.Handler {
+	return handlerFor(NewHostServiceWithSessions(mgr))
+}
+
+func handlerFor(svc *HostService) http.Handler {
 	mux := http.NewServeMux()
 
-	path, h := agentwebv1connect.NewHostServiceHandler(NewHostService(app))
+	path, h := agentwebv1connect.NewHostServiceHandler(svc)
 	mux.Handle(path, h)
 
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticAssets()))))

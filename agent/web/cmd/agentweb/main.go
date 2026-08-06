@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -30,20 +31,28 @@ func main() {
 	demo := flag.Bool("demo", false, "run over an offline streaming demo provider (no config needed)")
 	flag.Parse()
 
-	app, err := buildApp(*configPath, *demo)
+	// One factory builds a fresh App per web session from the same config, so a
+	// CreateSession over the wire mints an independent conversation. The
+	// SessionManager holds them all; its default session (created at startup)
+	// backs an empty session_id, keeping the single-surface flow unchanged.
+	factory := func(ctx context.Context) (*host.App, error) { return buildApp(*configPath, *demo) }
+	mgr := web.NewSessionManager(factory)
+	defaultApp, err := factory(context.Background())
 	if err != nil {
 		log.Fatalf("agentweb: %v", err)
 	}
-	defer app.Close()
+	mgr.SetDefault(defaultApp)
+	defer mgr.CloseAll()
 
-	srv := &http.Server{Addr: *addr, Handler: web.Handler(app)}
+	srv := &http.Server{Addr: *addr, Handler: web.HandlerWithSessions(mgr)}
 	fmt.Fprintf(os.Stderr, "agentweb serving at http://%s/ (Connect: /%s, Ctrl-C to stop)\n", *addr, "mcpkit.agentweb.v1.HostService")
 	if err := skhttp.ListenAndServeGraceful(srv); err != nil {
 		log.Fatalf("agentweb: serve: %v", err)
 	}
 }
 
-// buildApp builds the one shared App. In demo mode it wires the offline demo
+// buildApp builds one App: the factory the SessionManager calls for the default
+// session and every CreateSession. In demo mode it wires the offline demo
 // provider; otherwise it loads the host config. The web surface renders in the
 // browser off the event stream, so the App's own terminal renderer is discarded
 // (output to io.Discard) — events reach clients through Subscribe / Watch.
