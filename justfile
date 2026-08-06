@@ -170,6 +170,18 @@ check-conformance-stale: check-local-suites-stale
 check-local-suites-stale:
     uv run scripts/check_local_suites.py
 
+# CI gate — fail if a third-party dep is pinned at 2+ versions across published modules
+check-dep-consistency:
+    python3 scripts/check_dep_consistency.py
+
+# Accept the current dependency divergence as the new baseline
+update-dep-baseline:
+    python3 scripts/check_dep_consistency.py --update-baseline
+
+# Repo-wide dependency sweep (usage: just dep-sweep [patch|minor]); see scripts/dep-sweep.sh
+dep-sweep MODE="minor":
+    bash scripts/dep-sweep.sh {{MODE}}
+
 # CI gate — fail if docs/GETTING_STARTED.md Go snippets drift from examples/getting-started/ (issue 853)
 check-snippets:
     go run ./tools/check-snippets
