@@ -220,7 +220,13 @@ Supports `2025-11-25` and `2024-11-05`. During `initialize`, server checks if cl
 1. Client sends `initialize` → server responds with capabilities and negotiated version
 2. Client sends `notifications/initialized` → server marks session as ready
 3. Only after step 2 does the server accept `tools/list`, `tools/call`, etc.
-4. `ping` is exempt — allowed at any time
+4. `ping` is exempt, allowed at any time
+
+### Ping
+
+`ping` is a liveness check either side can send. It takes no parameters and the peer replies with an empty result, so a successful response means only that the connection is up and the peer is processing messages. It says nothing about session state.
+
+The exemption in step 4 above is what makes it useful: a client can ping before completing the handshake, and a long-lived connection can ping to distinguish an idle session from a dropped one. That matters most on the SSE and Streamable HTTP transports, where a silent TCP drop is otherwise indistinguishable from a server with nothing to say. Handling is built in; servers register nothing to support it.
 
 ## Server-to-Client Notifications
 
