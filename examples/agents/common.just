@@ -24,17 +24,14 @@ agent:
 demo:
     @../demo.sh
 
-# Chat with the CLI surface (agentchat) off CONFIG. Start the example's
-# server first (just serve) so the configured tools are reachable.
+# Chat with the CLI surface (agentchat) off CONFIG (start the server first: just serve).
 chat:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "$(git rev-parse --show-toplevel)/cmd/agentchat"
     exec go run . --config "{{CONFIG}}"
 
-# Serve the browser surface (agentweb) off CONFIG on ADDR. Start the example's
-# server first (just serve); a down server does not block boot, its tools wire
-# in once it is up.
+# Serve the browser surface (agentweb) off CONFIG on ADDR (start the server first: just serve).
 web:
     #!/usr/bin/env bash
     set -euo pipefail
