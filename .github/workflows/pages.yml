@@ -38,6 +38,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A starved queue should fail fast and be retried, not block a merge for
+    # hours. This job was cancelled after 1h45m on PR 1234 without ever being
+    # assigned a runner (zero steps recorded).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -54,19 +58,17 @@ jobs:
         with:
           enable-cache: true
 
-      - uses: extractions/setup-just@v4
-
       - name: Sync Python tooling env
         run: uv sync
 
       - name: Build site
         working-directory: docs/site
-        run: just build
+        run: make build
 
       # Self-hosted shields endpoint badge: root-module coverage computed
       # here and shipped inside the site output at /coverage/badge.json,
       # same pattern as the conformance badge (which is committed under
-      # docs/site/static/ by refresh-conformance and rides `just build`).
+      # docs/site/static/ by refresh-conformance and rides `make build`).
       # Relies on docs/site/go.mod sharing the root module's go directive:
       # setup-go@v7 pins GOTOOLCHAIN=local, so the one installed toolchain
       # must satisfy both modules.

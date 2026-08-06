@@ -40,8 +40,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: extractions/setup-just@v4
-
       # MODE goes through env rather than being interpolated into the run: line.
       # `choice` already constrains it to minor|patch, but keeping dispatch input
       # out of the shell string is the cheap, unconditional habit.
@@ -71,11 +69,11 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          just check-dep-consistency 2>&1 | tee -a result.log
-          just test               2>&1 | tee -a result.log
-          just test-agent         2>&1 | tee -a result.log
-          just test-auth          2>&1 | tee -a result.log
-          just test-ui            2>&1 | tee -a result.log
+          make check-dep-consistency 2>&1 | tee -a result.log
+          make test               2>&1 | tee -a result.log
+          make test-agent         2>&1 | tee -a result.log
+          make test-auth          2>&1 | tee -a result.log
+          make test-ui            2>&1 | tee -a result.log
 
       - name: Open pull request
         if: steps.diff.outputs.changed == 'true'
@@ -101,7 +99,7 @@ jobs:
           fi
 
           {
-            echo "Automated monthly sweep (\`$MODE\`) across every Go module, reconciled with \`just tidy-all\`."
+            echo "Automated monthly sweep (\`$MODE\`) across every Go module, reconciled with \`make tidy-all\`."
             echo
             echo "$status"
             echo
