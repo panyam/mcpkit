@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package mcpkit.agentweb.v1;
 
-option go_package = "github.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1;agentwebv1";
+option go_package = "github.com/panyam/mcpkit/agent/surfaces/web/gen/go/mcpkit/agentweb/v1;agentwebv1";
 
 // HostService is the web bridge over agent/host.App: the same surface-agnostic
 // host the terminal agentchat drives, reached from a browser instead of a TTY.

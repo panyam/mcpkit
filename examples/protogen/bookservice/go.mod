@@ -15,7 +15,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/panyam/gocurrent v0.1.1 // indirect
+	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/protokit v0.0.5 // indirect
 	github.com/panyam/servicekit v0.1.3 // indirect

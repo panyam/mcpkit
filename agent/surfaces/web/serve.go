@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/panyam/mcpkit/agent/host"
-	"github.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1/agentwebv1connect"
+	"github.com/panyam/mcpkit/agent/surfaces/web/gen/go/mcpkit/agentweb/v1/agentwebv1connect"
 )
 
 // Handler builds the one mux the web surface serves, mirroring the Agni /
