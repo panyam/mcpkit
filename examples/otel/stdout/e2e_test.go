@@ -61,10 +61,10 @@ func TestEndToEnd_StdoutDemoWiring(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp",
 		core.ClientInfo{Name: "otel-stdout-test", Version: "1.0"},
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "echo",
 		"arguments": map[string]any{"message": "hello"},
 		"_meta":     map[string]any{"traceparent": testInbound},
@@ -168,10 +168,10 @@ func TestEndToEnd_BothSidesEmitSpans(t *testing.T) {
 			mcpotel.WithInstrumentationName("github.com/panyam/mcpkit/client"),
 		)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 
-	_, err := c.Call("tools/call", map[string]any{
+	_, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "echo",
 		"arguments": map[string]any{"message": "hello"},
 	})
@@ -256,7 +256,7 @@ func TestEndToEnd_ToolMenu_AllToolsEmit(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp",
 		core.ClientInfo{Name: "otel-stdout-test", Version: "1.0"},
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 
 	type expectation struct {
@@ -300,7 +300,7 @@ func TestEndToEnd_ToolMenu_AllToolsEmit(t *testing.T) {
 		t.Run(toolName, func(t *testing.T) {
 			exp.Reset()
 
-			_, err := c.Call("tools/call", map[string]any{
+			_, err := c.Call(t.Context(), "tools/call", map[string]any{
 				"name":      toolName,
 				"arguments": map[string]any{"message": "test"},
 			})

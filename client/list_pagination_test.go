@@ -142,7 +142,7 @@ func newPagedClient(t *testing.T, p *pagedJSONRPC, opts ...client.ClientOption) 
 	ts := httptest.NewServer(p)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL, core.ClientInfo{Name: "paged-test", Version: "1.0"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	return c
@@ -244,7 +244,7 @@ func TestListTools_AutoIteratesAndCachesAcrossPages(t *testing.T) {
 	}
 	// Tool from the last page must be cached — exercises that the
 	// cache replace ran ONCE after drain rather than per-page.
-	if _, err := c.ToolCall("t3", nil); err == nil {
+	if _, err := c.ToolCall(t.Context(), "t3", nil); err == nil {
 		// Server responds with method-not-found for tools/call (no
 		// handler), so we expect an error, but the fact that ToolCall
 		// even attempted dispatch tells us t3's schema was cached.
@@ -353,4 +353,3 @@ func TestListResources_FirstPageEmptyCursorIsBackcompat(t *testing.T) {
 		t.Errorf("server saw %d calls, want exactly 1", calls)
 	}
 }
-

@@ -116,7 +116,7 @@ func newConnectedClient(t *testing.T, srv *server.Server) *client.Client {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "dirread-probe", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

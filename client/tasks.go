@@ -87,8 +87,8 @@ func (r *ToolCallResult) IsInputRequired() bool {
 // Servers gate task creation on the io.modelcontextprotocol/tasks extension,
 // so this only ever returns a Task result if the client declared the
 // extension during initialize (or per-request via SEP-2575 _meta).
-func ToolCall(c *Client, name string, args any) (*ToolCallResult, error) {
-	resp, err := c.Call("tools/call", map[string]any{
+func ToolCall(ctx context.Context, c *Client, name string, args any) (*ToolCallResult, error) {
+	resp, err := c.Call(ctx, "tools/call", map[string]any{
 		"name":      name,
 		"arguments": args,
 	})
@@ -137,12 +137,12 @@ func parseToolCallResult(raw json.RawMessage) (*ToolCallResult, error) {
 // inlined result / error / inputRequests depending on status. Idempotent —
 // safe to call as often as needed; servers gate this method on the
 // io.modelcontextprotocol/tasks extension being negotiated.
-func GetTask(c *Client, taskID string) (*core.DetailedTask, error) {
+func GetTask(ctx context.Context, c *Client, taskID string) (*core.DetailedTask, error) {
 	// Map (not a typed struct) so core.DeriveMcpName can read taskId and
 	// emit the Mcp-Name routing header the server requires for task ops on
 	// the SEP-2575 stateless wire (no session to route by). Same reason
 	// ToolCall passes a map. See core.DeriveMcpName.
-	resp, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
+	resp, err := c.Call(ctx, "tasks/get", map[string]any{"taskId": taskID})
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func GetTask(c *Client, taskID string) (*core.DetailedTask, error) {
 //
 // Returns nil on success — the server response is an empty ack per
 // SEP-2663. Observe the resulting state via the next GetTask poll.
-func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
+func UpdateTask(ctx context.Context, c *Client, req core.UpdateTaskRequest) error {
 	if req.TaskID == "" {
 		return fmt.Errorf("UpdateTask: missing TaskID")
 	}
@@ -172,7 +172,7 @@ func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
 	if len(req.InputResponses) > 0 {
 		params["inputResponses"] = req.InputResponses
 	}
-	if _, err := c.Call("tasks/update", params); err != nil {
+	if _, err := c.Call(ctx, "tasks/update", params); err != nil {
 		return err
 	}
 	return nil
@@ -181,8 +181,8 @@ func UpdateTask(c *Client, req core.UpdateTaskRequest) error {
 // CancelTask cancels a running task. Returns nil on success — the server
 // response is an empty ack per SEP-2663 (no task state). Issue GetTask if
 // you need to observe the resulting "cancelled" status.
-func CancelTask(c *Client, taskID string) error {
-	if _, err := c.Call("tasks/cancel", map[string]any{"taskId": taskID}); err != nil {
+func CancelTask(ctx context.Context, c *Client, taskID string) error {
+	if _, err := c.Call(ctx, "tasks/cancel", map[string]any{"taskId": taskID}); err != nil {
 		return err
 	}
 	return nil
@@ -242,7 +242,7 @@ func WaitForTask(ctx context.Context, c *Client, taskID string, opts ...WaitOpti
 		default:
 		}
 
-		dt, err := GetTask(c, taskID)
+		dt, err := GetTask(ctx, c, taskID)
 		if err != nil {
 			return nil, err
 		}
@@ -292,7 +292,7 @@ func WaitForTaskWithInput(ctx context.Context, c *Client, taskID string, handler
 		default:
 		}
 
-		dt, err := GetTask(c, taskID)
+		dt, err := GetTask(ctx, c, taskID)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +307,7 @@ func WaitForTaskWithInput(ctx context.Context, c *Client, taskID string, handler
 			if err != nil {
 				return nil, fmt.Errorf("task %s input: %w", taskID, err)
 			}
-			if err := UpdateTask(c, core.UpdateTaskRequest{TaskID: taskID, InputResponses: responses}); err != nil {
+			if err := UpdateTask(ctx, c, core.UpdateTaskRequest{TaskID: taskID, InputResponses: responses}); err != nil {
 				return nil, err
 			}
 			continue
@@ -390,8 +390,12 @@ func (bt *BackgroundTask) Result() (*core.DetailedTask, error) {
 // Cancel requests server-side cancellation (tasks/cancel) and stops the
 // poll. Done still closes with the resulting (cancelled) outcome, so
 // observers see one lifecycle regardless of how it ended.
-func (bt *BackgroundTask) Cancel() error {
-	err := CancelTask(bt.c, bt.TaskID)
+//
+// ctx bounds the tasks/cancel round-trip only. The local poll is stopped
+// regardless of whether that request succeeds, so a cancelled or failed ctx
+// still detaches the handle — the error is reported, not swallowed.
+func (bt *BackgroundTask) Cancel(ctx context.Context) error {
+	err := CancelTask(ctx, bt.c, bt.TaskID)
 	bt.cancelPoll()
 	return err
 }

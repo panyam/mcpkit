@@ -142,7 +142,7 @@ func TestPromptsGet_LegacyMRTR_RoundTrip(t *testing.T) {
 
 	c := connectMRTRClient(t, s)
 
-	r1, err := c.Call("prompts/get", map[string]any{"name": "test_input_required_result_prompt"})
+	r1, err := c.Call(t.Context(), "prompts/get", map[string]any{"name": "test_input_required_result_prompt"})
 	if err != nil {
 		t.Fatalf("round 1 call: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestPromptsGet_LegacyMRTR_RoundTrip(t *testing.T) {
 		t.Fatalf("round 1 requestState empty; raw=%s", r1.Raw)
 	}
 
-	r2, err := c.Call("prompts/get", map[string]any{
+	r2, err := c.Call(t.Context(), "prompts/get", map[string]any{
 		"name": "test_input_required_result_prompt",
 		"inputResponses": map[string]any{
 			"user_context": map[string]any{"action": "accept", "content": map[string]any{"context": "demo"}},

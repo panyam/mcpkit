@@ -77,7 +77,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "system-monitor-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -106,7 +106,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s  ui=%v\n", t.Name, t.Meta["ui"])
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -141,7 +141,7 @@ for _, t := range out.Tools {
 pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-system-info", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-system-info", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -166,7 +166,7 @@ cores := sc["cpu"].(map[string]any)["cores"].([]any)
 fmt.Printf("cores: %d, memory: %v, uptime: %v, timestamp: %v\n",
     len(cores), sc["memory"], sc["uptime"], sc["timestamp"])`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("poll-system-stats", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "poll-system-stats", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -201,7 +201,7 @@ fmt.Printf("cores: %d, memory: %v, uptime: %v, timestamp: %v\n",
 		`text, _ := c.ReadResource("ui://system-monitor/mcp-app.html")
 fmt.Printf("%d bytes; first 200:\n%.200s\n", len(text), text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://system-monitor/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://system-monitor/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

@@ -175,7 +175,7 @@ func TestForAllTransports_RunsAllFour(t *testing.T) {
 // of how client and server communicate.
 func TestForAllTransports_EchoAllTransports(t *testing.T) {
 	ForAllTransports(t, NewTestServer(), func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("echo", map[string]any{"message": "transport-test"})
+		text, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "transport-test"})
 		if err != nil {
 			t.Fatalf("ToolCall: %v", err)
 		}

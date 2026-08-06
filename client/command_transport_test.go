@@ -60,9 +60,9 @@ func TestCommandTransport_EchoTool(t *testing.T) {
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
-	result, err := c.ToolCall("test_simple_text", map[string]any{})
+	result, err := c.ToolCall(t.Context(), "test_simple_text", map[string]any{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, result, "should get a response from the echo tool")
 
@@ -81,7 +81,7 @@ func TestCommandTransport_GracefulShutdown(t *testing.T) {
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// Measure shutdown time — should be fast (stdin EOF causes server exit).
 	start := time.Now()
@@ -104,10 +104,10 @@ func TestCommandTransport_StderrCapture(t *testing.T) {
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// Do a call to give the server time to log.
-	_, _ = c.ToolCall("test_simple_text", map[string]any{})
+	_, _ = c.ToolCall(t.Context(), "test_simple_text", map[string]any{})
 	c.Close()
 
 	stderr := transport.Stderr()
@@ -126,9 +126,9 @@ func TestCommandTransport_ProcessCrash(t *testing.T) {
 
 	// Connect may fail (process exits before handshake completes) or
 	// a subsequent call may fail — either way we should get an error.
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	if err == nil {
-		_, err = c.ToolCall("test_simple_text", map[string]any{})
+		_, err = c.ToolCall(t.Context(), "test_simple_text", map[string]any{})
 	}
 	assert.Error(t, err, "should get an error when process crashes")
 }
@@ -157,7 +157,7 @@ func TestCommandTransport_EnvPassthrough(t *testing.T) {
 		client.WithTransport(transport),
 		client.WithConnectTimeout(3*time.Second),
 	)
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	assert.Error(t, err, "without STDIO=1, connect should fail")
 	assert.Contains(t, err.Error(), "timed out",
 		"error should clearly indicate a timeout with diagnostic guidance")
@@ -170,7 +170,7 @@ func TestCommandTransport_EnvPassthrough(t *testing.T) {
 	c2 := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport2),
 	)
-	require.NoError(t, c2.Connect(), "with STDIO=1, connect should succeed")
+	require.NoError(t, c2.Connect(t.Context()), "with STDIO=1, connect should succeed")
 	c2.Close()
 }
 
@@ -185,9 +185,9 @@ func TestCommandTransport_WithCommandTransportOption(t *testing.T) {
 			client.WithEnv("STDIO=1"),
 		),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
-	result, err := c.ToolCall("test_simple_text", map[string]any{})
+	result, err := c.ToolCall(t.Context(), "test_simple_text", map[string]any{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, result)
 
@@ -208,8 +208,8 @@ func TestCommandTransport_WithStderr(t *testing.T) {
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 	)
-	require.NoError(t, c.Connect())
-	_, _ = c.ToolCall("test_simple_text", map[string]any{})
+	require.NoError(t, c.Connect(t.Context()))
+	_, _ = c.ToolCall(t.Context(), "test_simple_text", map[string]any{})
 	c.Close()
 
 	// Both the internal buffer and the user writer should have stderr content.
@@ -231,7 +231,7 @@ func TestCommandTransport_ShutdownTimeout(t *testing.T) {
 	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// Close should still complete quickly with a short timeout.
 	start := time.Now()

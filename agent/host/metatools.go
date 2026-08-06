@@ -145,7 +145,7 @@ func (a *App) registerMetaTools(multi *agent.MultiSource) error {
 			if bt == nil {
 				return "", fmt.Errorf("no running task %q", in.ID)
 			}
-			if err := bt.Cancel(); err != nil {
+			if err := bt.Cancel(ctx); err != nil {
 				return "", err
 			}
 			return "cancelling: " + in.ID, nil

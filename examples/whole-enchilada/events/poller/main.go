@@ -122,7 +122,7 @@ func main() {
 			}
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		log.Fatalf("%s connect failed: %v", prefix, err)
 	}
 	defer func() { _ = c.Close() }()
@@ -171,7 +171,7 @@ func main() {
 // silently retrying would just spam the AS. The walkthrough's
 // "revoke a session → watch the poller die" beat depends on this.
 func pollOnce(c *client.Client, eventName, cursor, prefix string) (next *string, authDead bool) {
-	res, err := c.Call("events/poll", map[string]any{
+	res, err := c.Call(context.Background(), "events/poll", map[string]any{
 		"name":   eventName,
 		"cursor": cursor,
 	})

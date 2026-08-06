@@ -84,11 +84,11 @@ func TestE2E_Client_401_TokenRefresh(t *testing.T) {
 		core.ClientInfo{Name: "retry-test", Version: "0.1.0"},
 		client.WithTokenSource(ts),
 	)
-	err := client.Connect()
+	err := client.Connect(t.Context())
 	require.NoError(t, err, "Connect should succeed after 401 retry with refreshed token")
 	defer client.Close()
 
-	result, err := client.ToolCall("echo", map[string]any{"msg": "refreshed"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "refreshed"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "refreshed")
 }
@@ -140,13 +140,13 @@ func TestE2E_Client_403_ScopeStepUp(t *testing.T) {
 		core.ClientInfo{Name: "stepup-test", Version: "0.1.0"},
 		client.WithTokenSource(ts),
 	)
-	err = client.Connect()
+	err = client.Connect(t.Context())
 	require.NoError(t, err)
 	defer client.Close()
 
 	// Verify the token source works (tool call with initial narrow token succeeds
 	// because the server doesn't have global RequiredScopes)
-	result, err := client.ToolCall("echo", map[string]any{"msg": "narrow-ok"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "narrow-ok"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "narrow-ok")
 }
@@ -167,7 +167,7 @@ func TestE2E_Client_RetryLimit(t *testing.T) {
 		core.ClientInfo{Name: "limit-test", Version: "0.1.0"},
 		client.WithTokenSource(ts),
 	)
-	err := clnt.Connect()
+	err := clnt.Connect(t.Context())
 	require.Error(t, err, "Connect should fail after retry limit")
 
 	// Verify it's a ClientAuthError
@@ -201,7 +201,7 @@ func TestE2E_Client_401_WithExpiredJWT(t *testing.T) {
 		core.ClientInfo{Name: "expire-test", Version: "0.1.0"},
 		client.WithTokenSource(ts),
 	)
-	err = client.Connect()
+	err = client.Connect(t.Context())
 	require.NoError(t, err, "should succeed after refreshing expired token")
 	defer client.Close()
 }

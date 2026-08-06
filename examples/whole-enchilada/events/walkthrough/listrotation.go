@@ -102,7 +102,7 @@ func runListRotation(serverURL string) func(demokit.StepContext) *demokit.StepRe
 				}
 			}),
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			return &demokit.StepResult{
 				Status:  demokit.StatusError,
 				Message: fmt.Sprintf("Connect to %s failed: %v", serverURL, err),
@@ -125,7 +125,7 @@ func runListRotation(serverURL string) func(demokit.StepContext) *demokit.StepRe
 				}
 			}
 			pendingReplica.Store("")
-			res, err := c.Call("events/list", map[string]any{})
+			res, err := c.Call(ctx.Ctx, "events/list", map[string]any{})
 			if err != nil {
 				return &demokit.StepResult{
 					Status:  demokit.StatusError,

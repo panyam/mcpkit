@@ -23,22 +23,22 @@ import (
 // cleanest fixture for understanding what an MCP App actually IS at
 // the bridge level.
 //
-//   1. Connect (initialize + notifications/initialized).
-//   2. tools/list — focus on get-time's `_meta.ui.resourceUri`, the
-//      signal that says "this tool has an iframe to render."
-//   3. tools/call get-time — capture the text content (ISO 8601
-//      timestamp). No structuredContent here; the iframe reads the
-//      text directly from content[0].text.
-//   4. resources/read on ui://get-time/mcp-app.html — pull the iframe
-//      bytes plus inspect the per-content `_meta` payload.
-//   5. (Section) "What the App iframe does with all this" — narrates
-//      quickstart's minimum-viable bridge dance: app.ontoolresult
-//      renders the time into the DOM, then a button calls
-//      app.callServerTool({name: "get-time"}) to fetch a fresh
-//      timestamp via the bridge — the simplest possible
-//      iframe-calls-back-to-server pattern. Contrast with
-//      budget-allocator's five app.registerTool calls + updateModelContext;
-//      quickstart shows the floor of what an MCP App can be.
+//  1. Connect (initialize + notifications/initialized).
+//  2. tools/list — focus on get-time's `_meta.ui.resourceUri`, the
+//     signal that says "this tool has an iframe to render."
+//  3. tools/call get-time — capture the text content (ISO 8601
+//     timestamp). No structuredContent here; the iframe reads the
+//     text directly from content[0].text.
+//  4. resources/read on ui://get-time/mcp-app.html — pull the iframe
+//     bytes plus inspect the per-content `_meta` payload.
+//  5. (Section) "What the App iframe does with all this" — narrates
+//     quickstart's minimum-viable bridge dance: app.ontoolresult
+//     renders the time into the DOM, then a button calls
+//     app.callServerTool({name: "get-time"}) to fetch a fresh
+//     timestamp via the bridge — the simplest possible
+//     iframe-calls-back-to-server pattern. Contrast with
+//     budget-allocator's five app.registerTool calls + updateModelContext;
+//     quickstart shows the floor of what an MCP App can be.
 //
 // Each tool/resource step attaches two unboxed Verbatim blocks via
 // common.WireRecipe: a curl form (copy-pastable) and a Go form (the
@@ -104,7 +104,7 @@ fmt.Printf("connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`,
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "quickstart-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -135,7 +135,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s: %v\n", t.Name, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -172,7 +172,7 @@ for _, t := range out.Tools {
 // tr.Content[0].Text is the ISO 8601 timestamp; no structuredContent here.
 fmt.Printf("text content: %s\n", tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-time", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-time", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -215,7 +215,7 @@ fmt.Printf("mimeType: %s\n", raw.Contents[0].MimeType)
 fmt.Printf("bytes:    %d\n", len(raw.Contents[0].Text))
 fmt.Printf("_meta:    %s\n", string(raw.Contents[0].Meta))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("resources/read", map[string]any{
+		res, err := c.Call(ctx.Ctx, "resources/read", map[string]any{
 			"uri": "ui://get-time/mcp-app.html",
 		})
 		if err != nil {

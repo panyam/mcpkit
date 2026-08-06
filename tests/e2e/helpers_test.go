@@ -118,7 +118,7 @@ func (e *TestEnv) ConnectMCPClient(t *testing.T, token string) *client.Client {
 		core.ClientInfo{Name: "e2e-test", Version: "0.1.0"},
 		client.WithClientBearerToken(token),
 	)
-	if err := client.Connect(); err != nil {
+	if err := client.Connect(t.Context()); err != nil {
 		t.Fatalf("ConnectMCPClient: %v", err)
 	}
 	t.Cleanup(func() { client.Close() })

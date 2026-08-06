@@ -1,6 +1,7 @@
 package skills_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -174,7 +175,7 @@ func TestDirectoryRead_StableOrdering(t *testing.T) {
 // the server's typed response use this form.
 func callDirectoryRead(t *testing.T, c *client.Client, uri, cursor string) skills.DirectoryReadResult {
 	t.Helper()
-	res, err := c.Call(skills.MethodResourcesDirectoryRead, skills.DirectoryReadRequest{URI: uri, Cursor: cursor})
+	res, err := c.Call(t.Context(), skills.MethodResourcesDirectoryRead, skills.DirectoryReadRequest{URI: uri, Cursor: cursor})
 	if err != nil {
 		t.Fatalf("Call(%s, uri=%q): %v", skills.MethodResourcesDirectoryRead, uri, err)
 	}
@@ -189,7 +190,7 @@ func callDirectoryRead(t *testing.T, c *client.Client, uri, cursor string) skill
 // error directly. Test bodies that assert the error message use this
 // form so they can match strings without fighting t.Fatalf.
 func callDirectoryReadErr(c *client.Client, uri, cursor string) error {
-	_, err := c.Call(skills.MethodResourcesDirectoryRead, skills.DirectoryReadRequest{URI: uri, Cursor: cursor})
+	_, err := c.Call(context.Background(), skills.MethodResourcesDirectoryRead, skills.DirectoryReadRequest{URI: uri, Cursor: cursor})
 	return err
 }
 

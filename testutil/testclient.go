@@ -2,6 +2,7 @@
 package testutil
 
 import (
+	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -37,7 +38,7 @@ func NewTestClient(t *testing.T, srv *server.Server, opts ...client.ClientOption
 		Name:    "test-client",
 		Version: "0.0.1",
 	}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("MCP connect failed: %v", err)
 	}
 
@@ -48,7 +49,7 @@ func NewTestClient(t *testing.T, srv *server.Server, opts ...client.ClientOption
 // Calls t.Fatal on error.
 func (tc *TestClient) ToolCall(name string, args any) string {
 	tc.t.Helper()
-	text, err := tc.Client.ToolCall(name, args)
+	text, err := tc.Client.ToolCall(context.Background(), name, args)
 	if err != nil {
 		tc.t.Fatalf("ToolCall(%s): %v", name, err)
 	}
@@ -59,7 +60,7 @@ func (tc *TestClient) ToolCall(name string, args any) string {
 // Calls t.Fatal on error.
 func (tc *TestClient) ReadResource(uri string) string {
 	tc.t.Helper()
-	text, err := tc.Client.ReadResource(uri)
+	text, err := tc.Client.ReadResource(context.Background(), uri)
 	if err != nil {
 		tc.t.Fatalf("ReadResource(%s): %v", uri, err)
 	}
@@ -100,7 +101,7 @@ func (tc *TestClient) ListResourceTemplates() []core.ResourceTemplate {
 // Calls t.Fatal on error.
 func (tc *TestClient) SubscribeResource(uri string) {
 	tc.t.Helper()
-	if err := tc.Client.SubscribeResource(uri); err != nil {
+	if err := tc.Client.SubscribeResource(context.Background(), uri); err != nil {
 		tc.t.Fatalf("SubscribeResource(%s): %v", uri, err)
 	}
 }
@@ -109,7 +110,7 @@ func (tc *TestClient) SubscribeResource(uri string) {
 // Calls t.Fatal on error.
 func (tc *TestClient) UnsubscribeResource(uri string) {
 	tc.t.Helper()
-	if err := tc.Client.UnsubscribeResource(uri); err != nil {
+	if err := tc.Client.UnsubscribeResource(context.Background(), uri); err != nil {
 		tc.t.Fatalf("UnsubscribeResource(%s): %v", uri, err)
 	}
 }
@@ -117,7 +118,7 @@ func (tc *TestClient) UnsubscribeResource(uri string) {
 // Call makes a raw JSON-RPC call. Calls t.Fatal on error.
 func (tc *TestClient) Call(method string, params any) *client.CallResult {
 	tc.t.Helper()
-	result, err := tc.Client.Call(method, params)
+	result, err := tc.Client.Call(context.Background(), method, params)
 	if err != nil {
 		tc.t.Fatalf("Call(%s): %v", method, err)
 	}

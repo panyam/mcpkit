@@ -79,7 +79,7 @@ func runDemo() {
 				opts = append(opts, opt)
 			}
 			c = client.NewClient(mcpURL, core.ClientInfo{Name: "kitchen-sink-host", Version: "1.0"}, opts...)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(context.Background()); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			} else {
 				fmt.Printf("    Connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)
@@ -95,7 +95,7 @@ func runDemo() {
 			if c == nil {
 				return nil
 			}
-			raw, err := c.Call("events/list", nil)
+			raw, err := c.Call(context.Background(), "events/list", nil)
 			if err != nil {
 				fmt.Printf("    events/list error: %v\n", err)
 				return nil

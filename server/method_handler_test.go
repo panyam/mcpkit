@@ -18,7 +18,9 @@ import (
 func TestCustomMethod_Dispatch(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"},
 		server.WithMethodHandler("custom/echo", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
-			var p struct{ Msg string `json:"msg"` }
+			var p struct {
+				Msg string `json:"msg"`
+			}
 			json.Unmarshal(params, &p)
 			return core.NewResponse(id, map[string]string{"echo": p.Msg})
 		}),
@@ -110,7 +112,7 @@ func TestCustomMethod_ForAllTransports(t *testing.T) {
 	)
 
 	testutil.ForAllTransports(t, srv, func(t *testing.T, c *client.Client) {
-		result, err := c.Call("custom/ping", nil)
+		result, err := c.Call(t.Context(), "custom/ping", nil)
 		require.NoError(t, err)
 		var resp map[string]string
 		result.Unmarshal(&resp)

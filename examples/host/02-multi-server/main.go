@@ -56,9 +56,9 @@ func main() {
 		)
 
 	var (
-		reg                                  *ui.ServerRegistry
+		reg                                        *ui.ServerRegistry
 		weatherClient, calendarClient, clockClient *client.Client
-		ctx                                  = context.Background()
+		ctx                                        = context.Background()
 	)
 
 	// Helper to create a server + connected client.
@@ -77,7 +77,7 @@ func main() {
 			client.WithTransport(xport),
 			client.WithTracerProvider(tp),
 		)
-		c.Connect()
+		c.Connect(ctx)
 		return c
 	}
 

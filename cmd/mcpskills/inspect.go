@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,9 +17,9 @@ import (
 
 func newInspectCmd() *cobra.Command {
 	var (
-		urlFlag   string
-		jsonFlag  bool
-		clientID  string
+		urlFlag  string
+		jsonFlag bool
+		clientID string
 	)
 	cmd := &cobra.Command{
 		Use:   "inspect [url]",
@@ -54,7 +55,7 @@ Examples:
 			painter := common.NewPainter(parseColorMode(colorFlag), out)
 
 			mcp := client.NewClient(url, core.ClientInfo{Name: clientID, Version: version})
-			if err := mcp.Connect(); err != nil {
+			if err := mcp.Connect(context.Background()); err != nil {
 				return fmt.Errorf("connect %s: %w", url, err)
 			}
 			defer mcp.Close()

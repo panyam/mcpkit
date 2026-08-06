@@ -30,7 +30,7 @@ func TestE2E_Middleware_SeesAuthClaims(t *testing.T) {
 	token := env.MintToken(t, "mw-user", []string{"tools:read", "admin:write"})
 	client := env.ConnectMCPClient(t, token)
 
-	result, err := client.ToolCall("echo", map[string]any{"msg": "mw-test"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "mw-test"})
 	require.NoError(t, err)
 
 	// The echo tool reports claims in the response
@@ -56,10 +56,10 @@ func TestE2E_Middleware_LoggingWithRealAuth(t *testing.T) {
 		client.WithClientBearerToken(token),
 		client.WithClientLogging(logger),
 	)
-	require.NoError(t, client.Connect())
+	require.NoError(t, client.Connect(t.Context()))
 	defer client.Close()
 
-	_, err := client.ToolCall("echo", map[string]any{"msg": "logged"})
+	_, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "logged"})
 	require.NoError(t, err)
 
 	output := buf.String()

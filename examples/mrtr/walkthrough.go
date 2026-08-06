@@ -120,7 +120,7 @@ if err := c.Connect(); err != nil { /* server not up — run: just serve */ }`),
 				core.ClientInfo{Name: "mrtr-demo-host", Version: "1.0"},
 				opts...,
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
@@ -149,7 +149,7 @@ if res.IsInputRequired() {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCall(c, "test_tool_with_elicitation", map[string]any{})
+			res, err := client.ToolCall(ctx.Ctx, c, "test_tool_with_elicitation", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return

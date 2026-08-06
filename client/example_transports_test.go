@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/client"
+	core "github.com/panyam/mcpkit/core"
 )
 
 // Connecting over the legacy SSE transport (MCP 2024-11-05). The default is
@@ -15,16 +15,19 @@ import (
 //
 // This example is illustrative and does not run: it needs a live server.
 func ExampleWithSSEClient() {
+	ctx := context.Background()
+
 	c := client.NewClient("http://localhost:8080/sse",
 		core.ClientInfo{Name: "example", Version: "1.0"},
 		client.WithSSEClient(),
 	)
-	if err := c.Connect(); err != nil {
+	// Connect's context bounds the handshake, not the session that follows.
+	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
 	defer c.Close()
 
-	tools, err := c.ListTools(context.Background())
+	tools, err := c.ListTools(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,9 +44,11 @@ func ExampleWithSSEClient() {
 //
 // This example is illustrative and does not run: it needs a live server.
 func ExampleClient_ListToolsPage() {
+	ctx := context.Background()
+
 	c := client.NewClient("http://localhost:8080/mcp",
 		core.ClientInfo{Name: "example", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
 	defer c.Close()
@@ -51,7 +56,8 @@ func ExampleClient_ListToolsPage() {
 	var all []core.ToolDef
 	cursor := ""
 	for {
-		page, err := c.ListToolsPage(cursor)
+		// One context for the whole walk, so cancelling it stops the paging.
+		page, err := c.ListToolsPage(ctx, cursor)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -73,6 +79,8 @@ func ExampleClient_ListToolsPage() {
 //
 // This example is illustrative and does not run: it needs a live server.
 func ExampleClient_NotifyRootsChanged() {
+	ctx := context.Background()
+
 	roots := []core.Root{{URI: "file:///home/me/project", Name: "project"}}
 
 	c := client.NewClient("http://localhost:8080/mcp",
@@ -81,13 +89,13 @@ func ExampleClient_NotifyRootsChanged() {
 			return roots, nil
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
 	defer c.Close()
 
 	roots = append(roots, core.Root{URI: "file:///tmp/scratch", Name: "scratch"})
-	if err := c.NotifyRootsChanged(); err != nil {
+	if err := c.NotifyRootsChanged(ctx); err != nil {
 		log.Fatal(err)
 	}
 }

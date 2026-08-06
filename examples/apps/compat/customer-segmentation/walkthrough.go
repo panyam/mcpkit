@@ -77,7 +77,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "customer-segmentation-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -108,7 +108,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s: %v\n", t.Name, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -148,7 +148,7 @@ fmt.Printf("customers: %d\n", len(sc["customers"].([]any)))
 pretty, _ := json.MarshalIndent(sc["segments"], "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-customer-data", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-customer-data", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -187,7 +187,7 @@ fmt.Println(string(pretty))`,
 sc := tr.StructuredContent.(map[string]any)
 fmt.Printf("enterprise customers: %d\n", len(sc["customers"].([]any)))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-customer-data", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-customer-data", map[string]any{
 			"segment": "Enterprise",
 		})
 		if err != nil {
@@ -232,7 +232,7 @@ fmt.Printf("enterprise customers: %d\n", len(sc["customers"].([]any)))`,
 		`text, _ := c.ReadResource("ui://customer-segmentation/mcp-app.html")
 fmt.Printf("first 200 bytes: %.200s\n", text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://customer-segmentation/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://customer-segmentation/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

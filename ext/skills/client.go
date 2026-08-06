@@ -127,7 +127,7 @@ func (c *Client) ListSkills(ctx context.Context) (Index, error) {
 	)
 	defer span.End()
 
-	body, err := c.mcp.ReadResource(IndexURI)
+	body, err := c.mcp.ReadResource(ctx, IndexURI)
 	if err != nil {
 		if isNotFoundErr(err) {
 			span.SetAttribute("mcp.skill.index_absent", "true")
@@ -164,7 +164,7 @@ func (c *Client) ReadSkillURI(ctx context.Context, uri string) ([]byte, error) {
 	)
 	defer span.End()
 
-	result, err := c.mcp.ReadResourceFull(uri)
+	result, err := c.mcp.ReadResourceFull(ctx, uri)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("skills: read %s: %w", uri, err)
@@ -224,7 +224,7 @@ func (c *Client) ReadDirectory(ctx context.Context, uri string, opts ...ReadDire
 	}
 
 	params := DirectoryReadRequest{URI: uri, Cursor: cfg.cursor}
-	result, err := c.mcp.Call(MethodResourcesDirectoryRead, params)
+	result, err := c.mcp.Call(ctx, MethodResourcesDirectoryRead, params)
 	if err != nil {
 		span.RecordError(err)
 		return DirectoryReadResult{}, fmt.Errorf("skills: %s %s: %w", MethodResourcesDirectoryRead, uri, err)

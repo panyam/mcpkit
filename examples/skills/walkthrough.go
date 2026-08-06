@@ -146,7 +146,7 @@ supports  := c.ServerSupportsExtension(skills.ExtensionID)`),
 				client.WithTracerProvider(tp),
 				client.WithClientMode(wireMode),
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
@@ -221,7 +221,7 @@ for _, e := range idx.Skills {
 			if c == nil {
 				return nil
 			}
-			body, err := c.ReadResource(uriIndex)
+			body, err := c.ReadResource(ctx.Ctx, uriIndex)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -349,7 +349,7 @@ got := "sha256:" + hex.EncodeToString(sum[:])
 				fmt.Printf("    %s not found in index\n", target)
 				return nil
 			}
-			result, err := c.ReadResourceFull(target)
+			result, err := c.ReadResourceFull(ctx.Ctx, target)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -399,7 +399,7 @@ fmt.Println(body)`),
 				fmt.Printf("    Detected archive mode — per-file SKILL.md reads are unavailable; see the Archive mode section below.\n")
 				return nil
 			}
-			body, err := c.ReadResource(uriPDFManifest)
+			body, err := c.ReadResource(ctx.Ctx, uriPDFManifest)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -430,7 +430,7 @@ body, _ := c.ReadResource(target.String())`),
 				fmt.Printf("    Detected archive mode — supporting files surface only after unpack; see the Archive mode section below.\n")
 				return nil
 			}
-			body, err := c.ReadResource(uriPDFRef)
+			body, err := c.ReadResource(ctx.Ctx, uriPDFRef)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -459,7 +459,7 @@ body, _ := c.ReadResource(target.String())`),
 				fmt.Printf("    Detected archive mode — nested-prefix skills become skill://acme/billing/refunds%s; see the Archive mode section below.\n", detected.suffix)
 				return nil
 			}
-			body, err := c.ReadResource(uriRefundsManifest)
+			body, err := c.ReadResource(ctx.Ctx, uriRefundsManifest)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -488,7 +488,7 @@ body, _ := c.ReadResource(target.String())`),
 				fmt.Printf("    Detected archive mode — supporting files surface only after unpack; see the Archive mode section below.\n")
 				return nil
 			}
-			body, err := c.ReadResource(uriRefundsEmail)
+			body, err := c.ReadResource(ctx.Ctx, uriRefundsEmail)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -518,7 +518,7 @@ fmt.Println(body)`),
 			if c == nil {
 				return nil
 			}
-			body, err := c.ReadResource("skill://archived/git-workflow/SKILL.md")
+			body, err := c.ReadResource(ctx.Ctx, "skill://archived/git-workflow/SKILL.md")
 			if err != nil {
 				fmt.Printf("    SKIP: %v (run with `just serve` for the multi-source demo)\n", err)
 				return nil
@@ -579,7 +579,7 @@ fmt.Println(body)`),
 				return nil
 			}
 			fmt.Printf("    discovered: %s\n", githubURI)
-			body, err := c.ReadResource(githubURI)
+			body, err := c.ReadResource(ctx.Ctx, githubURI)
 			if err != nil {
 				fmt.Printf("    ERROR reading %s: %v\n", githubURI, err)
 				return nil
@@ -627,7 +627,7 @@ echo "before=$V1 after=$V2"`).Default(),
 			demokit.MakeVariant("go", "go", `// Read once, capture version.
 body, _ := c.ReadResource(skills.IndexURI)
 var idx struct {
-    Meta map[string]any ` + "`" + `json:"_meta"` + "`" + `
+    Meta map[string]any `+"`"+`json:"_meta"`+"`"+`
 }
 json.Unmarshal([]byte(body), &idx)
 before, _ := idx.Meta["io.modelcontextprotocol.skills/version"].(float64)
@@ -651,7 +651,7 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 			before := readIndexVersion(c)
 			fmt.Printf("    before refresh: version = %d\n", before)
 
-			if _, err := c.ToolCall("_demo/refresh", map[string]any{}); err != nil {
+			if _, err := c.ToolCall(ctx.Ctx, "_demo/refresh", map[string]any{}); err != nil {
 				fmt.Printf("    ERROR calling _demo/refresh: %v\n", err)
 				return nil
 			}
@@ -909,7 +909,7 @@ for _, f := range files {
 					break
 				}
 			}
-			result, err := c.ReadResourceFull(target)
+			result, err := c.ReadResourceFull(ctx.Ctx, target)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -1129,7 +1129,7 @@ func isInteractive() bool {
 // Returns 0 when the field is absent — the field is opt-in metadata,
 // not a SEP requirement, so older / non-mcpkit servers will lack it.
 func readIndexVersion(c *client.Client) uint64 {
-	body, err := c.ReadResource(skills.IndexURI)
+	body, err := c.ReadResource(context.Background(), skills.IndexURI)
 	if err != nil {
 		return 0
 	}

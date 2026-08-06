@@ -288,7 +288,7 @@ func (r *ServerRegistry) CallToolOn(ctx context.Context, serverID, name string, 
 		return nil, fmt.Errorf("marshal params: %w", err)
 	}
 
-	callResult, cerr := entry.client.Call("tools/call", json.RawMessage(params))
+	callResult, cerr := entry.client.Call(ctx, "tools/call", json.RawMessage(params))
 	if cerr != nil {
 		return nil, cerr
 	}

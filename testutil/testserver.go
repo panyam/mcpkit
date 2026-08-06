@@ -174,7 +174,7 @@ func ForAllTransports(t *testing.T, srv *server.Server, fn func(t *testing.T, c 
 		t.Cleanup(ts.Close)
 
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"})
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Streamable Connect failed: %v", err)
 		}
 		fn(t, c)
@@ -185,7 +185,7 @@ func ForAllTransports(t *testing.T, srv *server.Server, fn func(t *testing.T, c 
 		ts := httptest.NewServer(handler)
 
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithSSEClient())
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			ts.Close()
 			t.Fatalf("SSE Connect failed: %v", err)
 		}
@@ -202,7 +202,7 @@ func ForAllTransports(t *testing.T, srv *server.Server, fn func(t *testing.T, c 
 	t.Run("memory", func(t *testing.T) {
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithTransport(server.NewInProcessTransport(srv)))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Memory Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
@@ -223,7 +223,7 @@ func ForAllTransports(t *testing.T, srv *server.Server, fn func(t *testing.T, c 
 
 		c := client.NewClient("stdio://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithStdioTransport(cr, cw))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx); err != nil {
 			cancel()
 			t.Fatalf("Stdio Connect failed: %v", err)
 		}

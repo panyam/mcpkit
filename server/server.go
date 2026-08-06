@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -20,9 +21,17 @@ import (
 
 // Server is an MCP server that can run over multiple transports.
 type Server struct {
-	dispatcher        *Dispatcher
-	options           serverOptions
-	mu                sync.Mutex
+	dispatcher *Dispatcher
+	options    serverOptions
+	mu         sync.Mutex
+
+	// readyCh is closed once a listener is bound and the server is accepting
+	// connections; boundAddr holds that listener's actual address. Both are
+	// set exactly once, by the first ListenAndServe / Run / RunWithListener
+	// call, under readyMu. See Server.Ready.
+	readyMu             sync.Mutex
+	readyCh             chan struct{}
+	boundAddr           string
 	sessionClosers      []sessionCloser
 	allSessionClosers   []func()
 	sessionBroadcasters []func(ctx context.Context, method string, params any)
@@ -49,40 +58,40 @@ type serverOptions struct {
 	authValidator        core.AuthValidator
 	extensions           []core.ExtensionProvider
 	middleware           []Middleware
-	notifyInterceptors   []NotifyInterceptor  // outgoing notification interceptors
-	requestInterceptors  []RequestInterceptor // outgoing server-to-client request interceptors
-	requestLogger        *log.Logger          // HTTP-level request/response logging
-	subscriptionsEnabled bool        // enable resources/subscribe and resources/unsubscribe
-	subscriptionCap      int         // per-session concurrent-subscription cap (0 = unlimited)
-	subscriptionRate     rate.Limit  // per-session subscribe/unsubscribe rate cap (0 = unlimited)
-	subscriptionBurst    int         // per-session burst alongside subscriptionRate (ignored when subscriptionRate == 0)
-	subscriptionReject   SubscriptionRejectFunc // optional hook fired when a subscribe is refused (both wires)
-	statelessSubCap      int         // per-scope concurrent subscriptions/listen stream cap (0 = unlimited)
-	statelessSubRate     rate.Limit  // per-scope subscriptions/listen open-rate cap (0 = unlimited)
-	statelessSubBurst    int         // per-scope burst alongside statelessSubRate
+	notifyInterceptors   []NotifyInterceptor            // outgoing notification interceptors
+	requestInterceptors  []RequestInterceptor           // outgoing server-to-client request interceptors
+	requestLogger        *log.Logger                    // HTTP-level request/response logging
+	subscriptionsEnabled bool                           // enable resources/subscribe and resources/unsubscribe
+	subscriptionCap      int                            // per-session concurrent-subscription cap (0 = unlimited)
+	subscriptionRate     rate.Limit                     // per-session subscribe/unsubscribe rate cap (0 = unlimited)
+	subscriptionBurst    int                            // per-session burst alongside subscriptionRate (ignored when subscriptionRate == 0)
+	subscriptionReject   SubscriptionRejectFunc         // optional hook fired when a subscribe is refused (both wires)
+	statelessSubCap      int                            // per-scope concurrent subscriptions/listen stream cap (0 = unlimited)
+	statelessSubRate     rate.Limit                     // per-scope subscriptions/listen open-rate cap (0 = unlimited)
+	statelessSubBurst    int                            // per-scope burst alongside statelessSubRate
 	statelessSubScope    StatelessSubscriptionScopeFunc // request → scope key (nil = DefaultStatelessSubscriptionScope)
-	errorHandler         ErrorHandler // optional out-of-band error callback
-	contentChunkMethod   string       // custom notification method for streaming content (empty = default)
-	onRootsChanged       func([]core.Root) // optional callback when client sends roots/list_changed
-	rootsFetchTimeout    time.Duration     // timeout for server-to-client roots/list requests (0 = default 30s)
-	skipSchemaValidation bool              // WithSchemaValidation(false) disables call-time validation
-	validateFileInputs   bool              // WithFileInputValidation enables SEP-2356 size + MIME enforcement
-	publicMethods        map[string]bool   // methods that bypass auth (pre-auth discovery)
-	customHandlers       map[string]MethodHandler // custom JSON-RPC method handlers
-	httpHandlers         []httpHandlerEntry       // custom HTTP endpoint handlers
-	requestStateKey      []byte                   // SEP-2322 requestState HMAC key — shared by MRTR + Tasks (nil = plaintext / unsigned)
-	requestStateTTL      time.Duration            // SEP-2322 requestState validity (0 = 24h default)
-	listTTLMs            *int                     // SEP-2549 cache-freshness hint (ms) attached to every list response (nil = omit)
-	listCacheScope       string                   // SEP-2549 cacheScope attached to every list response ("" = omit)
-	readTTLMs            *int                     // SEP-2549 resources/read default cache-freshness hint (ms); handler may override per-read
-	readCacheScope       string                   // SEP-2549 resources/read default cacheScope; handler may override per-read
-	allowLegacyOnDraft   bool                     // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
-	allowReinitialize    bool                     // WithAllowReinitialize — opt-in acceptance of a duplicate initialize (off by default; issue 421)
-	taskBucketKeyer      core.TaskBucketKeyer     // WithTaskBucketKeyer — per-request task-store isolation bucket (nil = session ID; issue 485)
-	supportedVersions    []string                 // WithSupportedVersions — per-server protocol version override (nil = package default; issue 419)
-	tracerProvider       core.TracerProvider      // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
-	meterProvider        core.MeterProvider       // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
-	notificationRelay       NotificationRelay           // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
+	errorHandler         ErrorHandler                   // optional out-of-band error callback
+	contentChunkMethod   string                         // custom notification method for streaming content (empty = default)
+	onRootsChanged       func([]core.Root)              // optional callback when client sends roots/list_changed
+	rootsFetchTimeout    time.Duration                  // timeout for server-to-client roots/list requests (0 = default 30s)
+	skipSchemaValidation bool                           // WithSchemaValidation(false) disables call-time validation
+	validateFileInputs   bool                           // WithFileInputValidation enables SEP-2356 size + MIME enforcement
+	publicMethods        map[string]bool                // methods that bypass auth (pre-auth discovery)
+	customHandlers       map[string]MethodHandler       // custom JSON-RPC method handlers
+	httpHandlers         []httpHandlerEntry             // custom HTTP endpoint handlers
+	requestStateKey      []byte                         // SEP-2322 requestState HMAC key — shared by MRTR + Tasks (nil = plaintext / unsigned)
+	requestStateTTL      time.Duration                  // SEP-2322 requestState validity (0 = 24h default)
+	listTTLMs            *int                           // SEP-2549 cache-freshness hint (ms) attached to every list response (nil = omit)
+	listCacheScope       string                         // SEP-2549 cacheScope attached to every list response ("" = omit)
+	readTTLMs            *int                           // SEP-2549 resources/read default cache-freshness hint (ms); handler may override per-read
+	readCacheScope       string                         // SEP-2549 resources/read default cacheScope; handler may override per-read
+	allowLegacyOnDraft   bool                           // WithAllowLegacyOnDraft — opt-in SEP-2575 leniency on the legacy wire (off by default; strict per spec)
+	allowReinitialize    bool                           // WithAllowReinitialize — opt-in acceptance of a duplicate initialize (off by default; issue 421)
+	taskBucketKeyer      core.TaskBucketKeyer           // WithTaskBucketKeyer — per-request task-store isolation bucket (nil = session ID; issue 485)
+	supportedVersions    []string                       // WithSupportedVersions — per-server protocol version override (nil = package default; issue 419)
+	tracerProvider       core.TracerProvider            // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
+	meterProvider        core.MeterProvider             // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
+	notificationRelay    NotificationRelay              // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
 }
 
 type httpHandlerEntry struct {
@@ -709,13 +718,13 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// Initialize subscription support if enabled
 	if s.options.subscriptionsEnabled {
 		s.subRegistry = &subscriptionRegistry{
-			subscribers:    make(map[string]map[string]*Dispatcher),
-			counts:         make(map[string]int),
-			limiters:       make(map[string]*rate.Limiter),
-			cap:            s.options.subscriptionCap,
-			rateLimit:      s.options.subscriptionRate,
-			rateBurst:      s.options.subscriptionBurst,
-			onReject:       s.options.subscriptionReject,
+			subscribers:       make(map[string]map[string]*Dispatcher),
+			counts:            make(map[string]int),
+			limiters:          make(map[string]*rate.Limiter),
+			cap:               s.options.subscriptionCap,
+			rateLimit:         s.options.subscriptionRate,
+			rateBurst:         s.options.subscriptionBurst,
+			onReject:          s.options.subscriptionReject,
 			notificationRelay: s.options.notificationRelay,
 		}
 		s.dispatcher.subscriptionsEnabled = true
@@ -1281,11 +1290,16 @@ func (w *statusCapture) Flush() {
 // with the address set via WithListen. For more control over transport options,
 // use ListenAndServe directly.
 //
+// Run blocks, so it is usually started in a goroutine. Wait on Ready before
+// connecting rather than sleeping — see Server.Ready. Pass ":0" to bind a free
+// port and read it back from Addr.
+//
 // Example:
 //
 //	srv := mcpkit.NewServer(mcpkit.ServerInfo{Name: "my-server", Version: "1.0"})
 //	srv.RegisterTool(def, handler)
-//	srv.Run(":8787")
+//	go srv.Run(":8787")
+//	<-srv.Ready() // the port is accepting; safe to connect
 func (s *Server) Run(addr string, opts ...TransportOption) error {
 	if addr != "" {
 		s.options.listen = addr
@@ -1307,10 +1321,108 @@ func (s *Server) Run(addr string, opts ...TransportOption) error {
 	return s.ListenAndServe(opts...)
 }
 
+// readyChan returns the ready channel, creating it on first use.
+// Callers must not hold readyMu.
+func (s *Server) readyChan() chan struct{} {
+	s.readyMu.Lock()
+	defer s.readyMu.Unlock()
+	if s.readyCh == nil {
+		s.readyCh = make(chan struct{})
+	}
+	return s.readyCh
+}
+
+// markReady records the bound address and unblocks Ready. Idempotent — a
+// second call (a server restarted, or two transports) is ignored.
+func (s *Server) markReady(addr string) {
+	s.readyMu.Lock()
+	defer s.readyMu.Unlock()
+	if s.readyCh == nil {
+		s.readyCh = make(chan struct{})
+	}
+	select {
+	case <-s.readyCh: // already closed
+		return
+	default:
+	}
+	s.boundAddr = addr
+	close(s.readyCh)
+}
+
+// Ready returns a channel that is closed once the server has bound its
+// listener and is accepting connections.
+//
+// Run and ListenAndServe block, so they are normally started in a goroutine.
+// Without a readiness signal a caller has no way to know when the port is
+// reachable and has to guess with a sleep. Wait on this channel instead:
+//
+//	srv := mcpkit.NewServer(info)
+//	go srv.Run(":0")
+//	<-srv.Ready()
+//	c := client.NewClient("http://"+srv.Addr()+"/mcp", clientInfo)
+//	if err := c.Connect(ctx); err != nil { ... }
+//
+// The channel is never closed if the server fails to bind (for example, the
+// port is in use). In that case Run returns the bind error, so select on both
+// rather than waiting on Ready alone:
+//
+//	errCh := make(chan error, 1)
+//	go func() { errCh <- srv.Run(":8787") }()
+//	select {
+//	case <-srv.Ready():
+//	case err := <-errCh:
+//	    return fmt.Errorf("server failed to start: %w", err)
+//	}
+//
+// Ready is safe to call before the server starts and from multiple goroutines.
+func (s *Server) Ready() <-chan struct{} {
+	return s.readyChan()
+}
+
+// Addr returns the address the server actually bound, or "" if it is not
+// listening yet. Only meaningful after Ready is closed.
+//
+// This is what makes port :0 usable — pass ":0" to let the kernel pick a free
+// port, then read the real one back here. That removes the port-collision
+// flakiness of hardcoding a port in tests and local runs.
+func (s *Server) Addr() string {
+	s.readyMu.Lock()
+	defer s.readyMu.Unlock()
+	return s.boundAddr
+}
+
+// RunWithListener serves on a listener the caller has already bound.
+//
+// This is the strongest form of the readiness guarantee: because the caller
+// owns the bind, the port is reachable before this is even called, so there is
+// no window to race against at all.
+//
+//	ln, err := net.Listen("tcp", "127.0.0.1:0")
+//	if err != nil { return err }
+//	go srv.RunWithListener(ln)
+//	// ln.Addr() is already accepting — connect immediately.
+//
+// The listener is closed as part of graceful shutdown. Ready and Addr are
+// populated from it, so code that waits on Ready works either way.
+func (s *Server) RunWithListener(ln net.Listener, opts ...TransportOption) error {
+	return s.listenAndServe(ln, opts...)
+}
+
 // ListenAndServe starts the HTTP transport(s) with graceful shutdown support.
 // On SIGTERM/SIGINT it stops accepting new connections, closes active sessions,
 // drains in-flight requests, and exits.
+//
+// Use Ready to learn when the listener is bound, and Addr for the resolved
+// address (useful with ":0"). To supply your own listener, see RunWithListener.
 func (s *Server) ListenAndServe(opts ...TransportOption) error {
+	return s.listenAndServe(nil, opts...)
+}
+
+// listenAndServe is the shared body. When ln is nil it binds s.options.listen
+// itself; the bind happens here rather than inside the serve loop so the
+// bound address is known before any request can arrive, which is what lets
+// Ready and Addr be accurate.
+func (s *Server) listenAndServe(ln net.Listener, opts ...TransportOption) error {
 	cfg := defaultTransportConfig()
 	for _, opt := range opts {
 		opt(&cfg)
@@ -1351,6 +1463,21 @@ func (s *Server) ListenAndServe(opts ...TransportOption) error {
 	for _, fn := range shutdownFns {
 		gracefulOpts = append(gracefulOpts, gohttp.WithOnShutdown(fn))
 	}
+
+	// Bind before serving so the address is known and Ready can fire the
+	// moment the port is actually accepting. A bind failure returns here and
+	// leaves Ready open, which is why callers should select on Ready and the
+	// error together — documented on Server.Ready.
+	if ln == nil {
+		var err error
+		ln, err = net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+	}
+	s.markReady(ln.Addr().String())
+
+	gracefulOpts = append(gracefulOpts, gohttp.WithListener(ln))
 	return gohttp.ListenAndServeGraceful(httpSrv, gracefulOpts...)
 }
 
@@ -1362,22 +1489,22 @@ type transportConfig struct {
 	publicURL       string        // public base URL for reverse proxy deployments
 	maxSessions     int           // max concurrent sessions (0 = unlimited)
 	keepalivePeriod time.Duration // SSE keepalive interval (default 30s)
-	allowedOrigins []string // allowed Origin values for DNS rebinding protection
-	streamableHTTP bool     // enable Streamable HTTP transport
-	sse            bool     // enable legacy SSE transport
-	stateless bool // stateless mode: no sessions, fresh dispatcher per request
+	allowedOrigins  []string      // allowed Origin values for DNS rebinding protection
+	streamableHTTP  bool          // enable Streamable HTTP transport
+	sse             bool          // enable legacy SSE transport
+	stateless       bool          // stateless mode: no sessions, fresh dispatcher per request
 	// statelessMode picks the wire — SEP-2575 stateless, legacy session,
 	// or both on one URL. Orthogonal to stateless above; the latter is
 	// process-architecture, this is the protocol shape. See stateless.Mode.
 	// Seeded by defaultTransportConfig from MCPKIT_STATELESS_MODE env or
 	// stateless.DefaultMode; WithStatelessMode option overrides if passed.
-	statelessMode  stateless.Mode
-	sessionTimeout time.Duration // idle timeout for Streamable HTTP sessions (0 = no timeout)
-	eventStore     gohttp.EventStore // optional: persists SSE events for Last-Event-ID replay
-	keepaliveInterval time.Duration  // 0 = disabled; interval for JSON-RPC ping requests
-	keepaliveMaxFails int            // max consecutive ping failures before session cleanup (default 3)
-	sseGracePeriod    time.Duration  // 0 = immediate cleanup on SSE disconnect (backward compat)
-	muxSetup          func(*http.ServeMux) // optional: register additional routes on the server mux
+	statelessMode     stateless.Mode
+	sessionTimeout    time.Duration                     // idle timeout for Streamable HTTP sessions (0 = no timeout)
+	eventStore        gohttp.EventStore                 // optional: persists SSE events for Last-Event-ID replay
+	keepaliveInterval time.Duration                     // 0 = disabled; interval for JSON-RPC ping requests
+	keepaliveMaxFails int                               // max consecutive ping failures before session cleanup (default 3)
+	sseGracePeriod    time.Duration                     // 0 = immediate cleanup on SSE disconnect (backward compat)
+	muxSetup          func(*http.ServeMux)              // optional: register additional routes on the server mux
 	handlerWraps      []func(http.Handler) http.Handler // applied after mux composition; first registered = innermost
 }
 

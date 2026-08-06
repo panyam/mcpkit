@@ -63,7 +63,7 @@ func TestListToolsForModelFilters(t *testing.T) {
 func TestAppOnlyToolCallable(t *testing.T) {
 	c := setupConformanceClient(t)
 
-	text, err := c.ToolCall("navigate-dashboard", map[string]string{"page": "settings"})
+	text, err := c.ToolCall(t.Context(), "navigate-dashboard", map[string]string{"page": "settings"})
 	if err != nil {
 		t.Fatalf("ToolCall navigate-dashboard: %v", err)
 	}

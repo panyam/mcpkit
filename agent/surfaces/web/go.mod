@@ -7,8 +7,8 @@ require (
 	github.com/panyam/mcpkit v0.4.0
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/agent/host v0.0.0
+	github.com/panyam/servicekit v0.1.4
 	github.com/panyam/mcpkit/agent/surfaces v0.0.0
-	github.com/panyam/servicekit v0.1.3
 	google.golang.org/protobuf v1.36.11
 )
 

@@ -13,8 +13,8 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
-	. "github.com/panyam/mcpkit/server"
 	tasks "github.com/panyam/mcpkit/ext/tasks"
+	. "github.com/panyam/mcpkit/server"
 )
 
 // newTaskV2Server registers a v2 tasks server with three tools:
@@ -73,7 +73,7 @@ func connectV2Client(t *testing.T, srv *Server, opts ...client.ClientOption) *cl
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "v2-test", Version: "0.0.1"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -102,7 +102,7 @@ func TestV2_NoTaskCreationWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "fast-task",
 		"arguments": map[string]any{},
 	})
@@ -133,7 +133,7 @@ func TestV2_TaskCreationWithExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "fast-task",
 		"arguments": map[string]any{},
 	})
@@ -165,7 +165,7 @@ func TestV2_RequiredTaskRejectsClientWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
 
-	_, err := c.Call("tools/call", map[string]any{
+	_, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "must-task",
 		"arguments": map[string]any{},
 	})
@@ -208,7 +208,7 @@ func TestV2_TasksGetRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
 
-	_, err := c.Call("tasks/get", map[string]any{"taskId": "any-id"})
+	_, err := c.Call(t.Context(), "tasks/get", map[string]any{"taskId": "any-id"})
 	if err == nil {
 		t.Fatal("tasks/get should fail without extension negotiation")
 	}
@@ -227,7 +227,7 @@ func TestV2_TasksCancelRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
 
-	_, err := c.Call("tasks/cancel", map[string]any{"taskId": "any-id"})
+	_, err := c.Call(t.Context(), "tasks/cancel", map[string]any{"taskId": "any-id"})
 	if err == nil {
 		t.Fatal("tasks/cancel should fail without extension negotiation")
 	}
@@ -248,7 +248,7 @@ func TestV2_PerRequestExtensionOptIn(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // session-level: no extension
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "fast-task",
 		"arguments": map[string]any{},
 		"_meta": map[string]any{
@@ -278,7 +278,7 @@ func TestV2_TasksGetWorksWithExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "fast-task",
 		"arguments": map[string]any{},
 	})
@@ -294,7 +294,7 @@ func TestV2_TasksGetWorksWithExtension(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	for {
-		gres, err := c.Call("tasks/get", map[string]any{"taskId": ctr.TaskID})
+		gres, err := c.Call(ctx, "tasks/get", map[string]any{"taskId": ctr.TaskID})
 		if err != nil {
 			t.Fatalf("tasks/get: %v", err)
 		}
@@ -355,7 +355,7 @@ func newTaskV2ServerWithSlow(t *testing.T) (*Server, chan struct{}) {
 
 func createTaskForUpdateTest(t *testing.T, c *client.Client, tool string) string {
 	t.Helper()
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      tool,
 		"arguments": map[string]any{},
 	})
@@ -384,7 +384,7 @@ func TestV2_UpdateAck(t *testing.T) {
 
 	// Send no RequestState — empty is allowed (legacy/first-call path).
 	// HMAC-state coverage is in TestV2_RequestState_* below.
-	res, err := c.Call("tasks/update", core.UpdateTaskRequest{
+	res, err := c.Call(t.Context(), "tasks/update", core.UpdateTaskRequest{
 		TaskID: taskID,
 		InputResponses: core.InputResponses{
 			"elicit-1": json.RawMessage(`{"action":"accept","content":{"ok":true}}`),
@@ -416,7 +416,7 @@ func TestV2_UpdateUnknownTaskRejected(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
-	_, err := c.Call("tasks/update", core.UpdateTaskRequest{TaskID: "no-such-task"})
+	_, err := c.Call(t.Context(), "tasks/update", core.UpdateTaskRequest{TaskID: "no-such-task"})
 	if err == nil {
 		t.Fatal("tasks/update with unknown taskId should fail")
 	}
@@ -441,7 +441,7 @@ func TestV2_UpdateTerminalRejected(t *testing.T) {
 	// Wait for fast-task to complete (it returns immediately on goroutine tick).
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		gres, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
+		gres, err := c.Call(t.Context(), "tasks/get", map[string]any{"taskId": taskID})
 		if err != nil {
 			t.Fatalf("tasks/get: %v", err)
 		}
@@ -453,7 +453,7 @@ func TestV2_UpdateTerminalRejected(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	_, err := c.Call("tasks/update", core.UpdateTaskRequest{TaskID: taskID})
+	_, err := c.Call(t.Context(), "tasks/update", core.UpdateTaskRequest{TaskID: taskID})
 	if err == nil {
 		t.Fatal("tasks/update on terminal task should fail")
 	}
@@ -473,7 +473,7 @@ func TestV2_UpdateRejectedWithoutExtension(t *testing.T) {
 	srv := newTaskV2Server(t)
 	c := connectV2Client(t, srv) // no WithTasksExtension
 
-	_, err := c.Call("tasks/update", core.UpdateTaskRequest{TaskID: "any-id"})
+	_, err := c.Call(t.Context(), "tasks/update", core.UpdateTaskRequest{TaskID: "any-id"})
 	if err == nil {
 		t.Fatal("tasks/update without extension should fail")
 	}
@@ -775,7 +775,7 @@ func pollV2Detailed(t *testing.T, ctx context.Context, c *client.Client, taskID 
 	t.Helper()
 	var last core.DetailedTask
 	for {
-		gres, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
+		gres, err := c.Call(ctx, "tasks/get", map[string]any{"taskId": taskID})
 		if err != nil {
 			t.Fatalf("tasks/get: %v", err)
 		}
@@ -804,7 +804,7 @@ func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
 	srv := newTaskV2ServerWithElicit(t)
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "confirm-delete",
 		"arguments": map[string]any{"filename": "important.txt"},
 	})
@@ -840,7 +840,7 @@ func TestV2_ElicitUpdateCompleteFlow(t *testing.T) {
 	}
 
 	// 2. Reply via tasks/update — empty ack confirms the server accepted it.
-	ackRes, err := c.Call("tasks/update", core.UpdateTaskRequest{
+	ackRes, err := c.Call(ctx, "tasks/update", core.UpdateTaskRequest{
 		TaskID: taskID,
 		InputResponses: core.InputResponses{
 			key: json.RawMessage(`{"action":"accept","content":{"confirm":true}}`),
@@ -882,7 +882,7 @@ func TestV2_ElicitCancelUnblocks(t *testing.T) {
 	srv := newTaskV2ServerWithElicit(t)
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "confirm-delete",
 		"arguments": map[string]any{"filename": "doc.txt"},
 	})
@@ -900,7 +900,7 @@ func TestV2_ElicitCancelUnblocks(t *testing.T) {
 		return d.Status == core.TaskInputRequired
 	})
 
-	if _, err := c.Call("tasks/cancel", map[string]any{"taskId": taskID}); err != nil {
+	if _, err := c.Call(ctx, "tasks/cancel", map[string]any{"taskId": taskID}); err != nil {
 		t.Fatalf("tasks/cancel: %v", err)
 	}
 
@@ -921,7 +921,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 	srv := newTaskV2ServerWithElicit(t)
 	c := connectV2Client(t, srv, client.WithTasksExtension())
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "confirm-delete",
 		"arguments": map[string]any{"filename": "x.txt"},
 	})
@@ -939,7 +939,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 	})
 
 	// Send an update for a bogus key — should ack but NOT unblock.
-	if _, err := c.Call("tasks/update", core.UpdateTaskRequest{
+	if _, err := c.Call(ctx, "tasks/update", core.UpdateTaskRequest{
 		TaskID: taskID,
 		InputResponses: core.InputResponses{
 			"bogus-key": json.RawMessage(`{"action":"reject"}`),
@@ -949,7 +949,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 	}
 
 	// Confirm the task is still parked — the real key is still pending.
-	gres, _ := c.Call("tasks/get", map[string]any{"taskId": taskID})
+	gres, _ := c.Call(ctx, "tasks/get", map[string]any{"taskId": taskID})
 	var still core.DetailedTask
 	json.Unmarshal(gres.Raw, &still)
 	if still.Status != core.TaskInputRequired {
@@ -962,7 +962,7 @@ func TestV2_UpdateUnknownKeyIgnored(t *testing.T) {
 		realKey = k
 		break
 	}
-	c.Call("tasks/update", core.UpdateTaskRequest{
+	c.Call(ctx, "tasks/update", core.UpdateTaskRequest{
 		TaskID: taskID,
 		InputResponses: core.InputResponses{
 			realKey: json.RawMessage(`{"action":"accept","content":{"confirm":false}}`),
@@ -1011,13 +1011,13 @@ func TestV2_StatusNotificationOmitsRequestState(t *testing.T) {
 			}
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
 	// Drive a fast task to terminal and watch for the status notification.
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "fast-task",
 		"arguments": map[string]any{},
 	})
@@ -1101,12 +1101,12 @@ func TestV2_NoProgressOrMessageOnTaskGoroutine(t *testing.T) {
 			}
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "progress-emit-task",
 		"arguments": map[string]any{},
 	})

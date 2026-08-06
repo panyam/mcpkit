@@ -28,7 +28,7 @@ func TestE2E_ValidToken_ToolCall(t *testing.T) {
 	token := env.MintToken(t, "user-1", []string{"tools:read", "tools:call"})
 
 	client := env.ConnectMCPClient(t, token)
-	result, err := client.ToolCall("echo", map[string]any{"msg": "hello"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "hello"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "hello")
 }
@@ -42,7 +42,7 @@ func TestE2E_ValidToken_ClaimsPropagation(t *testing.T) {
 	token := env.MintToken(t, "user-claims-test", []string{"tools:read", "admin:write"})
 
 	client := env.ConnectMCPClient(t, token)
-	result, err := client.ToolCall("echo", map[string]any{"msg": "check-claims"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "check-claims"})
 	require.NoError(t, err)
 
 	// Parse the echo tool's JSON response which includes claims
@@ -181,7 +181,7 @@ func TestE2E_ClientCredentials_FullFlow(t *testing.T) {
 	)
 
 	client := env.ConnectMCPClient(t, tok.AccessToken)
-	result, err := client.ToolCall("echo", map[string]any{"msg": "from-cc"})
+	result, err := client.ToolCall(t.Context(), "echo", map[string]any{"msg": "from-cc"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "from-cc")
 }

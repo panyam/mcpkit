@@ -200,7 +200,7 @@ func Stream(parent context.Context, sess *client.Client, opts StreamOptions) (*S
 	safeGo("eventsclient.stream", func() {
 		defer close(s.done)
 		cc := client.NewCallContext(ctx).WithNotifyHook(hook)
-		_, err := sess.CallContext(cc, "events/stream", params)
+		_, err := sess.CallContext(ctx, cc, "events/stream", params)
 		// Distinguish "we cancelled" from "server returned an error":
 		// after cancel(), CallContext may return an error from the
 		// transport (connection closed) — that's expected, not a failure.

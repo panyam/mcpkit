@@ -87,7 +87,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "map-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -119,7 +119,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s  execution=%v  _meta=%v\n", t.Name, t.Execution, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -159,7 +159,7 @@ for _, t := range out.Tools {
 pretty, _ := json.MarshalIndent(tr.Contents[0].Meta, "", "  ")
 fmt.Println(string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		full, err := c.ReadResourceFull("ui://cesium-map/mcp-app.html")
+		full, err := c.ReadResourceFull(ctx.Ctx, "ui://cesium-map/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -189,7 +189,7 @@ fmt.Println(string(pretty))`,
 		`tr, _ := c.ToolCallFull("show-map", map[string]any{})
 fmt.Printf("isError=%v, text=%q\n", tr.IsError, tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("show-map", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "show-map", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -216,7 +216,7 @@ fmt.Printf("isError=%v, text=%q\n", tr.IsError, tr.Content[0].Text)`,
 		`tr, _ := c.ToolCallFull("geocode", map[string]any{"query": "Eiffel Tower"})
 fmt.Println(tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("geocode", map[string]any{"query": "Eiffel Tower"})
+		tr, err := c.ToolCallFull(ctx.Ctx, "geocode", map[string]any{"query": "Eiffel Tower"})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -258,7 +258,7 @@ fmt.Println(tr.Content[0].Text)`,
 })
 fmt.Printf("isError=%v, text=%q\n", tr.IsError, tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("show-map", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "show-map", map[string]any{
 			"west":  2.293,
 			"south": 48.855,
 			"east":  2.297,

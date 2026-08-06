@@ -43,9 +43,9 @@ func TestNotifyInterceptor_SeesLogNotifications(t *testing.T) {
 		mu.Unlock()
 
 		// Enable logging so EmitLog actually sends notifications.
-		require.NoError(t, c.SetLogLevel("debug"))
+		require.NoError(t, c.SetLogLevel(t.Context(), "debug"))
 
-		_, err := c.ToolCall("log-tool", nil)
+		_, err := c.ToolCall(t.Context(), "log-tool", nil)
 		require.NoError(t, err)
 
 		mu.Lock()
@@ -88,16 +88,16 @@ func TestNotifyInterceptor_Chain(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(server.NewInProcessTransport(srv)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	require.NoError(t, c.SetLogLevel("debug"))
+	require.NoError(t, c.SetLogLevel(t.Context(), "debug"))
 
 	mu.Lock()
 	order = nil
 	mu.Unlock()
 
-	_, err := c.ToolCall("log-tool", nil)
+	_, err := c.ToolCall(t.Context(), "log-tool", nil)
 	require.NoError(t, err)
 
 	mu.Lock()
@@ -139,11 +139,11 @@ func TestNotifyInterceptor_Suppress(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(server.NewInProcessTransport(srv)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	require.NoError(t, c.SetLogLevel("debug"))
-	_, err := c.ToolCall("log-tool", nil)
+	require.NoError(t, c.SetLogLevel(t.Context(), "debug"))
+	_, err := c.ToolCall(t.Context(), "log-tool", nil)
 	require.NoError(t, err)
 
 	mu.Lock()

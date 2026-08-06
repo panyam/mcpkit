@@ -155,7 +155,7 @@ func TestBackgroundCancel(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected detach")
 	}
-	if err := bt.Cancel(); err != nil {
+	if err := bt.Cancel(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	select {

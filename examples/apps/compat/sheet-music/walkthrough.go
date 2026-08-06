@@ -92,7 +92,7 @@ fmt.Printf("connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`,
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "sheet-music-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -127,7 +127,7 @@ for _, t := range out.Tools {
     }
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -175,7 +175,7 @@ for _, t := range out.Tools {
 // tr.Content[0].Text is the small text envelope.
 fmt.Printf("server said: %s\n", tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("play-sheet-music", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "play-sheet-music", map[string]any{
 			"abcNotation": defaultABCNotation,
 		})
 		if err != nil {
@@ -213,7 +213,7 @@ json.Unmarshal(res.Raw, &raw)
 // lists the soundfont origin.
 fmt.Printf("_meta: %s\n", string(raw.Contents[0].Meta))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("resources/read", map[string]any{
+		res, err := c.Call(ctx.Ctx, "resources/read", map[string]any{
 			"uri": "ui://sheet-music/mcp-app.html",
 		})
 		if err != nil {

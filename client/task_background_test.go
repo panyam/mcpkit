@@ -56,7 +56,7 @@ func TestWaitForTaskOrBackground_DetachAndComplete(t *testing.T) {
 	ts := httptest.NewServer(f.server(t).Handler(server.WithStreamableHTTP(true)))
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "bg-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -90,7 +90,7 @@ func TestWaitForTaskOrBackground_InlineWhenFast(t *testing.T) {
 	ts := httptest.NewServer(f.server(t).Handler(server.WithStreamableHTTP(true)))
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "bg-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -110,7 +110,7 @@ func TestWaitForTaskOrBackground_ZeroGraceNeverDetaches(t *testing.T) {
 	ts := httptest.NewServer(f.server(t).Handler(server.WithStreamableHTTP(true)))
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "bg-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })

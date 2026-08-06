@@ -49,14 +49,14 @@ func TestE2E_SchemaValidationErrorOverWire(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Call with a negative value — violates minimum: 1.
 	// Use the lower-level Call so we can inspect the raw tool result;
 	// ToolCall would unwrap the isError into a Go error and we'd lose the
 	// structured-content payload.
-	result, err := c.Call("tools/call", map[string]any{
+	result, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "strict",
 		"arguments": map[string]any{"count": -5},
 	})

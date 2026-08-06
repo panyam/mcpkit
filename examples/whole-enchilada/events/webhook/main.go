@@ -149,7 +149,7 @@ func main() {
 		// robin freely across replicas for N>1.
 		client.WithClientMode(client.ClientModeStateless),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		log.Fatalf("%s connect failed: %v", prefix, err)
 	}
 	defer func() { _ = c.Close() }()

@@ -57,7 +57,7 @@ require (
 	github.com/panyam/mcpkit v0.4.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
-	github.com/panyam/servicekit v0.1.3 // indirect
+	github.com/panyam/servicekit v0.1.4 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

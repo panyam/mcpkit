@@ -84,7 +84,7 @@ func connectClient(t *testing.T, srv *server.Server) (*client.Client, *httptest.
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	return c, ts
 }
 
@@ -111,7 +111,7 @@ func TestE2EPollDelivery(t *testing.T) {
 
 	// Flat events/poll request shape per spec §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
-	result, err := c.Call("events/poll", map[string]any{
+	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "discord.message",
 		"cursor": "0",
 	})
@@ -339,7 +339,7 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	c, _ := connectClient(t, srv)
 
 	clientSecret := events.GenerateSecret()
-	subResult, err := c.Call("events/subscribe", map[string]any{
+	subResult, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -378,7 +378,7 @@ func TestE2EEventsList(t *testing.T) {
 	srv, _, _, _ := buildTestStack()
 	c, _ := connectClient(t, srv)
 
-	result, err := c.Call("events/list", map[string]any{})
+	result, err := c.Call(t.Context(), "events/list", map[string]any{})
 	require.NoError(t, err)
 
 	var resp struct {
@@ -416,7 +416,7 @@ func TestE2EResourceRead(t *testing.T) {
 
 	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "alice", "resource test", time.Now())))
 
-	text, err := c.ReadResource("discord://messages/recent")
+	text, err := c.ReadResource(t.Context(), "discord://messages/recent")
 	require.NoError(t, err)
 	assert.Contains(t, text, "resource test")
 
@@ -464,7 +464,7 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 
 	c, _ := connectClient(t, srv)
 	clientSecret := events.GenerateSecret()
-	_, err := c.Call("events/subscribe", map[string]any{
+	_, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -517,7 +517,7 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 
 	c, _ := connectClient(t, srv)
 	clientSecret := events.GenerateSecret()
-	_, err := c.Call("events/subscribe", map[string]any{
+	_, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -557,10 +557,10 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	tsrv := httptest.NewServer(handler)
 	defer tsrv.Close()
 	c := client.NewClient(tsrv.URL+"/mcp", core.ClientInfo{Name: "cursorless-wh", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	clientSecret := events.GenerateSecret()
-	raw, err := c.Call("events/subscribe", map[string]any{
+	raw, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "discord.typing",
 		"delivery": map[string]any{"mode": "webhook", "url": callbackSrv.URL, "secret": clientSecret},
 	})
@@ -597,7 +597,7 @@ func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
 		require.NoError(t, yieldTyping(context.Background(), newDiscordTypingEvent("g", "c", "alice", time.Now())))
 	}
 
-	result, err := c.Call("events/poll", map[string]any{
+	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "discord.typing",
 		"cursor": "0",
 	})
@@ -622,7 +622,7 @@ func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
 	expected := source.Latest()
 	require.NotEmpty(t, expected, "precondition: source has a head cursor")
 
-	raw, err := c.Call("events/subscribe", map[string]any{
+	raw, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "discord.message",
 		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink", "secret": events.GenerateSecret()},
 		// cursor field intentionally omitted → JSON null on parse
@@ -651,7 +651,7 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	// covers the
 	// wrapper-level rejection at the handler level; this demo test now just
 	// confirms the user-facing error message points at the spec.
-	_, err := c.Call("events/poll", map[string]any{
+	_, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"subscriptions": []map[string]any{
 			{"name": "discord.message", "cursor": "0"},
 		},
@@ -672,7 +672,7 @@ func TestE2EResourceByCursor(t *testing.T) {
 	require.NoError(t, yield(context.Background(), newDiscordEvent("g", "c", "bob", "second", time.Now())))
 
 	// Cursors are assigned monotonically by NewMemoryStore — first event = "1".
-	text, err := c.ReadResource("discord://message/1")
+	text, err := c.ReadResource(t.Context(), "discord://message/1")
 	require.NoError(t, err)
 	var payload DiscordEventData
 	require.NoError(t, json.Unmarshal([]byte(text), &payload))

@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"net/http/httptest"
+
 	client "github.com/panyam/mcpkit/client"
 	core "github.com/panyam/mcpkit/core"
 	server "github.com/panyam/mcpkit/server"
-	"net/http/httptest"
 )
 
 // newGetSSETestServer creates a server with subscriptions enabled and a tool
@@ -69,7 +70,7 @@ func setupGetSSEClient(t *testing.T, srv *server.Server, notifyCb func(string, a
 	}
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "get-sse-client", Version: "1.0"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		ts.Close()
 		t.Fatalf("Connect failed: %v", err)
 	}
@@ -102,7 +103,7 @@ func TestGetSSEStream_ReceivesNotificationsOutsideRequest(t *testing.T) {
 	})
 
 	// Subscribe to resource so server will notify us
-	if err := c.SubscribeResource("test://counter"); err != nil {
+	if err := c.SubscribeResource(t.Context(), "test://counter"); err != nil {
 		t.Fatalf("SubscribeResource: %v", err)
 	}
 
@@ -169,7 +170,7 @@ func TestGetSSEStream_ReceivesLogNotifications(t *testing.T) {
 	})
 
 	// Enable logging
-	if _, err := c.Call("logging/setLevel", map[string]any{"level": "info"}); err != nil {
+	if _, err := c.Call(t.Context(), "logging/setLevel", map[string]any{"level": "info"}); err != nil {
 		t.Fatalf("logging/setLevel: %v", err)
 	}
 
@@ -177,7 +178,7 @@ func TestGetSSEStream_ReceivesLogNotifications(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Call tool that emits a log
-	text, err := c.ToolCall("emit-log", map[string]any{"msg": "hello-from-get-sse"})
+	text, err := c.ToolCall(t.Context(), "emit-log", map[string]any{"msg": "hello-from-get-sse"})
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -226,7 +227,7 @@ func TestGetSSEStream_CleanClose(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test", Version: "1.0"},
 		client.WithGetSSEStream(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 
@@ -262,7 +263,7 @@ func TestGetSSEStream_NotOpenedWhenDisabled(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "no-sse-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer c.Close()
@@ -279,7 +280,7 @@ func TestGetSSEStream_NotOpenedWhenDisabled(t *testing.T) {
 	// Subscribe and trigger notification — without GET SSE stream,
 	// the notification should NOT arrive (no callback registered, no stream).
 	// Just verify no panic or error occurs.
-	if err := c.SubscribeResource("test://counter"); err != nil {
+	if err := c.SubscribeResource(t.Context(), "test://counter"); err != nil {
 		t.Fatalf("SubscribeResource: %v", err)
 	}
 	srv.NotifyResourceUpdated("test://counter")
@@ -311,13 +312,13 @@ func TestGetSSEStream_ReconnectionReopens(t *testing.T) {
 			received = append(received, method)
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		ts.Close()
 		t.Fatalf("Connect: %v", err)
 	}
 
 	// Subscribe before killing server
-	if err := c.SubscribeResource("test://counter"); err != nil {
+	if err := c.SubscribeResource(t.Context(), "test://counter"); err != nil {
 		c.Close()
 		ts.Close()
 		t.Fatalf("SubscribeResource: %v", err)
@@ -343,7 +344,7 @@ func TestGetSSEStream_ReconnectionReopens(t *testing.T) {
 	}
 
 	// Re-subscribe on new server
-	if err := c.SubscribeResource("test://counter"); err != nil {
+	if err := c.SubscribeResource(t.Context(), "test://counter"); err != nil {
 		t.Fatalf("re-SubscribeResource: %v", err)
 	}
 

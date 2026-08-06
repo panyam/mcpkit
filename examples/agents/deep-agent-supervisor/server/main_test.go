@@ -27,7 +27,7 @@ func newRosterClient(t *testing.T) *testutil.TestClient {
 func TestRosterListsThreeAgentsWithoutSchemas(t *testing.T) {
 	tc := newRosterClient(t)
 
-	res, err := tc.Client.Call(agents.MethodList, nil)
+	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 	var out agents.ListResult
 	require.NoError(t, res.Unmarshal(&out))
@@ -49,7 +49,7 @@ func TestRosterListsThreeAgentsWithoutSchemas(t *testing.T) {
 func TestGetResearchReturnsScopedTools(t *testing.T) {
 	tc := newRosterClient(t)
 
-	res, err := tc.Client.Call(agents.MethodGet, agents.GetParams{AgentID: "research"})
+	res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "research"})
 	require.NoError(t, err)
 	var out agents.GetResult
 	require.NoError(t, res.Unmarshal(&out))

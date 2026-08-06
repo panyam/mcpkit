@@ -112,7 +112,7 @@ _ = c.ServerSupportsExtension(core.TasksExtensionID) // true once negotiated`),
 				core.ClientInfo{Name: "tasks-v2-host", Version: "1.0"},
 				opts...,
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
@@ -143,7 +143,7 @@ if !res.IsTask() && len(res.Sync.Content) > 0 {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCall(c, "greet", map[string]any{"name": "world"})
+			res, err := client.ToolCall(ctx.Ctx, c, "greet", map[string]any{"name": "world"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -194,7 +194,7 @@ if res.IsTask() {
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			var slowTaskID string
-			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 3, "label": "demo"})
+			res, err := client.ToolCall(ctx.Ctx, c, "slow_compute", map[string]any{"seconds": 3, "label": "demo"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -260,7 +260,7 @@ if final.Result != nil {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCall(c, "failing_job", map[string]any{})
+			res, err := client.ToolCall(ctx.Ctx, c, "failing_job", map[string]any{})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
 				return
@@ -313,7 +313,7 @@ if final.Error != nil {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCall(c, "protocol_error_job", map[string]any{})
+			res, err := client.ToolCall(ctx.Ctx, c, "protocol_error_job", map[string]any{})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
 				return
@@ -387,7 +387,7 @@ final, _ := client.WaitForTask(context.Background(), c, taskID)
 _ = final.Status // "completed"`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCall(c, "confirm_delete", map[string]any{"filename": "important.txt"})
+			res, err := client.ToolCall(ctx.Ctx, c, "confirm_delete", map[string]any{"filename": "important.txt"})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v / IsTask=%v\n", err, res != nil && res.IsTask())
 				return
@@ -401,7 +401,7 @@ _ = final.Status // "completed"`),
 			deadline := time.Now().Add(5 * time.Second)
 			var pending *core.DetailedTask
 			for time.Now().Before(deadline) {
-				dt, err := client.GetTask(c, taskID)
+				dt, err := client.GetTask(ctx.Ctx, c, taskID)
 				if err != nil {
 					fmt.Printf("    ERROR: %v\n", err)
 					return
@@ -429,7 +429,7 @@ _ = final.Status // "completed"`),
 
 			// Resume via tasks/update.
 			fmt.Printf("    delivering tasks/update {action: accept, confirm: true} ...\n")
-			if err := client.UpdateTask(c, core.UpdateTaskRequest{
+			if err := client.UpdateTask(ctx.Ctx, c, core.UpdateTaskRequest{
 				TaskID: taskID,
 				InputResponses: core.InputResponses{
 					key: json.RawMessage(`{"action":"accept","content":{"confirm":true}}`),
@@ -489,7 +489,7 @@ final, _ := client.WaitForTask(context.Background(), c, cancelID)
 _ = final.Status // "cancelled"`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCall(c, "slow_compute", map[string]any{"seconds": 10, "label": "to-cancel"})
+			res, err := client.ToolCall(ctx.Ctx, c, "slow_compute", map[string]any{"seconds": 10, "label": "to-cancel"})
 			if err != nil || !res.IsTask() {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -499,7 +499,7 @@ _ = final.Status // "cancelled"`),
 
 			time.Sleep(500 * time.Millisecond)
 			fmt.Printf("    Cancelling ...\n")
-			if err := client.CancelTask(c, cancelID); err != nil {
+			if err := client.CancelTask(ctx.Ctx, c, cancelID); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}

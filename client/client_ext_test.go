@@ -121,7 +121,7 @@ func setupUIStreamableClient(t *testing.T, opts ...client.ClientOption) (*client
 
 	allOpts := append([]client.ClientOption{client.WithUIExtension()}, opts...)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "ui-test-client", Version: "1.0"}, allOpts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	return c, ts
@@ -134,7 +134,7 @@ func setupUIStreamableClient(t *testing.T, opts ...client.ClientOption) (*client
 func TestClientWithUIExtension(t *testing.T) {
 	c, _ := setupUIStreamableClient(t)
 
-	text, err := c.ToolCall("check_ui", nil)
+	text, err := c.ToolCall(t.Context(), "check_ui", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -152,11 +152,11 @@ func TestClientWithoutUIExtension(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "plain-client", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 
-	text, err := c.ToolCall("check_ui", nil)
+	text, err := c.ToolCall(t.Context(), "check_ui", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestClientServerSupportsUI(t *testing.T) {
 		t.Cleanup(ts.Close)
 
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		if c.ServerSupportsUI() {

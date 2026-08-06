@@ -42,10 +42,10 @@ func TestToolCallTyped(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := client.ToolCallTyped[SearchResult](c, "search", nil)
+	result, err := client.ToolCallTyped[SearchResult](t.Context(), c, "search", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.Total)
 	assert.Equal(t, []string{"a", "b"}, result.Items)
@@ -72,11 +72,11 @@ func TestToolCallTypedNoStructuredContent(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	type Anything struct{ X int }
-	_, err := client.ToolCallTyped[Anything](c, "text-only", nil)
+	_, err := client.ToolCallTyped[Anything](t.Context(), c, "text-only", nil)
 	assert.Error(t, err, "should error when no structured content")
 	assert.Contains(t, err.Error(), "no structured content")
 }
@@ -101,11 +101,11 @@ func TestToolCallTypedToolError(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	type Anything struct{ X int }
-	_, err := client.ToolCallTyped[Anything](c, "fail", nil)
+	_, err := client.ToolCallTyped[Anything](t.Context(), c, "fail", nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "tool error")
 }
@@ -130,10 +130,10 @@ func TestToolCallFullSuccess(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCallFull("greet", nil)
+	result, err := c.ToolCallFull(t.Context(), "greet", nil)
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	require.Len(t, result.Content, 1)
@@ -164,11 +164,11 @@ func TestToolCallFullError(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// ToolCallFull should NOT return a Go error for tool-level errors.
-	result, err := c.ToolCallFull("conflict", nil)
+	result, err := c.ToolCallFull(t.Context(), "conflict", nil)
 	require.NoError(t, err, "transport should succeed even when tool errors")
 	assert.True(t, result.IsError)
 	require.Len(t, result.Content, 1)
@@ -184,7 +184,7 @@ func TestToolCallFullError(t *testing.T) {
 	assert.Equal(t, float64(5), conflict["current_version"])
 
 	// Contrast: ToolCall would flatten this to a Go error, losing the data.
-	_, toolCallErr := c.ToolCall("conflict", nil)
+	_, toolCallErr := c.ToolCall(t.Context(), "conflict", nil)
 	assert.Error(t, toolCallErr, "ToolCall should return Go error for isError:true")
 	assert.Contains(t, toolCallErr.Error(), "version conflict")
 }
@@ -218,10 +218,10 @@ func TestToolCallFullStructuredSuccess(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCallFull("search", nil)
+	result, err := c.ToolCallFull(t.Context(), "search", nil)
 	require.NoError(t, err)
 	assert.False(t, result.IsError)
 	require.Len(t, result.Content, 1)

@@ -35,7 +35,7 @@ func newSimpleServer(t *testing.T, tools map[string]string) *client.Client {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "registry-test", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

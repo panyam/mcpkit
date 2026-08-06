@@ -22,7 +22,7 @@ require (
 	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.0.0-20260613221610-63a4e4058337
 	github.com/panyam/mcpkit/ext/auth v0.0.0-00010101000000-000000000000
-	github.com/panyam/servicekit v0.1.3
+	github.com/panyam/servicekit v0.1.4
 	github.com/redis/go-redis/v9 v9.21.0
 	github.com/stretchr/testify v1.11.1
 	gorm.io/driver/postgres v1.6.2

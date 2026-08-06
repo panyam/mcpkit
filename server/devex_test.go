@@ -156,7 +156,7 @@ func TestInMemoryTransport_Connect(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	assert.Equal(t, "test-server", c.ServerInfo.Name)
@@ -171,10 +171,10 @@ func TestInMemoryTransport_ToolCall(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello from memory"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hello from memory"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "hello from memory")
 }
@@ -187,10 +187,10 @@ func TestInMemoryTransport_ReadResource(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	content, err := c.ReadResource("test://info")
+	content, err := c.ReadResource(t.Context(), "test://info")
 	require.NoError(t, err)
 	assert.Contains(t, content, "hello from test")
 }
@@ -203,7 +203,7 @@ func TestInMemoryTransport_ListTools(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "mem-test", Version: "1.0"}, client.WithTransport(
 		server.NewInProcessTransport(srv)),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	tools, err := c.ListTools(t.Context())
@@ -283,7 +283,7 @@ func TestCloseSession(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	sid := c.SessionID()
 	require.NotEmpty(t, sid)
 
@@ -291,7 +291,7 @@ func TestCloseSession(t *testing.T) {
 	assert.True(t, srv.CloseSession(sid), "should find and close the session")
 
 	// Subsequent call should fail (session not found)
-	_, err := c.ToolCall("echo", map[string]any{"message": "after close"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "after close"})
 	assert.Error(t, err, "call after session close should fail")
 	c.Close()
 }
@@ -306,16 +306,16 @@ func TestCloseAllSessions(t *testing.T) {
 
 	// Create two clients
 	c1 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test-1", Version: "1.0"})
-	require.NoError(t, c1.Connect())
+	require.NoError(t, c1.Connect(t.Context()))
 	c2 := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "close-test-2", Version: "1.0"})
-	require.NoError(t, c2.Connect())
+	require.NoError(t, c2.Connect(t.Context()))
 
 	// Close all sessions
 	srv.CloseAllSessions()
 
 	// Both clients should fail
-	_, err1 := c1.ToolCall("echo", map[string]any{"message": "c1"})
-	_, err2 := c2.ToolCall("echo", map[string]any{"message": "c2"})
+	_, err1 := c1.ToolCall(t.Context(), "echo", map[string]any{"message": "c1"})
+	_, err2 := c2.ToolCall(t.Context(), "echo", map[string]any{"message": "c2"})
 	assert.Error(t, err1, "c1 should fail after close all")
 	assert.Error(t, err2, "c2 should fail after close all")
 	c1.Close()

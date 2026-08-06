@@ -79,7 +79,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "scenario-modeler-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -111,7 +111,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s  execution=%v  _meta=%v\n", t.Name, t.Execution, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -153,7 +153,7 @@ fmt.Printf("templates: %d\n", len(tpls))
 pretty, _ := json.MarshalIndent(sc["defaultInputs"], "", "  ")
 fmt.Printf("defaultInputs: %s\n", string(pretty))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-scenario-data", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-scenario-data", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -198,7 +198,7 @@ sc := tr.StructuredContent.(map[string]any)
 sum, _ := json.MarshalIndent(sc["customSummary"], "", "  ")
 fmt.Printf("customSummary: %s\n", string(sum))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-scenario-data", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-scenario-data", map[string]any{
 			"customInputs": map[string]any{
 				"startingMRR":       50000,
 				"monthlyGrowthRate": 5,
@@ -238,7 +238,7 @@ fmt.Printf("customSummary: %s\n", string(sum))`,
 		`text, _ := c.ReadResource("ui://scenario-modeler/mcp-app.html")
 fmt.Printf("first 200 bytes: %.200s\n", text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://scenario-modeler/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://scenario-modeler/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

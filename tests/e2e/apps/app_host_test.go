@@ -34,7 +34,7 @@ func setupAppHost(t *testing.T) (*ui.AppHost, *ui.InProcessAppBridge, *client.Cl
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "apphost-conformance", Version: "1.0"},
 		client.WithUIExtension(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

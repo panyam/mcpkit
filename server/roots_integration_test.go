@@ -28,7 +28,7 @@ func TestRootsRoundTrip(t *testing.T) {
 	}
 
 	forAllRootsTransports(t, expected, func(t *testing.T, c *client.Client, callbackCh chan []core.Root) {
-		err := c.NotifyRootsChanged()
+		err := c.NotifyRootsChanged(t.Context())
 		require.NoError(t, err, "NotifyRootsChanged should succeed")
 
 		select {
@@ -45,7 +45,7 @@ func TestRootsRoundTrip(t *testing.T) {
 // list still triggers the callback with an empty (non-nil) slice.
 func TestRootsRoundTripEmpty(t *testing.T) {
 	forAllRootsTransports(t, []core.Root{}, func(t *testing.T, c *client.Client, callbackCh chan []core.Root) {
-		err := c.NotifyRootsChanged()
+		err := c.NotifyRootsChanged(t.Context())
 		require.NoError(t, err)
 
 		select {
@@ -72,7 +72,7 @@ func TestRootsNoHandlerNoCap(t *testing.T) {
 	// Client WITHOUT WithRootsHandler — no roots capability advertised.
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-no-roots", Version: "1.0"},
 		client.WithGetSSEStream())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 
 	// Give the GET SSE stream a moment to connect.
@@ -81,7 +81,7 @@ func TestRootsNoHandlerNoCap(t *testing.T) {
 	// The client can still send the notification (protocol doesn't forbid it),
 	// but the server must not issue a roots/list request because the client
 	// did not declare the capability.
-	_ = c.NotifyRootsChanged()
+	_ = c.NotifyRootsChanged(t.Context())
 
 	select {
 	case roots := <-callbackCh:
@@ -137,7 +137,7 @@ func forAllRootsTransports(t *testing.T, expectedRoots []core.Root, fn func(t *t
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithRootsHandler(rootsHandler),
 			client.WithGetSSEStream())
-		require.NoError(t, c.Connect())
+		require.NoError(t, c.Connect(t.Context()))
 		t.Cleanup(func() { c.Close() })
 		// Give the GET SSE stream a moment to establish so pushRequest is wired.
 		time.Sleep(100 * time.Millisecond)
@@ -153,7 +153,7 @@ func forAllRootsTransports(t *testing.T, expectedRoots []core.Root, fn func(t *t
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithSSEClient(),
 			client.WithRootsHandler(rootsHandler))
-		require.NoError(t, c.Connect())
+		require.NoError(t, c.Connect(t.Context()))
 		t.Cleanup(func() {
 			c.Close()
 			ts.Close()
@@ -173,7 +173,7 @@ func forAllRootsTransports(t *testing.T, expectedRoots []core.Root, fn func(t *t
 			}),
 		)
 		c.SetTransport(transport)
-		require.NoError(t, c.Connect())
+		require.NoError(t, c.Connect(t.Context()))
 		t.Cleanup(func() { c.Close() })
 		fn(t, c, callbackCh)
 	})
@@ -197,7 +197,7 @@ func forAllRootsTransports(t *testing.T, expectedRoots []core.Root, fn func(t *t
 		c := client.NewClient("stdio://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithStdioTransport(cr, cw),
 			client.WithRootsHandler(rootsHandler))
-		require.NoError(t, c.Connect())
+		require.NoError(t, c.Connect(ctx))
 
 		t.Cleanup(func() {
 			c.Close()

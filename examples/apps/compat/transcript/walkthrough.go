@@ -88,7 +88,7 @@ fmt.Printf("connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`,
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "transcript-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -119,7 +119,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s: %v\n", t.Name, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -156,7 +156,7 @@ for _, t := range out.Tools {
 // tr.Content[0].Text is `+"`{\"status\":\"ready\",\"message\":\"Transcription UI opened. Speak into your microphone.\"}`"+`
 fmt.Printf("server said: %s\n", tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("transcribe", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "transcribe", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -190,7 +190,7 @@ json.Unmarshal(res.Raw, &raw)
 // _meta.ui.permissions is what the host reads to set the iframe's allow= attribute.
 fmt.Printf("_meta: %s\n", string(raw.Contents[0].Meta))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("resources/read", map[string]any{
+		res, err := c.Call(ctx.Ctx, "resources/read", map[string]any{
 			"uri": "ui://transcript/mcp-app.html",
 		})
 		if err != nil {
