@@ -299,15 +299,19 @@
 </span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;enumNames&#34;</span>: [<span style="color:#d14">&#34;Development&#34;</span>, <span style="color:#d14">&#34;Staging&#34;</span>, <span style="color:#d14">&#34;Production&#34;</span>],
 </span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;default&#34;</span>: <span style="color:#d14">&#34;dev&#34;</span>
 </span></span><span style="display:flex;"><span>}}
-</span></span></code></pre><h2 id="mcpkit-does-not-validate-the-response">mcpkit does not validate the response <a class="anchor" href="#mcpkit-does-not-validate-the-response">¶</a></h2>
-<p>The schema tells the client what to collect. It is not enforced on the way back: mcpkit does not check <code>result.Content</code> against <code>requestedSchema</code> before handing it to your handler.</p>
-<p>So a handler that asked for an <code>integer</code> can receive a string, and one that offered three enum values can receive a fourth. Validate anything you are going to act on:</p>
-<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>env, ok <span style="color:#000;font-weight:bold">:=</span> result.Content[<span style="color:#d14">&#34;env&#34;</span>].(<span style="color:#458;font-weight:bold">string</span>)
-</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> !ok <span style="color:#000;font-weight:bold">||</span> !slices.<span style="color:#900;font-weight:bold">Contains</span>([]<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;dev&#34;</span>, <span style="color:#d14">&#34;staging&#34;</span>, <span style="color:#d14">&#34;prod&#34;</span>}, env) {
-</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> core.<span style="color:#900;font-weight:bold">ErrorResult</span>(<span style="color:#d14">&#34;invalid environment&#34;</span>), <span style="color:#000;font-weight:bold">nil</span>
-</span></span><span style="display:flex;"><span>}
-</span></span></code></pre><p>Content values are decoded JSON, so numbers arrive as <code>float64</code> and objects as <code>map[string]any</code>, the same as prompt arguments.</p>
-<h2 id="url-mode">URL mode <a class="anchor" href="#url-mode">¶</a></h2>
+</span></span></code></pre><h2 id="the-response-is-validated-against-your-schema">The response is validated against your schema <a class="anchor" href="#the-response-is-validated-against-your-schema">¶</a></h2>
+<p>An accepted response is checked against <code>requestedSchema</code> before it is sent. A handler that returns a string where you asked for an <code>integer</code>, omits a <code>required</code> property, or supplies a value outside a declared <code>enum</code> produces a <code>-32602</code> error with a structured list of violations, rather than handing you content you did not ask for.</p>
+<p>The client is the only party in a position to catch this. It is the one that saw both the schema and the user&rsquo;s input; by the time the response reaches you, the schema is just a memory of what you requested.</p>
+<p>Validation runs <strong>after</strong> the defaults merge, so a schema-declared default can be what satisfies <code>required</code>.</p>
+<p>Two things it deliberately does not do:</p>
+<ul>
+<li><strong>A malformed or uncompilable schema is not an error.</strong> If your schema cannot be compiled, validation is skipped and the user&rsquo;s answer goes through. The defect is on the server side and the user answered in good faith, so refusing their input would punish the wrong party.</li>
+<li><strong>Only <code>accept</code> is validated.</strong> Content is undefined for decline and cancel.</li>
+</ul>
+<p>Turn it off with <code>client.WithElicitationValidation(false)</code>, which sends whatever the handler produced. This mirrors the server, where <code>WithSchemaValidation(false)</code> opts out of validating inbound tool and prompt arguments. Both default to on.</p>
+<p>Content values are decoded JSON, so numbers arrive as <code>float64</code> and objects as <code>map[string]any</code>, the same as prompt arguments. Validation confirms the shape; it does not convert types for you:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>replicas, ok <span style="color:#000;font-weight:bold">:=</span> result.Content[<span style="color:#d14">&#34;replicas&#34;</span>].(<span style="color:#458;font-weight:bold">float64</span>)  <span style="color:#998;font-style:italic">// not int, even for &#34;type&#34;: &#34;integer&#34;
+</span></span></span></code></pre><h2 id="url-mode">URL mode <a class="anchor" href="#url-mode">¶</a></h2>
 <p>Some flows cannot happen in a form: an OAuth consent screen, a payment step, a device pairing page. URL mode hands the user a link instead of a schema.</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>core.<span style="color:#900;font-weight:bold">ElicitURL</span>(ctx, core.ElicitationRequest{
 </span></span><span style="display:flex;"><span>    Message:       <span style="color:#d14">&#34;Approve access in your browser&#34;</span>,
