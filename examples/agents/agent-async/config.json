@@ -1,0 +1,13 @@
+{
+  "instructions": "You manage asynchronous work through chat. Subscribe to event streams, install standing triggers that fire when a chosen event occurs, and kick off long-running task tools. When an event you are watching fires, act on it.",
+  "connections": {
+    "active": "local",
+    "connections": {
+      "local": { "type": "lmstudio", "model": "qwen2.5-7b-instruct" }
+    }
+  },
+  "metaTools": true,
+  "servers": [
+    { "id": "app", "url": "http://localhost:8788/mcp" }
+  ]
+}
