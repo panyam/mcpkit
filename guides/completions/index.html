@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Suggest values for prompt arguments and resource URI template variables (completion/complete).">
+    <title>Argument completion · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Argument completion</h1>
+        
+        <p class="lead">Suggest values for prompt arguments and resource URI template variables (completion/complete).</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/docs/COMPLETIONS.md"><code>docs/COMPLETIONS.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="argument-completion">Argument completion <a class="anchor" href="#argument-completion">¶</a></h1>
+<p>A user typing a prompt argument in a client UI should get suggestions, the same way a shell completes a filename. MCP does this with <code>completion/complete</code>: the client sends the argument name and whatever the user has typed so far, and your server answers with the candidates that match.</p>
+<p>Completion is a server capability like tools or resources. It applies to two things: prompt arguments, and the variables in a resource URI template.</p>
+<h2 id="registering-a-handler">Registering a handler <a class="anchor" href="#registering-a-handler">¶</a></h2>
+<p><code>RegisterCompletion</code> takes a reference type, the name of the thing being completed, and a handler.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterCompletion</span>(<span style="color:#d14">&#34;ref/prompt&#34;</span>, <span style="color:#d14">&#34;summarize&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">func</span>(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>        styles <span style="color:#000;font-weight:bold">:=</span> []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;bullet&#34;</span>, <span style="color:#d14">&#34;brief&#34;</span>, <span style="color:#d14">&#34;detailed&#34;</span>}
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">var</span> matched []<span style="color:#458;font-weight:bold">string</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">for</span> _, s <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">range</span> styles {
+</span></span><span style="display:flex;"><span>            <span style="color:#000;font-weight:bold">if</span> strings.<span style="color:#900;font-weight:bold">HasPrefix</span>(s, arg.Value) {
+</span></span><span style="display:flex;"><span>                matched = <span style="color:#0086b3">append</span>(matched, s)
+</span></span><span style="display:flex;"><span>            }
+</span></span><span style="display:flex;"><span>        }
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.CompletionResult{Values: matched, Total: <span style="color:#0086b3">len</span>(matched)}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p><code>arg.Name</code> is the argument being completed and <code>arg.Value</code> is the partial input. Prefix matching is the common case, but nothing requires it. Fuzzy matching, a database lookup, or ignoring the partial value entirely are all fine.</p>
+<p>Runnable versions of every snippet on this page live in <a href="https://github.com/panyam/mcpkit/blob/main/server/example_completion_test.go"><code>server/example_completion_test.go</code></a> and run as part of the test suite.</p>
+<h2 id="the-two-reference-types">The two reference types <a class="anchor" href="#the-two-reference-types">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Ref type</th>
+<th>Second argument to <code>RegisterCompletion</code></th>
+<th>Completes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ref/prompt</code></td>
+<td>the prompt name</td>
+<td>an argument of that prompt</td>
+</tr>
+<tr>
+<td><code>ref/resource</code></td>
+<td>the URI <strong>template</strong>, not a concrete URI</td>
+<td>a variable in that template</td>
+</tr>
+</tbody>
+</table>
+<p>The resource case trips people up. You register against the template string you passed to <code>RegisterResourceTemplate</code>, because that is what the client sends back:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">RegisterCompletion</span>(<span style="color:#d14">&#34;ref/resource&#34;</span>, <span style="color:#d14">&#34;file:///logs/{date}&#34;</span>,
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">func</span>(ctx core.PromptContext, ref core.CompletionRef, arg core.CompletionArgument) (core.CompletionResult, <span style="color:#458;font-weight:bold">error</span>) {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> core.CompletionResult{Values: []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;2026-08-04&#34;</span>, <span style="color:#d14">&#34;2026-08-05&#34;</span>}, Total: <span style="color:#099">2</span>}, <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p>Registering <code>file:///logs/2026-08-04</code> instead would never match, since the client completes the template, not an already-resolved URI.</p>
+<h2 id="an-unregistered-argument-is-not-an-error">An unregistered argument is not an error <a class="anchor" href="#an-unregistered-argument-is-not-an-error">¶</a></h2>
+<p>Ask for completion on something with no handler and the server returns an empty list with no error:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>resp, _ <span style="color:#000;font-weight:bold">:=</span> srv.<span style="color:#900;font-weight:bold">Dispatch</span>(ctx, <span style="color:#900;font-weight:bold">completionRequest</span>(<span style="color:#d14">&#34;ref/prompt&#34;</span>, <span style="color:#d14">&#34;no-such-prompt&#34;</span>, <span style="color:#d14">&#34;style&#34;</span>, <span style="color:#d14">&#34;b&#34;</span>))
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// resp.Error == nil, values == []
+</span></span></span></code></pre><p>This is deliberate. A client can offer completion on every argument without first discovering which ones support it, and an argument that gains a handler later starts working with no client change. Treat &ldquo;no suggestions&rdquo; and &ldquo;no handler&rdquo; as the same thing.</p>
+<h2 id="returning-more-than-100-values">Returning more than 100 values <a class="anchor" href="#returning-more-than-100-values">¶</a></h2>
+<p>The spec caps a completion response at 100 values. You do not have to enforce that yourself. Return everything you found and the server truncates, records the real count in <code>Total</code>, and sets <code>HasMore</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">return</span> core.CompletionResult{Values: values}, <span style="color:#000;font-weight:bold">nil</span>   <span style="color:#998;font-style:italic">// len(values) == 150
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// client sees: 100 values, Total 150, HasMore true
+</span></span></span></code></pre><p>If you set <code>Total</code> yourself it is preserved. The automatic fill only happens when you leave it at zero, so a handler that knows the true size of a large result set (say, a count from a database that it only partially fetched) can report it accurately.</p>
+<p><code>HasMore</code> tells the client there is more behind the current partial input. There is no cursor and no second page: the client narrows the search by sending a longer <code>arg.Value</code>, and your handler filters again.</p>
+<h2 id="errors">Errors <a class="anchor" href="#errors">¶</a></h2>
+<p>Returning an error produces a JSON-RPC error response with code <code>-31003</code> (<code>core.ErrCodeCompletionError</code>) and the ref key in the message. Prefer an empty result over an error for the ordinary &ldquo;nothing matched&rdquo; case. Reserve errors for a genuine failure, like the backing store being unreachable, so a client can tell the difference between &ldquo;no suggestions&rdquo; and &ldquo;completion is broken right now&rdquo;.</p>
+<h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
+<p>The handler receives a <code>core.PromptContext</code>, the same typed context prompt handlers get. It embeds <code>context.Context</code>, so cancellation works directly through <code>ctx.Done()</code> and <code>ctx.Err()</code>, and <code>ctx.AuthClaims()</code> gives you the authenticated identity when the server runs behind <code>ext/auth</code>. A UI calls completion on every keystroke, so keep handlers fast and avoid unbounded work.</p>
+<h2 id="wire-shape">Wire shape <a class="anchor" href="#wire-shape">¶</a></h2>
+<p>Request:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>, <span style="color:#000080">&#34;id&#34;</span>: <span style="color:#099">1</span>, <span style="color:#000080">&#34;method&#34;</span>: <span style="color:#d14">&#34;completion/complete&#34;</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;params&#34;</span>: {
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;ref&#34;</span>: {<span style="color:#000080">&#34;type&#34;</span>: <span style="color:#d14">&#34;ref/prompt&#34;</span>, <span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;summarize&#34;</span>},
+</span></span><span style="display:flex;"><span>    <span style="color:#000080">&#34;argument&#34;</span>: {<span style="color:#000080">&#34;name&#34;</span>: <span style="color:#d14">&#34;style&#34;</span>, <span style="color:#000080">&#34;value&#34;</span>: <span style="color:#d14">&#34;b&#34;</span>}
+</span></span><span style="display:flex;"><span>  }
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>Response:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;jsonrpc&#34;</span>: <span style="color:#d14">&#34;2.0&#34;</span>, <span style="color:#000080">&#34;id&#34;</span>: <span style="color:#099">1</span>,
+</span></span><span style="display:flex;"><span>  <span style="color:#000080">&#34;result&#34;</span>: {<span style="color:#000080">&#34;completion&#34;</span>: {<span style="color:#000080">&#34;values&#34;</span>: [<span style="color:#d14">&#34;bullet&#34;</span>, <span style="color:#d14">&#34;brief&#34;</span>], <span style="color:#000080">&#34;total&#34;</span>: <span style="color:#099">2</span>, <span style="color:#000080">&#34;hasMore&#34;</span>: <span style="color:#000;font-weight:bold">false</span>}}
+</span></span><span style="display:flex;"><span>}
+</span></span></code></pre><p>The server resolves the handler by joining the ref type and the name or URI, so <code>ref/prompt</code> and <code>ref/resource</code> never collide even if a prompt and a template share a string.</p>
+<h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
+<ul>
+<li><a href="/mcpkit/get-started/">Getting started</a> for registering prompts and resource templates in the first place</li>
+<li><a href="/mcpkit/guides/transports/">Architecture</a> for where completion sits in the dispatch path</li>
+</ul>
+
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>

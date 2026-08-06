@@ -84,6 +84,8 @@
                 
                 <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
                 
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
                 <li><a href="/mcpkit/guides/observability/">Observability</a></li>
                 
                 <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
@@ -509,6 +511,9 @@ UnmarshalJSON call site — the helper semantics do not change.</p>
 </ul>
 <p><strong>Why store <code>*Dispatcher</code> not <code>NotifyFunc</code>:</strong> The <code>notifyFunc</code> on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading <code>d.getNotifyFunc()</code> at notification time handles this correctly. Access to <code>notifyFunc</code> is protected by <code>notifyMu</code> (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.</p>
 <p><strong>Session cleanup:</strong> All per-session teardown is centralized in <code>Dispatcher.Close()</code>. Transports call it in their disconnect path (SSE <code>OnClose</code>, Streamable <code>handleDelete</code>/<code>closeSession</code>, memory <code>close</code>). New per-session state should add its cleanup to <code>Close()</code> — not to each transport individually.</p>
+<h2 id="argument-completion">Argument Completion <a class="anchor" href="#argument-completion">¶</a></h2>
+<p><code>completion/complete</code> resolves a handler by joining the ref type with the prompt name or resource URI template, so <code>ref/prompt</code> and <code>ref/resource</code> share a namespace without colliding. Two behaviors worth knowing at the dispatch level: an unregistered ref returns an empty result rather than an error, and a result over <code>core.MaxCompletionValues</code> (100) is truncated with <code>Total</code> and <code>HasMore</code> filled in by the dispatcher.</p>
+<p>See <a href="/mcpkit/guides/completions/">COMPLETIONS.md</a> for the handler API and worked examples.</p>
 <h2 id="notification-delivery-order-guarantees">Notification Delivery Order Guarantees <a class="anchor" href="#notification-delivery-order-guarantees">¶</a></h2>
 <p>Notifications emitted during a tool call (logging, progress) are delivered to the client <strong>before</strong> the tool result. The ordering guarantee is per-transport:</p>
 <table>
