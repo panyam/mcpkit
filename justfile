@@ -379,9 +379,33 @@ lint:
 # Security audit
 # =============================================================================
 
-# Check dependencies for known vulnerabilities
+# Check dependencies for known vulnerabilities across the published module surface
+# (root + every module in SUB_MODS_TO_TAG).
+#
+# `govulncheck ./...` is module-scoped: `./...` matches packages in the current
+# module only and does NOT descend into nested modules. Scanning just the root
+# therefore left every published sub-module unscanned, ext/auth (the OAuth stack)
+# included. Examples are deliberately out of scope — they are demos, not modules
+# anyone imports.
 vulncheck:
-    govulncheck ./...
+    #!/usr/bin/env bash
+    set -u
+    failed=""
+    echo "==> govulncheck root"
+    govulncheck ./... || failed="$failed root"
+    for mod in {{SUB_MODS_TO_TAG}}; do
+        if [ -f "$mod/go.mod" ]; then
+            echo ""
+            echo "==> govulncheck $mod"
+            (cd "$mod" && govulncheck ./...) || failed="$failed $mod"
+        fi
+    done
+    echo ""
+    if [ -n "$failed" ]; then
+        echo "=== govulncheck FAILED in:$failed ==="
+        exit 1
+    fi
+    echo "=== govulncheck clean: root + $(echo {{SUB_MODS_TO_TAG}} | wc -w | tr -d ' ') sub-modules ==="
 
 # Run gosec security scanner (install: go install github.com/securego/gosec/v2/cmd/gosec@latest)
 seccheck:
