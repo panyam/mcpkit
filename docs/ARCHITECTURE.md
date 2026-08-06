@@ -258,6 +258,12 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 
 **Session cleanup:** All per-session teardown is centralized in `Dispatcher.Close()`. Transports call it in their disconnect path (SSE `OnClose`, Streamable `handleDelete`/`closeSession`, memory `close`). New per-session state should add its cleanup to `Close()` — not to each transport individually.
 
+## Argument Completion
+
+`completion/complete` resolves a handler by joining the ref type with the prompt name or resource URI template, so `ref/prompt` and `ref/resource` share a namespace without colliding. Two behaviors worth knowing at the dispatch level: an unregistered ref returns an empty result rather than an error, and a result over `core.MaxCompletionValues` (100) is truncated with `Total` and `HasMore` filled in by the dispatcher.
+
+See [COMPLETIONS.md](COMPLETIONS.md) for the handler API and worked examples.
+
 ## Notification Delivery Order Guarantees
 
 Notifications emitted during a tool call (logging, progress) are delivered to the client **before** the tool result. The ordering guarantee is per-transport:

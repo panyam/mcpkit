@@ -6,14 +6,14 @@
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
 SUB_MODS_TO_TAG := \
-	agent agent/host agent/web agent/store/redis agent/store/gorm \
+	agent agent/host agent/surfaces agent/surfaces/web agent/surfaces/chat agent/store/redis agent/store/gorm \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
 	experimental/ext/agents experimental/ext/agents/clients/go \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
-	cmd/testclient cmd/common cmd/mcpskills cmd/agentchat \
+	cmd/testclient cmd/common cmd/mcpskills \
 	examples/mcpskills-walkthrough \
 	tests/e2e tests/keycloak
 
@@ -121,6 +121,15 @@ check-conformance-stale: check-local-suites-stale ## Fail if CONFORMANCE.md is s
 check-local-suites-stale: ## CI gate — fail if conformance/local-suites.yaml drifts from the Makefile (cases A/B/C)
 	uv run scripts/check_local_suites.py
 
+check-dep-consistency: ## CI gate — fail if a third-party dep is pinned at 2+ versions across published modules
+	python3 scripts/check_dep_consistency.py
+
+update-dep-baseline: ## Accept the current dependency divergence as the new baseline
+	python3 scripts/check_dep_consistency.py --update-baseline
+
+dep-sweep: ## Repo-wide dependency sweep (usage: make dep-sweep MODE=patch|minor); see scripts/dep-sweep.sh
+	bash scripts/dep-sweep.sh $(or $(MODE),minor)
+
 check-snippets: ## CI gate — fail if docs/GETTING_STARTED.md Go snippets drift from examples/getting-started/ (issue 853)
 	go run ./tools/check-snippets
 
@@ -145,8 +154,9 @@ test-agent: ## Run agent sub-module tests
 	cd agent/store/redis && go test ./... -count=1 -timeout 60s
 	cd agent/store/gorm && go test ./... -count=1 -timeout 60s
 	cd agent/host && go test ./... -count=1 -timeout 60s
-	cd agent/web && go test ./... -count=1 -timeout 90s
-	cd cmd/agentchat && go test ./... -count=1 -timeout 60s
+	cd agent/surfaces && go test ./... -count=1 -timeout 60s
+	cd agent/surfaces/web && go test ./... -count=1 -timeout 90s
+	cd agent/surfaces/chat && go test ./... -count=1 -timeout 60s
 	cd examples/agents/agent-async && go test ./... -count=1 -timeout 60s
 	cd examples/agents/multi-agent && go test ./... -count=1 -timeout 60s
 	cd examples/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario
@@ -444,5 +454,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-snippets check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-snippets check-dep-consistency update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help

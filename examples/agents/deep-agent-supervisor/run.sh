@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch the supervisor host (cmd/agentchat) against deep-agent-supervisor.json.
+# Launch the supervisor host (agent/surfaces/chat) against deep-agent-supervisor.json.
 # The roster server must already be up on :8795 (start it with `just serve` in
 # another terminal) — the agent does not manage MCP-server lifecycle (root
 # CONSTRAINTS.md). The specialists are NOT declared in the config: the host
@@ -28,7 +28,7 @@ if ! (exec 3<>"/dev/tcp/localhost/8795") 2>/dev/null; then
 fi
 
 echo "==> launching supervisor (config=deep-agent-supervisor.json, active=${ACTIVE:-<config default>})"
-cd "$ROOT/cmd/agentchat"
+cd "$ROOT/agent/surfaces/chat"
 args=(--config "$DIR/deep-agent-supervisor.json" --ui "$UI")
 [ -n "$EXPORTER" ] && args+=(--exporter "$EXPORTER" --otlp-endpoint "$OTLP_ENDPOINT")
 [ -n "$ACTIVE" ] && args+=(--active "$ACTIVE")
