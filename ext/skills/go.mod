@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/panyam/mcpkit v0.4.0
+	github.com/panyam/mcpkit v0.5.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

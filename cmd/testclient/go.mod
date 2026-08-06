@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/cmd/testclient
 go 1.26.5
 
 require (
-	github.com/panyam/mcpkit v0.4.0
+	github.com/panyam/mcpkit v0.5.0
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/oneauth v0.1.36
 )

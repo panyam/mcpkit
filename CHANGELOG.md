@@ -9,8 +9,20 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
-Ergonomics pass on the client and server entry points, from external feedback
-on the SDK's first-run experience. Migration guide:
+## [0.5.0] - 2026-08-06
+
+Agent web surface, `context.Context` through the whole client I/O surface, and
+the last documentation gap in mcpkit's Tier 1 posture closed. API-breaking on
+the client and on two module paths; no protocol capability is removed. Full
+write-up: [`docs/releases/v0.5.0.md`](docs/releases/v0.5.0.md).
+
+Two thirds of the release is the agent layer. The rest is a breaking but
+mechanical client change that makes every call cancellable, a documentation
+push that took the SEP-1730 audit from 42/48 to 48/48, and a security pass that
+found four reachable advisories nothing was previously scanning for.
+
+The client and server entry-point changes below came from external feedback on
+the SDK's first-run experience. Migration guide:
 [`docs/CLIENT_CONTEXT_MIGRATION.md`](docs/CLIENT_CONTEXT_MIGRATION.md).
 
 ### Fixed
@@ -66,6 +78,86 @@ on the SDK's first-run experience. Migration guide:
 - Requires `github.com/panyam/servicekit` v0.1.4 for its new
   `http.WithListener` option, which is what lets mcpkit bind before serving and
   report readiness honestly.
+
+### Added (agent + protocol)
+- **Agent web surface** (issue 1193). A browser surface over the same
+  `agent/host` the terminal drives, on the same session at the same time.
+  Per-session event log on `gocurrent.Queue` with replay from offset 0, a
+  pending-ask barrier so an elicitation reaches every surface with first-answer
+  wins, a Connect bridge with a server-streaming `Watch`, a DockView + Solid
+  frontend with five observability panels (sub-agent tree, activity timeline,
+  memory inspector, tool-call and offload inspector, budget gauges), multi-
+  session routing by `session_id`, and RunStore-backed persistence.
+  PR 1201, 1205, 1206, 1208, 1209, 1210, 1211, 1214, 1226.
+- **Server-declared agent discovery** (epic 1142). `experimental/ext/agents`
+  implements the Agents WG pre-SEP wire primitive: `agents/list` returns a
+  roster without tool schemas, `agents/get` resolves one agent's instructions
+  and scoped tools. Only discovery is new wire surface; invocation rides the
+  existing `tools/call`. Includes a Go client SDK, an `AgentSource` bridge,
+  SEP-414 discovery spans, and a deep-agent supervisor demo. PR 1181, 1186,
+  1190, 1191.
+- **`preempt` signal kind** with a kind-aware barrier break, parent-granted
+  rather than child-authoritative, and the opt-in interruptible turn.
+  PR 1170, 1178.
+- **Four primitive guides and 25 Go `Example` functions**, where the repo
+  previously had none. `docs/COMPLETIONS.md`, `docs/PROMPTS.md`,
+  `docs/ELICITATION.md`, and a Ping section in `ARCHITECTURE.md`. Completions
+  was the only core capability slot with no user-facing documentation; prompts
+  was the only core primitive with no dedicated prose. The examples run under
+  `go test`, so the guides cannot drift. PR 1229, 1231, 1232, 1233.
+
+### Breaking (additional)
+- **`agent/web` moved to `agent/surfaces/web`** and `cmd/agentchat` to
+  `agent/surfaces/chat`, grouping the surfaces under one parent. Import paths
+  change; there is no shim, because the agent modules have never carried a
+  release tag. PR 1223.
+- **Elicitation responses are validated against `requestedSchema`.** An
+  accepted response that returns a string where the server asked for an
+  `integer`, a value outside a declared `enum`, or omits a `required` property
+  now gets `-32602` with a structured error list instead of being forwarded.
+  Opt out with `client.WithElicitationValidation(false)`; mirrors
+  `server.WithSchemaValidation(false)`, and both default to on. PR 1234.
+
+### Fixed (security)
+- **Four reachable advisories nothing was scanning for.** `govulncheck ./...`
+  is module-scoped and does not descend into nested modules, so the root scan
+  covered the root module and nothing else, leaving all 24 published
+  sub-modules unscanned including `ext/auth`. Fixing the scan surfaced
+  GO-2025-3540 (`redis/go-redis/v9`), GO-2026-5970 (`golang.org/x/text`),
+  GO-2026-6061 (`google.golang.org/grpc`), and GO-2026-5004 (`jackc/pgx/v5`),
+  all reachable from mcpkit's own code and all now bumped. `stores/redis` is
+  published, so 0.4.0 shipped with a reachable go-redis advisory.
+  PR 1216, 1222.
+- **A vulnerable pillow resolution** kept alive purely by a
+  `requires-python = ">=3.9"` floor nothing needed. PR 1236.
+- **The `pre-push` hook had been blocking every push** for anyone who ran
+  `make setup-hooks`, via a stale path left behind by a module move. PR 1224.
+- **Host-side SEP-2640 skills hardening**: origin tagging so a skill body
+  carries its origin label before entering context, and per-origin name
+  resolution so a bare name served by more than one origin returns a
+  disambiguation prompt rather than silently first-matching. PR 1185, 1187.
+
+### Changed (supply chain + CI)
+- **A weekly `vulncheck` workflow and a monthly repo-wide dependency sweep**,
+  both time-triggered because the advisory database moves independently of the
+  code. PR 1224, 1227.
+- **Two new CI gates.** `make check-dep-consistency` fails when a third-party
+  dependency is pinned at two or more versions across published modules, since
+  MVS resolves to the maximum and a split pin means some modules silently build
+  against a version their `go.mod` does not name. `make check-dependabot-dirs`
+  fails when a configured Dependabot directory no longer exists, which is how
+  one npm tree went unmonitored. PR 1227, 1236.
+- **Dependabot rescoped**: Go updates move as one lock-step sweep rather than
+  per-directory PRs, which could not satisfy the lock-step rule the dependency
+  policy requires. PR 1227.
+- **`make` is the only task runner CI uses.** CI installed a third-party action
+  to run six recipes `make` already had. Justfiles remain as an experiment;
+  `make` is authoritative when they disagree. PR 1235.
+- **Repository history rewritten.** 141 MB of committed build artifacts purged,
+  taking the repository from 466 MB to 23 MB. Commit SHAs changed; no published
+  module content did, verified by comparing every tag's tree SHA before and
+  after, so `sum.golang.org` checksums for released versions remain valid. A
+  `pre-commit` hook and CI gate now reject committed executables by magic bytes.
 
 ## [0.4.0] - 2026-08-03
 
@@ -300,4 +392,6 @@ Full notes: [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md).
 - `step-up-keycloak` no longer forces stateless mode by default. (PR 821)
 - `CAPABILITIES.md` protocol-negotiation version list corrected.
 
+[0.5.0]: https://github.com/panyam/mcpkit/releases/tag/v0.5.0
+[0.4.0]: https://github.com/panyam/mcpkit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/panyam/mcpkit/releases/tag/v0.3.0
