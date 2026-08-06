@@ -22,7 +22,10 @@ const (
 )
 
 type WatchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id selects the conversation (App) to stream. Empty routes to the
+	// default session.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -55,6 +58,13 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
 	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *WatchRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 // Frame is one host event on the wire. kind is the HostEvent.Kind
@@ -117,8 +127,10 @@ func (x *Frame) GetPayload() []byte {
 }
 
 type SubmitRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Input         string                 `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Input string                 `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
+	// session_id selects the conversation (App). Empty routes to the default.
+	SessionId     string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -160,6 +172,13 @@ func (x *SubmitRequest) GetInput() string {
 	return ""
 }
 
+func (x *SubmitRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
 type SubmitResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -197,8 +216,10 @@ func (*SubmitResponse) Descriptor() ([]byte, []int) {
 }
 
 type DispatchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Line          string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Line  string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	// session_id selects the conversation (App). Empty routes to the default.
+	SessionId     string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -236,6 +257,13 @@ func (*DispatchRequest) Descriptor() ([]byte, []int) {
 func (x *DispatchRequest) GetLine() string {
 	if x != nil {
 		return x.Line
+	}
+	return ""
+}
+
+func (x *DispatchRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
 	}
 	return ""
 }
@@ -307,8 +335,11 @@ type RespondToAskRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	AskId int64                  `protobuf:"varint,1,opt,name=ask_id,json=askId,proto3" json:"ask_id,omitempty"`
 	// result is json.Marshal(core.ElicitationResult).
-	Result        []byte `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
-	By            string `protobuf:"bytes,3,opt,name=by,proto3" json:"by,omitempty"`
+	Result []byte `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
+	By     string `protobuf:"bytes,3,opt,name=by,proto3" json:"by,omitempty"`
+	// session_id selects the conversation (App) whose ask is being answered.
+	// Empty routes to the default.
+	SessionId     string `protobuf:"bytes,4,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -364,6 +395,13 @@ func (x *RespondToAskRequest) GetBy() string {
 	return ""
 }
 
+func (x *RespondToAskRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
 type RespondToAskResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -401,8 +439,11 @@ func (*RespondToAskResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListSessionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cursor        string                 `protobuf:"bytes,1,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Cursor string                 `protobuf:"bytes,1,opt,name=cursor,proto3" json:"cursor,omitempty"`
+	// session_id selects the conversation (App) whose persisted runs are paged.
+	// Empty routes to the default.
+	SessionId     string `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -440,6 +481,13 @@ func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
 func (x *ListSessionsRequest) GetCursor() string {
 	if x != nil {
 		return x.Cursor
+	}
+	return ""
+}
+
+func (x *ListSessionsRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
 	}
 	return ""
 }
@@ -506,7 +554,9 @@ func (x *ListSessionsResponse) GetActiveRunId() string {
 }
 
 type GetStatusRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id selects the conversation (App). Empty routes to the default.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -539,6 +589,13 @@ func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetStatusRequest) Descriptor() ([]byte, []int) {
 	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetStatusRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
 }
 
 type GetStatusResponse struct {
@@ -593,47 +650,317 @@ func (x *GetStatusResponse) GetRunId() string {
 	return ""
 }
 
+type CreateSessionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSessionRequest) Reset() {
+	*x = CreateSessionRequest{}
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSessionRequest) ProtoMessage() {}
+
+func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSessionRequest.ProtoReflect.Descriptor instead.
+func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
+	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{12}
+}
+
+type CreateSessionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id of the freshly created conversation (App).
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateSessionResponse) Reset() {
+	*x = CreateSessionResponse{}
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateSessionResponse) ProtoMessage() {}
+
+func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateSessionResponse.ProtoReflect.Descriptor instead.
+func (*CreateSessionResponse) Descriptor() ([]byte, []int) {
+	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CreateSessionResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type ListWebSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWebSessionsRequest) Reset() {
+	*x = ListWebSessionsRequest{}
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWebSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWebSessionsRequest) ProtoMessage() {}
+
+func (x *ListWebSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWebSessionsRequest.ProtoReflect.Descriptor instead.
+func (*ListWebSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{14}
+}
+
+type ListWebSessionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_ids of every live web session (App), including the default.
+	SessionIds    []string `protobuf:"bytes,1,rep,name=session_ids,json=sessionIds,proto3" json:"session_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWebSessionsResponse) Reset() {
+	*x = ListWebSessionsResponse{}
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWebSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWebSessionsResponse) ProtoMessage() {}
+
+func (x *ListWebSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWebSessionsResponse.ProtoReflect.Descriptor instead.
+func (*ListWebSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListWebSessionsResponse) GetSessionIds() []string {
+	if x != nil {
+		return x.SessionIds
+	}
+	return nil
+}
+
+type CloseSessionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session_id of the conversation (App) to close.
+	SessionId     string `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseSessionRequest) Reset() {
+	*x = CloseSessionRequest{}
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseSessionRequest) ProtoMessage() {}
+
+func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseSessionRequest.ProtoReflect.Descriptor instead.
+func (*CloseSessionRequest) Descriptor() ([]byte, []int) {
+	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CloseSessionRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+type CloseSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseSessionResponse) Reset() {
+	*x = CloseSessionResponse{}
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseSessionResponse) ProtoMessage() {}
+
+func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mcpkit_agentweb_v1_host_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseSessionResponse.ProtoReflect.Descriptor instead.
+func (*CloseSessionResponse) Descriptor() ([]byte, []int) {
+	return file_mcpkit_agentweb_v1_host_proto_rawDescGZIP(), []int{17}
+}
+
 var File_mcpkit_agentweb_v1_host_proto protoreflect.FileDescriptor
 
 const file_mcpkit_agentweb_v1_host_proto_rawDesc = "" +
 	"\n" +
-	"\x1dmcpkit/agentweb/v1/host.proto\x12\x12mcpkit.agentweb.v1\"\x0e\n" +
-	"\fWatchRequest\"5\n" +
+	"\x1dmcpkit/agentweb/v1/host.proto\x12\x12mcpkit.agentweb.v1\"-\n" +
+	"\fWatchRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"5\n" +
 	"\x05Frame\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x18\n" +
-	"\apayload\x18\x02 \x01(\fR\apayload\"%\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\"D\n" +
 	"\rSubmitRequest\x12\x14\n" +
-	"\x05input\x18\x01 \x01(\tR\x05input\"\x10\n" +
-	"\x0eSubmitResponse\"%\n" +
+	"\x05input\x18\x01 \x01(\tR\x05input\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"\x10\n" +
+	"\x0eSubmitResponse\"D\n" +
 	"\x0fDispatchRequest\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\tR\x04line\"T\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"T\n" +
 	"\x10DispatchResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x18\n" +
 	"\apayload\x18\x02 \x01(\fR\apayload\x12\x12\n" +
-	"\x04quit\x18\x03 \x01(\bR\x04quit\"T\n" +
+	"\x04quit\x18\x03 \x01(\bR\x04quit\"s\n" +
 	"\x13RespondToAskRequest\x12\x15\n" +
 	"\x06ask_id\x18\x01 \x01(\x03R\x05askId\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\fR\x06result\x12\x0e\n" +
-	"\x02by\x18\x03 \x01(\tR\x02by\"\x16\n" +
-	"\x14RespondToAskResponse\"-\n" +
+	"\x02by\x18\x03 \x01(\tR\x02by\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x04 \x01(\tR\tsessionId\"\x16\n" +
+	"\x14RespondToAskResponse\"L\n" +
 	"\x13ListSessionsRequest\x12\x16\n" +
-	"\x06cursor\x18\x01 \x01(\tR\x06cursor\"i\n" +
+	"\x06cursor\x18\x01 \x01(\tR\x06cursor\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\"i\n" +
 	"\x14ListSessionsResponse\x12\x12\n" +
 	"\x04runs\x18\x01 \x01(\fR\x04runs\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\x12\"\n" +
-	"\ractive_run_id\x18\x03 \x01(\tR\vactiveRunId\"\x12\n" +
-	"\x10GetStatusRequest\"K\n" +
+	"\ractive_run_id\x18\x03 \x01(\tR\vactiveRunId\"1\n" +
+	"\x10GetStatusRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"K\n" +
 	"\x11GetStatusResponse\x12\x1f\n" +
 	"\vmodel_label\x18\x01 \x01(\tR\n" +
 	"modelLabel\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runId2\x9d\x04\n" +
+	"\x06run_id\x18\x02 \x01(\tR\x05runId\"\x16\n" +
+	"\x14CreateSessionRequest\"6\n" +
+	"\x15CreateSessionResponse\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\x18\n" +
+	"\x16ListWebSessionsRequest\":\n" +
+	"\x17ListWebSessionsResponse\x12\x1f\n" +
+	"\vsession_ids\x18\x01 \x03(\tR\n" +
+	"sessionIds\"4\n" +
+	"\x13CloseSessionRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\x16\n" +
+	"\x14CloseSessionResponse2\xd2\x06\n" +
 	"\vHostService\x12F\n" +
 	"\x05Watch\x12 .mcpkit.agentweb.v1.WatchRequest\x1a\x19.mcpkit.agentweb.v1.Frame0\x01\x12O\n" +
 	"\x06Submit\x12!.mcpkit.agentweb.v1.SubmitRequest\x1a\".mcpkit.agentweb.v1.SubmitResponse\x12U\n" +
 	"\bDispatch\x12#.mcpkit.agentweb.v1.DispatchRequest\x1a$.mcpkit.agentweb.v1.DispatchResponse\x12a\n" +
 	"\fRespondToAsk\x12'.mcpkit.agentweb.v1.RespondToAskRequest\x1a(.mcpkit.agentweb.v1.RespondToAskResponse\x12a\n" +
 	"\fListSessions\x12'.mcpkit.agentweb.v1.ListSessionsRequest\x1a(.mcpkit.agentweb.v1.ListSessionsResponse\x12X\n" +
-	"\tGetStatus\x12$.mcpkit.agentweb.v1.GetStatusRequest\x1a%.mcpkit.agentweb.v1.GetStatusResponseBIZGgithub.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1;agentwebv1b\x06proto3"
+	"\tGetStatus\x12$.mcpkit.agentweb.v1.GetStatusRequest\x1a%.mcpkit.agentweb.v1.GetStatusResponse\x12d\n" +
+	"\rCreateSession\x12(.mcpkit.agentweb.v1.CreateSessionRequest\x1a).mcpkit.agentweb.v1.CreateSessionResponse\x12j\n" +
+	"\x0fListWebSessions\x12*.mcpkit.agentweb.v1.ListWebSessionsRequest\x1a+.mcpkit.agentweb.v1.ListWebSessionsResponse\x12a\n" +
+	"\fCloseSession\x12'.mcpkit.agentweb.v1.CloseSessionRequest\x1a(.mcpkit.agentweb.v1.CloseSessionResponseBIZGgithub.com/panyam/mcpkit/agent/web/gen/go/mcpkit/agentweb/v1;agentwebv1b\x06proto3"
 
 var (
 	file_mcpkit_agentweb_v1_host_proto_rawDescOnce sync.Once
@@ -647,20 +974,26 @@ func file_mcpkit_agentweb_v1_host_proto_rawDescGZIP() []byte {
 	return file_mcpkit_agentweb_v1_host_proto_rawDescData
 }
 
-var file_mcpkit_agentweb_v1_host_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_mcpkit_agentweb_v1_host_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_mcpkit_agentweb_v1_host_proto_goTypes = []any{
-	(*WatchRequest)(nil),         // 0: mcpkit.agentweb.v1.WatchRequest
-	(*Frame)(nil),                // 1: mcpkit.agentweb.v1.Frame
-	(*SubmitRequest)(nil),        // 2: mcpkit.agentweb.v1.SubmitRequest
-	(*SubmitResponse)(nil),       // 3: mcpkit.agentweb.v1.SubmitResponse
-	(*DispatchRequest)(nil),      // 4: mcpkit.agentweb.v1.DispatchRequest
-	(*DispatchResponse)(nil),     // 5: mcpkit.agentweb.v1.DispatchResponse
-	(*RespondToAskRequest)(nil),  // 6: mcpkit.agentweb.v1.RespondToAskRequest
-	(*RespondToAskResponse)(nil), // 7: mcpkit.agentweb.v1.RespondToAskResponse
-	(*ListSessionsRequest)(nil),  // 8: mcpkit.agentweb.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil), // 9: mcpkit.agentweb.v1.ListSessionsResponse
-	(*GetStatusRequest)(nil),     // 10: mcpkit.agentweb.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),    // 11: mcpkit.agentweb.v1.GetStatusResponse
+	(*WatchRequest)(nil),            // 0: mcpkit.agentweb.v1.WatchRequest
+	(*Frame)(nil),                   // 1: mcpkit.agentweb.v1.Frame
+	(*SubmitRequest)(nil),           // 2: mcpkit.agentweb.v1.SubmitRequest
+	(*SubmitResponse)(nil),          // 3: mcpkit.agentweb.v1.SubmitResponse
+	(*DispatchRequest)(nil),         // 4: mcpkit.agentweb.v1.DispatchRequest
+	(*DispatchResponse)(nil),        // 5: mcpkit.agentweb.v1.DispatchResponse
+	(*RespondToAskRequest)(nil),     // 6: mcpkit.agentweb.v1.RespondToAskRequest
+	(*RespondToAskResponse)(nil),    // 7: mcpkit.agentweb.v1.RespondToAskResponse
+	(*ListSessionsRequest)(nil),     // 8: mcpkit.agentweb.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),    // 9: mcpkit.agentweb.v1.ListSessionsResponse
+	(*GetStatusRequest)(nil),        // 10: mcpkit.agentweb.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),       // 11: mcpkit.agentweb.v1.GetStatusResponse
+	(*CreateSessionRequest)(nil),    // 12: mcpkit.agentweb.v1.CreateSessionRequest
+	(*CreateSessionResponse)(nil),   // 13: mcpkit.agentweb.v1.CreateSessionResponse
+	(*ListWebSessionsRequest)(nil),  // 14: mcpkit.agentweb.v1.ListWebSessionsRequest
+	(*ListWebSessionsResponse)(nil), // 15: mcpkit.agentweb.v1.ListWebSessionsResponse
+	(*CloseSessionRequest)(nil),     // 16: mcpkit.agentweb.v1.CloseSessionRequest
+	(*CloseSessionResponse)(nil),    // 17: mcpkit.agentweb.v1.CloseSessionResponse
 }
 var file_mcpkit_agentweb_v1_host_proto_depIdxs = []int32{
 	0,  // 0: mcpkit.agentweb.v1.HostService.Watch:input_type -> mcpkit.agentweb.v1.WatchRequest
@@ -669,14 +1002,20 @@ var file_mcpkit_agentweb_v1_host_proto_depIdxs = []int32{
 	6,  // 3: mcpkit.agentweb.v1.HostService.RespondToAsk:input_type -> mcpkit.agentweb.v1.RespondToAskRequest
 	8,  // 4: mcpkit.agentweb.v1.HostService.ListSessions:input_type -> mcpkit.agentweb.v1.ListSessionsRequest
 	10, // 5: mcpkit.agentweb.v1.HostService.GetStatus:input_type -> mcpkit.agentweb.v1.GetStatusRequest
-	1,  // 6: mcpkit.agentweb.v1.HostService.Watch:output_type -> mcpkit.agentweb.v1.Frame
-	3,  // 7: mcpkit.agentweb.v1.HostService.Submit:output_type -> mcpkit.agentweb.v1.SubmitResponse
-	5,  // 8: mcpkit.agentweb.v1.HostService.Dispatch:output_type -> mcpkit.agentweb.v1.DispatchResponse
-	7,  // 9: mcpkit.agentweb.v1.HostService.RespondToAsk:output_type -> mcpkit.agentweb.v1.RespondToAskResponse
-	9,  // 10: mcpkit.agentweb.v1.HostService.ListSessions:output_type -> mcpkit.agentweb.v1.ListSessionsResponse
-	11, // 11: mcpkit.agentweb.v1.HostService.GetStatus:output_type -> mcpkit.agentweb.v1.GetStatusResponse
-	6,  // [6:12] is the sub-list for method output_type
-	0,  // [0:6] is the sub-list for method input_type
+	12, // 6: mcpkit.agentweb.v1.HostService.CreateSession:input_type -> mcpkit.agentweb.v1.CreateSessionRequest
+	14, // 7: mcpkit.agentweb.v1.HostService.ListWebSessions:input_type -> mcpkit.agentweb.v1.ListWebSessionsRequest
+	16, // 8: mcpkit.agentweb.v1.HostService.CloseSession:input_type -> mcpkit.agentweb.v1.CloseSessionRequest
+	1,  // 9: mcpkit.agentweb.v1.HostService.Watch:output_type -> mcpkit.agentweb.v1.Frame
+	3,  // 10: mcpkit.agentweb.v1.HostService.Submit:output_type -> mcpkit.agentweb.v1.SubmitResponse
+	5,  // 11: mcpkit.agentweb.v1.HostService.Dispatch:output_type -> mcpkit.agentweb.v1.DispatchResponse
+	7,  // 12: mcpkit.agentweb.v1.HostService.RespondToAsk:output_type -> mcpkit.agentweb.v1.RespondToAskResponse
+	9,  // 13: mcpkit.agentweb.v1.HostService.ListSessions:output_type -> mcpkit.agentweb.v1.ListSessionsResponse
+	11, // 14: mcpkit.agentweb.v1.HostService.GetStatus:output_type -> mcpkit.agentweb.v1.GetStatusResponse
+	13, // 15: mcpkit.agentweb.v1.HostService.CreateSession:output_type -> mcpkit.agentweb.v1.CreateSessionResponse
+	15, // 16: mcpkit.agentweb.v1.HostService.ListWebSessions:output_type -> mcpkit.agentweb.v1.ListWebSessionsResponse
+	17, // 17: mcpkit.agentweb.v1.HostService.CloseSession:output_type -> mcpkit.agentweb.v1.CloseSessionResponse
+	9,  // [9:18] is the sub-list for method output_type
+	0,  // [0:9] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -693,7 +1032,7 @@ func file_mcpkit_agentweb_v1_host_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mcpkit_agentweb_v1_host_proto_rawDesc), len(file_mcpkit_agentweb_v1_host_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

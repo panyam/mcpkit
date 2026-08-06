@@ -47,6 +47,15 @@ const (
 	HostServiceListSessionsProcedure = "/mcpkit.agentweb.v1.HostService/ListSessions"
 	// HostServiceGetStatusProcedure is the fully-qualified name of the HostService's GetStatus RPC.
 	HostServiceGetStatusProcedure = "/mcpkit.agentweb.v1.HostService/GetStatus"
+	// HostServiceCreateSessionProcedure is the fully-qualified name of the HostService's CreateSession
+	// RPC.
+	HostServiceCreateSessionProcedure = "/mcpkit.agentweb.v1.HostService/CreateSession"
+	// HostServiceListWebSessionsProcedure is the fully-qualified name of the HostService's
+	// ListWebSessions RPC.
+	HostServiceListWebSessionsProcedure = "/mcpkit.agentweb.v1.HostService/ListWebSessions"
+	// HostServiceCloseSessionProcedure is the fully-qualified name of the HostService's CloseSession
+	// RPC.
+	HostServiceCloseSessionProcedure = "/mcpkit.agentweb.v1.HostService/CloseSession"
 )
 
 // HostServiceClient is a client for the mcpkit.agentweb.v1.HostService service.
@@ -68,6 +77,18 @@ type HostServiceClient interface {
 	// GetStatus returns the active model label and run id (App.ModelLabel /
 	// App.RunID) — the status-line read.
 	GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.GetStatusResponse], error)
+	// CreateSession mints a fresh conversation (a new host.App built from the
+	// server's config) and returns its session_id. Subsequent requests carrying
+	// that session_id route to the new App.
+	CreateSession(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error)
+	// ListWebSessions returns the session_ids of every live web session (App)
+	// the server currently hosts, including the default one. This is the roster
+	// of concurrent conversations, distinct from ListSessions (which pages the
+	// persisted RunStore runs inside one App).
+	ListWebSessions(context.Context, *connect.Request[v1.ListWebSessionsRequest]) (*connect.Response[v1.ListWebSessionsResponse], error)
+	// CloseSession closes the App for session_id and drops it from the roster.
+	// An unknown session_id is CodeNotFound.
+	CloseSession(context.Context, *connect.Request[v1.CloseSessionRequest]) (*connect.Response[v1.CloseSessionResponse], error)
 }
 
 // NewHostServiceClient constructs a client for the mcpkit.agentweb.v1.HostService service. By
@@ -117,17 +138,38 @@ func NewHostServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(hostServiceMethods.ByName("GetStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		createSession: connect.NewClient[v1.CreateSessionRequest, v1.CreateSessionResponse](
+			httpClient,
+			baseURL+HostServiceCreateSessionProcedure,
+			connect.WithSchema(hostServiceMethods.ByName("CreateSession")),
+			connect.WithClientOptions(opts...),
+		),
+		listWebSessions: connect.NewClient[v1.ListWebSessionsRequest, v1.ListWebSessionsResponse](
+			httpClient,
+			baseURL+HostServiceListWebSessionsProcedure,
+			connect.WithSchema(hostServiceMethods.ByName("ListWebSessions")),
+			connect.WithClientOptions(opts...),
+		),
+		closeSession: connect.NewClient[v1.CloseSessionRequest, v1.CloseSessionResponse](
+			httpClient,
+			baseURL+HostServiceCloseSessionProcedure,
+			connect.WithSchema(hostServiceMethods.ByName("CloseSession")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // hostServiceClient implements HostServiceClient.
 type hostServiceClient struct {
-	watch        *connect.Client[v1.WatchRequest, v1.Frame]
-	submit       *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
-	dispatch     *connect.Client[v1.DispatchRequest, v1.DispatchResponse]
-	respondToAsk *connect.Client[v1.RespondToAskRequest, v1.RespondToAskResponse]
-	listSessions *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	getStatus    *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	watch           *connect.Client[v1.WatchRequest, v1.Frame]
+	submit          *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
+	dispatch        *connect.Client[v1.DispatchRequest, v1.DispatchResponse]
+	respondToAsk    *connect.Client[v1.RespondToAskRequest, v1.RespondToAskResponse]
+	listSessions    *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	getStatus       *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	createSession   *connect.Client[v1.CreateSessionRequest, v1.CreateSessionResponse]
+	listWebSessions *connect.Client[v1.ListWebSessionsRequest, v1.ListWebSessionsResponse]
+	closeSession    *connect.Client[v1.CloseSessionRequest, v1.CloseSessionResponse]
 }
 
 // Watch calls mcpkit.agentweb.v1.HostService.Watch.
@@ -160,6 +202,21 @@ func (c *hostServiceClient) GetStatus(ctx context.Context, req *connect.Request[
 	return c.getStatus.CallUnary(ctx, req)
 }
 
+// CreateSession calls mcpkit.agentweb.v1.HostService.CreateSession.
+func (c *hostServiceClient) CreateSession(ctx context.Context, req *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error) {
+	return c.createSession.CallUnary(ctx, req)
+}
+
+// ListWebSessions calls mcpkit.agentweb.v1.HostService.ListWebSessions.
+func (c *hostServiceClient) ListWebSessions(ctx context.Context, req *connect.Request[v1.ListWebSessionsRequest]) (*connect.Response[v1.ListWebSessionsResponse], error) {
+	return c.listWebSessions.CallUnary(ctx, req)
+}
+
+// CloseSession calls mcpkit.agentweb.v1.HostService.CloseSession.
+func (c *hostServiceClient) CloseSession(ctx context.Context, req *connect.Request[v1.CloseSessionRequest]) (*connect.Response[v1.CloseSessionResponse], error) {
+	return c.closeSession.CallUnary(ctx, req)
+}
+
 // HostServiceHandler is an implementation of the mcpkit.agentweb.v1.HostService service.
 type HostServiceHandler interface {
 	// Watch streams host events: the retained backlog replayed from offset 0,
@@ -179,6 +236,18 @@ type HostServiceHandler interface {
 	// GetStatus returns the active model label and run id (App.ModelLabel /
 	// App.RunID) — the status-line read.
 	GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.GetStatusResponse], error)
+	// CreateSession mints a fresh conversation (a new host.App built from the
+	// server's config) and returns its session_id. Subsequent requests carrying
+	// that session_id route to the new App.
+	CreateSession(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error)
+	// ListWebSessions returns the session_ids of every live web session (App)
+	// the server currently hosts, including the default one. This is the roster
+	// of concurrent conversations, distinct from ListSessions (which pages the
+	// persisted RunStore runs inside one App).
+	ListWebSessions(context.Context, *connect.Request[v1.ListWebSessionsRequest]) (*connect.Response[v1.ListWebSessionsResponse], error)
+	// CloseSession closes the App for session_id and drops it from the roster.
+	// An unknown session_id is CodeNotFound.
+	CloseSession(context.Context, *connect.Request[v1.CloseSessionRequest]) (*connect.Response[v1.CloseSessionResponse], error)
 }
 
 // NewHostServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -224,6 +293,24 @@ func NewHostServiceHandler(svc HostServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(hostServiceMethods.ByName("GetStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	hostServiceCreateSessionHandler := connect.NewUnaryHandler(
+		HostServiceCreateSessionProcedure,
+		svc.CreateSession,
+		connect.WithSchema(hostServiceMethods.ByName("CreateSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	hostServiceListWebSessionsHandler := connect.NewUnaryHandler(
+		HostServiceListWebSessionsProcedure,
+		svc.ListWebSessions,
+		connect.WithSchema(hostServiceMethods.ByName("ListWebSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	hostServiceCloseSessionHandler := connect.NewUnaryHandler(
+		HostServiceCloseSessionProcedure,
+		svc.CloseSession,
+		connect.WithSchema(hostServiceMethods.ByName("CloseSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/mcpkit.agentweb.v1.HostService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case HostServiceWatchProcedure:
@@ -238,6 +325,12 @@ func NewHostServiceHandler(svc HostServiceHandler, opts ...connect.HandlerOption
 			hostServiceListSessionsHandler.ServeHTTP(w, r)
 		case HostServiceGetStatusProcedure:
 			hostServiceGetStatusHandler.ServeHTTP(w, r)
+		case HostServiceCreateSessionProcedure:
+			hostServiceCreateSessionHandler.ServeHTTP(w, r)
+		case HostServiceListWebSessionsProcedure:
+			hostServiceListWebSessionsHandler.ServeHTTP(w, r)
+		case HostServiceCloseSessionProcedure:
+			hostServiceCloseSessionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -269,4 +362,16 @@ func (UnimplementedHostServiceHandler) ListSessions(context.Context, *connect.Re
 
 func (UnimplementedHostServiceHandler) GetStatus(context.Context, *connect.Request[v1.GetStatusRequest]) (*connect.Response[v1.GetStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("mcpkit.agentweb.v1.HostService.GetStatus is not implemented"))
+}
+
+func (UnimplementedHostServiceHandler) CreateSession(context.Context, *connect.Request[v1.CreateSessionRequest]) (*connect.Response[v1.CreateSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("mcpkit.agentweb.v1.HostService.CreateSession is not implemented"))
+}
+
+func (UnimplementedHostServiceHandler) ListWebSessions(context.Context, *connect.Request[v1.ListWebSessionsRequest]) (*connect.Response[v1.ListWebSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("mcpkit.agentweb.v1.HostService.ListWebSessions is not implemented"))
+}
+
+func (UnimplementedHostServiceHandler) CloseSession(context.Context, *connect.Request[v1.CloseSessionRequest]) (*connect.Response[v1.CloseSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("mcpkit.agentweb.v1.HostService.CloseSession is not implemented"))
 }
