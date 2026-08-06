@@ -13,10 +13,10 @@ import (
 
 func TestPickSupportedVersion(t *testing.T) {
 	for _, tc := range []struct {
-		name             string
-		server           []string
-		client           []string
-		want             string
+		name   string
+		server []string
+		client []string
+		want   string
 	}{
 		{"single-match", []string{"2026-07-28"}, []string{"2026-07-28"}, "2026-07-28"},
 		{"client-preference-newest-first", []string{"2024-11-05", "2026-07-28"}, []string{"2026-07-28", "2024-11-05"}, "2026-07-28"},
@@ -145,7 +145,7 @@ func TestRawCallRetryOnUnsupportedVersion(t *testing.T) {
 
 	c := NewClient(srv.URL, core.ClientInfo{Name: "retry-test", Version: "1"},
 		WithClientMode(ClientModeStateless))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer c.Close()

@@ -85,7 +85,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "wiki-explorer-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -117,7 +117,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s\n    error schema: %v\n", t.Name, props["error"])
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -162,7 +162,7 @@ fmt.Printf("page: %v\n", sc["page"])
 fmt.Printf("links: %d\n", len(links))
 fmt.Printf("error: %v\n", sc["error"])`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-first-degree-links", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-first-degree-links", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -211,7 +211,7 @@ sc := tr.StructuredContent.(map[string]any)
 links := sc["links"].([]any)
 fmt.Printf("page: %v, links: %d\n", sc["page"], len(links))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-first-degree-links", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-first-degree-links", map[string]any{
 			"url": "https://en.wikipedia.org/wiki/Anthropic",
 		})
 		if err != nil {
@@ -248,7 +248,7 @@ fmt.Printf("page: %v, links: %d\n", sc["page"], len(links))`,
 sc := tr.StructuredContent.(map[string]any)
 fmt.Printf("isError=%v (always false), error string=%v\n", tr.IsError, sc["error"])`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-first-degree-links", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-first-degree-links", map[string]any{
 			"url": "https://example.com/foo",
 		})
 		if err != nil {
@@ -278,7 +278,7 @@ fmt.Printf("isError=%v (always false), error string=%v\n", tr.IsError, sc["error
 		`text, _ := c.ReadResource("ui://wiki-explorer/mcp-app.html")
 fmt.Printf("%d bytes; first 200:\n%.200s\n", len(text), text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://wiki-explorer/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://wiki-explorer/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

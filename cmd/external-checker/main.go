@@ -81,7 +81,7 @@ func run(url string) (checks []check, serverInfo core.ServerInfo, fatal error) {
 	// MCP-Protocol-Version + _meta{protocolVersion,clientInfo,clientCapabilities}
 	// on every POST; if any were missing the gauntlet rejects the request, so a
 	// clean Connect already proves the transport envelope.
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		checks = append(checks, check{"Connect (stateless wire)", "SEP-2575", false, err.Error()})
 		return checks, serverInfo, err
 	}
@@ -113,7 +113,7 @@ func run(url string) (checks []check, serverInfo core.ServerInfo, fatal error) {
 
 	// SEP-2106: arguments honor the inputSchema — required string, a real JSON
 	// number (not "42"), and a same-document $ref payload (#/$defs/payload).
-	args, err := c.ToolCall("validate_arguments", map[string]any{
+	args, err := c.ToolCall(ctx, "validate_arguments", map[string]any{
 		"message": "hello-from-mcpkit",
 		"count":   42,
 		"payload": map[string]any{"kind": "solid"},

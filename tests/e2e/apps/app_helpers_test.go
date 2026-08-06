@@ -45,7 +45,7 @@ func TestRegisterAppToolE2E(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithUIExtension(),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -73,7 +73,7 @@ func TestRegisterAppToolE2E(t *testing.T) {
 	}
 
 	// Verify resource serves HTML
-	result, err := c.Call("resources/read", map[string]string{"uri": "ui://decks/view"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://decks/view"})
 	if err != nil {
 		t.Fatalf("resources/read: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestRegisterAppToolE2E(t *testing.T) {
 	}
 
 	// Verify tool call works
-	text, err := c.ToolCall("build_deck", nil)
+	text, err := c.ToolCall(t.Context(), "build_deck", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -125,12 +125,12 @@ func TestNotifyResourcesChangedE2E(t *testing.T) {
 			notifMethod = method
 		}),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	_, err := c.ToolCall("mutate", nil)
+	_, err := c.ToolCall(t.Context(), "mutate", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}

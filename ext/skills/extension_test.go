@@ -103,7 +103,7 @@ func assertDiscoverHasSkillsCapability(t *testing.T, srv *server.Server) {
 		core.ClientInfo{Name: "discover-probe", Version: "0.0.1"},
 		client.WithClientMode(client.ClientModeAdaptive),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -146,7 +146,7 @@ func TestClient_Discover_LegacyOnlyServerReturnsTypedError(t *testing.T) {
 		ts.URL+"/mcp",
 		core.ClientInfo{Name: "discover-probe", Version: "0.0.1"},
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

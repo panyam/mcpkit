@@ -241,7 +241,7 @@ func TestProvider_RegisterWith_IndexExposed(t *testing.T) {
 		t.Errorf("resources/list missing %q in %v", skills.IndexURI, urisOf(defs))
 	}
 
-	body, err := c.ReadResource(skills.IndexURI)
+	body, err := c.ReadResource(t.Context(), skills.IndexURI)
 	if err != nil {
 		t.Fatalf("ReadResource %q: %v", skills.IndexURI, err)
 	}
@@ -273,7 +273,7 @@ func TestProvider_WithoutIndex(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-no-index-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -307,16 +307,16 @@ func TestProvider_WithIndexCacheTTL_ForwardsToIndexer(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-ttl-fwd-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	if _, err := c.ReadResource(skills.IndexURI); err != nil {
+	if _, err := c.ReadResource(t.Context(), skills.IndexURI); err != nil {
 		t.Fatalf("ReadResource #1: %v", err)
 	}
 	reads1 := atomic.LoadInt32(&cfs.openCount)
-	if _, err := c.ReadResource(skills.IndexURI); err != nil {
+	if _, err := c.ReadResource(t.Context(), skills.IndexURI); err != nil {
 		t.Fatalf("ReadResource #2: %v", err)
 	}
 	reads2 := atomic.LoadInt32(&cfs.openCount)
@@ -342,12 +342,12 @@ func TestIndexer_RegisterWith_AddsIndexResource(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-indexer-only-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	body, err := c.ReadResource(skills.IndexURI)
+	body, err := c.ReadResource(t.Context(), skills.IndexURI)
 	if err != nil {
 		t.Fatalf("ReadResource %q: %v", skills.IndexURI, err)
 	}
@@ -459,7 +459,7 @@ func boot(t *testing.T, dir string) (*server.Server, *httptest.Server, *client.C
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-boot-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

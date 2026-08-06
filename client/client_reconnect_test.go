@@ -33,10 +33,10 @@ func TestReconnect_OnDisconnect(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "reconnect-test", Version: "1.0"},
 		client.WithMaxRetries(2),
 		client.WithReconnectBackoff(10*time.Millisecond))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// First call should work
-	result, err := c.ToolCall("echo", map[string]any{"message": "before"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "before"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "before")
 
@@ -53,7 +53,7 @@ func TestReconnect_OnDisconnect(t *testing.T) {
 	c.SetURL(ts2.URL + "/mcp")
 
 	// This call should fail on old transport, reconnect to new server, and succeed
-	result, err = c.ToolCall("echo", map[string]any{"message": "after"})
+	result, err = c.ToolCall(t.Context(), "echo", map[string]any{"message": "after"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "after")
 	c.Close()
@@ -69,13 +69,13 @@ func TestReconnect_MaxRetries(t *testing.T) {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "reconnect-test", Version: "1.0"},
 		client.WithMaxRetries(2),
 		client.WithReconnectBackoff(10*time.Millisecond))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	// Stop server permanently
 	ts.Close()
 
 	// Call should fail after retries
-	_, err := c.ToolCall("echo", map[string]any{"message": "fail"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "fail"})
 	require.Error(t, err)
 	c.Close()
 }
@@ -123,12 +123,12 @@ func TestReconnect_DisabledByDefault(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "reconnect-test", Version: "1.0"})
 	// No WithMaxRetries — reconnection disabled
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 
 	ts.Close()
 
 	// Should fail immediately without reconnection attempt
-	_, err := c.ToolCall("echo", map[string]any{"message": "fail"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "fail"})
 	require.Error(t, err)
 	c.Close()
 }
@@ -153,10 +153,10 @@ func TestReconnect_WithLogging(t *testing.T) {
 		client.WithMaxRetries(1),
 		client.WithReconnectBackoff(10*time.Millisecond),
 		client.WithClientLogging(nil)) // use default logger
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("count", nil)
+	result, err := c.ToolCall(t.Context(), "count", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "call-")
 }

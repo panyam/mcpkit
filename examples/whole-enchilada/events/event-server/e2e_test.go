@@ -66,7 +66,7 @@ func buildTestStack(t *testing.T) (*httptest.Server, *events.HTTPSource[ChatMess
 func connectClient(t *testing.T, ts *httptest.Server) *client.Client {
 	t.Helper()
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
@@ -105,7 +105,7 @@ func TestE2E_HTTPInjectAndPoll(t *testing.T) {
 	assert.Equal(t, "alice", recent[0].Sender)
 
 	// Poll via MCP to confirm the wire surfaces them.
-	raw, err := c.Call("events/poll", map[string]any{
+	raw, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "chat.message",
 		"cursor": "0",
 	})
@@ -129,7 +129,7 @@ func TestE2E_CursorlessPresenceShape(t *testing.T) {
 	assert.True(t, presenceSrc.Def().Cursorless)
 
 	// Poll a cursorless source always returns empty + cursor:null.
-	raw, err := c.Call("events/poll", map[string]any{
+	raw, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "presence.changed",
 		"cursor": "0",
 	})

@@ -54,11 +54,11 @@ func TestStreamingToolResultsOverSSE(t *testing.T) {
 			mu.Unlock()
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Call the streaming tool
-	result, err := c.ToolCall("stream-test", nil)
+	result, err := c.ToolCall(t.Context(), "stream-test", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "final result")
 
@@ -104,11 +104,11 @@ func TestStreamingToolErrorMidStream(t *testing.T) {
 			chunkCount++
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Tool returns error — ToolCall wraps isError as Go error
-	_, err := c.ToolCall("stream-fail", nil)
+	_, err := c.ToolCall(t.Context(), "stream-fail", nil)
 	assert.Error(t, err, "should propagate tool error")
 	assert.Contains(t, err.Error(), "failed mid-stream")
 
@@ -138,10 +138,10 @@ func TestStreamingToolNoHandler(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("stream-ignored", nil)
+	result, err := c.ToolCall(t.Context(), "stream-ignored", nil)
 	require.NoError(t, err)
 	assert.Contains(t, result, "final only")
 }
@@ -180,10 +180,10 @@ func TestStreamingToolCustomMethod(t *testing.T) {
 			}
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	c.ToolCall("custom-method", nil)
+	c.ToolCall(t.Context(), "custom-method", nil)
 	time.Sleep(100 * time.Millisecond)
 
 	assert.Equal(t, "custom/streaming", receivedMethod, "should use custom method name")

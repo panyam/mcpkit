@@ -149,7 +149,7 @@ tools, _ := c.ListTools(ctx.Ctx)`),
 				client.WithGetSSEStream(),
 				client.WithTracerProvider(tp),
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				fmt.Printf("    Start the server with: just serve\n")
 				return
@@ -204,7 +204,7 @@ if errors.As(err, &rpcErr) {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			_, err := c.ToolCall("access_protected_resource", map[string]any{"resourceId": "my-doc"})
+			_, err := c.ToolCall(ctx.Ctx, "access_protected_resource", map[string]any{"resourceId": "my-doc"})
 			common.PrintRPCError(err, "")
 
 			// Parse the error data to extract consent URL and context ID.
@@ -290,7 +290,7 @@ res.Unmarshal(&toolResult) // toolResult.Content[0].Text → "Access granted ...
 			}
 
 			// Retry with the context ID.
-			res, err := c.Call("tools/call", map[string]any{
+			res, err := c.Call(ctx.Ctx, "tools/call", map[string]any{
 				"name":      "access_protected_resource",
 				"arguments": map[string]any{"resourceId": "my-doc"},
 				"_meta": map[string]any{

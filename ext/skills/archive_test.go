@@ -200,12 +200,12 @@ func TestProvider_ArchiveMode_HandlerServesArchive(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-archive-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	result, err := c.ReadResourceFull("skill://pdf-processing.tar.gz")
+	result, err := c.ReadResourceFull(t.Context(), "skill://pdf-processing.tar.gz")
 	if err != nil {
 		t.Fatalf("ReadResourceFull: %v", err)
 	}
@@ -303,12 +303,12 @@ func TestProvider_ArchiveMode_IndexResourceServesArchiveIndex(t *testing.T) {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-archive-boot-client", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	body, err := c.ReadResource(skills.IndexURI)
+	body, err := c.ReadResource(t.Context(), skills.IndexURI)
 	if err != nil {
 		t.Fatalf("ReadResource index: %v", err)
 	}

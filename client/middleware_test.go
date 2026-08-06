@@ -33,13 +33,13 @@ func TestClientMiddleware_SeesMethodAndParams(t *testing.T) {
 			return next(ctx, method, params)
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	_, err := c.ToolCall("hello", nil)
+	_, err := c.ToolCall(t.Context(), "hello", nil)
 	require.NoError(t, err)
 
-	_, err = c.Call("tools/list", nil)
+	_, err = c.Call(t.Context(), "tools/list", nil)
 	require.NoError(t, err)
 
 	mu.Lock()
@@ -86,10 +86,10 @@ func TestClientMiddleware_Chain(t *testing.T) {
 			},
 		),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	_, err := c.ToolCall("ping", nil)
+	_, err := c.ToolCall(t.Context(), "ping", nil)
 	require.NoError(t, err)
 
 	mu.Lock()
@@ -134,10 +134,10 @@ func TestClientMiddleware_ShortCircuit(t *testing.T) {
 			},
 		),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("ping", nil)
+	result, err := c.ToolCall(t.Context(), "ping", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "cached", result, "should get cached response from middleware")
 	assert.False(t, innerCalled, "inner middleware should not be reached")

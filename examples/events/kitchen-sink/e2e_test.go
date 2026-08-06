@@ -29,7 +29,7 @@ func newTestStack(t *testing.T) (*httptest.Server, *wiredServer) {
 func newTestClient(t *testing.T, ts *httptest.Server) *client.Client {
 	t.Helper()
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
@@ -396,7 +396,7 @@ func TestQuota_OnSubscribeRejection_WireShape(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	recv := nopReceiverServer()

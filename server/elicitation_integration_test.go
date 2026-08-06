@@ -47,7 +47,7 @@ func TestElicitNotSupported(t *testing.T) {
 // the client handler returns an "accept" response with content.
 func TestElicitAccept(t *testing.T) {
 	forAllElicitationTransports(t, "accept", map[string]any{"color": "blue"}, func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("elicit-tool", map[string]any{})
+		text, err := c.ToolCall(t.Context(), "elicit-tool", map[string]any{})
 		if err != nil {
 			t.Fatalf("ToolCall failed: %v", err)
 		}
@@ -60,7 +60,7 @@ func TestElicitAccept(t *testing.T) {
 // TestElicitDecline verifies elicitation round-trip when the user declines.
 func TestElicitDecline(t *testing.T) {
 	forAllElicitationTransports(t, "decline", nil, func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("elicit-tool", map[string]any{})
+		text, err := c.ToolCall(t.Context(), "elicit-tool", map[string]any{})
 		if err != nil {
 			t.Fatalf("ToolCall failed: %v", err)
 		}
@@ -73,7 +73,7 @@ func TestElicitDecline(t *testing.T) {
 // TestElicitCancel verifies elicitation round-trip when the user cancels.
 func TestElicitCancel(t *testing.T) {
 	forAllElicitationTransports(t, "cancel", nil, func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("elicit-tool", map[string]any{})
+		text, err := c.ToolCall(t.Context(), "elicit-tool", map[string]any{})
 		if err != nil {
 			t.Fatalf("ToolCall failed: %v", err)
 		}
@@ -90,7 +90,7 @@ func TestElicitCancel(t *testing.T) {
 // handler receives the URL-mode request and returns "accept".
 func TestElicitURLRoundTrip(t *testing.T) {
 	forAllURLElicitationTransports(t, func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("elicit-url-tool", map[string]any{})
+		text, err := c.ToolCall(t.Context(), "elicit-url-tool", map[string]any{})
 		if err != nil {
 			t.Fatalf("ToolCall failed: %v", err)
 		}
@@ -114,12 +114,12 @@ func TestElicitURLNotSupported(t *testing.T) {
 			t.Fatal("handler should not be called")
 			return core.ElicitationResult{}, nil
 		}))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	text, err := c.ToolCall("elicit-url-tool", map[string]any{})
+	text, err := c.ToolCall(t.Context(), "elicit-url-tool", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCall failed: %v", err)
 	}
@@ -147,13 +147,13 @@ func TestElicitCompletionNotification(t *testing.T) {
 		client.WithElicitationCompleteHandler(func(ctx context.Context, p core.ElicitationCompleteParams) {
 			completionCh <- p.ElicitationID
 		}))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
 	// Call the tool that sends a URL elicitation + completion notification.
-	text, err := c.ToolCall("elicit-url-complete-tool", map[string]any{})
+	text, err := c.ToolCall(t.Context(), "elicit-url-complete-tool", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCall failed: %v", err)
 	}
@@ -208,12 +208,12 @@ func TestElicitModeValidation(t *testing.T) {
 		client.WithElicitationHandler(func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
 			return core.ElicitationResult{Action: "accept"}, nil
 		}))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	text, err := c.ToolCall("raw-url-elicit", map[string]any{})
+	text, err := c.ToolCall(t.Context(), "raw-url-elicit", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCall failed: %v", err)
 	}
@@ -299,7 +299,7 @@ func forAllURLElicitationTransports(t *testing.T, fn func(t *testing.T, c *clien
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithElicitationHandler(handler),
 			client.WithElicitationURLSupport())
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
@@ -314,7 +314,7 @@ func forAllURLElicitationTransports(t *testing.T, fn func(t *testing.T, c *clien
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithSSEClient(), client.WithElicitationHandler(handler),
 			client.WithElicitationURLSupport())
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			ts.Close()
 			t.Fatalf("SSE Connect failed: %v", err)
 		}
@@ -336,7 +336,7 @@ func forAllURLElicitationTransports(t *testing.T, fn func(t *testing.T, c *clien
 			}),
 		)
 		c.SetTransport(transport)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
@@ -395,7 +395,7 @@ func forAllElicitationTransports(t *testing.T, action string, content map[string
 
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithElicitationHandler(handler))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
@@ -409,7 +409,7 @@ func forAllElicitationTransports(t *testing.T, action string, content map[string
 
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"},
 			client.WithSSEClient(), client.WithElicitationHandler(handler))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			ts.Close()
 			t.Fatalf("SSE Connect failed: %v", err)
 		}
@@ -430,7 +430,7 @@ func forAllElicitationTransports(t *testing.T, action string, content map[string
 			}),
 		)
 		c.SetTransport(transport)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })

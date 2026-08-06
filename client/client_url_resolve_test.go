@@ -118,7 +118,7 @@ func TestSSE_SessionIDFromQuery(t *testing.T) {
 func TestSSE_EndpointURLResolve_Integration(t *testing.T) {
 	c, _ := setupSSEClient(t)
 
-	result, err := c.ToolCall("echo", map[string]any{"message": "resolved"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "resolved"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "resolved")
 }

@@ -190,7 +190,7 @@ tools, _ := c.ListTools(ctx.Ctx) // succeeds without auth`),
 				client.WithTracerProvider(tp),
 			)
 			defer c.Close()
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
@@ -231,11 +231,11 @@ if errors.As(err, &authErr) {
 				client.WithTracerProvider(tp),
 			)
 			defer c.Close()
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			_, err := c.ToolCall("echo", map[string]any{"message": "hi"})
+			_, err := c.ToolCall(ctx.Ctx, "echo", map[string]any{"message": "hi"})
 			var authErr *client.ClientAuthError
 			if !errors.As(err, &authErr) {
 				fmt.Printf("    UNEXPECTED error type: %T %v\n", err, err)
@@ -278,11 +278,11 @@ text, _ := readClient.ToolCall("echo", map[string]any{"message": "hello"})`),
 				client.WithClientBearerToken(boot.TokRead),
 				client.WithTracerProvider(tp),
 			)
-			if err := readClient.Connect(); err != nil {
+			if err := readClient.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			text, err := readClient.ToolCall("echo", map[string]any{"message": "hello"})
+			text, err := readClient.ToolCall(ctx.Ctx, "echo", map[string]any{"message": "hello"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -311,7 +311,7 @@ if errors.As(err, &authErr) {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			_, err := readClient.ToolCall("write-tool", map[string]any{"data": "x"})
+			_, err := readClient.ToolCall(ctx.Ctx, "write-tool", map[string]any{"data": "x"})
 			var authErr *client.ClientAuthError
 			if !errors.As(err, &authErr) {
 				fmt.Printf("    UNEXPECTED error type: %T %v\n", err, err)
@@ -356,11 +356,11 @@ text, _ := readWriteClient.ToolCall("write-tool", map[string]any{"data": "hello 
 				client.WithClientBearerToken(boot.TokReadWrite),
 				client.WithTracerProvider(tp),
 			)
-			if err := readWriteClient.Connect(); err != nil {
+			if err := readWriteClient.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}
-			text, err := readWriteClient.ToolCall("write-tool", map[string]any{"data": "hello write"})
+			text, err := readWriteClient.ToolCall(ctx.Ctx, "write-tool", map[string]any{"data": "hello write"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -389,7 +389,7 @@ if errors.As(err, &authErr) {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			_, err := readWriteClient.ToolCall("admin-tool", map[string]any{"action": "rotate"})
+			_, err := readWriteClient.ToolCall(ctx.Ctx, "admin-tool", map[string]any{"action": "rotate"})
 			var authErr *client.ClientAuthError
 			if !errors.As(err, &authErr) {
 				fmt.Printf("    UNEXPECTED error type: %T %v\n", err, err)

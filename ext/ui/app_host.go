@@ -224,7 +224,7 @@ func (h *AppHost) handleAppRequest(ctx context.Context, req *core.Request) *core
 	)
 	defer span.End()
 
-	callResult, err := h.client.Call(req.Method, req.Params.Raw())
+	callResult, err := h.client.Call(ctx, req.Method, req.Params.Raw())
 	if err != nil {
 		span.RecordError(err)
 		return &core.Response{

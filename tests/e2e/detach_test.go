@@ -68,13 +68,13 @@ func TestE2E_DetachFromClient_SurvivesPerToolTimeout(t *testing.T) {
 		ts.URL+"/mcp",
 		core.ClientInfo{Name: "detach-e2e-client", Version: "0.1.0"},
 	)
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	require.NoError(t, err)
 	defer c.Close()
 
 	// Call the tool — it takes 300ms but has a 100ms timeout.
 	// Without DetachFromClient this would fail with deadline exceeded.
-	result, err := c.ToolCall("detached_long_work", map[string]any{"tag": "e2e-ok"})
+	result, err := c.ToolCall(t.Context(), "detached_long_work", map[string]any{"tag": "e2e-ok"})
 	require.NoError(t, err, "detached tool should complete despite timeout")
 	assert.Equal(t, "completed:e2e-ok", result)
 }
@@ -114,14 +114,14 @@ func TestE2E_DetachFromClient_NonDetachedToolCancelledByTimeout(t *testing.T) {
 		ts.URL+"/mcp",
 		core.ClientInfo{Name: "no-detach-e2e-client", Version: "0.1.0"},
 	)
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	require.NoError(t, err)
 	defer c.Close()
 
 	// Call should fail with a deadline/cancellation error. The server returns
 	// a JSON-RPC error (ErrCodeToolExecutionError) when the tool's context
 	// is cancelled by the per-tool timeout, and the client wraps it as an error.
-	_, err = c.ToolCall("normal_long_work", map[string]any{})
+	_, err = c.ToolCall(t.Context(), "normal_long_work", map[string]any{})
 	require.Error(t, err, "non-detached tool should fail on timeout")
 	assert.Contains(t, err.Error(), "cancelled", "error should mention cancellation")
 }
@@ -161,11 +161,11 @@ func TestE2E_DetachFromClient_WithRetryHint(t *testing.T) {
 		ts.URL+"/mcp",
 		core.ClientInfo{Name: "combo-e2e-client", Version: "0.1.0"},
 	)
-	err := c.Connect()
+	err := c.Connect(t.Context())
 	require.NoError(t, err)
 	defer c.Close()
 
-	result, err := c.ToolCall("hint_and_detach", map[string]any{})
+	result, err := c.ToolCall(t.Context(), "hint_and_detach", map[string]any{})
 	require.NoError(t, err)
 	assert.Equal(t, "combo-done", result)
 }

@@ -84,8 +84,8 @@ func IsToolTaskV1(tool core.ToolDef) bool {
 
 // GetTaskV1 polls the status of a v1 task by ID. Non-blocking.
 // Per MCP spec 2025-11-25 §tasks/get: returns flat Result & Task.
-func GetTaskV1(c *Client, taskID string) (*core.GetTaskResultV1, error) {
-	result, err := c.Call("tasks/get", getTaskParamsV1{TaskID: taskID})
+func GetTaskV1(ctx context.Context, c *Client, taskID string) (*core.GetTaskResultV1, error) {
+	result, err := c.Call(ctx, "tasks/get", getTaskParamsV1{TaskID: taskID})
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +101,8 @@ func GetTaskV1(c *Client, taskID string) (*core.GetTaskResultV1, error) {
 // Per MCP spec 2025-11-25 §tasks/result: returns the original ToolResult
 // with _meta["io.modelcontextprotocol/related-task"]. (V2 removed
 // tasks/result — DetailedTask inlines the result instead.)
-func GetTaskPayloadV1(c *Client, taskID string) (*core.ToolResult, string, error) {
-	result, err := c.Call("tasks/result", resultParamsV1{TaskID: taskID})
+func GetTaskPayloadV1(ctx context.Context, c *Client, taskID string) (*core.ToolResult, string, error) {
+	result, err := c.Call(ctx, "tasks/result", resultParamsV1{TaskID: taskID})
 	if err != nil {
 		return nil, "", err
 	}
@@ -120,8 +120,8 @@ func GetTaskPayloadV1(c *Client, taskID string) (*core.ToolResult, string, error
 // ListTasksV1 returns all v1 tasks with cursor-based pagination.
 // Pass an empty cursor to start from the beginning.
 // (Removed in v2 — tasks/list is no longer part of the protocol.)
-func ListTasksV1(c *Client, cursor string) (*core.ListTasksResultV1, error) {
-	result, err := c.Call("tasks/list", listTasksParamsV1{Cursor: cursor})
+func ListTasksV1(ctx context.Context, c *Client, cursor string) (*core.ListTasksResultV1, error) {
+	result, err := c.Call(ctx, "tasks/list", listTasksParamsV1{Cursor: cursor})
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +136,8 @@ func ListTasksV1(c *Client, cursor string) (*core.ListTasksResultV1, error) {
 // already in a terminal state.
 // Per MCP spec 2025-11-25 §tasks/cancel: returns flat Result & Task.
 // (V2 returns an empty ack; the v2 helper signature reflects that.)
-func CancelTaskV1(c *Client, taskID string) (*core.CancelTaskResultV1, error) {
-	result, err := c.Call("tasks/cancel", cancelTaskParamsV1{TaskID: taskID})
+func CancelTaskV1(ctx context.Context, c *Client, taskID string) (*core.CancelTaskResultV1, error) {
+	result, err := c.Call(ctx, "tasks/cancel", cancelTaskParamsV1{TaskID: taskID})
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func CancelTaskV1(c *Client, taskID string) (*core.CancelTaskResultV1, error) {
 // task hint at params.task, progressToken at params._meta.progressToken.
 // (V2 removes the client task hint — the server decides unilaterally —
 // so there is no V2 equivalent to this helper.)
-func ToolCallAsTaskV1(c *Client, name string, args any, opts ...*TaskCallOptionsV1) (*core.CreateTaskResultV1, error) {
+func ToolCallAsTaskV1(ctx context.Context, c *Client, name string, args any, opts ...*TaskCallOptionsV1) (*core.CreateTaskResultV1, error) {
 	params := toolCallAsTaskParamsV1{
 		Name:      name,
 		Arguments: args,
@@ -168,7 +168,7 @@ func ToolCallAsTaskV1(c *Client, name string, args any, opts ...*TaskCallOptions
 			params.Meta = map[string]any{"progressToken": o.ProgressToken}
 		}
 	}
-	result, err := c.Call("tools/call", params)
+	result, err := c.Call(ctx, "tools/call", params)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +189,7 @@ func WaitForTaskV1(ctx context.Context, c *Client, taskID string, pollInterval t
 		pollInterval = 1 * time.Second
 	}
 	for {
-		got, err := GetTaskV1(c, taskID)
+		got, err := GetTaskV1(ctx, c, taskID)
 		if err != nil {
 			return nil, err
 		}

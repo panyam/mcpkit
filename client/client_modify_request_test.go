@@ -54,10 +54,10 @@ func TestModifyRequest_AddsCustomHeader(t *testing.T) {
 			req.Header.Set("X-Custom-Test", "hello")
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	_, err := c.ToolCall("echo", map[string]any{"message": "hi"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hi"})
 	require.NoError(t, err)
 
 	// Every request should have the custom header.
@@ -84,10 +84,10 @@ func TestModifyRequest_SSETransport(t *testing.T) {
 			req.Header.Set("X-Trace-ID", "trace-123")
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	_, err := c.ToolCall("echo", map[string]any{"message": "hi"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hi"})
 	require.NoError(t, err)
 
 	headers := capture.getHeaders()
@@ -107,10 +107,10 @@ func TestModifyRequest_NilIsNoOp(t *testing.T) {
 	defer ts.Close()
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("echo", map[string]any{"message": "works"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "works"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "works")
 }
@@ -130,10 +130,10 @@ func TestModifyRequest_MultipleHeaders(t *testing.T) {
 			req.Header.Set("X-Request-ID", "req-456")
 		}),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	_, err := c.ToolCall("echo", map[string]any{"message": "hi"})
+	_, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hi"})
 	require.NoError(t, err)
 
 	headers := capture.getHeaders()

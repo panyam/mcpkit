@@ -105,13 +105,13 @@ func main() {
 	statelessWire := false
 	log.Println("Step 1: Trying direct connect (no auth)...")
 	noAuthClient := newConformanceClient(false)
-	connectErr := noAuthClient.Connect()
+	connectErr := noAuthClient.Connect(context.Background())
 	if connectErr != nil && strings.Contains(connectErr.Error(), "MCP-Protocol-Version") {
 		log.Println("Legacy handshake rejected with stateless signature — reconnecting on the SEP-2575 wire")
 		statelessWire = true
 		noAuthClient.Close()
 		noAuthClient = newConformanceClient(true)
-		connectErr = noAuthClient.Connect()
+		connectErr = noAuthClient.Connect(context.Background())
 	}
 
 	if err := connectErr; err == nil {
@@ -133,7 +133,7 @@ func main() {
 				// types).
 				toolName := tools[0].Name
 				log.Printf("Calling tool %q (no-auth fallback)...", toolName)
-				if _, err := noAuthClient.ToolCall(toolName, synthArgs(tools[0].InputSchema)); err != nil {
+				if _, err := noAuthClient.ToolCall(context.Background(), toolName, synthArgs(tools[0].InputSchema)); err != nil {
 					log.Printf("tools/call %q: %v (may be expected)", toolName, err)
 				}
 			}
@@ -167,7 +167,7 @@ func main() {
 	log.Println("Step 3: MCP initialize with OAuth token...")
 	c := newConformanceClient(statelessWire, client.WithTokenSource(ts))
 
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		log.Fatalf("MCP connect: %v", err)
 	}
 	defer c.Close()
@@ -191,7 +191,7 @@ func main() {
 			// schema-synthesized args.
 			toolName := tools[0].Name
 			log.Printf("Calling tool %q (default fallback)...", toolName)
-			if _, err := c.ToolCall(toolName, synthArgs(tools[0].InputSchema)); err != nil {
+			if _, err := c.ToolCall(context.Background(), toolName, synthArgs(tools[0].InputSchema)); err != nil {
 				log.Printf("tools/call %q: %v (may be expected)", toolName, err)
 			} else {
 				log.Printf("tools/call %q: ok", toolName)
@@ -212,16 +212,16 @@ func main() {
 // fidelity. Safe to call against any connected client; it's a few extra
 // POSTs per scenario run, which is cheap relative to the audit value.
 func driveStandardHeadersCoverage(c *client.Client) {
-	if _, err := c.Call("resources/list", map[string]any{}); err != nil {
+	if _, err := c.Call(context.Background(), "resources/list", map[string]any{}); err != nil {
 		log.Printf("resources/list: %v (non-fatal — coverage)", err)
 	}
-	if _, err := c.Call("resources/read", map[string]any{"uri": "test://coverage"}); err != nil {
+	if _, err := c.Call(context.Background(), "resources/read", map[string]any{"uri": "test://coverage"}); err != nil {
 		log.Printf("resources/read: %v (non-fatal — coverage)", err)
 	}
-	if _, err := c.Call("prompts/list", map[string]any{}); err != nil {
+	if _, err := c.Call(context.Background(), "prompts/list", map[string]any{}); err != nil {
 		log.Printf("prompts/list: %v (non-fatal — coverage)", err)
 	}
-	if _, err := c.Call("prompts/get", map[string]any{"name": "coverage"}); err != nil {
+	if _, err := c.Call(context.Background(), "prompts/get", map[string]any{"name": "coverage"}); err != nil {
 		log.Printf("prompts/get: %v (non-fatal — coverage)", err)
 	}
 }
@@ -338,7 +338,7 @@ func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource 
 func driveToolCalls(c *client.Client, calls []toolCallSpec) {
 	for i, tc := range calls {
 		log.Printf("Directed call %d/%d: tool=%q with %d args", i+1, len(calls), tc.Name, len(tc.Arguments))
-		if _, err := c.ToolCall(tc.Name, tc.Arguments); err != nil {
+		if _, err := c.ToolCall(context.Background(), tc.Name, tc.Arguments); err != nil {
 			log.Printf("tools/call %q: %v (non-fatal — scenario may expect)", tc.Name, err)
 		}
 	}

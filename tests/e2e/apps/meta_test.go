@@ -41,7 +41,9 @@ func newAppTestServer() *server.Server {
 			},
 		},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-			var p struct{ Title string `json:"title"` }
+			var p struct {
+				Title string `json:"title"`
+			}
 			req.Bind(&p)
 			return core.TextResult(fmt.Sprintf("built: %s", p.Title)), nil
 		},
@@ -99,7 +101,7 @@ func setupClient(t *testing.T) *client.Client {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "apps-e2e-client", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -178,7 +180,7 @@ func TestResourcesReadMetaE2E(t *testing.T) {
 	c := setupClient(t)
 
 	// Resource with _meta
-	result, err := c.Call("resources/read", map[string]string{"uri": "ui://decks/view"})
+	result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://decks/view"})
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -207,7 +209,7 @@ func TestResourcesReadMetaE2E(t *testing.T) {
 	}
 
 	// Plain resource — verify _meta absent at wire level
-	result2, err := c.Call("resources/read", map[string]string{"uri": "test://plain"})
+	result2, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "test://plain"})
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}

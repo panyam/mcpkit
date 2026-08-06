@@ -25,7 +25,7 @@ type fakeSpan struct {
 	ended  bool
 }
 
-func (s *fakeSpan) End()                  { s.ended = true }
+func (s *fakeSpan) End() { s.ended = true }
 func (s *fakeSpan) SetAttribute(k, v string) {
 	if s.attrs == nil {
 		s.attrs = map[string]string{}
@@ -116,7 +116,7 @@ func newAppHostWithCapturedServer(t *testing.T, opts ...ui.AppHostOption) (*ui.A
 		client.WithTransport(xport),
 		client.WithUIExtension(),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 
 	bridge := ui.NewInProcessAppBridge()

@@ -84,7 +84,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "pdf-server-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -114,7 +114,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s\n", t.Name)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -162,7 +162,7 @@ for _, t := range out.Tools {
 		`tr, _ := c.ToolCallFull("list_pdfs", map[string]any{})
 fmt.Printf("text: %q\nstructured: %v\n", tr.Content[0].Text, tr.StructuredContent)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("list_pdfs", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "list_pdfs", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -191,7 +191,7 @@ pretty, _ := json.MarshalIndent(tr.StructuredContent, "", "  ")
 fmt.Println(string(pretty))
 fmt.Printf("_meta: %v\n", tr.Meta)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("display_pdf", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "display_pdf", map[string]any{
 			"url": "https://arxiv.org/pdf/1706.03762",
 		})
 		if err != nil {
@@ -219,7 +219,7 @@ fmt.Printf("_meta: %v\n", tr.Meta)`,
 		`text, _ := c.ReadResource("ui://pdf-viewer/mcp-app.html")
 fmt.Printf("%d bytes; first 200:\n%.200s\n", len(text), text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://pdf-viewer/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://pdf-viewer/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

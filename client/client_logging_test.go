@@ -31,10 +31,10 @@ func TestLoggingTransport_LogsCallMethod(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithClientLogging(logger))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello"})
+	result, err := c.ToolCall(t.Context(), "echo", map[string]any{"message": "hello"})
 	require.NoError(t, err)
 	assert.Contains(t, result, "hello")
 
@@ -56,11 +56,11 @@ func TestLoggingTransport_LogsErrors(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithClientLogging(logger))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	// Call a tool that returns an error result (ToolCall wraps isError as Go error)
-	_, err := c.ToolCall("fail", nil)
+	_, err := c.ToolCall(t.Context(), "fail", nil)
 	assert.Error(t, err, "fail tool should return an error")
 
 	output := buf.String()
@@ -79,7 +79,7 @@ func TestLoggingTransport_LogsLatency(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithClientLogging(logger))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	output := buf.String()
@@ -100,7 +100,7 @@ func TestLoggingTransport_SessionIDPassthrough(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithClientLogging(logger))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	sid := c.SessionID()

@@ -80,7 +80,7 @@ if err := c.Connect(); err != nil {
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "shadertoy-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -113,7 +113,7 @@ for _, t := range out.Tools {
     for k := range props { fmt.Printf(" %s", k) }
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -164,7 +164,7 @@ for _, t := range out.Tools {
 		`tr, _ := c.ToolCallFull("render-shadertoy", map[string]any{})
 fmt.Printf("isError=%v, text=%q\n", tr.IsError, tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("render-shadertoy", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "render-shadertoy", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -205,7 +205,7 @@ curl -s -X POST `+serverURL+`/mcp \
 })
 fmt.Printf("isError=%v, text=%q\n", tr.IsError, tr.Content[0].Text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("render-shadertoy", map[string]any{
+		tr, err := c.ToolCallFull(ctx.Ctx, "render-shadertoy", map[string]any{
 			"fragmentShader": radialShader,
 		})
 		if err != nil {
@@ -235,7 +235,7 @@ fmt.Printf("isError=%v, text=%q\n", tr.IsError, tr.Content[0].Text)`,
 		`text, _ := c.ReadResource("ui://shadertoy/mcp-app.html")
 fmt.Printf("%d bytes; first 200:\n%.200s\n", len(text), text)`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		text, err := c.ReadResource("ui://shadertoy/mcp-app.html")
+		text, err := c.ReadResource(ctx.Ctx, "ui://shadertoy/mcp-app.html")
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil

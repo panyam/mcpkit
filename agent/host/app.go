@@ -659,7 +659,7 @@ func (a *App) Close() {
 	}
 	a.tasksMu.Lock()
 	for _, bt := range a.bgTasks {
-		bt.Cancel()
+		bt.Cancel(context.Background())
 	}
 	a.tasksMu.Unlock()
 	// The Group owns the server connections' lifecycle: closing it stops the

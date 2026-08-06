@@ -62,7 +62,7 @@ func TestExtensionAdvertised(t *testing.T) {
 func TestListReturnsRosterWithoutSchemas(t *testing.T) {
 	tc, _ := newAgentsServer(t, workflowAgent())
 
-	res, err := tc.Client.Call(agents.MethodList, nil)
+	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 	var out agents.ListResult
 	require.NoError(t, res.Unmarshal(&out))
@@ -86,7 +86,7 @@ func TestListReturnsRosterWithoutSchemas(t *testing.T) {
 func TestGetReturnsDetailWithTools(t *testing.T) {
 	tc, _ := newAgentsServer(t, workflowAgent())
 
-	res, err := tc.Client.Call(agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
 	require.NoError(t, err)
 	var out agents.GetResult
 	require.NoError(t, res.Unmarshal(&out))
@@ -105,7 +105,7 @@ func TestGetReturnsDetailWithTools(t *testing.T) {
 func TestGetUnknownAgentIsError(t *testing.T) {
 	tc, _ := newAgentsServer(t, workflowAgent())
 
-	_, err := tc.Client.Call(agents.MethodGet, agents.GetParams{AgentID: "no-such-agent"})
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "no-such-agent"})
 	require.Error(t, err)
 	rpcErr, ok := err.(*client.RPCError)
 	require.True(t, ok, "want a JSON-RPC error, got %T", err)
@@ -117,7 +117,7 @@ func TestGetUnknownAgentIsError(t *testing.T) {
 func TestGetEmptyAgentIsError(t *testing.T) {
 	tc, _ := newAgentsServer(t, workflowAgent())
 
-	_, err := tc.Client.Call(agents.MethodGet, agents.GetParams{})
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{})
 	require.Error(t, err)
 	rpcErr, ok := err.(*client.RPCError)
 	require.True(t, ok, "want a JSON-RPC error, got %T", err)
@@ -136,7 +136,7 @@ func TestRegisterDuplicateReportsError(t *testing.T) {
 	require.NotNil(t, reg)
 
 	tc := testutil.NewTestClient(t, srv)
-	res, err := tc.Client.Call(agents.MethodList, nil)
+	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 	var out agents.ListResult
 	require.NoError(t, res.Unmarshal(&out))
@@ -155,7 +155,7 @@ func TestListOrderIsStable(t *testing.T) {
 	tc, reg := newAgentsServer(t, a, b)
 	require.NoError(t, reg.AddAgent(c))
 
-	res, err := tc.Client.Call(agents.MethodList, nil)
+	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 	var out agents.ListResult
 	require.NoError(t, res.Unmarshal(&out))
@@ -175,7 +175,7 @@ func TestAddRemoveAgent(t *testing.T) {
 	reg.RemoveAgent("workflow-agent")
 	reg.RemoveAgent("nonexistent") // no-op, must not panic
 
-	res, err := tc.Client.Call(agents.MethodList, nil)
+	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 	var out agents.ListResult
 	require.NoError(t, res.Unmarshal(&out))

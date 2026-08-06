@@ -108,7 +108,7 @@ tools, _ := c.ListTools(ctx.Ctx) // each tool carries Execution.TaskSupport meta
 				core.ClientInfo{Name: "tasks-demo-host", Version: "1.0"},
 				opts...,
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return
 			}
@@ -145,7 +145,7 @@ _ = text
 _ = err`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			text, err := c.ToolCall("greet", map[string]any{"name": "world"})
+			text, err := c.ToolCall(ctx.Ctx, "greet", map[string]any{"name": "world"})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -179,7 +179,7 @@ slowTaskID := res.Task.TaskID // taskId, also res.Task.Status / res.Task.PollInt
 _ = slowTaskID`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCallAsTaskV1(c, "slow_compute", map[string]any{
+			res, err := client.ToolCallAsTaskV1(ctx.Ctx, c, "slow_compute", map[string]any{
 				"seconds": 3, "label": "demo",
 			})
 			if err != nil {
@@ -247,7 +247,7 @@ if err != nil { panic(err) }
 _ = tr.Content // tr.Content[0].Text holds the computed result`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			tr, _, err := client.GetTaskPayloadV1(c, slowTaskID)
+			tr, _, err := client.GetTaskPayloadV1(ctx.Ctx, c, slowTaskID)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -278,7 +278,7 @@ _, err := c.ToolCall("failing_job", map[string]any{})
 _ = err`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			_, err := c.ToolCall("failing_job", map[string]any{})
+			_, err := c.ToolCall(ctx.Ctx, "failing_job", map[string]any{})
 			if err == nil {
 				fmt.Printf("    UNEXPECTED: sync call succeeded\n")
 				return
@@ -319,7 +319,7 @@ _ = final // final.Status == "failed"
 _ = err`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCallAsTaskV1(c, "failing_job", map[string]any{})
+			res, err := client.ToolCallAsTaskV1(ctx.Ctx, c, "failing_job", map[string]any{})
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
@@ -381,7 +381,7 @@ _ = final // final.Status == "cancelled"
 _ = err`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
-			res, err := client.ToolCallAsTaskV1(c, "slow_compute", map[string]any{
+			res, err := client.ToolCallAsTaskV1(ctx.Ctx, c, "slow_compute", map[string]any{
 				"seconds": 10, "label": "to-cancel",
 			})
 			if err != nil {
@@ -393,7 +393,7 @@ _ = err`),
 
 			time.Sleep(500 * time.Millisecond)
 			fmt.Printf("    Cancelling ...\n")
-			if _, err := client.CancelTaskV1(c, cancelTaskID); err != nil {
+			if _, err := client.CancelTaskV1(ctx.Ctx, c, cancelTaskID); err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return
 			}

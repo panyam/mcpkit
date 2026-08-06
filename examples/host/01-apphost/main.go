@@ -55,11 +55,11 @@ func main() {
 
 	// Shared state across steps.
 	var (
-		srv          *server.Server
-		c            *client.Client
-		bridge       *ui.InProcessAppBridge
-		host         *ui.AppHost
-		ctx          = context.Background()
+		srv    *server.Server
+		c      *client.Client
+		bridge *ui.InProcessAppBridge
+		host   *ui.AppHost
+		ctx    = context.Background()
 	)
 
 	// --- Step 1: Create MCP server ---
@@ -100,7 +100,7 @@ func main() {
 				client.WithTransport(xport),
 				client.WithUIExtension(),
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
 				return nil
 			}

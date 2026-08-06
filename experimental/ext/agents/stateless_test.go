@@ -29,7 +29,7 @@ func newStatelessClient(t *testing.T, defs ...agents.AgentDef) *client.Client {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "0.0.1"},
 		client.WithClientMode(client.ClientModeStateless))
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	return c
 }
 
@@ -48,7 +48,7 @@ func TestStatelessWireParity(t *testing.T) {
 		"stateless wire must advertise %q", agents.ExtensionID)
 
 	// 2. agents/list dispatches and returns the roster without tool schemas.
-	listRes, err := c.Call(agents.MethodList, nil)
+	listRes, err := c.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 	var list agents.ListResult
 	require.NoError(t, listRes.Unmarshal(&list))
@@ -57,7 +57,7 @@ func TestStatelessWireParity(t *testing.T) {
 	assert.NotContains(t, string(listRes.Raw), "list_pipelines")
 
 	// 3. agents/get dispatches and returns the level-3 detail.
-	getRes, err := c.Call(agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	getRes, err := c.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
 	require.NoError(t, err)
 	var get agents.GetResult
 	require.NoError(t, getRes.Unmarshal(&get))
@@ -65,7 +65,7 @@ func TestStatelessWireParity(t *testing.T) {
 	assert.Equal(t, "list_pipelines", get.Agent.Tools[0].Name)
 
 	// 4. Unknown agentId still errors on the stateless wire.
-	_, err = c.Call(agents.MethodGet, agents.GetParams{AgentID: "nope"})
+	_, err = c.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "nope"})
 	require.Error(t, err)
 	rpcErr, ok := err.(*client.RPCError)
 	require.True(t, ok, "want a JSON-RPC error, got %T", err)

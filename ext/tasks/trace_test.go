@@ -27,8 +27,8 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
-	. "github.com/panyam/mcpkit/server"
 	tasks "github.com/panyam/mcpkit/ext/tasks"
+	. "github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -323,14 +323,14 @@ func connectTraceClient(t *testing.T, srv *Server) *client.Client {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "v2-trace", Version: "0.0.1"},
 		client.WithTasksExtension())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { c.Close() })
 	return c
 }
 
 func mustCreateTask(t *testing.T, c *client.Client, toolName string) string {
 	t.Helper()
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      toolName,
 		"arguments": map[string]any{},
 	})
@@ -359,7 +359,7 @@ func waitForTaskTerminal(t *testing.T, c *client.Client, taskID string) core.Det
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		res, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
+		res, err := c.Call(t.Context(), "tasks/get", map[string]any{"taskId": taskID})
 		require.NoError(t, err)
 		var dt core.DetailedTask
 		require.NoError(t, json.Unmarshal(res.Raw, &dt))
@@ -453,7 +453,7 @@ func TestTrace_GoAsync_Panic(t *testing.T) {
 	// panic-task call may itself surface a synthesized error in the
 	// initial response; the goroutine still spawns and emits the span,
 	// which is what we're asserting on. Ignore the call's own error.
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "panic-task",
 		"arguments": map[string]any{},
 	})
@@ -488,7 +488,7 @@ func TestTrace_GoAsync_Cancel(t *testing.T) {
 		return tp.findCall("task.execute") != nil
 	}), "task.execute span must be emitted before cancel")
 
-	_, err := c.Call("tasks/cancel", map[string]any{"taskId": taskID})
+	_, err := c.Call(t.Context(), "tasks/cancel", map[string]any{"taskId": taskID})
 	require.NoError(t, err)
 
 	sp := tp.findSpan("task.execute")
@@ -522,7 +522,7 @@ func TestTrace_TasksGet_AddsLink(t *testing.T) {
 		preLinkCounts[sp] = sp.addLinkCount()
 	}
 
-	_, err := c.Call("tasks/get", map[string]any{"taskId": taskID})
+	_, err := c.Call(t.Context(), "tasks/get", map[string]any{"taskId": taskID})
 	require.NoError(t, err)
 
 	// Find the dispatch span that gained an AddLink.
@@ -560,7 +560,7 @@ func TestTrace_TasksUpdate_AddsLink(t *testing.T) {
 	// Send tasks/update with no input responses — the AddLink fires before
 	// the body is processed. The handler may return an error (task isn't
 	// in input_required), but the link emission is what we're asserting.
-	_, _ = c.Call("tasks/update", map[string]any{"taskId": taskID, "inputResponses": map[string]any{}})
+	_, _ = c.Call(t.Context(), "tasks/update", map[string]any{"taskId": taskID, "inputResponses": map[string]any{}})
 
 	var updateSpan *fakeSpan
 	for _, sp := range tp.spans {
@@ -590,7 +590,7 @@ func TestTrace_TasksCancel_AddsLink(t *testing.T) {
 		preLinkCounts[sp] = sp.addLinkCount()
 	}
 
-	_, err := c.Call("tasks/cancel", map[string]any{"taskId": taskID})
+	_, err := c.Call(t.Context(), "tasks/cancel", map[string]any{"taskId": taskID})
 	require.NoError(t, err)
 	close(release)
 
@@ -657,7 +657,7 @@ func TestTrace_NoopTracerProvider_NoSpansEmitted(t *testing.T) {
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "v2-noop", Version: "0.0.1"},
 		client.WithTasksExtension())
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	defer c.Close()
 
 	taskID := mustCreateTask(t, c, "fast-task")

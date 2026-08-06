@@ -228,7 +228,7 @@ func (g *Group) run(m *groupMember) {
 			return
 		}
 		g.set(m, StateConnecting, nil)
-		err := m.client.Connect()
+		err := m.client.Connect(context.Background())
 		// If the group is closing, a Connect that just succeeded left an open
 		// connection that Close's earlier client.Close could not see (it raced
 		// this in-flight Connect). Close it here so it doesn't leak past Close.

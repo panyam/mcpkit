@@ -344,7 +344,7 @@ func TestTypedTool_ForAllTransports(t *testing.T) {
 	))
 
 	testutil.ForAllTransports(t, srv, func(t *testing.T, c *client.Client) {
-		result, err := c.ToolCall("greet", map[string]any{
+		result, err := c.ToolCall(t.Context(), "greet", map[string]any{
 			"name":    "World",
 			"excited": true,
 		})

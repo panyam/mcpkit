@@ -169,7 +169,7 @@ func newClientWithStub(t *testing.T, opts ...ClientOption) (*Client, *stubTransp
 func TestClientTrace_NoProvider_NoSpanNoMetaInjection(t *testing.T) {
 	c, stub := newClientWithStub(t)
 
-	_, err := c.Call("tools/call", map[string]any{
+	_, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "echo",
 		"arguments": map[string]any{"message": "hi"},
 	})
@@ -185,7 +185,7 @@ func TestClientTrace_NoopProvider_NoSpanNoMetaInjection(t *testing.T) {
 	tp := core.NoopTracerProvider{}
 	c, stub := newClientWithStub(t, WithTracerProvider(tp))
 
-	_, err := c.Call("ping", nil)
+	_, err := c.Call(t.Context(), "ping", nil)
 	require.NoError(t, err)
 
 	stub.mu.Lock()
@@ -197,7 +197,7 @@ func TestClientTrace_OutboundSpan_AttributesAndMethod(t *testing.T) {
 	tp := &fakeTracerProvider{}
 	c, _ := newClientWithStub(t, WithTracerProvider(tp))
 
-	_, err := c.Call("tools/call", map[string]any{
+	_, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "echo",
 		"arguments": map[string]any{"message": "hi"},
 	})
@@ -217,7 +217,7 @@ func TestClientTrace_OutboundInjectsChildTraceContext(t *testing.T) {
 	}
 	c, stub := newClientWithStub(t, WithTracerProvider(tp))
 
-	_, err := c.Call("tools/list", nil)
+	_, err := c.Call(t.Context(), "tools/list", nil)
 	require.NoError(t, err)
 
 	stub.mu.Lock()
@@ -235,7 +235,7 @@ func TestClientTrace_OutboundRespectsExplicitMeta(t *testing.T) {
 	c, stub := newClientWithStub(t, WithTracerProvider(tp))
 
 	explicit := "00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-1234567812345678-01"
-	_, err := c.Call("tools/call", map[string]any{
+	_, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":  "echo",
 		"_meta": map[string]any{core.MetaKeyTraceparent: explicit},
 	})
@@ -252,7 +252,7 @@ func TestClientTrace_RPCError_RecordsErrorAndCode(t *testing.T) {
 	c, stub := newClientWithStub(t, WithTracerProvider(tp))
 	stub.rpcError = &core.Error{Code: -32601, Message: "method not found"}
 
-	_, err := c.Call("nonexistent/method", nil)
+	_, err := c.Call(t.Context(), "nonexistent/method", nil)
 	require.Error(t, err)
 
 	spans := tp.snapshot()
@@ -277,7 +277,7 @@ func TestClientTrace_UserMiddlewareRunsInsideSpan(t *testing.T) {
 		WithClientMiddleware(userMW),
 	)
 
-	_, err := c.Call("ping", nil)
+	_, err := c.Call(t.Context(), "ping", nil)
 	require.NoError(t, err)
 
 	require.Equal(t, []string{"user-before", "user-after"}, order)
@@ -290,7 +290,7 @@ func TestClientTrace_SessionIDAttribute(t *testing.T) {
 	tp := &fakeTracerProvider{}
 	c, _ := newClientWithStub(t, WithTracerProvider(tp))
 
-	_, err := c.Call("ping", nil)
+	_, err := c.Call(t.Context(), "ping", nil)
 	require.NoError(t, err)
 
 	spans := tp.snapshot()
@@ -421,7 +421,7 @@ func TestClientTrace_OutboundInjectsBaggage(t *testing.T) {
 	// Easiest: stamp baggage onto _meta on the caller side and
 	// verify pass-through (caller-set wins is already covered by
 	// TestClientTrace_OutboundRespectsExplicitMeta).
-	_, err := c.Call("tools/list", map[string]any{
+	_, err := c.Call(t.Context(), "tools/list", map[string]any{
 		"_meta": map[string]any{core.MetaKeyBaggage: "userId=alice,tenant=acme"},
 	})
 	require.NoError(t, err)

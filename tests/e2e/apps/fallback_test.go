@@ -11,7 +11,7 @@ func TestToolResultHasText(t *testing.T) {
 	c := setupConformanceClient(t)
 
 	// show-dashboard has _meta.ui but should return text
-	text, err := c.ToolCall("show-dashboard", nil)
+	text, err := c.ToolCall(t.Context(), "show-dashboard", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestMutationNotifiesResourceChange(t *testing.T) {
 		notifCh <- method
 	})
 
-	_, err := c.ToolCall("mutate-dashboard", nil)
+	_, err := c.ToolCall(t.Context(), "mutate-dashboard", nil)
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}

@@ -89,7 +89,7 @@ func runDemo() {
 				core.ClientInfo{Name: "otel-stdout-host", Version: "1.0"},
 				client.WithTracerProvider(clientTP),
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
@@ -260,7 +260,7 @@ func dispatchTool(c *client.Client, tool string) {
 	if tool == "echo" {
 		args["message"] = "hello from explore step"
 	}
-	res, err := c.Call("tools/call", map[string]any{
+	res, err := c.Call(context.Background(), "tools/call", map[string]any{
 		"name":      tool,
 		"arguments": args,
 	})

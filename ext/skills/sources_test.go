@@ -309,7 +309,7 @@ func TestMultiSource_LocalRootResolves(t *testing.T) {
 	defer ts.Close()
 	defer c.Close()
 
-	body, err := c.ReadResource("skill://pdf-processing/SKILL.md")
+	body, err := c.ReadResource(t.Context(), "skill://pdf-processing/SKILL.md")
 	if err != nil {
 		t.Fatalf("read local root URI: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestMultiSource_ArchivedSubMountResolves(t *testing.T) {
 	defer ts.Close()
 	defer c.Close()
 
-	body, err := c.ReadResource("skill://archived/git-workflow/SKILL.md")
+	body, err := c.ReadResource(t.Context(), "skill://archived/git-workflow/SKILL.md")
 	if err != nil {
 		t.Fatalf("read archived sub-mount URI: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestMultiSource_GithubSubMountResolves(t *testing.T) {
 	defer ts.Close()
 	defer c.Close()
 
-	body, err := c.ReadResource("skill://github/web-scraper/SKILL.md")
+	body, err := c.ReadResource(t.Context(), "skill://github/web-scraper/SKILL.md")
 	if err != nil {
 		t.Fatalf("read github sub-mount URI: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestAutoWrap_ShapeB_AlreadyWrapped_NoDoubleWrap(t *testing.T) {
 	// git-workflow/. Auto-wrap should be a no-op (no SKILL.md at
 	// archive root).
 	data := buildTarGzFixture(t, map[string]string{
-		"git-workflow/SKILL.md":           "---\nname: git-workflow\ndescription: x\n---\n",
+		"git-workflow/SKILL.md":            "---\nname: git-workflow\ndescription: x\n---\n",
 		"git-workflow/references/FORMS.md": "extras",
 	})
 	tmp := writeTempArchive(t, data, ".tar.gz")
@@ -425,7 +425,7 @@ func TestAutoWrap_ShapeC_MultiSkillCatalog_NoWrap(t *testing.T) {
 	// Multi-skill catalog: two skills side-by-side at archive root.
 	// Auto-wrap is a no-op (no root SKILL.md).
 	data := buildTarGzFixture(t, map[string]string{
-		"git-workflow/SKILL.md":  "---\nname: git-workflow\ndescription: x\n---\n",
+		"git-workflow/SKILL.md":   "---\nname: git-workflow\ndescription: x\n---\n",
 		"pdf-processing/SKILL.md": "---\nname: pdf-processing\ndescription: y\n---\n",
 	})
 	tmp := writeTempArchive(t, data, ".tar.gz")
@@ -445,7 +445,7 @@ func TestAutoWrap_ShapeC_MultiSkillCatalog_NoWrap(t *testing.T) {
 
 func TestAutoWrap_ShapeC_MultiSkill_UnderPrefix(t *testing.T) {
 	data := buildTarGzFixture(t, map[string]string{
-		"git-workflow/SKILL.md":  "---\nname: git-workflow\ndescription: x\n---\n",
+		"git-workflow/SKILL.md":   "---\nname: git-workflow\ndescription: x\n---\n",
 		"pdf-processing/SKILL.md": "---\nname: pdf-processing\ndescription: y\n---\n",
 	})
 	tmp := writeTempArchive(t, data, ".tar.gz")
@@ -488,8 +488,8 @@ func TestOpenArchivesDir_FlatMergeAutoWrap(t *testing.T) {
 		mustPackSkill(t, "testdata/valid", "git-workflow", skills.ArchiveFormatTarGz))
 	writeArchive(t, filepath.Join(dir, "catalog.tar.gz"),
 		buildTarGzFixture(t, map[string]string{
-			"pdf-processing/SKILL.md":  "---\nname: pdf-processing\ndescription: x\n---\n",
-			"refunds/SKILL.md":          "---\nname: refunds\ndescription: y\n---\n",
+			"pdf-processing/SKILL.md": "---\nname: pdf-processing\ndescription: x\n---\n",
+			"refunds/SKILL.md":        "---\nname: refunds\ndescription: y\n---\n",
 		}))
 
 	src, err := skills.OpenArchivesDir(dir)
@@ -569,7 +569,7 @@ func bootMultiSourceServer(t *testing.T) (*client.Client, *httptest.Server) {
 	githubSource := &subSourceFS{FS: githubFS, closer: rawGH}
 
 	composed, err := fsutil.NewMountFS(
-		fsutil.Mount{FSys: localFS},                                                    // root
+		fsutil.Mount{FSys: localFS}, // root
 		fsutil.Mount{Path: "archived", FSys: archiveFS, Closer: archiveFS},
 		fsutil.Mount{Path: "github", FSys: githubSource, Closer: githubSource},
 	)
@@ -588,7 +588,7 @@ func bootMultiSourceServer(t *testing.T) (*client.Client, *httptest.Server) {
 	ts := httptest.NewServer(handler)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "multi-test", Version: "0.0.1"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		ts.Close()
 		ghServer.Close()
 		t.Fatalf("client connect: %v", err)

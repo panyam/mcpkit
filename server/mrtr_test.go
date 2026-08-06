@@ -51,7 +51,7 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 	c := connectMRTRClient(t, srv)
 
 	// Round 1: no inputResponses → expect InputRequiredResult
-	r1, err := c.Call("tools/call", map[string]any{
+	r1, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_tool_with_elicitation",
 		"arguments": map[string]any{},
 	})
@@ -82,7 +82,7 @@ func TestMRTR_BasicElicitationRoundTrip(t *testing.T) {
 	}
 
 	// Round 2: echo back inputResponses + requestState → expect complete
-	r2, err := c.Call("tools/call", map[string]any{
+	r2, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_tool_with_elicitation",
 		"arguments": map[string]any{},
 		"inputResponses": map[string]any{
@@ -147,7 +147,7 @@ func TestMRTR_RequestStateSigned(t *testing.T) {
 
 	c := connectMRTRClient(t, srv)
 
-	r1, err := c.Call("tools/call", map[string]any{
+	r1, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "stateful",
 		"arguments": map[string]any{},
 	})
@@ -175,7 +175,7 @@ func TestMRTR_RequestStateSigned(t *testing.T) {
 	}
 
 	// Round 2: echo signed state back — should be accepted.
-	r2, err := c.Call("tools/call", map[string]any{
+	r2, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "stateful",
 		"arguments": map[string]any{},
 		"inputResponses": map[string]any{
@@ -221,7 +221,7 @@ func TestMRTR_TamperedRequestStateRejected(t *testing.T) {
 		t.Fatalf("SignMRTRState: %v", err)
 	}
 
-	_, callErr := c.Call("tools/call", map[string]any{
+	_, callErr := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":         "stateful",
 		"arguments":    map[string]any{},
 		"requestState": forged,
@@ -287,7 +287,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	c := connectMRTRClient(t, srv)
 
 	// Round 1
-	r1, err := c.Call("tools/call", map[string]any{
+	r1, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_incomplete_result_multi_round",
 		"arguments": map[string]any{},
 	})
@@ -302,7 +302,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	state1 := m1["requestState"].(string)
 
 	// Round 2: send step1 only — server must forward it into next requestState
-	r2, err := c.Call("tools/call", map[string]any{
+	r2, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_incomplete_result_multi_round",
 		"arguments": map[string]any{},
 		"inputResponses": map[string]any{
@@ -327,7 +327,7 @@ func TestMRTR_MultiRoundAccumulatesAnswers(t *testing.T) {
 	}
 
 	// Round 3: send step2 only — server must combine with carried-over step1
-	r3, err := c.Call("tools/call", map[string]any{
+	r3, err := c.Call(t.Context(), "tools/call", map[string]any{
 		"name":      "test_incomplete_result_multi_round",
 		"arguments": map[string]any{},
 		"inputResponses": map[string]any{
@@ -365,7 +365,7 @@ func connectMRTRClient(t *testing.T, srv *Server, opts ...client.ClientOption) *
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "mrtr-test", Version: "0.0.1"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

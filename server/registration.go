@@ -1,6 +1,10 @@
 package server
 
-import core "github.com/panyam/mcpkit/core"
+import (
+	"fmt"
+
+	core "github.com/panyam/mcpkit/core"
+)
 
 // Tool bundles a tool definition with its handler for single-struct
 // registration via [Server.Register]. This is the recommended way to
@@ -45,10 +49,19 @@ type Prompt struct {
 
 // Register registers one or more tools, resources, resource templates, or
 // prompts using single-struct registration. Each argument must be a [Tool],
-// [Resource], [ResourceTemplate], or [Prompt] value.
+// [Resource], [ResourceTemplate], [Prompt], or [core.TypedToolResult] value.
 //
 // The existing two-argument methods (RegisterTool, RegisterResource, etc.)
 // remain available for backward compatibility.
+//
+// Register panics on an argument of any other type. The parameter is `...any`
+// so that a single call can mix the primitive kinds, which means the type
+// system cannot check it — an unrecognized value would otherwise be dropped
+// with no diagnostic, producing a server that is silently missing a tool.
+// Passing a pointer (&server.Tool{...} instead of server.Tool{...}) is the
+// common way to hit this. Registration happens at startup, so a panic surfaces
+// the mistake immediately rather than as a confusing "unknown tool" at call
+// time.
 //
 // Example:
 //
@@ -58,7 +71,7 @@ type Prompt struct {
 //	    server.Prompt{PromptDef: core.PromptDef{Name: "c"}, Handler: handlerC},
 //	)
 func (s *Server) Register(items ...any) {
-	for _, item := range items {
+	for i, item := range items {
 		switch v := item.(type) {
 		case Tool:
 			s.RegisterTool(v.ToolDef, v.Handler)
@@ -73,6 +86,12 @@ func (s *Server) Register(items ...any) {
 			s.RegisterResourceTemplate(v.ResourceTemplate, v.Handler)
 		case Prompt:
 			s.RegisterPrompt(v.PromptDef, v.Handler)
+		default:
+			panic(fmt.Sprintf(
+				"server.Register: unsupported type %T at argument %d; "+
+					"want server.Tool, server.Resource, server.ResourceTemplate, "+
+					"server.Prompt, or core.TypedToolResult (note: pass the value, not a pointer)",
+				item, i))
 		}
 	}
 }

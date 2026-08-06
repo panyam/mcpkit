@@ -102,7 +102,7 @@ fmt.Printf("connected to %s %s\n", c.ServerInfo.Name, c.ServerInfo.Version)`,
 		c = client.NewClient(serverURL+"/mcp",
 			core.ClientInfo{Name: "budget-allocator-host", Version: "1.0"},
 		)
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(ctx.Ctx); err != nil {
 			fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 			return nil
 		}
@@ -133,7 +133,7 @@ for _, t := range out.Tools {
     fmt.Printf("  %s: %v\n", t.Name, t.Meta)
 }`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("tools/list", map[string]any{})
+		res, err := c.Call(ctx.Ctx, "tools/list", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -175,7 +175,7 @@ fmt.Printf("categories:       %d\n", len(cfg["categories"].([]any)))
 fmt.Printf("history months:   %d\n", len(an["history"].([]any)))
 fmt.Printf("benchmark stages: %d\n", len(an["benchmarks"].([]any)))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		tr, err := c.ToolCallFull("get-budget-data", map[string]any{})
+		tr, err := c.ToolCallFull(ctx.Ctx, "get-budget-data", map[string]any{})
 		if err != nil {
 			fmt.Printf("    ERROR: %v\n", err)
 			return nil
@@ -232,7 +232,7 @@ fmt.Printf("mimeType: %s\n", raw.Contents[0].MimeType)
 fmt.Printf("bytes:    %d\n", len(raw.Contents[0].Text))
 fmt.Printf("_meta:    %s\n", string(raw.Contents[0].Meta))`,
 	).Run(func(ctx demokit.StepContext) *demokit.StepResult {
-		res, err := c.Call("resources/read", map[string]any{
+		res, err := c.Call(ctx.Ctx, "resources/read", map[string]any{
 			"uri": "ui://budget-allocator/mcp-app.html",
 		})
 		if err != nil {

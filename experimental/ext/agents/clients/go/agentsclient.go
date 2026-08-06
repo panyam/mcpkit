@@ -42,7 +42,7 @@ func (c *Client) SupportsAgents() bool {
 //
 // ctx controls cancellation of the underlying POST on Streamable HTTP.
 func (c *Client) ListAgents(ctx context.Context) ([]agents.AgentSummary, error) {
-	res, err := c.mcp.CallContext(client.NewCallContext(ctx), agents.MethodList, nil)
+	res, err := c.mcp.CallContext(ctx, client.NewCallContext(ctx), agents.MethodList, nil)
 	if err != nil {
 		return nil, fmt.Errorf("agents/list: %w", err)
 	}
@@ -63,7 +63,7 @@ func (c *Client) ListAgents(ctx context.Context) ([]agents.AgentSummary, error) 
 //
 // ctx controls cancellation of the underlying POST on Streamable HTTP.
 func (c *Client) GetAgent(ctx context.Context, agentID string) (agents.AgentDetail, error) {
-	res, err := c.mcp.CallContext(client.NewCallContext(ctx), agents.MethodGet, agents.GetParams{AgentID: agentID})
+	res, err := c.mcp.CallContext(ctx, client.NewCallContext(ctx), agents.MethodGet, agents.GetParams{AgentID: agentID})
 	if err != nil {
 		return agents.AgentDetail{}, fmt.Errorf("agents/get %q: %w", agentID, err)
 	}

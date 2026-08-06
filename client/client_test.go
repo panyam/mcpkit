@@ -69,7 +69,7 @@ func setupStreamableClient(t *testing.T) (*client.Client, *httptest.Server) {
 	t.Cleanup(ts.Close)
 
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"})
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	return c, ts
@@ -85,7 +85,7 @@ func setupSSEClient(t *testing.T) (*client.Client, *httptest.Server) {
 	ts := httptest.NewServer(handler)
 
 	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithSSEClient())
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		ts.Close()
 		t.Fatalf("SSE Connect failed: %v", err)
 	}
@@ -127,7 +127,7 @@ func setupStdioClient(t *testing.T) *client.Client {
 
 	c := client.NewClient("stdio://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 		client.WithStdioTransport(cr, cw))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(ctx); err != nil {
 		cancel()
 		t.Fatalf("Stdio Connect failed: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestClientConnect(t *testing.T) {
 // first text content from the response across all transports.
 func TestClientToolCall(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		text, err := c.ToolCall("echo", map[string]string{"message": "world"})
+		text, err := c.ToolCall(t.Context(), "echo", map[string]string{"message": "world"})
 		if err != nil {
 			t.Fatalf("ToolCall: %v", err)
 		}
@@ -173,7 +173,7 @@ func TestClientToolCall(t *testing.T) {
 // tool reports isError:true in its response across all transports.
 func TestClientToolCallError(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		_, err := c.ToolCall("fail", nil)
+		_, err := c.ToolCall(t.Context(), "fail", nil)
 		if err == nil {
 			t.Fatal("expected error from fail tool")
 		}
@@ -187,7 +187,7 @@ func TestClientToolCallError(t *testing.T) {
 // and returns its text content across all transports.
 func TestClientReadResource(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		text, err := c.ReadResource("test://info")
+		text, err := c.ReadResource(t.Context(), "test://info")
 		if err != nil {
 			t.Fatalf("ReadResource: %v", err)
 		}
@@ -201,7 +201,7 @@ func TestClientReadResource(t *testing.T) {
 // template and returns the parameterized content across all transports.
 func TestClientReadResourceTemplate(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		text, err := c.ReadResource("test://items/42")
+		text, err := c.ReadResource(t.Context(), "test://items/42")
 		if err != nil {
 			t.Fatalf("ReadResource: %v", err)
 		}
@@ -311,7 +311,7 @@ func TestClientListToolsMeta(t *testing.T) {
 // attach metadata to individual resource items in resources/read responses.
 func TestClientReadResourceMeta(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		result, err := c.Call("resources/read", map[string]string{"uri": "ui://test/view"})
+		result, err := c.Call(t.Context(), "resources/read", map[string]string{"uri": "ui://test/view"})
 		if err != nil {
 			t.Fatalf("Call: %v", err)
 		}
@@ -345,7 +345,7 @@ func TestClientReadResourceMeta(t *testing.T) {
 // that can be unmarshalled into typed structs across all transports.
 func TestClientCallRaw(t *testing.T) {
 	forAllTransports(t, func(t *testing.T, c *client.Client) {
-		result, err := c.Call("tools/list", nil)
+		result, err := c.Call(t.Context(), "tools/list", nil)
 		if err != nil {
 			t.Fatalf("Call: %v", err)
 		}
@@ -380,7 +380,7 @@ func TestSSEClientConnect(t *testing.T) {
 // POST request → read message event from SSE stream → parse response.
 func TestSSEClientToolCall(t *testing.T) {
 	c, _ := setupSSEClient(t)
-	text, err := c.ToolCall("echo", map[string]string{"message": "sse-world"})
+	text, err := c.ToolCall(t.Context(), "echo", map[string]string{"message": "sse-world"})
 	if err != nil {
 		t.Fatalf("SSE ToolCall: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestSSEClientToolCall(t *testing.T) {
 // TestSSEClientToolCallError verifies error handling over SSE transport.
 func TestSSEClientToolCallError(t *testing.T) {
 	c, _ := setupSSEClient(t)
-	_, err := c.ToolCall("fail", nil)
+	_, err := c.ToolCall(t.Context(), "fail", nil)
 	if err == nil {
 		t.Fatal("expected error from fail tool over SSE")
 	}
@@ -404,7 +404,7 @@ func TestSSEClientToolCallError(t *testing.T) {
 // TestSSEClientReadResource verifies resource reading over SSE transport.
 func TestSSEClientReadResource(t *testing.T) {
 	c, _ := setupSSEClient(t)
-	text, err := c.ReadResource("test://info")
+	text, err := c.ReadResource(t.Context(), "test://info")
 	if err != nil {
 		t.Fatalf("SSE ReadResource: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestSSEClientReadResource(t *testing.T) {
 // TestSSEClientReadResourceTemplate verifies template resource reading over SSE.
 func TestSSEClientReadResourceTemplate(t *testing.T) {
 	c, _ := setupSSEClient(t)
-	text, err := c.ReadResource("test://items/99")
+	text, err := c.ReadResource(t.Context(), "test://items/99")
 	if err != nil {
 		t.Fatalf("SSE ReadResource template: %v", err)
 	}
@@ -465,14 +465,14 @@ func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 		t.Cleanup(ts.Close)
 
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect: %v", err)
 		}
 
-		if err := c.SubscribeResource("test://config"); err != nil {
+		if err := c.SubscribeResource(t.Context(), "test://config"); err != nil {
 			t.Fatalf("SubscribeResource: %v", err)
 		}
-		if err := c.UnsubscribeResource("test://config"); err != nil {
+		if err := c.UnsubscribeResource(t.Context(), "test://config"); err != nil {
 			t.Fatalf("UnsubscribeResource: %v", err)
 		}
 	})
@@ -483,16 +483,16 @@ func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 		ts := httptest.NewServer(handler)
 
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test", Version: "1.0"}, client.WithSSEClient())
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			ts.Close()
 			t.Fatalf("Connect: %v", err)
 		}
 		t.Cleanup(func() { c.Close(); ts.Close() })
 
-		if err := c.SubscribeResource("test://config"); err != nil {
+		if err := c.SubscribeResource(t.Context(), "test://config"); err != nil {
 			t.Fatalf("SubscribeResource: %v", err)
 		}
-		if err := c.UnsubscribeResource("test://config"); err != nil {
+		if err := c.UnsubscribeResource(t.Context(), "test://config"); err != nil {
 			t.Fatalf("UnsubscribeResource: %v", err)
 		}
 	})
@@ -501,15 +501,15 @@ func TestClientSubscribeUnsubscribeResource(t *testing.T) {
 		srv := newSubscriptionTestServer()
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 			client.WithTransport(server.NewInProcessTransport(srv)))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
 
-		if err := c.SubscribeResource("test://config"); err != nil {
+		if err := c.SubscribeResource(t.Context(), "test://config"); err != nil {
 			t.Fatalf("SubscribeResource: %v", err)
 		}
-		if err := c.UnsubscribeResource("test://config"); err != nil {
+		if err := c.UnsubscribeResource(t.Context(), "test://config"); err != nil {
 			t.Fatalf("UnsubscribeResource: %v", err)
 		}
 	})
@@ -535,12 +535,12 @@ func TestClientSubscriptionNotificationDelivery(t *testing.T) {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(transport),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
 
-	if err := c.SubscribeResource("test://config"); err != nil {
+	if err := c.SubscribeResource(t.Context(), "test://config"); err != nil {
 		t.Fatalf("SubscribeResource: %v", err)
 	}
 
@@ -665,7 +665,7 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 		ts := httptest.NewServer(handler)
 		t.Cleanup(ts.Close)
 		c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"})
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		runTest(t, c)
@@ -676,7 +676,7 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 		handler := srv.Handler(server.WithSSE(true), server.WithStreamableHTTP(false))
 		ts := httptest.NewServer(handler)
 		c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithSSEClient())
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			ts.Close()
 			t.Fatalf("SSE Connect failed: %v", err)
 		}
@@ -689,7 +689,7 @@ func TestClientListToolsExtraSchemaFields(t *testing.T) {
 
 	t.Run("memory", func(t *testing.T) {
 		c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"}, client.WithTransport(server.NewInProcessTransport(newExtraSchemaServer())))
-		if err := c.Connect(); err != nil {
+		if err := c.Connect(t.Context()); err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
 		t.Cleanup(func() { c.Close() })
@@ -760,7 +760,7 @@ func setupStreamableWithOpts(t *testing.T, srv *server.Server, opts ...client.Cl
 	allOpts := []client.ClientOption{}
 	allOpts = append(allOpts, opts...)
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -777,7 +777,7 @@ func setupSSEWithOpts(t *testing.T, srv *server.Server, opts ...client.ClientOpt
 	allOpts := []client.ClientOption{client.WithSSEClient()}
 	allOpts = append(allOpts, opts...)
 	c := client.NewClient(ts.URL+"/mcp/sse", core.ClientInfo{Name: "test-client", Version: "1.0"}, allOpts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		ts.Close()
 		t.Fatalf("SSE Connect failed: %v", err)
 	}
@@ -807,7 +807,7 @@ func setupMemoryWithNotify(t *testing.T, srv *server.Server, onNotify notifyCall
 	transport := server.NewInProcessTransport(srv, transportOpts...)
 	c := client.NewClient("memory://", core.ClientInfo{Name: "test-client", Version: "1.0"},
 		client.WithTransport(transport))
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -853,11 +853,11 @@ func TestNotificationDeliveryOrder(t *testing.T) {
 			})
 
 			// Enable logging so EmitLog notifications are sent
-			if _, err := c.Call("logging/setLevel", map[string]string{"level": "debug"}); err != nil {
+			if _, err := c.Call(t.Context(), "logging/setLevel", map[string]string{"level": "debug"}); err != nil {
 				t.Fatalf("logging/setLevel: %v", err)
 			}
 
-			text, err := c.ToolCall("notify-tool", map[string]any{"tag": "order"})
+			text, err := c.ToolCall(t.Context(), "notify-tool", map[string]any{"tag": "order"})
 			if err != nil {
 				t.Fatalf("ToolCall: %v", err)
 			}
@@ -923,7 +923,7 @@ func TestStreamableConcurrentNotificationIsolation(t *testing.T) {
 	}))
 
 	// Enable logging
-	if _, err := c.Call("logging/setLevel", map[string]string{"level": "debug"}); err != nil {
+	if _, err := c.Call(t.Context(), "logging/setLevel", map[string]string{"level": "debug"}); err != nil {
 		t.Fatalf("logging/setLevel: %v", err)
 	}
 
@@ -934,7 +934,7 @@ func TestStreamableConcurrentNotificationIsolation(t *testing.T) {
 		wg.Add(1)
 		go func(idx int, tag string) {
 			defer wg.Done()
-			text, err := c.ToolCall("notify-tool", map[string]any{"tag": tag})
+			text, err := c.ToolCall(t.Context(), "notify-tool", map[string]any{"tag": tag})
 			results[idx] = callResult{text: text, err: err}
 		}(i, tag)
 	}

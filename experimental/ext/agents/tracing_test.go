@@ -70,7 +70,7 @@ func TestListEmitsSpan(t *testing.T) {
 	tp := &recTP{}
 	tc := newTracedAgentsServer(t, tp, workflowAgent())
 
-	_, err := tc.Client.Call(agents.MethodList, nil)
+	_, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
 
 	sp := tp.find("agents.list")
@@ -85,7 +85,7 @@ func TestGetEmitsSpanFound(t *testing.T) {
 	tp := &recTP{}
 	tc := newTracedAgentsServer(t, tp, workflowAgent())
 
-	_, err := tc.Client.Call(agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
 	require.NoError(t, err)
 
 	sp := tp.find("agents.get")
@@ -101,7 +101,7 @@ func TestGetEmitsSpanNotFound(t *testing.T) {
 	tp := &recTP{}
 	tc := newTracedAgentsServer(t, tp, workflowAgent())
 
-	_, err := tc.Client.Call(agents.MethodGet, agents.GetParams{AgentID: "no-such-agent"})
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "no-such-agent"})
 	require.Error(t, err, "unknown agentId is a client error")
 
 	sp := tp.find("agents.get")
@@ -119,8 +119,8 @@ func TestNoTracerProviderNoPanic(t *testing.T) {
 	require.NoError(t, err)
 	tc := testutil.NewTestClient(t, srv)
 
-	_, err = tc.Client.Call(agents.MethodList, nil)
+	_, err = tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
-	_, err = tc.Client.Call(agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	_, err = tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
 	require.NoError(t, err)
 }

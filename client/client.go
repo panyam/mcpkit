@@ -415,12 +415,12 @@ type Client struct {
 	serverExtensions map[string]json.RawMessage         // parsed from server's initialize response
 
 	// Server-to-client request handlers
-	samplingHandler              SamplingHandler
-	elicitationHandler           ElicitationHandler
-	elicitationURLSupport        bool
-	fileInputs                   bool
-	elicitationCompleteHandler   ElicitationCompleteHandler
-	rootsHandler                 RootsHandler
+	samplingHandler            SamplingHandler
+	elicitationHandler         ElicitationHandler
+	elicitationURLSupport      bool
+	fileInputs                 bool
+	elicitationCompleteHandler ElicitationCompleteHandler
+	rootsHandler               RootsHandler
 
 	// Reconnection settings (zero values = disabled)
 	maxRetries int
@@ -450,8 +450,8 @@ type Client struct {
 	lastEventID atomic.Value // stores string
 
 	// Client keepalive: periodic ping to detect dead server.
-	keepaliveInterval time.Duration     // 0 = disabled
-	keepaliveMaxFails int               // max consecutive failures before close/reconnect
+	keepaliveInterval time.Duration      // 0 = disabled
+	keepaliveMaxFails int                // max consecutive failures before close/reconnect
 	keepaliveCancel   context.CancelFunc // cancels keepalive goroutine
 
 	// toolSchemas caches inputSchemas from tools/list responses, keyed by
@@ -561,27 +561,55 @@ const defaultCommandConnectTimeout = 30 * time.Second
 
 // Connect establishes the transport and performs the MCP initialize handshake.
 //
-// For command and stdio transports, Connect is bounded by a default 30s timeout
-// to prevent indefinite hangs when the subprocess doesn't speak the expected
-// protocol. Override with WithConnectTimeout. HTTP transports are not bounded
-// by this default (set WithConnectTimeout explicitly if needed).
-func (c *Client) Connect() error {
+// ctx bounds the handshake only — it does NOT bound the resulting session.
+// Once Connect returns nil the session is live and outlives ctx, so passing a
+// short-lived timeout context here is safe and does not later tear down the
+// connection. This mirrors grpc.DialContext. Use Close to end the session.
+//
+// For command and stdio transports, Connect is additionally bounded by a
+// default 30s timeout to prevent indefinite hangs when the subprocess doesn't
+// speak the expected protocol. Override with WithConnectTimeout. HTTP
+// transports are not bounded by this default (set WithConnectTimeout
+// explicitly if needed). ctx and that timeout compose — whichever fires first
+// wins.
+//
+// A nil ctx is treated as context.Background.
+func (c *Client) Connect(ctx context.Context) error {
+	ctx = ctxOrBackground(ctx)
 	timeout := c.connectTimeout
 	// Auto-apply default timeout for command/stdio transports.
 	if timeout <= 0 && c.isSubprocessTransport() {
 		timeout = defaultCommandConnectTimeout
 	}
-	if timeout > 0 {
-		done := make(chan error, 1)
-		safeGo("client.connect", func() { done <- c.doConnect() })
-		select {
-		case err := <-done:
-			return err
-		case <-time.After(timeout):
-			return fmt.Errorf("connect timed out after %s: subprocess started but did not complete MCP handshake — verify the server is in stdio mode (e.g., STDIO=1 env var) and check stderr for startup errors", timeout)
-		}
+
+	// Fast path: nothing to wait on, so run the handshake inline and avoid
+	// the goroutine entirely (this is the common Background-ctx HTTP case).
+	if timeout <= 0 && ctx.Done() == nil {
+		return c.doConnect()
 	}
-	return c.doConnect()
+
+	done := make(chan error, 1)
+	safeGo("client.connect", func() { done <- c.doConnect() })
+
+	var timeoutCh <-chan time.Time
+	if timeout > 0 {
+		t := time.NewTimer(timeout)
+		defer t.Stop()
+		timeoutCh = t.C
+	}
+
+	// doConnect performs blocking transport I/O and cannot itself be
+	// interrupted, so an abandoned handshake finishes in the background and
+	// its result is discarded (done is buffered). Same trade-off the
+	// pre-existing WithConnectTimeout path already made.
+	select {
+	case err := <-done:
+		return err
+	case <-timeoutCh:
+		return fmt.Errorf("connect timed out after %s: subprocess started but did not complete MCP handshake — verify the server is in stdio mode (e.g., STDIO=1 env var) and check stderr for startup errors", timeout)
+	case <-ctx.Done():
+		return fmt.Errorf("connect cancelled: %w", ctx.Err())
+	}
 }
 
 // isSubprocessTransport returns true if the client is configured to use a
@@ -1022,7 +1050,7 @@ func (c *Client) dispatchServerRequest(ctx context.Context, req *core.Request) *
 // so the server can re-fetch the current list via a roots/list request.
 //
 // Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
-func (c *Client) NotifyRootsChanged() error {
+func (c *Client) NotifyRootsChanged(ctx context.Context) error {
 	return c.notifyMethod("notifications/roots/list_changed", nil)
 }
 
@@ -1108,7 +1136,7 @@ func (cc *CallContext) WithNotifyHook(hook func(method string, params json.RawMe
 // CallContext issues a JSON-RPC call with per-call configuration carried
 // on the typed CallContext. Identical to Call when cc has no hooks set
 // beyond a plain context.
-func (c *Client) CallContext(cc *CallContext, method string, params any) (*CallResult, error) {
+func (c *Client) CallContext(ctx context.Context, cc *CallContext, method string, params any) (*CallResult, error) {
 	resp, err := c.rawCallWithContext(method, params, cc)
 	if err != nil {
 		return nil, err
@@ -1123,9 +1151,30 @@ func (c *Client) CallContext(cc *CallContext, method string, params any) (*CallR
 	return &CallResult{Raw: resp.Result}, nil
 }
 
+// ctxOrBackground normalizes a nil context to context.Background.
+//
+// Go lets a caller pass an untyped nil for a context.Context parameter, and
+// nothing in the toolchain flags it — not the compiler, not go vet. Any
+// exported method here that accepts a ctx routes it through this helper so a
+// nil argument degrades to the documented default instead of panicking deep
+// in the call stack, where the stack trace points at an internal file rather
+// than the caller's mistake.
+//
+// Callers that want cancellation should pass a real context; this is a
+// crash guard, not an invitation to pass nil.
+func ctxOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 // Call makes a JSON-RPC call and returns the parsed response.
-func (c *Client) Call(method string, params any) (*CallResult, error) {
-	return c.callImpl(context.Background(), method, params)
+//
+// ctx bounds the call and is threaded through the client middleware chain
+// and the trace middleware. A nil ctx is treated as context.Background.
+func (c *Client) Call(ctx context.Context, method string, params any) (*CallResult, error) {
+	return c.callImpl(ctxOrBackground(ctx), method, params)
 }
 
 // callImpl is the ctx-aware body of Call. Extracted so package-private
@@ -1236,9 +1285,9 @@ func (r *CallResult) Unmarshal(v any) error {
 //	    Total   int      `json:"total"`
 //	}
 //	result, err := client.ToolCallTyped[SearchResult](c, "search", map[string]any{"query": "test"})
-func ToolCallTyped[T any](c *Client, name string, args any) (T, error) {
+func ToolCallTyped[T any](ctx context.Context, c *Client, name string, args any) (T, error) {
 	var zero T
-	result, err := c.Call("tools/call", map[string]any{
+	result, err := c.Call(ctx, "tools/call", map[string]any{
 		"name":      name,
 		"arguments": args,
 	})
@@ -1283,10 +1332,10 @@ func ToolCallTyped[T any](c *Client, name string, args any) (T, error) {
 // x-mcp-header annotations send no extra headers (identical to pre-
 // SEP-2243 behavior). Caller-side note: middleware registered via
 // WithCallMiddleware does not run on the header-mirroring path.
-func (c *Client) ToolCall(name string, args any) (string, error) {
+func (c *Client) ToolCall(ctx context.Context, name string, args any) (string, error) {
 	params := map[string]any{"name": name, "arguments": args}
 	headers := c.buildToolCallHeaders(name, args)
-	result, err := c.callForToolCall(params, headers)
+	result, err := c.callForToolCall(ctx, params, headers)
 	if err != nil {
 		return "", err
 	}
@@ -1334,9 +1383,9 @@ func (c *Client) buildToolCallHeaders(name string, args any) map[string]string {
 // Headers reach the streamable transport. The middleware bypass is a
 // known trade-off; SEP-2243 tool calls are typically conformance / wire-
 // behavior paths where middleware doesn't apply.
-func (c *Client) callForToolCall(params map[string]any, headers map[string]string) (*CallResult, error) {
+func (c *Client) callForToolCall(ctx context.Context, params map[string]any, headers map[string]string) (*CallResult, error) {
 	if len(headers) == 0 {
-		return c.Call("tools/call", params)
+		return c.Call(ctx, "tools/call", params)
 	}
 	cc := &CallContext{Headers: headers}
 	resp, err := c.rawCallWithContext("tools/call", params, cc)
@@ -1353,8 +1402,8 @@ func (c *Client) callForToolCall(params map[string]any, headers map[string]strin
 // IsError, all content blocks, and the raw JSON. Unlike ToolCall, tool-level
 // errors (isError: true) are returned in the result, not as Go errors.
 // Only transport/protocol failures produce a Go error.
-func (c *Client) ToolCallFull(name string, args any) (*core.ToolResult, error) {
-	result, err := c.Call("tools/call", map[string]any{
+func (c *Client) ToolCallFull(ctx context.Context, name string, args any) (*core.ToolResult, error) {
+	result, err := c.Call(ctx, "tools/call", map[string]any{
 		"name":      name,
 		"arguments": args,
 	})
@@ -1369,8 +1418,8 @@ func (c *Client) ToolCallFull(name string, args any) (*core.ToolResult, error) {
 }
 
 // ReadResource reads a resource by URI and returns the first text content.
-func (c *Client) ReadResource(uri string) (string, error) {
-	result, err := c.Call("resources/read", map[string]string{"uri": uri})
+func (c *Client) ReadResource(ctx context.Context, uri string) (string, error) {
+	result, err := c.Call(ctx, "resources/read", map[string]string{"uri": uri})
 	if err != nil {
 		return "", err
 	}
@@ -1382,8 +1431,8 @@ func (c *Client) ReadResource(uri string) (string, error) {
 // hints. The plain ReadResource helper drops that envelope and returns only
 // the first text content; callers that want to cache a read response should
 // use ReadResourceFull.
-func (c *Client) ReadResourceFull(uri string) (*core.ResourceResult, error) {
-	result, err := c.Call("resources/read", map[string]string{"uri": uri})
+func (c *Client) ReadResourceFull(ctx context.Context, uri string) (*core.ResourceResult, error) {
+	result, err := c.Call(ctx, "resources/read", map[string]string{"uri": uri})
 	if err != nil {
 		return nil, err
 	}
@@ -1396,14 +1445,14 @@ func (c *Client) ReadResourceFull(uri string) (*core.ResourceResult, error) {
 
 // SubscribeResource subscribes to change notifications for a resource URI.
 // The server will send notifications/resources/updated when the resource changes.
-func (c *Client) SubscribeResource(uri string) error {
-	_, err := c.Call("resources/subscribe", map[string]string{"uri": uri})
+func (c *Client) SubscribeResource(ctx context.Context, uri string) error {
+	_, err := c.Call(ctx, "resources/subscribe", map[string]string{"uri": uri})
 	return err
 }
 
 // UnsubscribeResource removes a subscription for a resource URI.
-func (c *Client) UnsubscribeResource(uri string) error {
-	_, err := c.Call("resources/unsubscribe", map[string]string{"uri": uri})
+func (c *Client) UnsubscribeResource(ctx context.Context, uri string) error {
+	_, err := c.Call(ctx, "resources/unsubscribe", map[string]string{"uri": uri})
 	return err
 }
 
@@ -1579,8 +1628,8 @@ func (c *Client) ListResourceTemplates(ctx context.Context) ([]core.ResourceTemp
 // SetLogLevel sets the server's minimum log level for this session via
 // logging/setLevel. The server will send notifications/message for log
 // entries at or above this level. Use "debug" to see all logs.
-func (c *Client) SetLogLevel(level string) error {
-	_, err := c.Call("logging/setLevel", map[string]string{"level": level})
+func (c *Client) SetLogLevel(ctx context.Context, level string) error {
+	_, err := c.Call(ctx, "logging/setLevel", map[string]string{"level": level})
 	return err
 }
 
@@ -1602,9 +1651,9 @@ func (c *Client) ListPrompts(ctx context.Context) ([]core.PromptDef, error) {
 
 // initializeParams is the params object sent in an initialize request.
 type initializeParams struct {
-	ProtocolVersion string                   `json:"protocolVersion"`
-	Capabilities    core.ClientCapabilities  `json:"capabilities"`
-	ClientInfo      core.ClientInfo          `json:"clientInfo"`
+	ProtocolVersion string                  `json:"protocolVersion"`
+	Capabilities    core.ClientCapabilities `json:"capabilities"`
+	ClientInfo      core.ClientInfo         `json:"clientInfo"`
 }
 
 type rpcResponse struct {
@@ -1722,9 +1771,9 @@ type streamableClientTransport struct {
 
 	// GET SSE stream state (opt-in via WithGetSSEStream)
 	enableGetSSE bool
-	getSSEResp   *http.Response       // open GET response (for close)
-	getSSEDone   chan struct{}         // closed when background reader exits
-	getSSECancel context.CancelFunc   // cancels the GET request context
+	getSSEResp   *http.Response     // open GET response (for close)
+	getSSEDone   chan struct{}      // closed when background reader exits
+	getSSECancel context.CancelFunc // cancels the GET request context
 
 	// ModifyRequest hook called inside buildReq before auth is applied.
 	modifyReq func(*http.Request)
@@ -2225,7 +2274,7 @@ type sseClientTransport struct {
 	client *Client
 
 	// Background reader state
-	pendingCalls     conc.SyncMap[string, chan *rpcResponse]       // requestID → response channel
+	pendingCalls     conc.SyncMap[string, chan *rpcResponse]     // requestID → response channel
 	serverReqHandler func(*core.Request) *core.Response          // set by Client before connect
 	notifyHandler    func(method string, params json.RawMessage) // set by Client before connect
 	done             chan struct{}                               // closed when background reader exits

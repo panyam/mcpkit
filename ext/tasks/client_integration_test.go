@@ -9,8 +9,8 @@ import (
 
 	client "github.com/panyam/mcpkit/client"
 	core "github.com/panyam/mcpkit/core"
-	server "github.com/panyam/mcpkit/server"
 	tasks "github.com/panyam/mcpkit/ext/tasks"
+	server "github.com/panyam/mcpkit/server"
 )
 
 // --- v2 task client fixtures ---
@@ -121,7 +121,7 @@ func connectV2TaskClient(t *testing.T, url string, opts ...client.ClientOption) 
 	t.Helper()
 	opts = append(opts, client.WithTasksExtension())
 	c := client.NewClient(url+"/mcp", core.ClientInfo{Name: "v2-task-client-test", Version: "0.0.1"}, opts...)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })
@@ -136,7 +136,7 @@ func TestToolCall_SyncResult(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, err := client.ToolCall(c, "echo", map[string]any{"message": "hi"})
+	res, err := client.ToolCall(t.Context(), c, "echo", map[string]any{"message": "hi"})
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestToolCall_TaskResult(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, err := client.ToolCall(c, "fast-task", map[string]any{})
+	res, err := client.ToolCall(t.Context(), c, "fast-task", map[string]any{})
 	if err != nil {
 		t.Fatalf("ToolCall: %v", err)
 	}
@@ -178,13 +178,13 @@ func TestGetTask(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, err := client.ToolCall(c, "fast-task", map[string]any{})
+	res, err := client.ToolCall(t.Context(), c, "fast-task", map[string]any{})
 	if err != nil || !res.IsTask() {
 		t.Fatalf("setup: ToolCall(fast-task) = %v, %+v", err, res)
 	}
 	taskID := res.Task.TaskID
 
-	dt, err := client.GetTask(c, taskID)
+	dt, err := client.GetTask(t.Context(), c, taskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestWaitForTask(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, _ := client.ToolCall(c, "fast-task", map[string]any{})
+	res, _ := client.ToolCall(t.Context(), c, "fast-task", map[string]any{})
 	taskID := res.Task.TaskID
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -227,7 +227,7 @@ func TestWaitForTask_HonorsServerPollHint(t *testing.T) {
 	url, unblock := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, _ := client.ToolCall(c, "slow-task", map[string]any{})
+	res, _ := client.ToolCall(t.Context(), c, "slow-task", map[string]any{})
 	taskID := res.Task.TaskID
 
 	// Release after 150ms so the wait spans at least 2-3 server-hinted polls.
@@ -265,7 +265,7 @@ func TestWaitForTask_RespectsCallerOverride(t *testing.T) {
 	url, unblock := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, _ := client.ToolCall(c, "slow-task", map[string]any{})
+	res, _ := client.ToolCall(t.Context(), c, "slow-task", map[string]any{})
 	taskID := res.Task.TaskID
 
 	// Release right away so the test doesn't depend on timing precision.
@@ -307,7 +307,7 @@ func TestWaitForTask_AbortOnCancel(t *testing.T) {
 	// slow-task blocks until unblock fires; we never close it from this test
 	// so the task stays in "working" indefinitely. The point of the test is
 	// that WaitForTask exits long before the task ever transitions.
-	res, err := client.ToolCall(c, "slow-task", map[string]any{})
+	res, err := client.ToolCall(t.Context(), c, "slow-task", map[string]any{})
 	if err != nil || !res.IsTask() {
 		t.Fatalf("ToolCall(slow-task): err=%v res=%+v", err, res)
 	}
@@ -319,7 +319,7 @@ func TestWaitForTask_AbortOnCancel(t *testing.T) {
 	// interval so the test exercises the abort path during a select wait.
 	go func() {
 		time.Sleep(75 * time.Millisecond)
-		_ = client.CancelTask(c, taskID)
+		_ = client.CancelTask(t.Context(), c, taskID)
 		stopPoll()
 	}()
 
@@ -348,7 +348,7 @@ func TestUpdateTask_FullElicitLoop(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
 
-	res, err := client.ToolCall(c, "confirm-delete", map[string]any{})
+	res, err := client.ToolCall(t.Context(), c, "confirm-delete", map[string]any{})
 	if err != nil || !res.IsTask() {
 		t.Fatalf("ToolCall(confirm-delete): err=%v res=%+v", err, res)
 	}
@@ -360,7 +360,7 @@ func TestUpdateTask_FullElicitLoop(t *testing.T) {
 	var pending *core.DetailedTask
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		dt, err := client.GetTask(c, taskID)
+		dt, err := client.GetTask(ctx, c, taskID)
 		if err != nil {
 			t.Fatalf("GetTask: %v", err)
 		}
@@ -381,7 +381,7 @@ func TestUpdateTask_FullElicitLoop(t *testing.T) {
 	}
 
 	// Reply via UpdateTask.
-	if err := client.UpdateTask(c, core.UpdateTaskRequest{
+	if err := client.UpdateTask(ctx, c, core.UpdateTaskRequest{
 		TaskID: taskID,
 		InputResponses: core.InputResponses{
 			key: json.RawMessage(`{"action":"accept","content":{"confirm":true}}`),
@@ -408,7 +408,7 @@ func TestUpdateTask_FullElicitLoop(t *testing.T) {
 func TestUpdateTask_MissingTaskID(t *testing.T) {
 	url, _ := newTaskV2TestServer(t)
 	c := connectV2TaskClient(t, url)
-	if err := client.UpdateTask(c, core.UpdateTaskRequest{}); err == nil {
+	if err := client.UpdateTask(t.Context(), c, core.UpdateTaskRequest{}); err == nil {
 		t.Error("expected error for empty TaskID")
 	}
 }
@@ -422,10 +422,10 @@ func TestCancelTask(t *testing.T) {
 	c := connectV2TaskClient(t, url)
 	_ = unblock // intentional: leave slow-task blocked so cancel has work to do
 
-	res, _ := client.ToolCall(c, "slow-task", map[string]any{})
+	res, _ := client.ToolCall(t.Context(), c, "slow-task", map[string]any{})
 	taskID := res.Task.TaskID
 
-	if err := client.CancelTask(c, taskID); err != nil {
+	if err := client.CancelTask(t.Context(), c, taskID); err != nil {
 		t.Fatalf("CancelTask: %v", err)
 	}
 

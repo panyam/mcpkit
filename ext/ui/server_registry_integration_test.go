@@ -38,7 +38,7 @@ func connectInProcess(t *testing.T, srv *server.Server) *client.Client {
 	c := client.NewClient("memory://", core.ClientInfo{Name: "test", Version: "1.0"},
 		client.WithTransport(xport),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(func() { c.Close() })

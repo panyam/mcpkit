@@ -84,7 +84,7 @@ func snifferStack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client,
 	t.Cleanup(sniffTS.Close)
 
 	c := client.NewClient(sniffTS.URL+"/mcp", core.ClientInfo{Name: "test", Version: "1.0"})
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	return c, &captured
 }
 

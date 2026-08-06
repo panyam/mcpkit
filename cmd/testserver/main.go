@@ -165,7 +165,7 @@ func selfTest(srv *server.Server) {
 	c := client.NewClient("selftest://", core.ClientInfo{Name: "selftest", Version: "1.0"},
 		client.WithTransport(logged),
 	)
-	if err := c.Connect(); err != nil {
+	if err := c.Connect(context.Background()); err != nil {
 		log.Fatalf("self-test connect: %v", err)
 	}
 	defer c.Close()
@@ -185,12 +185,12 @@ func selfTest(srv *server.Server) {
 
 	// Enable server-side logging (required for slog→MCP notifications to flow).
 	log.Println("--- Enabling logging (setLevel=debug) ---")
-	c.SetLogLevel("debug")
+	c.SetLogLevel(ctx, "debug")
 
 	// Call the echo tool — its handler uses slog.Logger backed by MCPLogHandler,
 	// so we should see a notifications/message from the slog.Info call.
 	log.Println("--- Calling echo tool (slog→MCP demo) ---")
-	result, err := c.ToolCall("echo", map[string]any{"message": "hello from self-test"})
+	result, err := c.ToolCall(ctx, "echo", map[string]any{"message": "hello from self-test"})
 	if err != nil {
 		log.Printf("echo: error: %v", err)
 	} else {

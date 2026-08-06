@@ -88,7 +88,7 @@ if err := c.Connect(); err != nil { /* run: just serve */ }`).Default(),
 				client.WithTracerProvider(tp),
 				client.WithClientMode(wireMode),
 			)
-			if err := c.Connect(); err != nil {
+			if err := c.Connect(ctx.Ctx); err != nil {
 				fmt.Printf("    ERROR: %v\n    Start the server with: just serve\n", err)
 				return nil
 			}
@@ -137,7 +137,7 @@ for _, e := range idx.Skills {
 			if c == nil {
 				return nil
 			}
-			body, err := c.ReadResource(skills.IndexURI)
+			body, err := c.ReadResource(ctx.Ctx, skills.IndexURI)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -166,7 +166,7 @@ for _, e := range idx.Skills {
 			if c == nil {
 				return nil
 			}
-			body, err := c.ReadResource(uriCommitHelper)
+			body, err := c.ReadResource(ctx.Ctx, uriCommitHelper)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
@@ -194,7 +194,7 @@ for _, e := range idx.Skills {
 			if c == nil {
 				return nil
 			}
-			out, err := c.ToolCall("format_commit", map[string]any{
+			out, err := c.ToolCall(ctx.Ctx, "format_commit", map[string]any{
 				"type":    "feat",
 				"scope":   "skills",
 				"summary": "add commit-helper skill",

@@ -244,7 +244,7 @@ func (s *Subscription) subscribe() error {
 		params["ttlMs"] = *s.opts.TTLMs
 	}
 
-	resp, err := s.sess.Call("events/subscribe", params)
+	resp, err := s.sess.Call(context.Background(), "events/subscribe", params)
 	if err != nil {
 		return err
 	}

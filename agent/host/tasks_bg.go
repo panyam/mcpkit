@@ -77,7 +77,7 @@ func (a *App) cancelTask(id string) {
 		a.emit(HostEvent{Kind: HostMessage, Message: fmt.Sprintf("no running task %q (see /tasks)", id)})
 		return
 	}
-	if err := bt.Cancel(); err != nil {
+	if err := bt.Cancel(context.Background()); err != nil {
 		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
 	}
 }

@@ -99,7 +99,7 @@ func connectClientAsTenant(t *testing.T, ts *httptest.Server, tenant string) *cl
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "test-" + tenant, Version: "1.0"},
 		client.WithClientBearerToken(tenant),
 	)
-	require.NoError(t, c.Connect())
+	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
 	return c
 }
@@ -167,7 +167,7 @@ func TestE2E_TenantIsolation_Poll(t *testing.T) {
 	}))
 
 	pollAs := func(c *client.Client) []events.Event {
-		raw, err := c.Call("events/poll", map[string]any{"name": "chat.message", "cursor": "0"})
+		raw, err := c.Call(ctx, "events/poll", map[string]any{"name": "chat.message", "cursor": "0"})
 		require.NoError(t, err)
 		var pr pollResultWire
 		require.NoError(t, json.Unmarshal(raw.Raw, &pr))
@@ -203,7 +203,7 @@ func TestE2E_TenantIsolation_UntaggedEventReachesAll(t *testing.T) {
 	}))
 
 	pollAs := func(c *client.Client) []events.Event {
-		raw, err := c.Call("events/poll", map[string]any{"name": "chat.message", "cursor": "0"})
+		raw, err := c.Call(t.Context(), "events/poll", map[string]any{"name": "chat.message", "cursor": "0"})
 		require.NoError(t, err)
 		var pr pollResultWire
 		require.NoError(t, json.Unmarshal(raw.Raw, &pr))
@@ -238,7 +238,7 @@ func TestE2E_TenantIsolation_CrossTenantPollDoesNotLeak(t *testing.T) {
 	}
 
 	pollAs := func(c *client.Client) []events.Event {
-		raw, err := c.Call("events/poll", map[string]any{"name": "chat.message", "cursor": "0"})
+		raw, err := c.Call(ctx, "events/poll", map[string]any{"name": "chat.message", "cursor": "0"})
 		require.NoError(t, err)
 		var pr pollResultWire
 		require.NoError(t, json.Unmarshal(raw.Raw, &pr))
