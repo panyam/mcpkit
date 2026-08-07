@@ -68,6 +68,36 @@ Build it by URL-encoding the note (Python `urllib.parse.urlencode`). Tags
 themselves push fine via `make tag-push`; only the Release object needs the
 browser step.
 
+The encoded URL runs to a few KB. GitHub sometimes drops the `body` parameter on
+longer URLs, so copy the note to the clipboard first (`pbcopy < docs/releases/<tag>.md`)
+and paste if the description box comes up empty.
+
+### The wider PAT gap
+
+The missing Contents permission is one facet of a fine-grained PAT that is scoped
+narrower than release work needs. During the v0.5.1 release the same token blocked
+three separate things:
+
+| Operation | Endpoint | Missing permission |
+|---|---|---|
+| `gh release create` | `POST /repos/…/releases` | Contents: read and write |
+| Enable or read Dependabot alerts and automated security fixes | `…/vulnerability-alerts`, `…/automated-security-fixes` | Administration: read and write |
+| Read open Dependabot alerts | `…/dependabot/alerts` | Dependabot alerts: read |
+| Read branch protection | `…/branches/main/protection` | Administration: read |
+
+`GET /repos/…/private-vulnerability-reporting` works on Metadata alone, which is why
+that one field is readable while the rest return 403.
+
+A 403 here is not a 404. A status script that treats any non-success as "disabled"
+will report a fully-configured repository as unprotected. Distinguish the two.
+
+Pushing commits and tags is unaffected: that goes over SSH, and per `CLAUDE.md` needs
+the personal key pinned, since the agent offers the EMU key first.
+
+```
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin main
+```
+
 ## Full-minor checklist (e.g. tagging the final v0.4.0)
 
 - [ ] `make audit` green (govulncheck + gosec + gitleaks + race)
