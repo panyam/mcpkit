@@ -12,7 +12,7 @@ replace github.com/panyam/mcpkit/ext/tasks => ../../ext/tasks
 
 require (
 	github.com/panyam/demokit v0.0.30
-	github.com/panyam/mcpkit v0.5.0
+	github.com/panyam/mcpkit v0.5.1
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/tasks v0.0.0
 )
@@ -33,7 +33,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 )
 

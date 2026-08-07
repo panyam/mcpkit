@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/agents/agent-async
 go 1.26.5
 
 require (
-	github.com/panyam/mcpkit v0.5.0
+	github.com/panyam/mcpkit v0.5.1
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/panyam/mcpkit/agent/host v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
@@ -37,7 +37,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.39.0 // indirect

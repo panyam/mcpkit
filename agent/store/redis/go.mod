@@ -8,7 +8,7 @@ replace github.com/panyam/mcpkit/agent => ../..
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
-	github.com/panyam/mcpkit v0.5.0
+	github.com/panyam/mcpkit v0.5.1
 	github.com/panyam/mcpkit/agent v0.0.0
 	github.com/redis/go-redis/v9 v9.21.0
 )

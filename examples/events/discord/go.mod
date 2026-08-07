@@ -14,7 +14,7 @@ replace (
 require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/panyam/demokit v0.0.30
-	github.com/panyam/mcpkit v0.5.0
+	github.com/panyam/mcpkit v0.5.1
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
@@ -91,7 +91,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect

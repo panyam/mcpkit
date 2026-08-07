@@ -10,7 +10,7 @@ replace (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/panyam/mcpkit v0.5.0
+	github.com/panyam/mcpkit v0.5.1
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
 	github.com/panyam/oneauth v0.1.36
@@ -36,7 +36,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.39.0 // indirect

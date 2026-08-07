@@ -9,6 +9,25 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-07
+
+A security patch. Three dependencies carrying published advisories move to fixed
+versions. No API, protocol, or behavior changes. Full write-up:
+[`docs/releases/v0.5.1.md`](docs/releases/v0.5.1.md).
+
+### Fixed
+- **`golang.org/x/crypto` v0.51.0 to v0.52.0** across all 16 modules requiring
+  it, clearing GO-2026-5021, GO-2026-5023, and GO-2026-5033. The dependency is
+  indirect everywhere and no affected symbol is reachable from mcpkit code, so
+  this is supply-chain hygiene rather than a fix for an exploitable path. All
+  modules move in lock-step per `DEPENDENCY_POLICY.md`.
+- **`vitest` 2.1.9 to 3.2.6** in `conformance/`, `tools/compat-reports`, and
+  `tools/conformance-report`, the three development trees still on `^2.0.0`.
+  `ext/ui/assets` and `agent/surfaces/web/web` were already on 4.x.
+- **`hono` 4.12.14 to 4.13.1** in `examples/tasks/package-lock.json`, a
+  transitive peer dependency. The advisory range is `hono <=4.12.33`, so the fix
+  line sits above the 4.12 series.
+
 ## [0.5.0] - 2026-08-06
 
 Agent web surface, `context.Context` through the whole client I/O surface, and
