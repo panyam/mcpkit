@@ -102,7 +102,7 @@ The full architecture (Pattern B, NotificationRelay seam, NotificationRelayRecei
 
 ## C6: MCP server lifecycle is decoupled from the agent
 
-The agent (`agent/host` and the surfaces built on it, e.g. `cmd/agentchat`) is a **pure MCP client**. It connects to servers by URL and does not own their process lifecycle: it MUST NOT spawn, supervise, restart, or kill the MCP servers it talks to. Bringing servers up and down is an operator/launcher concern — a `just servers-up` recipe, docker, systemd — not something the agent process does as a side effect of starting or stopping.
+The agent (`agent/host` and the surfaces built on it, e.g. `agent/surfaces/chat`) is a **pure MCP client**. It connects to servers by URL and does not own their process lifecycle: it MUST NOT spawn, supervise, restart, or kill the MCP servers it talks to. Bringing servers up and down is an operator/launcher concern — a `just servers-up` recipe, docker, systemd — not something the agent process does as a side effect of starting or stopping.
 
 The rule prevents two failure modes:
 

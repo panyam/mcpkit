@@ -101,7 +101,7 @@ Three interface families build on the module: CLIs, web frontends, and desktop/n
 
 | Surface | Mode | What it uses |
 |---|---|---|
-| CLI (`cmd/agentchat`) | in-process | Import the module, subscribe to the event stream, implement the elicitation callback in-terminal |
+| CLI (`agent/surfaces/chat`) | in-process | Import the module, subscribe to the event stream, implement the elicitation callback in-terminal |
 | Web | wire | A host application embeds the module and maps the event stream 1:1 onto WebSocket or SSE; user input, cancel, and elicitation responses come back as requests |
 | Desktop/native | either | Go-native shells (Wails, Fyne) consume in-process like the CLI; webview shells consume the wire like web |
 

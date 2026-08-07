@@ -309,7 +309,7 @@ build on shipped primitives — the "experiment with SOTA agent strategies on mc
 | Multi-agent | `agent/agent_source.go`, `agent/team.go` |
 | Eval | `agent/eval/` (`eval.go`, `scorer.go`, `judge.go`, `suite.go`, `scenario.go`, `longmemeval/`) |
 | Tool layer / events / policies | `agent/toolsource.go`, `agent/multi_source.go`, `agent/filter_source.go`, `agent/events.go`, `agent/injection.go`, `agent/triggers.go`, `agent/stages.go` |
-| Host surface | `agent/host/` (`commands.go`, `connections.go`, `render.go`, `hostevent.go`, `memory.go`, `subagents.go`, `persistence.go`), `cmd/agentchat/` |
+| Host surface | `agent/host/` (`commands.go`, `connections.go`, `render.go`, `hostevent.go`, `memory.go`, `subagents.go`, `persistence.go`), `agent/surfaces/chat/` |
 | Invariants | `docs/AGENT_DESIGN.md`, `agent/CONSTRAINTS.md` |
 
 ---

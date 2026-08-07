@@ -68,7 +68,7 @@ authority. See the `SkillsMode` godoc in `config.go`.
 
 Fully offline: real in-process mcpkit servers plus a scripted `StubProvider` plus
 a canned reader. See `examples/agent-async` for a golden-transcript scenario and
-`cmd/agentchat` for the terminal CLI built on this package.
+`agent/surfaces/chat` for the terminal CLI built on this package.
 
 Run the module's tests with `just test-agent` from the repo root, or
 `cd agent/host && go test ./...` directly.

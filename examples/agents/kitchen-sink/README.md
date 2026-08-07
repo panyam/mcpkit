@@ -1,7 +1,7 @@
 # kitchen-sink
 
 Every agent feature wired together in one runnable harness. It reuses
-`cmd/agentchat` (the reference agent surface) with all the knobs turned on, so
+`agent/surfaces/chat` (the reference agent surface) with all the knobs turned on, so
 you can see durable sessions, tool-result offloading, semantic memory,
 compaction, tracing, and sub-agents working at the same time against real
 backends. It is meant to grow: as new SDK features land, add a knob here and a

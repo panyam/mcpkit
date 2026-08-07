@@ -8,7 +8,7 @@ surface/observability epic, not an SDK-parity phase. It sits beside Phases 4–7
 Two reasons, and the second is the stronger one.
 
 1. **A second live surface.** The host layer (`agent/host`) was deliberately built surface-agnostic
-   so a web chat could reuse the whole thing and swap only stdin/stdout for a socket. `cmd/agentchat`
+   so a web chat could reuse the whole thing and swap only stdin/stdout for a socket. `agent/surfaces/chat`
    is a thin terminal surface over it. A browser surface should be another thin surface over the same
    `App`, viewable at the same time as the TUI.
 
@@ -93,10 +93,10 @@ server-streaming RPC (`Watch`) is the idiomatic slot, with the Queue subscriptio
 
 ## Layering
 
-`agent/web` is a new submodule (own go.mod) importing `agent/host`: the goapplib shell, the Connect
+`agent/surfaces/web` is a new submodule (own go.mod) importing `agent/host`: the goapplib shell, the Connect
 bridge (Queue subscription → `Watch` stream; `Dispatch`/queries → unary; barrier → `RespondToAsk`),
 and the Solid/DockView frontend assets. A thin `cmd/agentweb serve` over it, mirroring how
-`cmd/agentchat` is thin over the host.
+`agent/surfaces/chat` is thin over the host.
 
 ## Open design decisions (resolve during E1/E3, not now)
 
@@ -185,11 +185,11 @@ fact is the coordinator invariant; the barrier does not depend on it.
   out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
   `-race`.
 
-### E3 (1196) — `agent/web` submodule + Connect bridge — SHIPPED
-New submodule (`agent/web`, own go.mod, module `github.com/panyam/mcpkit/agent/web`) + a thin
-`cmd/agentweb` serve binary (inside the module, mirroring how `cmd/agentchat` is thin over the host).
-**Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `agent/web/protos/`, generated
-Go + Connect committed under `agent/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
+### E3 (1196) — `agent/surfaces/web` submodule + Connect bridge — SHIPPED
+New submodule (`agent/surfaces/web`, own go.mod, module `github.com/panyam/mcpkit/agent/surfaces/web`) + a thin
+`cmd/agentweb` serve binary (inside the module, mirroring how `agent/surfaces/chat` is thin over the host).
+**Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `agent/surfaces/web/protos/`, generated
+Go + Connect committed under `agent/surfaces/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
 new `App.Subscribe` seam), unary `Submit` (turn), `Dispatch` (command → `CmdResult`), `RespondToAsk`
 (the E2 offset barrier), and two trivial queries `ListSessions` + `GetStatus`. `servicekit/http` serves
 the placeholder shell + `/static` + the Connect handlers on one listener.
@@ -218,15 +218,15 @@ the placeholder shell + `/static` + the Connect handlers on one listener.
   templar template — the real templar/DockView shell is E4.
 - Accept (met): a Connect client `Watch`es a live session and `Submit`s a turn; a local Observer and a
   Watch client on the same `App` see the same stream, including replay-from-offset-0; a `RespondToAsk`
-  over the wire wins an ask the local UI is blocking on (`agent/web/host_bridge_test.go`, run with
+  over the wire wins an ask the local UI is blocking on (`agent/surfaces/web/host_bridge_test.go`, run with
   `-race`). The serve binary serves the shell, `/static`, and the Connect endpoints (`GetStatus`
   returns the model label; `ListSessions` returns `failed_precondition` with no RunStore).
 
 ### E4 (1197) — Frontend shell (DockView + Solid islands) — SHIPPED
 Modeled on **`~/projects/diffpp/main/web`**: `dockview-core` v4, `tsappkit-solid` islands, Connect-Web
 clients generated from the E3 proto, and **`MobileOverlays` for the mobile mode** (the dockview-vs-mobile
-switch). Saved-layout reconcile carries over. The frontend lives in `agent/web/web/`; the built esbuild
-bundle is committed under `agent/web/static/` (Go embeds it, so `just test-agent` needs no Node step).
+switch). Saved-layout reconcile carries over. The frontend lives in `agent/surfaces/web/web/`; the built esbuild
+bundle is committed under `agent/surfaces/web/static/` (Go embeds it, so `just test-agent` needs no Node step).
 
 **Scope change from the plan: massrelay is deferred.** The browser consumes the E3 Connect `Watch`
 server-stream **directly** via connect-web (`web/src/watch.ts` — decode each `Frame` payload to a
@@ -239,7 +239,7 @@ What shipped: the placeholder shell is replaced by a server-rendered shell (`she
 on `HostElicitRequest` answered via `RespondToAsk(AskID, …)`); a framework-neutral panel registry +
 saved-layout reconcile (`web/src/dock.ts`) ready for E5 to add panels; the DockView desktop layout and the
 mobile-overlay layout over one shared store; and a `--demo` mode on `cmd/agentweb` (offline streaming
-provider) + `agent/web/run.sh` as the runnable proof. Unit tests (vitest) cover Frame-decode/dispatch, the
+provider) + `agent/surfaces/web/run.sh` as the runnable proof. Unit tests (vitest) cover Frame-decode/dispatch, the
 event fold, and the dock reconcile.
 - Accept (met): the browser renders live turns from the same `App`; the layout persists across reload
   (localStorage); the mobile mode presents the same panel as an overlay.
