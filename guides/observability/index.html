@@ -502,7 +502,7 @@ which outcome path returns, so the counter never double-counts or misses.</p>
 <p>The host threads it end to end: <code>host.WithMeterProvider</code> sets it on the<br />
 main Runner and every sub-agent persona; agentchat builds it from the<br />
 same <code>--exporter</code>/<code>--otlp-endpoint</code> decision as the tracer and logger<br />
-(<code>cmd/agentchat/telemetry_setup_meter.go</code>, the meter sibling of<br />
+(<a href="https://github.com/panyam/mcpkit/blob/main/agent/surfaces/chat/telemetry_setup_meter.go"><code>agent/surfaces/chat/telemetry_setup_meter.go</code></a>, the meter sibling of<br />
 <code>SetupTelemetry</code>/<code>SetupLogs</code>). The OTLP path lands in Mimir; the<br />
 <code>mcpkit — agent</code> Grafana dashboard<br />
 (<a href="https://github.com/panyam/mcpkit/blob/main/docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json"><code>docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json</code></a>)<br />
