@@ -31,6 +31,11 @@ Full text in `agent/CONSTRAINTS.md`. These four are the ones that get violated b
 - **A9 — the provider seam exposes loop-visible capabilities only.** Loop-invisible provider
   optimizations (prompt caching, extended thinking) stay out; wrap the vendor SDK behind the seam
   if one is ever genuinely needed.
+- **A10 — dependency weight decides module boundaries.** `agent/go.mod` has exactly two direct
+  requires and must stay that way. An implementation belongs beside its interface here when it costs
+  no third-party dependency, and in a satellite module (`agent/store/redis`, `agent/store/gorm`) when
+  it needs a driver or SDK. Seam interfaces stay with the Runner that consumes them; do not create an
+  interface-only package.
 
 Also: **A8 rules out building a workflow engine here.** Orchestration is model-driven or
 integrated with a dedicated engine.
