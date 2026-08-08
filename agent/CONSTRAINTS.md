@@ -60,3 +60,17 @@ The dividing test for any provider-specific behavior is **does the agent loop ac
 Never thread provider-specific opaque state (e.g. Anthropic signed thinking blocks) through the neutral `agent.Message` or the Runner — that violates A2 wire-serializability and the provider-agnostic core, regardless of which side of the test the feature falls on. The SDK's job is the Provider *seam*, not provider parity. Rationale (2026-08-04): issue 953 (caching/thinking, loop-invisible) closed not-planned; logprob #1053 kept as a loop-visible capability. See `docs/AGENT_SDK_ROADMAP.md` § Phase 5.
 
 **Verify:** `agent.Message` carries no provider-specific reasoning/signature field; the no-SDK providers send no `cache_control`, `thinking`, fast-mode, or task-budget request fields. (Loop-visible capabilities like logprobs are permitted as capability-optional seam additions.)
+
+## A10: Dependency weight decides module boundaries; seam interfaces stay with the Runner
+
+Two rules, and the second is the one that gets broken by accident.
+
+**Seam interfaces live in `agent/`, with the Runner that consumes them.** `Provider`, `ToolSource`, `MemoryStore`, `RunStore`, `ToolResultStore`, `Embedder`, and `Compactor` are all defined where they are used, per the Go convention that an interface belongs to its consumer rather than its implementors. There is no `agent/api` or interface-only package, and there should not be: it would separate every seam from the only code that depends on it, and implementations satisfy these structurally without importing anything.
+
+**A satellite module is for dependency weight, not for layering.** An implementation lives beside its interface in `agent/` when it costs no third-party dependency, and moves to its own module when it needs a driver or SDK. That is why `InMemoryRunStore`, `InMemoryMemoryStore`, `InMemorySemanticStore`, `FileToolResultStore`, and the no-SDK `OpenAIProvider` / `AnthropicProvider` all sit next to their interfaces, while redis, gorm, and pgvector implementations are `agent/store/redis` and `agent/store/gorm` with their own `go.mod`.
+
+The property this protects is that `agent/` is cheap to embed: it pulls mcpkit's own modules and nothing else, so depending on the agent SDK never drags in a database driver or a vendor SDK a consumer does not use. A1 governs the *outward* direction (nothing outside `agent/` may import an LLM SDK or this module); this governs the inward one. A9 depends on it too — "wrap the vendor's official SDK behind the seam" means in a satellite module, not here.
+
+Adding a dependency-free implementation beside its interface is always fine. Adding one that carries a driver is the violation, and the fix is a new satellite module rather than a new direct require.
+
+**Verify:** `cd agent && go mod edit -json | jq -r '.Require[] | select(.Indirect|not) | .Path'` lists only `github.com/panyam/mcpkit` and `github.com/panyam/servicekit`. Any other entry means a dependency landed in the core agent module: justify it as genuinely dep-free infrastructure, or move the code to a satellite module.
