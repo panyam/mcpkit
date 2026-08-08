@@ -21,7 +21,7 @@ make test-examples     # examples/ orchestrator
 make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML report
 make audit             # govulncheck + gosec + gitleaks + race
 make tidy-all          # Required after touching core/ imports
-make tag-push vX.Y.Z   # Tag root + all sub-modules and push (RELEASING.md; pre-release is vX.Y.Z-bN)
+make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (RELEASING.md; pre-release is vX.Y.Z-bN)
 ```
 
 Conformance targets (`testconf`, `testconf-client`, `testconf-tasks-v2`, `testconf-mrtr`,
