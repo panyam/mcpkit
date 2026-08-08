@@ -273,8 +273,13 @@ primitive" to "buildable today."** Updated status:
 - **Multi-agent debate / Mixture-of-Agents / CAMEL / supervisor** — `AgentSource` + `MultiSource` +
   `Team` (✅). ([2305.14325](https://arxiv.org/abs/2305.14325), [2406.04692](https://arxiv.org/abs/2406.04692))
 - **Best-of-N + verifier / CRITIC / judge panel** — `ToolChoice` forced-tool + `ResponseSchema` +
-  `FuncSource` verifiers + eval scorers (✅). ([2110.14168](https://arxiv.org/abs/2110.14168),
+  `FuncSource` verifiers + eval scorers (✅ as of #1239). ([2110.14168](https://arxiv.org/abs/2110.14168),
   [2305.11738](https://arxiv.org/abs/2305.11738), [2404.18796](https://arxiv.org/abs/2404.18796))
+  *Correction: this row read ✅ before #1239, but `ToolChoice` was unreachable from a turn — the
+  Runner's step loop sent only `{Instructions, Messages, Tools}`, so `Temperature`, `MaxTokens`, and
+  `ToolChoice` could not be set on a Runner at all. #1239 added `RunnerConfig.Generation` /
+  `TurnRequest.Generation` and the row is now accurate. The stale claim is why #1056 was sized S–M;
+  see that issue for the re-scope.*
 - **Tool retrieval via `Selector`** — narrow a big `MultiSource` per step (✅; relevance needs an
   embedder, now present). ([2410.14594](https://arxiv.org/abs/2410.14594))
 - **CodeAct** — `execute_code` `FuncSource` + forced-tool + error-feedback (✅).

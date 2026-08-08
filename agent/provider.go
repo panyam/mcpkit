@@ -76,25 +76,23 @@ type ProviderRequest struct {
 	// Tools lists what the model may call. Nil means no tools offered.
 	Tools []core.ToolDef `json:"tools,omitempty"`
 
-	// Temperature overrides the provider default when non-nil.
+	// Temperature overrides the provider default when non-nil. Set it on a
+	// turn through RunnerConfig.Generation or TurnRequest.Generation.
 	//
 	// Not universally supported, and the unsupported case is a hard failure
 	// rather than a graceful one: current Anthropic models reject sampling
-	// parameters outright, so a non-nil Temperature makes the request 400.
-	// Leave it nil for those models. Providers forward this field as given
-	// and do not screen it; see issue 1239 for the seam-level decision on
-	// what a provider should do with a parameter it cannot honor.
-	//
-	// The Runner does not set this field, so it is reachable only by calling
-	// a Provider directly (issue 1239).
+	// parameters outright, so a non-nil Temperature makes the request 400
+	// instead of being ignored. Leave it nil for those models. Providers
+	// forward this field as given and do not screen it by model — mcpkit
+	// keeps no per-model capability table — so the vendor's own error is
+	// the diagnostic, carried verbatim in ProviderError.Body.
 	Temperature *float64 `json:"temperature,omitempty"`
 
-	// MaxTokens caps the completion length when positive.
+	// MaxTokens caps the completion length when positive. Set it on a turn
+	// through RunnerConfig.Generation or TurnRequest.Generation.
 	//
-	// The Runner does not set this field, so it is reachable only by calling
-	// a Provider directly (issue 1239). AnthropicProvider always sends a
-	// max_tokens (the Messages API requires one), defaulting to
-	// AnthropicConfig.MaxTokens when this is zero.
+	// AnthropicProvider always sends a max_tokens (the Messages API requires
+	// one), defaulting to AnthropicConfig.MaxTokens when this is zero.
 	MaxTokens int `json:"maxTokens,omitempty"`
 
 	// ToolChoice biases tool calling for this request. Empty is the
@@ -103,16 +101,71 @@ type ProviderRequest struct {
 	// force a specific tool. Support varies across OpenAI-compatible
 	// servers; a server that ignores it degrades to "auto".
 	//
-	// The Runner does not set this field, so it is reachable only by calling
-	// a Provider directly (issue 1239). The pairing with
-	// RunnerConfig.Selector — narrow the offered set, then force a call, to
-	// steer a proactive or injected turn toward acting rather than only
-	// replying — is the intended design but is not wired today.
+	// Pairs with RunnerConfig.Selector (narrow the offered set) to steer a
+	// proactive or injected turn toward acting rather than only replying:
+	// set Selector on the config and ToolChoice on that turn's
+	// TurnRequest.Generation.
 	ToolChoice ToolChoice `json:"toolChoice,omitempty"`
 
 	// ResponseSchema, when set, asks Generate for structured output
 	// conforming to this JSON Schema. Ignored by Stream.
 	ResponseSchema core.RawJSON `json:"responseSchema,omitempty"`
+}
+
+// GenerationParams are the model-facing generation knobs a caller sets for a
+// turn: the subset of ProviderRequest that says *how* to generate rather than
+// *what* to generate from. The Runner copies them onto every ProviderRequest
+// it builds, so they reach both the streaming step loop and the finalizing
+// Generate of a structured-output turn.
+//
+// Set defaults for every turn on RunnerConfig.Generation and override them for
+// one turn on TurnRequest.Generation. Merge is per field, and a zero field
+// inherits: a TurnRequest that sets only ToolChoice keeps the config's
+// Temperature and MaxTokens. The corollary is that a turn cannot un-set a
+// config default back to the provider's own default — set the field to the
+// value you want instead.
+//
+// ResponseSchema is deliberately not here. It lives on RunnerConfig because it
+// selects a different turn shape (a finalizing Generate call) rather than
+// tuning the calls a turn already makes.
+//
+// Support varies by provider and a rejected parameter is a failed request, not
+// a silently ignored one. See ProviderRequest.Temperature.
+type GenerationParams struct {
+	// Temperature overrides the provider default when non-nil.
+	Temperature *float64 `json:"temperature,omitempty"`
+
+	// MaxTokens caps the completion length when positive.
+	MaxTokens int `json:"maxTokens,omitempty"`
+
+	// ToolChoice biases tool calling. The zero value is the provider
+	// default ("auto").
+	ToolChoice ToolChoice `json:"toolChoice,omitempty"`
+}
+
+// merge returns p overlaid with over: each field of over that is set wins,
+// each field that is zero inherits from p. Used to resolve
+// TurnRequest.Generation against RunnerConfig.Generation.
+func (p GenerationParams) merge(over GenerationParams) GenerationParams {
+	out := p
+	if over.Temperature != nil {
+		out.Temperature = over.Temperature
+	}
+	if over.MaxTokens != 0 {
+		out.MaxTokens = over.MaxTokens
+	}
+	if !over.ToolChoice.IsZero() {
+		out.ToolChoice = over.ToolChoice
+	}
+	return out
+}
+
+// applyTo copies the params onto req. Kept as one place so the streaming and
+// finalizing request builders cannot drift.
+func (p GenerationParams) applyTo(req *ProviderRequest) {
+	req.Temperature = p.Temperature
+	req.MaxTokens = p.MaxTokens
+	req.ToolChoice = p.ToolChoice
 }
 
 // ToolChoice is the request-level tool-calling bias. The zero value ("")
