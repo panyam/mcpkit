@@ -7,31 +7,36 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// Stage is one step of an event pipeline, generic over the event type so the
-// machinery is promotable to any consumer (webhook receivers, page bridges)
-// unchanged: nothing here knows about MCP or the model. Push feeds one event
-// and returns whatever the stage releases now; Flush releases anything whose
+// stage is one step of an event pipeline, generic over the event type so the
+// machinery stays independent of MCP and the model. Push feeds one event and
+// returns whatever the stage releases now; Flush releases anything whose
 // window has expired by now. Stateless stages return their result from Push
 // and nil from Flush. Stages are not safe for concurrent use; drive each
 // pipeline from one goroutine (the policies do).
-type Stage[E any] interface {
+//
+// This is deliberately unexported. Nothing in the public API accepts a stage:
+// the injection and trigger configs take plain funcs, and the typed adapters
+// below (TypedFilter, TypedTransform, MergeWith, ShallowMergeJSON) are what
+// callers compose. Export it only when a public seam genuinely needs to
+// receive one.
+type stage[E any] interface {
 	Push(now time.Time, ev E) []E
 	Flush(now time.Time) []E
 }
 
-// Pipeline chains stages: each event Pushed cascades through every stage in
+// pipeline chains stages: each event Pushed cascades through every stage in
 // order, and Flush cascades expirations the same way.
-type Pipeline[E any] struct {
-	stages []Stage[E]
+type pipeline[E any] struct {
+	stages []stage[E]
 }
 
-// NewPipeline builds a pipeline from stages, applied in order.
-func NewPipeline[E any](stages ...Stage[E]) *Pipeline[E] {
-	return &Pipeline[E]{stages: stages}
+// newPipeline builds a pipeline from stages, applied in order.
+func newPipeline[E any](stages ...stage[E]) *pipeline[E] {
+	return &pipeline[E]{stages: stages}
 }
 
 // Push cascades ev through the stages.
-func (p *Pipeline[E]) Push(now time.Time, ev E) []E {
+func (p *pipeline[E]) Push(now time.Time, ev E) []E {
 	events := []E{ev}
 	for _, s := range p.stages {
 		var next []E
@@ -48,7 +53,7 @@ func (p *Pipeline[E]) Push(now time.Time, ev E) []E {
 
 // Flush cascades window expirations: stage i's flushed events still traverse
 // stages i+1..n before release.
-func (p *Pipeline[E]) Flush(now time.Time) []E {
+func (p *pipeline[E]) Flush(now time.Time) []E {
 	var out []E
 	for i, s := range p.stages {
 		for _, e := range s.Flush(now) {
@@ -66,8 +71,8 @@ func (p *Pipeline[E]) Flush(now time.Time) []E {
 	return out
 }
 
-// Filter keeps events for which fn returns true.
-func Filter[E any](fn func(E) bool) Stage[E] { return filterStage[E]{fn: fn} }
+// newFilterStage keeps events for which fn returns true.
+func newFilterStage[E any](fn func(E) bool) stage[E] { return filterStage[E]{fn: fn} }
 
 type filterStage[E any] struct{ fn func(E) bool }
 
@@ -79,8 +84,8 @@ func (s filterStage[E]) Push(_ time.Time, ev E) []E {
 }
 func (s filterStage[E]) Flush(time.Time) []E { return nil }
 
-// Transform rewrites events; returning false drops the event.
-func Transform[E any](fn func(E) (E, bool)) Stage[E] { return transformStage[E]{fn: fn} }
+// newTransformStage rewrites events; returning false drops the event.
+func newTransformStage[E any](fn func(E) (E, bool)) stage[E] { return transformStage[E]{fn: fn} }
 
 type transformStage[E any] struct{ fn func(E) (E, bool) }
 
@@ -104,12 +109,12 @@ const (
 	WindowDebounce WindowStrategy = "debounce"
 )
 
-// Window buffers events per key and releases per strategy when the window
-// expires. For last-wins and merge the window opens at the FIRST event of a
-// burst (bounded latency); for debounce every event restarts the window
+// newWindowStage buffers events per key and releases per strategy when the
+// window expires. For last-wins and merge the window opens at the FIRST event
+// of a burst (bounded latency); for debounce every event restarts the window
 // (quiet-gap semantics). merge folds with the supplied combiner; nil merge
 // falls back to last-wins behavior.
-func Window[E any](d time.Duration, strategy WindowStrategy, key func(E) string, merge func(acc, next E) E) Stage[E] {
+func newWindowStage[E any](d time.Duration, strategy WindowStrategy, key func(E) string, merge func(acc, next E) E) stage[E] {
 	return &windowStage[E]{d: d, strategy: strategy, key: key, merge: merge, buckets: map[string]*bucket[E]{}}
 }
 
