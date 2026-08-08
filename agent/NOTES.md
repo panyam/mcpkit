@@ -449,6 +449,38 @@ who-acts-next, not owning the user; in the distributed limit it decouples into t
 
 ## Providers
 
+### Generation parameters: how they reach a turn (#1239)
+
+`GenerationParams` (`agent/provider.go`) carries `Temperature`, `MaxTokens`, and `ToolChoice`.
+Defaults live on `RunnerConfig.Generation`; `TurnRequest.Generation` overrides per turn, **field by
+field, where a zero field inherits**. The corollary is documented on the type: a turn cannot un-set a
+config default back to the provider's own, it can only set a different value.
+
+`ResponseSchema` deliberately stays on `RunnerConfig` and out of the struct — it selects a different
+*turn shape* (a finalizing `Generate`) rather than tuning the calls a turn already makes.
+
+**The trap in the finalizing call.** `finalizeStructured` offers no tools, so a `ToolChoice` carried
+from the turn's params would ask the provider to force a call it has no tool for, which OpenAI
+rejects. `applyTo` is shared with the step loop, so the drop happens at the finalize call site, not
+inside `applyTo`. `TestGenerationToolChoiceDroppedOnFinalize` pins it.
+
+**How this was ever missing.** Before #1239 the step loop built `ProviderRequest{Instructions,
+Messages, Tools}` and nothing else, so three of the four generation parameters the seam defines were
+unreachable from a turn: `Temperature` and `ToolChoice` were set nowhere in non-test code, and
+`MaxTokens` only as a `failover.go` health probe. Both providers had always rendered all three onto
+the wire correctly — the gap was purely loop-side, which is why it stayed invisible. The roadmap's §7
+scorecard credited `ToolChoice` as shipped, which is how #1056 came to be sized against primitives
+that could not actually be driven.
+
+**Unsupported parameters are forwarded, not screened.** A provider sends what it is given, and a
+model that rejects a parameter fails the request rather than ignoring it — current Anthropic models
+400 on sampling params. That is deliberate: `ProviderError{StatusCode, Body}` already carries the
+vendor's message verbatim (up to 2048 bytes) and names the offending field, so a capability layer
+would duplicate diagnostics that already exist, and screening by model would need exactly the
+per-model table this project has declined once already (the reason agentchat takes
+`--context-window` rather than inferring one). Revisit only if a *response*-side signal such as
+logprobs (#1053) needs capability negotiation, which degrades to best-effort rather than failing.
+
 ### Tool-name sanitization (PR 1129, `agent/toolname.go`)
 
 OpenAI and Anthropic both constrain a function/tool name to `^[a-zA-Z0-9_-]{1,64}$`. A connected

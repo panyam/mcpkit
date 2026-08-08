@@ -104,6 +104,16 @@ type RunnerConfig struct {
 	// Nil means every call runs, the pre-approval behavior.
 	Approval ApprovalPolicy
 
+	// Generation carries the default generation knobs (temperature, token
+	// cap, tool-choice bias) for every model call this Runner makes, both
+	// the streaming steps and the finalizing Generate of a structured-output
+	// turn. TurnRequest.Generation overrides it per turn, field by field.
+	//
+	// The zero value sends nothing, which is the behavior before these were
+	// reachable: the provider's own defaults apply and the request carries
+	// no temperature, max_tokens, or tool_choice.
+	Generation GenerationParams
+
 	// Compactor, when non-nil, may rewrite the turn's history before the
 	// first model call — the head summarized, a recent tail kept verbatim —
 	// to keep a long conversation under a context budget. The Runner calls
@@ -264,6 +274,16 @@ type TurnRequest struct {
 	// turn is running: between turns nothing drains the channel, and a
 	// buffered cancel-all would hit the next turn's first dispatch.
 	Control <-chan Control
+
+	// Generation overrides RunnerConfig.Generation for this turn, field by
+	// field: a set field wins, a zero field inherits the config's. Use it
+	// for per-turn decisions the config cannot express — forcing a tool call
+	// on a proactive turn, capping tokens on one cheap turn, varying
+	// temperature across sampled candidates.
+	//
+	// The zero value changes nothing and the turn runs on the config's
+	// defaults.
+	Generation GenerationParams
 }
 
 // Run executes one turn against history. Events stream to emit (nil is
@@ -285,6 +305,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 	if emit == nil {
 		emit = func(Event) {}
 	}
+	gen := r.cfg.Generation.merge(req.Generation)
 
 	var reg *callCancels
 	if req.Control != nil {
@@ -367,11 +388,13 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 		}
 		stepSpan.SetAttribute("agent.tools.offered", fmt.Sprint(len(tools)))
 
-		stream, err := r.cfg.Provider.Stream(stepCtx, ProviderRequest{
+		stepReq := ProviderRequest{
 			Instructions: turnInstructions,
 			Messages:     msgs,
 			Tools:        tools,
-		})
+		}
+		gen.applyTo(&stepReq)
+		stream, err := r.cfg.Provider.Stream(stepCtx, stepReq)
 		if err != nil {
 			stepSpan.RecordError(err)
 			stepSpan.End()
@@ -398,7 +421,7 @@ func (r *Runner) RunTurn(ctx context.Context, req TurnRequest) (*TurnResult, err
 			stepSpan.End()
 			var structured core.RawJSON
 			if r.cfg.ResponseSchema.Len() > 0 {
-				s, err := r.finalizeStructured(ctx, turnInstructions, msgs, &usage)
+				s, err := r.finalizeStructured(ctx, turnInstructions, msgs, &usage, gen)
 				if err != nil {
 					return nil, r.failSpan(emit, turnSpan, fmt.Errorf("agent: structured finalize: %w", err))
 				}
@@ -514,14 +537,21 @@ const structuredMaxAttempts = 2
 // aborts (the caller asked for structured output and cannot get it); after the
 // retry budget it returns the last output best-effort so a caller's Bind, not
 // a lost turn, surfaces a still-malformed document.
-func (r *Runner) finalizeStructured(ctx context.Context, instructions string, msgs []Message, usage *Usage) (core.RawJSON, error) {
+func (r *Runner) finalizeStructured(ctx context.Context, instructions string, msgs []Message, usage *Usage, gen GenerationParams) (core.RawJSON, error) {
 	var last string
 	for attempt := 0; attempt < structuredMaxAttempts; attempt++ {
-		resp, err := r.cfg.Provider.Generate(ctx, ProviderRequest{
+		finalReq := ProviderRequest{
 			Instructions:   instructions,
 			Messages:       msgs,
 			ResponseSchema: r.cfg.ResponseSchema,
-		})
+		}
+		gen.applyTo(&finalReq)
+		// The finalizing call offers no tools, so a ToolChoice carried from
+		// the turn's params would ask the provider to force a call it cannot
+		// make. Drop it here rather than in applyTo, which the step loop
+		// shares.
+		finalReq.ToolChoice = ToolChoice{}
+		resp, err := r.cfg.Provider.Generate(ctx, finalReq)
 		if err != nil {
 			return core.RawJSON{}, err
 		}
