@@ -77,18 +77,37 @@ type ProviderRequest struct {
 	Tools []core.ToolDef `json:"tools,omitempty"`
 
 	// Temperature overrides the provider default when non-nil.
+	//
+	// Not universally supported, and the unsupported case is a hard failure
+	// rather than a graceful one: current Anthropic models reject sampling
+	// parameters outright, so a non-nil Temperature makes the request 400.
+	// Leave it nil for those models. Providers forward this field as given
+	// and do not screen it; see issue 1239 for the seam-level decision on
+	// what a provider should do with a parameter it cannot honor.
+	//
+	// The Runner does not set this field, so it is reachable only by calling
+	// a Provider directly (issue 1239).
 	Temperature *float64 `json:"temperature,omitempty"`
 
 	// MaxTokens caps the completion length when positive.
+	//
+	// The Runner does not set this field, so it is reachable only by calling
+	// a Provider directly (issue 1239). AnthropicProvider always sends a
+	// max_tokens (the Messages API requires one), defaulting to
+	// AnthropicConfig.MaxTokens when this is zero.
 	MaxTokens int `json:"maxTokens,omitempty"`
 
 	// ToolChoice biases tool calling for this request. Empty is the
 	// provider default ("auto"). Use ToolChoiceRequired to force some
 	// tool call, ToolChoiceNone to forbid, or ToolChoiceFunc(name) to
-	// force a specific tool. Pairs with RunnerConfig.Selector (narrow the
-	// set) to steer a proactive or injected turn toward acting rather than
-	// only replying. Support varies across OpenAI-compatible servers; a
-	// server that ignores it degrades to "auto".
+	// force a specific tool. Support varies across OpenAI-compatible
+	// servers; a server that ignores it degrades to "auto".
+	//
+	// The Runner does not set this field, so it is reachable only by calling
+	// a Provider directly (issue 1239). The pairing with
+	// RunnerConfig.Selector — narrow the offered set, then force a call, to
+	// steer a proactive or injected turn toward acting rather than only
+	// replying — is the intended design but is not wired today.
 	ToolChoice ToolChoice `json:"toolChoice,omitempty"`
 
 	// ResponseSchema, when set, asks Generate for structured output

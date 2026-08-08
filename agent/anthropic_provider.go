@@ -41,6 +41,13 @@ type AnthropicConfig struct {
 
 	// Model is the model identifier sent on every request (required). The
 	// caller supplies it; the provider hardcodes none.
+	//
+	// Model choice constrains what ProviderRequest fields are usable: current
+	// models (Opus 4.7/4.8, Sonnet 5, Fable 5) reject sampling parameters, so
+	// a non-nil ProviderRequest.Temperature makes the request 400 rather than
+	// being ignored. buildBody forwards Temperature as given and does not
+	// screen it by model — mcpkit keeps no per-model capability table, the
+	// same reason agentchat takes --context-window rather than inferring one.
 	Model string
 
 	// MaxTokens caps the completion length sent on every request. Defaults to
