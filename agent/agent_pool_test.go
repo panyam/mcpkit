@@ -21,11 +21,11 @@ func TestAgentPool_SpawnAwait(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := pool.Spawn(context.Background(), "worker", "go")
+	id, err := pool.spawn(context.Background(), "worker", "go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := pool.Await(context.Background(), id)
+	res, err := pool.await(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,24 +33,24 @@ func TestAgentPool_SpawnAwait(t *testing.T) {
 		t.Fatalf("await result = %q, want the child's answer", res.Text)
 	}
 	// Await is idempotent.
-	if res2, err := pool.Await(context.Background(), id); err != nil || res2.Text != "the answer" {
+	if res2, err := pool.await(context.Background(), id); err != nil || res2.Text != "the answer" {
 		t.Fatalf("second await = (%+v, %v), want the same stored result", res2, err)
 	}
 }
 
 func TestAgentPool_UnknownName(t *testing.T) {
 	pool := NewAgentPool(nil)
-	if _, err := pool.Spawn(context.Background(), "nope", "go"); err == nil {
+	if _, err := pool.spawn(context.Background(), "nope", "go"); err == nil {
 		t.Fatal("spawning an unregistered agent should error")
 	}
 }
 
 func TestAgentPool_UnknownHandle(t *testing.T) {
 	pool := NewAgentPool(nil)
-	if _, err := pool.Await(context.Background(), "agent-99"); err == nil {
+	if _, err := pool.await(context.Background(), "agent-99"); err == nil {
 		t.Fatal("await of an unknown handle should error")
 	}
-	if err := pool.Cancel("agent-99"); err == nil {
+	if err := pool.cancel("agent-99"); err == nil {
 		t.Fatal("cancel of an unknown handle should error")
 	}
 }
@@ -64,18 +64,18 @@ func TestAgentPool_Cancel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	id, err := pool.Spawn(context.Background(), "slow", "go")
+	id, err := pool.spawn(context.Background(), "slow", "go")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.Cancel(id); err != nil {
+	if err := pool.cancel(id); err != nil {
 		t.Fatal(err)
 	}
 	// Awaiting a cancelled agent errors (its run returned ctx.Canceled).
-	if _, err := pool.Await(context.Background(), id); err == nil {
+	if _, err := pool.await(context.Background(), id); err == nil {
 		t.Fatal("await of a cancelled agent should error")
 	}
-	for _, s := range pool.Statuses() {
+	for _, s := range pool.statuses() {
 		if s.ID == id && s.Status != "cancelled" {
 			t.Fatalf("status = %q, want cancelled", s.Status)
 		}
@@ -85,11 +85,11 @@ func TestAgentPool_Cancel(t *testing.T) {
 func TestAgentPool_Statuses(t *testing.T) {
 	pool := NewAgentPool(nil)
 	_ = pool.Register("a", "a", poolRunner(t, StubTurn{Text: "x"}), 0)
-	id, _ := pool.Spawn(context.Background(), "a", "go")
-	if _, err := pool.Await(context.Background(), id); err != nil {
+	id, _ := pool.spawn(context.Background(), "a", "go")
+	if _, err := pool.await(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	st := pool.Statuses()
+	st := pool.statuses()
 	if len(st) != 1 || st[0].ID != id || st[0].Status != "done" {
 		t.Fatalf("statuses = %+v, want one done handle", st)
 	}

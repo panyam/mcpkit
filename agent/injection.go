@@ -93,7 +93,7 @@ type EventInjectionPolicy struct {
 	cfg EventInjectionConfig
 
 	mu      sync.Mutex
-	windows map[string]Stage[IncomingEvent]
+	windows map[string]stage[IncomingEvent]
 	pending []IncomingEvent
 	session map[string]IncomingEvent
 	sessOrd []string
@@ -111,7 +111,7 @@ func NewEventInjectionPolicy(cfg EventInjectionConfig) *EventInjectionPolicy {
 	if cfg.now == nil {
 		cfg.now = time.Now
 	}
-	return &EventInjectionPolicy{cfg: cfg, windows: map[string]Stage[IncomingEvent]{}, session: map[string]IncomingEvent{}}
+	return &EventInjectionPolicy{cfg: cfg, windows: map[string]stage[IncomingEvent]{}, session: map[string]IncomingEvent{}}
 }
 
 // HintFromMeta extracts a server-advertised ContextHint from an events/list
@@ -196,7 +196,7 @@ func (p *EventInjectionPolicy) Ingest(ev IncomingEvent) {
 	}
 	w, ok := p.windows[ev.Name]
 	if !ok {
-		w = Window(time.Duration(h.Aggregate.WindowMs)*time.Millisecond, h.Aggregate.Strategy,
+		w = newWindowStage(time.Duration(h.Aggregate.WindowMs)*time.Millisecond, h.Aggregate.Strategy,
 			func(e IncomingEvent) string { return e.Server + "/" + e.Name },
 			p.cfg.Merge)
 		p.windows[ev.Name] = w

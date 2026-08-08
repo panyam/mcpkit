@@ -264,7 +264,7 @@ func TestGenericWindowIsPromotable(t *testing.T) {
 	// The stages are generic machinery: prove they work on a non-event
 	// type (the promotability contract from the design discussion).
 	clock := newClock()
-	w := Window[int](time.Second, WindowMerge, func(int) string { return "k" }, func(a, b int) int { return a + b })
+	w := newWindowStage[int](time.Second, WindowMerge, func(int) string { return "k" }, func(a, b int) int { return a + b })
 	w.Push(clock.t, 1)
 	w.Push(clock.t, 2)
 	w.Push(clock.t, 3)
@@ -272,9 +272,9 @@ func TestGenericWindowIsPromotable(t *testing.T) {
 		t.Fatalf("generic merge window = %v", got)
 	}
 
-	pipe := NewPipeline[int](
-		Filter(func(n int) bool { return n%2 == 0 }),
-		Transform(func(n int) (int, bool) { return n * 10, true }),
+	pipe := newPipeline[int](
+		newFilterStage(func(n int) bool { return n%2 == 0 }),
+		newTransformStage(func(n int) (int, bool) { return n * 10, true }),
 	)
 	if got := pipe.Push(clock.t, 4); len(got) != 1 || got[0] != 40 {
 		t.Fatalf("generic pipeline = %v", got)

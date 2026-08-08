@@ -6,12 +6,13 @@ import (
 	"time"
 )
 
-// MetaKeyTrigger is the vendor _meta key on an events/list EventDef carrying
-// a server-suggested trigger binding. Server-advertised triggers are
-// suggestions only: the host decides whether to install them, and every
-// firing is mediated by TriggerPolicy regardless of origin (the triggers SEP
-// draft's stance: the server signals, the host owns the turn).
-const MetaKeyTrigger = "io.github.panyam.mcpkit/trigger"
+// Server-advertised trigger bindings are not implemented. The vendor _meta
+// key reserved for them (io.github.panyam.mcpkit/trigger, planned in
+// docs/AGENT_DESIGN.md) previously had an exported constant here with no
+// reader anywhere, which promised a capability the code does not have: a
+// server could set the key and nothing would install a binding. The constant
+// returns alongside the parser that consumes it, mirroring MetaKeyContextHint
+// and HintFromMeta in injection.go. Bindings today are host-configured only.
 
 // DefaultTriggerCooldown gates re-arming when a binding does not set its own.
 const DefaultTriggerCooldown = 5 * time.Minute

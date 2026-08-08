@@ -49,7 +49,7 @@ func NewSpawnSource(pool *AgentPool) *FuncSource {
 			if strings.TrimSpace(in.Task) == "" {
 				return "", fmt.Errorf("spawn_agent requires a non-empty 'task'")
 			}
-			id, err := pool.Spawn(ctx, in.Name, in.Task)
+			id, err := pool.spawn(ctx, in.Name, in.Task)
 			if err != nil {
 				return "", err
 			}
@@ -59,7 +59,7 @@ func NewSpawnSource(pool *AgentPool) *FuncSource {
 	_ = AddFunc(fs, AwaitAgentToolName,
 		"Wait for a spawned sub-agent to finish and return its result. Blocks until it completes.",
 		func(ctx context.Context, in agentIDArgs) (string, error) {
-			result, err := pool.Await(ctx, in.ID)
+			result, err := pool.await(ctx, in.ID)
 			if err != nil {
 				return "", err
 			}
@@ -75,7 +75,7 @@ func NewSpawnSource(pool *AgentPool) *FuncSource {
 	_ = AddFunc(fs, CancelAgentToolName,
 		"Cancel a spawned sub-agent you no longer need, by its handle id.",
 		func(ctx context.Context, in agentIDArgs) (string, error) {
-			if err := pool.Cancel(in.ID); err != nil {
+			if err := pool.cancel(in.ID); err != nil {
 				return "", err
 			}
 			return "cancelled " + in.ID, nil
@@ -84,7 +84,7 @@ func NewSpawnSource(pool *AgentPool) *FuncSource {
 	_ = AddFunc(fs, ListAgentsToolName,
 		"List the sub-agents you have spawned and their status (running / done / failed / cancelled).",
 		func(ctx context.Context, _ struct{}) (string, error) {
-			st := pool.Statuses()
+			st := pool.statuses()
 			if len(st) == 0 {
 				return "no spawned agents", nil
 			}
@@ -108,7 +108,7 @@ func NewSpawnSource(pool *AgentPool) *FuncSource {
 //
 // A handle outlives the spawning turn (the child runs on a DetachForBackground
 // context), so spawn-in-turn-1 / await-in-turn-3 works. Delivery is pull-only:
-// a spawned result is stored on the handle and returned by Await, never
+// a spawned result is stored on the handle and returned by await, never
 // auto-injected — auto-injection is AsyncAgentSource's model. The pool is
 // safe for concurrent use.
 type AgentPool struct {
@@ -192,12 +192,12 @@ func (p *AgentPool) Names() []SpawnStatus {
 	return out
 }
 
-// Spawn starts the named agent on a detached, cancellable goroutine over an
+// spawn starts the named agent on a detached, cancellable goroutine over an
 // isolated slice seeded with task, and returns a handle id. Depth and the
 // ctx-threaded call budget are checked before the spawn (an unknown name or an
 // exhausted guard is an error, not a started agent). The child outlives ctx
 // (DetachForBackground), so it keeps running after the spawning turn ends.
-func (p *AgentPool) Spawn(ctx context.Context, name, task string) (string, error) {
+func (p *AgentPool) spawn(ctx context.Context, name, task string) (string, error) {
 	p.mu.Lock()
 	spec, ok := p.agents[name]
 	if !ok {
@@ -257,10 +257,10 @@ func (h *spawnHandle) finish(result *TurnResult, err error) {
 	close(h.done)
 }
 
-// Await blocks until the spawned agent id finishes and returns its result, or
+// await blocks until the spawned agent id finishes and returns its result, or
 // returns when ctx is cancelled (the turn was cancelled). An unknown id is an
-// error. Await is idempotent: a second call returns the same stored result.
-func (p *AgentPool) Await(ctx context.Context, id string) (*TurnResult, error) {
+// error. await is idempotent: a second call returns the same stored result.
+func (p *AgentPool) await(ctx context.Context, id string) (*TurnResult, error) {
 	p.mu.Lock()
 	h, ok := p.handles[id]
 	p.mu.Unlock()
@@ -280,10 +280,10 @@ func (p *AgentPool) Await(ctx context.Context, id string) (*TurnResult, error) {
 	return h.result, nil
 }
 
-// Cancel aborts the spawned agent id (its context is cancelled; the running
+// cancel aborts the spawned agent id (its context is cancelled; the running
 // child returns and its handle moves to "cancelled"). An unknown id is an
 // error. Cancelling a finished agent is a no-op that still succeeds.
-func (p *AgentPool) Cancel(id string) error {
+func (p *AgentPool) cancel(id string) error {
 	p.mu.Lock()
 	h, ok := p.handles[id]
 	p.mu.Unlock()
@@ -299,9 +299,9 @@ func (p *AgentPool) Cancel(id string) error {
 	return nil
 }
 
-// Statuses snapshots every handle (running and finished) for list_agents,
+// statuses snapshots every handle (running and finished) for list_agents,
 // in id order of creation.
-func (p *AgentPool) Statuses() []SpawnStatus {
+func (p *AgentPool) statuses() []SpawnStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make([]SpawnStatus, 0, len(p.handles))
