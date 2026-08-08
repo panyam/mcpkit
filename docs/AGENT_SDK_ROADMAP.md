@@ -54,6 +54,15 @@ differentiator. See §4.
 
 Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open issue) · ❌ untracked gap.
 
+> **Marking a row ✅ requires checking that the loop can reach the primitive, not that the seam
+> declares it.** §7 credited `ToolChoice` forced-tool as shipped for Best-of-N and judge panels;
+> `ProviderRequest` did declare it and both providers rendered it onto the wire, but the Runner's
+> step loop never populated it, so no caller could set it on a turn (fixed in #1239). The failure
+> mode is specific and worth naming: a seam can look complete while nothing drives it, and reading
+> the type definition confirms the wrong half. The cost was not the doc line — #1056 was scoped and
+> sized against that row, and the estimate was wrong by the size of a missing contract decision.
+> When a row's evidence is a type declaration, grep for a non-test assignment before marking it.
+
 | Area | Status | As-built (file) | Remaining |
 |---|---|---|---|
 | **Tool-call approval / permission ladder** | ✅ #929 | `agent/approval.go` — `ApprovalPolicy`, `TieredApproval`, `ApprovalMode` {AlwaysAsk/ReadOnlyAuto/AlwaysAllow} + per-tool `RuleAsk/Allow/Deny`; "ask" routes through `ElicitationCoordinator.Confirm`; `EventToolDenied`; host `/approve` | — |
@@ -71,8 +80,8 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Observability** | ✅ | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) + OTel **metrics** (#1023 — turn/step/token/tool counters + duration histograms via `RunnerConfig.MeterProvider`, `host.WithMeterProvider`, agentchat `SetupMeter`, `mcpkit-agent` Grafana dashboard) | — |
 | **Durable workflows / graphs (Phase 4)** | ❌ **dropped (not-planned, 2026-08-04)** | — | Not building an engine (constraint A8). Workflow patterns build on shipped primitives (§7); durable orchestration → integrate a dedicated engine. #928/#944/#945/#946 closed not-planned. |
 | **Provider routing / cascades** | ⏳ #991 | only `FailoverProvider` (failure+cooldown) today | per-turn/per-role routing **#991**, router presets **#1044**, confidence-gated cascade **#1057** (Phase 6) |
-| **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 (re-scoped by A9) | structured output via finalizing `Generate` only | logprob/token-confidence **#1053** — **loop-visible** (routing/abstention/cascade), kept as agent-SDK work; OpenAI-wire/local, not Anthropic. Grammar/guided decoding **#1054** — deferred (marginal). Anthropic caching/thinking **dropped (#953, loop-invisible)**. |
-| **Test-time compute (Phase 6)** | ⏳ #1051 | achievable by host loop; `#1033` covers sub-agent fan-out only | sampling/vote helper **#1056**, `FailoverProvider` quality trigger **#1057** |
+| **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 (re-scoped by A9) | structured output via finalizing `Generate`; generation parameters reachable from a turn via `RunnerConfig.Generation` / `TurnRequest.Generation` (#1239 — temperature, token cap, tool choice; before it, three of the four `ProviderRequest` parameters could not be set on a Runner at all) | logprob/token-confidence **#1053** — **loop-visible** (routing/abstention/cascade), kept as agent-SDK work; OpenAI-wire/local, not Anthropic. Grammar/guided decoding **#1054** — deferred (marginal). Anthropic caching/thinking **dropped (#953, loop-invisible)**. |
+| **Test-time compute (Phase 6)** | ⏳ #1051 | `#1033` `FanOutSource` already gives N concurrent runs, member ordering, failure isolation, and a pluggable `Aggregate` hook | sampling/vote **#1056** — re-scoped down to two aggregators over that hook (see §5a); `FailoverProvider` quality trigger **#1057**, blocked on #1053 |
 | **Safety & guardrails (Phase 7)** | ⏳ #1052 | approval ladder (#929); event stages exist (`stages.go`) but no shipped guardrail Transform | prompt-injection spotlighting **#1058**; opt-in extensions (AgentDojo eval, constitutional gate) unfiled |
 | **Coding-surface: sandboxing, hooks, repo map, LSP** | ⏳ #1059 | — | scope decision (agent/ vs coding agent built on it) **#1059** |
 
@@ -194,8 +203,19 @@ sufficient.
   - The phase's original "provider control" framing was too provider-flavored; A9 is the durable line.
     Capability-optional fields, nil = today's behavior (A2/CONSTRAINTS).
 - **Phase 6 — test-time compute & routing reliability:** epic #1051 → sampling+aggregate helper
-  (self-consistency / Best-of-N + verifier rerank) #1056, `FailoverProvider` quality-score trigger for
-  confidence-gated cascades #1057. Complements upfront routing #991 (selection vs escalation).
+  #1056, `FailoverProvider` quality-score trigger for confidence-gated cascades #1057. Complements
+  upfront routing #991 (selection vs escalation).
+  - **#1056 was re-scoped down (2026-08-07)** after a design pass, and the reasoning generalizes.
+    Most of its mechanism already ships: `FanOutConfig` provides N concurrent runs, stable member
+    ordering, per-member failure isolation, and a pluggable `Aggregate` reduce hook, so the delta is
+    two aggregator functions rather than a new primitive. Its premise was also not portable —
+    self-consistency is defined as sampling at `Temperature>0`, and current Anthropic models reject
+    sampling parameters outright, so identical-member diversity is the one unportable case. The
+    portable source of diversity is per-member providers, which multi-model already gives us free.
+    And no user was identifiable: the issue traces to the §5b competitive sweep, not a request.
+    **Worth applying the same three questions to the other phase children** — what already ships,
+    does the premise hold on every provider, and who asked.
+  - #1057 is blocked on #1053: a confidence-gated cascade needs a confidence signal to gate on.
 - **Phase 7 — safety & guardrails:** epic #1052 → prompt-injection spotlighting/datamarking `Transform`
   stage for untrusted tool output #1058; opt-in extensions AgentDojo eval suite #1060 and constitutional
   pre-dispatch critique gate #1061. The coding-surface scope decision (sandboxing/hooks/repo map/LSP)
