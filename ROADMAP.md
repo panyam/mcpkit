@@ -25,6 +25,8 @@ Recently done: stable v0.4.0 and the v0.5.x line, client conformance harness (ti
 
 The tier-advancement request to the SDK Working Group is deliberately held until the 1.0 release. The protocol surface is already at the conformance and policy bar; the remaining work is on the agent track (see below), and cutting 1.0 once that lands means the tiering system's stable-release and spec-tracking checks are satisfied by a release that represents the whole project rather than a protocol-only slice. The request is a self-assessment issue filed against `modelcontextprotocol/modelcontextprotocol` once 1.0 is published.
 
+**Issue 1240 is the 1.0 tracker.** 1.0 is primarily an API stability commitment rather than a feature milestone: it retires the `VERSIONING.md` clause allowing breaking changes in minor releases, and the agent surface is the young part of the tree. The tracker carries the freeze agenda — generation parameters on the provider seam (1239, done), package layout (constraint A10, done; the `agent/providers/` extraction question still open), an exported-vs-internal audit, seam shapes, naming, and contract documentation.
+
 ## Longer-term
 
 - **SEP-2577 removals:** Roots, Sampling, and Logging surfaces are deprecated with a 12-month annotation window; removal is tracked in issue 850 and lands no earlier than 2027.

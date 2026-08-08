@@ -15,7 +15,14 @@ dependencies = [
     # Image processing for the apps-compat visual gallery — pixel diff +
     # bounding-box overlays. Used only by scripts/apps_visual_gallery.py;
     # other scripts are stdlib-only.
-    "Pillow>=10.0.0",
+    #
+    # Floor is 12.2.0, not 10.0.0, and must not be lowered: PYSEC-2026-165 and
+    # its siblings affect pillow <12.2.0. The requires-python bump above already
+    # killed the second 11.3.0 resolution, so the lock resolves 12.2.0 alone —
+    # but a floor below it left Dependabot computing an update that produced no
+    # diff, which it reports as a hard error (dependency_file_content_not_changed)
+    # rather than a no-op, failing the Dependabot Updates run.
+    "Pillow>=12.2.0",
     "numpy>=1.24.0",
 ]
 
