@@ -102,6 +102,15 @@ type Config struct {
 	// with "ask" prompts routed through the terminal elicitation UI.
 	Approval *ApprovalConfig `json:"approval,omitempty"`
 
+	// Spotlight marks untrusted tool output as data before the model reads
+	// it, the mitigation for indirect prompt injection (a fetched page whose
+	// text is shaped like instructions). Nil leaves tool output unmarked,
+	// which is the behavior before this existed.
+	//
+	// It runs outside the approval gate, so a denied call is never marked
+	// and the gate still decides on unmarked arguments.
+	Spotlight *SpotlightConfig `json:"spotlight,omitempty"`
+
 	// Connections is a named registry of model connections with one
 	// active. When set it supersedes Model for the chat provider and
 	// enables runtime /provider switching; Model stays as the
@@ -370,6 +379,36 @@ type ApprovalConfig struct {
 	// Remember caches a tool the user approved so later calls to it skip the
 	// prompt for the life of the session.
 	Remember bool `json:"remember,omitempty"`
+}
+
+// SpotlightConfig is the host's view of prompt-injection spotlighting. It maps
+// to agent.Spotlight, which fences untrusted tool output in unguessable
+// markers and tells the model the fenced text is data rather than
+// instructions.
+//
+// The default is that every tool is untrusted; TrustedTools is the opt-out.
+type SpotlightConfig struct {
+	// TrustedTools names tools whose output reaches the model unmarked,
+	// for output the operator vouches for rather than relays. Prefer
+	// leaving it empty: marking a trusted tool costs a few tokens, while
+	// trusting an untrusted one costs the whole mitigation.
+	TrustedTools []string `json:"trustedTools,omitempty"`
+}
+
+// build turns the config into the middleware, or nil when spotlighting is off.
+func (c *SpotlightConfig) build() agent.ToolMiddleware {
+	if c == nil {
+		return nil
+	}
+	trusted := make(map[string]bool, len(c.TrustedTools))
+	for _, name := range c.TrustedTools {
+		trusted[name] = true
+	}
+	var pred func(agent.ToolCallInfo) bool
+	if len(trusted) > 0 {
+		pred = func(info agent.ToolCallInfo) bool { return trusted[info.Call.Name] }
+	}
+	return agent.Spotlight(agent.SpotlightConfig{Trusted: pred})
 }
 
 // approvalPrompt renders the yes/no question shown when a tool call needs
