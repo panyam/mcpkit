@@ -141,10 +141,35 @@ type spawnHandle struct {
 }
 
 // SpawnStatus is a wire-serializable snapshot of a handle for list_agents
-// (constraint A2).
+// (constraint A2). It is a point-in-time copy: a running child may have
+// finished by the time the caller reads it.
+//
+// The type serves two callers with different meanings for the same fields,
+// which is a wart worth knowing before reading one:
+//
+//   - statuses() describes live handles. ID is the handle, Name is the agent
+//     it was spawned from, Status is a lifecycle state.
+//   - Names describes registered agents, before any spawn. ID is empty, Name
+//     is the registered name, and Status carries the agent's human-readable
+//     description rather than a lifecycle state.
+//
+// Read Status as a lifecycle value only when ID is non-empty.
 type SpawnStatus struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
+	// ID is the handle the model passes to await_agent and cancel_agent.
+	// Empty in a Names listing, which has no handle to report on.
+	ID string `json:"id"`
+
+	// Name is the registered agent name: the one this handle was spawned
+	// from, or the registered name itself in a Names listing.
+	Name string `json:"name"`
+
+	// Status is one of "running", "done", "failed", or "cancelled" for a
+	// live handle. The two failure values are distinct on purpose: "failed"
+	// means the child's own Run returned an error, "cancelled" means the
+	// parent dropped it, and collapsing them loses that.
+	//
+	// In a Names listing this instead holds the registered description. See
+	// the type doc.
 	Status string `json:"status"`
 }
 

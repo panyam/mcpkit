@@ -39,9 +39,32 @@ type ContextHint struct {
 	Sensitivity string `json:"sensitivity,omitempty"`
 }
 
-// AggregateHint is ContextHint's coalescing sub-shape.
+// AggregateHint is ContextHint's coalescing sub-shape: how to fold a burst of
+// one event name into fewer entries before the model sees them. It is part of
+// the wire shape a server may publish under the context-hint _meta key, so
+// treat both fields as an external contract rather than internal tuning.
+//
+// Coalescing is keyed by server plus event name, so two servers emitting the
+// same event name aggregate independently.
 type AggregateHint struct {
-	WindowMs int            `json:"windowMs"`
+	// WindowMs is the coalescing window in milliseconds. Zero or negative
+	// disables aggregation entirely and every event buffers individually,
+	// which is also what a missing AggregateHint means.
+	//
+	// The window's start depends on Strategy: last-wins and merge open it at
+	// the first event of a burst, giving bounded latency, while debounce
+	// restarts it on every event and so can defer release indefinitely under
+	// a sustained stream.
+	WindowMs int `json:"windowMs"`
+
+	// Strategy selects the fold: WindowLastWins keeps only the newest event
+	// per key, WindowMerge combines payloads through the policy's Merge func
+	// (ShallowMergeJSON by default), and WindowDebounce releases only after
+	// the key has been quiet for the window.
+	//
+	// The value is not validated. It is taken verbatim from the server's
+	// JSON, and anything other than the three constants above behaves as
+	// last-wins rather than erroring, so a typo degrades quietly.
 	Strategy WindowStrategy `json:"strategy,omitempty"`
 }
 
@@ -77,10 +100,23 @@ type EventInjectionConfig struct {
 // DefaultMaxPerDrain bounds injected entries per turn when unconfigured.
 const DefaultMaxPerDrain = 16
 
-// InjectedContext is one rendered entry ready to join the model's context.
+// InjectedContext is one rendered entry ready to join the model's context,
+// as returned by a Drain. Entries arrive in priority order, already filtered,
+// transformed, coalesced, and budgeted; a caller renders them into the turn
+// and does not re-apply policy.
 type InjectedContext struct {
-	Event    IncomingEvent
-	Text     string
+	// Event is the event this entry came from, after any Transforms ran.
+	// For a coalesced burst it is the single surviving event, so the
+	// originals are not recoverable from here.
+	Event IncomingEvent
+
+	// Text is the rendered form the model reads.
+	Text string
+
+	// Priority is the originating ContextHint's priority, carried through
+	// so a caller can group or style entries. It is the hint's vocabulary
+	// verbatim and is not normalized, so an unrecognized value reaches the
+	// caller unchanged rather than being defaulted.
 	Priority string
 }
 
