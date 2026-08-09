@@ -6,7 +6,7 @@ import (
 	"github.com/panyam/mcpkit/agent"
 )
 
-// contextStage is one named step of pre-turn context assembly: it takes the
+// ContextStage is one named step of pre-turn context assembly: it takes the
 // messages so far and returns them with its own contribution folded in.
 //
 // A stage that has nothing to add returns its input unchanged. Stages do not
@@ -14,9 +14,14 @@ import (
 // embedder that timed out) contributes nothing rather than failing the turn,
 // because context assembly is best-effort by nature and a missing recall
 // block is a worse answer, not a broken one.
-type contextStage struct {
-	name string
-	run  func(ctx context.Context, msgs []agent.Message) []agent.Message
+type ContextStage struct {
+	// Name identifies the stage in stageNames and in diagnostics. Use a
+	// dotted form scoped to the contributor ("memory.recall") so a pipeline
+	// listing says who added what.
+	Name string
+
+	// Run folds this stage's contribution into the messages so far.
+	Run func(ctx context.Context, msgs []agent.Message) []agent.Message
 }
 
 // contextPipeline declares, in one place, how a turn's context is assembled
@@ -82,8 +87,8 @@ type contextStage struct {
 // contention between producers is measurable enough to rank them on a common
 // scale.
 type contextPipeline struct {
-	durable   []contextStage
-	transient []contextStage
+	durable   []ContextStage
+	transient []ContextStage
 }
 
 // runDurable applies the durable stages and appends the user's message,
@@ -99,7 +104,7 @@ type contextPipeline struct {
 func (p *contextPipeline) runDurable(ctx context.Context, prior []agent.Message, user agent.Message) []agent.Message {
 	out := prior
 	for _, st := range p.durable {
-		out = st.run(ctx, out)
+		out = st.Run(ctx, out)
 	}
 	return append(out, user)
 }
@@ -112,7 +117,7 @@ func (p *contextPipeline) runTransient(ctx context.Context, history []agent.Mess
 	out := make([]agent.Message, len(history))
 	copy(out, history)
 	for _, st := range p.transient {
-		out = st.run(ctx, out)
+		out = st.Run(ctx, out)
 	}
 	return out
 }
@@ -122,10 +127,10 @@ func (p *contextPipeline) runTransient(ctx context.Context, history []agent.Mess
 func (p *contextPipeline) stageNames() []string {
 	out := make([]string, 0, len(p.durable)+len(p.transient))
 	for _, st := range p.durable {
-		out = append(out, st.name)
+		out = append(out, st.Name)
 	}
 	for _, st := range p.transient {
-		out = append(out, st.name)
+		out = append(out, st.Name)
 	}
 	return out
 }

@@ -149,6 +149,7 @@ type appOptions struct {
 	configPath      string
 	promptMutate    func(*SystemPromptBuilder)
 	browserOpener   func(string) error
+	extensions      []Extension
 }
 
 // WithBrowserOpener overrides how the interactive (oauth) auth type opens the
@@ -555,7 +556,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// contributes no stage at all rather than a stage that no-ops. See
 	// contextPipeline for the order's rationale and where a new stage goes.
 	app.context = contextPipeline{
-		durable:   []contextStage{app.injectionStage()},
+		durable:   []ContextStage{app.injectionStage()},
 		transient: app.memoryStages(),
 	}
 
@@ -587,6 +588,25 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	if mw := cfg.Spotlight.build(); mw != nil {
 		runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, mw)
 	}
+	// Built-in commands register before extensions so an extension naming a
+	// command the host already owns fails construction instead of being
+	// silently overwritten later. Their Run closures capture app and are not
+	// invoked here, so registering before the Runner exists is safe.
+	app.registerBuiltinCommands()
+
+	// Extensions contribute across every seam at once, applied after the
+	// built-in producers so their prompt sections and context stages land
+	// after the host's own, and before the gate below so their middleware
+	// wraps outside it. registerBuiltinCommands has already run, so a
+	// collision with a built-in /command is caught here rather than
+	// silently shadowing it.
+	extMW, err := app.applyExtensions(o.extensions)
+	if err != nil {
+		app.Close()
+		return nil, err
+	}
+	runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, extMW...)
+
 	// The permission gate goes last in the middleware chain so it inspects
 	// the arguments that will actually execute, after any earlier entry has
 	// rewritten them (see agent.RunnerConfig.ToolMiddleware). Appended only
@@ -609,7 +629,6 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		return nil, err
 	}
 	app.runner = runner
-	app.registerBuiltinCommands()
 
 	// The fanIn + subscription ctx were built before the servers connected, and
 	// the ready-observer has been subscribing each server's event streams; now
