@@ -76,8 +76,8 @@ func (a *App) runProactiveTurn(ctx context.Context, firing *agent.TriggerFiring)
 // injectionStage is the durable context producer for incoming events: it
 // drains pending injected context into history as
 // system messages. Caller holds turnMu.
-func (a *App) injectionStage() contextStage {
-	return contextStage{name: "events", run: func(_ context.Context, msgs []agent.Message) []agent.Message {
+func (a *App) injectionStage() ContextStage {
+	return ContextStage{Name: "events", Run: func(_ context.Context, msgs []agent.Message) []agent.Message {
 		for _, inj := range a.injection.Drain() {
 			msgs = append(msgs, agent.Message{Role: agent.RoleSystem, Text: inj.Text})
 		}

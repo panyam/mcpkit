@@ -57,13 +57,13 @@ func (a *App) registerMemory(multi *agent.MultiSource, store agent.MemoryStore) 
 // Neither is written into history — see contextPipeline on why that split is
 // structural. A producer whose store errors contributes nothing rather than
 // failing the turn.
-func (a *App) memoryStages() []contextStage {
+func (a *App) memoryStages() []ContextStage {
 	if a.memory == nil || a.cfg.Memory == nil {
 		return nil
 	}
-	var out []contextStage
+	var out []ContextStage
 	if a.cfg.Memory.InjectSummary {
-		out = append(out, contextStage{name: "memory.summary", run: func(ctx context.Context, msgs []agent.Message) []agent.Message {
+		out = append(out, ContextStage{Name: "memory.summary", Run: func(ctx context.Context, msgs []agent.Message) []agent.Message {
 			if len(msgs) == 0 {
 				return msgs
 			}
@@ -75,7 +75,7 @@ func (a *App) memoryStages() []contextStage {
 		}})
 	}
 	if a.cfg.Memory.InjectRecall {
-		out = append(out, contextStage{name: "memory.recall", run: func(ctx context.Context, msgs []agent.Message) []agent.Message {
+		out = append(out, ContextStage{Name: "memory.recall", Run: func(ctx context.Context, msgs []agent.Message) []agent.Message {
 			if len(msgs) == 0 {
 				return msgs
 			}

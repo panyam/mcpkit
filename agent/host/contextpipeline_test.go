@@ -9,8 +9,8 @@ import (
 	"github.com/panyam/mcpkit/agent"
 )
 
-func stubStage(name, text string) contextStage {
-	return contextStage{name: name, run: func(_ context.Context, msgs []agent.Message) []agent.Message {
+func stubStage(name, text string) ContextStage {
+	return ContextStage{Name: name, Run: func(_ context.Context, msgs []agent.Message) []agent.Message {
 		return weaveBeforeUser(msgs, []string{text})
 	}}
 }
@@ -27,8 +27,8 @@ func texts(msgs []agent.Message) []string {
 // history that precedes the user's message: events describe what happened
 // before the user spoke, so they cannot land after it.
 func TestPipelineDurableAppendsBeforeUser(t *testing.T) {
-	p := contextPipeline{durable: []contextStage{
-		{name: "events", run: func(_ context.Context, msgs []agent.Message) []agent.Message {
+	p := contextPipeline{durable: []ContextStage{
+		{Name: "events", Run: func(_ context.Context, msgs []agent.Message) []agent.Message {
 			return append(msgs, agent.Message{Role: agent.RoleSystem, Text: "an event"})
 		}},
 	}}
@@ -43,7 +43,7 @@ func TestPipelineDurableAppendsBeforeUser(t *testing.T) {
 // stage registered ends up closest to it. That is why recall follows the
 // summary rather than preceding it.
 func TestPipelineTransientWeavesBeforeUserInOrder(t *testing.T) {
-	p := contextPipeline{transient: []contextStage{
+	p := contextPipeline{transient: []ContextStage{
 		stubStage("memory.summary", "SUMMARY"),
 		stubStage("memory.recall", "RECALL"),
 	}}
@@ -59,7 +59,7 @@ func TestPipelineTransientWeavesBeforeUserInOrder(t *testing.T) {
 // into history would be re-injected next turn and eventually summarized
 // alongside real conversation, so the per-turn view must not alias it.
 func TestPipelineTransientNeverMutatesHistory(t *testing.T) {
-	p := contextPipeline{transient: []contextStage{stubStage("memory.recall", "RECALL")}}
+	p := contextPipeline{transient: []ContextStage{stubStage("memory.recall", "RECALL")}}
 	history := []agent.Message{{Role: agent.RoleUser, Text: "hello"}}
 
 	perTurn := p.runTransient(context.Background(), history)
