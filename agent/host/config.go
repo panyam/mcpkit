@@ -374,15 +374,15 @@ type ApprovalConfig struct {
 
 // approvalPrompt renders the yes/no question shown when a tool call needs
 // approval. The args are trimmed so a large payload does not flood the prompt.
-func approvalPrompt(req agent.ApprovalRequest) string {
-	args := strings.TrimSpace(string(req.Args.Raw()))
+func approvalPrompt(info agent.ToolCallInfo) string {
+	args := strings.TrimSpace(string(info.Call.Args.Raw()))
 	if len(args) > 200 {
 		args = args[:200] + "…"
 	}
 	if args == "" || args == "{}" {
-		return fmt.Sprintf("Allow tool call %q?", req.ToolName)
+		return fmt.Sprintf("Allow tool call %q?", info.Call.Name)
 	}
-	return fmt.Sprintf("Allow tool call %q with %s?", req.ToolName, args)
+	return fmt.Sprintf("Allow tool call %q with %s?", info.Call.Name, args)
 }
 
 // parseApprovalMode maps a config string to an agent mode, defaulting to ask.

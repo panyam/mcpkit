@@ -372,8 +372,8 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
 	// gated tool call never stacks a dialog against a concurrent elicitation.
-	ask := func(ctx context.Context, req agent.ApprovalRequest) (bool, error) {
-		return coord.Confirm(ctx, approvalPrompt(req))
+	ask := func(ctx context.Context, info agent.ToolCallInfo) (bool, error) {
+		return coord.Confirm(ctx, approvalPrompt(info))
 	}
 	app.approval = cfg.Approval.buildApproval(ask)
 
@@ -625,10 +625,13 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		// advisory-only. GrantAllPreempts trusts every configured persona equally.
 		PreemptGrant: preemptGrantFor(cfg.AllowPreempt),
 	}
-	// Only set Approval when a policy exists: a nil *TieredApproval boxed in
-	// the interface would read as non-nil and gate every call to a deny.
+	// The permission gate goes last in the middleware chain so it inspects
+	// the arguments that will actually execute, after any earlier entry has
+	// rewritten them (see agent.RunnerConfig.ToolMiddleware). Appended only
+	// when a policy exists, since a method value on a nil *TieredApproval
+	// would panic on the first call rather than allow it.
 	if app.approval != nil {
-		runnerCfg.Approval = app.approval
+		runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, app.approval.WrapToolCall)
 	}
 	if cfg.Compaction != nil {
 		compactor, err := cfg.Compaction.build(provider)

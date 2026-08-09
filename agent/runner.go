@@ -97,12 +97,23 @@ type RunnerConfig struct {
 	// host configuration bug, not something the model can recover from.
 	Selector ToolSelector
 
-	// Approval, when non-nil, gates each tool call before it runs: the
-	// Runner asks the policy in callTool, after argument binding and before
-	// ToolSource.Call. A refusal is fed back to the model as a tool result
-	// (a tool-denied event, then the turn continues), never a turn abort.
-	// Nil means every call runs, the pre-approval behavior.
-	Approval ApprovalPolicy
+	// ToolMiddleware wraps every tool call this Runner dispatches. It is the
+	// single interception seam: permission gates, argument redaction, rate
+	// and budget limits, blocklists, result caching, retries, audit trails,
+	// and marking untrusted tool output are all middleware, not separate
+	// mechanisms.
+	//
+	// Entries wrap outermost-first: the first wraps the second, and the last
+	// wraps the real dispatch. A permission gate belongs last, where it sees
+	// the arguments every earlier entry has already rewritten. TieredApproval
+	// is the batteries-included gate and agent/host appends it last.
+	//
+	// This is not an observation seam. To watch what a turn does, subscribe
+	// to the event stream, which already reports every tool outcome. See
+	// ToolMiddleware.
+	//
+	// Empty means every call dispatches unwrapped.
+	ToolMiddleware []ToolMiddleware
 
 	// Generation carries the default generation knobs (temperature, token
 	// cap, tool-choice bias) for every model call this Runner makes, both
@@ -782,35 +793,34 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 		return failed(fmt.Errorf("%w: %q (no tools offered)", ErrUnknownTool, call.Name))
 	}
 
-	if r.cfg.Approval != nil {
-		dec, err := r.cfg.Approval.Approve(ctx, ApprovalRequest{
-			ToolName: call.Name,
-			Args:     call.Args,
-			ReadOnly: toolReadOnly(tools, call.Name),
-		})
-		if err != nil {
-			return failed(fmt.Errorf("agent: approval policy for %q: %w", call.Name, err))
-		}
-		if !dec.Allowed {
-			reason := dec.Reason
-			if reason == "" {
-				reason = "denied by approval policy"
+	// The middleware chain wraps the real dispatch: entry 0 is outermost and
+	// the last entry wraps ToolSource.Call, so a gate placed last inspects
+	// the arguments every earlier entry has already rewritten. A middleware
+	// that returns without calling next has decided the call.
+	dispatch := func(ctx context.Context, info ToolCallInfo) (*core.ToolResult, error) {
+		args := map[string]any{}
+		if info.Call.Args.Len() > 0 {
+			if err := info.Call.Args.Bind(&args); err != nil {
+				return nil, fmt.Errorf("agent: tool %q arguments are not a JSON object: %w", info.Call.Name, err)
 			}
+		}
+		return r.cfg.Tools.Call(ctx, info.Call.Name, args)
+	}
+	res, err := chainToolMiddleware(r.cfg.ToolMiddleware, dispatch)(ctx, ToolCallInfo{
+		Step:     step,
+		Call:     call,
+		ReadOnly: toolReadOnly(tools, call.Name),
+	})
+	if err != nil {
+		// A denial is a decision, not a failure: the model is told the call
+		// was not permitted and the turn continues, exactly as a refused
+		// approval always did.
+		if reason, denied := deniedReason(err); denied && !cancelled() {
 			status = "denied"
 			span.SetAttribute("agent.tool.denied", "true")
 			emit(Event{Kind: EventToolDenied, Step: step, ToolCall: &call, Reason: reason})
 			return "tool call not permitted: " + reason
 		}
-	}
-
-	args := map[string]any{}
-	if call.Args.Len() > 0 {
-		if err := call.Args.Bind(&args); err != nil {
-			return failed(fmt.Errorf("agent: tool %q arguments are not a JSON object: %w", call.Name, err))
-		}
-	}
-	res, err := r.cfg.Tools.Call(ctx, call.Name, args)
-	if err != nil {
 		// A tool whose server is unreachable right now is a non-fatal miss, not
 		// a failure: the model is told and the turn continues (mirrors denial /
 		// cancellation). Reason (not Error) so error-keyed scorers don't count it.
@@ -825,6 +835,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	if cancelled() {
 		return cancelledText()
 	}
+
 	span.SetAttribute("agent.tool.is_error", fmt.Sprint(res.IsError))
 	emit(Event{Kind: EventToolEnd, Step: step, ToolCall: &call, ToolResult: res})
 	text := toolResultText(res)

@@ -153,10 +153,10 @@ func TestRunnerToolMetricStatuses(t *testing.T) {
 		)
 		meter := &recMeter{}
 		r, _ := NewRunner(RunnerConfig{
-			Provider:      stub,
-			Tools:         src,
-			MeterProvider: meter,
-			Approval:      denyAll{reason: "nope"},
+			Provider:       stub,
+			Tools:          src,
+			MeterProvider:  meter,
+			ToolMiddleware: []ToolMiddleware{denyAll("nope")},
 		})
 		r.Run(context.Background(), nil, nil)
 		calls := meter.named("agent.tool.calls")
