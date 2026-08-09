@@ -85,7 +85,7 @@ func TestBearerAuthReachesTheWire(t *testing.T) {
 		t.Fatalf("without bearer, boot should still succeed gracefully: %v", err)
 	}
 	defer app2.Close()
-	if s, _ := app2.group.State(cfg.Servers[0].ID); s == client.StateReady {
+	if s, _ := app2.servers.group.State(cfg.Servers[0].ID); s == client.StateReady {
 		t.Fatalf("un-bearered connection to the guarded server must not be ready, got %v", s)
 	}
 }

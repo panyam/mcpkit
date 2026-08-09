@@ -31,12 +31,9 @@ func (a *App) openSubscription(ctx context.Context, serverID, name string) (stri
 	}
 	id := serverID + ":" + name
 
-	a.subsMu.Lock()
-	if _, exists := a.subs[id]; exists {
-		a.subsMu.Unlock()
+	if a.streams.has(id) {
 		return id, nil // idempotent: already subscribed
 	}
-	a.subsMu.Unlock()
 
 	ch, call, err := eventsclient.StreamChan(ctx, c, eventsclient.ChanStreamOptions{
 		EventName: name,
@@ -46,9 +43,7 @@ func (a *App) openSubscription(ctx context.Context, serverID, name string) (stri
 		return "", err
 	}
 
-	a.subsMu.Lock()
-	a.subs[id] = &subscription{id: id, server: serverID, name: name, call: call}
-	a.subsMu.Unlock()
+	a.streams.add(&subscription{id: id, server: serverID, name: name, call: call})
 
 	adapted := make(chan agent.IncomingEvent, 16)
 	go func() {
@@ -57,19 +52,14 @@ func (a *App) openSubscription(ctx context.Context, serverID, name string) (stri
 			adapted <- adaptEvent(serverID, ev)
 		}
 	}()
-	a.fanIn.Add(adapted)
+	a.streams.fanIn.Add(adapted)
 	return id, nil
 }
 
 // closeSubscription stops one stream. Unknown ids report false.
 func (a *App) closeSubscription(id string) bool {
-	a.subsMu.Lock()
-	sub, ok := a.subs[id]
-	if ok {
-		delete(a.subs, id)
-	}
-	a.subsMu.Unlock()
-	if !ok {
+	sub := a.streams.take(id)
+	if sub == nil {
 		return false
 	}
 	sub.call.Stop()
@@ -78,20 +68,14 @@ func (a *App) closeSubscription(id string) bool {
 
 // listSubscriptions snapshots the open subscriptions.
 func (a *App) listSubscriptions() []*subscription {
-	a.subsMu.Lock()
-	defer a.subsMu.Unlock()
-	out := make([]*subscription, 0, len(a.subs))
-	for _, s := range a.subs {
-		out = append(out, s)
-	}
-	return out
+	return a.streams.all()
 }
 
 // clientByID resolves a configured server id to its connected client, or nil.
 func (a *App) clientByID(id string) *client.Client {
 	for i, sc := range a.cfg.Servers {
 		if sc.ID == id {
-			return a.clients[i]
+			return a.servers.clients[i]
 		}
 	}
 	return nil

@@ -15,7 +15,6 @@ import (
 	"github.com/panyam/mcpkit/agent"
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
-	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
 // App is agentchat's testable core: everything the binary does minus flag
@@ -40,27 +39,24 @@ type App struct {
 	teamEventSink func(agent.Event)
 
 	sources  *agent.MultiSource
-	clients  []*client.Client
 	history  []agent.Message
 	replOut  io.Writer // terminal REPL draws its own prompt here
 	failover *agent.FailoverProvider
 
-	// group owns the MCP server connection lifecycle (async connect, per-server
-	// state, backoff reconnect); its observer registers a server's tools when it
-	// becomes ready. serverTools mirrors the server sources for sub-agent
-	// personas. See docs/AGENT_SERVER_STATE.md.
-	group       *client.Group
-	serverTools *agent.MultiSource
+	// servers is the connected MCP servers: the Group owning their connection
+	// lifecycle, the clients, the persona-visible tool mirror, and the oauth
+	// token sources. See docs/AGENT_SERVER_STATE.md and serverSet.
+	servers serverSet
+
+	// streams is the inbound event plumbing over those servers: live
+	// subscriptions, the fan-in that merges them, and the context bounding
+	// them. Only populated when the async control plane is on. See streamSet.
+	streams streamSet
 
 	// agentPool backs the runner-control meta-tools (Config.RunnerControl,
 	// issue 1166): the registry of spawnable personas + their live handles. Nil
 	// when runner control is off.
 	agentPool *agent.AgentPool
-
-	// oauthSources holds the interactive (oauth) token source per server id, so
-	// LoginServer can force a fresh browser login. Only oauth-typed servers have
-	// an entry; its presence is what CanLogin reports.
-	oauthSources map[string]loginSource
 
 	// tp is the tracer provider, held so the ready-observer can load a late
 	// server's skills with the same instrumentation as the boot path.
@@ -79,12 +75,8 @@ type App struct {
 	injection *agent.EventInjectionPolicy
 	triggers  *agent.TriggerPolicy
 	approval  *agent.TieredApproval
-	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
-	streams   []*eventsclient.StreamCall
 	tasks     *taskSet
 	events    *eventSpine
-	subsMu    sync.Mutex
-	subs      map[string]*subscription
 	metaTools bool
 	turnMu    sync.Mutex
 
@@ -100,9 +92,6 @@ type App struct {
 	// to be dropped rather than queued.
 	ctrlMu sync.Mutex
 	ctrl   chan agent.Control
-
-	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
-	eventStop context.CancelFunc
 
 	// session is the persistence seam (WithRunStore): the store, the active
 	// run turns append to, and the /sessions paging position. See
@@ -251,8 +240,8 @@ func (a *App) registerServerTools(sc ServerConfig, c *client.Client) {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("register tools for %s: %v", sc.ID, err)})
 		return
 	}
-	if a.serverTools != nil {
-		_ = a.serverTools.Add(sc.ID, src)
+	if a.servers.tools != nil {
+		_ = a.servers.tools.Add(sc.ID, src)
 	}
 	// A late-added source changes the tool list; clear any cached aggregate so
 	// the next turn sees the new tools.
@@ -303,8 +292,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, events: &eventSpine{observers: observers}, replOut: out, tasks: newTaskSet(), skills: newSkillSet(), subs: map[string]*subscription{}, session: sessionState{store: o.store},
-		tp: o.tp, log: o.logger, oauthSources: map[string]loginSource{}}
+	app := &App{cfg: cfg, sources: multi, events: &eventSpine{observers: observers}, replOut: out, tasks: newTaskSet(), skills: newSkillSet(), session: sessionState{store: o.store},
+		streams: streamSet{subs: map[string]*subscription{}},
+		servers: serverSet{oauth: map[string]loginSource{}},
+		tp:      o.tp, log: o.logger}
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
 	// MaxEventLogRetention 0 keeps the unbounded log; a positive value caps the
@@ -336,7 +327,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// servers without seeing the meta-tools or the other personas (which would
 	// let it recurse). Built only when personas are configured.
 	if len(cfg.SubAgents) > 0 || len(cfg.FanOut) > 0 || cfg.Team != nil {
-		app.serverTools = agent.NewMultiSource()
+		app.servers.tools = agent.NewMultiSource()
 	}
 
 	// Build one client per server and hand it to the connection Group, which
@@ -354,7 +345,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			app.onServerEvents(serverByID[ch.ID])
 		}
 	}
-	app.group = client.NewGroup(client.WithObserver(onState))
+	app.servers.group = client.NewGroup(client.WithObserver(onState))
 	for _, sc := range cfg.Servers {
 		copts := []client.ClientOption{
 			client.WithGetSSEStream(),
@@ -372,13 +363,13 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 			copts = append(copts, authOpt)
 		}
 		if loginSrc != nil {
-			app.oauthSources[sc.ID] = loginSrc
+			app.servers.oauth[sc.ID] = loginSrc
 		}
 		c := client.NewClient(sc.URL, core.ClientInfo{Name: "agentchat", Version: "0.1"}, copts...)
-		app.clients = append(app.clients, c)
+		app.servers.clients = append(app.servers.clients, c)
 		serverByID[sc.ID] = sc
 		clientByID[sc.ID] = c
-		app.group.Add(sc.ID, c, sc.Required)
+		app.servers.group.Add(sc.ID, c, sc.Required)
 	}
 	// The event infrastructure (fanIn + subscription ctx) must exist before the
 	// servers connect, so the ready-observer can subscribe a server's event
@@ -389,14 +380,14 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		app.metaTools = app.metaTools || len(sc.Events) > 0
 	}
 	if app.metaTools {
-		app.evCtx, app.eventStop = context.WithCancel(context.Background())
-		app.fanIn = gocurrent.NewFanIn[agent.IncomingEvent]()
+		app.streams.ctx, app.streams.stop = context.WithCancel(context.Background())
+		app.streams.fanIn = gocurrent.NewFanIn[agent.IncomingEvent]()
 	}
 
-	app.group.Start(context.Background())
+	app.servers.group.Start(context.Background())
 	// Block only for the servers marked required; the rest keep connecting in
 	// the background and register via the observer as they become ready.
-	if err := app.group.WaitRequired(context.Background()); err != nil {
+	if err := app.servers.group.WaitRequired(context.Background()); err != nil {
 		app.Close()
 		return nil, fmt.Errorf("agentchat: %w", err)
 	}
@@ -407,7 +398,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// are loaded in the ready-observer (onServerSkills) into shared state that
 	// the dynamic system prompt (buildInstructions) and load_skill read live, so
 	// a server that connects after boot contributes its skills on the next turn.
-	_ = app.group.WaitSettled(context.Background())
+	_ = app.servers.group.WaitSettled(context.Background())
 
 	provider := o.provider
 	if provider == nil && cfg.Connections != nil {
@@ -488,7 +479,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// a filtered view of serverTools (built above), so it never sees the
 	// meta-tools or its sibling personas.
 	if len(cfg.SubAgents) > 0 {
-		if err := app.registerSubAgents(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+		if err := app.registerSubAgents(multi, app.servers.tools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}
@@ -498,7 +489,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// personas concurrently (agent.FanOutSource). Members are built like
 	// sub-agents (serverTools-only), so the same memory-free rule holds.
 	if len(cfg.FanOut) > 0 {
-		if err := app.registerFanOut(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+		if err := app.registerFanOut(multi, app.servers.tools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}
@@ -515,7 +506,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// configured personas in the background with handles (issue 1166). Reuses
 	// the persona child Runners; only meaningful with SubAgents.
 	if cfg.RunnerControl && len(cfg.SubAgents) > 0 {
-		if err := app.registerRunnerControl(multi, app.serverTools, provider, o.tp, o.mp); err != nil {
+		if err := app.registerRunnerControl(multi, app.servers.tools, provider, o.tp, o.mp); err != nil {
 			app.Close()
 			return nil, err
 		}
@@ -524,7 +515,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// Team mode: a handoff Team drives RunTurn instead of the single runner.
 	// Validated mutually exclusive with the single-agent features above.
 	if cfg.Team != nil {
-		team, err := app.buildTeam(app.serverTools, provider, o.tp, o.mp)
+		team, err := app.buildTeam(app.servers.tools, provider, o.tp, o.mp)
 		if err != nil {
 			app.Close()
 			return nil, err
@@ -612,25 +603,25 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// the ready-observer has been subscribing each server's event streams; now
 	// that the Runner exists, start the consumer that drains them into the
 	// injection/trigger policies.
-	if app.metaTools && app.fanIn != nil {
-		go app.consumeEvents(app.evCtx)
+	if app.metaTools && app.streams.fanIn != nil {
+		go app.consumeEvents(app.streams.ctx)
 	}
 	return app, nil
 }
 
 // Close stops event streams and disconnects every server.
 func (a *App) Close() {
-	if a.eventStop != nil {
-		a.eventStop()
+	if a.streams.stop != nil {
+		a.streams.stop()
 	}
-	for _, s := range a.streams {
+	for _, s := range a.streams.calls {
 		s.Stop()
 	}
 	for _, s := range a.listSubscriptions() {
 		s.call.Stop()
 	}
-	if a.fanIn != nil {
-		a.fanIn.Stop()
+	if a.streams.fanIn != nil {
+		a.streams.fanIn.Stop()
 	}
 	for _, bt := range a.tasks.all() {
 		bt.Cancel(context.Background())
@@ -639,10 +630,10 @@ func (a *App) Close() {
 	// connect/retry goroutines and closes the member clients. Fall back to
 	// closing clients directly only if the Group was never built (an early
 	// construction error).
-	if a.group != nil {
-		a.group.Close()
+	if a.servers.group != nil {
+		a.servers.group.Close()
 	} else {
-		for _, c := range a.clients {
+		for _, c := range a.servers.clients {
 			c.Close()
 		}
 	}
@@ -670,7 +661,7 @@ type loginSource interface{ Invalidate() }
 
 // canLogin reports whether an interactive (oauth) auth type is configured for
 // the server, so a surface knows when to offer the login action.
-func (a *App) canLogin(id string) bool { return a.oauthSources[id] != nil }
+func (a *App) canLogin(id string) bool { return a.servers.oauth[id] != nil }
 
 // LoginServer forces a fresh interactive login for an oauth-configured server:
 // it drops any cached token and reconnects, so the client's next connect runs
@@ -678,7 +669,7 @@ func (a *App) canLogin(id string) bool { return a.oauthSources[id] != nil }
 // (oauth) auth type, or an unknown id, is a no-op — canLogin / the server
 // status CanLogin flag tells a surface when to offer it.
 func (a *App) LoginServer(id string) {
-	src := a.oauthSources[id]
+	src := a.servers.oauth[id]
 	if src == nil {
 		return
 	}
@@ -693,8 +684,8 @@ func (a *App) LoginServer(id string) {
 // reconnect command and the interactive /mcp overlay's reconnect action; the
 // surface renders the resulting state transitions from the group observer.
 func (a *App) ReconnectServer(id string) {
-	if a.group != nil {
-		a.group.Reconnect(id)
+	if a.servers.group != nil {
+		a.servers.group.Reconnect(id)
 	}
 }
 
