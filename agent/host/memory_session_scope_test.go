@@ -32,7 +32,7 @@ func TestCurrentRunIDLockFree(t *testing.T) {
 	app.turnMu.Lock()
 	defer app.turnMu.Unlock()
 	done := make(chan string, 1)
-	go func() { done <- app.currentRunID() }()
+	go func() { done <- app.session.currentRunID() }()
 	select {
 	case got := <-done:
 		if got != "r1" {

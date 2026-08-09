@@ -39,28 +39,7 @@ func WithProviderBuilder(b ProviderBuilder) AppOption {
 func (a *App) RunID() string {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
-	return a.runID
-}
-
-// setRunID updates the active run id and its lock-free mirror together.
-// Caller holds turnMu (every write site does). Routing all four writers
-// (AttachRun, resumeLocked, Fork, ensureRunLocked) through here keeps
-// runIDAtomic from drifting out of sync with runID.
-func (a *App) setRunID(id string) {
-	a.runID = id
-	a.runIDAtomic.Store(id)
-}
-
-// currentRunID reads the active run id WITHOUT taking turnMu, so it is
-// safe to call from inside a turn (the memory namespace func runs while
-// RunTurn already holds turnMu — RunID would deadlock there). Returns ""
-// before any run is set, which the session-scoped namespace func maps to
-// the shared default scratchpad (the same as unscoped memory).
-func (a *App) currentRunID() string {
-	if v := a.runIDAtomic.Load(); v != nil {
-		return v.(string)
-	}
-	return ""
+	return a.session.runID
 }
 
 // AttachRun binds the session to runID with create-or-resume semantics:
@@ -71,15 +50,15 @@ func (a *App) currentRunID() string {
 func (a *App) AttachRun(ctx context.Context, runID string) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
-	if a.store == nil {
+	if a.session.store == nil {
 		return fmt.Errorf("host: no RunStore configured")
 	}
-	resp, err := a.store.CreateRun(ctx, agent.CreateRunRequest{RunID: runID})
+	resp, err := a.session.store.CreateRun(ctx, agent.CreateRunRequest{RunID: runID})
 	if err != nil {
 		return fmt.Errorf("host: attaching run %q: %w", runID, err)
 	}
 	if resp.Created {
-		a.setRunID(resp.RunID)
+		a.session.setRunID(resp.RunID)
 		a.history = nil
 		return nil
 	}
@@ -114,25 +93,21 @@ type SessionPage struct {
 // without the surface handling the opaque cursor. Errors when no RunStore is
 // configured.
 func (a *App) SessionsPage(ctx context.Context, cursor string) (SessionPage, error) {
-	if a.store == nil {
+	if a.session.store == nil {
 		return SessionPage{}, fmt.Errorf("host: no RunStore configured")
 	}
-	resp, err := a.store.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor})
+	resp, err := a.session.store.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor})
 	if err != nil {
 		return SessionPage{}, fmt.Errorf("host: listing sessions: %w", err)
 	}
-	a.sessionsMu.Lock()
-	a.sessionsCursor = resp.NextCursor
-	a.sessionsMu.Unlock()
+	a.session.rememberCursor(resp.NextCursor)
 	return SessionPage{Runs: resp.Runs, HasMore: resp.NextCursor != ""}, nil
 }
 
 // PageMore returns the next page after the last SessionsPage call (the
 // /sessions "more" flow), or an empty page when there is nothing more.
 func (a *App) PageMore(ctx context.Context) (SessionPage, error) {
-	a.sessionsMu.Lock()
-	cursor := a.sessionsCursor
-	a.sessionsMu.Unlock()
+	cursor := a.session.nextCursor()
 	if cursor == "" {
 		return SessionPage{}, nil
 	}
@@ -149,7 +124,7 @@ const maxSessionSearchScan = 1000
 // bounded, so a match past the cap is not found — a deliberate limit until a
 // real search index exists.
 func (a *App) SearchSessions(ctx context.Context, query string) ([]agent.RunInfo, error) {
-	if a.store == nil {
+	if a.session.store == nil {
 		return nil, fmt.Errorf("host: no RunStore configured")
 	}
 	q := strings.ToLower(query)
@@ -157,7 +132,7 @@ func (a *App) SearchSessions(ctx context.Context, query string) ([]agent.RunInfo
 	cursor := ""
 	scanned := 0
 	for scanned < maxSessionSearchScan {
-		resp, err := a.store.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor})
+		resp, err := a.session.store.ListRuns(ctx, agent.ListRunsRequest{Cursor: cursor})
 		if err != nil {
 			return nil, fmt.Errorf("host: searching sessions: %w", err)
 		}
@@ -182,14 +157,14 @@ func (a *App) SearchSessions(ctx context.Context, query string) ([]agent.RunInfo
 func (a *App) Resume(ctx context.Context, runID string) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
-	if a.store == nil {
+	if a.session.store == nil {
 		return fmt.Errorf("host: no RunStore configured")
 	}
 	return a.resumeLocked(ctx, runID)
 }
 
 func (a *App) resumeLocked(ctx context.Context, runID string) error {
-	resp, err := a.store.LoadRun(ctx, agent.LoadRunRequest{RunID: runID})
+	resp, err := a.session.store.LoadRun(ctx, agent.LoadRunRequest{RunID: runID})
 	if err != nil {
 		return fmt.Errorf("host: loading run %q: %w", runID, err)
 	}
@@ -197,7 +172,7 @@ func (a *App) resumeLocked(ctx context.Context, runID string) error {
 		return fmt.Errorf("host: run %q not found", runID)
 	}
 	a.history = resp.Run.Messages
-	a.setRunID(runID)
+	a.session.setRunID(runID)
 	return nil
 }
 
@@ -212,18 +187,18 @@ func (a *App) resumeLocked(ctx context.Context, runID string) error {
 func (a *App) Fork(ctx context.Context, newRunID string, atMessage int) (string, error) {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
-	if a.store == nil {
+	if a.session.store == nil {
 		return "", fmt.Errorf("host: no RunStore configured")
 	}
-	if a.runID == "" {
+	if a.session.runID == "" {
 		return "", fmt.Errorf("host: no active run to fork (run at least one turn first)")
 	}
-	resp, err := a.store.ForkRun(ctx, agent.ForkRunRequest{RunID: a.runID, NewRunID: newRunID, AtMessage: atMessage})
+	resp, err := a.session.store.ForkRun(ctx, agent.ForkRunRequest{RunID: a.session.runID, NewRunID: newRunID, AtMessage: atMessage})
 	if err != nil {
-		return "", fmt.Errorf("host: forking run %q: %w", a.runID, err)
+		return "", fmt.Errorf("host: forking run %q: %w", a.session.runID, err)
 	}
 	if !resp.Found {
-		return "", fmt.Errorf("host: run %q not found", a.runID)
+		return "", fmt.Errorf("host: run %q not found", a.session.runID)
 	}
 	if !resp.Created {
 		return "", fmt.Errorf("host: run %q already exists", newRunID)
@@ -231,21 +206,21 @@ func (a *App) Fork(ctx context.Context, newRunID string, atMessage int) (string,
 	if atMessage > 0 {
 		return resp.RunID, a.resumeLocked(ctx, resp.RunID)
 	}
-	a.setRunID(resp.RunID)
+	a.session.setRunID(resp.RunID)
 	return resp.RunID, nil
 }
 
 // ensureRunLocked lazily creates the session's run before the first
 // persisted turn. Caller holds turnMu.
 func (a *App) ensureRunLocked(ctx context.Context) error {
-	if a.runID != "" {
+	if a.session.runID != "" {
 		return nil
 	}
-	resp, err := a.store.CreateRun(ctx, agent.CreateRunRequest{})
+	resp, err := a.session.store.CreateRun(ctx, agent.CreateRunRequest{})
 	if err != nil {
 		return fmt.Errorf("host: creating run: %w", err)
 	}
-	a.setRunID(resp.RunID)
+	a.session.setRunID(resp.RunID)
 	a.emit(HostEvent{Kind: HostSessionChanged, RunID: resp.RunID})
 	return nil
 }
@@ -256,11 +231,11 @@ func (a *App) ensureRunLocked(ctx context.Context) error {
 // and the in-memory session stays usable; only durability degraded.
 // Caller holds turnMu.
 func (a *App) persistTurnLocked(ctx context.Context, msgs []agent.Message, pe *PersistingEmit) {
-	resp, err := a.store.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: a.runID, Messages: msgs})
+	resp, err := a.session.store.AppendMessages(ctx, agent.AppendMessagesRequest{RunID: a.session.runID, Messages: msgs})
 	if err != nil {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: err.Error()})
 	} else if !resp.Found {
-		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("run %q disappeared from the store", a.runID)})
+		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("run %q disappeared from the store", a.session.runID)})
 	}
 	if err := pe.Flush(ctx); err != nil {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: err.Error()})
@@ -273,7 +248,7 @@ func (a *App) persistTurnLocked(ctx context.Context, msgs []agent.Message, pe *P
 	// on a successful Flush keeps unpersisted events in the Queue-tail half of
 	// the replay (no gap). eventLog.Len() is the absolute offset space, so this
 	// stays correct under a bounded (evicting) log.
-	a.persistedOffset.Store(int64(a.eventLog.Len()))
+	a.events.persisted.Store(int64(a.events.log.Len()))
 }
 
 // PersistingEmit tees a Runner event stream into a RunStore event log.

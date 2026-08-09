@@ -10,13 +10,13 @@ import (
 )
 
 func newAskApp() *App {
-	return &App{
-		eventLog:  gocurrent.NewQueue[HostEvent](),
+	return &App{events: &eventSpine{
+		log:       gocurrent.NewQueue[HostEvent](),
 		observers: []Observer{&recordObserver{}},
-	}
+	}}
 }
 
-func askRecorder(a *App) *recordObserver { return a.observers[0].(*recordObserver) }
+func askRecorder(a *App) *recordObserver { return a.events.observers[0].(*recordObserver) }
 
 // waitAskOffset returns the log offset of the pending HostElicitRequest — the
 // ask id a surface reads from its stream position and passes to RespondToAsk.
@@ -24,7 +24,7 @@ func waitAskOffset(t *testing.T, a *App) int {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		evs, _ := a.eventLog.ReadFrom(0)
+		evs, _ := a.events.log.ReadFrom(0)
 		for i := range evs {
 			if evs[i].Kind == HostElicitRequest {
 				return i
@@ -129,7 +129,7 @@ func TestRespondToAsk_Errors(t *testing.T) {
 		t.Fatal("expected an error responding to an out-of-range offset")
 	}
 
-	off := a.eventLog.Append(HostEvent{Kind: HostElicitRequest})
+	off := a.events.log.Append(HostEvent{Kind: HostElicitRequest})
 	if err := a.RespondToAsk(off, core.ElicitationResult{}, "first"); err != nil {
 		t.Fatalf("first response should win: %v", err)
 	}

@@ -52,10 +52,10 @@ func TestAppBootsWithDownOptionalServer(t *testing.T) {
 	}
 	defer app.Close()
 
-	if s, _ := app.group.State("test"); s != client.StateReady {
+	if s, _ := app.servers.group.State("test"); s != client.StateReady {
 		t.Fatalf("reachable server state = %v, want ready", s)
 	}
-	if s, _ := app.group.State("down"); s == client.StateReady {
+	if s, _ := app.servers.group.State("down"); s == client.StateReady {
 		t.Fatalf("down server should not be ready, got %v", s)
 	}
 	res, err := app.Dispatch(context.Background(), "/servers")
@@ -102,7 +102,7 @@ func TestAppRequiredServerReadyAfterBoot(t *testing.T) {
 		t.Fatalf("boot with a reachable required server: %v", err)
 	}
 	defer app.Close()
-	if s, _ := app.group.State("test"); s != client.StateReady {
+	if s, _ := app.servers.group.State("test"); s != client.StateReady {
 		t.Fatalf("required server must be ready after boot, got %v", s)
 	}
 }

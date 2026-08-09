@@ -17,14 +17,14 @@ import (
 // evict, Len keeps counting the absolute offset space, and ReadFrom(0)
 // degrades to the retained suffix (never panics, never renumbers).
 func TestEventLog_BoundedEvicts(t *testing.T) {
-	a := &App{eventLog: gocurrent.NewBoundedQueue[HostEvent](3)}
+	a := &App{events: &eventSpine{log: gocurrent.NewBoundedQueue[HostEvent](3)}}
 	for i := 0; i < 5; i++ {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: strconv.Itoa(i)})
 	}
-	if got := a.eventLog.Len(); got != 5 {
+	if got := a.events.log.Len(); got != 5 {
 		t.Fatalf("Len = %d, want 5 (absolute offset space keeps counting past eviction)", got)
 	}
-	evs, _ := a.eventLog.ReadFrom(0)
+	evs, _ := a.events.log.ReadFrom(0)
 	got := make([]string, len(evs))
 	for i := range evs {
 		got[i] = evs[i].Err
@@ -39,7 +39,7 @@ func TestEventLog_BoundedEvicts(t *testing.T) {
 // receives live events, until ctx is cancelled. This is what a web Watch RPC
 // drains onto the wire.
 func TestSubscribe_ReplayThenLive(t *testing.T) {
-	a := &App{eventLog: gocurrent.NewQueue[HostEvent]()}
+	a := &App{events: &eventSpine{log: gocurrent.NewQueue[HostEvent]()}}
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "0"})
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "1"})
 
@@ -87,7 +87,7 @@ func TestSubscribe_ReplayThenLive(t *testing.T) {
 // (Observer) and a browser (Subscribe) on one App see the same turns.
 func TestSubscribe_LocalObserverAndSubscriberSeeSameStream(t *testing.T) {
 	rec := &recordObserver{}
-	a := &App{eventLog: gocurrent.NewQueue[HostEvent](), observers: []Observer{rec}}
+	a := &App{events: &eventSpine{log: gocurrent.NewQueue[HostEvent](), observers: []Observer{rec}}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -117,7 +117,7 @@ func TestSubscribe_LocalObserverAndSubscriberSeeSameStream(t *testing.T) {
 // RunStore, Subscribe replays the current retained window and then follows
 // live. With a bounded log the window is the un-evicted suffix.
 func TestSubscribe_NoStoreReplaysRetainedWindow(t *testing.T) {
-	a := &App{eventLog: gocurrent.NewBoundedQueue[HostEvent](2)}
+	a := &App{events: &eventSpine{log: gocurrent.NewBoundedQueue[HostEvent](2)}}
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "0"}) // evicted before Subscribe
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "1"})
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "2"})
@@ -168,10 +168,10 @@ func TestSubscribe_DeepReplayAfterEviction(t *testing.T) {
 
 	// Eviction really happened: the log counted more than the window, and the
 	// retained window is capped, so the early turns are gone from the Queue.
-	if n := app.eventLog.Len(); n <= 4 {
+	if n := app.events.log.Len(); n <= 4 {
 		t.Fatalf("expected the log to exceed the retention window, Len = %d", n)
 	}
-	if evs, _ := app.eventLog.ReadFrom(0); len(evs) > 4 {
+	if evs, _ := app.events.log.ReadFrom(0); len(evs) > 4 {
 		t.Fatalf("retained window = %d entries, want <= 4 (evicting)", len(evs))
 	}
 
@@ -202,17 +202,17 @@ func TestPersistedOffsetAdvancesAtTurnEnd(t *testing.T) {
 	}
 	t.Cleanup(app.Close)
 
-	if got := app.persistedOffset.Load(); got != 0 {
+	if got := app.events.persisted.Load(); got != 0 {
 		t.Fatalf("persistedOffset before any turn = %d, want 0", got)
 	}
 	if err := app.RunTurn(ctx, "hi"); err != nil {
 		t.Fatal(err)
 	}
-	off := app.persistedOffset.Load()
+	off := app.events.persisted.Load()
 	if off == 0 {
 		t.Fatal("persistedOffset did not advance after a persisted turn")
 	}
-	if n := int64(app.eventLog.Len()); off > n {
+	if n := int64(app.events.log.Len()); off > n {
 		t.Fatalf("persistedOffset = %d exceeds event log length %d", off, n)
 	}
 }

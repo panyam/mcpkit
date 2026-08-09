@@ -14,9 +14,7 @@ import (
 // onTaskDetach registers the handle and tells the user their job moved to
 // the background.
 func (a *App) onTaskDetach(bt *client.BackgroundTask) {
-	a.tasksMu.Lock()
-	a.bgTasks[bt.TaskID] = bt
-	a.tasksMu.Unlock()
+	a.tasks.add(bt)
 	a.emit(HostEvent{Kind: HostTaskDetached, Task: bt})
 }
 
@@ -27,9 +25,7 @@ func (a *App) onTaskDetach(bt *client.BackgroundTask) {
 // "tell the user immediately" binds a trigger on task.completed; nothing is
 // hardcoded, so N finishing tasks cannot nag by default).
 func (a *App) onTaskComplete(serverID string, bt *client.BackgroundTask) {
-	a.tasksMu.Lock()
-	delete(a.bgTasks, bt.TaskID)
-	a.tasksMu.Unlock()
+	a.tasks.remove(bt.TaskID)
 	a.emit(HostEvent{Kind: HostTaskCompleted, Task: bt})
 
 	dt, err := bt.Result()
@@ -59,20 +55,12 @@ func (a *App) onTaskComplete(serverID string, bt *client.BackgroundTask) {
 
 // snapshotTasks lists running background tasks for /tasks.
 func (a *App) snapshotTasks() []*client.BackgroundTask {
-	a.tasksMu.Lock()
-	defer a.tasksMu.Unlock()
-	out := make([]*client.BackgroundTask, 0, len(a.bgTasks))
-	for _, bt := range a.bgTasks {
-		out = append(out, bt)
-	}
-	return out
+	return a.tasks.all()
 }
 
 // cancelTask services "/tasks cancel <id>".
 func (a *App) cancelTask(id string) {
-	a.tasksMu.Lock()
-	bt := a.bgTasks[id]
-	a.tasksMu.Unlock()
+	bt := a.tasks.get(id)
 	if bt == nil {
 		a.emit(HostEvent{Kind: HostMessage, Message: fmt.Sprintf("no running task %q (see /tasks)", id)})
 		return

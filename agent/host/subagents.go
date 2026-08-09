@@ -45,7 +45,7 @@ func preemptGrantFor(allow bool) func(agent.Signal) bool {
 // location is not guaranteed, so shared parent memory would assume a
 // co-location that A2 wire-serializability forbids; parent-to-child is params +
 // injection only. A child that needs memory owns its own (its Runner's config),
-// never a WithMemoryNamespaceFunc(a.currentRunID) into the parent's namespace.
+// never a WithMemoryNamespaceFunc(a.session.currentRunID) into the parent's namespace.
 // Guarded by TestSubAgentCannotReachParentMemory.
 func (a *App) registerSubAgents(multi, serverTools *agent.MultiSource, provider agent.Provider, tp core.TracerProvider, mp core.MeterProvider) error {
 	for _, sub := range a.cfg.SubAgents {
