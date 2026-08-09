@@ -25,7 +25,7 @@ type elicitResolution struct {
 // RPC calls (issue 1196); the local terminal UI resolves the same ask through
 // barrierElicit below.
 func (a *App) RespondToAsk(askOffset int, res core.ElicitationResult, by string) error {
-	return a.eventLog.Resolve(askOffset, elicitResolution{res: res, by: by})
+	return a.events.log.Resolve(askOffset, elicitResolution{res: res, by: by})
 }
 
 // barrierElicit wraps a local ElicitationUI so an elicitation is broadcast to
@@ -47,7 +47,7 @@ func (a *App) barrierElicit(local agent.ElicitationUI) agent.ElicitationUI {
 		go func() {
 			res, err := local(localCtx, req)
 			if localCtx.Err() == nil {
-				a.eventLog.Resolve(off, elicitResolution{res: res, err: err, by: "local"})
+				a.events.log.Resolve(off, elicitResolution{res: res, err: err, by: "local"})
 			}
 		}()
 
@@ -55,7 +55,7 @@ func (a *App) barrierElicit(local agent.ElicitationUI) agent.ElicitationUI {
 		// cancelled turn by resolving the ask ourselves (the goroutine then
 		// unblocks and exits; the buffered channel means it never leaks).
 		resolved := make(chan elicitResolution, 1)
-		go func() { resolved <- a.eventLog.AwaitResolution(off).(elicitResolution) }()
+		go func() { resolved <- a.events.log.AwaitResolution(off).(elicitResolution) }()
 
 		select {
 		case r := <-resolved:
@@ -66,7 +66,7 @@ func (a *App) barrierElicit(local agent.ElicitationUI) agent.ElicitationUI {
 			a.emit(HostEvent{Kind: HostElicitResolved, AskID: int64(off), By: r.by})
 			return r.res, r.err
 		case <-ctx.Done():
-			a.eventLog.Resolve(off, elicitResolution{err: ctx.Err(), by: askCancelled})
+			a.events.log.Resolve(off, elicitResolution{err: ctx.Err(), by: askCancelled})
 			return core.ElicitationResult{}, ctx.Err()
 		}
 	}

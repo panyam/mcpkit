@@ -13,11 +13,11 @@ import (
 // This is what lets a web surface (issue 1196) join a running session and see
 // its history.
 func TestEventLog_RetainsForLateReplay(t *testing.T) {
-	a := &App{eventLog: gocurrent.NewQueue[HostEvent]()}
+	a := &App{events: &eventSpine{log: gocurrent.NewQueue[HostEvent]()}}
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "0"})
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "1"})
 
-	sub := a.eventLog.Subscribe() // subscribes late, after "0" and "1"
+	sub := a.events.log.Subscribe() // subscribes late, after "0" and "1"
 	defer sub.Close()
 
 	a.emit(HostEvent{Kind: HostSessionWarn, Err: "2"})
@@ -28,7 +28,7 @@ func TestEventLog_RetainsForLateReplay(t *testing.T) {
 		t.Fatal("late subscriber was not notified of the live event")
 	}
 
-	evs, _ := a.eventLog.ReadFrom(0)
+	evs, _ := a.events.log.ReadFrom(0)
 	got := make([]string, len(evs))
 	for i := range evs {
 		got[i] = evs[i].Err
@@ -44,7 +44,7 @@ func TestEventLog_RetainsForLateReplay(t *testing.T) {
 // wait), and the same events land on the retained log.
 func TestEmit_DeliversToLocalObserversSynchronously(t *testing.T) {
 	rec := &recordObserver{}
-	a := &App{eventLog: gocurrent.NewQueue[HostEvent](), observers: []Observer{rec}}
+	a := &App{events: &eventSpine{log: gocurrent.NewQueue[HostEvent](), observers: []Observer{rec}}}
 
 	want := []HostEventKind{HostRunnerEvent, HostTurnDone, HostSessionWarn}
 	for _, k := range want {
@@ -54,7 +54,7 @@ func TestEmit_DeliversToLocalObserversSynchronously(t *testing.T) {
 	if got := rec.kinds(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("observer order = %v, want %v", got, want)
 	}
-	if n := a.eventLog.Len(); n != len(want) {
+	if n := a.events.log.Len(); n != len(want) {
 		t.Fatalf("retained log length = %d, want %d", n, len(want))
 	}
 }

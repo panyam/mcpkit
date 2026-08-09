@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	gocurrent "github.com/panyam/gocurrent"
 	"github.com/panyam/mcpkit/agent"
@@ -40,12 +39,11 @@ type App struct {
 	// nil otherwise.
 	teamEventSink func(agent.Event)
 
-	sources   *agent.MultiSource
-	clients   []*client.Client
-	history   []agent.Message
-	observers []Observer
-	replOut   io.Writer // terminal REPL draws its own prompt here
-	failover  *agent.FailoverProvider
+	sources  *agent.MultiSource
+	clients  []*client.Client
+	history  []agent.Message
+	replOut  io.Writer // terminal REPL draws its own prompt here
+	failover *agent.FailoverProvider
 
 	// group owns the MCP server connection lifecycle (async connect, per-server
 	// state, backoff reconnect); its observer registers a server's tools when it
@@ -84,11 +82,11 @@ type App struct {
 	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
 	streams   []*eventsclient.StreamCall
 	tasks     *taskSet
+	events    *eventSpine
 	subsMu    sync.Mutex
 	subs      map[string]*subscription
 	metaTools bool
 	turnMu    sync.Mutex
-	emitMu    sync.Mutex // serializes emit's synchronous local delivery (the Group, turn, and event goroutines all emit)
 
 	// ctrl is the in-flight turn's mid-turn control channel, non-nil only
 	// while a single-agent turn is running. InterruptToolCalls sends on it;
@@ -103,52 +101,13 @@ type App struct {
 	ctrlMu sync.Mutex
 	ctrl   chan agent.Control
 
-	// eventLog is the retained per-session event log. emit appends every
-	// HostEvent here in addition to delivering it synchronously to the local
-	// observers, so the log is the single source of truth a web surface
-	// subscribes onto (replay from offset 0 + live) and the barrier seam for
-	// multi-surface asks. Local observers stay synchronous because the terminal
-	// renderer writes to a caller-visible io.Writer; the async subscriber
-	// adapter that isolates a remote surface lands with that surface (issue
-	// 1196). Bounded when Config.MaxEventLogRetention > 0 (issue 1200): the
-	// oldest entries evict while offsets stay absolute, and Subscribe deep
-	// replays evicted-but-persisted turns from the RunStore. Unbounded by
-	// default (issue 1194, Option A).
-	eventLog *gocurrent.Queue[HostEvent]
-
-	// persistedOffset is the eventLog offset through which the run's events
-	// have been written to the RunStore: eventLog[0, persistedOffset) is
-	// covered by the store (its runner events are in RunStore.Events; any
-	// non-runner HostEvents in that range are ephemeral). Advanced at the
-	// turn-end persist site (persistTurnLocked) once AppendEvents succeeds,
-	// and read by Subscribe to split its replay between the RunStore (deep
-	// history) and the Queue tail (unpersisted, still in the retained window).
-	// Written and the deep-replay snapshot read under turnMu; atomic so a
-	// lock-free reader stays safe. Stays 0 when no RunStore is configured, so
-	// Subscribe falls back to replaying the whole retained window.
-	persistedOffset atomic.Int64
-
 	evCtx     context.Context // subscription lifetime ctx; the ready-observer subscribes late servers on it
 	eventStop context.CancelFunc
 
-	// store and runID are the persistence seam (WithRunStore): runID is
-	// the run turns append to, created lazily on the first persisted
-	// turn or set by AttachRun / Resume / Fork. Guarded by turnMu; write
-	// through setRunID so runIDAtomic stays in sync.
-	store agent.RunStore
-	runID string
-
-	// runIDAtomic mirrors runID for a lock-free read (currentRunID). The
-	// session-scoped memory namespace func reads it during a turn while
-	// turnMu is already held, so it must NOT go through RunID (which takes
-	// turnMu and would deadlock). Written under turnMu via setRunID.
-	runIDAtomic atomic.Value
-
-	// sessionsMu guards sessionsCursor, the paging position the /sessions
-	// picker remembers so "/sessions more" advances (the store cursor is
-	// opaque, so the host holds where the last page ended).
-	sessionsMu     sync.Mutex
-	sessionsCursor string
+	// session is the persistence seam (WithRunStore): the store, the active
+	// run turns append to, and the /sessions paging position. See
+	// sessionState for why its locking is deliberately not uniform.
+	session sessionState
 
 	// toolResultStore backs tool-result offloading when Config.Offload
 	// is set; nil when offloading is off.
@@ -344,7 +303,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, tasks: newTaskSet(), skills: newSkillSet(), subs: map[string]*subscription{}, store: o.store,
+	app := &App{cfg: cfg, sources: multi, events: &eventSpine{observers: observers}, replOut: out, tasks: newTaskSet(), skills: newSkillSet(), subs: map[string]*subscription{}, session: sessionState{store: o.store},
 		tp: o.tp, log: o.logger, oauthSources: map[string]loginSource{}}
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
@@ -352,9 +311,9 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// retained window (NewBoundedQueue evicts the oldest, offsets stay absolute
 	// so Subscribe's deep replay still stitches).
 	if cfg.MaxEventLogRetention > 0 {
-		app.eventLog = gocurrent.NewBoundedQueue[HostEvent](cfg.MaxEventLogRetention)
+		app.events.log = gocurrent.NewBoundedQueue[HostEvent](cfg.MaxEventLogRetention)
 	} else {
-		app.eventLog = gocurrent.NewQueue[HostEvent]()
+		app.events.log = gocurrent.NewQueue[HostEvent]()
 	}
 	// Elicitations broadcast to every surface via the event log and resolve on
 	// the first responder; the local UI is one responder (barrierElicit).
@@ -752,7 +711,7 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 
 	emit := func(e agent.Event) { a.emit(HostEvent{Kind: HostRunnerEvent, RunnerEvent: e}) }
 	var pe *PersistingEmit
-	if a.store != nil {
+	if a.session.store != nil {
 		if err := a.ensureRunLocked(ctx); err != nil {
 			a.history = a.history[:len(a.history)-1]
 			a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
@@ -762,9 +721,9 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 			// Team member events render attributed via OnEvent, so the persisting
 			// tap must NOT also render (that would double-render) — a nil next
 			// makes pe buffer-only; teamEventSink feeds it below.
-			pe = NewPersistingEmit(a.store, a.runID, nil)
+			pe = NewPersistingEmit(a.session.store, a.session.runID, nil)
 		} else {
-			pe = NewPersistingEmit(a.store, a.runID, emit)
+			pe = NewPersistingEmit(a.session.store, a.session.runID, emit)
 			emit = pe.Emit
 		}
 	}
@@ -905,21 +864,8 @@ func (a *App) SwitchProvider(name string) error {
 }
 
 // emit records a host event on the retained log and delivers it synchronously
-// to every local observer. The append is the source of truth a web surface
-// replays and subscribes onto; the synchronous fan-out preserves the terminal
-// rendering contract (a caller reading the renderer's io.Writer sees the event
-// once emit returns). Serialized by emitMu: the async server connections (Group
-// observer), the turn goroutine, and event goroutines all emit, so the lock
-// keeps the not-inherently-concurrent terminal renderer from racing.
-func (a *App) emit(ev HostEvent) (offset int) {
-	offset = a.eventLog.Append(ev)
-	a.emitMu.Lock()
-	defer a.emitMu.Unlock()
-	for _, o := range a.observers {
-		o.On(ev)
-	}
-	return offset
-}
+// to every local observer. See eventSpine.emit for the ordering contract.
+func (a *App) emit(ev HostEvent) (offset int) { return a.events.emit(ev) }
 
 // promptREPL draws the terminal REPL's input marker. The prompt is
 // surface chrome, not a host event — the REPL owns it because the REPL is

@@ -66,15 +66,15 @@ func (a *App) Subscribe(ctx context.Context) <-chan HostEvent {
 	// after this point wakes the subscription (and is also picked up by the tail
 	// read, harmlessly re-signalled); any Append before it is already in the tail.
 	a.turnMu.Lock()
-	sub := a.eventLog.Subscribe()
-	p := int(a.persistedOffset.Load())
+	sub := a.events.log.Subscribe()
+	p := int(a.events.persisted.Load())
 	var deep []agent.Event
-	if a.store != nil && a.runID != "" && p > 0 {
-		if resp, err := a.store.LoadRun(ctx, agent.LoadRunRequest{RunID: a.runID}); err == nil && resp.Found {
+	if a.session.store != nil && a.session.runID != "" && p > 0 {
+		if resp, err := a.session.store.LoadRun(ctx, agent.LoadRunRequest{RunID: a.session.runID}); err == nil && resp.Found {
 			deep = resp.Run.Events
 		}
 	}
-	tail, next := a.eventLog.ReadFrom(p)
+	tail, next := a.events.log.ReadFrom(p)
 	a.turnMu.Unlock()
 
 	out := make(chan HostEvent, subscribeBuffer)
@@ -107,7 +107,7 @@ func (a *App) Subscribe(ctx context.Context) <-chan HostEvent {
 			case <-ctx.Done():
 				return
 			case <-sub.Notify():
-				evs, n := a.eventLog.ReadFrom(off)
+				evs, n := a.events.log.ReadFrom(off)
 				for i, e := range evs {
 					stampAskID(&e, off+i)
 					select {

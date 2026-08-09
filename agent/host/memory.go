@@ -33,8 +33,8 @@ func (a *App) registerMemory(multi *agent.MultiSource, store agent.MemoryStore) 
 		// currentRunID is lock-free: it runs during a turn while turnMu is
 		// already held (both the memory tools and the summary/recall injection),
 		// so RunID would deadlock here.
-		opts = append(opts, agent.WithMemoryNamespaceFunc(a.currentRunID))
-		if a.store == nil {
+		opts = append(opts, agent.WithMemoryNamespaceFunc(a.session.currentRunID))
+		if a.session.store == nil {
 			a.log.Warn("host: memory sessionScoped is set but no RunStore is configured; every session shares the default scratchpad (add WithRunStore / --session-store to isolate)")
 		}
 	}
