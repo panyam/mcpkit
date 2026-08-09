@@ -1168,7 +1168,17 @@ func (cc *CallContext) WithNotifyHook(hook func(method string, params json.RawMe
 // CallContext issues a JSON-RPC call with per-call configuration carried
 // on the typed CallContext. Identical to Call when cc has no hooks set
 // beyond a plain context.
+//
+// ctx bounds the call. A cc that already carries its own Context keeps it —
+// an explicitly built NewCallContext is the caller stating intent, and it
+// wins over the ambient argument.
 func (c *Client) CallContext(ctx context.Context, cc *CallContext, method string, params any) (*CallResult, error) {
+	if cc == nil {
+		cc = &CallContext{}
+	}
+	if cc.Context == nil {
+		cc.Context = ctxOrBackground(ctx)
+	}
 	resp, err := c.rawCallWithContext(method, params, cc)
 	if err != nil {
 		return nil, err
@@ -1222,12 +1232,14 @@ func (c *Client) Call(ctx context.Context, method string, params any) (*CallResu
 func (c *Client) callImpl(ctx context.Context, method string, params any) (*CallResult, error) {
 	traceEnabled := tracingEnabled(c.tracerProvider)
 	if len(c.callMiddleware) == 0 && !traceEnabled {
-		return c.callDirect(method, params)
+		return c.callDirect(ctx, method, params)
 	}
 
-	// Build the terminal handler.
-	terminal := ClientCallFunc(func(_ context.Context, method string, params any) (*CallResult, error) {
-		return c.callDirect(method, params)
+	// Build the terminal handler. It takes the ctx the middleware chain hands
+	// it rather than the one captured here, so middleware that derives a ctx
+	// (a per-call timeout, a retry budget) bounds the request it wraps.
+	terminal := ClientCallFunc(func(ctx context.Context, method string, params any) (*CallResult, error) {
+		return c.callDirect(ctx, method, params)
 	})
 	// Wrap with user middleware (reverse order: first registered = outermost).
 	handler := terminal
@@ -1251,9 +1263,16 @@ func (c *Client) callImpl(ctx context.Context, method string, params any) (*Call
 	return handler(ctx, method, params)
 }
 
-// callDirect is the non-middleware Call path.
-func (c *Client) callDirect(method string, params any) (*CallResult, error) {
-	resp, err := c.rawCall(method, params)
+// callDirect is the non-middleware Call path. ctx bounds the request: it is
+// carried down as CallContext.Context so the streamable HTTP transport builds
+// its http.Request with it and cancelling actually aborts the in-flight POST.
+//
+// Threading ctx here is what makes an ordinary call cancellable. Before it,
+// every caller's ctx was used for tracing and then dropped, callWithContext
+// fell back to context.Background(), and only callers that hand-built a
+// NewCallContext (events/stream) could be cancelled at all.
+func (c *Client) callDirect(ctx context.Context, method string, params any) (*CallResult, error) {
+	resp, err := c.rawCallWithContext(method, params, &CallContext{Context: ctx})
 	if err != nil {
 		return nil, err
 	}

@@ -358,17 +358,34 @@ func runChat(v *viper.Viper) error {
 		return runNotebook(app, nbSurface, v.GetInt("notebook-max-lines"), window)
 	}
 
-	fmt.Printf("agentchat: %d server(s), model %s. /tools /history /quit; Ctrl-C cancels a turn.\n", len(cfg.Servers), cfg.Model.Model)
+	fmt.Printf("agentchat: %d server(s), model %s. /tools /history /quit; Ctrl-C interrupts a tool call, twice aborts the turn.\n", len(cfg.Servers), cfg.Model.Model)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT)
+	// Ctrl-C escalates. The first press cancels whatever tool calls are in
+	// flight and lets the turn continue, so the model sees "cancelled by user"
+	// and can react; the second aborts the turn outright. Escalating matters
+	// because the common case is one wedged tool call, and throwing away the
+	// whole turn to escape it loses the reasoning that got there.
+	//
+	// A press with nothing to interrupt (no call in flight, or team mode,
+	// where Team owns its own loop) reports false and falls straight through
+	// to the hard abort, so Ctrl-C is never a no-op.
 	turnCtx := func() (context.Context, context.CancelFunc) {
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			select {
-			case <-sigs:
-				cancel()
-			case <-ctx.Done():
+			for {
+				select {
+				case <-sigs:
+					if app.InterruptToolCalls() {
+						fmt.Println("^C interrupting tool call; Ctrl-C again to abort the turn.")
+						continue
+					}
+					cancel()
+					return
+				case <-ctx.Done():
+					return
+				}
 			}
 		}()
 		return ctx, cancel

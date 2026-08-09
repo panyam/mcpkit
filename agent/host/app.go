@@ -95,6 +95,19 @@ type App struct {
 	turnMu    sync.Mutex
 	emitMu    sync.Mutex // serializes emit's synchronous local delivery (the Group, turn, and event goroutines all emit)
 
+	// ctrl is the in-flight turn's mid-turn control channel, non-nil only
+	// while a single-agent turn is running. InterruptToolCalls sends on it;
+	// RunTurn installs and clears it. It has its own mutex because RunTurn
+	// holds turnMu for the whole turn, so an interrupt arriving mid-turn
+	// could never take turnMu to find the channel.
+	//
+	// Clearing it between turns is load-bearing: agent.TurnRequest.Control
+	// warns that a buffered cancel-all sent while nothing drains would land
+	// on the next turn's first dispatch, so a send with no turn running has
+	// to be dropped rather than queued.
+	ctrlMu sync.Mutex
+	ctrl   chan agent.Control
+
 	// eventLog is the retained per-session event log. emit appends every
 	// HostEvent here in addition to delivering it synchronously to the local
 	// observers, so the log is the single source of truth a web surface
@@ -778,7 +791,22 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 			a.activeTeamAgent = active
 		}
 	} else {
-		result, err = a.runner.Run(ctx, turnMsgs, emit)
+		// Single-agent mode drives the full turn surface so a surface can
+		// cancel one in-flight tool call without aborting the turn. Team mode
+		// cannot: Team.RunTurn owns its own inner loop and takes no control
+		// channel, so an interrupt there falls back to cancelling ctx.
+		ctrl := make(chan agent.Control, 1)
+		a.ctrlMu.Lock()
+		a.ctrl = ctrl
+		a.ctrlMu.Unlock()
+		result, err = a.runner.RunTurn(ctx, agent.TurnRequest{
+			History: turnMsgs,
+			Emit:    emit,
+			Control: ctrl,
+		})
+		a.ctrlMu.Lock()
+		a.ctrl = nil
+		a.ctrlMu.Unlock()
 	}
 	if err != nil {
 		a.history = a.history[:len(a.history)-1]
@@ -791,6 +819,42 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	}
 	a.emit(HostEvent{Kind: HostTurnDone, Result: result})
 	return nil
+}
+
+// InterruptToolCalls cancels every tool call currently in flight without
+// ending the turn. Each cancelled call fails fast, its result is fed back to
+// the model as "cancelled by user" (rendering as EventToolCancelled, which is
+// deliberately distinct from an error), and the model gets to react — pick a
+// different tool, ask what to do, or answer without it.
+//
+// This is the softer half of interrupting, and the reason a surface should
+// reach for it before cancelling the turn's context: cancelling ctx aborts
+// everything and throws the turn's work away, while this keeps the
+// conversation alive. A natural binding is escalating, first press soft and
+// second press hard.
+//
+// It reports whether an interrupt was delivered. False means there was
+// nothing to interrupt: no turn running, a team-mode turn (Team owns its own
+// loop and takes no control channel), or a delivery already pending. False is
+// the caller's cue to fall back to cancelling the turn context.
+//
+// Safe to call from any goroutine, including a signal handler.
+func (a *App) InterruptToolCalls() bool {
+	a.ctrlMu.Lock()
+	ch := a.ctrl
+	a.ctrlMu.Unlock()
+	if ch == nil {
+		return false
+	}
+	// Non-blocking: the Runner drains continuously while a turn runs, so a
+	// full buffer means an interrupt is already on its way and a second one
+	// would be redundant. Never block a signal handler waiting for it.
+	select {
+	case ch <- agent.Control{}:
+		return true
+	default:
+		return false
+	}
 }
 
 // Tools renders the current merged tool list (the /tools command).
