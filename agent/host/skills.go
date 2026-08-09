@@ -252,22 +252,7 @@ func (a *App) onServerSkills(sc ServerConfig, c *client.Client) {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("load skills for %s: %v", sc.ID, err)})
 		return
 	}
-	var collisions []string
-	a.skillsMu.Lock()
-	if block != "" {
-		a.skillBlocks[sc.ID] = block
-	}
-	if len(cat) > 0 {
-		a.skillCatalog[sc.ID] = cat
-		collisions = a.detectSkillCollisionsLocked(sc.ID)
-	}
-	// Register load_skill lazily, once, on the first catalog skill — so it never
-	// appears when no server offers catalog skills.
-	registerLoader := len(cat) > 0 && !a.loadSkillReg
-	if registerLoader {
-		a.loadSkillReg = true
-	}
-	a.skillsMu.Unlock()
+	collisions, registerLoader := a.skills.add(sc.ID, block, cat)
 
 	// Surface cross-origin name collisions (SEP-2640 SHOULD): the load_skill
 	// handler already refuses to silently shadow, but the user deserves to know.
@@ -290,14 +275,7 @@ func (a *App) onServerSkills(sc ServerConfig, c *client.Client) {
 // instructions), recomputed each turn so a late server's skills land on the next
 // turn.
 func (a *App) skillsSection(context.Context) string {
-	a.skillsMu.Lock()
-	defer a.skillsMu.Unlock()
-	var blocks []string
-	for _, id := range a.serverOrder {
-		if block := a.skillBlocks[id]; block != "" {
-			blocks = append(blocks, block)
-		}
-	}
+	blocks := a.skills.promptBlocks()
 	return strings.Join(blocks, "\n\n")
 }
 
@@ -311,51 +289,8 @@ func (a *App) defaultPromptBuilder() *SystemPromptBuilder {
 	}}
 }
 
-// detectSkillCollisionsLocked returns one human-readable line per catalog-skill
-// name from server newID that another connected origin also serves — the
-// cross-origin collisions SEP-2640 asks hosts to surface. Names are reported
-// once each; callers hold skillsMu.
-func (a *App) detectSkillCollisionsLocked(newID string) []string {
-	var out []string
-	seenName := map[string]struct{}{}
-	for _, cs := range a.skillCatalog[newID] {
-		name := cs.entry.Name
-		if name == "" {
-			continue
-		}
-		if _, dup := seenName[name]; dup {
-			continue
-		}
-		seenName[name] = struct{}{}
-		var others []string
-		for id, entries := range a.skillCatalog {
-			if id == newID {
-				continue
-			}
-			for _, e := range entries {
-				if e.entry.Name == name {
-					others = append(others, id)
-					break
-				}
-			}
-		}
-		if len(others) > 0 {
-			sort.Strings(others)
-			out = append(out, fmt.Sprintf("%q served by %s and %s", name, newID, strings.Join(others, ", ")))
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
 // allCatalogSkills flattens every connected server's catalog entries, in config
 // order, for the load_skill lookup.
 func (a *App) allCatalogSkills() []catalogSkill {
-	a.skillsMu.Lock()
-	defer a.skillsMu.Unlock()
-	var out []catalogSkill
-	for _, id := range a.serverOrder {
-		out = append(out, a.skillCatalog[id]...)
-	}
-	return out
+	return a.skills.allCatalog()
 }

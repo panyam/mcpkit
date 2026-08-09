@@ -139,9 +139,7 @@ func (a *App) registerMetaTools(multi *agent.MultiSource) error {
 	if err := agent.AddFunc(fs, "cancel_task",
 		"Cancel a running background task by its id.",
 		func(ctx context.Context, in cancelReq) (string, error) {
-			a.tasksMu.Lock()
-			bt := a.bgTasks[in.ID]
-			a.tasksMu.Unlock()
+			bt := a.tasks.get(in.ID)
 			if bt == nil {
 				return "", fmt.Errorf("no running task %q", in.ID)
 			}

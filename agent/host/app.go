@@ -76,19 +76,14 @@ type App struct {
 	// blocks and load_skill catalog are shared mutable state read live: the
 	// dynamic system prompt (buildInstructions -> RunnerConfig.InstructionsFunc)
 	// and the load_skill tool. serverOrder keeps assembly deterministic.
-	skillsMu     sync.Mutex
-	skillBlocks  map[string]string         // serverID -> system-prompt block (eager bodies or catalog listing)
-	skillCatalog map[string][]catalogSkill // serverID -> catalog entries for load_skill
-	serverOrder  []string
-	loadSkillReg bool // load_skill registered once, lazily, on the first catalog skill
+	skills *skillSet
 
 	injection *agent.EventInjectionPolicy
 	triggers  *agent.TriggerPolicy
 	approval  *agent.TieredApproval
 	fanIn     *gocurrent.FanIn[agent.IncomingEvent]
 	streams   []*eventsclient.StreamCall
-	tasksMu   sync.Mutex
-	bgTasks   map[string]*client.BackgroundTask
+	tasks     *taskSet
 	subsMu    sync.Mutex
 	subs      map[string]*subscription
 	metaTools bool
@@ -349,8 +344,8 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 
 	multi := agent.NewMultiSource()
-	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, bgTasks: map[string]*client.BackgroundTask{}, subs: map[string]*subscription{}, store: o.store,
-		tp: o.tp, log: o.logger, skillBlocks: map[string]string{}, skillCatalog: map[string][]catalogSkill{}, oauthSources: map[string]loginSource{}}
+	app := &App{cfg: cfg, sources: multi, observers: observers, replOut: out, tasks: newTaskSet(), skills: newSkillSet(), subs: map[string]*subscription{}, store: o.store,
+		tp: o.tp, log: o.logger, oauthSources: map[string]loginSource{}}
 	// Bring the retained event log up before anything can emit (the
 	// server-connect hooks below capture app and fire asynchronously).
 	// MaxEventLogRetention 0 keeps the unbounded log; a positive value caps the
@@ -365,7 +360,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// the first responder; the local UI is one responder (barrierElicit).
 	coord := agent.NewElicitationCoordinator(app.barrierElicit(elicUI))
 	for _, sc := range cfg.Servers {
-		app.serverOrder = append(app.serverOrder, sc.ID)
+		app.skills.track(sc.ID)
 	}
 	if o.configPath != "" {
 		app.overlay = &configOverlay{path: overlayPathFor(o.configPath)}
@@ -678,11 +673,9 @@ func (a *App) Close() {
 	if a.fanIn != nil {
 		a.fanIn.Stop()
 	}
-	a.tasksMu.Lock()
-	for _, bt := range a.bgTasks {
+	for _, bt := range a.tasks.all() {
 		bt.Cancel(context.Background())
 	}
-	a.tasksMu.Unlock()
 	// The Group owns the server connections' lifecycle: closing it stops the
 	// connect/retry goroutines and closes the member clients. Fall back to
 	// closing clients directly only if the Group was never built (an early
