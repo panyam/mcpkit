@@ -243,10 +243,7 @@ func (p *AgentPool) spawn(ctx context.Context, name, task string) (string, error
 	id := fmt.Sprintf("agent-%d", p.seq)
 	p.mu.Unlock()
 
-	childScope := name
-	if parent := agentScope(ctx); parent != "" {
-		childScope = parent + "/" + name
-	}
+	childScope := agentScope(ctx).Child(name)
 	bgCtx := withAgentScope(withAgentDepth(core.DetachForBackground(ctx), depth+1), childScope)
 	runCtx, cancel := context.WithCancel(bgCtx)
 
@@ -258,7 +255,7 @@ func (p *AgentPool) spawn(ctx context.Context, name, task string) (string, error
 	emit := func(Event) {}
 	if p.onEvent != nil {
 		childDepth := depth + 1
-		emit = func(e Event) { p.onEvent(SubAgentEvent{Scope: childScope, Depth: childDepth, Event: e}) }
+		emit = func(e Event) { p.onEvent(SubAgentEvent{Scope: childScope.String(), Depth: childDepth, Event: e}) }
 	}
 	go func() {
 		result, err := spec.runner.Run(runCtx, []Message{{Role: RoleUser, Text: task}}, emit)

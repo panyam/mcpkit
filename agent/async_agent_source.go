@@ -129,10 +129,7 @@ func (s *AsyncAgentSource) Call(ctx context.Context, name string, args map[strin
 		seed = in.Task
 	}
 
-	childScope := s.cfg.Name
-	if parent := agentScope(ctx); parent != "" {
-		childScope = parent + "/" + s.cfg.Name
-	}
+	childScope := agentScope(ctx).Child(s.cfg.Name)
 	// Detach for background: the child outlives the spawning turn AND calls MCP
 	// server tools, so it needs the session-level push (DetachForBackground),
 	// not a plain context.WithoutCancel. Depth/scope are threaded onto the
@@ -142,7 +139,7 @@ func (s *AsyncAgentSource) Call(ctx context.Context, name string, args map[strin
 	emit := func(Event) {}
 	if s.cfg.OnEvent != nil {
 		childDepth := depth + 1
-		emit = func(e Event) { s.cfg.OnEvent(SubAgentEvent{Scope: childScope, Depth: childDepth, Event: e}) }
+		emit = func(e Event) { s.cfg.OnEvent(SubAgentEvent{Scope: childScope.String(), Depth: childDepth, Event: e}) }
 	}
 
 	go func() {

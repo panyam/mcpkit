@@ -209,7 +209,7 @@ func RaiseSignal(ctx context.Context, sig Signal) bool {
 		return false
 	}
 	if sig.Source == "" {
-		sig.Source = agentScope(ctx)
+		sig.Source = agentScope(ctx).String()
 	}
 	sink.raise(sig)
 	return true

@@ -159,10 +159,7 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 
 	// Extend both ctx threads for the child: depth (guards) and scope (the
 	// path this sub-agent's events are tagged with).
-	childScope := s.cfg.Name
-	if parent := agentScope(ctx); parent != "" {
-		childScope = parent + "/" + s.cfg.Name
-	}
+	childScope := agentScope(ctx).Child(s.cfg.Name)
 	childCtx := withAgentScope(withAgentDepth(ctx, depth+1), childScope)
 	// Hand the child the sink of the dispatch that spawned it (issue 1165), so
 	// the child's signal_parent raises to THIS parent — the child's own dispatch
@@ -174,7 +171,7 @@ func (s *AgentSource) Call(ctx context.Context, name string, args map[string]any
 	emit := func(Event) {}
 	if s.cfg.OnEvent != nil {
 		childDepth := depth + 1
-		emit = func(e Event) { s.cfg.OnEvent(SubAgentEvent{Scope: childScope, Depth: childDepth, Event: e}) }
+		emit = func(e Event) { s.cfg.OnEvent(SubAgentEvent{Scope: childScope.String(), Depth: childDepth, Event: e}) }
 	}
 	result, err := s.cfg.Runner.Run(childCtx, []Message{{Role: RoleUser, Text: seed}}, emit)
 	if err != nil {
@@ -193,17 +190,21 @@ type agentDepthKey struct{}
 type agentBudgetKey struct{}
 type agentScopeKey struct{}
 
-// withAgentScope stamps the slash-joined sub-agent path on ctx so a nested
-// AgentSource can prefix its own name and tag its child's events with the
-// full path.
-func withAgentScope(ctx context.Context, scope string) context.Context {
-	return context.WithValue(ctx, agentScopeKey{}, scope)
+// withAgentScope stamps the sub-agent ancestry on ctx so a nested source can
+// extend it and tag its child's events with the full path.
+//
+// Stored structurally rather than slash-joined because RunScope exports it:
+// a joined string cannot answer "am I under X" without substring traps, and
+// cannot be split back safely when a name contains the separator. String() is
+// the display form, applied at the point of display.
+func withAgentScope(ctx context.Context, path AgentPath) context.Context {
+	return context.WithValue(ctx, agentScopeKey{}, path)
 }
 
-// agentScope reads the current sub-agent path ("" at the top level).
-func agentScope(ctx context.Context) string {
-	s, _ := ctx.Value(agentScopeKey{}).(string)
-	return s
+// agentScope reads the current sub-agent ancestry (empty at the top level).
+func agentScope(ctx context.Context) AgentPath {
+	p, _ := ctx.Value(agentScopeKey{}).(AgentPath)
+	return p
 }
 
 // withAgentDepth stamps the current sub-agent nesting depth on ctx; each
