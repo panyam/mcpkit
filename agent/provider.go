@@ -254,7 +254,7 @@ type DeltaKind string
 // Delta kinds. Tool calls stream as one DeltaToolCallStart (carrying ID and
 // Name) followed by any number of DeltaToolCallArgs fragments for the same
 // Index; there is no explicit end marker, the next start or the finish delta
-// closes the call (fold with Accumulator).
+// closes the call (fold with DeltaAccumulator).
 const (
 	DeltaText          DeltaKind = "text"
 	DeltaReasoning     DeltaKind = "reasoning"
@@ -342,9 +342,9 @@ type Provider interface {
 	Generate(ctx context.Context, req ProviderRequest) (*ProviderResponse, error)
 }
 
-// Accumulator folds a delta stream into a ProviderResponse. Zero value is
+// DeltaAccumulator folds a delta stream into a ProviderResponse. Zero value is
 // ready to use. Not safe for concurrent use.
-type Accumulator struct {
+type DeltaAccumulator struct {
 	resp    ProviderResponse
 	text    strings.Builder
 	reason  strings.Builder
@@ -354,7 +354,7 @@ type Accumulator struct {
 }
 
 // Add folds one delta.
-func (a *Accumulator) Add(d Delta) {
+func (a *DeltaAccumulator) Add(d Delta) {
 	switch d.Kind {
 	case DeltaText:
 		a.text.WriteString(d.Text)
@@ -385,7 +385,7 @@ func (a *Accumulator) Add(d Delta) {
 // Result returns the folded response. Tool-call argument fragments are
 // joined in stream order; an empty argument buffer becomes the empty JSON
 // object so callers can always unmarshal Args.
-func (a *Accumulator) Result() *ProviderResponse {
+func (a *DeltaAccumulator) Result() *ProviderResponse {
 	out := a.resp
 	out.Text = a.text.String()
 	out.Reasoning = a.reason.String()

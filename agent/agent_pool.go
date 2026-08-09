@@ -40,8 +40,8 @@ func NewSpawnSource(pool *AgentPool) *FuncSource {
 	fs := NewFuncSource()
 
 	var menu strings.Builder
-	for _, a := range pool.Names() {
-		fmt.Fprintf(&menu, "\n- %s: %s", a.Name, a.Status)
+	for _, a := range pool.Registered() {
+		fmt.Fprintf(&menu, "\n- %s: %s", a.Name, a.Description)
 	}
 	_ = AddFunc(fs, SpawnAgentToolName,
 		"Start a sub-agent running in the background and get a handle id back; it keeps running while you do other work. Await its result later with await_agent, or drop it with cancel_agent. Available agents:"+menu.String(),
@@ -140,37 +140,37 @@ type spawnHandle struct {
 	err    error
 }
 
-// SpawnStatus is a wire-serializable snapshot of a handle for list_agents
-// (constraint A2). It is a point-in-time copy: a running child may have
-// finished by the time the caller reads it.
+// SpawnStatus is a wire-serializable snapshot of one live handle for
+// list_agents (constraint A2). It is a point-in-time copy: a running child may
+// have finished by the time the caller reads it.
 //
-// The type serves two callers with different meanings for the same fields,
-// which is a wart worth knowing before reading one:
-//
-//   - statuses() describes live handles. ID is the handle, Name is the agent
-//     it was spawned from, Status is a lifecycle state.
-//   - Names describes registered agents, before any spawn. ID is empty, Name
-//     is the registered name, and Status carries the agent's human-readable
-//     description rather than a lifecycle state.
-//
-// Read Status as a lifecycle value only when ID is non-empty.
+// It describes handles only. For the agents a pool can spawn, before any
+// spawn has happened, see Registered.
 type SpawnStatus struct {
 	// ID is the handle the model passes to await_agent and cancel_agent.
-	// Empty in a Names listing, which has no handle to report on.
 	ID string `json:"id"`
 
-	// Name is the registered agent name: the one this handle was spawned
-	// from, or the registered name itself in a Names listing.
+	// Name is the registered agent this handle was spawned from.
 	Name string `json:"name"`
 
-	// Status is one of "running", "done", "failed", or "cancelled" for a
-	// live handle. The two failure values are distinct on purpose: "failed"
-	// means the child's own Run returned an error, "cancelled" means the
-	// parent dropped it, and collapsing them loses that.
-	//
-	// In a Names listing this instead holds the registered description. See
-	// the type doc.
+	// Status is one of "running", "done", "failed", or "cancelled". The two
+	// failure values are distinct on purpose: "failed" means the child's own
+	// Run returned an error, "cancelled" means the parent dropped it, and
+	// collapsing them loses that.
 	Status string `json:"status"`
+}
+
+// RegisteredAgent describes one agent a pool can spawn, as returned by
+// Registered. It is the pre-spawn view: no handle exists yet, so there is no
+// ID and no lifecycle state.
+type RegisteredAgent struct {
+	// Name is the name Register was called with, and the name the model
+	// passes to spawn_agent.
+	Name string `json:"name"`
+
+	// Description is the human-readable blurb Register was given, used to
+	// build the spawn tool's menu so the model can choose between agents.
+	Description string `json:"description"`
 }
 
 // NewAgentPool returns an empty pool. onEvent, when non-nil, receives every
@@ -205,14 +205,15 @@ func (p *AgentPool) Register(name, description string, runner *Runner, maxDepth 
 	return nil
 }
 
-// Names returns the registered spawnable agent names in registration order,
-// with their descriptions — for a spawn tool's help text.
-func (p *AgentPool) Names() []SpawnStatus {
+// Registered lists the agents this pool can spawn, in registration order,
+// for a spawn tool's help text. It describes registrations rather than live
+// children; use list_agents (backed by statuses) for handles in flight.
+func (p *AgentPool) Registered() []RegisteredAgent {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]SpawnStatus, 0, len(p.order))
+	out := make([]RegisteredAgent, 0, len(p.order))
 	for _, n := range p.order {
-		out = append(out, SpawnStatus{Name: n, Status: p.agents[n].description})
+		out = append(out, RegisteredAgent{Name: n, Description: p.agents[n].description})
 	}
 	return out
 }

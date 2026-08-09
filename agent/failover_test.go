@@ -57,7 +57,7 @@ func TestFailoverCleanFailureRetriesBackupOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var acc Accumulator
+	var acc DeltaAccumulator
 	for {
 		d, err := s.Recv()
 		if errors.Is(err, io.EOF) {

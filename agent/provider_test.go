@@ -42,7 +42,7 @@ func newTestProvider(t *testing.T, url string) *OpenAIProvider {
 
 func drain(t *testing.T, s Stream) *ProviderResponse {
 	t.Helper()
-	var acc Accumulator
+	var acc DeltaAccumulator
 	for {
 		d, err := s.Recv()
 		if errors.Is(err, io.EOF) {
@@ -347,7 +347,7 @@ func TestDeltaKindsJSONRoundTrip(t *testing.T) {
 }
 
 func TestAccumulatorEmptyArgsBecomeEmptyObject(t *testing.T) {
-	var acc Accumulator
+	var acc DeltaAccumulator
 	acc.Add(Delta{Kind: DeltaToolCallStart, Index: 0, ToolCallID: "x", ToolName: "noargs"})
 	acc.Add(Delta{Kind: DeltaFinish, FinishReason: "tool_calls"})
 	res := acc.Result()
