@@ -179,6 +179,9 @@ type App struct {
 	// WithSystemPromptBuilder). Wired as RunnerConfig.InstructionsFunc.
 	promptBuilder *SystemPromptBuilder
 
+	// context is the declared pre-turn context-assembly pipeline (#1026).
+	context contextPipeline
+
 	// overlay persists mutable config picks (active connection, approval
 	// mode) back to a local-overlay file when WithConfigOverlay is set; nil
 	// means runtime changes are session-only.
@@ -602,6 +605,15 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		o.promptMutate(app.promptBuilder)
 	}
 
+	// The pre-turn context pipeline, in declared order. Built after the
+	// producers exist (injection above, memory below) so a nil producer
+	// contributes no stage at all rather than a stage that no-ops. See
+	// contextPipeline for the order's rationale and where a new stage goes.
+	app.context = contextPipeline{
+		durable:   []contextStage{app.injectionStage()},
+		transient: app.memoryStages(),
+	}
+
 	runnerCfg := agent.RunnerConfig{
 		Provider:         provider,
 		Tools:            runnerTools,
@@ -753,9 +765,8 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 	a.triggers.NotifyEngagement()
-	a.drainInjectionLocked()
 	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
-	a.history = append(a.history, userMsg)
+	a.history = a.context.runDurable(ctx, a.history, userMsg)
 
 	emit := func(e agent.Event) { a.emit(HostEvent{Kind: HostRunnerEvent, RunnerEvent: e}) }
 	var pe *PersistingEmit
@@ -776,10 +787,10 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 		}
 	}
 
-	// The memory summary is woven into the per-turn slice only, never into
-	// a.history — see withMemorySummaryLocked (a no-op in team mode, which has
-	// no memory).
-	turnMsgs := a.withMemorySummaryLocked(ctx)
+	// Transient producers run here, after ensureRunLocked, because
+	// session-scoped recall derives its namespace from the run id that call
+	// creates. See contextPipeline for the full order and its rationale.
+	turnMsgs := a.context.runTransient(ctx, a.history)
 	var result *agent.TurnResult
 	var err error
 	if a.team != nil {

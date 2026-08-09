@@ -61,8 +61,8 @@ func (a *App) runProactiveTurn(ctx context.Context, firing *agent.TriggerFiring)
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 	a.emit(HostEvent{Kind: HostTriggerFired, Label: firing.Binding.Label})
-	a.history = append(a.history, agent.Message{Role: agent.RoleSystem, Text: firing.Binding.Instructions})
-	a.drainInjectionLocked()
+	a.history = a.context.runDurable(ctx, a.history,
+		agent.Message{Role: agent.RoleSystem, Text: firing.Binding.Instructions})
 	result, err := a.runner.Run(ctx, a.history, func(e agent.Event) { a.emit(HostEvent{Kind: HostRunnerEvent, RunnerEvent: e}) })
 	if err != nil {
 		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
@@ -73,12 +73,16 @@ func (a *App) runProactiveTurn(ctx context.Context, firing *agent.TriggerFiring)
 	a.promptREPL()
 }
 
-// drainInjectionLocked moves pending injected context into history as
+// injectionStage is the durable context producer for incoming events: it
+// drains pending injected context into history as
 // system messages. Caller holds turnMu.
-func (a *App) drainInjectionLocked() {
-	for _, inj := range a.injection.Drain() {
-		a.history = append(a.history, agent.Message{Role: agent.RoleSystem, Text: inj.Text})
-	}
+func (a *App) injectionStage() contextStage {
+	return contextStage{name: "events", run: func(_ context.Context, msgs []agent.Message) []agent.Message {
+		for _, inj := range a.injection.Drain() {
+			msgs = append(msgs, agent.Message{Role: agent.RoleSystem, Text: inj.Text})
+		}
+		return msgs
+	}}
 }
 
 // buildTriggerBindings converts config bindings into policy bindings,

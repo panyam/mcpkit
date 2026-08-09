@@ -49,55 +49,42 @@ func (a *App) registerMemory(multi *agent.MultiSource, store agent.MemoryStore) 
 	return nil
 }
 
-// withMemorySummaryLocked returns the messages for this turn, weaving the
-// working-memory summary in as a RoleSystem message just before the current
-// (last) user message when Config.Memory.InjectSummary is on.
+// memoryStages are the transient context producers memory contributes: the
+// ambient scratchpad summary, then the recall relevant to this turn. Both are
+// woven in just before the user message, recall closest because it was
+// retrieved for these exact words while the summary is ambient.
 //
-// The summary is a stateful snapshot of current memory, re-rendered every
-// turn, so it is injected TRANSIENTLY: it goes into the returned slice for
-// this one model call and is never written into a.history. That keeps the
-// durable conversation (and the persisted RunStore log) free of stacked,
-// mostly-identical snapshots — the opposite of drainInjectionLocked, which
-// appends because each event is drained exactly once.
-//
-// When memory is off or empty it returns a.history unchanged (no copy). A
-// summary error is non-fatal — memory awareness is best-effort and must
-// never fail a turn. Caller holds turnMu and has already appended the user
-// message to a.history.
-func (a *App) withMemorySummaryLocked(ctx context.Context) []agent.Message {
+// Neither is written into history — see contextPipeline on why that split is
+// structural. A producer whose store errors contributes nothing rather than
+// failing the turn.
+func (a *App) memoryStages() []contextStage {
 	if a.memory == nil || a.cfg.Memory == nil {
-		return a.history
+		return nil
 	}
-	n := len(a.history)
-	if n == 0 {
-		return a.history
-	}
-
-	// Two independent memory-injection producers, each self-capping and each
-	// a RoleSystem message woven in just before the current user message.
-	// Recall (relevant to this turn) sits closest to the user message — most
-	// salient; the summary (ambient scratchpad) precedes it. Neither is
-	// written into a.history (transient — see the RunTurn note).
-	var blocks []string
+	var out []contextStage
 	if a.cfg.Memory.InjectSummary {
-		if s, err := a.memory.Summary(ctx, a.cfg.Memory.summaryOptions()); err == nil && s != "" {
-			blocks = append(blocks, s)
-		}
+		out = append(out, contextStage{name: "memory.summary", run: func(ctx context.Context, msgs []agent.Message) []agent.Message {
+			if len(msgs) == 0 {
+				return msgs
+			}
+			s, err := a.memory.Summary(ctx, a.cfg.Memory.summaryOptions())
+			if err != nil || s == "" {
+				return msgs
+			}
+			return weaveBeforeUser(msgs, []string{s})
+		}})
 	}
 	if a.cfg.Memory.InjectRecall {
-		if r, err := a.memory.RecallRelevant(ctx, a.history[n-1].Text, a.cfg.Memory.recallOptions()); err == nil && r != "" {
-			blocks = append(blocks, r)
-		}
+		out = append(out, contextStage{name: "memory.recall", run: func(ctx context.Context, msgs []agent.Message) []agent.Message {
+			if len(msgs) == 0 {
+				return msgs
+			}
+			r, err := a.memory.RecallRelevant(ctx, msgs[len(msgs)-1].Text, a.cfg.Memory.recallOptions())
+			if err != nil || r == "" {
+				return msgs
+			}
+			return weaveBeforeUser(msgs, []string{r})
+		}})
 	}
-	if len(blocks) == 0 {
-		return a.history
-	}
-
-	msgs := make([]agent.Message, 0, n+len(blocks))
-	msgs = append(msgs, a.history[:n-1]...)
-	for _, b := range blocks {
-		msgs = append(msgs, agent.Message{Role: agent.RoleSystem, Text: b})
-	}
-	msgs = append(msgs, a.history[n-1])
-	return msgs
+	return out
 }
