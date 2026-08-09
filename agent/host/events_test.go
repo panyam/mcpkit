@@ -157,7 +157,7 @@ func TestAppEventsWithoutHintsDegradesToRawInjection(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		app.turnMu.Lock()
-		app.drainInjectionLocked()
+		app.history = app.context.durable[0].run(context.Background(), app.history)
 		n := len(app.history)
 		app.turnMu.Unlock()
 		if n > 0 {
