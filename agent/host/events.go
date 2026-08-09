@@ -19,14 +19,14 @@ import (
 // gocurrent's FanIn. Per-stream buffers isolate backpressure: one noisy stream
 // drops its own events (warned), never a sibling's.
 func (a *App) onServerEvents(sc ServerConfig) {
-	if a.fanIn == nil || len(sc.Events) == 0 {
+	if a.streams.fanIn == nil || len(sc.Events) == 0 {
 		return
 	}
 	// Called from the ready-observer, so a server that connects after boot has
 	// its event streams subscribed with no restart. openSubscription is
 	// idempotent (dedup by server:name), and a failure degrades to a warning.
 	for _, ec := range sc.Events {
-		if _, err := a.openSubscription(a.evCtx, sc.ID, ec.Name); err != nil {
+		if _, err := a.openSubscription(a.streams.ctx, sc.ID, ec.Name); err != nil {
 			a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("events/stream %s on %s: %v", ec.Name, sc.ID, err)})
 		}
 	}
@@ -41,7 +41,7 @@ func (a *App) consumeEvents(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case ev, ok := <-a.fanIn.OutputChan():
+		case ev, ok := <-a.streams.fanIn.OutputChan():
 			if !ok {
 				return
 			}

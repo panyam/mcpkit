@@ -276,8 +276,8 @@ func (a *App) registerBuiltinCommands() {
 				return CmdResult{Kind: CmdMessage, Message: "login started for " + id}, nil
 			}
 			var st []ServerStatus
-			if a.group != nil {
-				for _, ms := range a.group.Status() {
+			if a.servers.group != nil {
+				for _, ms := range a.servers.group.Status() {
 					st = append(st, ServerStatus{MemberStatus: ms, CanLogin: a.canLogin(ms.ID)})
 				}
 			}
@@ -290,8 +290,8 @@ func (a *App) registerBuiltinCommands() {
 					out = append(out, sub)
 				}
 			}
-			if a.group != nil {
-				for _, st := range a.group.Status() {
+			if a.servers.group != nil {
+				for _, st := range a.servers.group.Status() {
 					if strings.HasPrefix(st.ID, prefix) {
 						out = append(out, st.ID)
 					}

@@ -247,7 +247,7 @@ func (f *fakeLoginSource) Invalidate() { f.invalidated++ }
 func TestApp_LoginServer(t *testing.T) {
 	app, _ := newCmdApp(t)
 	fake := &fakeLoginSource{}
-	app.oauthSources["oauth-srv"] = fake
+	app.servers.oauth["oauth-srv"] = fake
 
 	if !app.canLogin("oauth-srv") || app.canLogin("bare-srv") {
 		t.Fatalf("canLogin: oauth-srv=%v bare-srv=%v", app.canLogin("oauth-srv"), app.canLogin("bare-srv"))

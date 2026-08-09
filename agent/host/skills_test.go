@@ -92,9 +92,12 @@ func TestFilterSkillsAllow(t *testing.T) {
 // is what makes a late server's eager skills appear on the next turn.
 func TestBuildInstructions(t *testing.T) {
 	a := &App{
-		cfg:         &Config{Instructions: "base"},
-		skillBlocks: map[string]string{"s1": "block1", "s2": "block2"},
-		serverOrder: []string{"s1", "s2"},
+		cfg: &Config{Instructions: "base"},
+		skills: &skillSet{
+			blocks:  map[string]string{"s1": "block1", "s2": "block2"},
+			catalog: map[string][]catalogSkill{},
+			order:   []string{"s1", "s2"},
+		},
 	}
 	build := func() string { return a.defaultPromptBuilder().Build(context.Background()) }
 
@@ -102,13 +105,13 @@ func TestBuildInstructions(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	// order follows serverOrder, not map iteration
-	a.serverOrder = []string{"s2", "s1"}
+	a.skills.order = []string{"s2", "s1"}
 	if got := build(); got != "base\n\nblock2\n\nblock1" {
 		t.Fatalf("order must follow serverOrder: %q", got)
 	}
 	// a server with no block yet is skipped
-	a.skillBlocks = map[string]string{"s1": "only1"}
-	a.serverOrder = []string{"s1", "s2"}
+	a.skills.blocks = map[string]string{"s1": "only1"}
+	a.skills.order = []string{"s1", "s2"}
 	if got := build(); got != "base\n\nonly1" {
 		t.Fatalf("empty block must be skipped: %q", got)
 	}
@@ -117,13 +120,14 @@ func TestBuildInstructions(t *testing.T) {
 // TestAllCatalogSkills covers the live load_skill catalog: every connected
 // server's entries flattened in config order.
 func TestAllCatalogSkills(t *testing.T) {
-	a := &App{
-		skillCatalog: map[string][]catalogSkill{
+	a := &App{skills: &skillSet{
+		blocks: map[string]string{},
+		catalog: map[string][]catalogSkill{
 			"s1": {{serverID: "s1", entry: skills.IndexEntry{Name: "a"}}},
 			"s2": {{serverID: "s2", entry: skills.IndexEntry{Name: "b"}}},
 		},
-		serverOrder: []string{"s1", "s2"},
-	}
+		order: []string{"s1", "s2"},
+	}}
 	got := a.allCatalogSkills()
 	if len(got) != 2 || got[0].entry.Name != "a" || got[1].entry.Name != "b" {
 		t.Fatalf("flatten order wrong: %+v", got)
@@ -131,11 +135,11 @@ func TestAllCatalogSkills(t *testing.T) {
 }
 
 func TestRegisterLoadSkill(t *testing.T) {
-	app := &App{
-		skillBlocks:  map[string]string{},
-		skillCatalog: map[string][]catalogSkill{"s": {{serverID: "s", entry: skills.IndexEntry{Name: "alpha", URL: "skill://a/SKILL.md"}}}},
-		serverOrder:  []string{"s"},
-	}
+	app := &App{skills: &skillSet{
+		blocks:  map[string]string{},
+		catalog: map[string][]catalogSkill{"s": {{serverID: "s", entry: skills.IndexEntry{Name: "alpha", URL: "skill://a/SKILL.md"}}}},
+		order:   []string{"s"},
+	}}
 	multi := agent.NewMultiSource()
 	if err := app.registerLoadSkill(multi); err != nil {
 		t.Fatal(err)
@@ -245,14 +249,14 @@ func TestResolveCatalogSkill(t *testing.T) {
 func TestLoadSkillCollisionNoSilentShadow(t *testing.T) {
 	// Two servers serve "deploy"; client is nil so any attempt to read (silent
 	// shadow) would panic — proving the handler stops at disambiguation.
-	app := &App{
-		skillBlocks: map[string]string{},
-		skillCatalog: map[string][]catalogSkill{
+	app := &App{skills: &skillSet{
+		blocks: map[string]string{},
+		catalog: map[string][]catalogSkill{
 			"alpha": {{serverID: "alpha", entry: skills.IndexEntry{Name: "deploy", URL: "skill://alpha/deploy"}}},
 			"beta":  {{serverID: "beta", entry: skills.IndexEntry{Name: "deploy", URL: "skill://beta/deploy"}}},
 		},
-		serverOrder: []string{"alpha", "beta"},
-	}
+		order: []string{"alpha", "beta"},
+	}}
 	multi := agent.NewMultiSource()
 	if err := app.registerLoadSkill(multi); err != nil {
 		t.Fatal(err)
@@ -268,17 +272,17 @@ func TestLoadSkillCollisionNoSilentShadow(t *testing.T) {
 }
 
 func TestDetectSkillCollisionsLocked(t *testing.T) {
-	a := &App{skillCatalog: map[string][]catalogSkill{
+	a := &App{skills: &skillSet{catalog: map[string][]catalogSkill{
 		"a": {{serverID: "a", entry: skills.IndexEntry{Name: "deploy"}}, {serverID: "a", entry: skills.IndexEntry{Name: "lint"}}},
 		"b": {{serverID: "b", entry: skills.IndexEntry{Name: "deploy"}}},
-	}}
-	got := a.detectSkillCollisionsLocked("b")
+	}}}
+	got := a.skills.collisionsLocked("b")
 	if len(got) != 1 || !strings.Contains(got[0], `"deploy"`) || !strings.Contains(got[0], "a") {
 		t.Fatalf("expected a deploy collision with server a: %v", got)
 	}
 	// a server whose names are all unique reports nothing
-	a.skillCatalog["c"] = []catalogSkill{{serverID: "c", entry: skills.IndexEntry{Name: "unique"}}}
-	if got := a.detectSkillCollisionsLocked("c"); got != nil {
+	a.skills.catalog["c"] = []catalogSkill{{serverID: "c", entry: skills.IndexEntry{Name: "unique"}}}
+	if got := a.skills.collisionsLocked("c"); got != nil {
 		t.Fatalf("no collision expected: %v", got)
 	}
 }
