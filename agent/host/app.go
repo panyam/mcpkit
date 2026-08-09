@@ -625,6 +625,11 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 		// advisory-only. GrantAllPreempts trusts every configured persona equally.
 		PreemptGrant: preemptGrantFor(cfg.AllowPreempt),
 	}
+	// Spotlighting goes before the gate: the gate decides on unmarked
+	// arguments, and a call it denies never produces a result to mark.
+	if mw := cfg.Spotlight.build(); mw != nil {
+		runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, mw)
+	}
 	// The permission gate goes last in the middleware chain so it inspects
 	// the arguments that will actually execute, after any earlier entry has
 	// rewritten them (see agent.RunnerConfig.ToolMiddleware). Appended only
