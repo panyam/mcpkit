@@ -185,6 +185,13 @@ func paginate[T any](ctx context.Context, c *Client, method string,
 		var cursor string
 		pageCount := 0
 		for {
+			// Stop before spending a request the caller no longer wants. The
+			// per-item check below cannot cover this: cancellation between the
+			// last yield of one page and the fetch of the next would otherwise
+			// still hit the wire.
+			if ctx.Err() != nil {
+				return
+			}
 			if c.maxListPages > 0 && pageCount >= c.maxListPages {
 				var zero T
 				yield(zero, ErrListPaginationOverrun)
@@ -199,6 +206,15 @@ func paginate[T any](ctx context.Context, c *Client, method string,
 
 			result, err := c.Call(ctx, method, params)
 			if err != nil {
+				// A call aborted by the caller's own cancellation is a clean
+				// stop, not an iteration error — the same rule the per-item
+				// check below applies. Requests are cancellable now that the
+				// client threads ctx to the wire, so this arm is reachable
+				// where previously the ctx was dropped and the request ran to
+				// completion regardless.
+				if ctx.Err() != nil {
+					return
+				}
 				var zero T
 				yield(zero, err)
 				return
