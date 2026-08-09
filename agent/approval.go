@@ -7,36 +7,11 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// ApprovalPolicy gates each tool call before it runs. The Runner consults it
-// in callTool, after argument binding and before ToolSource.Call; a nil
-// policy on RunnerConfig means every call runs (the pre-approval behavior).
-//
-// Approve may block to ask the user. It returns a decision, never a turn
-// abort: a refusal is fed back to the model as a tool result and the loop
-// continues, so an error from Approve is reserved for the policy itself
-// failing (for example, the ask UI could not present the prompt).
-type ApprovalPolicy interface {
-	Approve(ctx context.Context, req ApprovalRequest) (ApprovalDecision, error)
-}
-
-// ApprovalRequest describes the call a policy is deciding on. Args is the
-// model-supplied arguments object (core.RawJSON per A5, so a policy can Bind
-// for typed inspection without a second parse). ReadOnly reflects the tool's
-// readOnlyHint annotation, the signal the read-only-auto tier keys on; it is
-// false when the tool declares no such hint.
-type ApprovalRequest struct {
-	ToolName string
-	Args     core.RawJSON
-	ReadOnly bool
-}
-
-// ApprovalDecision is a policy's verdict. Allowed true runs the call. On a
-// refusal, Reason is surfaced to the model (as the tool result text) and to
-// surfaces (on the tool-denied event); an empty Reason gets a default.
-type ApprovalDecision struct {
-	Allowed bool
-	Reason  string
-}
+// Approval is one ToolMiddleware among others rather than a mechanism of its
+// own. A permission gate is middleware that declines to call next; that it
+// asks a human first is an implementation detail, not a different kind of
+// interception. See ToolMiddleware for the ordering contract, and
+// RunnerConfig.ToolMiddleware for why a gate belongs last in the chain.
 
 // ApprovalMode is the default disposition TieredApproval applies to a call
 // that no per-tool rule covers.
@@ -69,9 +44,9 @@ const (
 // ElicitationCoordinator.Confirm satisfies it, which is how the "ask" outcome
 // reuses the existing FIFO UI seam instead of introducing a second one. A nil
 // AskFunc makes every ask resolve to a refusal (fail-closed).
-type AskFunc func(ctx context.Context, req ApprovalRequest) (bool, error)
+type AskFunc func(ctx context.Context, info ToolCallInfo) (bool, error)
 
-// TieredApproval is the batteries-included ApprovalPolicy: a default mode, a
+// TieredApproval is the batteries-included permission gate: a default mode, a
 // map of per-tool rules that override it, an optional ask seam, and an
 // optional session-scoped cache that remembers a tool the user approved so
 // later calls to it skip the prompt. Safe for concurrent use by the Runner's
@@ -145,59 +120,63 @@ func (t *TieredApproval) DefaultMode() ApprovalMode {
 	return t.mode
 }
 
-// Approve applies, in order: a remembered approval, a per-tool rule, then the
-// default mode. An ask that the user accepts is remembered when the cache is
-// on. A refusal (rule Deny, an ask returning false, or an ask with no AskFunc
-// wired) yields Allowed:false with a Reason; the Runner feeds that back to the
-// model and continues the turn.
-func (t *TieredApproval) Approve(ctx context.Context, req ApprovalRequest) (ApprovalDecision, error) {
+// BeforeTool applies, in order: a remembered approval, a per-tool rule, then
+// the default mode. An ask that the user accepts is remembered when the cache
+// is on. A refusal (rule Deny, an ask returning false, or an ask with no
+// AskFunc wired) denies with a Reason; the Runner feeds that back to the model
+// and continues the turn.
+//
+// It never rewrites arguments. A gate decides, it does not edit, and leaving
+// the rewrite to other hooks is what lets this one run last and still see
+// exactly what will execute.
+func (t *TieredApproval) WrapToolCall(ctx context.Context, info ToolCallInfo, next ToolCallFunc) (*core.ToolResult, error) {
 	t.mu.Lock()
 	mode := t.mode
-	remembered := t.remember && t.remembered[req.ToolName]
+	remembered := t.remember && t.remembered[info.Call.Name]
 	t.mu.Unlock()
 	if remembered {
-		return ApprovalDecision{Allowed: true}, nil
+		return next(ctx, info)
 	}
 
-	if rule, ok := t.rules[req.ToolName]; ok {
+	if rule, ok := t.rules[info.Call.Name]; ok {
 		switch rule {
 		case RuleAllow:
-			return ApprovalDecision{Allowed: true}, nil
+			return next(ctx, info)
 		case RuleDeny:
-			return ApprovalDecision{Reason: "denied by approval policy"}, nil
+			return nil, DenyTool("denied by approval policy")
 		case RuleAsk:
-			return t.doAsk(ctx, req)
+			return t.doAsk(ctx, info, next)
 		}
 	}
 
 	switch mode {
 	case ModeAlwaysAllow:
-		return ApprovalDecision{Allowed: true}, nil
+		return next(ctx, info)
 	case ModeReadOnlyAuto:
-		if req.ReadOnly {
-			return ApprovalDecision{Allowed: true}, nil
+		if info.ReadOnly {
+			return next(ctx, info)
 		}
-		return t.doAsk(ctx, req)
+		return t.doAsk(ctx, info, next)
 	default: // ModeAlwaysAsk
-		return t.doAsk(ctx, req)
+		return t.doAsk(ctx, info, next)
 	}
 }
 
-func (t *TieredApproval) doAsk(ctx context.Context, req ApprovalRequest) (ApprovalDecision, error) {
+func (t *TieredApproval) doAsk(ctx context.Context, info ToolCallInfo, next ToolCallFunc) (*core.ToolResult, error) {
 	if t.ask == nil {
-		return ApprovalDecision{Reason: "no approval UI available"}, nil
+		return nil, DenyTool("no approval UI available")
 	}
-	ok, err := t.ask(ctx, req)
+	ok, err := t.ask(ctx, info)
 	if err != nil {
-		return ApprovalDecision{}, err
+		return nil, err
 	}
 	if !ok {
-		return ApprovalDecision{Reason: "declined by user"}, nil
+		return nil, DenyTool("declined by user")
 	}
 	if t.remember {
 		t.mu.Lock()
-		t.remembered[req.ToolName] = true
+		t.remembered[info.Call.Name] = true
 		t.mu.Unlock()
 	}
-	return ApprovalDecision{Allowed: true}, nil
+	return next(ctx, info)
 }

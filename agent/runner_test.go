@@ -431,11 +431,11 @@ func TestRunnerEventKindsJSONRoundTrip(t *testing.T) {
 	}
 }
 
-// denyAll is an ApprovalPolicy that refuses every call with a fixed reason.
-type denyAll struct{ reason string }
-
-func (d denyAll) Approve(context.Context, ApprovalRequest) (ApprovalDecision, error) {
-	return ApprovalDecision{Reason: d.reason}, nil
+// denyAll is ToolMiddleware that refuses every call with a fixed reason.
+func denyAll(reason string) ToolMiddleware {
+	return func(context.Context, ToolCallInfo, ToolCallFunc) (*core.ToolResult, error) {
+		return nil, DenyTool(reason)
+	}
 }
 
 func TestRunnerApprovalDeniedFeedsBackAndContinues(t *testing.T) {
@@ -454,7 +454,7 @@ func TestRunnerApprovalDeniedFeedsBackAndContinues(t *testing.T) {
 	)
 	emit, events := collectEvents()
 
-	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src, Approval: denyAll{reason: "declined by user"}})
+	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src, ToolMiddleware: []ToolMiddleware{denyAll("declined by user")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +504,7 @@ func TestRunnerApprovalAllowedRunsTool(t *testing.T) {
 	emit, events := collectEvents()
 
 	r, err := NewRunner(RunnerConfig{Provider: stub, Tools: src,
-		Approval: NewTieredApproval(WithDefaultMode(ModeAlwaysAllow))})
+		ToolMiddleware: []ToolMiddleware{NewTieredApproval(WithDefaultMode(ModeAlwaysAllow)).WrapToolCall}})
 	if err != nil {
 		t.Fatal(err)
 	}
