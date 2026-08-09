@@ -211,11 +211,38 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 // turn appended (assistant messages and tool results, in order), so callers
 // thread history as append(history, result.Messages...).
 type TurnResult struct {
-	Text         string    `json:"text,omitempty"`
-	Messages     []Message `json:"messages"`
-	Usage        Usage     `json:"usage"`
-	Steps        int       `json:"steps"`
-	FinishReason string    `json:"finishReason,omitempty"`
+	// Text is the final assistant message of the turn, which is the Text of
+	// the last model call. Intermediate steps' text is not concatenated here;
+	// read Messages for the full sequence, or the event stream to see text as
+	// it arrived.
+	Text string `json:"text,omitempty"`
+
+	// Messages is exactly what the turn appended, never the full history.
+	// Thread it with append(history, result.Messages...).
+	Messages []Message `json:"messages"`
+
+	// Usage sums every model call this Runner made during the turn: each
+	// step of the loop plus the finalizing Generate of a structured-output
+	// turn. Steps whose provider reported no usage contribute zero, so an
+	// under-reporting provider yields an undercount rather than an error.
+	//
+	// It does not include sub-agents. A child reached through AgentSource,
+	// AsyncAgentSource, FanOutSource, Team, or AgentPool runs its own Runner
+	// and accounts for its own tokens, so cost accounting over an agent tree
+	// has to sum the children separately. TreeBudget is the mechanism that
+	// does see the whole tree; this field deliberately does not.
+	Usage Usage `json:"usage"`
+
+	// Steps is how many times the loop called the model, counting from one.
+	// A turn that answered without tools reports 1. The finalizing Generate
+	// of a structured-output turn is not counted here, though its tokens are
+	// counted in Usage. Reaching RunnerConfig.MaxSteps returns an error
+	// wrapping ErrMaxSteps instead of a result.
+	Steps int `json:"steps"`
+
+	// FinishReason is the last model call's finish reason, in the provider's
+	// own vocabulary and unmapped. See ProviderResponse.FinishReason.
+	FinishReason string `json:"finishReason,omitempty"`
 
 	// Structured is the schema-coerced final answer, present only when
 	// RunnerConfig.ResponseSchema was set. It is the JSON document from the

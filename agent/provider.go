@@ -133,13 +133,29 @@ type ProviderRequest struct {
 // a silently ignored one. See ProviderRequest.Temperature.
 type GenerationParams struct {
 	// Temperature overrides the provider default when non-nil.
+	//
+	// Setting it is not universally safe. Current Anthropic models reject
+	// sampling parameters outright, so a non-nil Temperature makes the
+	// request fail with a 400 rather than being ignored, and mcpkit keeps no
+	// per-model capability table that would catch this first. Leave it nil
+	// unless the target model is known to accept it. Full contract on
+	// ProviderRequest.Temperature.
 	Temperature *float64 `json:"temperature,omitempty"`
 
-	// MaxTokens caps the completion length when positive.
+	// MaxTokens caps the completion length when positive. Zero leaves the
+	// decision to the provider, except on AnthropicProvider, whose API
+	// requires a cap and which substitutes AnthropicConfig.MaxTokens.
+	//
+	// A cap that truncates mid-turn ends the call with a length-flavored
+	// FinishReason and no error: the Runner treats the short completion as
+	// the model's answer, so too small a value silently degrades a turn
+	// rather than failing it.
 	MaxTokens int `json:"maxTokens,omitempty"`
 
 	// ToolChoice biases tool calling. The zero value is the provider
-	// default ("auto").
+	// default ("auto"). Support varies across OpenAI-compatible servers and
+	// one that ignores it degrades to "auto", so forcing a call is a
+	// request, not a guarantee. Full contract on ProviderRequest.ToolChoice.
 	ToolChoice ToolChoice `json:"toolChoice,omitempty"`
 }
 
@@ -211,9 +227,24 @@ func (tc ToolChoice) wire() any {
 	}
 }
 
-// Usage reports token consumption for one model call.
+// Usage reports token consumption for one model call. TurnResult.Usage is the
+// sum across a turn; see its doc for what that total does and does not cover.
+//
+// Both counts are as the provider reported them, not as mcpkit measured them.
+// A provider that reports no usage yields a nil *Usage rather than a zero one,
+// so the caller can tell "not reported" from "reported as zero". The Runner
+// treats a missing report as zero when summing, which means a provider that
+// under-reports produces an undercount rather than an error.
 type Usage struct {
-	InputTokens  int `json:"inputTokens"`
+	// InputTokens is the prompt side of the call: instructions, history, and
+	// tool definitions as the provider counted them. Cache reads and writes
+	// are not broken out; whatever the provider folds into its own input
+	// count is what appears here.
+	InputTokens int `json:"inputTokens"`
+
+	// OutputTokens is the completion side, including tokens spent on tool
+	// calls and on reasoning the provider billed for, even when that
+	// reasoning never reached Delta.Text.
 	OutputTokens int `json:"outputTokens"`
 }
 
@@ -268,13 +299,35 @@ type Stream interface {
 }
 
 // ProviderResponse is a completed model call: the fold of a delta stream, or
-// the direct result of Generate.
+// the direct result of Generate. One response is one call, never a whole turn;
+// the Runner makes as many of these as the step loop needs.
 type ProviderResponse struct {
-	Text         string     `json:"text,omitempty"`
-	Reasoning    string     `json:"reasoning,omitempty"`
-	ToolCalls    []ToolCall `json:"toolCalls,omitempty"`
-	FinishReason string     `json:"finishReason,omitempty"`
-	Usage        *Usage     `json:"usage,omitempty"`
+	// Text is the assistant's message content. Empty is normal and not an
+	// error: a call that only requested tools produces no text.
+	Text string `json:"text,omitempty"`
+
+	// Reasoning is provider-exposed reasoning text, folded from
+	// DeltaReasoning. Empty for providers that expose none, which is most of
+	// them. This is plain text for display and never carries provider-opaque
+	// state such as signed thinking blocks, which constraint A9 keeps off the
+	// neutral types entirely.
+	Reasoning string `json:"reasoning,omitempty"`
+
+	// ToolCalls holds the calls the model requested, in the order the
+	// provider emitted them. Parallel calls all appear here; the Runner
+	// dispatches them and feeds one RoleTool message back per call.
+	ToolCalls []ToolCall `json:"toolCalls,omitempty"`
+
+	// FinishReason is the provider's own vocabulary passed through
+	// unmapped ("stop", "tool_calls", "length", and whatever else a given
+	// provider emits). Compare against it only for a specific provider, and
+	// branch on len(ToolCalls) rather than on this string when deciding
+	// whether the loop should continue.
+	FinishReason string `json:"finishReason,omitempty"`
+
+	// Usage is what the provider reported for this call, or nil when it
+	// reported nothing. Nil is distinct from a zero Usage.
+	Usage *Usage `json:"usage,omitempty"`
 }
 
 // Provider is the LLM seam. Implementations must be safe for concurrent use;
