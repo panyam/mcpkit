@@ -50,6 +50,50 @@ differentiator. See §4.
 
 ---
 
+## 1a. Product frame (2026-08-09)
+
+The SDK exists to support **the best agent experience, CLI and UI, for coding or any task**. That
+frame decides what belongs here, and it settled #1059.
+
+**`agentchat` and `agentweb` are the general-purpose harness. Coding is an extension over them, not
+a separate module.** Working through what a coding agent actually is, essentially none of it is loop
+machinery: edit/search/bash tools are a `ToolSource`, sandboxing is a wrapper, a repo map is a
+`PromptSection`, LSP is a tool plus an `AfterToolCall` middleware, checkpointing is middleware plus a
+command. Roughly tools 60%, prompts 25%, harness 15% — and the harness slice is what `agent/` already
+is. §4a reached the same place from the other side: oh-my-pi's moat was a large in-process tool core,
+not a better loop.
+
+What blocked it was not the loop but the host. `host.App` has 52 fields and thirteen `AppOption`s,
+and **every option replaces something already pluggable — none adds tools, middleware, or commands**.
+`CommandRegistry.Register` has no caller outside the package (#1244 audit). With nowhere else to put
+a feature, every feature went into the struct.
+
+Working order, ahead of the phase blocks:
+
+1. **#1026 / #1024** — the pre-turn context pipeline. The fifth extension seam; memory and event
+   injection contribute per-turn context and cannot leave `App` without it. Re-scoped from polish to
+   prerequisite.
+2. **#1250** — the `Extension` contract. The unlock.
+3. **#1251** — collapse `App`'s 52 fields (C2). Independent and mechanical; can land first.
+4. Migrate features out of `App` one at a time — approval is the cheapest proof, since #1248 already
+   made it middleware.
+5. **#1252** — the coding extension.
+
+Alongside: **#1253** (pluggable approval rendering, so an edit ask shows a hunk not truncated JSON)
+and **#1254** (input transform, for `@file` references).
+
+**Not this goal, parked deliberately rather than neglected:** #752 cross-replica sessions, #483
+middleware precompute, #1018 faster cosine, and to a lesser degree #999 RunStore GC are
+*hosted-deployment* concerns. They matter for running an agent as a multi-tenant service; they do
+little for a CLI on a laptop or a single-session UI. Phase 5 is demoted to its one live child
+(#1053) and Phase 6 is parked — see the comments on #1050 / #1051.
+
+Still first-order for the experience, regardless of the above: **#1007** (token-accurate estimator —
+`len/4` is worst exactly on code and tool-result JSON, and compaction is calibrated off it) and
+**#1006** (mid-turn compaction; `Compactor` is pre-loop only today).
+
+---
+
 ## 2. Status scorecard
 
 Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open issue) · ❌ untracked gap.
@@ -83,7 +127,7 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 (re-scoped by A9) | structured output via finalizing `Generate`; generation parameters reachable from a turn via `RunnerConfig.Generation` / `TurnRequest.Generation` (#1239 — temperature, token cap, tool choice; before it, three of the four `ProviderRequest` parameters could not be set on a Runner at all) | logprob/token-confidence **#1053** — **loop-visible** (routing/abstention/cascade), kept as agent-SDK work; OpenAI-wire/local, not Anthropic. Grammar/guided decoding **#1054** — deferred (marginal). Anthropic caching/thinking **dropped (#953, loop-invisible)**. |
 | **Test-time compute (Phase 6)** | ⏳ #1051 | `#1033` `FanOutSource` already gives N concurrent runs, member ordering, failure isolation, and a pluggable `Aggregate` hook | sampling/vote **#1056** — re-scoped down to two aggregators over that hook (see §5a); `FailoverProvider` quality trigger **#1057**, blocked on #1053 |
 | **Safety & guardrails (Phase 7)** | 🟡 #1052 | approval ladder (#929); `ToolMiddleware` is the interception seam guardrails attach to; prompt-injection spotlighting **✅ #1058** (`agent/spotlight.go` — unguessable per-call fence + data framing, untrusted-by-default with a trusted opt-out, host `spotlight` config block, runs outside the approval gate) | efficacy against a live model is unproven by unit tests — needs the AgentDojo suite **#1060**; constitutional gate **#1061** |
-| **Coding-surface: sandboxing, hooks, repo map, LSP** | ⏳ #1059 | — | scope decision (agent/ vs coding agent built on it) **#1059** |
+| **Coding surface (sandboxing, hooks, repo map, LSP)** | 🟡 **decided** — #1059 closed | Hooks landed in `agent/` as `ToolMiddleware` (#1248). The rest are an **extension** over the general harness, not a separate module: epic **#1252** | Blocked on the extension contract **#1250** (and its fifth seam, **#1026**). Host decomposition **#1251** runs in parallel |
 
 **Bottom line:** Phases 0–3 are effectively **done**. Phase 4 (workflows) was evaluated and **dropped**
 — not a gap, a deliberate non-goal (constraint A8). Three structural phases stay open and fully scoped
@@ -122,10 +166,11 @@ The three once-universal gaps are now mostly closed:
 | 3 | **Mid-turn interrupt** | ✅ shipped (#936/#937) — cancel one call, turn continues |
 
 Second-tier: context compaction ✅ (#939), isolated-context subagents ✅ (#941), session
-persistence/resume/fork ✅ (#960/#962), slash + custom commands ✅ (#985). **Still absent (untracked):**
-lifecycle **hooks** (PreToolUse/PostToolUse), **sandboxing** of tool execution, **repo map**,
-**LSP-in-loop**, and a soft **tool-call budget gate**. These are coding-*surface* features; whether
-they belong in `agent/` or in a coding-agent built on it is a scoping decision (see §5).
+persistence/resume/fork ✅ (#960/#962), slash + custom commands ✅ (#985). **Hooks** shipped as
+`ToolMiddleware` (#1248), which also absorbed the approval policy rather than sitting beside it.
+**Sandboxing**, **repo map**, **LSP-in-loop**, a soft **tool-call budget gate**, an anchored **edit
+primitive**, **file-state rewind**, and a **test/build feedback loop** are all now children of the
+coding-extension epic **#1252** — implementations of existing seams, not new loop machinery.
 
 ### 4a. The coding-agent field, re-surveyed against oh-my-pi
 
