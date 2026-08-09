@@ -45,7 +45,7 @@ func (p *barrierProvider) Stream(ctx context.Context, req ProviderRequest) (Stre
 
 func (p *barrierProvider) Generate(ctx context.Context, req ProviderRequest) (*ProviderResponse, error) {
 	p.b.arrive()
-	var acc Accumulator
+	var acc DeltaAccumulator
 	acc.Add(Delta{Kind: DeltaText, Text: p.text})
 	acc.Add(Delta{Kind: DeltaFinish, FinishReason: "stop"})
 	return acc.Result(), nil

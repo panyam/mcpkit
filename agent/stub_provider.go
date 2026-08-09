@@ -101,7 +101,7 @@ func (s *StubProvider) Generate(ctx context.Context, req ProviderRequest) (*Prov
 	if turn.Err != nil {
 		return nil, turn.Err
 	}
-	var acc Accumulator
+	var acc DeltaAccumulator
 	for _, d := range turn.deltas() {
 		acc.Add(d)
 	}

@@ -178,8 +178,8 @@ func TestAnthropicStreamTextFinishUsage(t *testing.T) {
 		t.Fatalf("delta sequence:\n got: %+v\nwant: %+v", got, want)
 	}
 
-	// The Accumulator folds the same stream into the completed response.
-	var acc Accumulator
+	// The DeltaAccumulator folds the same stream into the completed response.
+	var acc DeltaAccumulator
 	for _, d := range got {
 		acc.Add(d)
 	}
@@ -211,7 +211,7 @@ func TestAnthropicToolNameSanitizedAndReversed(t *testing.T) {
 	}
 	defer s.Close()
 
-	var acc Accumulator
+	var acc DeltaAccumulator
 	for _, d := range collectDeltas(t, s) {
 		acc.Add(d)
 	}
@@ -255,7 +255,7 @@ func TestAnthropicStreamToolUse(t *testing.T) {
 		t.Fatalf("delta sequence:\n got: %+v\nwant: %+v", got, want)
 	}
 
-	var acc Accumulator
+	var acc DeltaAccumulator
 	for _, d := range got {
 		acc.Add(d)
 	}

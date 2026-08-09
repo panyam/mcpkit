@@ -43,7 +43,7 @@ func TestAppRunnerControlWiring(t *testing.T) {
 		t.Fatal("agentPool not built with RunnerControl")
 	}
 	var names []string
-	for _, n := range app.agentPool.Names() {
+	for _, n := range app.agentPool.Registered() {
 		names = append(names, n.Name)
 	}
 	if len(names) != 1 || names[0] != "worker" {

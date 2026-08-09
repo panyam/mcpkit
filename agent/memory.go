@@ -101,10 +101,21 @@ type ListMemoriesResponse struct {
 // Score is a property of the QUERY, not of the stored fact (the same item
 // scores differently against different queries), which is why it lives here
 // on the result and not on MemoryItem — that keeps MemoryItem the durable,
-// query-independent fact. A substring store returns 1 for a match; a
-// semantic store returns cosine similarity. Room to grow: a future
-// ranking/reranker stage can add per-signal provenance (similarity vs
-// recency vs importance) here without touching the store or the item.
+// query-independent fact. Room to grow: a future ranking/reranker stage can
+// add per-signal provenance (similarity vs recency vs importance) here
+// without touching the store or the item.
+//
+// Direction is contractual and scale is not. Higher always means more
+// relevant, in every backend: the semantic stores report cosine similarity,
+// and the pgvector backend converts distance with 1 - (embedding <=> query)
+// specifically so it agrees. What differs is the range. A matching store (the
+// in-memory default, Redis) reports a flat 1 for every hit because it has no
+// graded notion of relevance, and every store reports 0 on the "list
+// everything" path where there is no query to rank against.
+//
+// So Score is safe to sort and compare within one response, and unsafe to
+// compare across backends or to threshold with a constant tuned elsewhere.
+// See RecallOptions.MinScore, the one place in-tree that thresholds on it.
 type ScoredMemory struct {
 	Item  MemoryItem
 	Score float64
@@ -424,6 +435,15 @@ type RecallOptions struct {
 	// semantic store every note gets some cosine score, so without a floor a
 	// low-TopK recall would inject the least-irrelevant notes even when
 	// nothing is actually relevant. Zero means no floor (keep all TopK).
+	//
+	// The threshold is not portable across backends, because ScoredMemory.Score
+	// shares a direction but not a scale. Ranking stores score on a cosine
+	// scale where a floor discriminates; matching stores (the in-memory
+	// default and Redis) return a flat 1 for every match, so any floor at or
+	// below 1 keeps everything and the guard is inert. It degrades safely —
+	// no filtering rather than wrong filtering — but a value tuned against a
+	// semantic store does nothing after a swap to a substring one. Tune it
+	// against the backend actually in use.
 	MinScore float64
 }
 

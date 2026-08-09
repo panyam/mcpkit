@@ -20,7 +20,7 @@ func (p *latchProvider) Stream(ctx context.Context, req ProviderRequest) (Stream
 }
 func (p *latchProvider) Generate(ctx context.Context, req ProviderRequest) (*ProviderResponse, error) {
 	<-p.release
-	var acc Accumulator
+	var acc DeltaAccumulator
 	acc.Add(Delta{Kind: DeltaText, Text: p.text})
 	acc.Add(Delta{Kind: DeltaFinish, FinishReason: "stop"})
 	return acc.Result(), nil

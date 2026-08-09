@@ -517,7 +517,7 @@ func (r *Runner) failSpan(emit func(Event), span core.Span, err error) error {
 // reasoning delta, end when the step moves on to text, tool calls, or
 // completes.
 func consumeStream(stream Stream, step int, emit func(Event)) (*ProviderResponse, error) {
-	var acc Accumulator
+	var acc DeltaAccumulator
 	thinking := false
 	endThinking := func() {
 		if thinking {

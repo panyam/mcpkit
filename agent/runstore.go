@@ -61,11 +61,21 @@ type RunStore interface {
 // the current length of the message log; the fork lineage (ParentID,
 // ForkPoint) is the session tree a picker renders.
 type RunInfo struct {
-	ID           string    `json:"id"`
-	ParentID     string    `json:"parentId,omitempty"`
-	ForkPoint    int       `json:"forkPoint,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
-	MessageCount int       `json:"messageCount"`
+	ID       string `json:"id"`
+	ParentID string `json:"parentId,omitempty"`
+
+	// ForkPoint is the number of ParentID's messages this run was forked
+	// with, and zero for runs created directly. It is a message count, never
+	// a timestamp or a storage sequence value; see Run.ForkPoint for why.
+	// Comparing it against MessageCount tells a picker how far this run has
+	// diverged from its parent.
+	ForkPoint int `json:"forkPoint,omitempty"`
+
+	CreatedAt time.Time `json:"createdAt"`
+
+	// MessageCount is the current length of this run's message log, so a
+	// listing can show size without loading bodies.
+	MessageCount int `json:"messageCount"`
 }
 
 // ListRunsRequest pages the run listing. Cursor is empty for the first
