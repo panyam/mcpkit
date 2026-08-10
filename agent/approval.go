@@ -23,6 +23,17 @@ const (
 	// ModeReadOnlyAuto auto-allows calls whose tool declares readOnlyHint
 	// and asks for the rest. The "read-only → auto-edit" rung of the ladder.
 	ModeReadOnlyAuto
+	// ModeReversibleAuto auto-allows a call that reads, and a call that
+	// writes something the tool declares it can undo, asking only when the
+	// effect is irreversible. The rung above ModeReadOnlyAuto: it separates
+	// "does this write?" from "can this be taken back?", so an editing tool
+	// stops prompting while a send or a delete still does.
+	//
+	// It keys on ToolCallInfo.Destructive, so a tool that annotates nothing
+	// is asked about rather than assumed reversible. Against servers that
+	// skip destructiveHint entirely this behaves exactly like ModeAlwaysAsk,
+	// which is the intended failure direction.
+	ModeReversibleAuto
 	// ModeAlwaysAllow runs every uncovered call without asking (full-auto /
 	// "yolo"). Per-tool Deny rules still apply on top.
 	ModeAlwaysAllow
@@ -154,6 +165,11 @@ func (t *TieredApproval) WrapToolCall(ctx context.Context, info ToolCallInfo, ne
 		return next(ctx, info)
 	case ModeReadOnlyAuto:
 		if info.ReadOnly {
+			return next(ctx, info)
+		}
+		return t.doAsk(ctx, info, next)
+	case ModeReversibleAuto:
+		if info.ReadOnly || !info.Destructive {
 			return next(ctx, info)
 		}
 		return t.doAsk(ctx, info, next)

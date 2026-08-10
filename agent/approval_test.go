@@ -43,6 +43,17 @@ func req(tool string, readOnly bool) ToolCallInfo {
 	return ToolCallInfo{Call: ToolCall{Name: tool}, ReadOnly: readOnly}
 }
 
+func reqHints(tool string, readOnly, destructive bool) ToolCallInfo {
+	return ToolCallInfo{Call: ToolCall{Name: tool}, ReadOnly: readOnly, Destructive: destructive}
+}
+
+// resolved builds the info the way the Runner does, so a mode test exercises
+// the annotation defaults rather than hand-picked field values.
+func resolved(tool core.ToolDef) ToolCallInfo {
+	ro, d, i := toolHints([]core.ToolDef{tool}, tool.Name)
+	return ToolCallInfo{Call: ToolCall{Name: tool.Name}, ReadOnly: ro, Destructive: d, Idempotent: i}
+}
+
 func TestTieredApprovalModes(t *testing.T) {
 
 	t.Run("always-allow skips the ask", func(t *testing.T) {
@@ -159,16 +170,120 @@ func TestTieredApprovalDeclineAndNoUI(t *testing.T) {
 	})
 }
 
-func TestToolReadOnly(t *testing.T) {
+func TestReversibleAutoMode(t *testing.T) {
+	t.Run("allows read-only without asking", func(t *testing.T) {
+		ask, n := countingAsk(false)
+		p := NewTieredApproval(WithDefaultMode(ModeReversibleAuto), WithAsk(ask))
+		allowed, _, _ := gate(p, reqHints("list_files", true, false))
+		if !allowed || *n != 0 {
+			t.Fatalf("read-only should auto-allow: allowed=%v asks=%d", allowed, *n)
+		}
+	})
+
+	t.Run("allows a write the tool declares reversible", func(t *testing.T) {
+		ask, n := countingAsk(false)
+		p := NewTieredApproval(WithDefaultMode(ModeReversibleAuto), WithAsk(ask))
+		allowed, _, _ := gate(p, reqHints("edit_file", false, false))
+		if !allowed || *n != 0 {
+			t.Fatalf("reversible write should auto-allow: allowed=%v asks=%d", allowed, *n)
+		}
+	})
+
+	t.Run("asks on an irreversible write", func(t *testing.T) {
+		ask, n := countingAsk(true)
+		p := NewTieredApproval(WithDefaultMode(ModeReversibleAuto), WithAsk(ask))
+		allowed, _, _ := gate(p, reqHints("send_email", false, true))
+		if !allowed || *n != 1 {
+			t.Fatalf("destructive write should ask: allowed=%v asks=%d", allowed, *n)
+		}
+	})
+
+	// The conservative pin, through the Runner's own resolution path rather
+	// than hand-set fields: a tool that annotates nothing must reach the ask.
+	// Getting this backwards would silently widen what runs unattended.
+	t.Run("asks for an unannotated tool", func(t *testing.T) {
+		ask, n := countingAsk(true)
+		p := NewTieredApproval(WithDefaultMode(ModeReversibleAuto), WithAsk(ask))
+		allowed, _, _ := gate(p, resolved(core.ToolDef{Name: "shell"}))
+		if !allowed || *n != 1 {
+			t.Fatalf("unannotated tool should ask: allowed=%v asks=%d", allowed, *n)
+		}
+	})
+
+	t.Run("read-only-auto is unchanged by a reversible annotation", func(t *testing.T) {
+		ask, n := countingAsk(true)
+		p := NewTieredApproval(WithDefaultMode(ModeReadOnlyAuto), WithAsk(ask))
+		allowed, _, _ := gate(p, reqHints("edit_file", false, false))
+		if !allowed || *n != 1 {
+			t.Fatalf("read-only-auto should still ask on any write: allowed=%v asks=%d", allowed, *n)
+		}
+	})
+
+	t.Run("per-tool rules override the mode in both directions", func(t *testing.T) {
+		ask, n := countingAsk(true)
+		p := NewTieredApproval(
+			WithDefaultMode(ModeReversibleAuto),
+			WithToolRule("send_email", RuleAllow),
+			WithToolRule("edit_file", RuleAsk),
+			WithToolRule("rm_rf", RuleDeny),
+			WithAsk(ask),
+		)
+		if allowed, _, _ := gate(p, reqHints("send_email", false, true)); !allowed || *n != 0 {
+			t.Fatalf("RuleAllow should beat a destructive hint: allowed=%v asks=%d", allowed, *n)
+		}
+		if allowed, _, _ := gate(p, reqHints("edit_file", false, false)); !allowed || *n != 1 {
+			t.Fatalf("RuleAsk should beat a reversible hint: allowed=%v asks=%d", allowed, *n)
+		}
+		if allowed, reason, _ := gate(p, reqHints("rm_rf", false, false)); allowed || reason == "" {
+			t.Fatalf("RuleDeny should refuse: allowed=%v reason=%q", allowed, reason)
+		}
+	})
+}
+
+func TestToolHints(t *testing.T) {
 	tools := []core.ToolDef{
 		{Name: "list", Annotations: map[string]any{"readOnlyHint": true}},
 		{Name: "write", Annotations: map[string]any{"readOnlyHint": false}},
 		{Name: "plain"},
+		{Name: "edit", Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false}},
+		{Name: "send", Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": true}},
+		{Name: "put", Annotations: map[string]any{"destructiveHint": false, "idempotentHint": true}},
+		// Contradictory: the spec says the other two are meaningful only
+		// when a tool writes, so read-only wins and this reports safe.
+		{Name: "contradictory", Annotations: map[string]any{"readOnlyHint": true, "destructiveHint": true, "idempotentHint": false}},
 	}
-	cases := map[string]bool{"list": true, "write": false, "plain": false, "unknown": false}
+	type hints struct{ readOnly, destructive, idempotent bool }
+	cases := map[string]hints{
+		"list":          {true, false, true},
+		"write":         {false, true, false},
+		"plain":         {false, true, false},
+		"edit":          {false, false, false},
+		"send":          {false, true, false},
+		"put":           {false, false, true},
+		"contradictory": {true, false, true},
+		"unknown":       {false, true, false},
+	}
 	for name, want := range cases {
-		if got := toolReadOnly(tools, name); got != want {
-			t.Errorf("toolReadOnly(%q) = %v, want %v", name, got, want)
+		ro, d, i := toolHints(tools, name)
+		if got := (hints{ro, d, i}); got != want {
+			t.Errorf("toolHints(%q) = %+v, want %+v", name, got, want)
+		}
+	}
+}
+
+// An absent destructiveHint must resolve to destructive, which is the one
+// default that inverts the Go zero value and so the one a refactor can quietly
+// flip.
+func TestToolHintsUnannotatedIsDestructive(t *testing.T) {
+	for _, tool := range []core.ToolDef{
+		{Name: "t"},
+		{Name: "t", Annotations: map[string]any{}},
+		{Name: "t", Annotations: map[string]any{"readOnlyHint": false}},
+		{Name: "t", Annotations: map[string]any{"idempotentHint": true}},
+		{Name: "t", Annotations: map[string]any{"destructiveHint": "not-a-bool"}},
+	} {
+		if _, destructive, _ := toolHints([]core.ToolDef{tool}, "t"); !destructive {
+			t.Errorf("annotations %v resolved to non-destructive", tool.Annotations)
 		}
 	}
 }

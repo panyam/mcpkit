@@ -237,7 +237,7 @@ func (a *App) registerBuiltinCommands() {
 			return CmdResult{Kind: CmdTasks, Tasks: a.snapshotTasks()}, nil
 		}})
 
-	r.Register(&Command{Name: "approve", Help: "show or set approval mode (allow | read-only-auto | ask)",
+	r.Register(&Command{Name: "approve", Help: "show or set approval mode (allow | reversible-auto | read-only-auto | ask)",
 		Run: func(_ context.Context, args string) (CmdResult, error) {
 			if args != "" && a.approval != nil {
 				mode := parseApprovalMode(args)
