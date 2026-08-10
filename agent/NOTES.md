@@ -316,6 +316,50 @@ it later would break callers.
 The default fence names the origin in prose ("fetched from outside this system") rather than
 emitting the raw label, so the sentence reads to a model that was never told what `world` means.
 
+### Provenance is derived from the source, not restated in config (#1268, PR 1274)
+
+`spotlight.tools` shipped in #1262 as the only input, which is correct exactly as long as someone
+maintains it: connect a server and every tool it advertises silently defaults to `world`, so the
+labels stop distinguishing anything and the differentiated fencing never gets used. The host
+already knows what each source is, because it chose the id when it called `Add`.
+
+The derivation table lives in `agent/host/provenance.go`:
+
+| source id | label |
+|---|---|
+| a connected MCP server (`sc.ID`, recorded at Add time) | `server` |
+| `subagent:*`, `fanout:*`, `serveragents:*` | `agent` |
+| `host`, `runner-control` | `operator` |
+| an extension, or anything unmatched | none → `world` |
+
+**`operator` is a closed allowlist and must stay one.** An extension is arbitrary code that may
+shell out or fetch, so the host has no standing to vouch for it. Deriving `operator` there is the
+one mistake that silently *disables* the mitigation instead of making it noisy. Everything
+unmatched falls through to `world`, which marks.
+
+Two things that shaped the implementation:
+
+- **You cannot map a tool name back to its source by matching the name.** A colliding name is
+  offered to the model as the qualified `sourceID/name` form, so the classifier sees either shape.
+  `MultiSource.OwnerOf` shares `resolveLocked` with `Call` — `resolveLocked` returns the source id
+  rather than the source for exactly this reason. A classifier that disagreed with the dispatcher
+  would attribute output to a source that never served the call, which is worse than not labelling
+  it. `TestMultiSourceOwnerOfMatchesCall` pins the two against each other through a `Resolver`.
+- **An ambiguous name gets no label rather than a guess.** Picking the first claimant would be a
+  plausible answer that `Call` would not have acted on.
+
+The classifier is bounded by a 2s timeout because `SpotlightConfig.Classify` takes no context and
+an index miss makes `MultiSource` re-list every source, which reaches the network. An unreachable
+server must not stall tool dispatch.
+
+Known wart: an extension's tools get the `world` fence, which reads "fetched from outside this
+system" about code that ran in-process and fetched nothing. Right marking decision, false sentence.
+Options and the decision are #1273; it was deliberately not fixed by widening the enum.
+
+Also corrected in that PR: three comments in `agent/multi_source.go` described the qualified form
+as `sourceID_name` while the code has always joined with `/` — and `Add` rejects `/` in a source id
+*because* it is the separator. The stale docs cost a red test to discover.
+
 ### Reversal: restore and compensate are different operations (#1267, PRs 1270/1271/1272)
 
 `agent/ext/checkpoint` holds the seam. The design mistake it was rewritten to avoid: putting undo
