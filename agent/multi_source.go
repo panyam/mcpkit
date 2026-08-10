@@ -22,7 +22,7 @@ type ToolOwner struct {
 
 // Resolver picks which source handles an ambiguous bare-name call. Returning
 // an empty string (or an error) fails the call; the caller can always reach a
-// specific candidate via the qualified "sourceID_name" form instead.
+// specific candidate via the qualified "sourceID/name" form instead.
 type Resolver func(name string, candidates []ToolOwner, args map[string]any) (sourceID string, err error)
 
 // MultiSource aggregates ToolSources under stable source IDs, mirroring the
@@ -30,7 +30,7 @@ type Resolver func(name string, candidates []ToolOwner, args map[string]any) (so
 //
 //   - Unique names are exposed and callable as-is.
 //   - Colliding names are exposed to the model ONLY in qualified form
-//     ("sourceID_name" for every claimant), so the model-facing list never
+//     ("sourceID/name" for every claimant), so the model-facing list never
 //     contains duplicates and every tool stays reachable.
 //   - A bare-name Call that hits a collision consults the Resolver if one is
 //     configured, else fails with an error naming the qualified forms.
@@ -172,7 +172,7 @@ func (m *MultiSource) SourceTools(ctx context.Context, id string) (defs []core.T
 }
 
 // Call dispatches by bare or qualified name. Resolution order: exact unique
-// bare name; qualified "sourceID_name"; ambiguous bare name via Resolver.
+// bare name; qualified "sourceID/name"; ambiguous bare name via Resolver.
 // A name miss against the memoized index triggers exactly one fresh gather
 // before failing, so tools registered after the last listing stay reachable.
 func (m *MultiSource) Call(ctx context.Context, name string, args map[string]any) (*core.ToolResult, error) {
@@ -182,18 +182,52 @@ func (m *MultiSource) Call(ctx context.Context, name string, args map[string]any
 		m.mu.Unlock()
 		return nil, err
 	}
-	src, bare, resolveErr := m.resolveLocked(claims, name, args)
+	id, bare, resolveErr := m.resolveLocked(claims, name, args)
 	if errors.Is(resolveErr, ErrUnknownTool) {
 		m.index = nil
 		if claims, _, err = m.indexLocked(ctx); err == nil {
-			src, bare, resolveErr = m.resolveLocked(claims, name, args)
+			id, bare, resolveErr = m.resolveLocked(claims, name, args)
 		}
 	}
+	src := m.sources[id]
 	m.mu.Unlock()
 	if resolveErr != nil {
 		return nil, resolveErr
 	}
 	return src.Call(ctx, bare, args)
+}
+
+// OwnerOf reports which source would handle a call to name, without making it.
+//
+// It exists so a caller can key policy on where a tool came from — the host
+// derives spotlight provenance this way — and it takes args because resolution
+// does: an ambiguous bare name goes through the Resolver, which may inspect
+// them. Passing the same name and args Call would receive is what makes the
+// answer the one Call would act on, rather than a plausible guess at it.
+//
+// found is false for an unknown tool, for an ambiguity no Resolver settled,
+// and for a listing error. Callers get a single "no answer" signal because
+// every one of those means the same thing to a policy: do not claim to know
+// where this came from.
+func (m *MultiSource) OwnerOf(ctx context.Context, name string, args map[string]any) (sourceID string, found bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	claims, _, err := m.indexLocked(ctx)
+	if err != nil {
+		return "", false
+	}
+	id, _, resolveErr := m.resolveLocked(claims, name, args)
+	if errors.Is(resolveErr, ErrUnknownTool) {
+		m.index = nil
+		if claims, _, err = m.indexLocked(ctx); err != nil {
+			return "", false
+		}
+		id, _, resolveErr = m.resolveLocked(claims, name, args)
+	}
+	if resolveErr != nil {
+		return "", false
+	}
+	return id, true
 }
 
 // indexLocked returns the memoized claims index, gathering it if absent.
@@ -210,38 +244,42 @@ func (m *MultiSource) indexLocked(ctx context.Context) (map[string][]ToolOwner, 
 	return claims, orderNames, nil
 }
 
-func (m *MultiSource) resolveLocked(claims map[string][]ToolOwner, name string, args map[string]any) (ToolSource, string, error) {
+// resolveLocked maps a called name to the source id that owns it and the bare
+// name to dispatch. It returns the id rather than the source so callers that
+// need to know WHERE a tool came from (OwnerOf) share one resolution path with
+// the caller that only needs to dispatch (Call).
+func (m *MultiSource) resolveLocked(claims map[string][]ToolOwner, name string, args map[string]any) (sourceID, bare string, err error) {
 	if owners, ok := claims[name]; ok {
 		if len(owners) == 1 {
-			return m.sources[owners[0].SourceID], name, nil
+			return owners[0].SourceID, name, nil
 		}
 		if m.resolver != nil {
 			id, err := m.resolver(name, owners, args)
 			if err != nil {
-				return nil, "", err
+				return "", "", err
 			}
-			if src, ok := m.sources[id]; ok {
-				return src, name, nil
+			if _, ok := m.sources[id]; ok {
+				return id, name, nil
 			}
-			return nil, "", fmt.Errorf("agent: resolver returned unknown source %q for tool %q", id, name)
+			return "", "", fmt.Errorf("agent: resolver returned unknown source %q for tool %q", id, name)
 		}
 		var forms []string
 		for _, o := range owners {
 			forms = append(forms, qualifiedName(o.SourceID, name))
 		}
-		return nil, "", fmt.Errorf("agent: tool %q is ambiguous; use one of: %s", name, strings.Join(forms, ", "))
+		return "", "", fmt.Errorf("agent: tool %q is ambiguous; use one of: %s", name, strings.Join(forms, ", "))
 	}
 
-	if id, bare, ok := splitQualified(name); ok {
-		if src, exists := m.sources[id]; exists {
-			for _, o := range claims[bare] {
+	if id, bareName, ok := splitQualified(name); ok {
+		if _, exists := m.sources[id]; exists {
+			for _, o := range claims[bareName] {
 				if o.SourceID == id {
-					return src, bare, nil
+					return id, bareName, nil
 				}
 			}
 		}
 	}
-	return nil, "", fmt.Errorf("%w: %q", ErrUnknownTool, name)
+	return "", "", fmt.Errorf("%w: %q", ErrUnknownTool, name)
 }
 
 func (m *MultiSource) gatherLocked(ctx context.Context) (map[string][]ToolOwner, []string, error) {

@@ -117,6 +117,13 @@ type App struct {
 	// so per-turn lifecycle (TurnStart) can reach them.
 	extensions []Extension
 
+	// toolOrigins records what each source id IS, so spotlight provenance is
+	// derived from where a tool came from rather than restated in config.
+	// Recorded where sources are added, because that is the only place the
+	// distinction is still known: a server id and an extension name are both
+	// arbitrary strings by the time anything reads them back.
+	toolOrigins map[string]agent.Provenance
+
 	// commands is the slash-command registry every surface dispatches
 	// through (Dispatch / Commands). Built in NewApp.
 	commands *CommandRegistry
@@ -244,6 +251,7 @@ func (a *App) registerServerTools(sc ServerConfig, c *client.Client) {
 	// Outermost: map an unreachable-server transport error on any call to a
 	// non-fatal ErrNotAvailableNow miss (docs/AGENT_SERVER_STATE.md).
 	src = newAvailabilitySource(src, sc.ID)
+	a.recordOrigin(sc.ID, agent.ProvenanceServer)
 	if err := a.sources.Add(sc.ID, src); err != nil {
 		a.emit(HostEvent{Kind: HostSessionWarn, Err: fmt.Sprintf("register tools for %s: %v", sc.ID, err)})
 		return
@@ -589,7 +597,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	// Spotlighting goes before the gate: the gate decides on unmarked
 	// arguments, and a call it denies never produces a result to mark.
-	if mw := cfg.Spotlight.build(); mw != nil {
+	if mw := cfg.Spotlight.build(app); mw != nil {
 		runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, mw)
 	}
 	// Built-in commands register before extensions so an extension naming a

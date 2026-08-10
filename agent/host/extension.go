@@ -171,6 +171,10 @@ func (a *App) applyExtensions(exts []Extension) ([]agent.ToolMiddleware, error) 
 			return nil, fmt.Errorf("host: extension %q tools: %w", name, err)
 		}
 		if src != nil {
+			// Deliberately not recorded as operator. An extension is
+			// arbitrary code that may shell out or fetch, so the host has no
+			// standing to vouch for its output; config must say so
+			// explicitly. See derivedProvenance.
 			if err := a.sources.Add(name, src); err != nil {
 				return nil, fmt.Errorf("host: extension %q tools: %w", name, err)
 			}
