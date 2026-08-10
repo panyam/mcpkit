@@ -274,6 +274,16 @@ Deferred: binary offloading (#979), and streaming/handle-based results for hundr
 MCP resource links plus a ranged store (#980 — `Put` is not the bottleneck, upstream
 materialization is).
 
+**A new tool must not reinvent this** (#1284). Writing `list_files` and `search_files`, the obvious
+instinct is to cap the returned bytes so a big repo cannot blow the context window. That is already
+solved, one layer up, for every tool at once. Two truncation mechanisms then disagree about the same
+output, and the tool's cap is the one that also loses information the store would have kept.
+
+The line is A6. A **result-count** limit belongs to the tool: it bounds the work actually done and
+means something to a caller ("the first 100 matches"). **Context economics** belong to the agent
+layer, where `OffloadingSource` wraps the aggregate and already owns them. So those tools take a
+`limit`, report what it dropped, and do no byte-level truncation at all.
+
 ---
 
 ## Safety, approval, and reversal
@@ -433,6 +443,19 @@ exhaustiveness it was never meant to have.
 
 A follow-on: the temp file's mode is set with `fchmod` on the descriptor, because chmod by name
 re-resolves that name and is documented as racy even through `os.Root`.
+
+The same handle covers traversal, which is the part that is easy to build separately and get wrong
+(#1284). `fs.WalkDir` over `root.FS()` cannot leave the root, and it does **not** descend into a
+symlinked directory, so neither an escape nor a link cycle is reachable without writing any
+traversal logic. A symlink stays visible in a listing as a name, which is useful; what is refused is
+reading *through* it. Reaching for `filepath.WalkDir` over a joined path is the version that needs
+its own containment argument.
+
+One design note that belongs with the rest: `write_file` has **no create-or-overwrite mode**, and
+the absence is the feature. The presence of `expect_hash` alone distinguishes create (refused if the
+path exists) from replace (refused if the hash is stale), so no argument combination lands content
+on a file nobody looked at. A convenience flag would be the escape hatch that made the anchored
+editor decorative, and it is exactly what a model reaches for the moment anchoring feels awkward.
 
 ### The same shape in checkpoint wanted a different answer (#1281, PR 1283)
 
@@ -979,25 +1002,37 @@ A tool denial emits `EventToolDenied` with `Event.Reason`, is fed back as model-
   `.github/workflows/test.yml`**, not via `make test-agent`. Moving or adding an example needs
   the workflow updated too, not just the Makefile.
 
-### Reading a mutation run (learned on #1275)
+### Reading a mutation run (learned on #1275, #1284)
 
-Red-before-green here means mutating the implementation and naming which tests fail. Two ways that
-misleads, both hit in one session:
+Red-before-green here means mutating the implementation and naming which tests fail.
 
-- **An empty result is ambiguous.** A mutation that does not compile produces no `--- FAIL` lines,
-  which looks identical to a mutation no test caught. Two "surviving" mutations were really
-  `declared and not used` and `missing return` in the mutation itself. Grep for `build failed`
-  before concluding anything, or the harness reports a test gap that is not there and hides one
-  that is.
-- **A survivor may be unreachable rather than uncovered.** Reverting `edit_file`'s rename to an
-  unconfined `os.Rename` changed nothing, because the earlier `Stat` through the root already
-  refused. That is defence in depth working, not a missing test. The way to tell them apart is to
-  mutate the whole path at once and see whether the behaviour moves.
+**A surviving mutation is a signal to diagnose, not a verdict.** Three quite different things
+produce an identical-looking "no test failed", and across #1275 and #1284 all three happened:
+
+- **A real test gap.** The one you want to find.
+- **An unreachable mutation.** Reverting `edit_file`'s rename to an unconfined `os.Rename` changed
+  nothing, because the earlier `Stat` through the root already refused. That is defence in depth
+  working. Tell it apart by mutating the whole path at once and seeing whether the behaviour moves.
+- **A broken or lying harness.** Two "survivors" were really `declared and not used` and
+  `missing return` in the mutation itself, which produces no `--- FAIL` lines and reads exactly like
+  a gap.
+
+So the harness needs two guards of its own, and neither is optional:
+
+- **Assert the mutation applied.** `shasum` the file before and after; if it is unchanged the
+  pattern did not match and the result is meaningless.
+- **Detect build failures separately**, before parsing for `--- FAIL`.
+
+Even with both, do not trust a surprising survivor. On #1284 a run reported the binary-detection
+mutation as surviving; running the same mutation by hand three times, with and without the `gofmt`
+step, showed the test failing on it exactly as intended. The discrepancy was never explained. The
+tests were right and the tooling around them was not, which is the correct order of trust: hand-verify
+a survivor before you write a test to close a gap that may not exist.
 
 ### A green suite is not evidence of the property you think it is
 
-The failure mutation testing exists to catch, and it turned up three times in one session
-(2026-08-10) in three different disguises. Each looked like coverage of a class and exercised only
+The failure mutation testing exists to catch, and it turned up four times in one session
+(2026-08-10) in four different disguises. Each looked like coverage of a class and exercised only
 the member that already worked:
 
 - **`agent/ext/files` symlink containment.** The test used a symlinked *parent directory*, which is
@@ -1009,14 +1044,36 @@ the member that already worked:
 - **`checkpoint` capture through a symlink.** `TestSymlinkAtCaptureIsNotFollowed` leaves the link in
   place at restore time, so the restore-side guard refuses either way. Swapping `Lstat` for `Stat`
   in `capture` survived the entire suite.
+- **`write_file`'s type and boundary checks.** Both sit in front of `os.Root`, which refuses either
+  way, so deleting them broke nothing any test asserted. See below, because this one resolves
+  differently from the other three.
 
 The shape is the same each time: **a second guard downstream makes the test pass regardless of the
-behaviour it names.** So the fix is the same each time too, and it is what to reach for rather than
+behaviour it names.** So the fix is usually the same too, and it is what to reach for rather than
 adding another case alongside the existing ones. Construct the scenario so the downstream guard is
 absent, which usually means letting the interfering condition resolve before the assertion (replace
 the symlink with a real file; mix a valid element in with the invalid one). If you cannot remove
 the second guard, the test cannot distinguish the two implementations and is not testing what its
 name says.
+
+### Sometimes the guard is load-bearing for the message, not the behaviour (#1284)
+
+`write_file` refuses a non-regular target, and distinguishes a path that escapes the workspace from
+one that merely does not exist. Remove either and `os.Root` still refuses the write, so no safety
+property changes and no outcome-based test can see the difference. The obvious conclusion is that
+the guards are redundant. They are not.
+
+What they change is **what the model is told**. Without the type check, writing to a directory is
+reported as *"already exists, pass expect_hash to replace it"*, which is advice that can never
+work: the model follows it, is refused again, and has burned a turn discovering that the tool
+misdescribed the problem. Without the boundary branch, a symlink pointing out of the workspace
+reads as an ordinary write failure rather than a containment refusal, which points debugging in the
+wrong direction.
+
+For a model-facing tool the message *is* part of the contract, because the model's next action is
+computed from it. So those two tests assert the wording rather than the outcome, and say so in a
+doc comment — otherwise the next reader sees an assertion on a string, concludes it is brittle, and
+deletes it.
 
 ---
 
