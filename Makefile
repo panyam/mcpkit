@@ -7,7 +7,7 @@
 # experimental events modules were added once they shipped their own go.mod.
 SUB_MODS_TO_TAG := \
 	agent agent/host agent/surfaces agent/surfaces/web agent/surfaces/chat agent/store/redis agent/store/gorm \
-	agent/ext/checkpoint \
+	agent/ext/checkpoint agent/ext/files \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
 	experimental/ext/agents experimental/ext/agents/clients/go \
@@ -164,6 +164,7 @@ test-agent: ## Run agent sub-module tests
 	cd agent/store/redis && go test ./... -count=1 -timeout 60s
 	cd agent/store/gorm && go test ./... -count=1 -timeout 60s
 	cd agent/ext/checkpoint && go test ./... -count=1 -timeout 60s
+	cd agent/ext/files && go test ./... -count=1 -timeout 60s
 	cd agent/host && go test ./... -count=1 -timeout 60s
 	cd agent/surfaces && go test ./... -count=1 -timeout 60s
 	cd agent/surfaces/web && go test ./... -count=1 -timeout 90s
