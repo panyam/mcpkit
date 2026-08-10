@@ -61,7 +61,7 @@ cp.Add("/work/src/a.go", "/work/src/b.go")   // captures current content
 cp.Restore()                                  // back to what Add saw
 ```
 
-Three behaviours worth knowing:
+Four behaviours worth knowing:
 
 - **First capture wins.** Re-adding a path already in the checkpoint is a
   no-op, so the checkpoint holds the state at the start of the turn. Capturing
@@ -74,9 +74,48 @@ Three behaviours worth knowing:
   place. A failure during the rename phase leaves a mix. The fix is to run it
   again: restoring the same checkpoint twice reaches the same state, and the
   manifest is never consumed.
+- **A path that changed shape is refused, not restored.** See below.
 
 Paths are absolute, so a checkpoint is valid on the machine that took it and
 is not portable off it.
+
+## Restoring only what is still the thing that was captured
+
+A checkpoint records what it found at each path: a regular file's content, that
+the path was missing, or that it was something else. Restore compares that
+against what is there now, and declines any path where the two disagree.
+
+The gap this closes is unusually wide. Capture happens at the top of a turn and
+a restore happens whenever someone types `/undo`, so a path has minutes or
+hours in which to become a symlink pointing somewhere else. Renaming onto it
+writes the old content to the link's target, and for a path captured as absent
+the restore is an `os.Remove`, which deletes that target outright. Neither is a
+race in any tight sense; both are just what happens next if nothing looks.
+
+```
+turn-7: 3 file(s) restored
+
+1 path(s) REFUSED (not restored):
+  /work/notes.md — is now a symlink, was regular at capture
+```
+
+A refusal is per path, so one tampered file does not cost you the rest of the
+turn. It is deliberately not a containment check: this package has no workspace
+root and does not want one, because a checkpointed tool may legitimately write
+to a cache or temp directory outside any single tree. Confining paths is the
+**tool's** job, and `agent/ext/files` is the worked example of doing it with an
+`os.Root` handle. What this adds is narrower and needs no root: restoring
+through a thing that is not what you captured is not something any caller
+wants, whatever their layout.
+
+Capture uses `Lstat`, so a path that is *already* a symlink is recorded as
+unsupported rather than followed. Following it would copy the target's content
+into the blob store and set up a restore that writes back to a file the caller
+never named.
+
+Through the `Reversal` seam a refusal surfaces as an **error**, because the
+harness runs restores unattended (constraint A11) and has nowhere to put
+detail. `/undo` calls `Restore` directly and prints each refusal in full.
 
 ## What this does not cover
 

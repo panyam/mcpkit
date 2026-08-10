@@ -234,10 +234,11 @@ func (e *Extension) runUndo(ctx context.Context, args string) (host.CmdResult, e
 	if err != nil {
 		return host.CmdResult{}, fmt.Errorf("checkpoint: no such checkpoint %q: %w", id, err)
 	}
-	if err := cp.Restore(); err != nil {
+	res, err := cp.Restore()
+	if err != nil {
 		return host.CmdResult{}, err
 	}
-	report := e.undoReport(cp)
+	report := e.undoReport(cp, res)
 	if extra := e.offerProposals(ctx, e.gaps()); extra != "" {
 		report += "\n\n" + extra
 	}
@@ -304,10 +305,22 @@ func (e *Extension) gaps() []Gap {
 // GitHub issue reports "3 files restored" under any design that only knows
 // about what it captured, and the issue goes unmentioned. A safety net with an
 // unreported hole is worse than none, because it stops being checked.
-func (e *Extension) undoReport(cp *Checkpoint) string {
+//
+// There are two kinds of hole and they are listed separately, because the
+// reader can act on them differently. A call with no reverser was never
+// undoable and the answer is a proposed offset. A refused path WAS captured
+// and would have been restored, except that it is not the thing that was
+// captured any more, and the answer is to go and look at it.
+func (e *Extension) undoReport(cp *Checkpoint, res RestoreResult) string {
 	var b strings.Builder
-	paths := cp.Paths()
-	fmt.Fprintf(&b, "%s: %d file(s) restored", cp.ID(), len(paths))
+	fmt.Fprintf(&b, "%s: %d file(s) restored", cp.ID(), len(res.Restored))
+
+	if len(res.Refused) > 0 {
+		fmt.Fprintf(&b, "\n\n%d path(s) REFUSED (not restored):", len(res.Refused))
+		for _, r := range res.Refused {
+			fmt.Fprintf(&b, "\n  %s — %s", r.Path, r.Reason)
+		}
+	}
 
 	e.mu.Lock()
 	gaps := append([]Gap(nil), e.unreversed...)
