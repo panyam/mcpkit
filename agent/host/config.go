@@ -388,13 +388,20 @@ type ApprovalConfig struct {
 // markers and tells the model the fenced text is data rather than
 // instructions.
 //
-// The default is that every tool is untrusted; TrustedTools is the opt-out.
+// The default is that every tool is untrusted; Tools is the per-tool opt-out.
 type SpotlightConfig struct {
-	// TrustedTools names tools whose output reaches the model unmarked,
-	// for output the operator vouches for rather than relays. Prefer
-	// leaving it empty: marking a trusted tool costs a few tokens, while
-	// trusting an untrusted one costs the whole mitigation.
-	TrustedTools []string `json:"trustedTools,omitempty"`
+	// Tools labels a tool's output by where it came from: "operator"
+	// (computed in-process, the only label that reaches the model unmarked),
+	// "server" (relayed by a server the operator runs), "world" (fetched
+	// from outside), or "agent" (produced by a sub-agent). A tool not listed
+	// is "world".
+	//
+	// Prefer listing as little as possible as "operator": marking output
+	// that did not need it costs a few tokens, while vouching for output
+	// that did costs the whole mitigation. An unrecognised label is treated
+	// as "world" rather than rejected, so a typo fences output instead of
+	// exposing it.
+	Tools map[string]string `json:"tools,omitempty"`
 }
 
 // build turns the config into the middleware, or nil when spotlighting is off.
@@ -402,15 +409,37 @@ func (c *SpotlightConfig) build() agent.ToolMiddleware {
 	if c == nil {
 		return nil
 	}
-	trusted := make(map[string]bool, len(c.TrustedTools))
-	for _, name := range c.TrustedTools {
-		trusted[name] = true
+	var classify func(agent.ToolCallInfo) agent.Provenance
+	if len(c.Tools) > 0 {
+		labels := make(map[string]agent.Provenance, len(c.Tools))
+		for name, label := range c.Tools {
+			labels[name] = parseProvenance(label)
+		}
+		classify = func(info agent.ToolCallInfo) agent.Provenance {
+			if p, ok := labels[info.Call.Name]; ok {
+				return p
+			}
+			return agent.ProvenanceWorld
+		}
 	}
-	var pred func(agent.ToolCallInfo) bool
-	if len(trusted) > 0 {
-		pred = func(info agent.ToolCallInfo) bool { return trusted[info.Call.Name] }
+	return agent.Spotlight(agent.SpotlightConfig{Classify: classify})
+}
+
+// parseProvenance maps a config label to a provenance, defaulting to world.
+// Only an exact match on the vouched-for label can exempt a tool from
+// marking, so neither an unknown value nor a casing slip can silently widen
+// what reaches the model unfenced.
+func parseProvenance(s string) agent.Provenance {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "operator":
+		return agent.ProvenanceOperator
+	case "server":
+		return agent.ProvenanceServer
+	case "agent":
+		return agent.ProvenanceAgent
+	default:
+		return agent.ProvenanceWorld
 	}
-	return agent.Spotlight(agent.SpotlightConfig{Trusted: pred})
 }
 
 // approvalPrompt renders the yes/no question shown when a tool call needs
