@@ -24,6 +24,14 @@ type Config struct {
 	// instruction into a write to an arbitrary path, so the confinement is
 	// the tool's, not a policy the caller can forget to add.
 	Root string
+
+	// Exclude names directories that list_files and search_files skip, by
+	// base name or by a path.Match pattern. Nil means DefaultExclude; an
+	// explicitly empty non-nil slice means exclude nothing.
+	//
+	// This is not .gitignore and deliberately does not read one. See
+	// DefaultExclude for why the two questions are different.
+	Exclude []string
 }
 
 // Source serves read_file and edit_file over agent.ToolSource.
@@ -35,6 +43,7 @@ type Config struct {
 type Source struct {
 	root     *os.Root
 	rootPath string
+	exclude  []string
 	defs     []core.ToolDef
 }
 
@@ -58,7 +67,13 @@ func NewSource(cfg Config) (*Source, error) {
 	if err != nil {
 		return nil, fmt.Errorf("files: open root %s: %w", cfg.Root, err)
 	}
-	return &Source{root: root, rootPath: abs, defs: toolDefs()}, nil
+	// Nil means "the caller did not choose", empty means "the caller chose
+	// nothing". Collapsing the two would make excluding nothing impossible.
+	exclude := cfg.Exclude
+	if exclude == nil {
+		exclude = DefaultExclude
+	}
+	return &Source{root: root, rootPath: abs, exclude: exclude, defs: toolDefs()}, nil
 }
 
 // Close releases the root directory handle. A long-lived host need not call
@@ -122,6 +137,52 @@ func toolDefs() []core.ToolDef {
 				"required": []string{"path", "expect_hash", "edits"},
 			},
 		},
+		{
+			Name:        "list_files",
+			Title:       "List files",
+			Description: "List files in the workspace, recursively. Use this to find what is there before reading or editing.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Directory to list, relative to the workspace root. Omit for the whole workspace.",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": fmt.Sprintf("Maximum paths to return. Default %d. The reply says how many were left out.", DefaultListLimit),
+					},
+				},
+			},
+		},
+		{
+			Name:  "search_files",
+			Title: "Search file contents",
+			Description: "Search the workspace for a regular expression, returning matching lines as path:line: text. " +
+				"The query is a regex (RE2 syntax): escape it, or pass literal:true, to search for text containing regex characters.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Regular expression to match against each line.",
+					},
+					"literal": map[string]any{
+						"type":        "boolean",
+						"description": "Treat query as plain text rather than a regex. Use this when searching for something containing ( ) [ ] . * + ? | \\ or $.",
+					},
+					"dir": map[string]any{
+						"type":        "string",
+						"description": "Directory to search, relative to the workspace root. Omit for the whole workspace.",
+					},
+					"limit": map[string]any{
+						"type":        "integer",
+						"description": fmt.Sprintf("Maximum matches to return. Default %d. The reply says how many were left out.", DefaultSearchLimit),
+					},
+				},
+				"required": []string{"query"},
+			},
+		},
 	}
 }
 
@@ -146,6 +207,10 @@ func (s *Source) Call(ctx context.Context, name string, args map[string]any) (*c
 		return s.read(args), nil
 	case "edit_file":
 		return s.edit(args), nil
+	case "list_files":
+		return s.list(args), nil
+	case "search_files":
+		return s.search(args), nil
 	default:
 		return nil, fmt.Errorf("files: unknown tool %q", name)
 	}

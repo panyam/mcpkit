@@ -340,8 +340,23 @@ func TestToolsAreDeclared(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(defs) != 2 {
-		t.Fatalf("got %d tools, want 2", len(defs))
+	// Asserted by name rather than by count: a count says a tool went missing
+	// without saying which, and it has to be edited every time one is added,
+	// which is how it stops being read.
+	want := map[string]bool{"read_file": true, "edit_file": true, "list_files": true, "search_files": true}
+	got := map[string]bool{}
+	for _, d := range defs {
+		got[d.Name] = true
+	}
+	for name := range want {
+		if !got[name] {
+			t.Errorf("tool %q is not declared", name)
+		}
+	}
+	for name := range got {
+		if !want[name] {
+			t.Errorf("undeclared tool %q appeared", name)
+		}
 	}
 	for _, d := range defs {
 		if d.Name == "" || d.Description == "" || d.InputSchema == nil {
