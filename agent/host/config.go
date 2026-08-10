@@ -393,8 +393,13 @@ type SpotlightConfig struct {
 	// Tools labels a tool's output by where it came from: "operator"
 	// (computed in-process, the only label that reaches the model unmarked),
 	// "server" (relayed by a server the operator runs), "world" (fetched
-	// from outside), or "agent" (produced by a sub-agent). A tool not listed
-	// is "world".
+	// from outside), or "agent" (produced by a sub-agent).
+	//
+	// An entry here OVERRIDES what the host derives from the tool's source,
+	// so most deployments need none: a connected server's tools are already
+	// "server" and a sub-agent's are already "agent". Reach for it to vouch
+	// for something the host will not vouch for on its own — an extension's
+	// tools, or a server that returns only output you compute.
 	//
 	// Prefer listing as little as possible as "operator": marking output
 	// that did not need it costs a few tokens, while vouching for output
@@ -405,24 +410,20 @@ type SpotlightConfig struct {
 }
 
 // build turns the config into the middleware, or nil when spotlighting is off.
-func (c *SpotlightConfig) build() agent.ToolMiddleware {
+//
+// The classifier is always installed, even with no Tools entries, because
+// derivation from the tool's source is the default rather than an opt-in. Nil
+// would fall back to labelling everything world, which still marks but throws
+// away the distinction Mark exists to act on.
+func (c *SpotlightConfig) build(a *App) agent.ToolMiddleware {
 	if c == nil {
 		return nil
 	}
-	var classify func(agent.ToolCallInfo) agent.Provenance
-	if len(c.Tools) > 0 {
-		labels := make(map[string]agent.Provenance, len(c.Tools))
-		for name, label := range c.Tools {
-			labels[name] = parseProvenance(label)
-		}
-		classify = func(info agent.ToolCallInfo) agent.Provenance {
-			if p, ok := labels[info.Call.Name]; ok {
-				return p
-			}
-			return agent.ProvenanceWorld
-		}
+	labels := make(map[string]agent.Provenance, len(c.Tools))
+	for name, label := range c.Tools {
+		labels[name] = parseProvenance(label)
 	}
-	return agent.Spotlight(agent.SpotlightConfig{Classify: classify})
+	return agent.Spotlight(agent.SpotlightConfig{Classify: a.classifyTool(labels)})
 }
 
 // parseProvenance maps a config label to a provenance, defaulting to world.

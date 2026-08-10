@@ -482,3 +482,87 @@ func TestAddAsyncFuncAckThenComplete(t *testing.T) {
 		t.Fatal("completion event never delivered")
 	}
 }
+
+func TestMultiSourceOwnerOf(t *testing.T) {
+	m := NewMultiSource()
+	if err := m.Add("alpha", &fakeSource{defs: defsNamed("one", "shared")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Add("beta", &fakeSource{defs: defsNamed("two", "shared")}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	cases := map[string]struct {
+		want  string
+		found bool
+	}{
+		"one":          {"alpha", true},
+		"two":          {"beta", true},
+		"alpha/shared": {"alpha", true},
+		"beta/shared":  {"beta", true},
+		// Ambiguous with no Resolver: not found, because a policy keying on
+		// this must not pick a claimant the dispatcher would not have picked.
+		"shared":       {"", false},
+		"nope":         {"", false},
+		"alpha/nope":   {"", false},
+		"gamma/shared": {"", false},
+	}
+	for name, want := range cases {
+		id, found := m.OwnerOf(ctx, name, nil)
+		if id != want.want || found != want.found {
+			t.Errorf("OwnerOf(%q) = (%q, %v), want (%q, %v)", name, id, found, want.want, want.found)
+		}
+	}
+}
+
+// TestMultiSourceOwnerOfMatchesCall pins that OwnerOf answers with the source
+// Call would actually reach, including through a Resolver that inspects args.
+// Two copies of resolution that disagree is the failure this shares one path
+// to avoid.
+func TestMultiSourceOwnerOfMatchesCall(t *testing.T) {
+	alpha := &fakeSource{defs: defsNamed("shared")}
+	beta := &fakeSource{defs: defsNamed("shared")}
+	m := NewMultiSource(WithResolver(func(_ string, _ []ToolOwner, args map[string]any) (string, error) {
+		if args["pick"] == "beta" {
+			return "beta", nil
+		}
+		return "alpha", nil
+	}))
+	if err := m.Add("alpha", alpha); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Add("beta", beta); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		args map[string]any
+		want string
+	}{
+		{map[string]any{"pick": "beta"}, "beta"},
+		{map[string]any{"pick": "alpha"}, "alpha"},
+	} {
+		id, found := m.OwnerOf(ctx, "shared", tc.args)
+		if !found || id != tc.want {
+			t.Fatalf("OwnerOf with %v = (%q, %v), want %q", tc.args, id, found, tc.want)
+		}
+		if _, err := m.Call(ctx, "shared", tc.args); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(alpha.calls) != 1 || len(beta.calls) != 1 {
+		t.Fatalf("Call went elsewhere than OwnerOf said: alpha=%v beta=%v", alpha.calls, beta.calls)
+	}
+}
+
+func TestMultiSourceOwnerOfListErrorIsNotFound(t *testing.T) {
+	m := NewMultiSource()
+	if err := m.Add("alpha", &fakeSource{listErr: errors.New("server down")}); err != nil {
+		t.Fatal(err)
+	}
+	if id, found := m.OwnerOf(context.Background(), "one", nil); found {
+		t.Fatalf("a listing failure reported an owner %q; policy must get no answer", id)
+	}
+}

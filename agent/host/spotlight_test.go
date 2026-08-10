@@ -165,3 +165,136 @@ func TestSpotlightDoesNotMarkDeniedCalls(t *testing.T) {
 		t.Fatalf("expected the denial to reach the model: %q", toolMsg.Text)
 	}
 }
+
+// classifierFor builds an App's classifier over a set of recorded origins, so
+// derivation is testable without standing up every source kind.
+func classifierFor(t *testing.T, origins map[string]agent.Provenance, labels map[string]string) func(agent.ToolCallInfo) agent.Provenance {
+	t.Helper()
+	app := &App{sources: agent.NewMultiSource()}
+	for id, p := range origins {
+		app.recordOrigin(id, p)
+	}
+	parsed := map[string]agent.Provenance{}
+	for name, label := range labels {
+		parsed[name] = parseProvenance(label)
+	}
+	return app.classifyTool(parsed)
+}
+
+func addSource(t *testing.T, m *agent.MultiSource, id string, tools ...string) {
+	t.Helper()
+	src := agent.NewFuncSource()
+	for _, name := range tools {
+		if err := src.AddToolFunc(core.ToolDef{Name: name, Description: "d"},
+			func(context.Context, map[string]any) (*core.ToolResult, error) { return &core.ToolResult{}, nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := m.Add(id, src); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func infoFor(tool string) agent.ToolCallInfo {
+	return agent.ToolCallInfo{Call: agent.ToolCall{Name: tool}}
+}
+
+// TestProvenanceDerivedFromSource is the point of the feature: an operator who
+// configures nothing still gets meaningful labels, instead of everything
+// defaulting to world and the distinction Mark acts on never being used.
+func TestProvenanceDerivedFromSource(t *testing.T) {
+	app := &App{sources: agent.NewMultiSource()}
+	app.recordOrigin("prod-api", agent.ProvenanceServer)
+	addSource(t, app.sources, "prod-api", "db_query")
+	addSource(t, app.sources, "host", "remember")
+	addSource(t, app.sources, "runner-control", "spawn")
+	addSource(t, app.sources, "subagent:researcher", "delegate")
+	addSource(t, app.sources, "fanout:panel", "broadcast")
+	addSource(t, app.sources, "my-extension", "checkpoint_undo")
+
+	classify := app.classifyTool(nil)
+	cases := map[string]agent.Provenance{
+		"db_query":        agent.ProvenanceServer,
+		"remember":        agent.ProvenanceOperator,
+		"spawn":           agent.ProvenanceOperator,
+		"delegate":        agent.ProvenanceAgent,
+		"broadcast":       agent.ProvenanceAgent,
+		"checkpoint_undo": agent.ProvenanceWorld,
+	}
+	for tool, want := range cases {
+		if got := classify(infoFor(tool)); got != want {
+			t.Errorf("%s derived %q, want %q", tool, got, want)
+		}
+	}
+}
+
+// TestExtensionToolIsNeverDerivedOperator is the safety pin. An extension is
+// arbitrary code that may shell out or fetch, so the host has no standing to
+// vouch for it. Deriving operator here would silently unfence output the
+// mitigation exists to fence.
+func TestExtensionToolIsNeverDerivedOperator(t *testing.T) {
+	app := &App{sources: agent.NewMultiSource()}
+	addSource(t, app.sources, "my-extension", "shell_out")
+	if got := app.classifyTool(nil)(infoFor("shell_out")); got == agent.ProvenanceOperator {
+		t.Fatal("an extension tool was vouched for by derivation")
+	}
+}
+
+// TestUnknownToolResolvesToWorld pins the fail-closed direction: a name that
+// resolves to nothing gets marked rather than passed through.
+func TestUnknownToolResolvesToWorld(t *testing.T) {
+	app := &App{sources: agent.NewMultiSource()}
+	addSource(t, app.sources, "host", "remember")
+	if got := app.classifyTool(nil)(infoFor("never_registered")); got != agent.ProvenanceWorld {
+		t.Fatalf("unknown tool classified %q, want world", got)
+	}
+}
+
+// TestCollidingServersResolveToTheirOwnSource is the disambiguation case:
+// two servers advertising one name must not borrow each other's provenance.
+func TestCollidingServersResolveToTheirOwnSource(t *testing.T) {
+	app := &App{sources: agent.NewMultiSource()}
+	app.recordOrigin("vendor-api", agent.ProvenanceServer)
+	addSource(t, app.sources, "vendor-api", "search")
+	addSource(t, app.sources, "subagent:scout", "search")
+
+	classify := app.classifyTool(nil)
+	if got := classify(infoFor("vendor-api/search")); got != agent.ProvenanceServer {
+		t.Errorf("qualified server tool = %q, want server", got)
+	}
+	if got := classify(infoFor("subagent:scout/search")); got != agent.ProvenanceAgent {
+		t.Errorf("qualified sub-agent tool = %q, want agent", got)
+	}
+	// The bare name is ambiguous with no resolver, so no source is claimed
+	// and it falls to world rather than to whichever registered first.
+	if got := classify(infoFor("search")); got != agent.ProvenanceWorld {
+		t.Errorf("ambiguous bare name = %q, want world", got)
+	}
+}
+
+// TestConfigOverridesDerivation pins that an explicit label wins in both
+// directions: vouching for something the host would mark, and marking
+// something the host would vouch for.
+func TestConfigOverridesDerivation(t *testing.T) {
+	app := &App{sources: agent.NewMultiSource()}
+	app.recordOrigin("prod-api", agent.ProvenanceServer)
+	addSource(t, app.sources, "prod-api", "db_query")
+	addSource(t, app.sources, "host", "remember")
+
+	classify := app.classifyTool(map[string]agent.Provenance{
+		"db_query": agent.ProvenanceOperator,
+		"remember": agent.ProvenanceWorld,
+	})
+	if got := classify(infoFor("db_query")); got != agent.ProvenanceOperator {
+		t.Errorf("config did not override derivation upward: %q", got)
+	}
+	if got := classify(infoFor("remember")); got != agent.ProvenanceWorld {
+		t.Errorf("config did not override derivation downward: %q", got)
+	}
+}
+
+func TestClassifierWithNoSourcesIsWorld(t *testing.T) {
+	if got := classifierFor(t, nil, nil)(infoFor("anything")); got != agent.ProvenanceWorld {
+		t.Fatalf("classified %q with no sources, want world", got)
+	}
+}
