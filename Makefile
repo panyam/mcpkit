@@ -467,6 +467,9 @@ setup-hooks: ## Install git hooks (pre-push runs tests; pre-commit rejects compi
 check-no-binaries: ## CI gate — fail if any tracked file is a compiled executable
 	@./scripts/check-no-binaries.sh
 
+check-ext-isolation: ## CI gate — fail if one extension module requires another (C4)
+	@./scripts/check-ext-isolation.sh
+
 setup: setup-tools setup-hooks ## Full development setup
 
 help: ## Show this help
