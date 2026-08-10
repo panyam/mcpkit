@@ -180,11 +180,19 @@ func TestEscapingTheRootIsRefused(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
+	// The final component is itself the symlink, rather than a directory on
+	// the way to the target. Resolving only the parent directory and then
+	// appending this name passes a containment check and is then followed by
+	// the open, which is how the first version of this leaked.
+	if err := os.Symlink(secret, filepath.Join(root, "innocent.md")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
 
 	for _, path := range []string{
 		filepath.Join("..", filepath.Base(outside), "secret"),
 		secret,
 		filepath.Join("link", "secret"),
+		"innocent.md",
 	} {
 		t.Run(path, func(t *testing.T) {
 			text, isErr := call(t, s, "read_file", map[string]any{"path": path})
@@ -195,6 +203,38 @@ func TestEscapingTheRootIsRefused(t *testing.T) {
 				t.Fatalf("read_file leaked content from outside the root: %s", text)
 			}
 		})
+	}
+}
+
+// TestEditCannotWriteThroughASymlink is the write-side half of the escape.
+// Reading through a link leaks; writing through one corrupts a file outside
+// the workspace, which is the worse of the two.
+func TestEditCannotWriteThroughASymlink(t *testing.T) {
+	s, root := newTestSource(t)
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(outside, "important.conf")
+	const original = "keep me\n"
+	if err := os.WriteFile(target, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "innocent.md")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	text, isErr := call(t, s, "edit_file", map[string]any{
+		"path":        "innocent.md",
+		"expect_hash": Hash(original),
+		"edits":       []any{map[string]any{"old": "keep me", "new": "CLOBBERED"}},
+	})
+	if !isErr {
+		t.Fatalf("edit_file should have refused to write through a symlink, got: %s", text)
+	}
+	got, _ := os.ReadFile(target)
+	if string(got) != original {
+		t.Fatalf("wrote outside the workspace root: %q", got)
 	}
 }
 

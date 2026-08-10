@@ -2,7 +2,9 @@ package files
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,24 +33,37 @@ type Config struct {
 // return one would make the precondition unusable and leave the whole
 // mechanism as decoration.
 type Source struct {
-	root string
-	defs []core.ToolDef
+	root     *os.Root
+	rootPath string
+	defs     []core.ToolDef
 }
 
-// NewSource builds the source, resolving and verifying Root.
+// NewSource builds the source, opening Root as a confined directory handle.
+//
+// The handle is the confinement. Checking a path and then opening it by name
+// are two operations, and every escape this package cares about lives in the
+// gap between them: a symlink is followed at open time, not at check time, and
+// the filesystem can change in between. os.Root resolves each component at
+// open time against the directory it holds, so the check and the use are the
+// same act.
 func NewSource(cfg Config) (*Source, error) {
 	if cfg.Root == "" {
 		return nil, fmt.Errorf("files: Config.Root is required")
 	}
-	root, err := filepath.Abs(cfg.Root)
+	abs, err := filepath.Abs(cfg.Root)
 	if err != nil {
 		return nil, fmt.Errorf("files: resolve root %s: %w", cfg.Root, err)
 	}
-	if root, err = filepath.EvalSymlinks(root); err != nil {
-		return nil, fmt.Errorf("files: resolve root %s: %w", cfg.Root, err)
+	root, err := os.OpenRoot(abs)
+	if err != nil {
+		return nil, fmt.Errorf("files: open root %s: %w", cfg.Root, err)
 	}
-	return &Source{root: root, defs: toolDefs()}, nil
+	return &Source{root: root, rootPath: abs, defs: toolDefs()}, nil
 }
+
+// Close releases the root directory handle. A long-lived host need not call
+// it; it exists so a test or a short-lived process does not leak a descriptor.
+func (s *Source) Close() error { return s.root.Close() }
 
 func toolDefs() []core.ToolDef {
 	return []core.ToolDef{
@@ -141,13 +156,13 @@ func (s *Source) read(args map[string]any) *core.ToolResult {
 	if !ok || path == "" {
 		return toolError("read_file needs a path")
 	}
-	abs, err := s.resolve(path)
+	rel, err := s.rel(path)
 	if err != nil {
 		return toolError(err.Error())
 	}
-	b, err := os.ReadFile(abs)
+	b, err := s.root.ReadFile(rel)
 	if err != nil {
-		return toolError(fmt.Sprintf("cannot read %s: %v", path, err))
+		return toolError(escapeMessage(path, err))
 	}
 	content := string(b)
 	hash := Hash(content)
@@ -173,25 +188,25 @@ func (s *Source) edit(args map[string]any) *core.ToolResult {
 	if err != nil {
 		return toolError(err.Error())
 	}
-	abs, err := s.resolve(path)
+	rel, err := s.rel(path)
 	if err != nil {
 		return toolError(err.Error())
 	}
 
-	info, err := os.Stat(abs)
+	info, err := s.root.Stat(rel)
 	if err != nil {
-		return toolError(fmt.Sprintf("cannot read %s: %v", path, err))
+		return toolError(escapeMessage(path, err))
 	}
-	b, err := os.ReadFile(abs)
+	b, err := s.root.ReadFile(rel)
 	if err != nil {
-		return toolError(fmt.Sprintf("cannot read %s: %v", path, err))
+		return toolError(escapeMessage(path, err))
 	}
 
 	out, err := (Edit{ExpectHash: expect, Hunks: hunks}).Apply(string(b))
 	if err != nil {
 		return toolError(fmt.Sprintf("%s: %v", path, err))
 	}
-	if err := writeFile(abs, out, info.Mode().Perm()); err != nil {
+	if err := s.writeThroughRoot(rel, out, info.Mode().Perm()); err != nil {
 		return toolError(fmt.Sprintf("cannot write %s: %v", path, err))
 	}
 
@@ -237,57 +252,86 @@ func parseHunks(raw any) ([]Hunk, error) {
 	return hunks, nil
 }
 
-// resolve turns a tool-supplied path into an absolute one inside Root, or
-// refuses.
+// rel turns a tool-supplied path into one relative to the root, for handing
+// to an os.Root method.
 //
-// Symlinks are resolved before the containment check, because a link inside
-// the root pointing out of it would otherwise pass a purely lexical test. The
-// check is applied to the parent directory rather than the file so that a
-// path whose final component does not exist yet still resolves.
-func (s *Source) resolve(path string) (string, error) {
-	abs := path
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(s.root, abs)
+// It does not enforce containment and must not be relied on to: os.Root does
+// that, at open time, per component. What this adds is a readable refusal for
+// the two shapes a model actually produces by mistake, before any syscall.
+// Anything subtler, notably a symlink pointing out of the root, is caught by
+// the open itself.
+func (s *Source) rel(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path")
 	}
-	abs = filepath.Clean(abs)
-
-	dir, base := filepath.Split(abs)
-	realDir, err := filepath.EvalSymlinks(dir)
-	if err != nil {
-		return "", fmt.Errorf("cannot resolve %s: %v", path, err)
+	out := path
+	if filepath.IsAbs(out) {
+		r, err := filepath.Rel(s.rootPath, out)
+		if err != nil {
+			return "", fmt.Errorf("refusing %s: outside the workspace root", path)
+		}
+		out = r
 	}
-	resolved := filepath.Join(realDir, base)
-
-	rel, err := filepath.Rel(s.root, resolved)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	out = filepath.Clean(out)
+	if out == ".." || strings.HasPrefix(out, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("refusing %s: outside the workspace root", path)
 	}
-	return resolved, nil
+	return out, nil
 }
 
-// writeFile replaces a file's contents via a temp file and a rename, so a
-// failure partway through leaves the original intact rather than truncated.
-// The engine guarantees all-or-nothing for the edit; this is the same promise
-// at the filesystem.
-func writeFile(path, content string, mode os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".files-*")
-	if err != nil {
-		return err
+// escapeMessage renders a filesystem error for the model, translating
+// os.Root's containment refusal into the same sentence rel produces.
+//
+// The standard library exports no sentinel for it, so this matches on the
+// message os.Root produces. A missed match degrades to the raw error, which is
+// already self-explanatory ("path escapes from parent"); it does not become an
+// allowed operation, because the refusal happened in os.Root regardless.
+func escapeMessage(path string, err error) string {
+	if strings.Contains(err.Error(), "escapes from parent") {
+		return fmt.Sprintf("refusing %s: outside the workspace root", path)
 	}
-	name := tmp.Name()
-	defer os.Remove(name)
+	return fmt.Sprintf("cannot access %s: %v", path, err)
+}
 
-	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
+// writeThroughRoot replaces a file's contents via a temp file and a rename,
+// both inside the root, so a failure partway through leaves the original
+// intact rather than truncated. The engine guarantees all-or-nothing for the
+// edit; this is the same promise at the filesystem.
+//
+// The mode is applied to the open descriptor rather than by path. Chmod by
+// name is a second resolution of that name and is documented as racy even on
+// os.Root; fchmod on a descriptor we just created with O_EXCL cannot be
+// redirected at anything else. It also restores bits the umask cleared at
+// create time.
+func (s *Source) writeThroughRoot(rel, content string, mode os.FileMode) error {
+	dir := filepath.Dir(rel)
+	var f *os.File
+	var tmp string
+	for attempt := 0; ; attempt++ {
+		tmp = filepath.Join(dir, fmt.Sprintf(".files-%d.tmp", rand.Uint64()))
+		var err error
+		f, err = s.root.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrExist) || attempt >= 10 {
+			return err
+		}
+	}
+	defer s.root.Remove(tmp)
+
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
 		return err
 	}
-	if err := tmp.Close(); err != nil {
+	if err := f.Chmod(mode); err != nil {
+		f.Close()
 		return err
 	}
-	if err := os.Chmod(name, mode); err != nil {
+	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(name, path)
+	return s.root.Rename(tmp, rel)
 }
 
 func toolError(msg string) *core.ToolResult {

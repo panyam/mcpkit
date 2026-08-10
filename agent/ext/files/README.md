@@ -31,9 +31,27 @@ src, _ := files.NewSource(files.Config{Root: "/work/project"})
 driven by a model, and a model's instructions can come from content it read
 rather than from the user, which `agent.Spotlight` exists because you cannot
 distinguish after the fact. An unconfined editor turns any such instruction
-into a write to an arbitrary path. Symlinks are resolved before the
-containment check, so a link inside the root pointing out of it is refused
-rather than followed.
+into a write to an arbitrary path.
+
+The confinement is a directory handle (`os.Root`), not a string comparison.
+Checking a path and then opening it by name are two separate operations, and
+every way out of a workspace lives in the gap between them:
+
+- A symlink is followed when the file is **opened**, not when the path is
+  checked. `workspace/notes.md -> /etc/passwd` passes any comparison of the
+  path text and then reads the wrong file.
+- The filesystem can change between the two. A name that was a regular file
+  when it was checked can be a symlink a moment later, so a check that
+  happened earlier is a statement about the past.
+
+`os.Root` resolves each component at open time against the directory it holds
+and refuses anything that leaves it, which collapses the check and the use
+into one act. Escape attempts come back as refusals:
+
+```
+refusing ../../etc/passwd: outside the workspace root
+refusing innocent.md: outside the workspace root      # a symlink pointing out
+```
 
 ## The tools
 
