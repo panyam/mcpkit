@@ -42,12 +42,25 @@ type Config struct {
 	// reported by /undo as something that could not be undone rather than
 	// passed over in silence.
 	Writes []WriteSpec
-}
 
-// unreversed is one call that changed something and offered no way back.
-type unreversed struct {
-	tool string
-	args string
+	// Proposer suggests inverse calls for the gaps /undo could not close.
+	// Nil means /undo reports the gaps and stops, which is the default and
+	// is never wrong, only less helpful.
+	Proposer Proposer
+
+	// Approve gates every proposal. It is called once per proposal and the
+	// call is made only if it returns true.
+	//
+	// Nil means no proposal is ever run: a proposal is a guess at an
+	// operation nobody could reverse automatically, aimed at a tool that
+	// changes things, so having no way to ask is a reason to do nothing
+	// rather than a reason to proceed. Wire it to the host's
+	// ElicitationCoordinator.Confirm to reuse the existing prompt.
+	Approve func(ctx context.Context, p Proposal) (bool, error)
+
+	// Tools dispatches an approved proposal. Nil disables running them even
+	// when Approve says yes, since there would be nowhere to send the call.
+	Tools agent.ToolSource
 }
 
 // Extension wires the reversal seam into a turn: capture before a write,
@@ -59,13 +72,16 @@ type unreversed struct {
 type Extension struct {
 	host.BaseExtension
 
-	store  *Store
-	writes map[string]WriteSpec
+	store    *Store
+	writes   map[string]WriteSpec
+	proposer Proposer
+	approve  func(ctx context.Context, p Proposal) (bool, error)
+	tools    agent.ToolSource
 
 	mu         sync.Mutex
 	turn       int
 	current    *Checkpoint
-	unreversed []unreversed
+	unreversed []Gap
 }
 
 // New builds the extension, creating the store directory if needed.
@@ -84,7 +100,13 @@ func New(cfg Config) (*Extension, error) {
 		}
 		writes[w.Tool] = w
 	}
-	return &Extension{store: store, writes: writes}, nil
+	return &Extension{
+		store:    store,
+		writes:   writes,
+		proposer: cfg.Proposer,
+		approve:  cfg.Approve,
+		tools:    cfg.Tools,
+	}, nil
 }
 
 // Name identifies the extension.
@@ -159,9 +181,9 @@ func denied(err error) bool {
 func (e *Extension) record(info agent.ToolCallInfo) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.unreversed = append(e.unreversed, unreversed{
-		tool: info.Call.Name,
-		args: truncate(string(info.Call.Args.Raw()), 120),
+	e.unreversed = append(e.unreversed, Gap{
+		Tool: info.Call.Name,
+		Args: truncate(string(info.Call.Args.Raw()), 120),
 	})
 }
 
@@ -196,7 +218,7 @@ func (e *Extension) Commands() []*host.Command {
 	}
 }
 
-func (e *Extension) runUndo(_ context.Context, args string) (host.CmdResult, error) {
+func (e *Extension) runUndo(ctx context.Context, args string) (host.CmdResult, error) {
 	id := strings.TrimSpace(args)
 	if id == "" {
 		list, err := e.store.List()
@@ -215,7 +237,65 @@ func (e *Extension) runUndo(_ context.Context, args string) (host.CmdResult, err
 	if err := cp.Restore(); err != nil {
 		return host.CmdResult{}, err
 	}
-	return host.CmdResult{Kind: host.CmdMessage, Message: e.undoReport(cp)}, nil
+	report := e.undoReport(cp)
+	if extra := e.offerProposals(ctx, e.gaps()); extra != "" {
+		report += "\n\n" + extra
+	}
+	return host.CmdResult{Kind: host.CmdMessage, Message: report}, nil
+}
+
+// offerProposals asks the proposer for inverse calls and runs only the ones a
+// human approves. Returns the transcript to append to the undo report, or ""
+// when there was nothing to offer.
+//
+// Every exit that skips a proposal SAYS so. A silent skip here would leave the
+// user believing an offset ran, which is the same false-confidence failure the
+// gap report exists to prevent, one level down.
+func (e *Extension) offerProposals(ctx context.Context, gaps []Gap) string {
+	if e.proposer == nil || len(gaps) == 0 {
+		return ""
+	}
+	proposals, err := e.proposer.Propose(ctx, gaps)
+	if err != nil {
+		return "could not propose offsets: " + err.Error()
+	}
+	if len(proposals) == 0 {
+		return "no offsets proposed."
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d offset(s) proposed. None runs without your approval:", len(proposals))
+	for _, p := range proposals {
+		fmt.Fprintf(&b, "\n  %s %v\n    why: %s", p.Tool, p.Args, p.Rationale)
+		switch {
+		case e.approve == nil:
+			b.WriteString("\n    NOT RUN: no approval prompt is wired")
+		case e.tools == nil:
+			b.WriteString("\n    NOT RUN: no tool source is wired")
+		default:
+			ok, err := e.approve(ctx, p)
+			if err != nil {
+				fmt.Fprintf(&b, "\n    NOT RUN: approval failed: %v", err)
+				continue
+			}
+			if !ok {
+				b.WriteString("\n    declined")
+				continue
+			}
+			if _, err := e.tools.Call(ctx, p.Tool, p.Args); err != nil {
+				fmt.Fprintf(&b, "\n    FAILED: %v", err)
+				continue
+			}
+			b.WriteString("\n    ran")
+		}
+	}
+	return b.String()
+}
+
+func (e *Extension) gaps() []Gap {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]Gap(nil), e.unreversed...)
 }
 
 // undoReport says what was restored AND what was not.
@@ -230,7 +310,7 @@ func (e *Extension) undoReport(cp *Checkpoint) string {
 	fmt.Fprintf(&b, "%s: %d file(s) restored", cp.ID(), len(paths))
 
 	e.mu.Lock()
-	gaps := append([]unreversed(nil), e.unreversed...)
+	gaps := append([]Gap(nil), e.unreversed...)
 	e.mu.Unlock()
 
 	if len(gaps) == 0 {
@@ -238,7 +318,7 @@ func (e *Extension) undoReport(cp *Checkpoint) string {
 	}
 	fmt.Fprintf(&b, "\n\n%d call(s) had no reverser and were NOT undone:", len(gaps))
 	for _, g := range gaps {
-		fmt.Fprintf(&b, "\n  %s %s", g.tool, g.args)
+		fmt.Fprintf(&b, "\n  %s %s", g.Tool, g.Args)
 	}
 	return b.String()
 }

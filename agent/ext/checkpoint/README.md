@@ -140,10 +140,59 @@ you to skip it.
 irreversible, so `ModeReversibleAuto` asks before it runs. The best time to
 handle an un-undoable action is before it happens.
 
-A model-proposed tier, where the model suggests inverse calls for a human to
-approve, is the remaining piece of #1267.
+**Then a model can propose an offset.** Set `Config.Proposer` and `/undo` asks
+it for inverse calls covering the gaps:
+
+```
+turn-7: 1 file(s) restored
+
+1 call(s) had no reverser and were NOT undone:
+  create_issue {"title":"flaky test in CI"}
+
+1 offset(s) proposed. None runs without your approval:
+  delete_issue map[id:41]
+    why: removes the issue that was filed
+    ran
+```
+
+Three tiers, in decreasing certainty:
+
+| Tier | Who decides what runs | Who runs it |
+|---|---|---|
+| `Restore` | tool author, at capture time | harness, unattended |
+| `Compensate` | tool author, declared | human approves, harness runs it |
+| model-proposed | the model, at undo time | human approves each, harness runs it |
+
+**Nothing but a `Restore` ever runs unattended.** A nil `Approve` means no
+proposal runs at all, and the report says so per proposal rather than skipping
+quietly. An approval prompt that errors is a reason not to act.
+
+### Why the proposer gets a fresh conversation
+
+`ModelProposer` runs its Runner over a slice built only from the gap list. The
+turn's own history never reaches it.
+
+That is a security property. If the turn went wrong because of prompt
+injection — content in a fetched page that read as instructions — then running
+the cleanup inside that same context is asking the attacker to write the
+cleanup. Spotlighting (`agent.Spotlight`) exists because such content is
+indistinguishable from instructions once it is in the transcript; the answer
+here is to not carry the transcript over. The gap list is itself untrusted for
+the same reason, which is the other half of why a proposal is a suggestion to
+a human rather than an instruction to the harness.
+
+Build the proposer's Runner with `ProposalSchema()`, its own provider, and no
+memory:
+
+```go
+r, _ := agent.NewRunner(agent.RunnerConfig{
+    Provider:       provider,
+    Tools:          tools,
+    ResponseSchema: checkpoint.ProposalSchema(),
+})
+mp, _ := checkpoint.NewModelProposer(r)
+```
 
 ## Status
 
-Seam, file store, and host extension. The model-proposed undo tier is still to
-come.
+Seam, file store, host extension, and the model-proposed tier.
