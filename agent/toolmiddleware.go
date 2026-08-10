@@ -74,6 +74,27 @@ type ToolCallInfo struct {
 	// tool declares none. It is a hint from the server, not a guarantee that
 	// the call is free of side effects.
 	ReadOnly bool
+
+	// Destructive reports whether the call's effect is irreversible or hard
+	// to undo, from the tool's destructiveHint annotation. It is a hint from
+	// the server, not a guarantee.
+	//
+	// True when the tool declares nothing, because the spec's default for an
+	// absent destructiveHint on a writing tool is destructive. That inverts
+	// the Go zero value, so a hand-built ToolCallInfo{} reads as
+	// non-destructive: only a value the Runner populated carries a meaningful
+	// answer. Normalized against ReadOnly, which the spec says wins — a
+	// read-only tool reports false whatever it annotated.
+	Destructive bool
+
+	// Idempotent reports whether repeating the call with the same arguments
+	// has no additional effect, from the tool's idempotentHint annotation. It
+	// is a hint from the server, not a guarantee.
+	//
+	// False when the tool declares nothing, matching the spec default, so the
+	// zero value is the conservative reading here rather than the inverted
+	// one. Read-only tools report true.
+	Idempotent bool
 }
 
 // ToolDeniedError is how a middleware refuses a call. The Runner unwraps it

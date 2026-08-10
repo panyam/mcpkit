@@ -368,8 +368,10 @@ func (c *OffloadConfig) toAgent() agent.OffloadConfig {
 type ApprovalConfig struct {
 	// Mode is the default disposition for calls no rule covers: "ask"
 	// (default), "read-only-auto" (auto-allow tools that declare the
-	// readOnlyHint annotation, ask for the rest), or "allow" (run
-	// everything, "yolo"). An unknown value falls back to "ask".
+	// readOnlyHint annotation, ask for the rest), "reversible-auto" (also
+	// auto-allow a write the tool declares non-destructive, ask on the rest),
+	// or "allow" (run everything, "yolo"). An unknown value falls back to
+	// "ask".
 	Mode string `json:"mode,omitempty"`
 
 	// Rules pins per-tool overrides that win over Mode: tool name ->
@@ -429,8 +431,10 @@ func parseApprovalMode(s string) agent.ApprovalMode {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "allow", "yolo", "auto", "full-auto":
 		return agent.ModeAlwaysAllow
-	case "read-only-auto", "readonly", "read-only", "auto-edit":
+	case "read-only-auto", "readonly", "read-only":
 		return agent.ModeReadOnlyAuto
+	case "reversible-auto", "reversible", "auto-edit":
+		return agent.ModeReversibleAuto
 	default:
 		return agent.ModeAlwaysAsk
 	}
@@ -443,6 +447,8 @@ func approvalModeName(m agent.ApprovalMode) string {
 		return "allow"
 	case agent.ModeReadOnlyAuto:
 		return "read-only-auto"
+	case agent.ModeReversibleAuto:
+		return "reversible-auto"
 	default:
 		return "ask"
 	}

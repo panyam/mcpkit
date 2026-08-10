@@ -738,19 +738,40 @@ func (r *Runner) dispatch(ctx context.Context, step int, calls []ToolCall, tools
 	return results, sink.drain()
 }
 
-// toolReadOnly reports whether the named tool declares the readOnlyHint
-// annotation in the step's offered set. It is the signal the read-only-auto
-// approval tier keys on; an unknown tool or an absent hint is treated as
-// not read-only (fail-safe: a tool that does not promise read-only gets the
-// stricter path).
-func toolReadOnly(tools []core.ToolDef, name string) bool {
+// toolHints reads the named tool's safety annotations from the step's offered
+// set, applying the spec's defaults so every caller sees one resolved answer
+// rather than re-deriving them from a raw map.
+//
+// The defaults are not symmetric. An absent readOnlyHint means not read-only
+// and an absent idempotentHint means not idempotent, so both fall to the Go
+// zero value. An absent destructiveHint means DESTRUCTIVE, which does not, and
+// that asymmetry is the whole reason this defaulting lives in one place: a
+// caller that read the annotation map directly and took the zero value would
+// silently treat every unannotated tool as safe to run.
+//
+// readOnlyHint wins over the other two, which the spec says are meaningful
+// only when a tool writes. A read-only tool therefore reports non-destructive
+// and idempotent whatever else it declared, rather than passing a
+// contradiction through to policy.
+//
+// An unknown tool gets the strictest reading, since a name not in the offered
+// set has made no promises at all.
+func toolHints(tools []core.ToolDef, name string) (readOnly, destructive, idempotent bool) {
 	for _, t := range tools {
-		if t.Name == name {
-			ro, _ := t.Annotations["readOnlyHint"].(bool)
-			return ro
+		if t.Name != name {
+			continue
 		}
+		if ro, _ := t.Annotations["readOnlyHint"].(bool); ro {
+			return true, false, true
+		}
+		destructive = true
+		if d, ok := t.Annotations["destructiveHint"].(bool); ok {
+			destructive = d
+		}
+		idempotent, _ = t.Annotations["idempotentHint"].(bool)
+		return false, destructive, idempotent
 	}
-	return false
+	return false, true, false
 }
 
 // callTool executes one call and renders the text fed back to the model.
@@ -806,11 +827,14 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 		}
 		return r.cfg.Tools.Call(ctx, info.Call.Name, args)
 	}
+	readOnly, destructive, idempotent := toolHints(tools, call.Name)
 	res, err := chainToolMiddleware(r.cfg.ToolMiddleware, dispatch)(ctx, ToolCallInfo{
-		Step:     step,
-		Call:     call,
-		Scope:    ScopeFrom(ctx),
-		ReadOnly: toolReadOnly(tools, call.Name),
+		Step:        step,
+		Call:        call,
+		Scope:       ScopeFrom(ctx),
+		ReadOnly:    readOnly,
+		Destructive: destructive,
+		Idempotent:  idempotent,
 	})
 	if err != nil {
 		// A denial is a decision, not a failure: the model is told the call
