@@ -7,18 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 )
-
-// absent is the manifest hash for a path that did not exist when it was
-// captured. Restoring it deletes the file, which is what undoing a create
-// means. A sha256 hex string is never empty, so the sentinel cannot collide
-// with a real blob.
-const absent = ""
 
 // Store is a content-addressed snapshot of files, on disk under one root.
 //
@@ -59,7 +54,7 @@ type Checkpoint struct {
 	created time.Time
 
 	mu    sync.Mutex
-	files map[string]string
+	files map[string]entry
 }
 
 // Info is a checkpoint's header, for listing without loading the manifest
@@ -70,11 +65,84 @@ type Info struct {
 	Files   int       `json:"files"`
 }
 
-type manifest struct {
-	ID      string            `json:"id"`
-	Created time.Time         `json:"created"`
-	Files   map[string]string `json:"files"`
+// kind is what Add found at a path, which decides what restoring it means and
+// whether restoring it is safe at all.
+type kind string
+
+const (
+	// kindRegular is an ordinary file whose content was captured.
+	kindRegular kind = "regular"
+
+	// kindAbsent is a path that did not exist. Restoring it deletes whatever
+	// the call went on to create, which is what undoing a creation means.
+	kindAbsent kind = "absent"
+
+	// kindUnsupported is anything else at capture time: a symlink, a
+	// directory, a device. No content is captured and restoring is refused.
+	//
+	// Recorded rather than skipped, because a path the caller asked to protect
+	// and that was silently never protected is the failure A11's corollary is
+	// about. Naming it at /undo time is what lets someone notice.
+	kindUnsupported kind = "unsupported"
+)
+
+// entry is what one captured path holds. It is a struct rather than a bare
+// hash because the hash alone cannot express "this was not a regular file",
+// and C2 rules out carrying that in a second map keyed by the same paths.
+type entry struct {
+	// Hash names the blob, and is empty for every kind but kindRegular.
+	Hash string `json:"hash,omitempty"`
+
+	// Kind is what was there at capture. Restore compares it against what is
+	// there now, and refuses when they disagree.
+	Kind kind `json:"kind"`
 }
+
+// manifestVersion is the on-disk format. Version 1 replaced a bare
+// path-to-hash map, which could not distinguish a file that was absent from
+// one that was a symlink, so a restore wrote through the link.
+//
+// Checkpoints are per-session artifacts under a working directory rather than
+// durable state, so an older manifest is reported and ignored rather than
+// migrated.
+const manifestVersion = 1
+
+type manifest struct {
+	Version int              `json:"version"`
+	ID      string           `json:"id"`
+	Created time.Time        `json:"created"`
+	Files   map[string]entry `json:"files"`
+}
+
+// Refusal is one path Restore declined to touch, and why.
+type Refusal struct {
+	// Path is the captured path, as recorded at capture time.
+	Path string
+
+	// Reason is a sentence for a human, naming what changed. It is meant to
+	// be read in a /undo report, not matched on.
+	Reason string
+}
+
+// RestoreResult reports what a Restore did and, more importantly, what it did
+// not.
+//
+// Restore returns this rather than a bare error because a partial restore is
+// a normal outcome here, not a failure: one tampered path should not block
+// recovering the rest of the turn. But a caller that only learned "no error"
+// would believe the turn was fully reversed, and constraint A11's corollary
+// is precisely that a reversal path must report what it could not reverse.
+type RestoreResult struct {
+	// Restored lists the paths returned to their captured state, sorted.
+	Restored []string
+
+	// Refused lists the paths left alone, sorted by path. Empty means the
+	// restore was complete.
+	Refused []Refusal
+}
+
+// Complete reports whether every captured path was restored.
+func (r RestoreResult) Complete() bool { return len(r.Refused) == 0 }
 
 // Open returns the checkpoint with this id, loading it if it already exists.
 // Reopening is how a turn that spans several tool calls keeps adding to one
@@ -90,7 +158,7 @@ func (s *Store) Open(id string) (*Checkpoint, error) {
 	if !os.IsNotExist(err) {
 		return nil, err
 	}
-	return &Checkpoint{store: s, id: id, created: time.Now().UTC(), files: map[string]string{}}, nil
+	return &Checkpoint{store: s, id: id, created: time.Now().UTC(), files: map[string]entry{}}, nil
 }
 
 // Load reads an existing checkpoint. The error satisfies os.IsNotExist when no
@@ -100,12 +168,26 @@ func (s *Store) Load(id string) (*Checkpoint, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Version is read first so a manifest from the previous format reports
+	// what it is. Unmarshalling it as the current one fails on a type error
+	// and would be reported as corruption, sending someone to look for a
+	// truncated write that never happened.
+	var probe struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return nil, fmt.Errorf("checkpoint: manifest %q is corrupt: %w", id, err)
+	}
+	if probe.Version != manifestVersion {
+		return nil, fmt.Errorf("checkpoint: manifest %q is format v%d, this build writes v%d; delete it or keep using the mcpkit that wrote it", id, probe.Version, manifestVersion)
+	}
+
 	var m manifest
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("checkpoint: manifest %q is corrupt: %w", id, err)
 	}
 	if m.Files == nil {
-		m.Files = map[string]string{}
+		m.Files = map[string]entry{}
 	}
 	return &Checkpoint{store: s, id: m.ID, created: m.Created, files: m.Files}, nil
 }
@@ -173,11 +255,11 @@ func (c *Checkpoint) Add(paths ...string) error {
 		if _, seen := c.files[abs]; seen {
 			continue
 		}
-		hash, err := c.store.putFile(abs)
+		e, err := c.store.capture(abs)
 		if err != nil {
 			return err
 		}
-		c.files[abs] = hash
+		c.files[abs] = e
 		changed = true
 	}
 	if !changed {
@@ -199,52 +281,110 @@ func (c *Checkpoint) Add(paths ...string) error {
 // restoring the same checkpoint twice reaches the same state, so a restore
 // that fails halfway is fixed by running it again rather than by manual
 // repair. The manifest is never consumed, so retrying is always possible.
-func (c *Checkpoint) Restore() error {
+func (c *Checkpoint) Restore() (RestoreResult, error) {
 	c.mu.Lock()
-	files := make(map[string]string, len(c.files))
-	for p, h := range c.files {
-		files[p] = h
+	files := make(map[string]entry, len(c.files))
+	for p, e := range c.files {
+		files[p] = e
 	}
 	c.mu.Unlock()
 
 	type staged struct{ tmp, dst string }
 	var writes []staged
 	var deletes []string
+	var result RestoreResult
 
 	cleanup := func() {
 		for _, w := range writes {
 			os.Remove(w.tmp)
 		}
 	}
+	refuse := func(path, reason string) {
+		result.Refused = append(result.Refused, Refusal{Path: path, Reason: reason})
+	}
 
-	for dst, hash := range files {
-		if hash == absent {
-			deletes = append(deletes, dst)
+	for _, dst := range sortedKeys(files) {
+		e := files[dst]
+
+		// What is there NOW, without following a link. The gap between
+		// capture and /undo is a user deciding to type it, so this is not a
+		// tight race: minutes or hours in which a path can become something
+		// else entirely.
+		now, err := os.Lstat(dst)
+		switch {
+		case err != nil && !os.IsNotExist(err):
+			cleanup()
+			return RestoreResult{}, fmt.Errorf("checkpoint: inspect %s: %w", dst, err)
+		case err == nil && !now.Mode().IsRegular():
+			// Covers both directions that matter: writing back through a
+			// symlink that appeared, and deleting through one.
+			refuse(dst, fmt.Sprintf("is now a %s, was %s at capture", describe(now.Mode()), e.Kind))
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			cleanup()
-			return fmt.Errorf("checkpoint: prepare %s: %w", dst, err)
+
+		switch e.Kind {
+		case kindUnsupported:
+			refuse(dst, "was not a regular file at capture; checkpoint restores regular files only")
+		case kindAbsent:
+			deletes = append(deletes, dst)
+		case kindRegular:
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				cleanup()
+				return RestoreResult{}, fmt.Errorf("checkpoint: prepare %s: %w", dst, err)
+			}
+			tmp, err := c.store.stage(e.Hash, dst)
+			if err != nil {
+				cleanup()
+				return RestoreResult{}, err
+			}
+			writes = append(writes, staged{tmp: tmp, dst: dst})
+		default:
+			refuse(dst, fmt.Sprintf("unknown capture kind %q", e.Kind))
 		}
-		tmp, err := c.store.stage(hash, dst)
-		if err != nil {
-			cleanup()
-			return err
-		}
-		writes = append(writes, staged{tmp: tmp, dst: dst})
 	}
 
 	for _, w := range writes {
 		if err := os.Rename(w.tmp, w.dst); err != nil {
-			return fmt.Errorf("checkpoint: restore %s (partially applied, safe to retry): %w", w.dst, err)
+			return result, fmt.Errorf("checkpoint: restore %s (partially applied, safe to retry): %w", w.dst, err)
 		}
+		result.Restored = append(result.Restored, w.dst)
 	}
 	for _, dst := range deletes {
 		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("checkpoint: remove %s (partially applied, safe to retry): %w", dst, err)
+			return result, fmt.Errorf("checkpoint: remove %s (partially applied, safe to retry): %w", dst, err)
 		}
+		result.Restored = append(result.Restored, dst)
 	}
-	return nil
+	sort.Strings(result.Restored)
+	return result, nil
+}
+
+// describe names a file type for a refusal message, since "is now a mode
+// 0xa000" tells the reader nothing about what to go and look at.
+func describe(m fs.FileMode) string {
+	switch {
+	case m&fs.ModeSymlink != 0:
+		return "symlink"
+	case m.IsDir():
+		return "directory"
+	case m&fs.ModeDevice != 0:
+		return "device"
+	case m&fs.ModeNamedPipe != 0:
+		return "named pipe"
+	case m&fs.ModeSocket != 0:
+		return "socket"
+	default:
+		return "non-regular file"
+	}
+}
+
+func sortedKeys(m map[string]entry) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Reversal presents this checkpoint through the seam, so a file-touching tool
@@ -252,11 +392,28 @@ func (c *Checkpoint) Restore() error {
 // outside the machine, which is exactly the property that makes it safe for
 // the harness to run unattended.
 func (c *Checkpoint) Reversal() Reversal {
-	return Reversal{Restore: func(context.Context) error { return c.Restore() }}
+	return Reversal{Restore: func(context.Context) error {
+		res, err := c.Restore()
+		if err != nil {
+			return err
+		}
+		// A refusal is an error at this seam even though Restore treats it as
+		// a normal partial outcome. The seam's caller is the harness running
+		// unattended (A11), and it has no channel to report detail on: the
+		// only thing it can tell a human is that the reversal did not fully
+		// happen. Swallowing it here is exactly the unreported hole A11's
+		// corollary names. /undo goes through Restore directly and reports
+		// each refusal in full.
+		if !res.Complete() {
+			return fmt.Errorf("checkpoint: %d of %d path(s) could not be restored: %s",
+				len(res.Refused), len(res.Refused)+len(res.Restored), res.Refused[0].Reason)
+		}
+		return nil
+	}}
 }
 
 func (c *Checkpoint) save() error {
-	m := manifest{ID: c.id, Created: c.created, Files: c.files}
+	m := manifest{Version: manifestVersion, ID: c.id, Created: c.created, Files: c.files}
 	raw, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return fmt.Errorf("checkpoint: encode manifest %q: %w", c.id, err)
@@ -281,14 +438,40 @@ func (s *Store) blobPath(hash string) string {
 	return filepath.Join(s.root, "blobs", hash[:2], hash[2:])
 }
 
-// putFile stores a file's content and returns its hash, or absent when the
-// file does not exist. An already-stored blob is left alone, which is where
-// the dedup comes from.
+// capture records what is at a path right now: its content if it is a regular
+// file, that it was missing, or that it was something restoring cannot
+// faithfully undo.
+//
+// The kind is recorded rather than inferred later because "what was here"
+// stops being knowable the moment the tool runs, and it is the only thing
+// Restore can compare against to notice a path changed shape underneath it.
+func (s *Store) capture(path string) (entry, error) {
+	// Lstat, not Stat: a symlink here must be recorded as one rather than
+	// followed. Following it captures the target's content and, worse, makes
+	// the restore write back through the link to a file the caller never
+	// named.
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return entry{Kind: kindAbsent}, nil
+	}
+	if err != nil {
+		return entry{}, fmt.Errorf("checkpoint: inspect %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return entry{Kind: kindUnsupported}, nil
+	}
+
+	hash, err := s.putFile(path)
+	if err != nil {
+		return entry{}, err
+	}
+	return entry{Hash: hash, Kind: kindRegular}, nil
+}
+
+// putFile stores a file's content and returns its hash. An already-stored
+// blob is left alone, which is where the dedup comes from.
 func (s *Store) putFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return absent, nil
-	}
 	if err != nil {
 		return "", fmt.Errorf("checkpoint: read %s: %w", path, err)
 	}

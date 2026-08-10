@@ -51,7 +51,7 @@ func TestRestoreReturnsModifiedContent(t *testing.T) {
 	}
 	write(t, f, "clobbered")
 
-	if err := cp.Restore(); err != nil {
+	if _, err := cp.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, f); got != "original" {
@@ -75,7 +75,7 @@ func TestRestoreDeletesCreatedFile(t *testing.T) {
 	}
 	write(t, f, "created by the agent")
 
-	if err := cp.Restore(); err != nil {
+	if _, err := cp.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(f); !os.IsNotExist(err) {
@@ -99,7 +99,7 @@ func TestRestoreRecreatesDeletedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cp.Restore(); err != nil {
+	if _, err := cp.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, f); got != "original" {
@@ -129,7 +129,7 @@ func TestAddFirstCaptureWins(t *testing.T) {
 	}
 	write(t, f, "v3")
 
-	if err := cp.Restore(); err != nil {
+	if _, err := cp.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(t, f); got != "v1" {
@@ -156,7 +156,7 @@ func TestRestoreIsIdempotent(t *testing.T) {
 	write(t, created, "new")
 
 	for i := range 3 {
-		if err := cp.Restore(); err != nil {
+		if _, err := cp.Restore(); err != nil {
 			t.Fatalf("restore %d: %v", i, err)
 		}
 		if got := read(t, kept); got != "original" {
@@ -248,7 +248,7 @@ func TestReopenAccumulates(t *testing.T) {
 
 	write(t, a, "a2")
 	write(t, b, "b2")
-	if err := second.Restore(); err != nil {
+	if _, err := second.Restore(); err != nil {
 		t.Fatal(err)
 	}
 	if read(t, a) != "a1" || read(t, b) != "b1" {
