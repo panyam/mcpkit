@@ -113,6 +113,10 @@ type App struct {
 	connections    *ConnectionRegistry
 	providerSwitch *providerSwitch
 
+	// extensions are the registered Extensions, retained past construction
+	// so per-turn lifecycle (TurnStart) can reach them.
+	extensions []Extension
+
 	// commands is the slash-command registry every surface dispatches
 	// through (Dispatch / Commands). Built in NewApp.
 	commands *CommandRegistry
@@ -727,6 +731,10 @@ func (a *App) RunTurn(ctx context.Context, input string) error {
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 	a.triggers.NotifyEngagement()
+	if err := a.startExtensionTurns(ctx); err != nil {
+		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
+		return err
+	}
 	userMsg := agent.Message{Role: agent.RoleUser, Text: input}
 	a.history = a.context.runDurable(ctx, a.history, userMsg)
 

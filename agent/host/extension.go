@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/panyam/mcpkit/agent"
@@ -85,6 +86,23 @@ type Extension interface {
 	// phase. Use this for context the model should see for one turn without
 	// it joining the session's history.
 	ContextStages() []ContextStage
+
+	// TurnStart runs once at the top of every turn, before any context stage
+	// and before history is touched, so a failure leaves nothing half-done.
+	// An error aborts the turn.
+	//
+	// It exists because the other seams are all contributions and none of
+	// them is a lifecycle hook. An extension whose state is scoped to a turn
+	// — a checkpoint to restore to, a per-turn budget, a counter — had
+	// nowhere to learn a turn had begun, and the nearest workaround was a
+	// ContextStage that produces no context and exists for its side effect.
+	// A stage that lies about being a producer is worse than a seam that
+	// admits what it is.
+	//
+	// Proactive turns (a trigger firing) call this too: they run the model
+	// over history exactly as a user turn does, so an extension that skipped
+	// them would hold state scoped to the wrong thing.
+	TurnStart(ctx context.Context) error
 }
 
 // BaseExtension implements every optional Extension seam as a no-op, so an
@@ -102,12 +120,29 @@ func (BaseExtension) Middleware() []agent.ToolMiddleware { return nil }
 func (BaseExtension) PromptSections() []PromptSection    { return nil }
 func (BaseExtension) Commands() []*Command               { return nil }
 func (BaseExtension) ContextStages() []ContextStage      { return nil }
+func (BaseExtension) TurnStart(context.Context) error    { return nil }
 
 // WithExtension registers extensions with the App, applied in the order
 // given. Repeated calls accumulate rather than replace, so a caller can build
 // the list across several options.
 func WithExtension(exts ...Extension) AppOption {
 	return func(o *appOptions) { o.extensions = append(o.extensions, exts...) }
+}
+
+// startExtensionTurns runs every extension's TurnStart, in registration
+// order, stopping at the first error.
+//
+// Called with turnMu held and before history is touched, so an extension that
+// cannot start its turn aborts before anything is half-applied. A failure
+// names the extension: a turn that dies on someone else's bookkeeping should
+// say whose.
+func (a *App) startExtensionTurns(ctx context.Context) error {
+	for _, ext := range a.extensions {
+		if err := ext.TurnStart(ctx); err != nil {
+			return fmt.Errorf("host: extension %q turn start: %w", ext.Name(), err)
+		}
+	}
+	return nil
 }
 
 // applyExtensions wires every extension into the seams it contributes to.
@@ -120,6 +155,7 @@ func WithExtension(exts ...Extension) AppOption {
 func (a *App) applyExtensions(exts []Extension) ([]agent.ToolMiddleware, error) {
 	var mw []agent.ToolMiddleware
 	seen := map[string]bool{}
+	a.extensions = exts
 	for _, ext := range exts {
 		name := ext.Name()
 		if name == "" {
