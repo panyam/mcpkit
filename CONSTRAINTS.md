@@ -60,25 +60,11 @@ If a future SEP explicitly cross-cuts two extensions, document the SEP reference
 
 A cross-extension reference is a violation **only** when the referenced module is neither the importing module itself nor an ancestor of it. Nested intra-extension submodules (e.g., `experimental/ext/events/stores/redis` depending on its parent `experimental/ext/events`) are intentional and allowed.
 
-**Verify:** the script below catches `require`/`replace` lines pointing at another extension after subtracting (a) the module's own path and (b) any ancestor of it. It walks every `go.mod` under `ext/` and `experimental/ext/`, including nested submodules. Must print nothing.
+**`agent/ext/` is in scope**, alongside `ext/` and `experimental/ext/`. Those modules all already depend on `agent/` and `agent/host`, which makes them less independent of each other by construction than `ext/*` modules are, and that is an argument about shared *ancestors* rather than a licence for siblings to couple. Both failure modes above are about module layering, and neither becomes benign because the tree sits under `agent/`. Membership is derived from the module path (any path segment named `ext`), so a new extension tree is covered when it appears rather than when someone remembers to add it.
 
-```bash
-bash -c '
-for m in $(find ext experimental/ext -name go.mod); do
-  mod=$(grep -E "^module " "$m" | awk "{print \$2}")
-  refs=$(grep -E "github\.com/panyam/mcpkit/(ext|experimental/ext)/" "$m" \
-    | grep -vE "^module " \
-    | grep -oE "github\.com/panyam/mcpkit/(ext|experimental/ext)/[a-zA-Z0-9_/-]+" \
-    | sort -u)
-  for ref in $refs; do
-    case "$mod" in
-      "$ref"|"$ref"/*) continue;;
-    esac
-    echo "VIOLATION $m: $ref"
-  done
-done
-'
-```
+**Only direct requires count.** A `replace` with no matching require is path resolution for a multi-module repo and changes no build, so it is not a dependency edge. An `// indirect` require is transitive: every `agent/ext/*` module pulls `ext/auth` and friends through `agent/host`, and treating that as a violation would report 16 non-problems and teach everyone to ignore the check.
+
+**Verify:** `make check-ext-isolation`, run in CI by the `No cross-extension requires` step in `.github/workflows/test.yml`. The rationale for each rule lives in `scripts/check-ext-isolation.sh`'s header. Must exit 0.
 
 ## C5: Multi-replica notification delivery requires explicit Pattern B wiring
 

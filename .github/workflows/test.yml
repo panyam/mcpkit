@@ -27,6 +27,12 @@ jobs:
       - name: No committed binaries
         run: ./scripts/check-no-binaries.sh
 
+      # C4: extension modules stay independent of each other. Same reasoning as
+      # the gate above — fast, unambiguous, and pointless if it only runs when
+      # someone remembers to paste a snippet out of CONSTRAINTS.md.
+      - name: No cross-extension requires
+        run: ./scripts/check-ext-isolation.sh
+
       - name: Run unit tests
         run: go test ./... -v
 
