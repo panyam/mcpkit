@@ -86,3 +86,24 @@ func (st *treeBudgetState) addTokens(n int) {
 		st.tokensUsed.Add(int64(n))
 	}
 }
+
+// usage snapshots consumption against the caps for RunScope. A nil state (no
+// budget installed) reports all zeros, which RunScope documents as unbounded.
+//
+// Steps are stored as a remaining count and reported as a used one, so the two
+// dimensions read the same way. Both are only tracked when their cap is set —
+// consumeStep and addTokens skip an uncapped dimension because there is
+// nothing to enforce — so an uncapped dimension reports 0 used.
+func (st *treeBudgetState) usage() TreeUsage {
+	if st == nil {
+		return TreeUsage{}
+	}
+	u := TreeUsage{MaxSteps: int(st.maxSteps), MaxTokens: int(st.maxTokens)}
+	if st.maxSteps > 0 {
+		u.StepsUsed = int(st.maxSteps - st.stepsLeft.Load())
+	}
+	if st.maxTokens > 0 {
+		u.TokensUsed = int(st.tokensUsed.Load())
+	}
+	return u
+}

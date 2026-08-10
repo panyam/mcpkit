@@ -809,6 +809,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 	res, err := chainToolMiddleware(r.cfg.ToolMiddleware, dispatch)(ctx, ToolCallInfo{
 		Step:     step,
 		Call:     call,
+		Scope:    ScopeFrom(ctx),
 		ReadOnly: toolReadOnly(tools, call.Name),
 	})
 	if err != nil {

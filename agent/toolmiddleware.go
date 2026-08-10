@@ -61,6 +61,15 @@ type ToolCallInfo struct {
 	// Bind for typed inspection without a second parse.
 	Call ToolCall
 
+	// Scope is where in the run this call sits: the agent ancestry, the
+	// remaining sub-agent call budget, and the turn tree's usage against its
+	// caps. Populated by the Runner at dispatch; see RunScope.
+	//
+	// A middleware needs it to behave correctly at depth — a checkpoint that
+	// ignores it snapshots once per nested call, and a budget-aware one
+	// cannot back off before exhaustion.
+	Scope RunScope
+
 	// ReadOnly reflects the tool's readOnlyHint annotation, false when the
 	// tool declares none. It is a hint from the server, not a guarantee that
 	// the call is free of side effects.
