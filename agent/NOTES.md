@@ -406,6 +406,49 @@ Open tension for the freeze: `Reversal.Compensate` and the proposer tier both pr
 call a human approves, differing only in who authored the suggestion. If `Compensate` never gets a
 producer, they collapse into one mechanism with two entry points.
 
+### Confining a path is not a check, it is a handle (#1275, PR 1278)
+
+`agent/ext/files` shipped an escape and the fix is worth keeping, because the reasoning generalises
+to anything that takes a path from tool arguments.
+
+The first version resolved symlinks on a path's **parent directory** and then appended the basename
+unresolved, so a symlink as the *final* component walked straight out: `workspace/innocent.md ->
+/etc/passwd` passed containment and was then followed by the open. The test meant to cover this used
+a symlinked *parent* (`link/secret`), which is exactly the case parent-resolution catches, so the
+suite was green while the property did not hold. A test that exercises the one member of a class
+that already works reads as coverage of the class.
+
+The missing case was not the fault. **Checking a path and opening it by name are two operations, and
+every way out of a directory lives in the gap between them.** A symlink is followed at open time, not
+at check time, so a check on the path text describes a name rather than the file that name will
+reach. And the filesystem can change in between, so even a correct check is a statement about the
+past. Neither is fixable inside a `resolve` function, because both follow from the check being
+separate from the open.
+
+So confinement is an `os.Root` handle. It resolves each component at open time against the directory
+it holds and refuses anything leaving it, collapsing check and use into one act and closing the
+TOCTOU window along with the symlink escape. `files.rel` survives only to produce a readable refusal
+before any syscall and its doc comment says it is not the enforcement, so nobody audits it for
+exhaustiveness it was never meant to have.
+
+Two follow-ons: the temp file's mode is set with `fchmod` on the descriptor, because chmod by name
+re-resolves that name and is documented as racy even through `os.Root`. And the same path-then-open
+shape is still live in `agent/ext/checkpoint`, whose `Restore` renames and removes at unconfined
+absolute paths that came from tool arguments, with a capture-to-`/undo` gap measured in minutes
+rather than microseconds (#1281).
+
+### Two extensions compose at the wiring layer, not by importing each other (#1275)
+
+`agent/ext/files` is checkpointable and contains no reversal code, because
+`checkpoint.WriteSpec{Tool, Paths}` is a declaration keyed by **tool name**, supplied by whoever
+builds the host. `files.EditPaths` is deliberately a plain `func(map[string]any) []string` rather
+than a `checkpoint.WriteSpec`, so neither module imports the other.
+
+The alternative, an edit tool declaring its own `checkpoint.Reverser`, is the obvious thing to reach
+for and is what C4 exists to prevent: checkpoint's API would become implicitly stabilized for the
+edit tool's benefit with no design decision saying the two must interoperate. Nothing enforces this
+for `agent/ext/` today, since C4's verify script walks `ext/` and `experimental/ext/` only (#1277).
+
 ---
 
 ## Persistence
@@ -899,6 +942,25 @@ A tool denial emits `EventToolDenied` with `Event.Reason`, is fed back as model-
 - **The CI `test-agent` job runs example tests as explicit hardcoded steps in
   `.github/workflows/test.yml`**, not via `make test-agent`. Moving or adding an example needs
   the workflow updated too, not just the Makefile.
+
+### Reading a mutation run (learned on #1275)
+
+Red-before-green here means mutating the implementation and naming which tests fail. Two ways that
+misleads, both hit in one session:
+
+- **An empty result is ambiguous.** A mutation that does not compile produces no `--- FAIL` lines,
+  which looks identical to a mutation no test caught. Two "surviving" mutations were really
+  `declared and not used` and `missing return` in the mutation itself. Grep for `build failed`
+  before concluding anything, or the harness reports a test gap that is not there and hides one
+  that is.
+- **A survivor may be unreachable rather than uncovered.** Reverting `edit_file`'s rename to an
+  unconfined `os.Rename` changed nothing, because the earlier `Stat` through the root already
+  refused. That is defence in depth working, not a missing test. The way to tell them apart is to
+  mutate the whole path at once and see whether the behaviour moves.
+
+The complement is the failure mode in § Safety above: a green suite whose cases only cover the
+member of a class that already works. Mutation testing catches that one, which is why it is worth
+the trouble.
 
 ---
 

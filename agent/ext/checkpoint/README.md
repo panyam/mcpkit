@@ -109,6 +109,20 @@ app, _ := host.NewApp(cfg, out, in, host.WithExtension(cp))
 `WriteSpec` says which arguments name files. A tool that is not listed is
 never captured, which is not the same as being ignored: see below.
 
+Because a `WriteSpec` is keyed by **tool name** and supplied by whoever builds
+the host, a tool becomes checkpointable without either package importing the
+other. `agent/ext/files` is the worked example: it exports a plain
+`func(map[string]any) []string` and this package keeps its own struct.
+
+```go
+checkpoint.WriteSpec{Tool: "edit_file", Paths: files.EditPaths}
+```
+
+A tool declaring its own `Reverser` here instead is the obvious thing to
+reach for and is what constraint C4 rules out: this package's API would become
+implicitly stabilized for that tool's benefit with no design decision saying
+the two must interoperate.
+
 - **One checkpoint per turn**, created lazily on the first captured write, so a
   read-only turn costs nothing on disk.
 - **Depth 0 only.** A sub-agent's writes land inside the parent's checkpoint.
