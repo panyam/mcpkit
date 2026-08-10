@@ -120,14 +120,105 @@ func TestSpotlightResistsForgedMarker(t *testing.T) {
 	}
 }
 
-// TestSpotlightTrustedToolIsUntouched pins the opt-out: a local tool the
+// TestSpotlightOperatorToolIsUntouched pins the opt-out: a local tool the
 // operator vouches for reaches the model byte-for-byte.
-func TestSpotlightTrustedToolIsUntouched(t *testing.T) {
+func TestSpotlightOperatorToolIsUntouched(t *testing.T) {
 	mw := []ToolMiddleware{Spotlight(SpotlightConfig{
-		Trusted: func(info ToolCallInfo) bool { return info.Call.Name == "fetch" },
+		Classify: func(info ToolCallInfo) Provenance {
+			if info.Call.Name == "fetch" {
+				return ProvenanceOperator
+			}
+			return ProvenanceWorld
+		},
 	})}
 	if got := runOnce(t, mw, spotlightText("plain output")); got != "plain output" {
-		t.Fatalf("trusted tool output was modified: %q", got)
+		t.Fatalf("operator tool output was modified: %q", got)
+	}
+}
+
+// TestSpotlightMarksEveryNonOperatorLabel pins that operator is the only
+// exemption. Server and agent output is relayed rather than computed, so a
+// label that merely says the relay is trusted must not unfence what it
+// relayed.
+func TestSpotlightMarksEveryNonOperatorLabel(t *testing.T) {
+	for _, p := range []Provenance{ProvenanceServer, ProvenanceWorld, ProvenanceAgent} {
+		mw := []ToolMiddleware{Spotlight(SpotlightConfig{
+			Classify: func(ToolCallInfo) Provenance { return p },
+		})}
+		got := runOnce(t, mw, spotlightText(injection))
+		if !markerRe.MatchString(got) {
+			t.Errorf("provenance %q was not marked:\n%s", p, got)
+		}
+	}
+}
+
+// TestSpotlightUnknownLabelIsFenced pins the fail-closed direction: a
+// classifier returning a label nobody defined, or the empty string, must be
+// treated as world. Getting this backwards turns a config typo into a silent
+// hole in the mitigation.
+func TestSpotlightUnknownLabelIsFenced(t *testing.T) {
+	for _, p := range []Provenance{"", "Operator", "OPERATOR", "trusted", "nonsense"} {
+		mw := []ToolMiddleware{Spotlight(SpotlightConfig{
+			Classify: func(ToolCallInfo) Provenance { return p },
+		})}
+		got := runOnce(t, mw, spotlightText(injection))
+		if !markerRe.MatchString(got) {
+			t.Errorf("label %q escaped marking:\n%s", p, got)
+		}
+	}
+}
+
+// TestSpotlightMarkReceivesResolvedLabel pins that Mark is handed the label
+// the middleware acted on, including the world default a nil Classify implies,
+// so a strategy can scale to the source without re-deriving it.
+func TestSpotlightMarkReceivesResolvedLabel(t *testing.T) {
+	cases := map[string]struct {
+		classify func(ToolCallInfo) Provenance
+		want     Provenance
+	}{
+		"nil classify defaults to world": {nil, ProvenanceWorld},
+		"server passes through":          {func(ToolCallInfo) Provenance { return ProvenanceServer }, ProvenanceServer},
+		"agent passes through":           {func(ToolCallInfo) Provenance { return ProvenanceAgent }, ProvenanceAgent},
+		"unknown resolves to world":      {func(ToolCallInfo) Provenance { return "bogus" }, ProvenanceWorld},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			var got MarkRequest
+			mw := []ToolMiddleware{Spotlight(SpotlightConfig{
+				Classify: tc.classify,
+				Mark: func(r MarkRequest) string {
+					got = r
+					return r.Content
+				},
+			})}
+			runOnce(t, mw, spotlightText("payload"))
+			if got.Provenance != tc.want {
+				t.Errorf("Mark saw provenance %q, want %q", got.Provenance, tc.want)
+			}
+			if got.ToolName != "fetch" || got.Marker == "" || got.Content != "payload" {
+				t.Errorf("MarkRequest fields wrong: %+v", got)
+			}
+		})
+	}
+}
+
+// TestSpotlightDefaultFenceNamesTheSource pins that the built-in strategy puts
+// the origin in the fence, so the label is visible to the model without a
+// caller writing a custom Mark.
+func TestSpotlightDefaultFenceNamesTheSource(t *testing.T) {
+	cases := map[Provenance]string{
+		ProvenanceWorld:  "fetched from outside this system",
+		ProvenanceServer: "relayed by a server the operator runs",
+		ProvenanceAgent:  "produced by another agent",
+	}
+	for p, want := range cases {
+		mw := []ToolMiddleware{Spotlight(SpotlightConfig{
+			Classify: func(ToolCallInfo) Provenance { return p },
+		})}
+		got := runOnce(t, mw, spotlightText(injection))
+		if !strings.Contains(got, want) {
+			t.Errorf("fence for %q missing %q:\n%s", p, want, got)
+		}
 	}
 }
 
@@ -161,8 +252,8 @@ func TestSpotlightMarksStructuredOnlyResult(t *testing.T) {
 // function, not built-in modes.
 func TestSpotlightCustomMark(t *testing.T) {
 	encode := Spotlight(SpotlightConfig{
-		Mark: func(_, _, content string) string {
-			return "base64 data: " + base64.StdEncoding.EncodeToString([]byte(content))
+		Mark: func(r MarkRequest) string {
+			return "base64 data: " + base64.StdEncoding.EncodeToString([]byte(r.Content))
 		},
 	})
 	got := runOnce(t, []ToolMiddleware{encode}, spotlightText(injection))

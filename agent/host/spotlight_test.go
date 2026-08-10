@@ -71,11 +71,11 @@ func TestSpotlightMarksServerToolOutput(t *testing.T) {
 	}
 }
 
-// TestSpotlightTrustedToolsOptOut pins the config escape hatch.
-func TestSpotlightTrustedToolsOptOut(t *testing.T) {
+// TestSpotlightOperatorLabelOptOut pins the config escape hatch.
+func TestSpotlightOperatorLabelOptOut(t *testing.T) {
 	ts := startTestServer(t)
 	cfg := testConfig(ts.URL)
-	cfg.Spotlight = &SpotlightConfig{TrustedTools: []string{"echo"}}
+	cfg.Spotlight = &SpotlightConfig{Tools: map[string]string{"echo": "operator"}}
 	stub := echoTurns()
 	var out strings.Builder
 	app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub))
@@ -89,7 +89,52 @@ func TestSpotlightTrustedToolsOptOut(t *testing.T) {
 	}
 	toolMsg := stub.Requests()[1].Messages[2]
 	if hostMarkerRe.MatchString(toolMsg.Text) {
-		t.Fatalf("a trusted tool was marked anyway: %q", toolMsg.Text)
+		t.Fatalf("an operator-labelled tool was marked anyway: %q", toolMsg.Text)
+	}
+}
+
+// TestSpotlightNonOperatorLabelsStillMark pins that only "operator" opts out.
+// A config that labels a tool "server" is describing where output came from,
+// not vouching for it, so the fence stays.
+func TestSpotlightNonOperatorLabelsStillMark(t *testing.T) {
+	for _, label := range []string{"server", "world", "agent", "trusted", ""} {
+		ts := startTestServer(t)
+		cfg := testConfig(ts.URL)
+		cfg.Spotlight = &SpotlightConfig{Tools: map[string]string{"echo": label}}
+		stub := echoTurns()
+		var out strings.Builder
+		app, err := NewApp(cfg, &out, strings.NewReader(""), WithProvider(stub))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := app.RunTurn(context.Background(), "echo hi"); err != nil {
+			app.Close()
+			t.Fatal(err)
+		}
+		toolMsg := stub.Requests()[1].Messages[2]
+		if !hostMarkerRe.MatchString(toolMsg.Text) {
+			t.Errorf("label %q escaped marking: %q", label, toolMsg.Text)
+		}
+		app.Close()
+	}
+}
+
+func TestParseProvenance(t *testing.T) {
+	cases := map[string]agent.Provenance{
+		"operator":   agent.ProvenanceOperator,
+		"  Operator": agent.ProvenanceOperator,
+		"OPERATOR":   agent.ProvenanceOperator,
+		"server":     agent.ProvenanceServer,
+		"agent":      agent.ProvenanceAgent,
+		"world":      agent.ProvenanceWorld,
+		"":           agent.ProvenanceWorld,
+		"trusted":    agent.ProvenanceWorld,
+		"oprator":    agent.ProvenanceWorld,
+	}
+	for in, want := range cases {
+		if got := parseProvenance(in); got != want {
+			t.Errorf("parseProvenance(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
