@@ -90,8 +90,60 @@ purposes.
 **Anything off this machine.** By construction. That is what `Compensate` is
 for, and why the harness will not run it for you.
 
+## Wiring it into a host
+
+```go
+cp, _ := checkpoint.New(checkpoint.Config{
+    Root: ".mcpkit/checkpoints",
+    Writes: []checkpoint.WriteSpec{{
+        Tool:  "write_file",
+        Paths: func(args map[string]any) []string {
+            p, _ := args["path"].(string)
+            return []string{p}
+        },
+    }},
+})
+app, _ := host.NewApp(cfg, out, in, host.WithExtension(cp))
+```
+
+`WriteSpec` says which arguments name files. A tool that is not listed is
+never captured, which is not the same as being ignored: see below.
+
+- **One checkpoint per turn**, created lazily on the first captured write, so a
+  read-only turn costs nothing on disk.
+- **Depth 0 only.** A sub-agent's writes land inside the parent's checkpoint.
+  The useful restore point is the turn, not each frame of the agent tree.
+- **`/undo`** restores the most recent checkpoint, or a named one.
+  **`/checkpoints`** lists them.
+
+## What `/undo` says about what it could not undo
+
+A turn that edits three files and creates a GitHub issue would report "3 files
+restored" under any design that only knows what it captured, and the issue
+would go unmentioned. So the extension records every call that ran, changed
+something, and offered no reverser:
+
+```
+turn-7: 3 file(s) restored
+
+1 call(s) had no reverser and were NOT undone:
+  create_issue {"title":"flaky test in CI"}
+```
+
+Read-only calls and calls the permission gate denied are deliberately absent
+from that list: neither had anything to undo, and padding the list would train
+you to skip it.
+
+## When a tool has no reverser
+
+**Approval is the first line, not undo.** A tool with no reverser is
+irreversible, so `ModeReversibleAuto` asks before it runs. The best time to
+handle an un-undoable action is before it happens.
+
+A model-proposed tier, where the model suggests inverse calls for a human to
+approve, is the remaining piece of #1267.
+
 ## Status
 
-This module ships the seam and the file store. The `host.Extension` that wires
-them into a turn (capture at depth 0, `/undo`, `/checkpoints`) is the second
-half of #1267.
+Seam, file store, and host extension. The model-proposed undo tier is still to
+come.

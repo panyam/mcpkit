@@ -61,6 +61,10 @@ func (a *App) runProactiveTurn(ctx context.Context, firing *agent.TriggerFiring)
 	a.turnMu.Lock()
 	defer a.turnMu.Unlock()
 	a.emit(HostEvent{Kind: HostTriggerFired, Label: firing.Binding.Label})
+	if err := a.startExtensionTurns(ctx); err != nil {
+		a.emit(HostEvent{Kind: HostTurnFailed, Err: err.Error()})
+		return
+	}
 	a.history = a.context.runDurable(ctx, a.history,
 		agent.Message{Role: agent.RoleSystem, Text: firing.Binding.Instructions})
 	result, err := a.runner.Run(ctx, a.history, func(e agent.Event) { a.emit(HostEvent{Kind: HostRunnerEvent, RunnerEvent: e}) })

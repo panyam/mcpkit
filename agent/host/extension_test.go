@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -217,4 +218,57 @@ type collidingExt struct{ BaseExtension }
 func (collidingExt) Name() string { return "collider" }
 func (collidingExt) Commands() []*Command {
 	return []*Command{{Name: "tools", Help: "shadows the built-in"}}
+}
+
+// turnExt counts TurnStart calls and can fail on demand.
+type turnExt struct {
+	BaseExtension
+	starts int
+	fail   error
+}
+
+func (turnExt) Name() string { return "turns" }
+
+func (e *turnExt) TurnStart(context.Context) error {
+	e.starts++
+	return e.fail
+}
+
+// TestTurnStartRunsOncePerTurn is the wiring acceptance for the lifecycle
+// seam. Extension had no per-turn hook before this, so an extension whose
+// state is scoped to a turn had to abuse a ContextStage for its side effect.
+func TestTurnStartRunsOncePerTurn(t *testing.T) {
+	ext := &turnExt{}
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "one"}, agent.StubTurn{Text: "two"})
+	app := extApp(t, stub, ext)
+
+	for i := 1; i <= 2; i++ {
+		if err := app.RunTurn(context.Background(), "hi"); err != nil {
+			t.Fatal(err)
+		}
+		if ext.starts != i {
+			t.Fatalf("after %d turns, TurnStart ran %d times", i, ext.starts)
+		}
+	}
+}
+
+// TestTurnStartErrorAbortsBeforeHistory pins that a failed start leaves
+// nothing half-done: the user's message must not be in history if the turn
+// never ran.
+func TestTurnStartErrorAbortsBeforeHistory(t *testing.T) {
+	ext := &turnExt{fail: errors.New("no space left")}
+	stub := agent.NewStubProvider(agent.StubTurn{Text: "unreachable"})
+	app := extApp(t, stub, ext)
+
+	before := len(app.history)
+	err := app.RunTurn(context.Background(), "hi")
+	if err == nil {
+		t.Fatal("a TurnStart failure should abort the turn")
+	}
+	if !strings.Contains(err.Error(), "turns") {
+		t.Fatalf("error should name the extension, got %v", err)
+	}
+	if len(app.history) != before {
+		t.Fatalf("history grew by %d despite the abort", len(app.history)-before)
+	}
 }
