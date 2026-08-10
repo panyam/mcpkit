@@ -79,6 +79,9 @@ jobs:
       - name: Run agent/ext/checkpoint tests
         run: cd agent/ext/checkpoint && go test ./... -v -race
 
+      - name: Run agent/ext/files tests
+        run: cd agent/ext/files && go test ./... -v -race
+
       - name: Run agent/surfaces shared-module tests
         run: cd agent/surfaces && go test ./... -v
 
