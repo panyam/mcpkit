@@ -121,7 +121,58 @@ precisely to keep it that way. The alternative, this package declaring its own
 benefit with no design decision saying the two must interoperate, which is the
 coupling constraint C4 exists to prevent.
 
+## Finding things
+
+`list_files` walks the workspace; `search_files` matches lines and returns
+them as `path:line: text`.
+
+```
+$ list_files {"dir": "agent/ext"}
+agent/ext/files/edit.go
+agent/ext/files/tools.go
+...
+
+$ search_files {"query": "func Get\\w+"}
+a.go:12: func GetUser() (*User, error) {
+a.go:31: func GetOrder(id string) (*Order, error) {
+```
+
+**The query is a regex** (RE2, so no catastrophic backtracking). Pass
+`literal: true` for text containing `( ) [ ] . * + ? | \ $`. A pattern that
+does not compile comes back as a refusal naming it, never as zero matches:
+"no matches" and "your pattern was malformed" are answers you act on
+differently, and reporting the second as the first sends you looking for code
+that is sitting right there.
+
+**Both tools say what they left out.** A capped listing that stayed quiet about
+being capped reads as the complete contents of a directory, so it reports the
+cap, the directories it skipped, and the files it would not search:
+
+```
+showing 100 of 4312 match(es); narrow the query or raise limit
+
+3 file(s) not searched: 2 binary, 1 over 2 MiB, 0 unreadable
+1 directory was skipped: node_modules
+```
+
+Those limits bound the work a call does. They are **not** a context-window
+mechanism, and deliberately do not try to be: `agent.OffloadingSource` already
+stores oversized tool results out of band behind a `read_tool_result` stub, and
+a second truncation mechanism here would only disagree with it.
+
+`Config.Exclude` sets which directories are skipped, defaulting to
+`DefaultExclude` (`.git`, `node_modules`, `vendor`, and similar). A nil slice
+means the default; an explicitly empty one means exclude nothing. It does not
+read `.gitignore`, which is a different question: that file says what should
+not be *committed*, and a `.env` is ignored while sometimes being exactly what
+you need, while a vendored dependency is committed and is usually noise.
+
+Traversal uses the same root handle as everything else, so it cannot leave the
+workspace. A symlinked directory is listed as a name but never descended into,
+which also means a link cycle cannot hang a walk.
+
 ## Status
 
-Anchored edit engine, the two tools, and the host extension. Not yet here:
-whole-file creation and `write_file`, directory listing, and search.
+Anchored edit engine, four tools (`read_file`, `edit_file`, `list_files`,
+`search_files`), and the host extension. Not yet here: whole-file creation and
+`write_file`.
