@@ -138,6 +138,32 @@ func toolDefs() []core.ToolDef {
 			},
 		},
 		{
+			Name:  "write_file",
+			Title: "Write a whole file",
+			Description: "Create a new file, or replace an existing one entirely. " +
+				"Omit expect_hash to create: the call is refused if the path already exists. " +
+				"To replace an existing file, pass expect_hash from the read_file that produced your view of it. " +
+				"Prefer edit_file for changing part of a file.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "Path to the file, relative to the workspace root.",
+					},
+					"content": map[string]any{
+						"type":        "string",
+						"description": "The complete new contents of the file.",
+					},
+					"expect_hash": map[string]any{
+						"type":        "string",
+						"description": "The hash read_file returned for the content being replaced. Omit only when creating a file that does not exist yet.",
+					},
+				},
+				"required": []string{"path", "content"},
+			},
+		},
+		{
 			Name:        "list_files",
 			Title:       "List files",
 			Description: "List files in the workspace, recursively. Use this to find what is there before reading or editing.",
@@ -207,6 +233,8 @@ func (s *Source) Call(ctx context.Context, name string, args map[string]any) (*c
 		return s.read(args), nil
 	case "edit_file":
 		return s.edit(args), nil
+	case "write_file":
+		return s.write(args), nil
 	case "list_files":
 		return s.list(args), nil
 	case "search_files":
@@ -282,6 +310,94 @@ func (s *Source) edit(args map[string]any) *core.ToolResult {
 			Text: fmt.Sprintf("edited %s, %d edit(s) applied\nhash: %s", path, len(hunks), hash),
 		}},
 		StructuredContent: map[string]any{"path": path, "hash": hash, "edits": len(hunks)},
+	}
+}
+
+// write replaces a file's entire contents, or creates it.
+//
+// The two cases are told apart by expect_hash rather than by a separate flag,
+// and the rule is that there is no way to spell "overwrite whatever is there".
+//
+//	no expect_hash  -> create; refused if the path exists
+//	expect_hash set -> replace, only if the content still hashes to it
+//
+// A create-or-overwrite mode would undo the whole module. edit_file exists to
+// stop a change landing on content nobody looked at, and a write_file that
+// clobbered on request would be the same hole with a different name, reachable
+// by a model that found the anchor matching awkward.
+func (s *Source) write(args map[string]any) *core.ToolResult {
+	path, ok := args["path"].(string)
+	if !ok || path == "" {
+		return toolError("write_file needs a path")
+	}
+	content, ok := args["content"].(string)
+	if !ok {
+		return toolError("write_file needs content (pass an empty string to write an empty file)")
+	}
+	expect, _ := args["expect_hash"].(string)
+
+	rel, err := s.rel(path)
+	if err != nil {
+		return toolError(err.Error())
+	}
+
+	info, statErr := s.root.Stat(rel)
+	switch {
+	case statErr == nil && !info.Mode().IsRegular():
+		return toolError(fmt.Sprintf("refusing %s: it is not a regular file", path))
+
+	case statErr == nil && expect == "":
+		return toolError(fmt.Sprintf(
+			"refusing %s: it already exists. Read it first and pass expect_hash to replace it, or use edit_file to change part of it.", path))
+
+	case statErr == nil:
+		b, err := s.root.ReadFile(rel)
+		if err != nil {
+			return toolError(escapeMessage(path, err))
+		}
+		if got := Hash(string(b)); got != expect {
+			return toolError(fmt.Sprintf(
+				"%s: %v: expected %s, found %s; re-read it before writing", path, ErrStale, expect, got))
+		}
+
+	case !errors.Is(statErr, os.ErrNotExist):
+		// A path that escapes the root lands here rather than in the create
+		// branch, so a refusal is never mistaken for "does not exist yet".
+		return toolError(escapeMessage(path, statErr))
+
+	case expect != "":
+		return toolError(fmt.Sprintf(
+			"refusing %s: expect_hash was given but the file does not exist. Omit it to create the file.", path))
+	}
+
+	mode := os.FileMode(0o644)
+	if info != nil {
+		mode = info.Mode().Perm()
+	}
+	// Creating a file in a directory that does not exist yet is an ordinary
+	// thing to want, and MkdirAll goes through the root so it cannot climb
+	// out. Only reached on the create path: replacing a file means its
+	// directory is already there.
+	if dir := filepath.Dir(rel); statErr != nil && dir != "." {
+		if err := s.root.MkdirAll(dir, 0o755); err != nil {
+			return toolError(escapeMessage(path, err))
+		}
+	}
+	if err := s.writeThroughRoot(rel, content, mode); err != nil {
+		return toolError(fmt.Sprintf("cannot write %s: %v", path, err))
+	}
+
+	verb := "created"
+	if statErr == nil {
+		verb = "replaced"
+	}
+	hash := Hash(content)
+	return &core.ToolResult{
+		Content: []core.Content{{
+			Type: "text",
+			Text: fmt.Sprintf("%s %s, %d byte(s)\nhash: %s", verb, path, len(content), hash),
+		}},
+		StructuredContent: map[string]any{"path": path, "hash": hash, "bytes": len(content), "created": statErr != nil},
 	}
 }
 
@@ -406,17 +522,19 @@ func toolError(msg string) *core.ToolResult {
 	}
 }
 
-// EditPaths reports the files an edit_file call is about to write, in the
-// shape a checkpoint WriteSpec wants:
+// PathArg reports the file a call is about to write, in the shape a
+// checkpoint WriteSpec wants. Every writing tool here names its target in the
+// same `path` argument, so one function serves them all:
 //
-//	checkpoint.WriteSpec{Tool: "edit_file", Paths: files.EditPaths}
+//	checkpoint.WriteSpec{Tool: "edit_file", Paths: files.PathArg}
+//	checkpoint.WriteSpec{Tool: "write_file", Paths: files.PathArg}
 //
 // It is a plain function rather than a WriteSpec so that this package does
 // not import the checkpoint package and checkpoint does not import this one.
 // The two features compose at the wiring layer, keyed by tool name, which is
 // what keeps either free to change without the other's API stabilizing around
 // it.
-func EditPaths(args map[string]any) []string {
+func PathArg(args map[string]any) []string {
 	p, ok := args["path"].(string)
 	if !ok || p == "" {
 		return nil

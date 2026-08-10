@@ -37,6 +37,15 @@ func write(t *testing.T, dir, name, content string) string {
 	return p
 }
 
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func call(t *testing.T, s *Source, name string, args map[string]any) (string, bool) {
 	t.Helper()
 	res, err := s.Call(context.Background(), name, args)
@@ -343,7 +352,7 @@ func TestToolsAreDeclared(t *testing.T) {
 	// Asserted by name rather than by count: a count says a tool went missing
 	// without saying which, and it has to be edited every time one is added,
 	// which is how it stops being read.
-	want := map[string]bool{"read_file": true, "edit_file": true, "list_files": true, "search_files": true}
+	want := map[string]bool{"read_file": true, "edit_file": true, "list_files": true, "search_files": true, "write_file": true}
 	got := map[string]bool{}
 	for _, d := range defs {
 		got[d.Name] = true
@@ -366,10 +375,10 @@ func TestToolsAreDeclared(t *testing.T) {
 }
 
 func TestEditPathsFeedsACheckpointWriteSpec(t *testing.T) {
-	if got := EditPaths(map[string]any{"path": "notes.md"}); len(got) != 1 || got[0] != "notes.md" {
-		t.Errorf("EditPaths = %v, want [notes.md]", got)
+	if got := PathArg(map[string]any{"path": "notes.md"}); len(got) != 1 || got[0] != "notes.md" {
+		t.Errorf("PathArg = %v, want [notes.md]", got)
 	}
-	if got := EditPaths(map[string]any{}); got != nil {
-		t.Errorf("EditPaths with no path = %v, want nil", got)
+	if got := PathArg(map[string]any{}); got != nil {
+		t.Errorf("PathArg with no path = %v, want nil", got)
 	}
 }
