@@ -23,8 +23,8 @@ func TestExtensionContributesToolsAndPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(defs) != 4 {
-		t.Errorf("got %d tools, want 4", len(defs))
+	if len(defs) != 5 {
+		t.Errorf("got %d tools, want 5", len(defs))
 	}
 
 	sections := e.PromptSections()

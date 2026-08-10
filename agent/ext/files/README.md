@@ -87,39 +87,29 @@ against the original content rather than against the result of earlier edits.
 So listing order cannot change the outcome, and an edit cannot match text an
 earlier edit introduced.
 
-## Wiring it into a host
+## Creating and replacing whole files
 
-```go
-ext, _ := files.New(files.Config{Root: "/work/project"})
-app, _ := host.NewApp(cfg, out, in, host.WithExtension(ext))
+`edit_file` needs existing content to anchor against, so creating a file and
+replacing one outright are `write_file`'s job. It carries the same discipline,
+expressed through `expect_hash` rather than through a separate flag:
+
+| Call | Meaning |
+|---|---|
+| no `expect_hash` | create; **refused** if the path already exists |
+| `expect_hash` set | replace, only if the content still hashes to it |
+
+There is deliberately no way to spell "write this, whatever is there". A
+create-or-overwrite mode would reopen the hole `edit_file` exists to close, and
+it would be the mode a model reached for the moment anchoring felt awkward.
+
+```
+$ write_file {"path": "notes.md", "content": "..."}
+  [IsError] refusing notes.md: it already exists. Read it first and pass
+            expect_hash to replace it, or use edit_file to change part of it.
 ```
 
-The extension contributes the tools and a prompt section stating the rules the
-tools enforce. Those travel together on purpose: a model that has not been
-told anchors must be unique will keep sending single-word anchors and keep
-being refused, so shipping the tools alone would make the contract
-discoverable only by failing.
-
-## Undo, and why there is no Reverser here
-
-An edit is checkpointable through `agent/ext/checkpoint`, but this package
-contains no reversal code and does not import that one:
-
-```go
-cp, _ := checkpoint.New(checkpoint.Config{
-    Root:   ".mcpkit/checkpoints",
-    Writes: []checkpoint.WriteSpec{{Tool: "edit_file", Paths: files.EditPaths}},
-})
-app, _ := host.NewApp(cfg, out, in, host.WithExtension(ext, cp))
-```
-
-`checkpoint.WriteSpec` is a declaration keyed by tool name, supplied by the
-wiring, so the two features compose at the config layer with no import edge in
-either direction. `EditPaths` is a plain function rather than a `WriteSpec`
-precisely to keep it that way. The alternative, this package declaring its own
-`checkpoint.Reverser`, would stabilize checkpoint's API for this package's
-benefit with no design decision saying the two must interoperate, which is the
-coupling constraint C4 exists to prevent.
+Missing parent directories are created. Replacing a file keeps its mode, so
+editing a script does not disarm it.
 
 ## Finding things
 
@@ -171,8 +161,45 @@ Traversal uses the same root handle as everything else, so it cannot leave the
 workspace. A symlinked directory is listed as a name but never descended into,
 which also means a link cycle cannot hang a walk.
 
+## Wiring it into a host
+
+```go
+ext, _ := files.New(files.Config{Root: "/work/project"})
+app, _ := host.NewApp(cfg, out, in, host.WithExtension(ext))
+```
+
+The extension contributes the tools and a prompt section stating the rules the
+tools enforce. Those travel together on purpose: a model that has not been
+told anchors must be unique will keep sending single-word anchors and keep
+being refused, so shipping the tools alone would make the contract
+discoverable only by failing.
+
+## Undo, and why there is no Reverser here
+
+An edit is checkpointable through `agent/ext/checkpoint`, but this package
+contains no reversal code and does not import that one:
+
+```go
+cp, _ := checkpoint.New(checkpoint.Config{
+    Root:   ".mcpkit/checkpoints",
+    Writes: []checkpoint.WriteSpec{
+        {Tool: "edit_file", Paths: files.PathArg},
+        {Tool: "write_file", Paths: files.PathArg},
+    },
+})
+app, _ := host.NewApp(cfg, out, in, host.WithExtension(ext, cp))
+```
+
+`checkpoint.WriteSpec` is a declaration keyed by tool name, supplied by the
+wiring, so the two features compose at the config layer with no import edge in
+either direction. Every writing tool here names its target in the same `path` argument, so one
+`PathArg` serves them all. It is a plain function rather than a `WriteSpec`
+precisely to keep it that way. The alternative, this package declaring its own
+`checkpoint.Reverser`, would stabilize checkpoint's API for this package's
+benefit with no design decision saying the two must interoperate, which is the
+coupling constraint C4 exists to prevent.
+
 ## Status
 
-Anchored edit engine, four tools (`read_file`, `edit_file`, `list_files`,
-`search_files`), and the host extension. Not yet here: whole-file creation and
-`write_file`.
+Anchored edit engine, five tools (`read_file`, `edit_file`, `write_file`,
+`list_files`, `search_files`), and the host extension.
