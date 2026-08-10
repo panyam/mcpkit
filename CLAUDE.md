@@ -39,6 +39,7 @@ upstream changes to watch.
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
 | `agent/` — Provider, Runner loop, ToolSource, memory, composition | `agent/CLAUDE.md`, `agent/CONSTRAINTS.md`, `agent/NOTES.md` |
 | `agent/host/` — Reusable, surface-agnostic host application core | `agent/host/README.md` |
+| `agent/ext/checkpoint/` — Reversal seam (restore vs compensate) + file checkpoints | `agent/ext/checkpoint/README.md` |
 | `agent/surfaces/chat/` — Terminal CLI (binary: `agentchat`) | `README.md`, `NOTES.md`, `CLAUDE.md` in that dir |
 | `agent/surfaces/web/` — Connect bridge + DockView frontend (binary: `agentweb`) | `agent/surfaces/web/README.md`, `docs/AGENT_WEB_UI_EPIC.md` |
 | `ext/auth/` — JWT, PRM, OAuth | `ext/auth/docs/DESIGN.md`, `ext/auth/NOTES.md` |

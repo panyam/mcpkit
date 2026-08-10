@@ -74,3 +74,33 @@ The property this protects is that `agent/` is cheap to embed: it pulls mcpkit's
 Adding a dependency-free implementation beside its interface is always fine. Adding one that carries a driver is the violation, and the fix is a new satellite module rather than a new direct require.
 
 **Verify:** `cd agent && go mod edit -json | jq -r '.Require[] | select(.Indirect|not) | .Path'` lists only `github.com/panyam/mcpkit` and `github.com/panyam/servicekit`. Any other entry means a dependency landed in the core agent module: justify it as genuinely dep-free infrastructure, or move the code to a satellite module.
+
+## A11: Only a true inverse runs unattended
+
+Anything that reverses a side effect falls into one of two kinds, and only one of them may be
+invoked without a human saying yes.
+
+- **A restore** returns local state to what was captured. It is a genuine inverse, order-independent,
+  idempotent, unaffected by intervening work, and near-certain to succeed. The harness runs it.
+- **A compensation** is a *new* action that partially offsets an old one — deleting an issue that was
+  created, refunding a charge. It is not an inverse (notifications fired, webhooks ran), it is
+  order-dependent, it can fail on permissions the original call never needed, and it breaks once
+  something has come to depend on the effect. It is surfaced to a human and never auto-invoked. The
+  same applies to a model-proposed offset, which is additionally a guess.
+
+Concretely: `checkpoint.Reversal.Reversible()` requires a `Restore`, and a `Compensate` alone must not
+satisfy it. Counting one would let a tool auto-approve under `ModeReversibleAuto` on the strength of an
+offset nobody verified. Any approval path that keys on reversibility reads that method rather than
+re-deriving the answer.
+
+Chaining compensations automatically — ordering, partial-failure recovery, retries — is a saga
+orchestrator, which **A8** already rules out. This constraint is the operational edge of A8 rather than
+a separate policy.
+
+A corollary that is easy to lose: a reversal path must **report what it could not reverse**. A restore
+that says "3 files restored" while a created issue goes unmentioned is a safety net with an unreported
+hole, and an unreported hole stops being checked.
+
+**Verify:** `grep -n "func (r Reversal) Reversible" agent/ext/checkpoint/reverser.go` returns a body
+testing `Restore` only; `TestCompensateAloneIsNotReversible` and `TestProposalNeverRunsWithoutApproval`
+pin both halves.

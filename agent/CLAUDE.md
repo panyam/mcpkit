@@ -51,5 +51,7 @@ integrated with a dedicated engine.
   the agent layer with isolated per-child providers.
 - **Memory injection never writes into `a.history`.** Summary and recall are transient per-turn
   producers; appending them to history stacks them up in both history and the RunStore log.
-- **The CI `test-agent` job hardcodes example steps** in `.github/workflows/test.yml` rather than
-  calling `make test-agent`. Adding or moving an example needs the workflow updated too.
+- **The CI `test-agent` job hardcodes its steps** in `.github/workflows/test.yml` rather than
+  calling `make test-agent`. Adding or moving an example needs the workflow updated too — and so
+  does **adding a sub-module**, which otherwise builds fine locally and never runs in CI. A new
+  sub-module needs three edits: `SUB_MODS_TO_TAG`, the `test-agent` target, and that workflow.

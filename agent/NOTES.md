@@ -276,6 +276,94 @@ materialization is).
 
 ---
 
+## Safety, approval, and reversal
+
+### Annotation defaults are not symmetric (#1260, PR 1265)
+
+`toolHints` in `agent/runner.go` resolves `readOnlyHint`, `destructiveHint`, and `idempotentHint`
+in one place, and the reason it is one function rather than three reads is that their spec defaults
+disagree with Go's zero value in different directions. Absent `readOnlyHint` means not read-only
+and absent `idempotentHint` means not idempotent, so both fall to `false`. **Absent
+`destructiveHint` means destructive.** A caller that read the annotation map directly and took the
+zero value would treat every unannotated tool as safe to run unattended.
+
+`readOnlyHint` wins over the other two, which the spec says are meaningful only when a tool writes,
+so a read-only tool reports non-destructive and idempotent whatever else it declared. Passing a
+server's self-contradiction through to policy is worse than normalizing it.
+
+The cost of the chosen shape (plain bools resolved by the Runner) is that a hand-built
+`ToolCallInfo{}` reads as non-destructive. That is documented on the field and pinned by testing
+the resolution path rather than hand-set values. A tri-state was considered and rejected: it adds a
+type to a struct heading for the 1.0 freeze.
+
+`ModeReversibleAuto` keys on the result. Against servers that skip `destructiveHint` entirely it
+behaves exactly like `ModeAlwaysAsk`, which is the intended failure direction. Note the host's
+`"auto-edit"` alias moved from `ModeReadOnlyAuto` (where it never auto-allowed an edit) to this
+mode.
+
+### Spotlight provenance: only `operator` exempts (#1262, PR 1266)
+
+`SpotlightConfig.Classify` returns one of four labels instead of a bool. The tempting mistake is to
+exempt `server` as well as `operator`: **trusting the relay is not trusting what it relayed.** A
+server the operator runs that returns a third-party document is a courier, not an author. So only
+`operator` — output the process computed rather than passed along — reaches the model unfenced.
+
+`resolveProvenance` closes the label set *before* the exemption check, so `"Operator"`,
+`"oprator"`, and `""` all fence rather than exempt. The set is deliberately closed rather than
+pass-through: a finer taxonomy is a plausible want, but opening it later is additive while closing
+it later would break callers.
+
+The default fence names the origin in prose ("fetched from outside this system") rather than
+emitting the raw label, so the sentence reads to a model that was never told what `world` means.
+
+### Reversal: restore and compensate are different operations (#1267, PRs 1270/1271/1272)
+
+`agent/ext/checkpoint` holds the seam. The design mistake it was rewritten to avoid: putting undo
+in the host is only possible if you first restrict undo to files, which assumes the conclusion. The
+host cannot know how to undo `create_issue`; the tool author can. Files are the first
+implementation, not the definition.
+
+The load-bearing split, and the reason `Reversal` has two fields:
+
+- **Restore** is a true inverse. Local, order-independent, idempotent, unaffected by intervening
+  work, near-certain to succeed. The harness runs it unattended.
+- **Compensate** is a new action that partially offsets an old one. Not an inverse (notifications
+  fired), order-dependent, fails on permissions the original never needed, and breaks once
+  something depends on the effect. **Never auto-run.**
+
+`Reversal.Reversible()` requires a `Restore`. Counting a compensation would let a tool auto-approve
+under `ModeReversibleAuto` on the strength of an offset nobody verified. Chaining compensations
+automatically would be a saga orchestrator, which A8 rules out.
+
+Three further things that bit or nearly bit:
+
+- **Restore is idempotent, not atomic.** POSIX has no multi-file rename. Everything stages to temp
+  files beside their destinations first (so a missing blob or unwritable directory fails before the
+  tree is touched), then renames. A failure during the rename phase leaves a mix, and the fix is to
+  run it again — the manifest is never consumed. Claiming atomicity would read as a guarantee while
+  providing none.
+- **Capture runs outside the permission gate**, because extension middleware is applied before it.
+  A call the gate then denies is still captured. Harmless (restoring an unchanged file is a no-op),
+  and the alternative is capturing after the pre-state is gone.
+- **`/undo` reports what it could not undo.** Without that, a turn that edits three files and files
+  an issue reports "3 files restored" and the issue goes unmentioned. A safety net with an
+  unreported hole is worse than none, because it stops being checked. Read-only and denied calls
+  are excluded — neither had anything to undo, and a padded list is one people learn to skip.
+
+### The undo proposer runs in a fresh context (#1267, PR 1272)
+
+`ModelProposer` builds its conversation from the gap list alone; the turn's history has no path to
+it. This is a security property, not tidiness: if the turn went wrong through prompt injection,
+running the cleanup inside that context asks the attacker to write the cleanup. The gap list is
+itself untrusted (it carries arguments the model chose, possibly under influence), which is the
+other half of why a proposal reaches a human rather than the dispatcher.
+
+Open tension for the freeze: `Reversal.Compensate` and the proposer tier both produce a suggested
+call a human approves, differing only in who authored the suggestion. If `Compensate` never gets a
+producer, they collapse into one mechanism with two entry points.
+
+---
+
 ## Persistence
 
 `RunStore` lives in `agent/runstore.go` per the A6 corollary above. gRPC-style req/resp per
@@ -554,6 +642,27 @@ capability-optionally on the seam.
 
 Reusable host application core in `agent/host/`: config loading (providers, servers, policies,
 skills), meta-tools, App/REPL wiring. Surface-agnostic — a CLI and a web chat both build on it.
+
+### The Extension contract had no lifecycle hook (#1250 / #1267, PR 1271)
+
+`Extension` shipped five seams and all five are *contributions*: tools, middleware, prompt
+sections, commands, context stages. None is a lifecycle hook. The first real extension
+(`agent/ext/checkpoint`) needed to know a turn had begun, and the only workaround available was a
+`ContextStage` that returns its input unchanged and exists for its side effect — a producer that
+produces nothing, which is a hook in disguise.
+
+So `Extension` gained `TurnStart`. It is called from **both** turn entry points, `RunTurn` in
+`app.go` and `runProactiveTurn` in `events.go`: a trigger firing runs the model over history
+exactly as a user turn does, so an extension that saw only one would scope its state to the wrong
+thing. It runs before history is touched, so a failure aborts cleanly. `BaseExtension` no-ops it.
+
+This also forced `App` to retain its extensions — they were previously only on `appOptions` and
+dropped after construction.
+
+The general lesson, and #1252's non-goals already state it: a feature that needs a change to how
+turns run has found a bug in the seam, not a reason to work around it. Building the first real
+extension found one on first use, which is an argument for building a real consumer before the 1.0
+freeze rather than after.
 
 ### Sub-agent personas
 
