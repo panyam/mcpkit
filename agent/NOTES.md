@@ -431,11 +431,46 @@ TOCTOU window along with the symlink escape. `files.rel` survives only to produc
 before any syscall and its doc comment says it is not the enforcement, so nobody audits it for
 exhaustiveness it was never meant to have.
 
-Two follow-ons: the temp file's mode is set with `fchmod` on the descriptor, because chmod by name
-re-resolves that name and is documented as racy even through `os.Root`. And the same path-then-open
-shape is still live in `agent/ext/checkpoint`, whose `Restore` renames and removes at unconfined
-absolute paths that came from tool arguments, with a capture-to-`/undo` gap measured in minutes
-rather than microseconds (#1281).
+A follow-on: the temp file's mode is set with `fchmod` on the descriptor, because chmod by name
+re-resolves that name and is documented as racy even through `os.Root`.
+
+### The same shape in checkpoint wanted a different answer (#1281, PR 1283)
+
+`checkpoint.Restore` had the same path-then-open fault and did **not** get the same fix, which is
+the more interesting half.
+
+It renamed and removed at whatever absolute paths the manifest held, without looking at what was
+there. Those paths come from `WriteSpec.Paths(args)`, so they originate in tool arguments, and the
+gap here is not microseconds: capture happens at the top of a turn, the restore happens whenever
+someone types `/undo`. A path has minutes or hours to become a symlink, and then the rename writes
+captured content to the link's target, while a path captured as absent is undone with `os.Remove`,
+which deletes that target outright.
+
+An `os.Root` handle was the wrong instrument, because it answers *containment* and checkpoint has
+no root to be contained by. A checkpointed tool may legitimately write to a cache or temp directory
+outside any one tree, so imposing a workspace root would break honest callers to stop a dishonest
+one. Confining paths stays the **tool's** job; `agent/ext/files` is the worked example.
+
+What checkpoint gained instead is an *integrity* check, which needs no root: the manifest records
+what `Add` found (`kindRegular` / `kindAbsent` / `kindUnsupported`, via `Lstat` so a link is
+recorded rather than followed), and `Restore` compares that against what is there now. Restoring
+through something that is not what you captured is not something any caller wants, whatever their
+layout, so refusing costs no legitimate use.
+
+Three consequences worth keeping:
+
+- **Refusals are per path.** One tampered file should not cost the rest of the turn, and the
+  staging phase already gives a clean all-or-nothing abort for real errors.
+- **`Restore` returns a `RestoreResult`.** Under per-path refusal a partial restore is a normal
+  outcome, so `error` alone cannot express it and a caller seeing nil would conclude the turn was
+  fully reversed. That is A11's corollary exactly.
+- **Through the `Reversal` seam a refusal is an error**, because that caller is the harness running
+  unattended with nowhere to put detail. `/undo` calls `Restore` directly and prints each one.
+
+The capture-side and restore-side `Lstat` catch different cases. Restore-side stops writing through
+a link that appeared since. Capture-side stops the blob store acquiring a link target's content,
+which matters if the link is later replaced by an ordinary file: restore would then see something
+perfectly normal and write the wrong content into it.
 
 ### Two extensions compose at the wiring layer, not by importing each other (#1275)
 
@@ -446,8 +481,9 @@ than a `checkpoint.WriteSpec`, so neither module imports the other.
 
 The alternative, an edit tool declaring its own `checkpoint.Reverser`, is the obvious thing to reach
 for and is what C4 exists to prevent: checkpoint's API would become implicitly stabilized for the
-edit tool's benefit with no design decision saying the two must interoperate. Nothing enforces this
-for `agent/ext/` today, since C4's verify script walks `ext/` and `experimental/ext/` only (#1277).
+edit tool's benefit with no design decision saying the two must interoperate. This is now enforced
+for `agent/ext/` as well, by `make check-ext-isolation` in CI (#1277); before that, C4's verifier
+was a snippet inside `CONSTRAINTS.md` that walked two trees and that nothing ran.
 
 ---
 
@@ -958,9 +994,29 @@ misleads, both hit in one session:
   refused. That is defence in depth working, not a missing test. The way to tell them apart is to
   mutate the whole path at once and see whether the behaviour moves.
 
-The complement is the failure mode in § Safety above: a green suite whose cases only cover the
-member of a class that already works. Mutation testing catches that one, which is why it is worth
-the trouble.
+### A green suite is not evidence of the property you think it is
+
+The failure mutation testing exists to catch, and it turned up three times in one session
+(2026-08-10) in three different disguises. Each looked like coverage of a class and exercised only
+the member that already worked:
+
+- **`agent/ext/files` symlink containment.** The test used a symlinked *parent directory*, which is
+  exactly what parent-resolution catches. A symlink as the *final* component escaped the root, and
+  the suite was green while the property did not hold.
+- **Malformed `edit_file` arguments.** Every case was an *entirely* malformed list, so dropping a
+  bad element left zero hunks and the call still failed, via `ErrNoHunks`, for the wrong reason. A
+  list with one good edit and one bad one would have applied the good one and reported success.
+- **`checkpoint` capture through a symlink.** `TestSymlinkAtCaptureIsNotFollowed` leaves the link in
+  place at restore time, so the restore-side guard refuses either way. Swapping `Lstat` for `Stat`
+  in `capture` survived the entire suite.
+
+The shape is the same each time: **a second guard downstream makes the test pass regardless of the
+behaviour it names.** So the fix is the same each time too, and it is what to reach for rather than
+adding another case alongside the existing ones. Construct the scenario so the downstream guard is
+absent, which usually means letting the interfering condition resolve before the assertion (replace
+the symlink with a real file; mix a valid element in with the invalid one). If you cannot remove
+the second guard, the test cannot distinguish the two implementations and is not testing what its
+name says.
 
 ---
 

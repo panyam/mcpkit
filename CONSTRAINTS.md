@@ -2,6 +2,30 @@
 
 These apply across all packages. Package-specific constraints live in each package's own `CONSTRAINTS.md`.
 
+## About the `Verify` lines
+
+Every constraint carries one, and it must say **whether anything actually runs it**. C4's was a
+bash block pasted into this file: correct, and never executed by anything, so the rule was
+documented and unenforced for as long as it existed (#1277). A verifier nobody runs is a comment.
+
+Current state, worth knowing before trusting one:
+
+| Constraint | Enforced? |
+|---|---|
+| C4 | **CI gate** — `make check-ext-isolation`, run by `.github/workflows/test.yml` |
+| C1, C2, C3 | manual `grep` recipes; nothing runs them |
+| C5 | says so explicitly; no automated check exists |
+| C6 | manual `grep` recipe |
+
+Prefer a script in `scripts/` wired into CI over a snippet here. When a snippet is genuinely the
+right weight, say plainly that it is manual so nobody mistakes it for a gate.
+
+One lesson from making C4 real: **a gate's precision is a correctness property, not a nicety.** The
+published C4 snippet matched every `go.mod` line mentioning another extension, which fired 16 times
+on a clean tree once `agent/ext/` was in scope, because `replace` directives and `// indirect`
+requires are not dependency edges. A check that cries wolf gets switched off, which returns the
+constraint to being a paragraph by a longer route.
+
 ## C1: Typed contexts over raw context.Context
 
 When passing domain-specific state through context, use typed context structs (e.g., `ToolContext`, `TaskContext`) instead of plain `context.Context` with `context.Value`. This gives type safety, discoverability, and IDE autocomplete.
