@@ -443,8 +443,15 @@ func parseProvenance(s string) agent.Provenance {
 	}
 }
 
-// approvalPrompt renders the yes/no question shown when a tool call needs
-// approval. The args are trimmed so a large payload does not flood the prompt.
+// approvalPrompt is the fallback rendering, used for any call no registered
+// ApprovalRenderer claimed.
+//
+// The args are trimmed so a large payload does not flood the prompt. That trim
+// lives HERE and not in the calling path on purpose: it is the right default
+// for an unknown tool, whose arguments are an opaque blob, and the wrong one
+// for a tool whose arguments are the thing being reviewed. Applying it to
+// everything is what made an edit unreviewable, so a renderer that claims a
+// call decides its own truncation.
 func approvalPrompt(info agent.ToolCallInfo) string {
 	args := strings.TrimSpace(string(info.Call.Args.Raw()))
 	if len(args) > 200 {
