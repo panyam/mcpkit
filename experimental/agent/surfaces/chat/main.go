@@ -180,6 +180,9 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Bool("memory-session-scoped", false, "with --memory, give each session (--session id) its own memory scratchpad so recall never crosses sessions (needs --session-store; default = one shared scratchpad)")
 	fl.Int("compact-tokens", 0, "compact history when its estimated token count exceeds N: summarize the head, keep a recent tail (0 = off)")
 	fl.Int("compact-keep-recent", 0, "with --compact-tokens, how many trailing messages to keep verbatim (0 = default 6)")
+	fl.String("workspace", "", "expose file tools (read/edit/write/list/search) confined to this directory, plus checkpoint /undo (empty = off; there is no default directory on purpose)")
+	fl.StringSlice("workspace-exclude", nil, "with --workspace, directories list_files/search_files skip, by base name or path.Match pattern (empty = built-in defaults)")
+	fl.Bool("no-checkpoint", false, "with --workspace, skip the file snapshot taken before each write, disabling /undo and /checkpoints")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -332,6 +335,31 @@ func runChat(v *viper.Viper) error {
 
 	if ct := v.GetInt("compact-tokens"); ct > 0 {
 		cfg.Compaction = &host.CompactionConfig{MaxTokens: ct, KeepRecent: v.GetInt("compact-keep-recent")}
+	}
+
+	// --workspace turns on the file tools and the checkpoint that guards their
+	// writes. Nil extensions when the flag is unset, so the no-workspace path
+	// is byte-for-byte what it was before.
+	//
+	// An unset --workspace-exclude arrives from viper as an empty slice, which
+	// files.Config would read as "exclude nothing" rather than "use the
+	// defaults". Passing nil for the empty case keeps the built-in list; the
+	// cost is that excluding nothing is not expressible from the CLI, which is
+	// the better of the two things to lose.
+	var wsExclude []string
+	if ex := v.GetStringSlice("workspace-exclude"); len(ex) > 0 {
+		wsExclude = ex
+	}
+	wsExts, err := surfaces.WorkspaceExtensions(surfaces.WorkspaceConfig{
+		Root:         v.GetString("workspace"),
+		Exclude:      wsExclude,
+		NoCheckpoint: v.GetBool("no-checkpoint"),
+	})
+	if err != nil {
+		return err
+	}
+	if len(wsExts) > 0 {
+		appOpts = append(appOpts, host.WithExtension(wsExts...))
 	}
 
 	app, err := host.NewApp(cfg, os.Stdout, os.Stdin, appOpts...)

@@ -1,0 +1,101 @@
+package surfaces
+
+import (
+	"fmt"
+
+	"github.com/panyam/mcpkit/experimental/agent/ext/checkpoint"
+	"github.com/panyam/mcpkit/experimental/agent/ext/files"
+	"github.com/panyam/mcpkit/experimental/agent/host"
+)
+
+// WorkspaceConfig describes the workspace tool set a surface exposes.
+//
+// It lives here rather than in host because agent/ext/files imports host for
+// its approval renderer, so host cannot import the extensions back. Both
+// agentchat and agentweb need the identical wiring, and getting it wrong is
+// silent in one specific way (see WorkspaceExtensions), so it is written once.
+type WorkspaceConfig struct {
+	// Root confines every path the file tools will touch. Empty disables the
+	// whole set: no file tools, no checkpoint.
+	//
+	// There is deliberately no "unset means the current directory" default.
+	// files.Config.Root documents why the tools themselves refuse to run
+	// unconfined, and the same reasoning applies to choosing the confinement
+	// for a user: a model's instructions can come from content it read, so an
+	// editor rooted somewhere nobody named is an injected instruction away
+	// from writing anywhere under it. Enabling these is a choice with a
+	// directory attached.
+	Root string
+
+	// Exclude overrides the directories list_files and search_files skip.
+	// Nil means files.DefaultExclude; an explicitly empty non-nil slice means
+	// exclude nothing.
+	Exclude []string
+
+	// NoCheckpoint drops the snapshot-and-restore safety net, leaving the file
+	// tools with no /undo. Opt-out rather than opt-in because a write tool
+	// whose effects cannot be reversed is the case checkpoint was built for.
+	NoCheckpoint bool
+}
+
+// WorkspaceExtensions builds the file and checkpoint extensions for cfg.
+//
+// Returns nil when cfg.Root is empty, so a caller can pass the result to
+// host.WithExtension unconditionally and get today's behaviour when no
+// workspace was requested.
+//
+// # Order is load-bearing
+//
+// Checkpoint comes first in the returned slice. Extensions are applied in
+// registration order and their middleware keeps it, so the snapshot must be
+// installed ahead of the tool that writes. Reversed, the middleware captures
+// the file *after* the write and /undo restores the damage.
+//
+// Nothing catches that. Both orders construct, both run, and the difference
+// only shows up as an /undo that appears to work and does not, which is why
+// the two extensions are built together here instead of being left to each
+// surface to register in whatever order reads well.
+//
+// # Why the two are coupled
+//
+// Checkpoint's WriteSpec list is per-tool, so with no file tools it guards
+// nothing; and file tools without it drop the reversal path that agent/ext/
+// checkpoint exists to provide. Wiring them separately would let a surface
+// enable half of a safety property.
+//
+// files.PathArg is the seam that joins them: checkpoint needs to know which
+// argument names a path, files exports the reader for its own tools, and
+// neither module imports the other.
+func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
+	if cfg.Root == "" {
+		return nil, nil
+	}
+
+	var exts []host.Extension
+
+	if !cfg.NoCheckpoint {
+		cx, err := checkpoint.New(checkpoint.Config{
+			Root: cfg.Root,
+			Writes: []checkpoint.WriteSpec{
+				{Tool: "write_file", Paths: files.PathArg},
+				{Tool: "edit_file", Paths: files.PathArg},
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("workspace checkpoint: %w", err)
+		}
+		exts = append(exts, cx)
+	}
+
+	// files.New rather than files.NewSource: the extension carries the prompt
+	// section describing the read-then-edit contract along with the tools.
+	// Registering the tools alone leaves that contract discoverable only by
+	// failing an edit.
+	fx, err := files.New(files.Config{Root: cfg.Root, Exclude: cfg.Exclude})
+	if err != nil {
+		return nil, fmt.Errorf("workspace files: %w", err)
+	}
+	exts = append(exts, fx)
+
+	return exts, nil
+}

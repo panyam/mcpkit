@@ -32,6 +32,8 @@ func main() {
 	configPath := flag.String("config", "", "path to a host config JSON (servers, model, policies)")
 	demo := flag.Bool("demo", false, "run over an offline streaming demo provider (no config needed)")
 	sessionStore := flag.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off, sessions live only in memory)")
+	workspace := flag.String("workspace", "", "expose file tools (read/edit/write/list/search) confined to this directory, plus checkpoint /undo (empty = off; there is no default directory on purpose)")
+	noCheckpoint := flag.Bool("no-checkpoint", false, "with --workspace, skip the file snapshot taken before each write, disabling /undo and /checkpoints")
 	flag.Parse()
 
 	// A configured --session-store makes web sessions durable: session_id is a
@@ -47,7 +49,9 @@ func main() {
 	// attaches the same store (buildApp), so a session it hosts persists. The
 	// SessionManager holds them all; its default session (created at startup)
 	// backs an empty session_id, keeping the single-surface flow unchanged.
-	factory := func(ctx context.Context) (*host.App, error) { return buildApp(*configPath, *demo, store) }
+	factory := func(ctx context.Context) (*host.App, error) {
+		return buildApp(*configPath, *demo, store, *workspace, *noCheckpoint)
+	}
 	var mgr *web.SessionManager
 	if store != nil {
 		mgr = web.NewSessionManagerWithStore(factory, store)
@@ -84,10 +88,23 @@ func main() {
 // non-nil store is attached to every App (host.WithRunStore) so each session,
 // including the default, persists its turns — the invariant the store-backed
 // SessionManager relies on when it rehydrates a dropped session.
-func buildApp(configPath string, demo bool, store agent.RunStore) (*host.App, error) {
+func buildApp(configPath string, demo bool, store agent.RunStore, workspace string, noCheckpoint bool) (*host.App, error) {
 	var storeOpt []host.AppOption
 	if store != nil {
 		storeOpt = append(storeOpt, host.WithRunStore(store))
+	}
+	// Built once and appended to whichever App this call constructs, so the
+	// demo and config paths cannot drift into offering different tools. Nil
+	// when --workspace is unset, leaving both paths as they were.
+	wsExts, err := agentsurfaces.WorkspaceExtensions(agentsurfaces.WorkspaceConfig{
+		Root:         workspace,
+		NoCheckpoint: noCheckpoint,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(wsExts) > 0 {
+		storeOpt = append(storeOpt, host.WithExtension(wsExts...))
 	}
 	if demo {
 		// Wire two delegate personas + a low offload threshold so a demo turn

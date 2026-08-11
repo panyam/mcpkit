@@ -51,6 +51,29 @@ startup when a named variable is unset. A per-server `allow` list is a
 capability boundary (a FilterSource): tools outside it are neither offered to
 the model nor callable.
 
+## Workspace file tools
+
+`--workspace <dir>` gives the model a confined file tool set (`read_file`,
+`edit_file`, `write_file`, `list_files`, `search_files`) plus the checkpoint
+that guards their writes:
+
+```bash
+go run . --config chat.json --workspace ~/code/project
+```
+
+Edits render as a diff at the approval prompt rather than truncated JSON, and
+`/undo` restores files to the start of a turn. `/checkpoints` lists restore
+points.
+
+There is no default directory, and omitting the flag leaves the tools off
+entirely. That is deliberate rather than cautious: a model's instructions can
+arrive in content it read, so an editor rooted somewhere nobody named turns any
+injected instruction into a write under that root. Enabling these is a choice
+with a directory attached.
+
+`--workspace-exclude` overrides the directories `list_files` and `search_files`
+skip. `--no-checkpoint` drops the snapshot, and with it `/undo`.
+
 ## Status line
 
 Both TUI surfaces show a persistent status line (kept in the managed live

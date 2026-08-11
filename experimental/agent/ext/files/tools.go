@@ -34,7 +34,8 @@ type Config struct {
 	Exclude []string
 }
 
-// Source serves read_file and edit_file over agent.ToolSource.
+// Source serves the workspace tools over agent.ToolSource: read_file,
+// edit_file, write_file, list_files, and search_files.
 //
 // The pairing is deliberate. edit_file's staleness check needs a hash the
 // caller can only have obtained by reading, so a read tool that did not
@@ -212,14 +213,14 @@ func toolDefs() []core.ToolDef {
 	}
 }
 
-// Tools returns the two definitions, in a stable order.
+// Tools returns the tool definitions, in a stable order.
 func (s *Source) Tools(context.Context) ([]core.ToolDef, error) {
 	out := make([]core.ToolDef, len(s.defs))
 	copy(out, s.defs)
 	return out, nil
 }
 
-// Call dispatches read_file and edit_file.
+// Call dispatches every tool Tools declares.
 //
 // A tool that ran and refused reports through ToolResult.IsError rather than
 // a returned error, so the Runner feeds the refusal back to the model instead

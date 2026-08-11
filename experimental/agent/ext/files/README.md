@@ -174,6 +174,15 @@ told anchors must be unique will keep sending single-word anchors and keep
 being refused, so shipping the tools alone would make the contract
 discoverable only by failing.
 
+`files.NewSource` returns the bare `agent.ToolSource` instead, for a `Runner`
+with no `agent/host`. Prefer `New` wherever there is a host, for the reason
+above.
+
+To get `/undo` over these writes, pair it with `agent/ext/checkpoint`,
+registered **first** so its snapshot is taken before the write lands.
+`surfaces.WorkspaceExtensions` does that pairing, and is what `agentchat
+--workspace` and `agentweb --workspace` use.
+
 ## What the approval prompt shows
 
 When a write is gated, the host asks before it runs. Its default rendering is a
