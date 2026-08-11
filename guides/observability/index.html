@@ -444,8 +444,8 @@ See <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/README.md"><cod
 <p>The <code>agent.Runner</code> emits through the same <code>core.MeterProvider</code> seam, the<br />
 metrics sibling of its SEP-414 spans. <code>RunnerConfig.MeterProvider</code> opts<br />
 it in; nil or <code>core.NoopMeterProvider</code> is zero overhead. Instruments are<br />
-built once in <code>NewRunner</code> (<a href="https://github.com/panyam/mcpkit/blob/main/agent/metrics.go"><code>agent/metrics.go</code></a>) and recorded at the same<br />
-points the spans are (<a href="https://github.com/panyam/mcpkit/blob/main/agent/runner.go"><code>agent/runner.go</code></a>): turn end and each tool call.</p>
+built once in <code>NewRunner</code> (<a href="https://github.com/panyam/mcpkit/blob/main/experimental/agent/metrics.go"><code>experimental/agent/metrics.go</code></a>) and recorded at the same<br />
+points the spans are (<a href="https://github.com/panyam/mcpkit/blob/main/experimental/agent/runner.go"><code>experimental/agent/runner.go</code></a>): turn end and each tool call.</p>
 <table>
 <thead>
 <tr>
@@ -502,7 +502,7 @@ which outcome path returns, so the counter never double-counts or misses.</p>
 <p>The host threads it end to end: <code>host.WithMeterProvider</code> sets it on the<br />
 main Runner and every sub-agent persona; agentchat builds it from the<br />
 same <code>--exporter</code>/<code>--otlp-endpoint</code> decision as the tracer and logger<br />
-(<a href="https://github.com/panyam/mcpkit/blob/main/agent/surfaces/chat/telemetry_setup_meter.go"><code>agent/surfaces/chat/telemetry_setup_meter.go</code></a>, the meter sibling of<br />
+(<a href="https://github.com/panyam/mcpkit/blob/main/experimental/agent/surfaces/chat/telemetry_setup_meter.go"><code>experimental/agent/surfaces/chat/telemetry_setup_meter.go</code></a>, the meter sibling of<br />
 <code>SetupTelemetry</code>/<code>SetupLogs</code>). The OTLP path lands in Mimir; the<br />
 <code>mcpkit — agent</code> Grafana dashboard<br />
 (<a href="https://github.com/panyam/mcpkit/blob/main/docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json"><code>docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json</code></a>)<br />
@@ -1068,9 +1068,9 @@ server span (TraceID T1)              server span (TraceID T2)
 </tbody>
 </table>
 <p><code>agents.found</code> is set on every path (including empty / unknown <code>agentId</code>), so a failed lookup is visible in the trace rather than silent.</p>
-<p><strong>Host side — delegation edge</strong> (<a href="https://github.com/panyam/mcpkit/blob/main/agent/host/server_agents.go"><code>agent/host/server_agents.go</code></a>). The host&rsquo;s lazy <code>serverAgentSource.resolve</code> wraps the first-use <code>agents/get</code> + child build in an <code>agents.resolve</code> span carrying <code>mcp.agent.id</code>. Cache hits are not spanned. This ties the three pieces a delegation trace should show: <code>supervisor turn -&gt; agents.resolve(agent.id) -&gt; agents.get -&gt; child turn</code>.</p>
+<p><strong>Host side — delegation edge</strong> (<a href="https://github.com/panyam/mcpkit/blob/main/experimental/agent/host/server_agents.go"><code>experimental/agent/host/server_agents.go</code></a>). The host&rsquo;s lazy <code>serverAgentSource.resolve</code> wraps the first-use <code>agents/get</code> + child build in an <code>agents.resolve</code> span carrying <code>mcp.agent.id</code>. Cache hits are not spanned. This ties the three pieces a delegation trace should show: <code>supervisor turn -&gt; agents.resolve(agent.id) -&gt; agents.get -&gt; child turn</code>.</p>
 <p><strong>Sub-agent execution reuses the Runner&rsquo;s own spans.</strong> A resolved specialist is a normal <code>agent.AgentSource</code> over a child <code>Runner</code>, so its work already emits <code>agent.turn</code> / <code>agent.step</code> / <code>agent.tool</code> spans (the same instrumentation any Runner gets). The host threads its <code>TracerProvider</code> through the bridge (<code>ServerAgentConfig.TracerProvider</code>), so no separate execution-span machinery is needed. The in-process delegation runs synchronously inside the supervisor&rsquo;s tool-call span, so those child spans nest naturally under it. A new-root-span + link shape (like <code>task.execute</code>) would only be warranted for an async delegation form (<code>AsyncAgentSource</code>) whose run outlives the dispatch; that is deferred until a demo needs it.</p>
-<p>Coverage: <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/agents/tracing_test.go"><code>experimental/ext/agents/tracing_test.go</code></a> pins the discovery spans (list count, get found / not-found, and the zero-overhead nil-TracerProvider path); <a href="https://github.com/panyam/mcpkit/blob/main/agent/host/server_agents_test.go"><code>agent/host/server_agents_test.go</code></a> pins the <code>agents.resolve</code> span (emitted on first delegation, not on the cached second).</p>
+<p>Coverage: <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/agents/tracing_test.go"><code>experimental/ext/agents/tracing_test.go</code></a> pins the discovery spans (list count, get found / not-found, and the zero-overhead nil-TracerProvider path); <a href="https://github.com/panyam/mcpkit/blob/main/experimental/agent/host/server_agents_test.go"><code>experimental/agent/host/server_agents_test.go</code></a> pins the <code>agents.resolve</code> span (emitted on first delegation, not on the cached second).</p>
 <h2 id="downstream-consumers-of-the-phase-1-contract">Downstream consumers of the Phase 1 contract <a class="anchor" href="#downstream-consumers-of-the-phase-1-contract">¶</a></h2>
 <ul>
 <li><strong><code>experimental/ext/events/</code> cross-replica bus (issue #629).</strong> The<br />
