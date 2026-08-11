@@ -165,3 +165,16 @@ func NotDenied() Scorer {
 		return boolScore("NotDenied", true, "no tool calls were denied")
 	})
 }
+
+// Ungradeable returns a Scorer that always fails, naming why the grade could
+// not be computed here.
+//
+// It exists so "we could not grade this" is reported as a failure rather than
+// as a pass. The alternative shapes are both worse: dropping the scorer leaves
+// the case graded by whatever remains, which for a rubric-graded case can be
+// nothing that discriminates; and skipping the case hides it from the totals.
+func Ungradeable(name, reason string) Scorer {
+	return scorerFunc(func(Result) Score {
+		return Score{Name: name, Pass: false, Value: 0, Detail: reason}
+	})
+}
