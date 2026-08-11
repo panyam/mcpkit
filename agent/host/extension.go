@@ -15,14 +15,21 @@ import (
 // plus the harness behaviour around them had nowhere to put it. That absence
 // is why App accumulated a feature per field instead of a registry per seam.
 //
-// Nothing here is a new mechanism. ToolSource, ToolMiddleware, PromptSection,
-// Command, and ContextStage all already exist and are all already wired. An
-// Extension's only job is to let one package contribute across all five as a
-// unit, because a feature is not five independent contributions — it is one
-// thing with five facets that have to agree. Memory's recall tool and its
-// pre-turn producer share a store; a checkpoint middleware and its /undo
-// command share a snapshot directory. Registering those separately would put
-// the coherence in the caller's head and leave their ordering unstated.
+// Most of this is not a new mechanism. ToolSource, ToolMiddleware,
+// PromptSection, Command, and ContextStage all already existed and were
+// already wired. An Extension's job is to let one package contribute across
+// them as a unit, because a feature is not a handful of independent
+// contributions — it is one thing with several facets that have to agree.
+// Memory's recall tool and its pre-turn producer share a store; a checkpoint
+// middleware and its /undo command share a snapshot directory; a file tool and
+// the way its approval reads describe the same operation. Registering those
+// separately would put the coherence in the caller's head and leave their
+// ordering unstated.
+//
+// Two seams were added because building real extensions found the contract
+// short: TurnStart, which checkpoint needed and no contribution seam could
+// express, and ApprovalRenderers, which the coding surface needed because the
+// ask text was the one part of the approval ladder a caller could not reach.
 //
 // Every method except Name is optional: return nil for the seams you do not
 // use. Embed BaseExtension to no-op all of them and override only what you
@@ -87,6 +94,21 @@ type Extension interface {
 	// it joining the session's history.
 	ContextStages() []ContextStage
 
+	// ApprovalRenderers supply the question a user is asked before a gated
+	// tool call runs, for the tools this extension owns.
+	//
+	// The ask text was the one part of the approval ladder a caller could not
+	// influence: mode, per-tool rules, remembering, and the ask transport are
+	// all configurable, while the wording was fixed. That is fine until a
+	// tool's arguments ARE the thing being reviewed. For an edit, the default
+	// renders a JSON blob trimmed to 200 characters, which makes a real change
+	// unreviewable by construction, so the user is answering a question they
+	// cannot actually evaluate.
+	//
+	// Consulted in registration order; the first renderer to claim a call
+	// wins, and the built-in format is the fallback. See ApprovalRenderer.
+	ApprovalRenderers() []ApprovalRenderer
+
 	// TurnStart runs once at the top of every turn, before any context stage
 	// and before history is touched, so a failure leaves nothing half-done.
 	// An error aborts the turn.
@@ -115,18 +137,67 @@ type Extension interface {
 //	func (c coding) Tools() (agent.ToolSource, error) { return c.src, nil }
 type BaseExtension struct{}
 
-func (BaseExtension) Tools() (agent.ToolSource, error)   { return nil, nil }
-func (BaseExtension) Middleware() []agent.ToolMiddleware { return nil }
-func (BaseExtension) PromptSections() []PromptSection    { return nil }
-func (BaseExtension) Commands() []*Command               { return nil }
-func (BaseExtension) ContextStages() []ContextStage      { return nil }
-func (BaseExtension) TurnStart(context.Context) error    { return nil }
+func (BaseExtension) Tools() (agent.ToolSource, error)      { return nil, nil }
+func (BaseExtension) Middleware() []agent.ToolMiddleware    { return nil }
+func (BaseExtension) PromptSections() []PromptSection       { return nil }
+func (BaseExtension) Commands() []*Command                  { return nil }
+func (BaseExtension) ContextStages() []ContextStage         { return nil }
+func (BaseExtension) ApprovalRenderers() []ApprovalRenderer { return nil }
+func (BaseExtension) TurnStart(context.Context) error       { return nil }
+
+// ApprovalRenderer turns a pending tool call into the question a user is
+// asked about it, or declines to.
+//
+// The bool is "this call is mine". False means the next renderer gets a look
+// and the built-in format is the fallback, so a renderer can claim a subset of
+// its own tools, or claim conditionally, without having to reproduce the
+// default for everything else. There is no error return on purpose: a
+// renderer that cannot do its job returns false and the user still gets asked,
+// which is the only useful behaviour at an approval prompt.
+//
+// The info carries the call as it WILL execute, arguments included, after
+// every middleware has rewritten them (#1248). That property is what makes the
+// prompt honest — the user approves the call that runs, not the one the model
+// proposed — and it is pinned by a test rather than left as a comment.
+//
+// Truncation is the renderer's business. The default trims arguments so a
+// large payload cannot flood the prompt; a renderer showing a diff wants the
+// opposite and is trusted to decide.
+//
+// The context is the turn's. It is here so a renderer can read state it needs
+// to render honestly — showing what a whole-file write would replace means
+// reading the file that is there now — rather than being restricted to what
+// the arguments happen to carry.
+type ApprovalRenderer func(context.Context, agent.ToolCallInfo) (string, bool)
 
 // WithExtension registers extensions with the App, applied in the order
 // given. Repeated calls accumulate rather than replace, so a caller can build
 // the list across several options.
 func WithExtension(exts ...Extension) AppOption {
 	return func(o *appOptions) { o.extensions = append(o.extensions, exts...) }
+}
+
+// renderApproval produces the question to ask about a pending call, giving
+// each registered renderer a look before falling back to the built-in format.
+//
+// First claim wins, in registration order, matching how middleware is ordered
+// rather than how Commands collide. Commands can refuse a duplicate because a
+// name is known at registration; a renderer decides per call, so two claiming
+// the same one cannot be detected until it happens, and failing a turn at that
+// point would be worse than picking the first.
+//
+// A renderer that returns an empty string is treated as having declined,
+// because an empty approval prompt asks the user to confirm nothing.
+func (a *App) renderApproval(ctx context.Context, info agent.ToolCallInfo) string {
+	for _, r := range a.approvalRenderers {
+		if r == nil {
+			continue
+		}
+		if text, ok := r(ctx, info); ok && text != "" {
+			return text
+		}
+	}
+	return approvalPrompt(info)
 }
 
 // startExtensionTurns runs every extension's TurnStart, in registration
@@ -183,6 +254,7 @@ func (a *App) applyExtensions(exts []Extension) ([]agent.ToolMiddleware, error) 
 		mw = append(mw, ext.Middleware()...)
 		a.promptBuilder.Sections = append(a.promptBuilder.Sections, ext.PromptSections()...)
 		a.context.transient = append(a.context.transient, ext.ContextStages()...)
+		a.approvalRenderers = append(a.approvalRenderers, ext.ApprovalRenderers()...)
 
 		for _, cmd := range ext.Commands() {
 			// Register overwrites silently, which is the wrong behaviour for

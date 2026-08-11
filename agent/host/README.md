@@ -51,6 +51,45 @@ stay out of the lean `agent/` module.
   nothing; persistence failures degrade to a rendered warning, never a turn
   failure.
 
+## Approval prompts
+
+The question a user is asked before a gated tool call runs is rendered by the
+host, and by default reads:
+
+```
+Allow tool call "edit_file" with {"path":"main.go","edits":[{"old":"func Old…?
+```
+
+That is right for a tool whose arguments are an opaque payload, and wrong for
+one whose arguments *are* the thing being reviewed. The default trims them to
+200 characters, so a real edit is unreviewable by construction and the user is
+answering a question they cannot evaluate.
+
+An extension supplies its own rendering for the tools it owns:
+
+```go
+func (e *Extension) ApprovalRenderers() []host.ApprovalRenderer {
+    return []host.ApprovalRenderer{func(ctx context.Context, info agent.ToolCallInfo) (string, bool) {
+        if info.Call.Name != "edit_file" {
+            return "", false          // not mine — next renderer, then the default
+        }
+        return renderDiff(info), true
+    }}
+}
+```
+
+Renderers are consulted in registration order and the first claim wins; the
+built-in format is the fallback, so a renderer only has to handle what it
+knows. Truncation becomes the renderer's decision, which is the point.
+
+`agent/ext/files` is the worked example: it renders an edit as a diff and a
+whole-file write as a capped preview.
+
+Two properties worth knowing. The `info` carries the call **as it will
+execute**, after every middleware has rewritten the arguments, so what the user
+approves is what runs. And a renderer that returns an empty string is treated
+as having declined, because an empty prompt asks the user to confirm nothing.
+
 ## Skills trust model
 
 Skills are data, not code (`ext/skills` is enforced no-exec), so the risk a

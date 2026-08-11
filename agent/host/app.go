@@ -117,6 +117,10 @@ type App struct {
 	// so per-turn lifecycle (TurnStart) can reach them.
 	extensions []Extension
 
+	// approvalRenderers are collected from the extensions in registration
+	// order and consulted before the built-in prompt format.
+	approvalRenderers []ApprovalRenderer
+
 	// toolOrigins records what each source id IS, so spotlight provenance is
 	// derived from where a tool came from rather than restated in config.
 	// Recorded where sources are added, because that is the only place the
@@ -334,7 +338,7 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	// The approval "ask" prompt rides the same FIFO seam as elicitation, so a
 	// gated tool call never stacks a dialog against a concurrent elicitation.
 	ask := func(ctx context.Context, info agent.ToolCallInfo) (bool, error) {
-		return coord.Confirm(ctx, approvalPrompt(info))
+		return coord.Confirm(ctx, app.renderApproval(ctx, info))
 	}
 	app.approval = cfg.Approval.buildApproval(ask)
 

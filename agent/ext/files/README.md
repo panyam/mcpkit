@@ -174,6 +174,33 @@ told anchors must be unique will keep sending single-word anchors and keep
 being refused, so shipping the tools alone would make the contract
 discoverable only by failing.
 
+## What the approval prompt shows
+
+When a write is gated, the host asks before it runs. Its default rendering is a
+call's JSON trimmed to 200 characters, which for an edit truncates the one
+thing you are being asked to judge:
+
+```
+Allow tool call "edit_file" with {"path":"main.go","expect_hash":"dcf19a8dce4a"…
+```
+
+This extension renders its own writes instead, so the question is about the
+change rather than the arguments:
+
+```
+Apply 2 change(s) to main.go?
+
+  - func Old() {}
+  + func New() {}
+
+  - return nil
+  + return fmt.Errorf("not implemented")
+```
+
+A whole-file write shows a capped preview and says whether it creates or
+replaces, since those differ by whether anything is destroyed. Everything this
+package does not own falls through to the host default untouched.
+
 ## Undo, and why there is no Reverser here
 
 An edit is checkpointable through `agent/ext/checkpoint`, but this package
