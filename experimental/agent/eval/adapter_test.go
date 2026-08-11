@@ -279,3 +279,64 @@ func TestLoadSuite(t *testing.T) {
 		t.Fatalf("got (%d cases, %v, %v)", len(suite.Cases), ok, err)
 	}
 }
+
+// TestDimensionsAggregatesByScorerName covers the rollup #1060 needed and
+// #1015 deliberately deferred: two independent dimensions counted separately
+// rather than collapsed into one case verdict.
+func TestDimensionsAggregatesByScorerName(t *testing.T) {
+	report := SuiteReport{Cases: []CaseReport{
+		{Case: "a", Scores: []Score{{Name: "utility", Pass: true}, {Name: "security", Pass: false}}},
+		{Case: "b", Scores: []Score{{Name: "utility", Pass: true}, {Name: "security", Pass: true}}},
+		{Case: "c", Scores: []Score{{Name: "utility", Pass: false}, {Name: "security", Pass: true}}},
+	}}
+
+	dims := report.Dimensions()
+	if len(dims) != 2 {
+		t.Fatalf("expected 2 dimensions, got %+v", dims)
+	}
+	// First-seen order, so a report reads in the order the scorers ran.
+	if dims[0].Name != "utility" || dims[1].Name != "security" {
+		t.Errorf("dimensions should keep first-seen order, got %q then %q", dims[0].Name, dims[1].Name)
+	}
+	if dims[0].Passed != 2 || dims[0].Failed != 1 || dims[0].Total != 3 {
+		t.Errorf("utility = %+v", dims[0])
+	}
+	if dims[1].Passed != 2 || dims[1].Failed != 1 || dims[1].Total != 3 {
+		t.Errorf("security = %+v", dims[1])
+	}
+	if got := dims[0].Rate(); got < 0.66 || got > 0.67 {
+		t.Errorf("utility rate = %v, want ~0.667", got)
+	}
+}
+
+// TestDimensionsHandlesPartialGrading pins that a dimension only some cases
+// carry reports a smaller Total rather than counting ungraded cases as failures.
+func TestDimensionsHandlesPartialGrading(t *testing.T) {
+	report := SuiteReport{Cases: []CaseReport{
+		{Case: "a", Scores: []Score{{Name: "utility", Pass: true}, {Name: "security", Pass: true}}},
+		{Case: "b", Scores: []Score{{Name: "utility", Pass: true}}},
+		{Case: "c", RunErr: "boom"},
+	}}
+
+	dims := report.Dimensions()
+	byName := map[string]DimensionReport{}
+	for _, d := range dims {
+		byName[d.Name] = d
+	}
+	if got := byName["utility"].Total; got != 2 {
+		t.Errorf("utility Total = %d, want 2", got)
+	}
+	if got := byName["security"].Total; got != 1 {
+		t.Errorf("security Total = %d, want 1: a case that did not carry the dimension is not a failure of it", got)
+	}
+}
+
+// TestDimensionsEmpty pins the zero cases.
+func TestDimensionsEmpty(t *testing.T) {
+	if got := (SuiteReport{}).Dimensions(); len(got) != 0 {
+		t.Errorf("expected no dimensions, got %+v", got)
+	}
+	if got := (DimensionReport{}).Rate(); got != 0 {
+		t.Errorf("an ungraded dimension has rate 0, not a divide by zero: %v", got)
+	}
+}

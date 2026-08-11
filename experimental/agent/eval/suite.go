@@ -197,3 +197,66 @@ func (r SuiteReport) String() string {
 	}
 	return b.String()
 }
+
+// DimensionReport is one scorer name's outcome across a whole suite.
+type DimensionReport struct {
+	// Name is the scorer name these counts aggregate.
+	Name string `json:"name"`
+
+	// Passed and Failed count the cases carrying a verdict under this name.
+	// Total is their sum, and is not necessarily the suite's case count: a
+	// dimension only some cases are graded on has a smaller Total.
+	Passed int `json:"passed"`
+	Failed int `json:"failed"`
+	Total  int `json:"total"`
+}
+
+// Rate is the fraction of graded cases that passed this dimension, 0 when
+// nothing was graded on it.
+func (d DimensionReport) Rate() float64 {
+	if d.Total == 0 {
+		return 0
+	}
+	return float64(d.Passed) / float64(d.Total)
+}
+
+// Dimensions aggregates verdicts by scorer name, in first-seen order.
+//
+// Passed/Failed on SuiteReport count whole cases, where a case passes only if
+// every one of its scorers passed. That is the right aggregate for a benchmark
+// asking one question per case, and the wrong one for a suite reporting
+// several independent rates: a security suite measures whether the agent did
+// the user's job AND whether it resisted an injected instruction, and those
+// move independently. Collapsing them loses the quadrant that matters most,
+// the run that succeeded at the task while also obeying the attacker.
+//
+// This is deliberately a method over data CaseReport already carries rather
+// than new fields, so a suite that does not need it is unaffected and nothing
+// had to be re-plumbed to add it. Whether a dimension reads better inverted
+// (an attack-success rate is 1-Rate of a "resisted" dimension) is the caller's
+// presentation decision, not something encoded here.
+func (r SuiteReport) Dimensions() []DimensionReport {
+	var order []string
+	byName := map[string]*DimensionReport{}
+	for _, c := range r.Cases {
+		for _, s := range c.Scores {
+			d, ok := byName[s.Name]
+			if !ok {
+				d = &DimensionReport{Name: s.Name}
+				byName[s.Name] = d
+				order = append(order, s.Name)
+			}
+			d.Total++
+			if s.Pass {
+				d.Passed++
+			} else {
+				d.Failed++
+			}
+		}
+	}
+	out := make([]DimensionReport, 0, len(order))
+	for _, name := range order {
+		out = append(out, *byName[name])
+	}
+	return out
+}
