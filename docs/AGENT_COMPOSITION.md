@@ -264,7 +264,7 @@ Two layers, split on A6:
   (level 3). Same progressive-disclosure shape as two-tier skills (#910). It
   traffics only in protocol objects, so it is not agent-layer.
 
-- **Bridge → `agent/` + `agent/host`** (issue 1144): consuming a resolved
+- **Bridge → `experimental/agent/` + `experimental/agent/host`** (issue 1144): consuming a resolved
   agent needs a model + a turn, so it is agent-layer.
   - `agent.NewServerAgentSource` (adapter, dep-free of the experimental module)
     takes the *decoded pieces* — `Instructions string`, `Tools []core.ToolDef`,
@@ -275,7 +275,7 @@ Two layers, split on A6:
     the agent's definition did not scope is `ErrUnknownTool` from the child —
     the capability boundary that keeps a server-advertised agent to its declared
     scope, not the server's whole `tools/list`.
-  - The host (`agent/host/server_agents.go`) discovers each connected server's
+  - The host (`experimental/agent/host/server_agents.go`) discovers each connected server's
     roster and adds a **lazy delegate per agent** (`serverAgentSource`) to the
     main aggregate. `agents/get` fires only on first delegation (cached after),
     so the scoped schemas resolve into the *child* Runner and never enter the
@@ -292,11 +292,11 @@ SEP-414 spans/metrics.
 
 ## Constraints this model respects
 
-- **A6** (model-facing → `agent/`): `AgentSource`, `Team`, and the future
-  control meta-tools are all model-facing, so they live in `agent/`.
+- **A6** (model-facing → `experimental/agent/`): `AgentSource`, `Team`, and the future
+  control meta-tools are all model-facing, so they live in `experimental/agent/`.
 - **A2** (wire-serializable events): nesting rides the `SubAgentEvent`
   envelope (scope/depth on the wrapper); `Event` stays flat.
-- **A1** (dependency direction): composition is pure `agent/` over `Runner` +
+- **A1** (dependency direction): composition is pure `experimental/agent/` over `Runner` +
   `ToolSource`; no new upward deps.
 - **A7** (no shared sub-agent memory): a persona is built over the server-only
   `serverTools`, never the memory-bearing aggregate; parent-to-child is params
@@ -348,7 +348,7 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
   **SHIPPED, epic closed**. Load-bearing facts: (A) signals are
   **non-referential** — a child reports only its own state, never names a
   sibling; the parent holds the fan-out inventory and decides. The ctx sink is
-  **two-key** (`agent/signal.go`): `dispatchSinkKey` (a dispatch's sink for its
+  **two-key** (`experimental/agent/signal.go`): `dispatchSinkKey` (a dispatch's sink for its
   own children) + `parentSinkKey` (snapshotted by `AgentSource.Call`), so a
   child raises to its *spawner*, not its own dispatch sink — a grandchild
   reaches its immediate parent (a single-key design was a real bug caught before
@@ -384,7 +384,7 @@ Host: `SubAgentConfig.Async` builds it; demoed as `deep_researcher` in
   `HostSubAgentEvent`). Map-style fan-out (distribute distinct subtasks) was NOT
   part of 1033 — `FanOutSource` broadcasts one task to all members; a distinct-
   subtask variant is a separate future item if wanted.
-- Surface: declarative `agent/host` + agentchat multi-agent config and nested
+- Surface: declarative `experimental/agent/host` + agentchat multi-agent config and nested
   rendering (1031, part 2).
 
 **Phase 4 (workflows, 928)** is the *durable* version of the control axis: when

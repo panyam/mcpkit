@@ -1,6 +1,6 @@
 # mcpkit Agent SDK — Competitive Status & Gap Analysis
 
-**What this is.** A living assessment of the mcpkit `agent/` host layer against (a) general agent
+**What this is.** A living assessment of the mcpkit `experimental/agent/` host layer against (a) general agent
 frameworks (Mastra, Eino, Genkit-Go, langchaingo, swarmgo, agno-Go) and (b) real coding-agent loops
 (Claude Code, Cursor, Gemini CLI, aider, Codex, OpenCode, and the Pi / oh-my-pi line). The first edition (below the fold) framed
 these as "what would it take to build a complete agent SDK." **Most of that roadmap has now shipped**
@@ -8,7 +8,7 @@ these as "what would it take to build a complete agent SDK." **Most of that road
 distinguishing **tracked** gaps (open issues) from **untracked** ones.
 
 **Status snapshot:** `main` as of 2026-07 (post the Phase 0–3 stack; issues #929–#1044). Method:
-direct inventory of `agent/` source + open-issue sweep. Verdicts respect `agent/CONSTRAINTS.md`
+direct inventory of `experimental/agent/` source + open-issue sweep. Verdicts respect `experimental/agent/CONSTRAINTS.md`
 (A1 dependency direction, A2 wire-serializability, A6 mechanism-vs-policy layering).
 
 ---
@@ -28,7 +28,7 @@ wire-serializability**, and **zero-overhead SEP-414 tracing**.
 not-planned).** A code-driven workflow engine has no AI in it, is a commodity (Temporal / Step Functions
 territory), is the *dual* of the model-driven agent loop rather than an extension of it, and the
 canonical workflow patterns already build on shipped primitives (§7). The decision is recorded as
-constraint **A8** in `agent/CONSTRAINTS.md`. The remaining phases stay open as epics, with **Phase 5
+constraint **A8** in `experimental/agent/CONSTRAINTS.md`. The remaining phases stay open as epics, with **Phase 5
 re-scoped by constraint A9** (its Anthropic caching/thinking child #953 was dropped as loop-invisible;
 logprob #1053 stays as a loop-visible agent capability; grammar #1054 is a marginal deferred enhancement):
 **Phase 5 — provider control & decoding fidelity** (#1050: logprob #1053, grammar decoding #1054), **Phase 6 —
@@ -44,7 +44,7 @@ shipped primitives remains (mostly tracked).
 genuinely new **agent-layer** primitives we lack — **mid-turn stream-rule steering** (#1147) and a
 **critic/observer model role** (#1148) — now filed. The rest of that product's moat (hash-anchored edit
 format, LSP-in-writes, DAP, a ~55k-LoC in-process Rust tool core, browser) is the **coding-surface**
-layer we deliberately scope to a coding agent built *on* `agent/`, not `agent/` itself (#1059). It is
+layer we deliberately scope to a coding agent built *on* `experimental/agent/`, not `experimental/agent/` itself (#1059). It is
 the clearest evidence yet that #1059 is a real decision, and that harness/tool quality is a first-order
 differentiator. See §4.
 
@@ -59,7 +59,7 @@ frame decides what belongs here, and it settled #1059.
 a separate module.** Working through what a coding agent actually is, essentially none of it is loop
 machinery: edit/search/bash tools are a `ToolSource`, sandboxing is a wrapper, a repo map is a
 `PromptSection`, LSP is a tool plus an `AfterToolCall` middleware, checkpointing is middleware plus a
-command. Roughly tools 60%, prompts 25%, harness 15% — and the harness slice is what `agent/` already
+command. Roughly tools 60%, prompts 25%, harness 15% — and the harness slice is what `experimental/agent/` already
 is. §4a reached the same place from the other side: oh-my-pi's moat was a large in-process tool core,
 not a better loop.
 
@@ -109,17 +109,17 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 
 | Area | Status | As-built (file) | Remaining |
 |---|---|---|---|
-| **Tool-call interception (hooks) + permission ladder** | ✅ #929 | `agent/toolhook.go` — `ToolHook` (`BeforeTool` may rewrite args or deny, `AfterTool` may rewrite the result), `RunnerConfig.ToolHooks`, ordered, deny short-circuits. `agent/approval.go` — `TieredApproval` is a hook, not a parallel seam: `ApprovalMode` {AlwaysAsk/ReadOnlyAuto/AlwaysAllow} + per-tool `RuleAsk/Allow/Deny`; "ask" routes through `ElicitationCoordinator.Confirm`; `EventToolDenied`; host `/approve`, appended last | — |
-| **Anthropic-native provider** | ✅ #930 | `agent/anthropic_provider.go` — no-SDK, content-block↔Delta, `thinking_delta`→reasoning; structured output via forced synthetic tool | Deliberately **minimal** (constraint A9). Caching/extended-thinking **dropped (not-planned, #953)** — provider-client features below the loop; wrap the official SDK if ever needed. |
+| **Tool-call interception (hooks) + permission ladder** | ✅ #929 | `experimental/agent/toolhook.go` — `ToolHook` (`BeforeTool` may rewrite args or deny, `AfterTool` may rewrite the result), `RunnerConfig.ToolHooks`, ordered, deny short-circuits. `experimental/agent/approval.go` — `TieredApproval` is a hook, not a parallel seam: `ApprovalMode` {AlwaysAsk/ReadOnlyAuto/AlwaysAllow} + per-tool `RuleAsk/Allow/Deny`; "ask" routes through `ElicitationCoordinator.Confirm`; `EventToolDenied`; host `/approve`, appended last | — |
+| **Anthropic-native provider** | ✅ #930 | `experimental/agent/anthropic_provider.go` — no-SDK, content-block↔Delta, `thinking_delta`→reasoning; structured output via forced synthetic tool | Deliberately **minimal** (constraint A9). Caching/extended-thinking **dropped (not-planned, #953)** — provider-client features below the loop; wrap the official SDK if ever needed. |
 | **Structured output in the loop** | ✅ #931 | finalizing `Generate` (`runner.go` `finalizeStructured`, retry×2); `RunnerConfig.ResponseSchema` → `TurnResult.Structured` | — |
-| **Eval / scorer harness** | 🟡 #974,#932 | `agent/eval/` — `Case`/`Scorer`/`Suite`/`Scenario`; 8 deterministic scorers; `Judge` (build-tagged); LongMemEval *smoke* scenarios | external-benchmark adapter **⏳ #1015**; real LongMemEval loader **⏳ #1014** |
-| **Persistence (RunStore) + fork/rewind** | ✅ #960,#962,#963,#986 | `agent/runstore.go` — full interface + `InMemoryRunStore`; redis + gorm (pg/sqlite) backends; `ForkRun{AtMessage}` checkpoint fork; `ListRuns`; `Message.Timestamp` | retention/GC **⏳ #999** |
+| **Eval / scorer harness** | 🟡 #974,#932 | `experimental/agent/eval/` — `Case`/`Scorer`/`Suite`/`Scenario`; 8 deterministic scorers; `Judge` (build-tagged); LongMemEval *smoke* scenarios | external-benchmark adapter **⏳ #1015**; real LongMemEval loader **⏳ #1014** |
+| **Persistence (RunStore) + fork/rewind** | ✅ #960,#962,#963,#986 | `experimental/agent/runstore.go` — full interface + `InMemoryRunStore`; redis + gorm (pg/sqlite) backends; `ForkRun{AtMessage}` checkpoint fork; `ListRuns`; `Message.Timestamp` | retention/GC **⏳ #999** |
 | **Per-tool-call cancellation / interrupt** | ✅ #936,#937 | `runner.go` `TurnRequest`/`Control` channel (per-`CallID`); `EventToolCancelled` | — |
-| **Working memory** | ✅ #938,#1003,#1140 | `agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore`; durable + per-request `Namespace` backends (redis/gorm, #1003); session-scoping by run id (#1140) | sub-agent memory model (injection over shared store) **#1151** |
-| **Semantic recall (vector)** | ✅ #940,#1019 | `agent/embedder.go` (`Embedder`, `OpenAIEmbedder`), `agent/semantic_memory.go` (`InMemorySemanticStore`), gorm **pgvector** store; pre-turn recall auto-injection | standalone doc-RAG VectorStore **⏳ #1021**; reranker **⏳ #1020**; auto-distillation **⏳ #1022** |
-| **Compaction / summarization** | 🟡 #939,#1011 | `agent/compaction.go` — `SummarizingCompactor`, `TokenEstimator`/`CharTokenEstimator`, `EventCompaction`; pre-loop hook; budgeted summary injection | mid-turn compaction **⏳ #1006**; real tokenizer **⏳ #1007** |
-| **Tool-result offloading (context mgmt)** | ✅ #966,#971,#972 | `agent/offloading_source.go` + `ToolResultStore` (mem/redis/gorm); `read_tool_result` (offset/limit/grep) | streaming/handle-based very-large results **⏳ #980,#979** |
-| **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031,#1032,#1033,#1035,#1036,#1042 | `agent/agent_source.go` (`AgentSource`, depth+budget caps, structured I/O), `agent/async_agent_source.go` (`AsyncAgentSource` Task form, #1035), `agent/fanout_source.go` (`FanOutSource`, #1033), `agent/team.go` (`Team` handoff + host wiring + tagging, #1042), `agent/tree_budget.go` (`TreeBudget` aggregate cap, #1032), `agent/signal.go` + `agent/agent_pool.go` (upward signals + runner-control pool + interruptible turn, #1036), `SubAgentEvent` nesting, declarative host personas | dynamic catalog #1038, nested config #1043, interaction mediator #1157, map-style fan-out (unfiled) |
+| **Working memory** | ✅ #938,#1003,#1140 | `experimental/agent/memory.go` — `MemorySource` remember/recall/forget; `Summary`/`RecallRelevant`; `InMemoryMemoryStore`; durable + per-request `Namespace` backends (redis/gorm, #1003); session-scoping by run id (#1140) | sub-agent memory model (injection over shared store) **#1151** |
+| **Semantic recall (vector)** | ✅ #940,#1019 | `experimental/agent/embedder.go` (`Embedder`, `OpenAIEmbedder`), `experimental/agent/semantic_memory.go` (`InMemorySemanticStore`), gorm **pgvector** store; pre-turn recall auto-injection | standalone doc-RAG VectorStore **⏳ #1021**; reranker **⏳ #1020**; auto-distillation **⏳ #1022** |
+| **Compaction / summarization** | 🟡 #939,#1011 | `experimental/agent/compaction.go` — `SummarizingCompactor`, `TokenEstimator`/`CharTokenEstimator`, `EventCompaction`; pre-loop hook; budgeted summary injection | mid-turn compaction **⏳ #1006**; real tokenizer **⏳ #1007** |
+| **Tool-result offloading (context mgmt)** | ✅ #966,#971,#972 | `experimental/agent/offloading_source.go` + `ToolResultStore` (mem/redis/gorm); `read_tool_result` (offset/limit/grep) | streaming/handle-based very-large results **⏳ #980,#979** |
+| **Sub-agents (agent-as-tool)** | ✅ #941,#942,#943,#1031,#1032,#1033,#1035,#1036,#1042 | `experimental/agent/agent_source.go` (`AgentSource`, depth+budget caps, structured I/O), `experimental/agent/async_agent_source.go` (`AsyncAgentSource` Task form, #1035), `experimental/agent/fanout_source.go` (`FanOutSource`, #1033), `experimental/agent/team.go` (`Team` handoff + host wiring + tagging, #1042), `experimental/agent/tree_budget.go` (`TreeBudget` aggregate cap, #1032), `experimental/agent/signal.go` + `experimental/agent/agent_pool.go` (upward signals + runner-control pool + interruptible turn, #1036), `SubAgentEvent` nesting, declarative host personas | dynamic catalog #1038, nested config #1043, interaction mediator #1157, map-style fan-out (unfiled) |
 | **Host surface** | ✅ #984–#992 | slash-command registry, `ConnectionRegistry` + runtime `/provider`, `HostEvent`/`Observer` render seam, notebook renderer (#1001), interactive `/mcp` + `/sessions` overlay (#1095, `focusLayer`/`modalHost` seam + `client.Group.Reconnect`), per-server tool view (#1117) + oauth login action / authorization-code auth type (#1116, #907), dialog stack for nested-overlay back-nav (#1124), color accessibility (#1125), bubbletea TUI, playground | context-assembly pipeline **⏳ #1024,#1026**; remaining TUI-track items (dimmed-base compositing, grapheme width, `WindowSizeMsg` fan-out) **⏳ #1063** |
 | **Observability** | ✅ | SEP-414 tracing (`agent.turn/step/tool`, `agent.memory.recall`) + OTel **metrics** (#1023 — turn/step/token/tool counters + duration histograms via `RunnerConfig.MeterProvider`, `host.WithMeterProvider`, agentchat `SetupMeter`, `mcpkit-agent` Grafana dashboard) | — |
 | **Durable workflows / graphs (Phase 4)** | ❌ **dropped (not-planned, 2026-08-04)** | — | Not building an engine (constraint A8). Workflow patterns build on shipped primitives (§7); durable orchestration → integrate a dedicated engine. #928/#944/#945/#946 closed not-planned. |
@@ -127,7 +127,7 @@ Legend: ✅ shipped · 🟡 partial/shipped-with-follow-ups · ⏳ tracked (open
 | **Provider control & decoding fidelity (Phase 5)** | ⏳ #1050 (re-scoped by A9) | structured output via finalizing `Generate`; generation parameters reachable from a turn via `RunnerConfig.Generation` / `TurnRequest.Generation` (#1239 — temperature, token cap, tool choice; before it, three of the four `ProviderRequest` parameters could not be set on a Runner at all) | logprob/token-confidence **#1053** — **loop-visible** (routing/abstention/cascade), kept as agent-SDK work; OpenAI-wire/local, not Anthropic. Grammar/guided decoding **#1054** — deferred (marginal). Anthropic caching/thinking **dropped (#953, loop-invisible)**. |
 | **Test-time compute (Phase 6)** | ⏳ #1051 | `#1033` `FanOutSource` already gives N concurrent runs, member ordering, failure isolation, and a pluggable `Aggregate` hook | sampling/vote **#1056** — re-scoped down to two aggregators over that hook (see §5a); `FailoverProvider` quality trigger **#1057**, blocked on #1053 |
 | **Safety & guardrails (Phase 7)** | 🟡 #1052 | approval ladder (#929) + reversibility as an axis distinct from `readOnlyHint` **✅ #1260** (`ModeReversibleAuto`); `ToolMiddleware` is the interception seam guardrails attach to; prompt-injection spotlighting **✅ #1058**, now provenance-labelled rather than a trusted bool **✅ #1262** (only `operator` exempts — trusting a relay is not trusting what it relayed); reversal seam + file checkpoints + model-proposed undo **✅ #1267** (constraint A11: only a true inverse runs unattended); provenance derived from a tool's source rather than restated in config **✅ #1268** (`operator` is a closed allowlist — an extension is never vouched for by derivation) | efficacy against a live model is unproven by unit tests — needs the AgentDojo suite **#1060**, which is also what would show whether differentiated fences beat one fence, and what would make **#1269** (provenance as an approval key) worth building; constitutional gate **#1061**; no label for in-process-but-unvouched output **#1273** |
-| **Coding surface (sandboxing, hooks, repo map, LSP)** | 🟡 **decided** — #1059 closed | Hooks landed in `agent/` as `ToolMiddleware` (#1248). The rest are an **extension** over the general harness, not a separate module: epic **#1252**. First child shipped: file checkpoint / rewind **✅ #1267** in `agent/ext/checkpoint`, the first real `host.Extension` — building it found the contract had no lifecycle hook, so `TurnStart` was added. Anchored edit primitive **✅ #1275** in `agent/ext/files`: content anchors locate a hunk, a content hash detects the file changing underneath, and neither substitutes for the other. It landed as `files` rather than `coding` because nothing in it is code-aware, which splits the epic's children along a line worth keeping. Toolset completed **✅ #1284** — `write_file` (no create-or-overwrite mode; `expect_hash` alone separates create from replace), plus `list_files` / `search_files`, so an agent can find what it edits | Remaining #1252 children, now sorted by whether they need to understand code: **code-aware** (a future `agent/ext/coding`) repo map, LSP-in-loop, test/build loop; **not code-aware** sandboxed execution; **blocked** diff-level review (needs #1253). **LSP-in-loop is also the natural first consumer of `ContextStages`** — the one `host.Extension` seam nothing implements, which #1240 should settle before the freeze rather than after. Host decomposition **#1251** runs in parallel |
+| **Coding surface (sandboxing, hooks, repo map, LSP)** | 🟡 **decided** — #1059 closed | Hooks landed in `experimental/agent/` as `ToolMiddleware` (#1248). The rest are an **extension** over the general harness, not a separate module: epic **#1252**. First child shipped: file checkpoint / rewind **✅ #1267** in `experimental/agent/ext/checkpoint`, the first real `host.Extension` — building it found the contract had no lifecycle hook, so `TurnStart` was added. Anchored edit primitive **✅ #1275** in `experimental/agent/ext/files`: content anchors locate a hunk, a content hash detects the file changing underneath, and neither substitutes for the other. It landed as `files` rather than `coding` because nothing in it is code-aware, which splits the epic's children along a line worth keeping. Toolset completed **✅ #1284** — `write_file` (no create-or-overwrite mode; `expect_hash` alone separates create from replace), plus `list_files` / `search_files`, so an agent can find what it edits | Remaining #1252 children, now sorted by whether they need to understand code: **code-aware** (a future `experimental/agent/ext/coding`) repo map, LSP-in-loop, test/build loop; **not code-aware** sandboxed execution; **blocked** diff-level review (needs #1253). **LSP-in-loop is also the natural first consumer of `ContextStages`** — the one `host.Extension` seam nothing implements, which #1240 should settle before the freeze rather than after. Host decomposition **#1251** runs in parallel |
 
 **Bottom line:** Phases 0–3 are effectively **done**. Phase 4 (workflows) was evaluated and **dropped**
 — not a gap, a deliberate non-goal (constraint A8). Three structural phases stay open and fully scoped
@@ -183,7 +183,7 @@ them as extension points. **oh-my-pi** (`can1357/oh-my-pi`, Can Bölük) is a TS
 format, a ~55k-LoC Rust core — and is currently the most feature-complete *open* coding-agent surface.
 
 The pairing is instructive for us in two ways. First, **Pi is the closer philosophical peer to
-`agent/`** (a lean, embeddable, extension-first harness with the same four surfaces), while oh-my-pi is
+`experimental/agent/`** (a lean, embeddable, extension-first harness with the same four surfaces), while oh-my-pi is
 precisely the *coding agent built on top* — the #1059 shape. Second, **mcpkit is already ahead of
 upstream Pi on MCP-native operation and sub-agents**: Pi omits both by design; the fork had to bolt them
 on, and MCP is one integration among many rather than the native fabric. So the comparison below is
@@ -193,16 +193,16 @@ Mastra/Eino-style library.
 oh-my-pi's explicit thesis — *the harness, not the model, decides* — is worth taking seriously: it
 reports multi-fold first-attempt-edit and token-efficiency lifts on the *same weights* purely from a
 better edit format and tool ergonomics. That validates our tool-layer investment, but it also draws the
-line sharply: **`agent/` ships no tool implementations at all** (it is the SDK substrate), so most of
+line sharply: **`experimental/agent/` ships no tool implementations at all** (it is the SDK substrate), so most of
 what makes that product good is the coding-*surface* layer we scope to #1059.
 
 Mapping its surface onto our status and the A6 layering line:
 
-| oh-my-pi capability | Nature | mcpkit `agent/` status |
+| oh-my-pi capability | Nature | mcpkit `experimental/agent/` status |
 |---|---|---|
 | Hash-anchored edit format (content-hash anchors, stale-anchor reject) | coding-surface | out of SDK scope → **#1059** (the SDK has no edit tool; a coding agent built on it would) |
 | LSP-in-writes (rename via `willRenameFiles`), DAP debugger, AST edits | coding-surface | out of scope → **#1059** |
-| ~55k-LoC in-process Rust core (ripgrep/glob/shell/PTY/AST, no fork-exec) | coding-surface / perf | out of scope → **#1059**; `agent/` is provider+loop, transport-agnostic by design |
+| ~55k-LoC in-process Rust core (ripgrep/glob/shell/PTY/AST, no fork-exec) | coding-surface / perf | out of scope → **#1059**; `experimental/agent/` is provider+loop, transport-agnostic by design |
 | Browser / computer-use, web_search, GitHub-as-filesystem, `://` resource schemes | coding-surface | out of scope → tool authoring on top of the SDK |
 | **Mid-turn stream-rule steering** (regex/AST over the *output* stream → abort → inject rule → retry within the turn; fired-state survives compaction) | **agent-layer** | **not shipped → newly filed #1147.** Our injection is turn-boundary only; the delta scanner (#989) is the hook |
 | **Critic/observer model** (second model on its own context reviews each turn, injects graded steering: aside/concern/blocker; cannot approve/deny) | **agent-layer** | **not shipped → newly filed #1148.** Composable on Observer #992 + AgentSource #941 + Control #936, but not a role yet |
@@ -217,7 +217,7 @@ are at or behind-by-a-tracked-issue, not behind in kind. Two real agent-layer ga
 (#1147, #1148) and are filed. Everything else that makes the product impressive is coding-surface or
 provider-routing-we-have-scheduled. The strategic signal is not "we are behind on the SDK"; it is that
 **the coding-surface layer (#1059) is where a large share of end-user value lives**, and a product-grade
-coding agent on top of `agent/` is the thing that would actually compete — the SDK is necessary but not
+coding agent on top of `experimental/agent/` is the thing that would actually compete — the SDK is necessary but not
 sufficient.
 
 ---
@@ -316,9 +316,9 @@ shim:
 | **SWE-bench Verified** | end coding-task resolution | near-zero (predictions JSONL); adopt when a coding agent exists |
 | **AgentDojo** | prompt-injection security | optional; pairs with the §5b spotlighting gap |
 
-**Shape for the eval harness:** the internal `agent/eval` harness (StubProvider + spans, ✅ shipped) is
+**Shape for the eval harness:** the internal `experimental/agent/eval` harness (StubProvider + spans, ✅ shipped) is
 the CI gate; the **external-benchmark adapter (#1015)** — starting with BFCL — is the missing second
-layer. mcpkit's own `agent/eval` scorer harness is itself a differentiator: only Genkit matches it in
+layer. mcpkit's own `experimental/agent/eval` scorer harness is itself a differentiator: only Genkit matches it in
 the Go field.
 
 ---
@@ -372,15 +372,15 @@ build on shipped primitives — the "experiment with SOTA agent strategies on mc
 
 | Area | Files |
 |---|---|
-| Loop / approval / cancel / structured | `agent/runner.go`, `agent/approval.go` |
-| Providers | `agent/provider.go`, `agent/anthropic_provider.go`, `agent/openai_provider.go`, `agent/failover.go` |
-| Memory | `agent/memory.go`, `agent/semantic_memory.go`, `agent/embedder.go`, `agent/compaction.go` |
-| Persistence / offloading | `agent/runstore.go`, `agent/toolresultstore.go`, `agent/offloading_source.go`, `agent/store/{redis,gorm}` |
-| Multi-agent | `agent/agent_source.go`, `agent/team.go` |
-| Eval | `agent/eval/` (`eval.go`, `scorer.go`, `judge.go`, `suite.go`, `scenario.go`, `longmemeval/`) |
-| Tool layer / events / policies | `agent/toolsource.go`, `agent/multi_source.go`, `agent/filter_source.go`, `agent/events.go`, `agent/injection.go`, `agent/triggers.go`, `agent/stages.go` |
-| Host surface | `agent/host/` (`commands.go`, `connections.go`, `render.go`, `hostevent.go`, `memory.go`, `subagents.go`, `persistence.go`), `agent/surfaces/chat/` |
-| Invariants | `docs/AGENT_DESIGN.md`, `agent/CONSTRAINTS.md` |
+| Loop / approval / cancel / structured | `experimental/agent/runner.go`, `experimental/agent/approval.go` |
+| Providers | `experimental/agent/provider.go`, `experimental/agent/anthropic_provider.go`, `experimental/agent/openai_provider.go`, `experimental/agent/failover.go` |
+| Memory | `experimental/agent/memory.go`, `experimental/agent/semantic_memory.go`, `experimental/agent/embedder.go`, `experimental/agent/compaction.go` |
+| Persistence / offloading | `experimental/agent/runstore.go`, `experimental/agent/toolresultstore.go`, `experimental/agent/offloading_source.go`, `experimental/agent/store/{redis,gorm}` |
+| Multi-agent | `experimental/agent/agent_source.go`, `experimental/agent/team.go` |
+| Eval | `experimental/agent/eval/` (`eval.go`, `scorer.go`, `judge.go`, `suite.go`, `scenario.go`, `longmemeval/`) |
+| Tool layer / events / policies | `experimental/agent/toolsource.go`, `experimental/agent/multi_source.go`, `experimental/agent/filter_source.go`, `experimental/agent/events.go`, `experimental/agent/injection.go`, `experimental/agent/triggers.go`, `experimental/agent/stages.go` |
+| Host surface | `experimental/agent/host/` (`commands.go`, `connections.go`, `render.go`, `hostevent.go`, `memory.go`, `subagents.go`, `persistence.go`), `experimental/agent/surfaces/chat/` |
+| Invariants | `docs/AGENT_DESIGN.md`, `experimental/agent/CONSTRAINTS.md` |
 
 ---
 

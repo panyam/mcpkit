@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/panyam/demokit"
-	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/experimental/agent"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/examples/common"
 	commonotel "github.com/panyam/mcpkit/examples/common/otel"

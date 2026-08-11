@@ -10,7 +10,7 @@
 # expected to exist.
 #
 # This used to be a bash block pasted inside CONSTRAINTS.md that nothing ran.
-# A rule with an unrun verifier is a comment, and `agent/ext/` accumulated a
+# A rule with an unrun verifier is a comment, and `experimental/agent/ext/` accumulated a
 # second module while the block still only walked `ext/` and
 # `experimental/ext/` (issue 1277).
 #
@@ -23,8 +23,8 @@
 #
 #   - `replace` lines are path resolution for a multi-module repo. A replace
 #     with no matching require changes no build and is not a dependency edge.
-#   - `// indirect` requires are transitive. In this repo every agent/ext
-#     module pulls ext/auth and friends through agent/host, and calling that a
+#   - `// indirect` requires are transitive. In this repo every experimental/agent/ext
+#     module pulls ext/auth and friends through experimental/agent/host, and calling that a
 #     C4 violation would flag 16 non-problems and train everyone to ignore the
 #     check.
 #
