@@ -1,0 +1,425 @@
+package host
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/panyam/mcpkit/experimental/agent"
+	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
+)
+
+// renderer maps the agent event stream onto the terminal, line-based so
+// interleaved tool events from parallel calls stay readable. ANSI styling is
+// suppressed when the resolved color decision is off (see envColorEnabled).
+type renderer struct {
+	out      io.Writer
+	plain    bool
+	thinking bool
+	midText  bool
+}
+
+// newRenderer builds a terminal renderer. colorEnabled=false renders every
+// line plain (no ANSI dim), for a --no-color / NO_COLOR / dumb-terminal caller.
+func newRenderer(out io.Writer, colorEnabled bool) *renderer {
+	return &renderer{out: out, plain: !colorEnabled}
+}
+
+// envColorEnabled resolves the color decision from the environment alone: off
+// when NO_COLOR is present (any value, per no-color.org) or the terminal is
+// TERM=dumb, on otherwise. It is the surface-agnostic default; a CLI layers its
+// own --no-color flag on top and threads the result via NewTerminalRendererColor.
+func envColorEnabled() bool {
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		return false
+	}
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	return true
+}
+
+func (r *renderer) dim(s string) string {
+	if r.plain {
+		return s
+	}
+	return "\x1b[2m" + s + "\x1b[0m"
+}
+
+// handle is the Runner emit callback.
+func (r *renderer) handle(e agent.Event) {
+	switch e.Kind {
+	case agent.EventThinkingBegin:
+		r.breakLine()
+		r.thinking = true
+		fmt.Fprint(r.out, r.dim("· thinking: "))
+	case agent.EventThinkingDelta:
+		// Stream the reasoning text itself (dimmed), so a reasoning model's
+		// chain-of-thought is readable — not a row of dots.
+		fmt.Fprint(r.out, r.dim(e.Text))
+	case agent.EventThinkingEnd:
+		r.thinking = false
+		fmt.Fprintln(r.out)
+	case agent.EventTextDelta:
+		r.thinking = false
+		r.midText = true
+		fmt.Fprint(r.out, e.Text)
+	case agent.EventToolBegin:
+		r.breakLine()
+		fmt.Fprintf(r.out, "%s\n", r.dim("⚙ "+e.ToolCall.Name+"("+compactJSON(e.ToolCall.Args)+")"))
+	case agent.EventToolEnd:
+		status := "✓"
+		if e.ToolResult != nil && e.ToolResult.IsError {
+			status = "✗"
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim("  "+status+" "+e.ToolCall.Name+": "+snippet(resultText(e.ToolResult), 100)))
+	case agent.EventToolError:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ✗ "+e.ToolCall.Name+" failed: "+snippet(e.Error, 120)))
+	case agent.EventToolDenied:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ⃠ "+e.ToolCall.Name+" not permitted: "+snippet(e.Reason, 120)))
+	case agent.EventToolCancelled:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ◼ "+e.ToolCall.Name+" cancelled: "+snippet(e.Reason, 120)))
+	case agent.EventToolUnavailable:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ⊘ "+e.ToolCall.Name+" unavailable: "+snippet(e.Reason, 120)))
+	case agent.EventSignal:
+		fmt.Fprintf(r.out, "%s\n", r.dim("  ▲ signal "+string(e.Signal.Kind)+" from "+e.Signal.Source+": "+snippet(e.Signal.Note, 120)))
+	case agent.EventError:
+		r.breakLine()
+	}
+}
+
+// approvalMode reports the host's current approval disposition (the /approve
+// command). A nil policy means the gate is off (every call runs).
+func (r *renderer) approvalMode(p *agent.TieredApproval) {
+	if p == nil {
+		fmt.Fprintf(r.out, "%s\n", r.dim("approval: off (every tool call runs)"))
+		return
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim("approval: "+approvalModeName(p.DefaultMode())))
+}
+
+// serverList renders /servers: each MCP server and its connection state.
+func (r *renderer) serverList(servers []ServerStatus) {
+	if len(servers) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("servers: none configured"))
+		return
+	}
+	for _, s := range servers {
+		line := fmt.Sprintf("  %-14s %s", s.ID, s.State)
+		if s.Required {
+			line += " (required)"
+		}
+		if s.CanLogin {
+			line += " (login available)"
+		}
+		if s.Err != nil {
+			line += ": " + s.Err.Error()
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim(line))
+	}
+}
+
+// serverState renders one HostServerStateChanged transition.
+func (r *renderer) serverState(id, state, errMsg string) {
+	line := "server " + id + ": " + state
+	if errMsg != "" {
+		line += " (" + errMsg + ")"
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}
+
+func (r *renderer) breakLine() {
+	if r.midText {
+		fmt.Fprintln(r.out)
+		r.midText = false
+	}
+}
+
+func (r *renderer) turnDone(res *agent.TurnResult) {
+	r.breakLine()
+	fmt.Fprintf(r.out, "%s\n", r.dim(fmt.Sprintf("— %d step(s), %d in / %d out tokens", res.Steps, res.Usage.InputTokens, res.Usage.OutputTokens)))
+}
+
+func (r *renderer) turnFailed(err error) {
+	r.breakLine()
+	fmt.Fprintf(r.out, "%s\n", "error: "+err.Error())
+}
+
+func (r *renderer) prompt() {
+	fmt.Fprint(r.out, "> ")
+}
+
+func (r *renderer) toolList(defs []core.ToolDef) {
+	for _, d := range defs {
+		fmt.Fprintf(r.out, "  %-28s %s\n", d.Name, snippet(d.Description, 80))
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(fmt.Sprintf("— %d tool(s)", len(defs))))
+}
+
+func (r *renderer) history(msgs []agent.Message) {
+	for _, m := range msgs {
+		text := m.Text
+		if text == "" && len(m.ToolCalls) > 0 {
+			text = fmt.Sprintf("(%d tool call(s))", len(m.ToolCalls))
+		}
+		fmt.Fprintf(r.out, "  [%s] %s\n", m.Role, snippet(text, 100))
+	}
+}
+
+func compactJSON(raw core.RawJSON) string {
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw.Raw()); err != nil {
+		return string(raw.Raw())
+	}
+	return snippet(buf.String(), 80)
+}
+
+func resultText(res *core.ToolResult) string {
+	if res == nil {
+		return ""
+	}
+	var parts []string
+	for _, c := range res.Content {
+		if c.Type == "text" {
+			parts = append(parts, c.Text)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func snippet(s string, n int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
+func (r *renderer) skillsLoaded(serverID string, ok, skipped int) {
+	line := fmt.Sprintf("skills: %d loaded from %s", ok, serverID)
+	if skipped > 0 {
+		line += fmt.Sprintf(", %d skipped", skipped)
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}
+
+func (r *renderer) skillSkipped(serverID, uri string, err error) {
+	fmt.Fprintf(r.out, "warning: skill %s from %s not injected: %v\n", uri, serverID, err)
+}
+
+func (r *renderer) health(f *agent.FailoverProvider) {
+	if f == nil {
+		fmt.Fprintf(r.out, "%s\n", r.dim("health: single provider, no failover configured"))
+		return
+	}
+	h := f.Health()
+	line := fmt.Sprintf("health: active=%s consecutive_failures=%d", h.Active, h.ConsecutiveFailures)
+	if h.LastError != "" {
+		line += " last_error=" + snippet(h.LastError, 80)
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim(line))
+}
+
+func (r *renderer) triggerFired(label string) {
+	fmt.Fprintf(r.out, "\n%s\n", r.dim("· trigger: "+label))
+}
+
+func (r *renderer) eventDropped(serverID, name string) {
+	fmt.Fprintf(r.out, "%s\n", r.dim("warning: event buffer full, dropped "+name+" from "+serverID))
+}
+
+func (r *renderer) taskStatus(dt *core.DetailedTask) {
+	if dt.Status == core.TaskWorking {
+		return // polling noise; begin/end and pauses are the signal
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim("  · task "+dt.TaskID+": "+string(dt.Status)))
+}
+
+func (r *renderer) taskDetached(bt *client.BackgroundTask) {
+	fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") moved to background; /tasks to manage"))
+}
+
+func (r *renderer) taskCompleted(bt *client.BackgroundTask) {
+	dt, err := bt.Result()
+	switch {
+	case err != nil:
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") ended: "+snippet(err.Error(), 80)))
+	case dt != nil && dt.Status == core.TaskFailed && dt.Error != nil:
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") failed: "+snippet(dt.Error.Message, 80)))
+	case dt != nil && dt.Result != nil:
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") completed: "+snippet(resultText(dt.Result), 80)))
+	default:
+		fmt.Fprintf(r.out, "%s\n", r.dim("· task "+bt.TaskID+" ("+bt.Tool+") "+string(dt.Status)))
+	}
+}
+
+func (r *renderer) taskList(tasks []*client.BackgroundTask) {
+	if len(tasks) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("no background tasks"))
+		return
+	}
+	for _, bt := range tasks {
+		fmt.Fprintf(r.out, "  %-12s %-20s %-16s %s\n", bt.TaskID, bt.Tool, bt.Status(), time.Since(bt.StartedAt).Round(time.Second))
+	}
+}
+
+func (r *renderer) session(runID string) {
+	if runID == "" {
+		fmt.Fprintf(r.out, "%s\n", r.dim("session: persistence off (no RunStore configured or no turn yet)"))
+		return
+	}
+	fmt.Fprintf(r.out, "%s\n", r.dim("session: "+runID))
+}
+
+func (r *renderer) sessionWarn(err error) {
+	fmt.Fprintf(r.out, "%s\n", r.dim("session: persistence degraded: "+err.Error()))
+}
+
+func (r *renderer) providers(names []string, active string) {
+	if len(names) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("providers: none configured (using the single --model)"))
+		return
+	}
+	for _, n := range names {
+		marker := "  "
+		if n == active {
+			marker = "▸ "
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim(marker+n))
+	}
+}
+
+func (r *renderer) sessions(runs []agent.RunInfo, active string) {
+	if len(runs) == 0 {
+		fmt.Fprintf(r.out, "%s\n", r.dim("no sessions yet"))
+		return
+	}
+	for _, s := range runs {
+		marker := "  "
+		if s.ID == active {
+			marker = "▸ "
+		}
+		line := fmt.Sprintf("%s%-20s %d msg", marker, s.ID, s.MessageCount)
+		if s.ParentID != "" {
+			line += fmt.Sprintf("  (forked from %s @%d)", s.ParentID, s.ForkPoint)
+		}
+		fmt.Fprintf(r.out, "%s\n", r.dim(line))
+	}
+}
+
+// command renders a CmdResult by dispatching to the shape-specific
+// renderer for its Kind — the terminal implementation of the structured
+// command output (a web surface would serialize the CmdResult instead).
+func (r *renderer) command(res CmdResult) {
+	switch res.Kind {
+	case CmdMessage:
+		fmt.Fprintf(r.out, "%s\n", r.dim(res.Message))
+	case CmdProviders:
+		r.providers(res.Providers, res.ActiveProvider)
+	case CmdSession:
+		r.session(res.RunID)
+	case CmdSessions:
+		r.sessions(res.Sessions, res.RunID)
+		if res.SessionsNote != "" {
+			fmt.Fprintf(r.out, "%s\n", r.dim(res.SessionsNote))
+		}
+	case CmdTools:
+		r.toolList(res.Tools)
+	case CmdHistory:
+		r.history(res.Messages)
+	case CmdHealth:
+		r.health(res.Failover)
+	case CmdTasks:
+		r.taskList(res.Tasks)
+	case CmdApproval:
+		r.approvalMode(res.Approval)
+	case CmdServers:
+		r.serverList(res.Servers)
+	case CmdServerTools:
+		fmt.Fprintf(r.out, "%s\n", r.dim("tools on "+res.ServerID))
+		r.toolList(res.Tools)
+	case CmdQuit:
+		// nothing to render; the loop exits
+	}
+}
+
+// On implements Observer: the terminal rendering of the host's HostEvent
+// stream. It dispatches each kind to the shape-specific formatter; the
+// formatters are unchanged, so behavior is identical to the pre-seam
+// direct calls.
+func (r *renderer) On(ev HostEvent) {
+	switch ev.Kind {
+	case HostRunnerEvent:
+		r.handle(ev.RunnerEvent)
+	case HostCommandResult:
+		r.command(ev.Command)
+	case HostTurnDone:
+		r.turnDone(ev.Result)
+	case HostTurnFailed:
+		r.turnFailed(errors.New(ev.Err))
+	case HostSessionChanged:
+		r.session(ev.RunID)
+	case HostSessionWarn:
+		r.sessionWarn(errors.New(ev.Err))
+	case HostTriggerFired:
+		r.triggerFired(ev.Label)
+	case HostSkillsLoaded:
+		r.skillsLoaded(ev.ServerID, ev.Loaded, ev.Skipped)
+	case HostSkillSkipped:
+		r.skillSkipped(ev.ServerID, ev.URI, errors.New(ev.Err))
+	case HostEventDropped:
+		r.eventDropped(ev.ServerID, ev.EventName)
+	case HostTaskStatus:
+		r.taskStatus(ev.TaskStatus)
+	case HostTaskDetached:
+		r.taskDetached(ev.Task)
+	case HostTaskCompleted:
+		r.taskCompleted(ev.Task)
+	case HostMessage:
+		fmt.Fprintf(r.out, "%s\n", r.dim(ev.Message))
+	case HostServerStateChanged:
+		r.serverState(ev.ServerID, ev.ServerState, ev.Err)
+	case HostSubAgentEvent:
+		r.subAgent(ev.SubAgent)
+	case HostHandoff:
+		fmt.Fprintf(r.out, "%s\n", r.dim("→ handed off to "+ev.To))
+	}
+}
+
+// gutter renders a dim border-left tree indent for a sub-agent at the given
+// depth (1 = top-level persona, 2 = nested), so delegation reads as a tree
+// rather than flat two-space indentation (issue 1063 B4).
+func (r *renderer) gutter(depth int) string {
+	if depth < 1 {
+		return ""
+	}
+	return r.dim(strings.Repeat("│ ", depth))
+}
+
+// subAgent renders a persona's nested activity under a border-left gutter keyed
+// to depth and tagged by scope: the tools it calls (name + compact args) and
+// its final answer. Other lifecycle events (deltas, turn boundaries) are
+// omitted to keep the nested transcript terse.
+func (r *renderer) subAgent(sa agent.SubAgentEvent) {
+	g := r.gutter(sa.Depth)
+	switch sa.Event.Kind {
+	case agent.EventToolBegin:
+		if tc := sa.Event.ToolCall; tc != nil {
+			line := "[" + sa.Scope + "] · " + tc.Name
+			if args := compactJSON(tc.Args); args != "" && args != "{}" {
+				line += "(" + args + ")"
+			}
+			fmt.Fprintf(r.out, "%s%s\n", g, r.dim(line))
+		}
+	case agent.EventTurnEnd:
+		if sa.Event.Result != nil && sa.Event.Result.Text != "" {
+			fmt.Fprintf(r.out, "%s%s\n", g, r.dim("["+sa.Scope+"] → "+snippet(sa.Event.Result.Text, 200)))
+		}
+	}
+}

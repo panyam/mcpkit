@@ -231,8 +231,8 @@ See `ext/otel/README.md` § Metrics for the wiring snippet and
 The `agent.Runner` emits through the same `core.MeterProvider` seam, the
 metrics sibling of its SEP-414 spans. `RunnerConfig.MeterProvider` opts
 it in; nil or `core.NoopMeterProvider` is zero overhead. Instruments are
-built once in `NewRunner` (`agent/metrics.go`) and recorded at the same
-points the spans are (`agent/runner.go`): turn end and each tool call.
+built once in `NewRunner` (`experimental/agent/metrics.go`) and recorded at the same
+points the spans are (`experimental/agent/runner.go`): turn end and each tool call.
 
 | Instrument | Kind | Attributes | Recorded |
 |---|---|---|---|
@@ -252,7 +252,7 @@ which outcome path returns, so the counter never double-counts or misses.
 The host threads it end to end: `host.WithMeterProvider` sets it on the
 main Runner and every sub-agent persona; agentchat builds it from the
 same `--exporter`/`--otlp-endpoint` decision as the tracer and logger
-(`agent/surfaces/chat/telemetry_setup_meter.go`, the meter sibling of
+(`experimental/agent/surfaces/chat/telemetry_setup_meter.go`, the meter sibling of
 `SetupTelemetry`/`SetupLogs`). The OTLP path lands in Mimir; the
 `mcpkit — agent` Grafana dashboard
 (`docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json`)
@@ -800,11 +800,11 @@ The pass follows the established opt-in contract. `agents.Config.TracerProvider 
 
 `agents.found` is set on every path (including empty / unknown `agentId`), so a failed lookup is visible in the trace rather than silent.
 
-**Host side — delegation edge** (`agent/host/server_agents.go`). The host's lazy `serverAgentSource.resolve` wraps the first-use `agents/get` + child build in an `agents.resolve` span carrying `mcp.agent.id`. Cache hits are not spanned. This ties the three pieces a delegation trace should show: `supervisor turn -> agents.resolve(agent.id) -> agents.get -> child turn`.
+**Host side — delegation edge** (`experimental/agent/host/server_agents.go`). The host's lazy `serverAgentSource.resolve` wraps the first-use `agents/get` + child build in an `agents.resolve` span carrying `mcp.agent.id`. Cache hits are not spanned. This ties the three pieces a delegation trace should show: `supervisor turn -> agents.resolve(agent.id) -> agents.get -> child turn`.
 
 **Sub-agent execution reuses the Runner's own spans.** A resolved specialist is a normal `agent.AgentSource` over a child `Runner`, so its work already emits `agent.turn` / `agent.step` / `agent.tool` spans (the same instrumentation any Runner gets). The host threads its `TracerProvider` through the bridge (`ServerAgentConfig.TracerProvider`), so no separate execution-span machinery is needed. The in-process delegation runs synchronously inside the supervisor's tool-call span, so those child spans nest naturally under it. A new-root-span + link shape (like `task.execute`) would only be warranted for an async delegation form (`AsyncAgentSource`) whose run outlives the dispatch; that is deferred until a demo needs it.
 
-Coverage: `experimental/ext/agents/tracing_test.go` pins the discovery spans (list count, get found / not-found, and the zero-overhead nil-TracerProvider path); `agent/host/server_agents_test.go` pins the `agents.resolve` span (emitted on first delegation, not on the cached second).
+Coverage: `experimental/ext/agents/tracing_test.go` pins the discovery spans (list count, get found / not-found, and the zero-overhead nil-TracerProvider path); `experimental/agent/host/server_agents_test.go` pins the `agents.resolve` span (emitted on first delegation, not on the cached second).
 
 ## Downstream consumers of the Phase 1 contract
 

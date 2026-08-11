@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/experimental/agent"
 )
 
 // TestCriticSteersAndSurfacesTheWall is the proof for issue 1148: it shows the

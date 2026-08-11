@@ -6,7 +6,7 @@ half of root `CONSTRAINTS.md` **C6** (MCP server lifecycle decoupled from the ag
 ## Problem
 
 `NewApp` today connects to every configured server synchronously and **fail-fast**:
-the loop in `agent/host/app.go` does `client.NewClient(sc.URL)` + `c.Connect()`, and any
+the loop in `experimental/agent/host/app.go` does `client.NewClient(sc.URL)` + `c.Connect()`, and any
 connect error tears the App down and returns. One down / unreachable / needs-auth server
 aborts the whole agent boot. And because the system prompt is baked once (see below), a
 server that is absent at boot has no path to integrate when it later comes up.
@@ -17,7 +17,7 @@ shows each server as `connected` / `failed` / `needs-login`. That is the target.
 ### Why eager skills are the hard part
 
 `RunnerConfig.Instructions` is documented as "the system prompt sent on every step"
-(`agent/runner.go`), and it is assembled **once** in `NewApp` — `cfg.Instructions` plus each
+(`experimental/agent/runner.go`), and it is assembled **once** in `NewApp` — `cfg.Instructions` plus each
 eager server's skill block appended at construction. The Runner replays that same system
 prompt on every step; it is never recomputed. So a server whose eager skills belong in the
 system prompt cannot integrate after boot without changing how the system prompt is produced.

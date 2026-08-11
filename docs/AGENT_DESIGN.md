@@ -1,6 +1,6 @@
 # agent/ Design
 
-The `agent/` sub-module is mcpkit's host layer: the piece that sits above `core/`, `server/`, and `client/` and runs the agentic loop. An application embeds it to become an MCP host: it connects MCP servers, hands their tools to a model, dispatches the model's tool calls, routes elicitation to a user interface, and streams the whole turn as typed events.
+The `experimental/agent/` sub-module is mcpkit's host layer: the piece that sits above `core/`, `server/`, and `client/` and runs the agentic loop. An application embeds it to become an MCP host: it connects MCP servers, hands their tools to a model, dispatches the model's tool calls, routes elicitation to a user interface, and streams the whole turn as typed events.
 
 This document is the contract the module's tickets build against (tracking epic: mcpkit issue 895). It pins the decisions that later milestones inherit; implementation details live with their tickets.
 
@@ -20,7 +20,7 @@ What the module is not (deliberately):
 - Not a memory or multi-agent framework. No episodic memory, no supervision trees, no A2A. If a need lands, it gets its own design pass.
 - Not a protocol extension. Nothing here changes what travels between host and server beyond spec-legal vendor `_meta` keys.
 
-Dependency rule: `agent/` depends on `core/` and `client/` (and may depend on other sub-modules such as `ext/ui`). Nothing in the root module or other sub-modules may depend on `agent/`, and LLM-provider dependencies exist only here. `agent/CONSTRAINTS.md` makes this checkable.
+Dependency rule: `experimental/agent/` depends on `core/` and `client/` (and may depend on other sub-modules such as `ext/ui`). Nothing in the root module or other sub-modules may depend on `experimental/agent/`, and LLM-provider dependencies exist only here. `experimental/agent/CONSTRAINTS.md` makes this checkable.
 
 ## The four seams
 
@@ -101,7 +101,7 @@ Three interface families build on the module: CLIs, web frontends, and desktop/n
 
 | Surface | Mode | What it uses |
 |---|---|---|
-| CLI (`agent/surfaces/chat`) | in-process | Import the module, subscribe to the event stream, implement the elicitation callback in-terminal |
+| CLI (`experimental/agent/surfaces/chat`) | in-process | Import the module, subscribe to the event stream, implement the elicitation callback in-terminal |
 | Web | wire | A host application embeds the module and maps the event stream 1:1 onto WebSocket or SSE; user input, cancel, and elicitation responses come back as requests |
 | Desktop/native | either | Go-native shells (Wails, Fyne) consume in-process like the CLI; webview shells consume the wire like web |
 
@@ -109,8 +109,8 @@ The canonical contract is the in-process one: the Runner input API (submit turn,
 
 Two rules keep that projection one-to-one:
 
-1. **Every Runner event type is wire-serializable from day one.** JSON tags, a stable `kind` discriminator, no Go-only payloads (channels, funcs, interfaces without concrete marshaling) in event fields. Enforced by a round-trip test (see `agent/CONSTRAINTS.md`).
-2. **The wire layer stays out of the module until it has two consumers.** The first web host builds the WebSocket mapping in its own package; when a second application needs it, the mapping is promoted into `agent/` (or a sibling package) as-is. This mirrors how the fire-and-forget-then-subscribe chat shape should work: submit returns an id immediately, the event stream carries the turn.
+1. **Every Runner event type is wire-serializable from day one.** JSON tags, a stable `kind` discriminator, no Go-only payloads (channels, funcs, interfaces without concrete marshaling) in event fields. Enforced by a round-trip test (see `experimental/agent/CONSTRAINTS.md`).
+2. **The wire layer stays out of the module until it has two consumers.** The first web host builds the WebSocket mapping in its own package; when a second application needs it, the mapping is promoted into `experimental/agent/` (or a sibling package) as-is. This mirrors how the fire-and-forget-then-subscribe chat shape should work: submit returns an id immediately, the event stream carries the turn.
 
 ## Elicitation: one UI seam, two protocol inlets
 

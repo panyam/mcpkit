@@ -74,8 +74,8 @@ require (
 	github.com/panyam/demokit/notebook v0.0.28 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/mcpkit/agent v0.0.0
-	github.com/panyam/mcpkit/agent/host v0.0.0
+	github.com/panyam/mcpkit/experimental/agent v0.0.0
+	github.com/panyam/mcpkit/experimental/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
 	github.com/panyam/servicekit v0.1.4 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
@@ -113,9 +113,9 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/panyam/mcpkit/agent => ../../agent
+replace github.com/panyam/mcpkit/experimental/agent => ../../experimental/agent
 
-replace github.com/panyam/mcpkit/agent/host => ../../agent/host
+replace github.com/panyam/mcpkit/experimental/agent/host => ../../experimental/agent/host
 
 replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
 

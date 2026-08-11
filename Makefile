@@ -5,9 +5,10 @@
 # downstream can `go get <module>@vX.Y.Z` — `replace` directives are ignored
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
+#
+# The agent modules are deliberately absent: they live on their own version
+# line under experimental/agent (see AGENT_MODS_TO_TAG and VERSIONING.md).
 SUB_MODS_TO_TAG := \
-	agent agent/host agent/surfaces agent/surfaces/web agent/surfaces/chat agent/store/redis agent/store/gorm \
-	agent/ext/checkpoint agent/ext/files \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
 	experimental/ext/agents experimental/ext/agents/clients/go \
@@ -17,6 +18,23 @@ SUB_MODS_TO_TAG := \
 	cmd/testclient cmd/common cmd/mcpskills \
 	examples/mcpskills-walkthrough \
 	tests/e2e tests/keycloak
+
+# The agent SDK's own module set, on a version line independent of the protocol
+# modules above. It is NOT part of `make tag` / `make tag-push`.
+#
+# Nothing here is released today. The agent track is unreleased on purpose: with
+# no version string to carry the "unstable" signal, the import path carries it,
+# which is why these modules sit under experimental/. See VERSIONING.md.
+#
+# The targets below exist so that extracting this tree to its own repository is
+# a copy rather than an invention. The list loses its experimental/agent/
+# prefix and `tag-agent` becomes that repo's `tag`. Until then they are staged,
+# not run: publishing these tags re-opens the door being held shut.
+AGENT_MODS_TO_TAG := \
+	experimental/agent experimental/agent/host \
+	experimental/agent/surfaces experimental/agent/surfaces/web experimental/agent/surfaces/chat \
+	experimental/agent/store/redis experimental/agent/store/gorm \
+	experimental/agent/ext/checkpoint experimental/agent/ext/files
 
 # Conformance test orchestration lives in `conformance/Makefile`.
 # Per-suite MCPCONFORMANCE_*_PATH vars are documented there.
@@ -160,15 +178,15 @@ pg: ## Playground: boot the demo MCP server + launch agentchat's TUI (needs a lo
 	bash scripts/playground.sh
 
 test-agent: ## Run agent sub-module tests
-	cd agent && go test ./... -count=1 -timeout 30s
-	cd agent/store/redis && go test ./... -count=1 -timeout 60s
-	cd agent/store/gorm && go test ./... -count=1 -timeout 60s
-	cd agent/ext/checkpoint && go test ./... -count=1 -timeout 60s
-	cd agent/ext/files && go test ./... -count=1 -timeout 60s
-	cd agent/host && go test ./... -count=1 -timeout 60s
-	cd agent/surfaces && go test ./... -count=1 -timeout 60s
-	cd agent/surfaces/web && go test ./... -count=1 -timeout 90s
-	cd agent/surfaces/chat && go test ./... -count=1 -timeout 60s
+	cd experimental/agent && go test ./... -count=1 -timeout 30s
+	cd experimental/agent/store/redis && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/store/gorm && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/ext/checkpoint && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/ext/files && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/host && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/surfaces && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/surfaces/web && go test ./... -count=1 -timeout 90s
+	cd experimental/agent/surfaces/chat && go test ./... -count=1 -timeout 60s
 	cd examples/agents/agent-async && go test ./... -count=1 -timeout 60s
 	cd examples/agents/multi-agent && go test ./... -count=1 -timeout 60s
 	cd examples/skills && go test ./... -count=1 -timeout 60s -run TestAgentScenario
@@ -446,6 +464,39 @@ tag-push: ## Tag and push in one step (usage: make tag-push V=v0.0.11)
 	@$(MAKE) tag V=$(V)
 	git push origin $(V) $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')
 
+# ---------------------------------------------------------------------------
+# Agent SDK release (STAGED, not part of a protocol release, not run today)
+#
+# These mirror `tag` / `tag-push` over AGENT_MODS_TO_TAG with their own version
+# variable, so the agent tree carries a working release path to whatever repo it
+# is eventually extracted into. Running them publishes the agent modules, which
+# is exactly what VERSIONING.md says is not happening yet, so they refuse
+# unless AGENT_RELEASE_OK=1 is set explicitly.
+#
+# Caveat worth knowing before relying on these: a release target that has never
+# been run is not a rehearsal, it is an untested script. Verifying it without
+# publishing means tagging locally and resolving from a file:// git remote in a
+# scratch module.
+# ---------------------------------------------------------------------------
+
+tag-agent: ## STAGED: tag agent sub-modules on their own version line (usage: make tag-agent AV=v0.6.0 AGENT_RELEASE_OK=1)
+	@if [ -z "$(AV)" ]; then echo "Usage: make tag-agent AV=v0.6.0 AGENT_RELEASE_OK=1"; exit 1; fi
+	@if [ "$(AGENT_RELEASE_OK)" != "1" ]; then \
+		echo "refusing: the agent track is unreleased on purpose (see VERSIONING.md)."; \
+		echo "These targets are staged for extraction, not for publishing from mcpkit."; \
+		echo "Set AGENT_RELEASE_OK=1 if you really mean it."; \
+		exit 1; \
+	fi
+	@echo "Tagging agent modules at $(AV)..."
+	@for mod in $(AGENT_MODS_TO_TAG); do \
+		echo "  $$mod/$(AV)"; \
+		git tag -a $$mod/$(AV) -m "$$mod/$(AV)"; \
+	done
+
+tag-push-agent: ## STAGED: tag + push agent sub-modules (usage: make tag-push-agent AV=v0.6.0 AGENT_RELEASE_OK=1)
+	@$(MAKE) tag-agent AV=$(AV) AGENT_RELEASE_OK=$(AGENT_RELEASE_OK)
+	git push origin $$(echo '$(AGENT_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(AV)|' | tr '\n' ' ')
+
 # =============================================================================
 # Setup
 # =============================================================================
@@ -475,5 +526,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-snippets check-dep-consistency check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-snippets check-dep-consistency check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help tag-agent tag-push-agent
 .DEFAULT_GOAL := help

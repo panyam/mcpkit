@@ -1,30 +1,107 @@
 #!/bin/bash
-# Verifies that sub-module go.mod files require a real, tagged version of the
-# root github.com/panyam/mcpkit module — not the v0.0.0 placeholder that used
-# to exist before #189.
+# Verifies that sub-module go.mod files pin their intra-repo dependencies at the
+# version their release policy requires. Two policies, because this repo now has
+# two release trains.
 #
-# Why: a sub-module's `require github.com/panyam/mcpkit v0.0.0` works locally
-# thanks to the `replace ../../` directive, but downstream consumers cannot
-# `go get github.com/panyam/mcpkit/ext/auth@vX` because Go ignores replace
-# directives in non-main modules. The require line must point to a released
-# tag so the module graph resolves for external users.
+# Why any of this matters: `replace ../../` makes a v0.0.0 require work locally,
+# but Go ignores replace directives in non-main modules. So the require line is
+# the only thing a downstream `go get github.com/panyam/mcpkit/<mod>@vX` sees. A
+# v0.0.0 require means the module does not resolve for anyone outside this repo.
 #
-# Failure mode this catches: someone opens a sub-module go.mod and resets the
-# require to v0.0.0 by accident (e.g., via go mod edit or a rebase) without
-# noticing. CI should fail loudly.
+#   PROTOCOL    Released and meant to be consumed. Every intra-repo require must
+#               name a real tag, or the published module is broken. This is the
+#               original check (#189).
+#
+#   AGENT       Lives under experimental/agent, deliberately unreleased (see
+#               VERSIONING.md). Its agent-to-agent requires must STAY at v0.0.0,
+#               because that is what makes the tree unresolvable from outside
+#               while working fine in-repo. The inverted assertion is the point:
+#               it stops someone "fixing" the pins and silently publishing the
+#               agent surface. On extraction day, move these modules to the
+#               protocol policy and run `make tag-agent`.
+#
+#   NON-LIBRARY cmd/*, tests/*, examples/*. Tagged for reproducibility but never
+#               imported as libraries, so a v0.0.0 sibling pin harms nobody. The
+#               root require is still checked.
+#
+# Failure mode the original version missed: it parsed ONLY the root
+# github.com/panyam/mcpkit require and skipped every sibling require in the
+# file. That is how agent/host pinned seven published modules at v0.0.0 and
+# passed CI for months. Sibling requires are now in scope.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+ROOT_MOD="github.com/panyam/mcpkit"
+# Modules on the agent release line (unreleased on purpose).
+AGENT_RE='^experimental/agent(/|$)'
+# Modules that are tagged but never imported as a library.
+NONLIB_RE='^(cmd|tests|examples|conformance|docs)/'
+
+# Pre-existing placeholder pins in published modules, tracked in #1291.
+#
+# These are real breaks: each module is tagged and pushed on every release, and
+# `go get <module>@vX.Y.Z` does not resolve for an outside consumer. They are
+# NOT new. They survived because the original version of this script parsed only
+# the root require, and they surfaced the moment that blind spot was closed.
+#
+# Allowlisted rather than fixed here because the fix asserts a pin version for
+# modules the agent move has no business touching, and the go.sum churn would
+# risk failing CI in a module that change did not edit. Delete an entry as each
+# one is fixed; the list reaching empty closes #1291.
+KNOWN_PLACEHOLDER_PINS="
+experimental/ext/agents/clients/go github.com/panyam/mcpkit/experimental/ext/agents
+experimental/ext/events/clients/go github.com/panyam/mcpkit/experimental/ext/events
+experimental/ext/events/stores/gorm github.com/panyam/mcpkit/experimental/ext/events
+experimental/ext/events/stores/memory github.com/panyam/mcpkit/experimental/ext/events
+experimental/ext/events/stores/redis github.com/panyam/mcpkit/stores/redis
+"
+
+# is_known_pin <submodule> <module>
+is_known_pin() {
+    echo "$KNOWN_PLACEHOLDER_PINS" | grep -qxF "$1 $2"
+}
+
 # Discover every sub-module dynamically (mirrors the Makefile's SUB_MODS_ALL)
-# so the check never goes stale when a sub-module is added or moved — e.g.
+# so the check never goes stale when a sub-module is added or moved. For example,
 # protogen relocating from ext/ to experimental/ext/ used to silently break
-# this hardcoded list. Modules that don't require the root are skipped below.
+# this hardcoded list, and agent/ relocating to experimental/agent/ would have
+# done the same. Modules that don't require the root are skipped below.
 SUBMODULES=()
 while IFS= read -r gomod; do
     SUBMODULES+=("$(dirname "${gomod#"$REPO_ROOT"/}")")
 done < <(find "$REPO_ROOT" -name go.mod -not -path '*/node_modules/*' -not -path "$REPO_ROOT/go.mod" | sort)
+
+# is_placeholder <version>. True only for versions that do not resolve.
+#
+# Two forms qualify: bare v0.0.0, and the zero pseudo-version
+# v0.0.0-00010101000000-000000000000 that `go mod tidy` writes when a replace
+# directive satisfies the requirement. Neither names a commit.
+#
+# A commit-based pseudo-version (v0.0.0-20260613221610-63a4e4058337) is NOT a
+# placeholder, it resolves fine. Treating every v0.0.0-* as broken was the
+# first cut of this function and it produced four false positives.
+is_placeholder() {
+    case "$1" in
+        v0.0.0|v0.0.0-00010101000000-000000000000) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# direct_requires <gomod>. Every non-indirect intra-repo require, as
+# "module version" pairs. Replace directives never reach this.
+direct_requires() {
+    awk '
+        /^require \(/ { inblock = 1; next }
+        /^\)/         { inblock = 0 }
+        inblock       { print; next }
+        /^require /   { sub(/^require /, ""); print }
+    ' "$1" \
+    | grep -v '// indirect' \
+    | grep -oE "github\.com/panyam/mcpkit[a-zA-Z0-9_/.-]*[[:space:]]+v[^[:space:]]+" \
+    | sed 's/[[:space:]]\+/ /g'
+}
 
 fail=0
 for sub in "${SUBMODULES[@]}"; do
@@ -35,31 +112,72 @@ for sub in "${SUBMODULES[@]}"; do
         continue
     fi
 
-    # Extract the version required for github.com/panyam/mcpkit (the root module).
-    # Look at the first non-indirect require line — we only care about the
-    # direct dependency.
-    version="$(awk '
-        /^require[[:space:]]+github\.com\/panyam\/mcpkit[[:space:]]+v/ {
-            print $3; exit
-        }
-        /^[[:space:]]+github\.com\/panyam\/mcpkit[[:space:]]+v/ {
-            print $2; exit
-        }
-    ' "$gomod")"
-
-    if [ -z "$version" ]; then
-        echo "PASS: $sub does not require github.com/panyam/mcpkit (skipping)"
-        continue
+    if [[ "$sub" =~ $AGENT_RE ]]; then
+        policy="agent"
+    elif [[ "$sub" =~ $NONLIB_RE ]]; then
+        policy="non-library"
+    else
+        policy="protocol"
     fi
 
-    if [ "$version" = "v0.0.0" ]; then
-        echo "FAIL: $sub/go.mod requires github.com/panyam/mcpkit v0.0.0 (placeholder)"
-        echo "      Bump to the current root tag. See CLAUDE.md 'Releasing Sub-Modules' for the release order."
-        fail=1
-        continue
-    fi
+    saw_root=0
+    while read -r mod version; do
+        [ -z "$mod" ] && continue
 
-    echo "PASS: $sub/go.mod requires github.com/panyam/mcpkit $version"
+        if [ "$mod" = "$ROOT_MOD" ]; then
+            # Every policy agrees on the root: it is published, so name a tag.
+            saw_root=1
+            if is_placeholder "$version"; then
+                echo "FAIL: $sub/go.mod requires $ROOT_MOD $version (placeholder)"
+                echo "      Bump to the current root tag. See RELEASING.md for the release order."
+                fail=1
+            fi
+            continue
+        fi
+
+        case "$policy" in
+            protocol)
+                if is_placeholder "$version"; then
+                    if is_known_pin "$sub" "$mod"; then
+                        echo "KNOWN: $sub/go.mod requires $mod $version (pre-existing, #1291)"
+                    else
+                        echo "FAIL: $sub/go.mod requires $mod $version (placeholder)"
+                        echo "      A released module cannot pin a sibling at v0.0.0. It will not resolve"
+                        echo "      for downstream consumers, because Go ignores replace outside the main module."
+                        fail=1
+                    fi
+                fi
+                ;;
+            agent)
+                # Only intra-agent requires carry the invariant. An agent module
+                # pinning a *published* module (ext/otel, ext/auth) at a real tag
+                # is harmless: that pin resolves, and unresolvability comes from
+                # the agent-to-agent edges, which can never resolve because these
+                # modules are never tagged. agentchat pins ext/otel v0.3.1 and is
+                # still unreachable from outside via its ten agent-to-agent pins.
+                case "$mod" in
+                    "$ROOT_MOD"/experimental/agent|"$ROOT_MOD"/experimental/agent/*) ;;
+                    *) continue ;;
+                esac
+                if ! is_placeholder "$version"; then
+                    echo "FAIL: $sub/go.mod requires $mod $version (expected v0.0.0)"
+                    echo "      Agent modules are unreleased on purpose, and their agent-to-agent pins"
+                    echo "      are what keep them unresolvable from outside. See VERSIONING.md."
+                    echo "      If you are extracting the tree, change AGENT_RE in this script instead."
+                    fail=1
+                fi
+                ;;
+            non-library)
+                : # tagged but never imported as a library; sibling pins are harmless
+                ;;
+        esac
+    done < <(direct_requires "$gomod")
+
+    if [ "$saw_root" -eq 0 ]; then
+        echo "PASS: $sub does not require $ROOT_MOD (skipping)"
+    else
+        echo "PASS: $sub ($policy policy)"
+    fi
 done
 
 if [ $fail -ne 0 ]; then
@@ -67,4 +185,4 @@ if [ $fail -ne 0 ]; then
 fi
 
 echo ""
-echo "All sub-modules reference a real root version."
+echo "All sub-modules pin intra-repo deps per their release policy."

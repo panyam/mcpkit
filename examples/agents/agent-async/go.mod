@@ -4,8 +4,8 @@ go 1.26.5
 
 require (
 	github.com/panyam/mcpkit v0.5.1
-	github.com/panyam/mcpkit/agent v0.0.0
-	github.com/panyam/mcpkit/agent/host v0.0.0
+	github.com/panyam/mcpkit/experimental/agent v0.0.0
+	github.com/panyam/mcpkit/experimental/agent/host v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
 	github.com/panyam/mcpkit/ext/tasks v0.0.0
 )
@@ -50,9 +50,9 @@ require (
 
 replace github.com/panyam/mcpkit => ../../..
 
-replace github.com/panyam/mcpkit/agent => ../../../agent
+replace github.com/panyam/mcpkit/experimental/agent => ../../../experimental/agent
 
-replace github.com/panyam/mcpkit/agent/host => ../../../agent/host
+replace github.com/panyam/mcpkit/experimental/agent/host => ../../../experimental/agent/host
 
 replace github.com/panyam/mcpkit/ext/tasks => ../../../ext/tasks
 

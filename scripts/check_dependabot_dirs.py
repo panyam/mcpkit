@@ -8,7 +8,7 @@ not warn, and the only symptom is a dependency tree that quietly stops being
 monitored.
 
 That is not hypothetical. `/agent/web/web` was configured for npm, the
-`agent/surfaces/*` refactor moved it to `agent/surfaces/web/web`, and the
+`experimental/agent/surfaces/*` refactor moved it to `experimental/agent/surfaces/web/web`, and the
 config was not updated. The tree went unmonitored until an OpenSSF Scorecard
 run surfaced a `@babel/core` advisory in it.
 

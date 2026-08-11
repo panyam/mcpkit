@@ -64,7 +64,7 @@ path was hardcoded for that.
 - `main.go` — dual-mode entry (stub vs `--model`) plus a concurrency-safe
   transcript writer (the proactive trigger turn writes from the event goroutine).
 
-The host is `github.com/panyam/mcpkit/agent/host` — the same App that backs the
+The host is `github.com/panyam/mcpkit/experimental/agent/host` — the same App that backs the
 agentchat CLI, imported here to drive it programmatically.
 
 Background-detach on genuinely long tasks (the task runs past its grace window

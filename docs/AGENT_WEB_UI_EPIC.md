@@ -7,8 +7,8 @@ surface/observability epic, not an SDK-parity phase. It sits beside Phases 4–7
 
 Two reasons, and the second is the stronger one.
 
-1. **A second live surface.** The host layer (`agent/host`) was deliberately built surface-agnostic
-   so a web chat could reuse the whole thing and swap only stdin/stdout for a socket. `agent/surfaces/chat`
+1. **A second live surface.** The host layer (`experimental/agent/host`) was deliberately built surface-agnostic
+   so a web chat could reuse the whole thing and swap only stdin/stdout for a socket. `experimental/agent/surfaces/chat`
    is a thin terminal surface over it. A browser surface should be another thin surface over the same
    `App`, viewable at the same time as the TUI.
 
@@ -24,7 +24,7 @@ Two reasons, and the second is the stronger one.
 - **Not a Grafana/OTel dashboard.** The agent already emits SEP-414 spans + metrics and ships a
   Grafana dashboard off Mimir/Tempo. That is ops-grade, aggregate, multi-session. This surface is live
   single-session introspection for development and use. Draw the boundary explicitly.
-- **Not a rewrite of the host.** No web framework or proto types leak into `agent/host`, the same
+- **Not a rewrite of the host.** No web framework or proto types leak into `experimental/agent/host`, the same
   discipline that keeps charm/lipgloss out of it. The web surface owns all of that.
 
 ## The backbone: `gocurrent.Queue` as the per-session event log
@@ -93,10 +93,10 @@ server-streaming RPC (`Watch`) is the idiomatic slot, with the Queue subscriptio
 
 ## Layering
 
-`agent/surfaces/web` is a new submodule (own go.mod) importing `agent/host`: the goapplib shell, the Connect
+`experimental/agent/surfaces/web` is a new submodule (own go.mod) importing `experimental/agent/host`: the goapplib shell, the Connect
 bridge (Queue subscription → `Watch` stream; `Dispatch`/queries → unary; barrier → `RespondToAsk`),
 and the Solid/DockView frontend assets. A thin `cmd/agentweb serve` over it, mirroring how
-`agent/surfaces/chat` is thin over the host.
+`experimental/agent/surfaces/chat` is thin over the host.
 
 ## Open design decisions (resolve during E1/E3, not now)
 
@@ -113,7 +113,7 @@ and the Solid/DockView frontend assets. A thin `cmd/agentweb serve` over it, mir
 
 ## Sub-tickets (dependency-ordered)
 
-### E1 (1194) — Session event log on `gocurrent.Queue` (`agent/host`) — SHIPPED
+### E1 (1194) — Session event log on `gocurrent.Queue` (`experimental/agent/host`) — SHIPPED
 Make a per-session `gocurrent.Queue[HostEvent]` the retained event substrate: `emit` appends every
 event to it *and* keeps delivering synchronously to the local observers (`emitMu` retained), so the
 terminal rendering contract is unchanged. The log is what a web surface (E3) subscribes onto (replay
@@ -153,8 +153,8 @@ after eviction still sees full history.
   gets the retained window then live; `persistedOffset` advances at turn end; `just test-agent` green
   with `-race`.
 
-### E2 (1195) — Pending-ask barrier (`agent/host`) — SHIPPED
-`barrierElicit` (`agent/host/ask.go`) wraps the local `ElicitationUI` the coordinator drives: it emits a
+### E2 (1195) — Pending-ask barrier (`experimental/agent/host`) — SHIPPED
+`barrierElicit` (`experimental/agent/host/ask.go`) wraps the local `ElicitationUI` the coordinator drives: it emits a
 `HostElicitRequest{Elicit}` (appended to the log at offset `off`), runs the local UI as one responder,
 and races it against `RespondToAsk(off, result, by)` from any other surface. **Resolution rides the
 event log's own barrier**: local and remote responders both call `eventLog.Resolve(off, ...)`, so the
@@ -185,16 +185,16 @@ fact is the coordinator invariant; the barrier does not depend on it.
   out-of-range / already-answered `RespondToAsk` returns the log's error; `just test-agent` green with
   `-race`.
 
-### E3 (1196) — `agent/surfaces/web` submodule + Connect bridge — SHIPPED
-New submodule (`agent/surfaces/web`, own go.mod, module `github.com/panyam/mcpkit/agent/surfaces/web`) + a thin
-`cmd/agentweb` serve binary (inside the module, mirroring how `agent/surfaces/chat` is thin over the host).
-**Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `agent/surfaces/web/protos/`, generated
-Go + Connect committed under `agent/surfaces/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
+### E3 (1196) — `experimental/agent/surfaces/web` submodule + Connect bridge — SHIPPED
+New submodule (`experimental/agent/surfaces/web`, own go.mod, module `github.com/panyam/mcpkit/experimental/agent/surfaces/web`) + a thin
+`cmd/agentweb` serve binary (inside the module, mirroring how `experimental/agent/surfaces/chat` is thin over the host).
+**Transport: Connect + buf.** Proto `mcpkit.agentweb.v1.HostService` (in `experimental/agent/surfaces/web/protos/`, generated
+Go + Connect committed under `experimental/agent/surfaces/web/gen/go/`): a server-streaming `Watch` (drains the E1 log via the
 new `App.Subscribe` seam), unary `Submit` (turn), `Dispatch` (command → `CmdResult`), `RespondToAsk`
 (the E2 offset barrier), and two trivial queries `ListSessions` + `GetStatus`. `servicekit/http` serves
 the placeholder shell + `/static` + the Connect handlers on one listener.
 
-- **`App.Subscribe(ctx) <-chan HostEvent` (`agent/host/subscribe.go`)** — the async subscriber adapter
+- **`App.Subscribe(ctx) <-chan HostEvent` (`experimental/agent/host/subscribe.go`)** — the async subscriber adapter
   E1 deferred. It replays the retained log from offset 0 then follows `Notify()`, on a drain goroutine
   scoped to ctx. A slow consumer cannot block `emit`: `emit` only `Append`s (non-blocking) and fans out
   to local observers, while the drain reads the retained log at its own pace, so back-pressure stays
@@ -218,15 +218,15 @@ the placeholder shell + `/static` + the Connect handlers on one listener.
   templar template — the real templar/DockView shell is E4.
 - Accept (met): a Connect client `Watch`es a live session and `Submit`s a turn; a local Observer and a
   Watch client on the same `App` see the same stream, including replay-from-offset-0; a `RespondToAsk`
-  over the wire wins an ask the local UI is blocking on (`agent/surfaces/web/host_bridge_test.go`, run with
+  over the wire wins an ask the local UI is blocking on (`experimental/agent/surfaces/web/host_bridge_test.go`, run with
   `-race`). The serve binary serves the shell, `/static`, and the Connect endpoints (`GetStatus`
   returns the model label; `ListSessions` returns `failed_precondition` with no RunStore).
 
 ### E4 (1197) — Frontend shell (DockView + Solid islands) — SHIPPED
 Modeled on **`~/projects/diffpp/main/web`**: `dockview-core` v4, `tsappkit-solid` islands, Connect-Web
 clients generated from the E3 proto, and **`MobileOverlays` for the mobile mode** (the dockview-vs-mobile
-switch). Saved-layout reconcile carries over. The frontend lives in `agent/surfaces/web/web/`; the built esbuild
-bundle is committed under `agent/surfaces/web/static/` (Go embeds it, so `just test-agent` needs no Node step).
+switch). Saved-layout reconcile carries over. The frontend lives in `experimental/agent/surfaces/web/web/`; the built esbuild
+bundle is committed under `experimental/agent/surfaces/web/static/` (Go embeds it, so `just test-agent` needs no Node step).
 
 **Scope change from the plan: massrelay is deferred.** The browser consumes the E3 Connect `Watch`
 server-stream **directly** via connect-web (`web/src/watch.ts` — decode each `Frame` payload to a
@@ -239,7 +239,7 @@ What shipped: the placeholder shell is replaced by a server-rendered shell (`she
 on `HostElicitRequest` answered via `RespondToAsk(AskID, …)`); a framework-neutral panel registry +
 saved-layout reconcile (`web/src/dock.ts`) ready for E5 to add panels; the DockView desktop layout and the
 mobile-overlay layout over one shared store; and a `--demo` mode on `cmd/agentweb` (offline streaming
-provider) + `agent/surfaces/web/run.sh` as the runnable proof. Unit tests (vitest) cover Frame-decode/dispatch, the
+provider) + `experimental/agent/surfaces/web/run.sh` as the runnable proof. Unit tests (vitest) cover Frame-decode/dispatch, the
 event fold, and the dock reconcile.
 - Accept (met): the browser renders live turns from the same `App`; the layout persists across reload
   (localStorage); the mobile mode presents the same panel as an overlay.

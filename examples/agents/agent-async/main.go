@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/panyam/mcpkit/agent"
+	"github.com/panyam/mcpkit/experimental/agent"
 )
 
 func main() {

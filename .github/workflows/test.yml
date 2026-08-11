@@ -48,7 +48,7 @@ jobs:
 
       # Dependabot ignores a configured directory that does not exist, without
       # warning. /agent/web/web went unmonitored that way after the
-      # agent/surfaces refactor moved it.
+      # experimental/agent/surfaces refactor moved it.
       - name: Check Dependabot directories exist
         run: python3 scripts/check_dependabot_dirs.py
 
@@ -77,22 +77,22 @@ jobs:
           go-version-file: go.mod
 
       - name: Run agent sub-module tests
-        run: cd agent && go test ./... -v
+        run: cd experimental/agent && go test ./... -v
 
-      - name: Run agent/host tests
-        run: cd agent/host && go test ./... -v
+      - name: Run experimental/agent/host tests
+        run: cd experimental/agent/host && go test ./... -v
 
-      - name: Run agent/ext/checkpoint tests
-        run: cd agent/ext/checkpoint && go test ./... -v -race
+      - name: Run experimental/agent/ext/checkpoint tests
+        run: cd experimental/agent/ext/checkpoint && go test ./... -v -race
 
-      - name: Run agent/ext/files tests
-        run: cd agent/ext/files && go test ./... -v -race
+      - name: Run experimental/agent/ext/files tests
+        run: cd experimental/agent/ext/files && go test ./... -v -race
 
-      - name: Run agent/surfaces shared-module tests
-        run: cd agent/surfaces && go test ./... -v
+      - name: Run experimental/agent/surfaces shared-module tests
+        run: cd experimental/agent/surfaces && go test ./... -v
 
-      - name: Run agentchat (agent/surfaces/chat) tests
-        run: cd agent/surfaces/chat && go test ./... -v
+      - name: Run agentchat (experimental/agent/surfaces/chat) tests
+        run: cd experimental/agent/surfaces/chat && go test ./... -v
 
       - name: Run agent-async example test
         run: cd examples/agents/agent-async && go test ./... -v
