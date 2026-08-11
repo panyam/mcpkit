@@ -37,7 +37,8 @@ func New(cfg Config) (*Extension, error) {
 // under.
 func (e *Extension) Name() string { return "files" }
 
-// Tools returns read_file and edit_file.
+// Tools returns the workspace tool set: read_file, edit_file, write_file,
+// list_files, and search_files.
 func (e *Extension) Tools() (agent.ToolSource, error) { return e.src, nil }
 
 // PromptSections states the edit discipline the tools enforce.

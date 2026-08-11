@@ -13,6 +13,27 @@ require (
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
+	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
+	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect
+	github.com/panyam/oneauth v0.1.36 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
+	golang.org/x/oauth2 v0.36.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
+)
+
+require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -28,6 +49,9 @@ require (
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/mcpkit v0.5.1 // indirect
+	github.com/panyam/mcpkit/experimental/agent/ext/checkpoint v0.0.0
+	github.com/panyam/mcpkit/experimental/agent/ext/files v0.0.0
+	github.com/panyam/mcpkit/experimental/agent/host v0.0.0
 	github.com/panyam/servicekit v0.1.4 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pgvector/pgvector-go v0.4.1 // indirect
@@ -51,3 +75,25 @@ replace github.com/panyam/mcpkit/experimental/agent => ..
 replace github.com/panyam/mcpkit/experimental/agent/store/gorm => ../store/gorm
 
 replace github.com/panyam/mcpkit/experimental/agent/store/redis => ../store/redis
+
+replace github.com/panyam/mcpkit/experimental/agent/host => ../host
+
+replace github.com/panyam/mcpkit/experimental/agent/ext/files => ../ext/files
+
+replace github.com/panyam/mcpkit/experimental/agent/ext/checkpoint => ../ext/checkpoint
+
+replace github.com/panyam/mcpkit/ext/auth => ../../../ext/auth
+
+replace github.com/panyam/mcpkit/ext/skills => ../../../ext/skills
+
+replace github.com/panyam/mcpkit/ext/otel => ../../../ext/otel
+
+replace github.com/panyam/mcpkit/ext/tasks => ../../../ext/tasks
+
+replace github.com/panyam/mcpkit/experimental/ext/agents => ../../../experimental/ext/agents
+
+replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../../experimental/ext/agents/clients/go
+
+replace github.com/panyam/mcpkit/experimental/ext/events => ../../../experimental/ext/events
+
+replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../experimental/ext/events/clients/go

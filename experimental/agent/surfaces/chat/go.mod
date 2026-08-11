@@ -96,6 +96,8 @@ require (
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
+	github.com/panyam/mcpkit/experimental/agent/ext/checkpoint v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/agent/ext/files v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/agent/store/gorm v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/store/redis v0.0.0
 	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
@@ -161,3 +163,7 @@ replace github.com/panyam/mcpkit/experimental/agent/host => ../../host
 replace github.com/panyam/mcpkit/experimental/agent/store/redis => ../../store/redis
 
 replace github.com/panyam/mcpkit/experimental/agent/store/gorm => ../../store/gorm
+
+replace github.com/panyam/mcpkit/experimental/agent/ext/files => ../../ext/files
+
+replace github.com/panyam/mcpkit/experimental/agent/ext/checkpoint => ../../ext/checkpoint
