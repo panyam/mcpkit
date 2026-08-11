@@ -41,47 +41,24 @@ func liveProvider(t *testing.T) agent.Provider {
 
 func TestLiveLongMemEval(t *testing.T) {
 	provider := liveProvider(t)
-	ctx := context.Background()
 
-	var passed, total int
-	for _, c := range SmokeScenarios() {
-		cfg := agent.RunnerConfig{Provider: provider}
-		if c.NewCompactor != nil {
-			// The case supplies the compaction strategy (a Compactor that
-			// decides per turn whether to compact) — issue 939's
-			// SummarizingCompactor graded by issue 974's harness.
-			compactor, err := c.NewCompactor(provider)
-			if err != nil {
-				t.Fatalf("%s: build compactor: %v", c.Scenario.Name, err)
-			}
-			cfg.Compactor = compactor
-		}
-		results, err := eval.RunScenario(ctx, cfg, c.Scenario)
-		if err != nil {
-			t.Fatalf("%s: harness error: %v", c.Scenario.Name, err)
-		}
-		final := eval.Final(results)
-
-		casePass := true
-		for _, s := range c.Deterministic() {
-			if sc := s.Score(final); !sc.Pass {
-				casePass = false
-				t.Logf("[%s] %s FAIL: %s", c.Category, c.Scenario.Name, sc.Detail)
-			}
-		}
-		if c.Rubric != "" {
-			if sc := eval.Judge(provider, c.Rubric).Score(final); !sc.Pass {
-				casePass = false
-				t.Logf("[%s] %s JUDGE FAIL (%.2f): %s", c.Category, c.Scenario.Name, sc.Value, sc.Detail)
-			}
-		}
-
-		total++
-		if casePass {
-			passed++
-			t.Logf("[%s] %s PASS", c.Category, c.Scenario.Name)
-		}
+	// The whole benchmark is now Suite.Run over an adapter. What used to live
+	// here was a hand-rolled copy of that loop -- run each case, apply its
+	// scorers, tally -- written because Suite could not express per-case
+	// scorers or multi-turn scenarios. That duplication was the evidence the
+	// adapter seam was missing (issue 1015).
+	suite, ok, err := eval.LoadSuite(agent.RunnerConfig{Provider: provider}, SmokeAdapter{})
+	if err != nil {
+		t.Fatalf("load suite: %v", err)
 	}
-	// Report, do not gate — the benchmark's job is to surface the pass rate.
-	t.Logf("LongMemEval-derived pass rate: %d/%d", passed, total)
+	if !ok {
+		t.Skip("longmemeval-smoke yielded no cases")
+	}
+
+	report := suite.Run(context.Background())
+
+	// Report, do not gate -- the benchmark's job is to surface the pass rate,
+	// since memory quality is statistical.
+	t.Logf("\n%s", report)
+	t.Logf("LongMemEval-derived pass rate: %d/%d", report.Passed, report.Total)
 }

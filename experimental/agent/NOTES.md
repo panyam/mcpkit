@@ -987,6 +987,41 @@ A tool denial emits `EventToolDenied` with `Event.Reason`, is fed back as model-
 **the turn continues**. It is deliberately not an error, so `eval.NoError` ignores it and
 `eval.NotDenied` is the separate check.
 
+### The adapter seam (#1015)
+
+External suites are **data sources**, not harnesses. `Adapter.Load` yields `[]SuiteCase`, and
+adding LoCoMo / BFCL / tau-bench must not touch the Runner, the scorers, or `Suite`.
+
+Three things had to change for that, and each was forced by a real shape rather than anticipated:
+
+- **Scorers are per-case.** `Suite.Scorers` was one list applied to every case, which can only
+  express properties true of all of them ("did not error"), never the ground truth that makes a
+  benchmark a benchmark. The evidence was `longmemeval/live_test.go`, which hand-rolled its own
+  copy of `Suite.Run` because `Suite` could not take it. That file is now the harness call it
+  should always have been.
+- **`Scenario.History` seeds without running.** A memory benchmark supplies a long prior
+  conversation and asks one question about it. Replaying that as `Turns` would call the model once
+  per historical message and grade its own invented replies. History is data the agent is told it
+  had; Turns are turns the agent takes.
+- **`SuiteCase.Configure` returns a config rather than mutating one**, so a compaction case's
+  `Compactor` cannot leak into the next case. `TestSuiteCaseConfigureIsPerCase` observes the
+  handed-in config through `Configure` rather than through `Result`, because `Result.Case` carries
+  only the turn's name and input — asserting there compares two zero values and passes either way.
+
+**Ungradeable is a failure, not a pass.** `Suite.Run` already failed a case with no scorers. The
+subtler version bit immediately: the abstention smoke case is graded by a `Rubric`, and its only
+deterministic scorer is a `MustNot` that *any* answer satisfies. Reachable from the default build
+for the first time (the adapter is untagged; `live_test.go` never was), it passed against a stub
+answering "stub answer". So `appendRubric` now yields `eval.Ungradeable` without the `eval_llm`
+tag. A case graded only by checks that cannot fail is not graded.
+
+**Aggregation is single-axis on purpose.** `SuiteReport.Passed/Failed` counts whole cases, which
+is right for one-question-per-case and wrong for a suite reporting several independent rates — a
+security suite wants utility and attack-success counted separately, and one of them inverted.
+Deliberately not designed for now: per-scorer verdicts are kept with their names, so a
+per-dimension rollup is an addition over existing data rather than a re-plumb. #1060 is the one
+that will actually stress it, and reshaping is free while the agent track is unreleased.
+
 ---
 
 ## Testing

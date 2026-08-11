@@ -235,13 +235,9 @@ func TestSuiteAggregate(t *testing.T) {
 			),
 			Tools: src,
 		},
-		Cases: []Case{
-			{Name: "A-uses-tool", Input: "get x"},
-			{Name: "B-wrong-answer", Input: "guess"},
-		},
-		Scorers: []Scorer{
-			ExactMatch("value-for-x"),
-			NoError(),
+		Cases: []SuiteCase{
+			Single(Case{Name: "A-uses-tool", Input: "get x"}, ExactMatch("value-for-x"), NoError()),
+			Single(Case{Name: "B-wrong-answer", Input: "guess"}, ExactMatch("value-for-x"), NoError()),
 		},
 	}
 
@@ -279,9 +275,11 @@ func TestSuiteRecordsHarnessErrorPerCase(t *testing.T) {
 	// No provider -> every case fails to build; the suite records RunErr and
 	// keeps going rather than aborting.
 	suite := Suite{
-		Config:  agent.RunnerConfig{},
-		Cases:   []Case{{Name: "a"}, {Name: "b"}},
-		Scorers: []Scorer{NoError()},
+		Config: agent.RunnerConfig{},
+		Cases: []SuiteCase{
+			Single(Case{Name: "a"}, NoError()),
+			Single(Case{Name: "b"}, NoError()),
+		},
 	}
 	report := suite.Run(context.Background())
 	if report.Failed != 2 || report.Passed != 0 {

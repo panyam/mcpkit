@@ -21,6 +21,18 @@ type Scenario struct {
 	// Name identifies the scenario in a report. Should be unique in a Suite.
 	Name string
 
+	// History seeds the conversation before the first turn runs. It is data,
+	// not turns: nothing in it is executed, and the model is never called to
+	// produce it.
+	//
+	// This is what an external suite needs and Turns cannot express. A
+	// memory benchmark supplies a long prior conversation and then asks one
+	// question about it; replaying that conversation as Turns would call the
+	// model once per historical message and would grade the model's own
+	// invented replies rather than the dataset's. The distinction is
+	// "conversation the agent is told it had" versus "turns the agent takes".
+	History []agent.Message
+
 	// Turns are the user inputs, oldest first. Each runs as one agent turn
 	// against the accumulated history; the final turn's Result is the graded
 	// one.
@@ -107,7 +119,10 @@ func RunScenario(ctx context.Context, cfg agent.RunnerConfig, s Scenario) ([]Res
 		return nil, fmt.Errorf("eval: build runner for scenario %q: %w", s.Name, err)
 	}
 
-	var history []agent.Message
+	// Copied rather than aliased: the loop appends to history, and a Scenario
+	// is a value a caller may run more than once (across memory backends, for
+	// instance) or share across a suite.
+	history := append([]agent.Message(nil), s.History...)
 	results := make([]Result, 0, len(s.Turns))
 	for i, input := range s.Turns {
 		history = append(history, agent.Message{Role: agent.RoleUser, Text: input})

@@ -172,3 +172,69 @@ func (c MemCase) Deterministic() []eval.Scorer {
 	}
 	return out
 }
+
+// SuiteCase adapts a MemCase onto the harness's graded unit.
+//
+// It is the whole of what an adapter does: map this suite's shape (a
+// category, a rubric, substring requirements, an optional compaction
+// strategy) onto a Scenario plus the scorers that grade it. The Runner, the
+// scorers, and the report are untouched.
+//
+// The name carries the category so a report groups readably without the
+// harness needing to know what a category is.
+func (c MemCase) SuiteCase() eval.SuiteCase {
+	s := c.Scenario
+	s.Name = string(c.Category) + "/" + s.Name
+
+	sc := eval.SuiteCase{Scenario: s}
+
+	sc.Scorers = func(p agent.Provider) []eval.Scorer {
+		// The judge needs a model, which is why Scorers takes the provider
+		// rather than being a plain slice: a rubric cannot be built until the
+		// suite's provider is known. appendRubric is a no-op without the
+		// eval_llm build tag, where eval.Judge does not exist.
+		return appendRubric(c.Deterministic(), p, c.Rubric)
+	}
+
+	if c.NewCompactor != nil {
+		// A compaction case is about the harness, not the model: it proves a
+		// fact survives the compaction boundary, so it has to run under a
+		// Compactor. Building it needs the provider (a SummarizingCompactor
+		// summarizes with a model), which is why Configure receives the
+		// config rather than being a static override.
+		sc.Configure = func(cfg agent.RunnerConfig) (agent.RunnerConfig, error) {
+			compactor, err := c.NewCompactor(cfg.Provider)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.Compactor = compactor
+			return cfg, nil
+		}
+	}
+
+	return sc
+}
+
+// SmokeAdapter yields the in-repo smoke set as an eval.Adapter.
+//
+// It needs no external data, so unlike a real corpus adapter it is always
+// configured. It exists to prove the seam with something that runs today; the
+// LongMemEval corpus loader (issue 1014) is the same interface over
+// LONGMEMEVAL_DATA_PATH and slots in beside it without touching the harness.
+type SmokeAdapter struct{}
+
+// Name identifies the suite in reports.
+func (SmokeAdapter) Name() string { return "longmemeval-smoke" }
+
+// Load yields the smoke set. It never returns zero cases, because the data is
+// compiled in.
+func (SmokeAdapter) Load() ([]eval.SuiteCase, error) {
+	cases := SmokeScenarios()
+	out := make([]eval.SuiteCase, 0, len(cases))
+	for _, c := range cases {
+		out = append(out, c.SuiteCase())
+	}
+	return out, nil
+}
+
+var _ eval.Adapter = SmokeAdapter{}
