@@ -23,22 +23,9 @@ Neither substitutes for the other, which is why both are here. An anchor can
 still match uniquely in a file that was reformatted after you read it, and
 that is exactly the case where applying it is wrong.
 
-Register it as an extension, which carries the prompt section describing the
-read-then-edit contract along with the tools:
-
 ```go
-fx, _ := files.New(files.Config{Root: "/work/project"})
-app, _ := host.NewApp(cfg, out, in, host.WithExtension(fx))
+src, _ := files.NewSource(files.Config{Root: "/work/project"})
 ```
-
-`files.NewSource` returns the bare `agent.ToolSource` for a `Runner` with no
-`agent/host`. Prefer `New` when there is a host: the tools alone leave the
-staleness contract discoverable only by failing an edit.
-
-To get `/undo` over those writes, pair it with `agent/ext/checkpoint`,
-registered **first** so its snapshot is taken before the write lands.
-`surfaces.WorkspaceExtensions` does that pairing and is what `agentchat
---workspace` uses.
 
 `Root` is required and has no "unset means anywhere" mode. These tools are
 driven by a model, and a model's instructions can come from content it read
@@ -186,6 +173,15 @@ tools enforce. Those travel together on purpose: a model that has not been
 told anchors must be unique will keep sending single-word anchors and keep
 being refused, so shipping the tools alone would make the contract
 discoverable only by failing.
+
+`files.NewSource` returns the bare `agent.ToolSource` instead, for a `Runner`
+with no `agent/host`. Prefer `New` wherever there is a host, for the reason
+above.
+
+To get `/undo` over these writes, pair it with `agent/ext/checkpoint`,
+registered **first** so its snapshot is taken before the write lands.
+`surfaces.WorkspaceExtensions` does that pairing, and is what `agentchat
+--workspace` and `agentweb --workspace` use.
 
 ## What the approval prompt shows
 
