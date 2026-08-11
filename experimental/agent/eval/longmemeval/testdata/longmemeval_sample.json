@@ -1,0 +1,54 @@
+[
+  {
+    "question_id": "gpt4_2f1e3b7a",
+    "question_type": "single-session-user",
+    "question": "What breed is my dog?",
+    "answer": "A border collie named Pip.",
+    "question_date": "2023/06/14 (Wed) 09:12",
+    "haystack_session_ids": ["sess_a1", "sess_a2"],
+    "haystack_dates": ["2023/05/02 (Tue) 18:30", "2023/05/09 (Tue) 11:04"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I just adopted a border collie. His name is Pip.", "has_answer": true},
+        {"role": "assistant", "content": "Congratulations! Border collies are famously energetic."}
+      ],
+      [
+        {"role": "user", "content": "Any tips for a rainy weekend indoors?"},
+        {"role": "assistant", "content": "Puzzle feeders and scent games work well."}
+      ]
+    ],
+    "answer_session_ids": ["sess_a1"]
+  },
+  {
+    "question_id": "gpt4_9c4d0e11_abs",
+    "question_type": "single-session-user",
+    "question": "What is my sister's name?",
+    "answer": "",
+    "question_date": "2023/07/01 (Sat) 14:00",
+    "haystack_session_ids": ["sess_b1"],
+    "haystack_dates": ["2023/06/20 (Tue) 08:00"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I have a younger sister and we are going hiking."},
+        {"role": "assistant", "content": "Sounds like a great trip."}
+      ]
+    ],
+    "answer_session_ids": []
+  },
+  {
+    "question_id": "gpt4_77aa22bc",
+    "question_type": "temporal-reasoning",
+    "question": "How long ago did I start the new job?",
+    "answer": "About two months before the question date.",
+    "question_date": "2023/08/15 (Tue) 10:00",
+    "haystack_session_ids": ["sess_c1"],
+    "haystack_dates": ["2023/06/15 (Thu) 09:00"],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "Today is my first day at the new job.", "has_answer": true},
+        {"role": "assistant", "content": "Good luck!"}
+      ]
+    ],
+    "answer_session_ids": ["sess_c1"]
+  }
+]
