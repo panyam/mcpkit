@@ -969,6 +969,36 @@ underscores, counters gain `_total`, and histograms gain a unit suffix, so
 
 Deferred: a memory-tracks metrics seam (embed/recall/compaction counters) and exemplars.
 
+### Critique gate (#1061)
+
+`NewCritiqueGate` asks a model whether a proposed tool call is acceptable under stated principles,
+and denies it if not. Three decisions are load-bearing:
+
+**It is middleware, not a new Runner hook.** The issue proposed a dedicated pre-dispatch gate in
+the Runner. There already is one, and `toolmiddleware.go` says so: ToolMiddleware is *the single
+interception seam*, and a second mechanism at the same point is exactly what that doc exists to
+prevent. A critique pass changes whether a call happens, which is what middleware is for.
+
+**It sits after extensions and before the approval gate.** Like the gate it must judge the
+arguments that will actually execute, so it cannot sit outside middleware that rewrites them.
+Unlike the gate it is automated policy, so it runs first and a call it refuses never reaches the
+human. Refusal is `DenyTool`, so the Runner emits `EventToolDenied`, tells the model why, and the
+turn continues.
+
+**It fails closed.** `AllowOnError` defaults false: a critique that could not be completed denies.
+A safety gate that disappears when its provider is down is not a safety gate, and a provider
+outage is not evidence a call is safe. The zero value being the safe one is deliberate.
+
+The proposed call reaches the critic inside the **same untrusted fence Spotlight uses**
+(`delimitMark` + a per-call `newMarker`), because the arguments are the part an attacker controls:
+an injected instruction that reached the agent through a tool result can be echoed straight back
+out as an argument, and handing that to the critic as prose hands the attacker a second prompt.
+That narrows the surface without closing it, which is the honest claim.
+
+Not built: critiquing the **final answer**. The issue mentions it, and it does not fit
+ToolMiddleware because there is no tool call. It needs a seam that does not exist, and inventing
+one speculatively is what #1288 is a cautionary tale about. Left for whoever has a caller.
+
 ---
 
 ## Eval

@@ -623,6 +623,17 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	}
 	runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, extMW...)
 
+	// Critique goes after extensions and before the gate. Like the gate it
+	// must judge the arguments that will actually execute, so it cannot sit
+	// outside middleware that rewrites them; unlike the gate it is automated
+	// policy, so it runs first and a call it refuses never reaches the human.
+	if mw, err := cfg.Critique.build(provider); err != nil {
+		app.Close()
+		return nil, err
+	} else if mw != nil {
+		runnerCfg.ToolMiddleware = append(runnerCfg.ToolMiddleware, mw)
+	}
+
 	// The permission gate goes last in the middleware chain so it inspects
 	// the arguments that will actually execute, after any earlier entry has
 	// rewritten them (see agent.RunnerConfig.ToolMiddleware). Appended only
