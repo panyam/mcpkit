@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^2.13.0",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "esbuild-plugin-solid": "^0.6.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
