@@ -844,7 +844,7 @@ func (r *Runner) callTool(ctx context.Context, parent context.Context, step int,
 			status = "denied"
 			span.SetAttribute("agent.tool.denied", "true")
 			emit(Event{Kind: EventToolDenied, Step: step, ToolCall: &call, Reason: reason})
-			return "tool call not permitted: " + reason
+			return "tool call not permitted: " + deniedModelReason(err, reason)
 		}
 		// A tool whose server is unreachable right now is a non-fatal miss, not
 		// a failure: the model is told and the turn continues (mirrors denial /

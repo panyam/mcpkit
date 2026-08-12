@@ -995,9 +995,35 @@ an injected instruction that reached the agent through a tool result can be echo
 out as an argument, and handing that to the critic as prose hands the attacker a second prompt.
 That narrows the surface without closing it, which is the honest claim.
 
+**The critic's output is fenced too, and that is the less obvious half.** Fencing the input and
+leaving the return path open protects nothing. The critic is a model that has just read
+attacker-controlled arguments, so it can be steered into writing an attacker's text as its reason,
+and that reason reaches the agent as `tool call not permitted: ...`. A denial arrives in the
+*policy layer's voice*, which the agent has every reason to trust more than the tool result the
+text came from, so an unfenced refusal is an injection channel with a promotion attached. The
+attacker pays one blocked call for a payload aimed at the next one.
+
+`fenceCritiqueReason` mints a **fresh** marker rather than reusing the one `critiquePrompt` used,
+because the critic saw that one: a critic that echoes it would close the fence from inside. It
+also does not reuse `delimitMark`, whose sentence names a tool and says the content was fetched
+from outside, neither true of a verdict written in-process. A fence whose explanation is false is
+the failure mode #1273 is about.
+
+This is what forced `ToolDeniedError.ModelReason`. A fence is several lines, and `agent/host`
+renders a denial as one truncated line against the call, so pushing the fence through the surface
+showed the user boilerplate and cut the actual reason off. `Reason` is now the legible attributed
+line surfaces show and `ModelReason` is what the model is told; empty means they are the same,
+which is right for every middleware whose reason is its own prose. The two audiences had been
+sharing one string since the type was written, and nothing noticed until a reason needed to be
+untrusted. Caught by `TestCritiqueConfigRefusesARealCall`, which asserts on rendered output.
+
 Not built: critiquing the **final answer**. The issue mentions it, and it does not fit
 ToolMiddleware because there is no tool call. It needs a seam that does not exist, and inventing
 one speculatively is what #1288 is a cautionary tale about. Left for whoever has a caller.
+
+Not audited: whether other middleware echo attacker-controlled argument text into their reasons.
+The three `DenyTool` sites in `approval.go` are host-authored constants, so critique is the first
+denial whose reason is not the host's own words, but a third-party middleware could be.
 
 ---
 
