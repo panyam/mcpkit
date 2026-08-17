@@ -88,6 +88,12 @@ jobs:
       - name: Run experimental/agent/ext/files tests
         run: cd experimental/agent/ext/files && go test ./... -v -race
 
+      # The lsp suite drives a stub language server that is this test binary
+      # re-executed, so it needs no server installed. The lsp_live tag runs the
+      # same surface against a real gopls and is deliberately not wired here.
+      - name: Run experimental/agent/ext/lsp tests
+        run: cd experimental/agent/ext/lsp && go test ./... -v -race
+
       - name: Run experimental/agent/surfaces shared-module tests
         run: cd experimental/agent/surfaces && go test ./... -v
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/panyam/mcpkit/experimental/agent/ext/checkpoint"
 	"github.com/panyam/mcpkit/experimental/agent/ext/files"
+	"github.com/panyam/mcpkit/experimental/agent/ext/lsp"
 	"github.com/panyam/mcpkit/experimental/agent/host"
 )
 
@@ -36,6 +37,17 @@ type WorkspaceConfig struct {
 	// tools with no /undo. Opt-out rather than opt-in because a write tool
 	// whose effects cannot be reversed is the case checkpoint was built for.
 	NoCheckpoint bool
+
+	// LanguageServers adds LSP-in-loop: navigation tools, and diagnostics
+	// after every write and in each turn's context. Empty adds nothing.
+	//
+	// Opt-in, unlike checkpoint, because this one spawns processes. A
+	// checkpoint costs a directory and is wanted wherever writes are, while a
+	// language server the caller did not ask for is a subprocess, an index of
+	// the whole tree, and a few hundred megabytes. Naming the servers is also
+	// unavoidable: nothing here can guess which languages the workspace holds
+	// or which server the caller wants driving them.
+	LanguageServers []lsp.ServerSpec
 }
 
 // WorkspaceExtensions builds the file and checkpoint extensions for cfg.
@@ -96,6 +108,28 @@ func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
 		return nil, fmt.Errorf("workspace files: %w", err)
 	}
 	exts = append(exts, fx)
+
+	if len(cfg.LanguageServers) > 0 {
+		// Last, and for the mirror image of checkpoint's reason. Checkpoint
+		// must see a file before it is written; this must see it after. Its
+		// middleware therefore has to sit innermost of the three, which
+		// registration order gives it.
+		lx, lspErr := lsp.New(lsp.Config{
+			Root:    cfg.Root,
+			Servers: cfg.LanguageServers,
+			Writes: []lsp.WriteSpec{
+				{Tool: "write_file", Paths: files.PathArg},
+				{Tool: "edit_file", Paths: files.PathArg},
+			},
+		})
+		if lspErr != nil {
+			// Everything built so far owns nothing that outlives this
+			// function except the language servers we failed to finish
+			// starting, which lsp.New has already cleaned up.
+			return nil, fmt.Errorf("workspace lsp: %w", lspErr)
+		}
+		exts = append(exts, lx)
+	}
 
 	return exts, nil
 }

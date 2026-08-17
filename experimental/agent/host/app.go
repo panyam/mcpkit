@@ -667,8 +667,10 @@ func NewApp(cfg *Config, out io.Writer, in io.Reader, opts ...AppOption) (*App, 
 	return app, nil
 }
 
-// Close stops event streams and disconnects every server.
+// Close stops event streams, closes every extension, and disconnects every
+// server.
 func (a *App) Close() {
+	a.closeExtensions()
 	if a.streams.stop != nil {
 		a.streams.stop()
 	}
