@@ -16,7 +16,7 @@ require (
 	github.com/panyam/demokit v0.0.30
 	github.com/panyam/mcpkit v0.5.1
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0
+	github.com/panyam/mcpkit/experimental/ext/events v0.5.1
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/ext/auth v0.2.42
 	github.com/panyam/servicekit v0.1.4
