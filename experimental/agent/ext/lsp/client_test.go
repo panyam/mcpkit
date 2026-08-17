@@ -148,3 +148,143 @@ func TestRelFromURIRefusesOutsideTheRoot(t *testing.T) {
 		t.Fatal("a path outside the root must not resolve to a workspace path")
 	}
 }
+
+func startStubSettle(t *testing.T, root string, s stubScript, settle time.Duration) *client {
+	t.Helper()
+	spec := stubSpec(t, s)
+	spec.SettleDelay = settle
+	c, err := startClient(context.Background(), spec, root)
+	if err != nil {
+		t.Fatalf("startClient: %v", err)
+	}
+	t.Cleanup(func() { _ = c.close() })
+	return c
+}
+
+// TestRefreshWaitsPastAProvisionalEmptyPublication is the #1303 regression.
+// rust-analyzer publishes an empty set the moment a file changes and its real
+// answer about two seconds later. Taking the first publication reported a file
+// that does not compile as clean, which is the worst direction to be wrong in.
+func TestRefreshWaitsPastAProvisionalEmptyPublication(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStubSettle(t, root, stubScript{
+		EmptyFirst:     true,
+		PublishDelayMs: 300,
+		Diagnostics: map[string][]diagnostic{
+			"a.go": {{Range: textRange{Start: position{Line: 4}}, Severity: severityError, Message: "undefined: foo"}},
+		},
+	}, 2*time.Second)
+
+	if !c.refresh(context.Background(), "a.go", 10*time.Second) {
+		t.Fatal("refresh reported no publication")
+	}
+	got := c.diagnostics("a.go")
+	if len(got) != 1 || got[0].Message != "undefined: foo" {
+		t.Fatalf("settled on the provisional empty set instead of the real one: %+v", got)
+	}
+}
+
+// TestRefreshNeedsNoRoundTripWhenContentIsUnchanged covers clangd, which does
+// not re-publish for a didChange carrying content it already has. Sending one
+// anyway left the caller waiting for a publication that was never coming.
+func TestRefreshNeedsNoRoundTripWhenContentIsUnchanged(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStub(t, root, stubScript{
+		PublishOnOpenOnly: true,
+		Diagnostics: map[string][]diagnostic{
+			"a.go": {{Message: "undefined: foo"}},
+		},
+	})
+
+	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+		t.Fatal("the first refresh should open the file and get diagnostics")
+	}
+	start := time.Now()
+	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+		t.Fatal("a second refresh over unchanged content should answer from what we hold")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("unchanged content took %s, so a didChange was sent and waited on", elapsed)
+	}
+	if got := c.diagnostics("a.go"); len(got) != 1 {
+		t.Fatalf("diagnostics = %+v, want the set from the open", got)
+	}
+}
+
+// TestRefreshDropsItsWaiterOnTimeout pins that repeated timeouts cannot grow
+// the waiter list without bound.
+func TestRefreshDropsItsWaiterOnTimeout(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStub(t, root, stubScript{NoPublish: true})
+
+	if c.refresh(context.Background(), "a.go", 150*time.Millisecond) {
+		t.Fatal("refresh claimed success from a server that published nothing")
+	}
+	c.mu.Lock()
+	left := len(c.waiters["a.go"])
+	c.mu.Unlock()
+	if left != 0 {
+		t.Fatalf("%d waiter(s) left behind after a timeout", left)
+	}
+}
+
+// TestSettleForKnownTwoPhaseServer pins the quirk table. Nothing in the
+// protocol lets a server say an answer was provisional, so the delay has to
+// come from knowing which servers do it.
+func TestSettleForKnownTwoPhaseServer(t *testing.T) {
+	if settleFor("rust-analyzer") <= DefaultSettleDelay {
+		t.Fatal("rust-analyzer needs a longer settle than the default, or the empty publication wins")
+	}
+	for _, name := range []string{"gopls", "clangd", ""} {
+		if got := settleFor(name); got != DefaultSettleDelay {
+			t.Fatalf("settleFor(%q) = %v, want the default", name, got)
+		}
+	}
+}
+
+func TestServerSpecSettleDelayOverridesTheDefault(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStubSettle(t, root, stubScript{}, 1234*time.Millisecond)
+	if c.settle != 1234*time.Millisecond {
+		t.Fatalf("settle = %v, want the spec's value", c.settle)
+	}
+}
+
+// TestDiagnosticsTimeoutOutlastsTheLongestSettle pins that the two bounds
+// agree. A timeout shorter than the settle would cut off the very publication
+// the settle exists to wait for.
+func TestDiagnosticsTimeoutOutlastsTheLongestSettle(t *testing.T) {
+	if DefaultDiagnosticsTimeout <= settleFor("rust-analyzer") {
+		t.Fatalf("timeout %v does not outlast settle %v", DefaultDiagnosticsTimeout, settleFor("rust-analyzer"))
+	}
+}
+
+// TestRefreshWaitsWhenTheServerHasNotAnsweredYet guards the narrow case that
+// makes the unchanged-content shortcut safe.
+//
+// A navigation call syncs the file, so by the time a write is re-checked the
+// content can already be with the server while the server has said nothing
+// about it. Skipping the wait on unchanged content alone reported the file as
+// clean before anything had looked at it, which is the same false all-clear
+// this change exists to remove.
+func TestRefreshWaitsWhenTheServerHasNotAnsweredYet(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStub(t, root, stubScript{
+		PublishDelayMs: 400,
+		Diagnostics: map[string][]diagnostic{
+			"a.go": {{Message: "undefined: foo"}},
+		},
+	})
+
+	// Open the document without waiting, the way a navigation call does.
+	if _, err := c.sync("a.go"); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+
+	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+		t.Fatal("refresh gave up on a file the server had not answered for")
+	}
+	if got := c.diagnostics("a.go"); len(got) != 1 {
+		t.Fatalf("diagnostics = %+v, want the server's answer rather than a premature clean", got)
+	}
+}

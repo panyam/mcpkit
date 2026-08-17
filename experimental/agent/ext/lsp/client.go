@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -71,12 +72,26 @@ type client struct {
 	conn *conn
 
 	// encoding is what the server agreed to for Position.Character. Empty
-	// means it declined to negotiate, which per spec means utf-16.
+	// means it declined to negotiate, which per spec means utf-16. gopls,
+	// typescript-language-server and pyright all decline; rust-analyzer and
+	// clangd answer "utf-8".
 	encoding string
 
-	mu      sync.Mutex
-	diags   map[string][]diagnostic
-	open    map[string]int
+	// settle is how long to keep waiting for further diagnostics after one
+	// arrives. See refresh.
+	settle time.Duration
+
+	mu    sync.Mutex
+	diags map[string][]diagnostic
+	open  map[string]int
+
+	// sent is the content hash last given to the server; answered is the hash
+	// the diagnostics we hold correspond to. They differ while a change is in
+	// flight, which is what tells "the server already agrees with us" apart
+	// from "the server has not replied yet".
+	sent     map[string][32]byte
+	answered map[string][32]byte
+
 	waiters map[string][]chan struct{}
 
 	closeOnce sync.Once
@@ -111,13 +126,15 @@ func startClient(ctx context.Context, spec ServerSpec, root string) (*client, er
 	}
 
 	c := &client{
-		spec:    spec,
-		root:    root,
-		cmd:     cmd,
-		conn:    newConn(stdin, stdout),
-		diags:   map[string][]diagnostic{},
-		open:    map[string]int{},
-		waiters: map[string][]chan struct{}{},
+		spec:     spec,
+		root:     root,
+		cmd:      cmd,
+		conn:     newConn(stdin, stdout),
+		diags:    map[string][]diagnostic{},
+		open:     map[string]int{},
+		sent:     map[string][32]byte{},
+		answered: map[string][32]byte{},
+		waiters:  map[string][]chan struct{}{},
 	}
 	c.conn.onNotify = c.onNotify
 	go c.conn.run()
@@ -155,11 +172,18 @@ func (c *client) initialize(ctx context.Context) error {
 		Capabilities struct {
 			PositionEncoding string `json:"positionEncoding"`
 		} `json:"capabilities"`
+		ServerInfo struct {
+			Name string `json:"name"`
+		} `json:"serverInfo"`
 	}
 	if err := c.conn.call(ctx, "initialize", params, &result); err != nil {
 		return fmt.Errorf("lsp: initialize %s: %w", c.spec.Command[0], err)
 	}
 	c.encoding = result.Capabilities.PositionEncoding
+	c.settle = c.spec.SettleDelay
+	if c.settle <= 0 {
+		c.settle = settleFor(result.ServerInfo.Name)
+	}
 	return c.conn.notify("initialized", map[string]any{})
 }
 
@@ -180,6 +204,7 @@ func (c *client) onNotify(method string, params json.RawMessage) {
 	}
 	c.mu.Lock()
 	c.diags[rel] = p.Diagnostics
+	c.answered[rel] = c.sent[rel]
 	waiters := c.waiters[rel]
 	delete(c.waiters, rel)
 	c.mu.Unlock()
@@ -192,8 +217,10 @@ func (c *client) onNotify(method string, params json.RawMessage) {
 //
 // Registered before the didChange that will cause them, because the server can
 // publish before the notify call returns and a waiter installed afterwards
-// would miss the very publication it is waiting for.
-func (c *client) awaitPublish(rel string) <-chan struct{} {
+// would miss the very publication it is waiting for. Every channel it hands
+// out is either closed by a publication or dropped by dropWait; one that is
+// neither stays in the map until the next publication for that file.
+func (c *client) awaitPublish(rel string) chan struct{} {
 	ch := make(chan struct{})
 	c.mu.Lock()
 	c.waiters[rel] = append(c.waiters[rel], ch)
@@ -201,22 +228,49 @@ func (c *client) awaitPublish(rel string) <-chan struct{} {
 	return ch
 }
 
+// dropWait removes a waiter that gave up, so a run of timeouts cannot grow the
+// waiter list without bound.
+func (c *client) dropWait(rel string, ch chan struct{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	list := c.waiters[rel]
+	for i, w := range list {
+		if w == ch {
+			c.waiters[rel] = append(list[:i:i], list[i+1:]...)
+			return
+		}
+	}
+}
+
 // sync tells the server about the current on-disk content of rel, opening the
-// document the first time and revising it afterwards.
-func (c *client) sync(rel string) error {
+// document the first time and revising it afterwards. It reports whether
+// anything was actually sent.
+//
+// Content that the server already has is not resent. Beyond saving a needless
+// recompute on every navigation call, this is load-bearing for refresh: clangd
+// does not re-publish for a didChange whose content is identical, so resending
+// would leave a caller waiting for a publication that is never coming.
+func (c *client) sync(rel string) (bool, error) {
 	body, err := os.ReadFile(filepath.Join(c.root, rel))
 	if err != nil {
-		return err
+		return false, err
 	}
+	sum := sha256.Sum256(body)
+
 	c.mu.Lock()
 	version, isOpen := c.open[rel]
+	if isOpen && c.sent[rel] == sum {
+		c.mu.Unlock()
+		return false, nil
+	}
 	version++
 	c.open[rel] = version
+	c.sent[rel] = sum
 	c.mu.Unlock()
 
 	uri := pathToURI(filepath.Join(c.root, rel))
 	if !isOpen {
-		return c.conn.notify("textDocument/didOpen", map[string]any{
+		return true, c.conn.notify("textDocument/didOpen", map[string]any{
 			"textDocument": map[string]any{
 				"uri":        uri,
 				"languageId": c.spec.LanguageID,
@@ -229,7 +283,7 @@ func (c *client) sync(rel string) error {
 	// the one form every server accepts regardless of the sync kind it
 	// declared, which matters because we drive several servers and cannot
 	// carry an incremental-diff implementation per server.
-	return c.conn.notify("textDocument/didChange", map[string]any{
+	return true, c.conn.notify("textDocument/didChange", map[string]any{
 		"textDocument":   map[string]any{"uri": uri, "version": version},
 		"contentChanges": []map[string]any{{"text": string(body)}},
 	})
@@ -237,22 +291,96 @@ func (c *client) sync(rel string) error {
 
 // refresh syncs rel and waits for the diagnostics that follow, up to timeout.
 //
-// A timeout returns false rather than the diagnostics we happen to be holding.
-// Stale problems presented as the result of the edit that just ran are worse
-// than saying nothing: the model would go fix an error it already fixed.
+// # Why it waits for quiet rather than for one publication
+//
+// The obvious implementation takes the first publication after the change as
+// the answer. That is correct for gopls, typescript-language-server and
+// pyright, all of which publish once with what they found, and it is wrong for
+// a server that computes in two phases.
+//
+// rust-analyzer publishes an EMPTY set as soon as the file changes and the
+// real diagnostics about two seconds later, once cargo has run. Taking the
+// first publication there reports a file that does not compile as "no problems
+// reported", which is the worst direction for this to be wrong in: the whole
+// point of the post-write report is to tell the model it broke something.
+//
+// So each publication restarts a settle timer and the last set wins. The
+// timeout still bounds the whole wait, which is what stops a server that
+// publishes continuously from holding a turn open.
+//
+// A timeout with nothing published returns false rather than the diagnostics
+// we happen to be holding. Stale problems presented as the result of the edit
+// that just ran are worse than saying nothing: the model would go fix an error
+// it already fixed.
 func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration) bool {
-	ch := c.awaitPublish(rel)
-	if err := c.sync(rel); err != nil {
+	deadline := time.Now().Add(timeout)
+	first := c.awaitPublish(rel)
+
+	changed, err := c.sync(rel)
+	if err != nil {
+		c.dropWait(rel, first)
 		return false
 	}
-	timer := time.NewTimer(timeout)
+	if !changed && c.hasAnswered(rel) {
+		// The server has this exact content and has already reported on it,
+		// so nothing further is coming and what we hold is current. Waiting
+		// would report a timeout for a file we can already answer about,
+		// which is what clangd does when handed content it already has.
+		//
+		// Both halves are load-bearing. Unchanged content alone is not
+		// enough: right after a didOpen the server has the content and has
+		// not replied yet, and returning here would report a file as clean
+		// before anything had looked at it.
+		c.dropWait(rel, first)
+		return true
+	}
+
+	if !c.waitPublish(ctx, rel, first, time.Until(deadline)) {
+		return false
+	}
+	for {
+		next := c.awaitPublish(rel)
+		remaining := time.Until(deadline)
+		wait := c.settle
+		if wait > remaining {
+			wait = remaining
+		}
+		if wait <= 0 || !c.waitPublish(ctx, rel, next, wait) {
+			return true
+		}
+	}
+}
+
+// hasAnswered reports whether the diagnostics we hold describe the content the
+// server currently has.
+func (c *client) hasAnswered(rel string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	sent, open := c.sent[rel]
+	if !open {
+		return false
+	}
+	answered, ok := c.answered[rel]
+	return ok && answered == sent
+}
+
+// waitPublish blocks until ch fires, the wait elapses, or ctx ends, dropping
+// the waiter in the two cases where nothing arrived.
+func (c *client) waitPublish(ctx context.Context, rel string, ch chan struct{}, wait time.Duration) bool {
+	if wait <= 0 {
+		c.dropWait(rel, ch)
+		return false
+	}
+	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
 	case <-ch:
 		return true
 	case <-timer.C:
+		c.dropWait(rel, ch)
 		return false
 	case <-ctx.Done():
+		c.dropWait(rel, ch)
 		return false
 	}
 }

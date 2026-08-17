@@ -286,3 +286,41 @@ func TestMiddlewareSkipsADeniedCall(t *testing.T) {
 		t.Fatalf("a denied call produced a result: %+v", res)
 	}
 }
+
+// TestMiddlewareDoesNotReportCleanForAProvisionalPublication is #1303 at the
+// level the model actually sees it. Before the settle logic this appended
+// "no problems reported" to an edit that broke the build, because the server's
+// first publication after the change was an empty placeholder.
+func TestMiddlewareDoesNotReportCleanForAProvisionalPublication(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	spec := stubSpec(t, stubScript{
+		EmptyFirst:     true,
+		PublishDelayMs: 300,
+		Diagnostics: map[string][]diagnostic{
+			"a.go": {{Range: textRange{Start: position{Line: 2}}, Severity: severityError, Message: "undefined: foo"}},
+		},
+	})
+	spec.SettleDelay = 2 * time.Second
+	ext, err := New(Config{
+		Root:               root,
+		Servers:            []ServerSpec{spec},
+		Writes:             []WriteSpec{{Tool: "edit_file", Paths: pathArg}},
+		DiagnosticsTimeout: 10 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = ext.Close() })
+
+	res, err := ext.Middleware()[0](context.Background(), callInfo("edit_file", "a.go"), okResult("edited"))
+	if err != nil {
+		t.Fatalf("middleware: %v", err)
+	}
+	got := resultText(res)
+	if strings.Contains(got, "no problems reported") {
+		t.Fatalf("a broken edit was reported as clean: %q", got)
+	}
+	if !strings.Contains(got, "undefined: foo") {
+		t.Fatalf("the real diagnostic never reached the model: %q", got)
+	}
+}
