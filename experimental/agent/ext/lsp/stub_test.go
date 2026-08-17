@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -48,6 +49,15 @@ type stubScript struct {
 	// NoPublish suppresses diagnostics entirely, so a refresh times out.
 	NoPublish bool `json:"noPublish,omitempty"`
 
+	// EmptyFirst publishes an empty set immediately and the real one after
+	// PublishDelayMs, which is what rust-analyzer does: the first publication
+	// after a change is a provisional clear, not an answer.
+	EmptyFirst bool `json:"emptyFirst,omitempty"`
+
+	// PublishOnOpenOnly ignores didChange, like clangd given content it
+	// already has.
+	PublishOnOpenOnly bool `json:"publishOnOpenOnly,omitempty"`
+
 	// IgnoreShutdown makes the server refuse to exit politely, which is what
 	// the kill path in client.close exists for.
 	IgnoreShutdown bool `json:"ignoreShutdown,omitempty"`
@@ -63,13 +73,23 @@ func runStubServer(script string) {
 	out := os.Stdout
 	root, _ := os.Getwd()
 
+	// A publish can emit twice and runs on its own goroutine, so frames need
+	// serializing or a header and a body interleave into a stream the client
+	// cannot resynchronize.
+	var writeMu sync.Mutex
 	send := func(msg *message) {
 		body, err := json.Marshal(msg)
 		if err != nil {
 			return
 		}
+		writeMu.Lock()
+		defer writeMu.Unlock()
 		fmt.Fprintf(out, "Content-Length: %d\r\n\r\n", len(body))
 		out.Write(body)
+	}
+	emit := func(uri string, diags []diagnostic) {
+		params, _ := json.Marshal(map[string]any{"uri": uri, "diagnostics": diags})
+		send(&message{JSONRPC: "2.0", Method: "textDocument/publishDiagnostics", Params: params})
 	}
 	publish := func(uri string) {
 		rel := stubRel(root, uri)
@@ -77,11 +97,13 @@ func runStubServer(script string) {
 		if diags == nil {
 			diags = []diagnostic{}
 		}
+		if s.EmptyFirst {
+			emit(uri, []diagnostic{})
+		}
 		if s.PublishDelayMs > 0 {
 			time.Sleep(time.Duration(s.PublishDelayMs) * time.Millisecond)
 		}
-		params, _ := json.Marshal(map[string]any{"uri": uri, "diagnostics": diags})
-		send(&message{JSONRPC: "2.0", Method: "textDocument/publishDiagnostics", Params: params})
+		emit(uri, diags)
 	}
 
 	for {
@@ -116,6 +138,9 @@ func runStubServer(script string) {
 			reply(map[string]any{"capabilities": caps})
 		case "textDocument/didOpen", "textDocument/didChange":
 			if s.NoPublish {
+				continue
+			}
+			if s.PublishOnOpenOnly && msg.Method == "textDocument/didChange" {
 				continue
 			}
 			var p struct {

@@ -30,6 +30,40 @@ type ServerSpec struct {
 	// Servers that handle one language mostly ignore it; ones that handle
 	// several do not.
 	LanguageID string
+
+	// SettleDelay is how long to keep waiting for further diagnostics after a
+	// publication arrives, before treating the last set as the answer. Zero
+	// picks a default from the server's reported name; see settleFor.
+	//
+	// Set it when a server computes diagnostics in phases and the default does
+	// not already know about it. The tell is a broken file reported as clean:
+	// the server published an empty set on the change and its real answer
+	// arrived after we had stopped listening.
+	SettleDelay time.Duration
+}
+
+// settleFor picks a settle delay from the name a server reports at initialize.
+//
+// Most servers publish once, with what they found, so a short delay costs
+// almost nothing and is enough. The exceptions are servers that publish an
+// empty set immediately and their real answer after a slow pass, where the
+// delay has to outlast that gap or a broken file gets reported as clean.
+//
+// A table of known servers is not elegant, and it is what every LSP client
+// ends up with, because nothing in the protocol lets a server say "that answer
+// was provisional". Keying on the reported name rather than on the command
+// means a server renamed or wrapped by a launcher still matches. A server that
+// reports no name at all (typescript-language-server and pyright both do)
+// falls through to the default, which is correct for them.
+func settleFor(serverName string) time.Duration {
+	switch serverName {
+	case "rust-analyzer":
+		// Measured: an empty publication on the change, the real diagnostics
+		// about 2.4s later once cargo has run.
+		return 3 * time.Second
+	default:
+		return DefaultSettleDelay
+	}
 }
 
 // WriteSpec declares that a tool writes files and says which of its arguments
@@ -77,10 +111,20 @@ type Config struct {
 	MaxDiagnostics int
 }
 
-// Defaults for the two bounds in Config.
+// Defaults for the bounds in Config and ServerSpec.
 const (
-	DefaultDiagnosticsTimeout = 3 * time.Second
-	DefaultMaxDiagnostics     = 50
+	// DefaultDiagnosticsTimeout bounds the whole wait after a write, settle
+	// included. It has to exceed the slowest known settle (rust-analyzer's
+	// three seconds) with room for the server's own work, or the timeout
+	// would cut off the very publication the settle exists to catch.
+	DefaultDiagnosticsTimeout = 8 * time.Second
+
+	// DefaultSettleDelay is the quiet period for a server that publishes once
+	// and means it, which is most of them. Short enough that a clean edit is
+	// not noticeably slower.
+	DefaultSettleDelay = 250 * time.Millisecond
+
+	DefaultMaxDiagnostics = 50
 )
 
 // startTimeout bounds the initialize handshake for one server.
@@ -172,7 +216,7 @@ func (s *source) navigate(ctx context.Context, args map[string]any, method strin
 	if c == nil {
 		return toolError(fmt.Sprintf("no language server configured for %s", filepath.Ext(rel)))
 	}
-	if err := c.sync(rel); err != nil {
+	if _, err := c.sync(rel); err != nil {
 		return toolError(fmt.Sprintf("%s: %v", path, err))
 	}
 

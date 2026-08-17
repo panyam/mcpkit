@@ -64,12 +64,35 @@ and trains the model to skip the section.
 A server that does not answer in time is reported as not having answered:
 
 ```
-cache.go: the language server did not report back within 3s
+cache.go: the language server did not report back within 8s
 ```
 
 Silence would read as "no problems" and the diagnostics we happened to be
 holding would read as problems this edit caused, sending the model to fix
 something it already fixed.
+
+### The first publication is not always the answer
+
+Most servers publish once with what they found. Some compute in two phases and
+publish an **empty set immediately**, then the real diagnostics after a slow
+pass. rust-analyzer does this, with about two seconds between the two.
+
+Taking the first publication there reports a file that does not compile as
+clean, which is the worst direction for this to be wrong in. So each
+publication restarts a settle timer and the last set wins, with
+`Config.DiagnosticsTimeout` bounding the whole wait.
+
+`ServerSpec.SettleDelay` sets that quiet period. Left at zero it is chosen from
+the name the server reports at `initialize`: three seconds for rust-analyzer,
+250ms for everything else. A table of known servers is not elegant and is what
+every LSP client ends up with, because nothing in the protocol lets a server say
+"that answer was provisional". The tell that a new server needs an entry is a
+broken file reported as clean.
+
+Content the server already has is not resent, so a navigation call and a
+re-check over an unchanged file cost no round trip. That also matters for
+clangd, which does not re-publish for a `didChange` carrying content it already
+holds.
 
 ## The tools take a symbol name, not a position
 
@@ -96,12 +119,18 @@ spelling the server uses, since gopls reports a method as `(*CacheWrapper).Get`.
 
 **LSP 3.17 does not remove the cursor.** Its `positionEncoding` negotiation only
 changes how a column is counted, and no LSP version has a name-addressed
-request. gopls v0.23.0 declines to negotiate at all: probed directly over stdio,
-offered `["utf-8","utf-16"]` and then `["utf-8"]` alone, it omits
-`positionEncoding` in both cases, which per spec means utf-16. So columns come
-back in utf-16 code units and a line containing an emoji counts differently from
-its bytes. That conversion lives in one function and no position ever reaches
-the model.
+request.
+
+Servers disagree about whether to negotiate at all, so both paths are live:
+
+| Server | `positionEncoding` |
+|---|---|
+| gopls, typescript-language-server, pyright | omitted, so utf-16 |
+| rust-analyzer, clangd | `utf-8` |
+
+An omitted value means utf-16 per spec, so columns arrive in code units and a
+line containing an emoji counts differently from its bytes. That conversion
+lives in one function and no position ever reaches the model.
 
 A location outside the workspace is named but not quoted, since a definition in
 a dependency is a real answer and reading that file would reach outside the root
@@ -146,14 +175,23 @@ The suite drives a stub language server that is the test binary re-executed, so
 it needs nothing installed and exercises spawn, framing, and teardown for real.
 It proves nothing about whether gopls behaves the way the stub does.
 
-The `lsp_live` tag runs the same surface against a real server and is not wired
+The `lsp_live` tag runs the same surface against real servers and is not wired
 into CI:
 
 ```bash
-go test -tags lsp_live ./experimental/agent/ext/lsp/ -run TestLive -v
+go test -tags lsp_live ./experimental/agent/ext/lsp/ -v
 ```
 
-`LSP_LIVE_SERVER` overrides the command, which defaults to `gopls`.
+`TestLive*` drives one server, defaulting to `gopls` and overridable with
+`LSP_LIVE_SERVER`. `TestServers` is the multi-language conformance probe: it
+checks startup, `documentSymbol` decoding, symbol resolution by name, and that a
+file which does not compile produces a diagnostic, for gopls,
+typescript-language-server, pyright, rust-analyzer and clangd. Each subtest skips
+when its binary is absent.
+
+That probe is what found the provisional-publication bug (#1303), which shipped
+because gopls was the only server ever tried. Adding a server to it is the
+cheapest way to find the next assumption of that kind.
 
 ## Status
 

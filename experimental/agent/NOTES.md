@@ -847,6 +847,48 @@ The other three, all recorded on #1240:
    duplication is cheap and exporting it would widen the surface being frozen, but a second
    copy means the rule now lives in two places.
 
+### One server is not the protocol (#1303)
+
+`ext/lsp` shipped having been run against gopls and nothing else. Probing the four other servers
+installed on a dev machine, through the package's own client, found that the diagnostics contract
+was gopls-shaped in a way that was silently wrong.
+
+**`refresh` took the first publication after a change as the answer.** True for gopls,
+typescript-language-server and pyright, which publish once with what they found. False for
+rust-analyzer, which publishes an **empty set immediately** and its real diagnostics about 2.4s
+later, once cargo has run. So an edit that broke the build came back to the model as "no problems
+reported". A false all-clear defeats the entire point of the post-write report.
+
+The fix is to settle rather than take-first: each publication restarts a quiet timer and the last
+set wins, bounded by `DiagnosticsTimeout`. The quiet period is per-server, keyed on the name
+reported at `initialize`, because nothing in the protocol lets a server say an answer was
+provisional. A quirk table is what every LSP client ends up with.
+
+Three things worth carrying:
+
+- **`DefaultDiagnosticsTimeout` had to go from 3s to 8s.** rust-analyzer's real answer lands at
+  ~2.4s and the settle adds 3s on top, so the measured end-to-end is 5.6s. The old bound would have
+  cut off the publication the settle exists to catch, and the fix would have looked like it worked
+  in unit tests while still failing live.
+- **"Unchanged content means what we hold is current" is only half true.** Skipping the re-sync when
+  the server already has the bytes is right (clangd does not re-publish for an identical
+  `didChange`), but right after a `didOpen` the server has the content and has said nothing. The
+  first cut of that optimisation reintroduced the same false all-clear from the other direction, and
+  the multi-language live test caught it within a minute of being written. Both halves are needed:
+  unchanged **and** already answered.
+- **positionEncoding negotiation is not dead.** #1301 recorded that gopls declines it and left the
+  impression utf-16 is simply what one gets. rust-analyzer and clangd both answer `utf-8`, so the
+  utf-8 branch in `byteColumn` is exercised rather than defensive.
+
+The `SymbolInformation[]` flat shape never appeared: all five servers returned hierarchical
+`DocumentSymbol` with a real `selectionRange`. It stays spec-legal, so `TestServers` asserts a
+non-zero range rather than trusting it, since a flat array decodes into a zero `selectionRange` and
+would resolve every symbol to line 0.
+
+The general lesson is the same one the eval PRs keep producing: a suite that only ever drives one
+implementation proves the code agrees with that implementation. `TestServers` exists so the next
+server-shaped assumption costs a test run rather than a merged bug.
+
 ### Sub-agent personas
 
 `Config.SubAgents []SubAgentConfig{Name, Description, Instructions, Allow, MaxDepth}` builds
