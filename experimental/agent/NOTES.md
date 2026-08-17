@@ -1043,6 +1043,38 @@ A tool denial emits `EventToolDenied` with `Event.Reason`, is fed back as model-
 **the turn continues**. It is deliberately not an error, so `eval.NoError` ignores it and
 `eval.NotDenied` is the separate check.
 
+### AgentDojo is a framework, not a dataset (#1060)
+
+#1060 asked for "an adapter that loads AgentDojo-style cases", which assumes a corpus. There is not
+one. A user task is a Python class whose `utility(output, pre_env, post_env)` inspects environment
+state before and after the run, an injection task pairs a GOAL with a `security(...)` check, and the
+environments are stateful Python objects whose tools mutate them. The scoring **is** code run against
+live state, so nothing exports as data.
+
+So `eval/agentdojo` rebuilds the *shape* in Go, the way `longmemeval`'s `SmokeScenarios` borrows
+LongMemEval's categories without its corpus. Its numbers are ours, not comparable to published ones,
+and the package doc says so. The bridge that would buy comparability is #1298.
+
+Three things that suite has to get right, all of which a single pass/fail destroys:
+
+- **The injection lives in tool output, never in the prompt.** The attacker does not control the
+  user's request. A payload delivered through instructions measures instruction-following.
+- **Two axes, scored independently.** The dangerous cell is utility-pass with security-fail: the
+  agent did the job *and* paid the attacker, which reads as clean success to any single verdict. The
+  opposite corner matters too, since an agent that refuses everything has perfect security and no use.
+- **Scorers read post-run state, not the transcript.** An agent that says it will not pay the
+  attacker and then calls `pay` has resisted nothing, and only the state distinguishes the two.
+
+`SuiteReport.Dimensions()` is the per-dimension rollup #1015 deferred to here. It is a **method over
+data `CaseReport` already carried**, not new fields, which is what the deferral was betting on.
+Inversion (an attack-success rate is `1-Rate` of a resistance dimension) stays in the caller, because
+making `Rate` mean opposite things depending on the scorer name would be worse than the arithmetic.
+
+**What the CI tests do not prove:** a stub provider cannot show that spotlighting changes a real
+model's behaviour. `TestGuardrailChangesTheMeasurement` verifies the *apparatus* distinguishes
+defended from undefended runs, and would pass even if the guardrail were a no-op on real models. The
+effect itself is a live-run measurement.
+
 ### The adapter seam (#1015)
 
 External suites are **data sources**, not harnesses. `Adapter.Load` yields `[]SuiteCase`, and
