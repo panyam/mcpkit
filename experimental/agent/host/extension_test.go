@@ -272,3 +272,70 @@ func TestTurnStartErrorAbortsBeforeHistory(t *testing.T) {
 		t.Fatalf("history grew by %d despite the abort", len(app.history)-before)
 	}
 }
+
+// closeExt records that it was closed, and in what order relative to others.
+type closeExt struct {
+	BaseExtension
+	name  string
+	order *[]string
+	fail  error
+}
+
+func (e *closeExt) Name() string { return e.name }
+
+func (e *closeExt) Close() error {
+	*e.order = append(*e.order, e.name)
+	return e.fail
+}
+
+// TestExtensionCloseRunsInReverseRegistrationOrder pins the teardown half of
+// the lifecycle. Registration order is dependency order (see
+// surfaces.WorkspaceExtensions, where checkpoint precedes the tools it
+// snapshots), so closing forwards would tear a dependency out from under its
+// dependent.
+func TestExtensionCloseRunsInReverseRegistrationOrder(t *testing.T) {
+	var order []string
+	app := extApp(t, agent.NewStubProvider(agent.StubTurn{Text: "ok"}),
+		&closeExt{name: "first", order: &order},
+		&closeExt{name: "second", order: &order},
+	)
+
+	app.Close()
+
+	want := []string{"second", "first"}
+	if len(order) != len(want) || order[0] != want[0] || order[1] != want[1] {
+		t.Fatalf("close order = %v, want %v", order, want)
+	}
+}
+
+// TestExtensionCloseContinuesPastAFailure pins that one extension that cannot
+// close does not leak the others. App.Close is the last thing a surface does
+// and has nowhere to report to, so the sweep finishes and logs.
+func TestExtensionCloseContinuesPastAFailure(t *testing.T) {
+	var order []string
+	app := extApp(t, agent.NewStubProvider(agent.StubTurn{Text: "ok"}),
+		&closeExt{name: "first", order: &order},
+		&closeExt{name: "second", order: &order, fail: errors.New("no")},
+	)
+
+	app.Close()
+
+	if len(order) != 2 {
+		t.Fatalf("closed %v, want both extensions closed despite the failure", order)
+	}
+}
+
+// TestExtensionCloseHappensOnce pins that a surface calling Close twice, which
+// a deferred Close plus an explicit one does routinely, closes each extension
+// once rather than making every implementation guard itself.
+func TestExtensionCloseHappensOnce(t *testing.T) {
+	var order []string
+	app := extApp(t, agent.NewStubProvider(agent.StubTurn{Text: "ok"}), &closeExt{name: "only", order: &order})
+
+	app.Close()
+	app.Close()
+
+	if len(order) != 1 {
+		t.Fatalf("closed %d times, want 1: %v", len(order), order)
+	}
+}

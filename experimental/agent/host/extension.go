@@ -125,6 +125,21 @@ type Extension interface {
 	// over history exactly as a user turn does, so an extension that skipped
 	// them would hold state scoped to the wrong thing.
 	TurnStart(ctx context.Context) error
+
+	// Close releases what the extension owns, and is called by App.Close in
+	// reverse registration order so an extension is torn down before whatever
+	// it was registered after.
+	//
+	// TurnStart had no counterpart until an extension owned something the
+	// runtime could not clean up for it. A directory handle survives being
+	// forgotten and a snapshot directory is meant to outlive the process, so
+	// the first two extensions needed nothing here. A subprocess is different:
+	// agent/ext/lsp spawns a language server, and one that outlives the App
+	// holds a workspace lock and a share of memory nothing can account for.
+	//
+	// Errors are collected and reported rather than aborting the sweep, since
+	// one extension that cannot close is not a reason to leak the rest.
+	Close() error
 }
 
 // BaseExtension implements every optional Extension seam as a no-op, so an
@@ -144,6 +159,7 @@ func (BaseExtension) Commands() []*Command                  { return nil }
 func (BaseExtension) ContextStages() []ContextStage         { return nil }
 func (BaseExtension) ApprovalRenderers() []ApprovalRenderer { return nil }
 func (BaseExtension) TurnStart(context.Context) error       { return nil }
+func (BaseExtension) Close() error                          { return nil }
 
 // ApprovalRenderer turns a pending tool call into the question a user is
 // asked about it, or declines to.
@@ -214,6 +230,32 @@ func (a *App) startExtensionTurns(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// closeExtensions closes every extension, in reverse registration order.
+//
+// Reverse because registration order is dependency order everywhere else: an
+// extension registered later was built knowing the earlier ones were there,
+// which is the ordering surfaces.WorkspaceExtensions relies on when it puts
+// checkpoint ahead of the tools it snapshots. Tearing down forwards would
+// close a dependency out from under its dependent.
+//
+// Every extension is closed even after one fails, and the failures are logged
+// rather than returned, because App.Close is the last thing a surface does and
+// has nowhere to report to. One extension that cannot close is not a reason to
+// leak the others.
+// Each extension is closed exactly once even if App.Close is called twice,
+// which a surface does by hand often enough (a deferred Close plus an explicit
+// one on a shutdown path) that leaving it to every implementation to guard
+// would make Close the one seam nobody could write simply.
+func (a *App) closeExtensions() {
+	exts := a.extensions
+	a.extensions = nil
+	for i := len(exts) - 1; i >= 0; i-- {
+		if err := exts[i].Close(); err != nil && a.log != nil {
+			a.log.Warn("extension close failed", "extension", exts[i].Name(), "err", err)
+		}
+	}
 }
 
 // applyExtensions wires every extension into the seams it contributes to.
