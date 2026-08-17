@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/panyam/mcpkit/experimental/agent"
+	"github.com/panyam/mcpkit/experimental/agent/ext/lsp"
 	"github.com/panyam/mcpkit/experimental/agent/host"
 )
 
@@ -136,3 +137,35 @@ type emptyStream struct{}
 
 func (emptyStream) Recv() (agent.Delta, error) { return agent.Delta{}, io.EOF }
 func (emptyStream) Close() error               { return nil }
+
+// TestWorkspaceExtensionsSkipsLSPByDefault pins that language servers are
+// opt-in. checkpoint is opt-out because it costs a directory; a language
+// server is a subprocess and an index of the whole tree, so a caller who did
+// not ask for one does not get one.
+func TestWorkspaceExtensionsSkipsLSPByDefault(t *testing.T) {
+	exts, err := WorkspaceExtensions(WorkspaceConfig{Root: t.TempDir()})
+	if err != nil {
+		t.Fatalf("WorkspaceExtensions: %v", err)
+	}
+	for _, e := range exts {
+		if e.Name() == "lsp" {
+			t.Fatal("a language server was started without being configured")
+		}
+	}
+}
+
+// TestWorkspaceExtensionsFailsOnAnUnstartableServer pins that a misconfigured
+// server stops construction rather than yielding an agent whose diagnostics are
+// permanently and silently empty.
+func TestWorkspaceExtensionsFailsOnAnUnstartableServer(t *testing.T) {
+	_, err := WorkspaceExtensions(WorkspaceConfig{
+		Root:            t.TempDir(),
+		LanguageServers: []lsp.ServerSpec{{Command: []string{"definitely-not-a-language-server-xyz"}, Extensions: []string{".go"}}},
+	})
+	if err == nil {
+		t.Fatal("want an error for a server that cannot start")
+	}
+	if !strings.Contains(err.Error(), "lsp") {
+		t.Fatalf("error should name the failing extension: %v", err)
+	}
+}

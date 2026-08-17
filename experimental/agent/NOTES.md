@@ -810,6 +810,43 @@ turns run has found a bug in the seam, not a reason to work around it. Building 
 extension found one on first use, which is an argument for building a real consumer before the 1.0
 freeze rather than after.
 
+### ContextStage is per-turn; the loop it serves is per-step (#1301)
+
+The prediction above held. Building the first `ContextStage` consumer (`agent/ext/lsp`) found four
+more gaps, and the first one changed the design before any code was written.
+
+**Stages run once per turn, at `RunTurn`. A coding agent's edit-check-fix cycle runs across the
+tool-call steps inside one turn.** A model that edits at step 3 and keeps working to step 12 gets
+nothing from a stage for nine steps, because there is no injection point inside a turn except a
+tool result. So diagnostics ship on two paths rather than one, and which path carries which claim
+is decided by what history does to it:
+
+- A tool result is permanent. That suits "this edit introduced these errors", which stays true as
+  a record of the past, and it is the only thing that reaches the model mid-turn.
+- A transient stage is per-turn. That suits "the file currently has these errors", which stops
+  being true the moment one is fixed and would otherwise accumulate one stale block per edit.
+
+The generalisation worth keeping: **a context producer whose value decays within a turn cannot be
+a `ContextStage` alone.** Memory recall does not have this problem because what it retrieves stays
+retrieved. Anything reflecting mutable external state does.
+
+The other three, all recorded on #1240:
+
+1. **No shutdown seam.** `TurnStart` had no counterpart, and `App.Close` never touched extensions.
+   Fixed here by adding `Extension.Close`, called in reverse registration order, exactly once even
+   if `App.Close` is called twice. Reverse because registration order is dependency order, which
+   `surfaces.WorkspaceExtensions` relies on. Note this was a **breaking interface change** for any
+   implementor not embedding `BaseExtension`, which is the argument for doing it before the freeze.
+2. **An extension cannot observe.** `ToolMiddleware`'s doc says a middleware that merely observes
+   should be an event subscriber, but `App.Subscribe` is a method on an `App` that an `Extension`
+   is constructed before and never receives. So an extension that wants to watch has no sanctioned
+   route. lsp sidesteps it because its middleware genuinely changes the result. The gap is still
+   there for the next one.
+3. **`weaveBeforeUser` is host-private.** Every out-of-tree stage that wants the "closest to the
+   user message is most salient" placement re-implements it. lsp does. It is four lines, so the
+   duplication is cheap and exporting it would widen the surface being frozen, but a second
+   copy means the rule now lives in two places.
+
 ### Sub-agent personas
 
 `Config.SubAgents []SubAgentConfig{Name, Description, Instructions, Allow, MaxDepth}` builds

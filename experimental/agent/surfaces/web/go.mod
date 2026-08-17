@@ -33,6 +33,7 @@ require (
 	github.com/panyam/goutils v0.1.8 // indirect
 	github.com/panyam/mcpkit/experimental/agent/ext/checkpoint v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/agent/ext/files v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/agent/ext/lsp v0.0.0-00010101000000-000000000000 // indirect
 	github.com/panyam/mcpkit/experimental/agent/store/gorm v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/agent/store/redis v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
@@ -96,3 +97,5 @@ replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../
 replace github.com/panyam/mcpkit/experimental/agent/ext/files => ../../ext/files
 
 replace github.com/panyam/mcpkit/experimental/agent/ext/checkpoint => ../../ext/checkpoint
+
+replace github.com/panyam/mcpkit/experimental/agent/ext/lsp => ../../ext/lsp

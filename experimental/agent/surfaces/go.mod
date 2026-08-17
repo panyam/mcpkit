@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
+	github.com/panyam/mcpkit/experimental/agent/ext/lsp v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/agent/store/gorm v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/store/redis v0.0.0
 	github.com/redis/go-redis/v9 v9.21.0
@@ -97,3 +98,5 @@ replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../../
 replace github.com/panyam/mcpkit/experimental/ext/events => ../../../experimental/ext/events
 
 replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../experimental/ext/events/clients/go
+
+replace github.com/panyam/mcpkit/experimental/agent/ext/lsp => ../ext/lsp
