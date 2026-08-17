@@ -58,6 +58,15 @@ type stubScript struct {
 	// already has.
 	PublishOnOpenOnly bool `json:"publishOnOpenOnly,omitempty"`
 
+	// PublishOnSaveOnly ignores didOpen and didChange entirely and publishes
+	// only on didSave, which is what rust-analyzer does: its cargo check runs
+	// on save and a change alone produces nothing at all.
+	PublishOnSaveOnly bool `json:"publishOnSaveOnly,omitempty"`
+
+	// BusyAroundPublish brackets the delayed publication in work-done progress,
+	// so the server is visibly working while the caller waits.
+	BusyAroundPublish bool `json:"busyAroundPublish,omitempty"`
+
 	// IgnoreShutdown makes the server refuse to exit politely, which is what
 	// the kill path in client.close exists for.
 	IgnoreShutdown bool `json:"ignoreShutdown,omitempty"`
@@ -91,6 +100,10 @@ func runStubServer(script string) {
 		params, _ := json.Marshal(map[string]any{"uri": uri, "diagnostics": diags})
 		send(&message{JSONRPC: "2.0", Method: "textDocument/publishDiagnostics", Params: params})
 	}
+	progress := func(kind string) {
+		params, _ := json.Marshal(map[string]any{"token": "stub/check", "value": map[string]any{"kind": kind}})
+		send(&message{JSONRPC: "2.0", Method: "$/progress", Params: params})
+	}
 	publish := func(uri string) {
 		rel := stubRel(root, uri)
 		diags := s.Diagnostics[rel]
@@ -100,8 +113,14 @@ func runStubServer(script string) {
 		if s.EmptyFirst {
 			emit(uri, []diagnostic{})
 		}
+		if s.BusyAroundPublish {
+			progress("begin")
+		}
 		if s.PublishDelayMs > 0 {
 			time.Sleep(time.Duration(s.PublishDelayMs) * time.Millisecond)
+		}
+		if s.BusyAroundPublish {
+			progress("end")
 		}
 		emit(uri, diags)
 	}
@@ -136,8 +155,19 @@ func runStubServer(script string) {
 				caps["positionEncoding"] = s.Encoding
 			}
 			reply(map[string]any{"capabilities": caps})
+		case "textDocument/didSave":
+			if s.NoPublish || !s.PublishOnSaveOnly {
+				continue
+			}
+			var p struct {
+				TextDocument struct {
+					URI string `json:"uri"`
+				} `json:"textDocument"`
+			}
+			_ = json.Unmarshal(msg.Params, &p)
+			go publish(p.TextDocument.URI)
 		case "textDocument/didOpen", "textDocument/didChange":
-			if s.NoPublish {
+			if s.NoPublish || s.PublishOnSaveOnly {
 				continue
 			}
 			if s.PublishOnOpenOnly && msg.Method == "textDocument/didChange" {

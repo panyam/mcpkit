@@ -75,19 +75,37 @@ something it already fixed.
 
 Most servers publish once with what they found. Some compute in two phases and
 publish an **empty set immediately**, then the real diagnostics after a slow
-pass. rust-analyzer does this, with about two seconds between the two.
+pass. An empty set means "clean" or "not computed yet" and nothing in the
+protocol distinguishes them, so taking the first publication reports a file that
+does not compile as clean.
 
-Taking the first publication there reports a file that does not compile as
-clean, which is the worst direction for this to be wrong in. So each
-publication restarts a settle timer and the last set wins, with
-`Config.DiagnosticsTimeout` bounding the whole wait.
+So an empty result waits a quiet period for a correction, extended while the
+server reports itself busy through work-done progress. A result that already has
+problems in it returns at once: a later publication can only add more, and the
+next turn's context stage carries the full set anyway.
 
-`ServerSpec.SettleDelay` sets that quiet period. Left at zero it is chosen from
-the name the server reports at `initialize`: three seconds for rust-analyzer,
-250ms for everything else. A table of known servers is not elegant and is what
-every LSP client ends up with, because nothing in the protocol lets a server say
-"that answer was provisional". The tell that a new server needs an entry is a
-broken file reported as clean.
+Measured on a warm rust-analyzer over a small crate:
+
+| Edit | Cost | Why |
+|---|---|---|
+| introduces an error | ~130ms | the result is actionable, no waiting |
+| leaves the file clean | ~1.9s | an empty result has to outlast a possible correction |
+| any edit, gopls / pyright / clangd | ~250ms | they publish once and report no busy work |
+
+`ServerSpec.SettleDelay` tunes the quiet period. The busy extension is bounded
+on purpose: waiting for a busy server to fall quiet does not work, because
+rust-analyzer reports progress almost continuously and that measured at the full
+eight-second timeout on every write.
+
+### Saving matters as much as changing
+
+A write sends `didChange` **and** `didSave`, which is honest because everything
+here reads the file from disk after it was written.
+
+It is also load-bearing. **rust-analyzer publishes nothing at all for a
+`didChange`**; its cargo check runs on save. Without the save, the first edit to
+a file was checked only because opening the document happened to trigger one,
+and every edit after that went unchecked.
 
 Content the server already has is not resent, so a navigation call and a
 re-check over an unchanged file cost no round trip. That also matters for

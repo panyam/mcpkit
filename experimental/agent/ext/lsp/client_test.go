@@ -2,6 +2,8 @@ package lsp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -228,20 +230,6 @@ func TestRefreshDropsItsWaiterOnTimeout(t *testing.T) {
 	}
 }
 
-// TestSettleForKnownTwoPhaseServer pins the quirk table. Nothing in the
-// protocol lets a server say an answer was provisional, so the delay has to
-// come from knowing which servers do it.
-func TestSettleForKnownTwoPhaseServer(t *testing.T) {
-	if settleFor("rust-analyzer") <= DefaultSettleDelay {
-		t.Fatal("rust-analyzer needs a longer settle than the default, or the empty publication wins")
-	}
-	for _, name := range []string{"gopls", "clangd", ""} {
-		if got := settleFor(name); got != DefaultSettleDelay {
-			t.Fatalf("settleFor(%q) = %v, want the default", name, got)
-		}
-	}
-}
-
 func TestServerSpecSettleDelayOverridesTheDefault(t *testing.T) {
 	root := workspace(t, map[string]string{"a.go": "package a\n"})
 	c := startStubSettle(t, root, stubScript{}, 1234*time.Millisecond)
@@ -250,12 +238,12 @@ func TestServerSpecSettleDelayOverridesTheDefault(t *testing.T) {
 	}
 }
 
-// TestDiagnosticsTimeoutOutlastsTheLongestSettle pins that the two bounds
-// agree. A timeout shorter than the settle would cut off the very publication
-// the settle exists to wait for.
-func TestDiagnosticsTimeoutOutlastsTheLongestSettle(t *testing.T) {
-	if DefaultDiagnosticsTimeout <= settleFor("rust-analyzer") {
-		t.Fatalf("timeout %v does not outlast settle %v", DefaultDiagnosticsTimeout, settleFor("rust-analyzer"))
+// TestDiagnosticsTimeoutOutlastsTheSettle pins that the two bounds agree. A
+// timeout shorter than the settle would cut off the very publication the
+// settle exists to wait for.
+func TestDiagnosticsTimeoutOutlastsTheSettle(t *testing.T) {
+	if DefaultDiagnosticsTimeout <= DefaultSettleDelay {
+		t.Fatalf("timeout %v does not outlast settle %v", DefaultDiagnosticsTimeout, DefaultSettleDelay)
 	}
 }
 
@@ -286,5 +274,110 @@ func TestRefreshWaitsWhenTheServerHasNotAnsweredYet(t *testing.T) {
 	}
 	if got := c.diagnostics("a.go"); len(got) != 1 {
 		t.Fatalf("diagnostics = %+v, want the server's answer rather than a premature clean", got)
+	}
+}
+
+// TestRefreshReturnsAtOnceOnRealProblems pins the latency short-circuit. A
+// publication with problems in it is actionable, so waiting out a quiet period
+// for more of them delays the model for nothing: a later publication can only
+// add problems, and the next turn's context stage carries the full set anyway.
+func TestRefreshReturnsAtOnceOnRealProblems(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStubSettle(t, root, stubScript{
+		Diagnostics: map[string][]diagnostic{"a.go": {{Message: "undefined: foo"}}},
+	}, 5*time.Second)
+
+	start := time.Now()
+	if !c.refresh(context.Background(), "a.go", 20*time.Second) {
+		t.Fatal("refresh reported no publication")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("took %s: a non-empty result should not wait out the settle", elapsed)
+	}
+}
+
+// TestRefreshWaitsOutTheSettleOnAnEmptyResult is the other half. An empty set
+// means "clean" or "not computed yet" and nothing distinguishes them, so this
+// is the case the quiet period exists for.
+func TestRefreshWaitsOutTheSettleOnAnEmptyResult(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStubSettle(t, root, stubScript{}, 600*time.Millisecond)
+
+	start := time.Now()
+	if !c.refresh(context.Background(), "a.go", 20*time.Second) {
+		t.Fatal("refresh reported no publication")
+	}
+	if elapsed := time.Since(start); elapsed < 500*time.Millisecond {
+		t.Fatalf("took %s: an empty result must wait for a possible correction", elapsed)
+	}
+}
+
+// TestBusyGraceIsBounded pins that a busy server extends the wait rather than
+// removing the bound. An earlier version waited for the server to fall quiet,
+// which measured at the full eight-second timeout on every rust-analyzer write
+// because it reports progress almost continuously.
+func TestBusyGraceIsBounded(t *testing.T) {
+	if busyGrace >= DefaultDiagnosticsTimeout {
+		t.Fatalf("busyGrace %v must stay well inside the %v timeout", busyGrace, DefaultDiagnosticsTimeout)
+	}
+}
+
+// TestSyncSavesSoSaveDrivenServersRecheck pins that a write sends didSave and
+// not only didChange.
+//
+// rust-analyzer publishes nothing at all for a didChange, because its cargo
+// check runs on save. Without this, the first edit to a file was checked only
+// because opening the document happened to trigger one, and every edit after
+// that went unchecked.
+func TestSyncSavesSoSaveDrivenServersRecheck(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStub(t, root, stubScript{
+		PublishOnSaveOnly: true,
+		Diagnostics: map[string][]diagnostic{
+			"a.go": {{Message: "undefined: foo"}},
+		},
+	})
+
+	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+		t.Fatal("a save-driven server was never told the file was saved on open")
+	}
+
+	// The second pass is the one that matters. The first goes through didOpen,
+	// which saves too, so a version that saved only on open would still look
+	// correct here. Changing the content forces the didChange path.
+	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n\nvar x = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.mu.Lock()
+	c.diags["a.go"] = nil
+	c.mu.Unlock()
+
+	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+		t.Fatal("a changed file was never reported as saved, so the server never re-checked")
+	}
+	if got := c.diagnostics("a.go"); len(got) != 1 {
+		t.Fatalf("diagnostics = %+v, want the set the save produced", got)
+	}
+}
+
+// TestBusyServerExtendsTheWait pins that a server reporting itself busy buys
+// more patience than the plain settle, so a slow recheck is not cut off and
+// reported as clean.
+func TestBusyServerExtendsTheWait(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	c := startStubSettle(t, root, stubScript{
+		EmptyFirst:        true,
+		BusyAroundPublish: true,
+		PublishDelayMs:    700,
+		Diagnostics: map[string][]diagnostic{
+			"a.go": {{Message: "undefined: foo"}},
+		},
+	}, 100*time.Millisecond)
+
+	if !c.refresh(context.Background(), "a.go", 10*time.Second) {
+		t.Fatal("refresh reported no publication")
+	}
+	if got := c.diagnostics("a.go"); len(got) != 1 {
+		t.Fatalf("diagnostics = %+v: a 100ms settle gave up on a busy server", got)
 	}
 }

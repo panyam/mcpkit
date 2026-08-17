@@ -859,17 +859,42 @@ rust-analyzer, which publishes an **empty set immediately** and its real diagnos
 later, once cargo has run. So an edit that broke the build came back to the model as "no problems
 reported". A false all-clear defeats the entire point of the post-write report.
 
-The fix is to settle rather than take-first: each publication restarts a quiet timer and the last
-set wins, bounded by `DiagnosticsTimeout`. The quiet period is per-server, keyed on the name
-reported at `initialize`, because nothing in the protocol lets a server say an answer was
-provisional. A quirk table is what every LSP client ends up with.
+**And rust-analyzer publishes nothing at all for a `didChange`.** Its cargo check runs on save, and
+we never sent one. The first edit to a file was checked only because opening the document happened
+to trigger a check; every edit after that went unchecked. Writes now send `didChange` and
+`didSave`, which is honest since everything here reads the file from disk after it was written.
+
+The fix for the provisional publication is to wait rather than take-first, and the shape of the
+wait went through three wrong versions before landing:
+
+1. **A fixed quiet period, per server, from a quirk table.** Correct, and it taxed every write on
+   that server by three seconds whether or not anything was wrong.
+2. **Wait for the server's work-done progress to finish.** The principled version, and wrong twice
+   over. A server reports progress for everything it does, so rust-analyzer's startup indexing is
+   indistinguishable from its cargo check, and "some work finished" was read as "your recheck
+   finished", returning an empty set as the answer. Counting progress *begins* after our change
+   instead of *ends* narrowed it but did not fix it, because startup work overlaps the first write.
+   Then waiting for the server to fall quiet ran to the full eight-second timeout on every write,
+   because rust-analyzer is never quiet.
+3. **What shipped:** an empty result waits a quiet period, extended by a *bounded* grace while the
+   server reports itself busy, and a non-empty result returns immediately.
+
+The last step is what makes the cost acceptable, and it comes from noticing the two cases are not
+symmetric. "Here are three errors" is actionable and complete enough; more can only be added, and
+the next turn's stage carries the full set. "Nothing is wrong" is the ambiguous one, because it is
+also what "I have not looked yet" looks like. So only the empty case pays. Measured on a warm
+rust-analyzer: a broken edit reports in ~130ms, a clean one in ~1.9s, and servers that publish once
+and report no busy work cost ~250ms either way.
+
+The quirk table is gone; `ServerSpec.SettleDelay` remains as the escape hatch.
 
 Three things worth carrying:
 
-- **`DefaultDiagnosticsTimeout` had to go from 3s to 8s.** rust-analyzer's real answer lands at
-  ~2.4s and the settle adds 3s on top, so the measured end-to-end is 5.6s. The old bound would have
-  cut off the publication the settle exists to catch, and the fix would have looked like it worked
-  in unit tests while still failing live.
+- **`DefaultDiagnosticsTimeout` had to go from 3s to 8s**, and every wrong version above passed its
+  unit tests. The stub does exactly what the test tells it to; only the live probe showed the
+  8s-per-write regression and the empty-set-as-answer one. A test that re-checks a file it just
+  opened also hides the didSave problem entirely, which is why there is now a live test that warms
+  the server first and then does real write cycles.
 - **"Unchanged content means what we hold is current" is only half true.** Skipping the re-sync when
   the server already has the bytes is right (clangd does not re-publish for an identical
   `didChange`), but right after a `didOpen` the server has the content and has said nothing. The

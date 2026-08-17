@@ -43,6 +43,17 @@ type diagnostic struct {
 	Message  string    `json:"message"`
 }
 
+// busyGrace is how much longer refresh waits for a correction while the server
+// reports itself busy.
+//
+// It is added to the settle rather than replacing the deadline. Waiting for a
+// busy server to fall quiet does not work: rust-analyzer reports progress
+// almost continuously, so "wait while busy" ran to the full timeout on every
+// write, measured at eight seconds each. A bounded extension keeps the
+// benefit, which is patience with a server that is visibly working, without
+// the cost.
+const busyGrace = 1500 * time.Millisecond
+
 // severity levels, as the protocol numbers them.
 const (
 	severityError   = 1
@@ -78,7 +89,7 @@ type client struct {
 	encoding string
 
 	// settle is how long to keep waiting for further diagnostics after one
-	// arrives. See refresh.
+	// arrives, for a server that does not report progress. See refresh.
 	settle time.Duration
 
 	mu    sync.Mutex
@@ -91,6 +102,14 @@ type client struct {
 	// from "the server has not replied yet".
 	sent     map[string][32]byte
 	answered map[string][32]byte
+
+	// busyTokens are the work-done progress operations the server says are
+	// running, and finished counts the ones that have ended. Together they
+	// replace guessing: a server that reports progress tells us when it is
+	// working and when it has stopped, which is a better answer than any
+	// quiet period we could pick for it.
+	busyTokens map[string]bool
+	begun      int
 
 	waiters map[string][]chan struct{}
 
@@ -126,15 +145,16 @@ func startClient(ctx context.Context, spec ServerSpec, root string) (*client, er
 	}
 
 	c := &client{
-		spec:     spec,
-		root:     root,
-		cmd:      cmd,
-		conn:     newConn(stdin, stdout),
-		diags:    map[string][]diagnostic{},
-		open:     map[string]int{},
-		sent:     map[string][32]byte{},
-		answered: map[string][32]byte{},
-		waiters:  map[string][]chan struct{}{},
+		spec:       spec,
+		root:       root,
+		cmd:        cmd,
+		conn:       newConn(stdin, stdout),
+		diags:      map[string][]diagnostic{},
+		open:       map[string]int{},
+		sent:       map[string][32]byte{},
+		answered:   map[string][32]byte{},
+		busyTokens: map[string]bool{},
+		waiters:    map[string][]chan struct{}{},
 	}
 	c.conn.onNotify = c.onNotify
 	go c.conn.run()
@@ -158,6 +178,9 @@ func (c *client) initialize(ctx context.Context) error {
 			// and the conversion in offsetFor becomes a no-op. gopls declines
 			// and we get utf-16, which is why the conversion exists at all.
 			"general": map[string]any{"positionEncodings": []string{"utf-8", "utf-16"}},
+			// Asking for progress is what lets refresh wait exactly as long as
+			// the server is working instead of guessing a quiet period.
+			"window": map[string]any{"workDoneProgress": true},
 			"textDocument": map[string]any{
 				"synchronization":    map[string]any{"didSave": true},
 				"publishDiagnostics": map[string]any{},
@@ -182,12 +205,16 @@ func (c *client) initialize(ctx context.Context) error {
 	c.encoding = result.Capabilities.PositionEncoding
 	c.settle = c.spec.SettleDelay
 	if c.settle <= 0 {
-		c.settle = settleFor(result.ServerInfo.Name)
+		c.settle = DefaultSettleDelay
 	}
 	return c.conn.notify("initialized", map[string]any{})
 }
 
 func (c *client) onNotify(method string, params json.RawMessage) {
+	if method == "$/progress" {
+		c.trackProgress(params)
+		return
+	}
 	if method != "textDocument/publishDiagnostics" {
 		return
 	}
@@ -211,6 +238,41 @@ func (c *client) onNotify(method string, params json.RawMessage) {
 	for _, ch := range waiters {
 		close(ch)
 	}
+}
+
+// trackProgress follows the server's work-done progress notifications.
+//
+// Only begin and end matter. A server that reports progress is telling us when
+// a recompute starts and stops, which is strictly better information than a
+// timer: rust-analyzer brackets its cargo check this way, so waiting for the
+// end costs exactly the time the check took and nothing more.
+func (c *client) trackProgress(params json.RawMessage) {
+	var p struct {
+		Token any `json:"token"`
+		Value struct {
+			Kind string `json:"kind"`
+		} `json:"value"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return
+	}
+	token := fmt.Sprint(p.Token)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch p.Value.Kind {
+	case "begin":
+		c.busyTokens[token] = true
+		c.begun++
+	case "end":
+		delete(c.busyTokens, token)
+	}
+}
+
+// busy reports whether the server says it is currently working.
+func (c *client) busy() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.busyTokens) > 0
 }
 
 // awaitPublish registers interest in the next diagnostics for rel.
@@ -270,22 +332,46 @@ func (c *client) sync(rel string) (bool, error) {
 
 	uri := pathToURI(filepath.Join(c.root, rel))
 	if !isOpen {
-		return true, c.conn.notify("textDocument/didOpen", map[string]any{
+		if err := c.conn.notify("textDocument/didOpen", map[string]any{
 			"textDocument": map[string]any{
 				"uri":        uri,
 				"languageId": c.spec.LanguageID,
 				"version":    version,
 				"text":       string(body),
 			},
-		})
+		}); err != nil {
+			return true, err
+		}
+		return true, c.save(uri, string(body))
 	}
 	// A single change with no range means "this is the whole document". It is
 	// the one form every server accepts regardless of the sync kind it
 	// declared, which matters because we drive several servers and cannot
 	// carry an incremental-diff implementation per server.
-	return true, c.conn.notify("textDocument/didChange", map[string]any{
+	if err := c.conn.notify("textDocument/didChange", map[string]any{
 		"textDocument":   map[string]any{"uri": uri, "version": version},
 		"contentChanges": []map[string]any{{"text": string(body)}},
+	}); err != nil {
+		return true, err
+	}
+	return true, c.save(uri, string(body))
+}
+
+// save tells the server the file is on disk, which for some servers is the
+// only thing that triggers a real re-check.
+//
+// Measured: rust-analyzer publishes NOTHING for a didChange. Its cargo check
+// runs on save, and on save it answers in about 0.2s. Without this, the second
+// and every later edit to a Rust file was never re-checked, and the first one
+// only worked because opening the document happened to trigger a check.
+//
+// It is also honest rather than a trick. Everything here reads the file from
+// disk, so by the time we describe it to the server it genuinely has been
+// saved. Servers that do not care ignore the notification.
+func (c *client) save(uri, text string) error {
+	return c.conn.notify("textDocument/didSave", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
+		"text":         text,
 	})
 }
 
@@ -338,15 +424,36 @@ func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration)
 	if !c.waitPublish(ctx, rel, first, time.Until(deadline)) {
 		return false
 	}
+	// Quiet is the moment we stop waiting for a correction. It moves whenever
+	// something is published, and further out while the server reports itself
+	// busy, so a slow recheck is not cut off and reported as clean.
+	quiet := time.Now().Add(c.settle)
 	for {
-		next := c.awaitPublish(rel)
-		remaining := time.Until(deadline)
-		wait := c.settle
-		if wait > remaining {
-			wait = remaining
-		}
-		if wait <= 0 || !c.waitPublish(ctx, rel, next, wait) {
+		now := time.Now()
+		switch {
+		case ctx.Err() != nil, now.After(deadline):
 			return true
+		case len(c.diagnostics(rel)) > 0:
+			// Something real to report beats waiting for more of it. A later
+			// publication can only add problems, and the next turn's context
+			// stage carries the full current set anyway, so holding the model
+			// up for completeness buys nothing it does not already get.
+			return true
+		}
+		if c.busy() {
+			quiet = now.Add(c.settle + busyGrace)
+		}
+		if now.After(quiet) {
+			return true
+		}
+		// Bounded by the quiet deadline rather than slept through in one go,
+		// so busy() is re-read on every pass. A server publishes its
+		// provisional empty set and only then announces the work, so a single
+		// sample taken right after the first publication misses it.
+		wait := min(quiet.Sub(now), deadline.Sub(now))
+		next := c.awaitPublish(rel)
+		if c.waitPublish(ctx, rel, next, wait) {
+			quiet = time.Now().Add(c.settle)
 		}
 	}
 }
