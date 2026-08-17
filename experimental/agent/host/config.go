@@ -111,6 +111,14 @@ type Config struct {
 	// and the gate still decides on unmarked arguments.
 	Spotlight *SpotlightConfig `json:"spotlight,omitempty"`
 
+	// Critique judges each proposed tool call against stated principles
+	// before it runs, and refuses the ones that violate them. Nil is off.
+	//
+	// It is the self-critique layer between the two guardrails either side of
+	// it: Spotlight marks untrusted input going in, the approval ladder gates
+	// what the user permits going out. Costs one model call per gated call.
+	Critique *CritiqueConfig `json:"critique,omitempty"`
+
 	// Connections is a named registry of model connections with one
 	// active. When set it supersedes Model for the chat provider and
 	// enables runtime /provider switching; Model stays as the
@@ -818,4 +826,48 @@ func (c *Config) APIKey() string {
 		return ""
 	}
 	return os.Getenv(c.Model.APIKeyEnv)
+}
+
+// CritiqueConfig is the host's view of the constitutional critique gate. It
+// maps to agent.NewCritiqueGate.
+type CritiqueConfig struct {
+	// Principles is the constitution proposed calls are judged against.
+	// Required: a critique gate with nothing to judge against is a model call
+	// whose answer means nothing.
+	Principles string `json:"principles"`
+
+	// Tools lists the tool names to critique. Empty critiques every call,
+	// which is the safe default and the expensive one, since each gated call
+	// costs a model call on its latency path.
+	Tools []string `json:"tools,omitempty"`
+
+	// AllowOnError lets a call through when the critique itself fails. The
+	// default (false) denies instead, because a gate that disappears when its
+	// provider is down is not a gate. Set it when availability matters more
+	// than the guardrail, and treat the guardrail as advisory afterwards.
+	AllowOnError bool `json:"allowOnError,omitempty"`
+}
+
+// build turns the config into the middleware, or nil when critique is off.
+//
+// It uses the host's own provider. A cheaper or differently-aligned critic is
+// a real want and is a follow-up: it needs a per-role connection lookup, and
+// wiring one badly here would be worse than not offering it yet.
+func (c *CritiqueConfig) build(provider agent.Provider) (agent.ToolMiddleware, error) {
+	if c == nil {
+		return nil, nil
+	}
+	cfg := agent.CritiqueConfig{
+		Provider:     provider,
+		Principles:   c.Principles,
+		AllowOnError: c.AllowOnError,
+	}
+	if len(c.Tools) > 0 {
+		gated := make(map[string]bool, len(c.Tools))
+		for _, name := range c.Tools {
+			gated[name] = true
+		}
+		cfg.Tools = func(name string) bool { return gated[name] }
+	}
+	return agent.NewCritiqueGate(cfg)
 }

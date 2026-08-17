@@ -102,7 +102,25 @@ type ToolCallInfo struct {
 // EventToolDenied, and the turn continues. It is not a turn abort and not a
 // tool failure, so the model can choose differently rather than seeing an
 // error it cannot act on.
-type ToolDeniedError struct{ Reason string }
+type ToolDeniedError struct {
+	// Reason is the short explanation surfaces show. Keep it to one legible
+	// line: agent/host renders it inline against the denied call and
+	// truncates what does not fit.
+	Reason string
+
+	// ModelReason is what the model is told, when that has to differ from
+	// what the surface shows. Empty means the model is told Reason, which is
+	// the right answer for a middleware whose reason is its own prose.
+	//
+	// The two diverge when the reason quotes something that read
+	// attacker-controlled input. Such text needs a fence before the model
+	// reads it, because a denial reaches the model in the policy layer's
+	// voice and would lend a quoted attacker more authority than the tool
+	// result the text came from. A fence is also several lines, which is
+	// exactly what a one-line surface render cannot carry. NewCritiqueGate,
+	// which quotes a critic model, is the case this exists for.
+	ModelReason string
+}
 
 func (e *ToolDeniedError) Error() string {
 	if e.Reason == "" {
@@ -113,6 +131,9 @@ func (e *ToolDeniedError) Error() string {
 
 // DenyTool builds the error a middleware returns to refuse a call. Return it
 // without calling next; an empty reason gets a default.
+//
+// Middleware that needs the model to see something other than the surfaced
+// reason builds a ToolDeniedError directly and sets ModelReason.
 func DenyTool(reason string) error { return &ToolDeniedError{Reason: reason} }
 
 // deniedReason reports whether err is a denial and the reason to surface.
@@ -125,6 +146,17 @@ func deniedReason(err error) (string, bool) {
 		return "denied by policy", true
 	}
 	return d.Reason, true
+}
+
+// deniedModelReason is what the model is told about a denial: ModelReason when
+// the middleware distinguished the two audiences, otherwise the surfaced
+// reason. See ToolDeniedError.
+func deniedModelReason(err error, surfaced string) string {
+	var d *ToolDeniedError
+	if errors.As(err, &d) && d.ModelReason != "" {
+		return d.ModelReason
+	}
+	return surfaced
 }
 
 // chainToolMiddleware wraps base so mw[0] is outermost and the last entry
