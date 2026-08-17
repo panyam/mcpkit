@@ -33,37 +33,14 @@ type ServerSpec struct {
 
 	// SettleDelay is how long to keep waiting for further diagnostics after a
 	// publication arrives, before treating the last set as the answer. Zero
-	// picks a default from the server's reported name; see settleFor.
+	// means DefaultSettleDelay.
 	//
-	// Set it when a server computes diagnostics in phases and the default does
-	// not already know about it. The tell is a broken file reported as clean:
-	// the server published an empty set on the change and its real answer
-	// arrived after we had stopped listening.
+	// The wait is already held open for as long as the server reports itself
+	// busy, which covers the servers that publish a provisional empty set and
+	// their real answer afterwards. Raise this only for a server that does
+	// that WITHOUT reporting progress. The tell is a broken file reported as
+	// clean.
 	SettleDelay time.Duration
-}
-
-// settleFor picks a settle delay from the name a server reports at initialize.
-//
-// Most servers publish once, with what they found, so a short delay costs
-// almost nothing and is enough. The exceptions are servers that publish an
-// empty set immediately and their real answer after a slow pass, where the
-// delay has to outlast that gap or a broken file gets reported as clean.
-//
-// A table of known servers is not elegant, and it is what every LSP client
-// ends up with, because nothing in the protocol lets a server say "that answer
-// was provisional". Keying on the reported name rather than on the command
-// means a server renamed or wrapped by a launcher still matches. A server that
-// reports no name at all (typescript-language-server and pyright both do)
-// falls through to the default, which is correct for them.
-func settleFor(serverName string) time.Duration {
-	switch serverName {
-	case "rust-analyzer":
-		// Measured: an empty publication on the change, the real diagnostics
-		// about 2.4s later once cargo has run.
-		return 3 * time.Second
-	default:
-		return DefaultSettleDelay
-	}
 }
 
 // WriteSpec declares that a tool writes files and says which of its arguments
@@ -113,10 +90,10 @@ type Config struct {
 
 // Defaults for the bounds in Config and ServerSpec.
 const (
-	// DefaultDiagnosticsTimeout bounds the whole wait after a write, settle
-	// included. It has to exceed the slowest known settle (rust-analyzer's
-	// three seconds) with room for the server's own work, or the timeout
-	// would cut off the very publication the settle exists to catch.
+	// DefaultDiagnosticsTimeout bounds the whole wait after a write, including
+	// the time a server spends reporting itself busy. It is generous because
+	// that is the cost of a cold server on a large project, and because
+	// exceeding it is reported honestly rather than as an all-clear.
 	DefaultDiagnosticsTimeout = 8 * time.Second
 
 	// DefaultSettleDelay is the quiet period for a server that publishes once
