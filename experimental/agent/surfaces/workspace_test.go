@@ -14,7 +14,7 @@ import (
 	"github.com/panyam/mcpkit/experimental/agent/host"
 )
 
-// TestWorkspaceExtensionsDisabledByDefault pins that an empty Root produces no
+// TestWorkspaceExtensionsDisabledByDefault pins that an empty Roots produces no
 // extensions at all, so a surface can wire this unconditionally and a user who
 // passed no workspace flag gets exactly today's behaviour.
 func TestWorkspaceExtensionsDisabledByDefault(t *testing.T) {
@@ -23,7 +23,7 @@ func TestWorkspaceExtensionsDisabledByDefault(t *testing.T) {
 		t.Fatalf("WorkspaceExtensions: %v", err)
 	}
 	if exts != nil {
-		t.Fatalf("expected no extensions for an empty Root, got %d", len(exts))
+		t.Fatalf("expected no extensions for an empty Roots, got %d", len(exts))
 	}
 }
 
@@ -37,7 +37,7 @@ func TestWorkspaceExtensionsDisabledByDefault(t *testing.T) {
 // no tool-level test would show. Asserting the order here is the cheapest place
 // to catch a reversal.
 func TestWorkspaceExtensionsCheckpointFirst(t *testing.T) {
-	exts, err := WorkspaceExtensions(WorkspaceConfig{Root: t.TempDir()})
+	exts, err := WorkspaceExtensions(WorkspaceConfig{Roots: []string{t.TempDir()}})
 	if err != nil {
 		t.Fatalf("WorkspaceExtensions: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestWorkspaceExtensionsCheckpointFirst(t *testing.T) {
 // TestWorkspaceExtensionsNoCheckpoint pins that opting out drops the safety net
 // but keeps the file tools.
 func TestWorkspaceExtensionsNoCheckpoint(t *testing.T) {
-	exts, err := WorkspaceExtensions(WorkspaceConfig{Root: t.TempDir(), NoCheckpoint: true})
+	exts, err := WorkspaceExtensions(WorkspaceConfig{Roots: []string{t.TempDir()}, NoCheckpoint: true})
 	if err != nil {
 		t.Fatalf("WorkspaceExtensions: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestWorkspaceExtensionsReachAnApp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	exts, err := WorkspaceExtensions(WorkspaceConfig{Root: ws})
+	exts, err := WorkspaceExtensions(WorkspaceConfig{Roots: []string{ws}})
 	if err != nil {
 		t.Fatalf("WorkspaceExtensions: %v", err)
 	}
@@ -143,7 +143,7 @@ func (emptyStream) Close() error               { return nil }
 // server is a subprocess and an index of the whole tree, so a caller who did
 // not ask for one does not get one.
 func TestWorkspaceExtensionsSkipsLSPByDefault(t *testing.T) {
-	exts, err := WorkspaceExtensions(WorkspaceConfig{Root: t.TempDir()})
+	exts, err := WorkspaceExtensions(WorkspaceConfig{Roots: []string{t.TempDir()}})
 	if err != nil {
 		t.Fatalf("WorkspaceExtensions: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestWorkspaceExtensionsSkipsLSPByDefault(t *testing.T) {
 // permanently and silently empty.
 func TestWorkspaceExtensionsFailsOnAnUnstartableServer(t *testing.T) {
 	_, err := WorkspaceExtensions(WorkspaceConfig{
-		Root:            t.TempDir(),
+		Roots:           []string{t.TempDir()},
 		LanguageServers: []lsp.ServerSpec{{Command: []string{"definitely-not-a-language-server-xyz"}, Extensions: []string{".go"}}},
 	})
 	if err == nil {

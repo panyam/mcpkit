@@ -24,14 +24,32 @@ still match uniquely in a file that was reformatted after you read it, and
 that is exactly the case where applying it is wrong.
 
 ```go
-src, _ := files.NewSource(files.Config{Root: "/work/project"})
+src, _ := files.NewSource(files.Config{Roots: []string{
+    "/work/mcpkit",
+    "/work/mcpkit-contribs",
+}})
 ```
 
-`Root` is required and has no "unset means anywhere" mode. These tools are
+`Roots` is required and has no "unset means anywhere" mode. These tools are
 driven by a model, and a model's instructions can come from content it read
 rather than from the user, which `agent.Spotlight` exists because you cannot
 distinguish after the fact. An unconfined editor turns any such instruction
 into a write to an arbitrary path.
+
+**A workspace is a set of directories, and one is the degenerate case.** A
+coding session that stays inside a single repository is the exception: the
+ordinary task changes an API in one repo and fixes its callers in another. An
+agent given one root edits the API, reports success, and never sees what it
+broke.
+
+Naming a common parent instead of listing the roots is not a shortcut. It
+silently widens confinement to everything else under that parent, which is the
+property this exists to deny.
+
+**Results are absolute paths.** Two repositories both holding `src/main.go` is
+normal, so a bare relative path would name either. A relative path on the way
+*in* still resolves against the first root, which is what keeps a single-root
+workspace behaving as it always did.
 
 The confinement is a directory handle (`os.Root`), not a string comparison.
 Checking a path and then opening it by name are two separate operations, and
@@ -46,11 +64,12 @@ every way out of a workspace lives in the gap between them:
 
 `os.Root` resolves each component at open time against the directory it holds
 and refuses anything that leaves it, which collapses the check and the use
-into one act. Escape attempts come back as refusals:
+into one act. There is one handle per root, and a path has to land inside one
+of them. Escape attempts come back as refusals:
 
 ```
-refusing ../../etc/passwd: outside the workspace root
-refusing innocent.md: outside the workspace root      # a symlink pointing out
+refusing ../../etc/passwd: outside every workspace root
+refusing innocent.md: outside every workspace root      # a symlink pointing out
 ```
 
 ## The tools
@@ -164,7 +183,7 @@ which also means a link cycle cannot hang a walk.
 ## Wiring it into a host
 
 ```go
-ext, _ := files.New(files.Config{Root: "/work/project"})
+ext, _ := files.New(files.Config{Roots: []string{"/work/project"}})
 app, _ := host.NewApp(cfg, out, in, host.WithExtension(ext))
 ```
 

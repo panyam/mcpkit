@@ -9,21 +9,31 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/panyam/mcpkit/experimental/agent"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/agent"
 )
 
 // Config configures the tool source.
 type Config struct {
-	// Root confines every path these tools will touch. Required.
+	// Roots confine every path these tools will touch. At least one is
+	// required, and the first is primary: a relative path resolves against it.
 	//
-	// It has no "unset means anywhere" mode on purpose. These tools are
+	// A set rather than a single directory because a session that stays inside
+	// one repository is the exception. The ordinary task spans repositories,
+	// and an agent confined to one of them edits an API and reports success
+	// while the caller it broke sits in another (issue 1314).
+	//
+	// There is no "unset means anywhere" mode on purpose. These tools are
 	// driven by a model, and a model's instructions can come from content it
 	// read rather than from the user (see agent.Spotlight for why that is not
 	// distinguishable after the fact). An unconfined editor turns any such
-	// instruction into a write to an arbitrary path, so the confinement is
-	// the tool's, not a policy the caller can forget to add.
-	Root string
+	// instruction into a write to an arbitrary path.
+	//
+	// Naming a common parent instead of listing the roots is not the same
+	// thing and is not a shortcut: it silently widens confinement to
+	// everything else under that parent, which is the property this exists to
+	// deny.
+	Roots []string
 
 	// Exclude names directories that list_files and search_files skip, by
 	// base name or by a path.Match pattern. Nil means DefaultExclude; an
@@ -42,10 +52,16 @@ type Config struct {
 // return one would make the precondition unusable and leave the whole
 // mechanism as decoration.
 type Source struct {
-	root     *os.Root
-	rootPath string
-	exclude  []string
-	defs     []core.ToolDef
+	roots   []*workspaceRoot
+	exclude []string
+	defs    []core.ToolDef
+}
+
+// workspaceRoot is one confined directory: the handle that enforces it and the
+// absolute path used to render results back to the model.
+type workspaceRoot struct {
+	path string
+	h    *os.Root
 }
 
 // NewSource builds the source, opening Root as a confined directory handle.
@@ -57,16 +73,23 @@ type Source struct {
 // open time against the directory it holds, so the check and the use are the
 // same act.
 func NewSource(cfg Config) (*Source, error) {
-	if cfg.Root == "" {
-		return nil, fmt.Errorf("files: Config.Root is required")
+	if len(cfg.Roots) == 0 {
+		return nil, fmt.Errorf("files: Config.Roots needs at least one directory")
 	}
-	abs, err := filepath.Abs(cfg.Root)
-	if err != nil {
-		return nil, fmt.Errorf("files: resolve root %s: %w", cfg.Root, err)
-	}
-	root, err := os.OpenRoot(abs)
-	if err != nil {
-		return nil, fmt.Errorf("files: open root %s: %w", cfg.Root, err)
+	var roots []*workspaceRoot
+	for _, r := range cfg.Roots {
+		if r == "" {
+			return nil, fmt.Errorf("files: Config.Roots contains an empty path")
+		}
+		abs, err := filepath.Abs(r)
+		if err != nil {
+			return nil, fmt.Errorf("files: resolve root %s: %w", r, err)
+		}
+		h, err := os.OpenRoot(abs)
+		if err != nil {
+			return nil, fmt.Errorf("files: open root %s: %w", r, err)
+		}
+		roots = append(roots, &workspaceRoot{path: abs, h: h})
 	}
 	// Nil means "the caller did not choose", empty means "the caller chose
 	// nothing". Collapsing the two would make excluding nothing impossible.
@@ -74,12 +97,20 @@ func NewSource(cfg Config) (*Source, error) {
 	if exclude == nil {
 		exclude = DefaultExclude
 	}
-	return &Source{root: root, rootPath: abs, exclude: exclude, defs: toolDefs()}, nil
+	return &Source{roots: roots, exclude: exclude, defs: toolDefs()}, nil
 }
 
-// Close releases the root directory handle. A long-lived host need not call
+// Close releases every root directory handle. A long-lived host need not call
 // it; it exists so a test or a short-lived process does not leak a descriptor.
-func (s *Source) Close() error { return s.root.Close() }
+func (s *Source) Close() error {
+	var firstErr error
+	for _, r := range s.roots {
+		if err := r.h.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
 
 func toolDefs() []core.ToolDef {
 	return []core.ToolDef{
@@ -250,22 +281,23 @@ func (s *Source) read(args map[string]any) *core.ToolResult {
 	if !ok || path == "" {
 		return toolError("read_file needs a path")
 	}
-	rel, err := s.rel(path)
+	wr, rel, err := s.resolve(path)
 	if err != nil {
 		return toolError(err.Error())
 	}
-	b, err := s.root.ReadFile(rel)
+	b, err := wr.h.ReadFile(rel)
 	if err != nil {
 		return toolError(escapeMessage(path, err))
 	}
 	content := string(b)
 	hash := Hash(content)
+	shown := wr.abs(rel)
 	return &core.ToolResult{
 		Content: []core.Content{{
 			Type: "text",
-			Text: fmt.Sprintf("path: %s\nhash: %s\n\n%s", path, hash, content),
+			Text: fmt.Sprintf("path: %s\nhash: %s\n\n%s", shown, hash, content),
 		}},
-		StructuredContent: map[string]any{"path": path, "hash": hash, "content": content},
+		StructuredContent: map[string]any{"path": shown, "hash": hash, "content": content},
 	}
 }
 
@@ -282,16 +314,16 @@ func (s *Source) edit(args map[string]any) *core.ToolResult {
 	if err != nil {
 		return toolError(err.Error())
 	}
-	rel, err := s.rel(path)
+	wr, rel, err := s.resolve(path)
 	if err != nil {
 		return toolError(err.Error())
 	}
 
-	info, err := s.root.Stat(rel)
+	info, err := wr.h.Stat(rel)
 	if err != nil {
 		return toolError(escapeMessage(path, err))
 	}
-	b, err := s.root.ReadFile(rel)
+	b, err := wr.h.ReadFile(rel)
 	if err != nil {
 		return toolError(escapeMessage(path, err))
 	}
@@ -300,7 +332,7 @@ func (s *Source) edit(args map[string]any) *core.ToolResult {
 	if err != nil {
 		return toolError(fmt.Sprintf("%s: %v", path, err))
 	}
-	if err := s.writeThroughRoot(rel, out, info.Mode().Perm()); err != nil {
+	if err := s.writeThroughRoot(wr, rel, out, info.Mode().Perm()); err != nil {
 		return toolError(fmt.Sprintf("cannot write %s: %v", path, err))
 	}
 
@@ -308,9 +340,9 @@ func (s *Source) edit(args map[string]any) *core.ToolResult {
 	return &core.ToolResult{
 		Content: []core.Content{{
 			Type: "text",
-			Text: fmt.Sprintf("edited %s, %d edit(s) applied\nhash: %s", path, len(hunks), hash),
+			Text: fmt.Sprintf("edited %s, %d edit(s) applied\nhash: %s", wr.abs(rel), len(hunks), hash),
 		}},
-		StructuredContent: map[string]any{"path": path, "hash": hash, "edits": len(hunks)},
+		StructuredContent: map[string]any{"path": wr.abs(rel), "hash": hash, "edits": len(hunks)},
 	}
 }
 
@@ -337,12 +369,12 @@ func (s *Source) write(args map[string]any) *core.ToolResult {
 	}
 	expect, _ := args["expect_hash"].(string)
 
-	rel, err := s.rel(path)
+	wr, rel, err := s.resolve(path)
 	if err != nil {
 		return toolError(err.Error())
 	}
 
-	info, statErr := s.root.Stat(rel)
+	info, statErr := wr.h.Stat(rel)
 	switch {
 	case statErr == nil && !info.Mode().IsRegular():
 		return toolError(fmt.Sprintf("refusing %s: it is not a regular file", path))
@@ -352,7 +384,7 @@ func (s *Source) write(args map[string]any) *core.ToolResult {
 			"refusing %s: it already exists. Read it first and pass expect_hash to replace it, or use edit_file to change part of it.", path))
 
 	case statErr == nil:
-		b, err := s.root.ReadFile(rel)
+		b, err := wr.h.ReadFile(rel)
 		if err != nil {
 			return toolError(escapeMessage(path, err))
 		}
@@ -380,11 +412,11 @@ func (s *Source) write(args map[string]any) *core.ToolResult {
 	// out. Only reached on the create path: replacing a file means its
 	// directory is already there.
 	if dir := filepath.Dir(rel); statErr != nil && dir != "." {
-		if err := s.root.MkdirAll(dir, 0o755); err != nil {
+		if err := wr.h.MkdirAll(dir, 0o755); err != nil {
 			return toolError(escapeMessage(path, err))
 		}
 	}
-	if err := s.writeThroughRoot(rel, content, mode); err != nil {
+	if err := s.writeThroughRoot(wr, rel, content, mode); err != nil {
 		return toolError(fmt.Sprintf("cannot write %s: %v", path, err))
 	}
 
@@ -396,9 +428,9 @@ func (s *Source) write(args map[string]any) *core.ToolResult {
 	return &core.ToolResult{
 		Content: []core.Content{{
 			Type: "text",
-			Text: fmt.Sprintf("%s %s, %d byte(s)\nhash: %s", verb, path, len(content), hash),
+			Text: fmt.Sprintf("%s %s, %d byte(s)\nhash: %s", verb, wr.abs(rel), len(content), hash),
 		}},
-		StructuredContent: map[string]any{"path": path, "hash": hash, "bytes": len(content), "created": statErr != nil},
+		StructuredContent: map[string]any{"path": wr.abs(rel), "hash": hash, "bytes": len(content), "created": statErr != nil},
 	}
 }
 
@@ -442,24 +474,44 @@ func parseHunks(raw any) ([]Hunk, error) {
 // the two shapes a model actually produces by mistake, before any syscall.
 // Anything subtler, notably a symlink pointing out of the root, is caught by
 // the open itself.
-func (s *Source) rel(path string) (string, error) {
+// resolve maps a caller-supplied path to the root that contains it and the
+// path relative to that root, refusing anything that falls outside every root.
+//
+// An absolute path is matched against each root in turn. A relative path
+// resolves against the primary root, which is what keeps a single-root
+// workspace behaving exactly as it did before there were several.
+//
+// Matching is on the cleaned path text, which decides only WHICH root handle
+// to use. The handle then does the real containment work at open time, so a
+// symlink pointing out of a root is still refused even though its path text
+// looked fine here. See NewSource for why that split matters.
+func (s *Source) resolve(path string) (*workspaceRoot, string, error) {
 	if path == "" {
-		return "", fmt.Errorf("empty path")
+		return nil, "", fmt.Errorf("empty path")
 	}
-	out := path
-	if filepath.IsAbs(out) {
-		r, err := filepath.Rel(s.rootPath, out)
-		if err != nil {
-			return "", fmt.Errorf("refusing %s: outside the workspace root", path)
+	if filepath.IsAbs(path) {
+		clean := filepath.Clean(path)
+		for _, r := range s.roots {
+			rel, err := filepath.Rel(r.path, clean)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				continue
+			}
+			return r, rel, nil
 		}
-		out = r
+		return nil, "", fmt.Errorf("refusing %s: outside every workspace root", path)
 	}
-	out = filepath.Clean(out)
-	if out == ".." || strings.HasPrefix(out, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("refusing %s: outside the workspace root", path)
+	rel := filepath.Clean(path)
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, "", fmt.Errorf("refusing %s: outside every workspace root", path)
 	}
-	return out, nil
+	return s.roots[0], rel, nil
 }
+
+// abs renders a resolved path back to the model. Results are absolute because
+// a bare relative path is ambiguous once there is more than one root: two
+// repositories can both hold src/main.go, and a path the model cannot resolve
+// unambiguously is one it will read from the wrong tree.
+func (r *workspaceRoot) abs(rel string) string { return filepath.Join(r.path, rel) }
 
 // escapeMessage renders a filesystem error for the model, translating
 // os.Root's containment refusal into the same sentence rel produces.
@@ -470,7 +522,7 @@ func (s *Source) rel(path string) (string, error) {
 // allowed operation, because the refusal happened in os.Root regardless.
 func escapeMessage(path string, err error) string {
 	if strings.Contains(err.Error(), "escapes from parent") {
-		return fmt.Sprintf("refusing %s: outside the workspace root", path)
+		return fmt.Sprintf("refusing %s: outside every workspace root", path)
 	}
 	return fmt.Sprintf("cannot access %s: %v", path, err)
 }
@@ -485,14 +537,14 @@ func escapeMessage(path string, err error) string {
 // os.Root; fchmod on a descriptor we just created with O_EXCL cannot be
 // redirected at anything else. It also restores bits the umask cleared at
 // create time.
-func (s *Source) writeThroughRoot(rel, content string, mode os.FileMode) error {
+func (s *Source) writeThroughRoot(wr *workspaceRoot, rel, content string, mode os.FileMode) error {
 	dir := filepath.Dir(rel)
 	var f *os.File
 	var tmp string
 	for attempt := 0; ; attempt++ {
 		tmp = filepath.Join(dir, fmt.Sprintf(".files-%d.tmp", rand.Uint64()))
 		var err error
-		f, err = s.root.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+		f, err = wr.h.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err == nil {
 			break
 		}
@@ -500,7 +552,7 @@ func (s *Source) writeThroughRoot(rel, content string, mode os.FileMode) error {
 			return err
 		}
 	}
-	defer s.root.Remove(tmp)
+	defer wr.h.Remove(tmp)
 
 	if _, err := f.WriteString(content); err != nil {
 		f.Close()
@@ -513,7 +565,7 @@ func (s *Source) writeThroughRoot(rel, content string, mode os.FileMode) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return s.root.Rename(tmp, rel)
+	return wr.h.Rename(tmp, rel)
 }
 
 func toolError(msg string) *core.ToolResult {

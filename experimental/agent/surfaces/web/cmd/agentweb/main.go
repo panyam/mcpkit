@@ -32,7 +32,8 @@ func main() {
 	configPath := flag.String("config", "", "path to a host config JSON (servers, model, policies)")
 	demo := flag.Bool("demo", false, "run over an offline streaming demo provider (no config needed)")
 	sessionStore := flag.String("session-store", "", "session persistence backend: memory | sqlite://path.db | redis://host:port | postgres://user:pass@host:port/db (empty = off, sessions live only in memory)")
-	workspace := flag.String("workspace", "", "expose file tools (read/edit/write/list/search) confined to this directory, plus checkpoint /undo (empty = off; there is no default directory on purpose)")
+	var workspace repeatedPath
+	flag.Var(&workspace, "workspace", "expose file tools (read/edit/write/list/search) confined to these directories, plus checkpoint /undo. Repeatable: a session that spans repositories passes each one. The first is primary (empty = off; there is no default directory on purpose)")
 	noCheckpoint := flag.Bool("no-checkpoint", false, "with --workspace, skip the file snapshot taken before each write, disabling /undo and /checkpoints")
 	flag.Parse()
 
@@ -50,7 +51,7 @@ func main() {
 	// SessionManager holds them all; its default session (created at startup)
 	// backs an empty session_id, keeping the single-surface flow unchanged.
 	factory := func(ctx context.Context) (*host.App, error) {
-		return buildApp(*configPath, *demo, store, *workspace, *noCheckpoint)
+		return buildApp(*configPath, *demo, store, workspace, *noCheckpoint)
 	}
 	var mgr *web.SessionManager
 	if store != nil {
@@ -88,7 +89,7 @@ func main() {
 // non-nil store is attached to every App (host.WithRunStore) so each session,
 // including the default, persists its turns — the invariant the store-backed
 // SessionManager relies on when it rehydrates a dropped session.
-func buildApp(configPath string, demo bool, store agent.RunStore, workspace string, noCheckpoint bool) (*host.App, error) {
+func buildApp(configPath string, demo bool, store agent.RunStore, workspace []string, noCheckpoint bool) (*host.App, error) {
 	var storeOpt []host.AppOption
 	if store != nil {
 		storeOpt = append(storeOpt, host.WithRunStore(store))
@@ -97,7 +98,7 @@ func buildApp(configPath string, demo bool, store agent.RunStore, workspace stri
 	// demo and config paths cannot drift into offering different tools. Nil
 	// when --workspace is unset, leaving both paths as they were.
 	wsExts, err := agentsurfaces.WorkspaceExtensions(agentsurfaces.WorkspaceConfig{
-		Root:         workspace,
+		Roots:        workspace,
 		NoCheckpoint: noCheckpoint,
 	})
 	if err != nil {
@@ -141,4 +142,19 @@ func buildApp(configPath string, demo bool, store agent.RunStore, workspace stri
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 	return host.NewApp(cfg, io.Discard, strings.NewReader(""), storeOpt...)
+}
+
+// repeatedPath collects a flag given more than once, so --workspace can name
+// several directories. The stdlib flag package has no slice type and the
+// alternative, splitting one value on commas, breaks on a path containing one.
+type repeatedPath []string
+
+func (r *repeatedPath) String() string { return strings.Join(*r, ",") }
+
+func (r *repeatedPath) Set(v string) error {
+	if v == "" {
+		return fmt.Errorf("empty workspace path")
+	}
+	*r = append(*r, v)
+	return nil
 }

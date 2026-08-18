@@ -959,6 +959,43 @@ stays useful whether or not this was the cause: the hang was never reproduced lo
 repeated `-race` runs and six concurrent ones, so this closes the class rather than a confirmed
 instance.
 
+### A workspace is a set of roots, not one (#1314)
+
+Every workspace extension took a single `Root`, and that assumption was wrong about how the tool is
+used. A coding session that stays inside one repository is the exception: the ordinary task changes
+an API in one repo and fixes its callers in another, often in another language. An agent confined to
+one of them edits the API, reports success, and never sees what it broke, because the caller is
+outside both its confinement and its language server.
+
+`files` now takes `Roots []string`, with the first primary so a relative path still resolves and a
+single-root workspace behaves exactly as before.
+
+Three things that fell out of it:
+
+- **Results became absolute paths.** Two repositories both holding `src/main.go` is normal, so a
+  bare relative path names either. The alternative was inventing a qualifier syntax (`repo:path`),
+  which changes every tool's path argument and gives the model a new thing to spell wrong. Absolute
+  in, absolute out, no grammar.
+- **A common parent is not a substitute for listing the roots.** It silently widens confinement to
+  everything else under that parent, which is the property `os.Root` is there to deny. Pinned by
+  `TestParentOfTheRootsIsNotImplicitlyIncluded`.
+- **The listing cap is global, not per root.** Applied per root it would quietly grow every time
+  someone added a repository, so a listing would get larger without anyone changing a limit.
+
+The confinement mechanism did not weaken. It is still one `os.Root` handle per root doing the
+resolution at open time; a path now has to land inside one of them rather than inside the one. The
+symlink-escape test still passes unchanged, which was the assertion worth watching.
+
+**`lsp` is deliberately still single-root**, and it is the harder half. A language server is rooted,
+so spanning repositories means an instance per root per language rather than a longer path list. The
+protocol is already ahead of us: the client sends `workspaceFolders` as an array because that field
+is plural, and some servers accept several folders in one instance. Which ones do is worth measuring
+rather than assuming.
+
+**Cross-language references stay out of reach** and no amount of this fixes them. A Go server cannot
+tell you that a TypeScript file calls the endpoint you renamed. That boundary belongs to the language
+server, so a cross-language rename is `search_files` and judgement.
+
 ### Sub-agent personas
 
 `Config.SubAgents []SubAgentConfig{Name, Description, Instructions, Allow, MaxDepth}` builds

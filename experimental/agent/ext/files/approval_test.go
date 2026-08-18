@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/panyam/mcpkit/experimental/agent"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/agent"
 )
 
 func renderCall(name, args string) (string, bool) {
@@ -147,7 +147,7 @@ func TestMalformedArgumentsDecline(t *testing.T) {
 // TestRendererIsRegistered pins the wiring, since a renderer that is never
 // collected is a diff nobody sees.
 func TestRendererIsRegistered(t *testing.T) {
-	e, err := New(Config{Root: t.TempDir()})
+	e, err := New(Config{Roots: []string{t.TempDir()}})
 	if err != nil {
 		t.Fatal(err)
 	}
