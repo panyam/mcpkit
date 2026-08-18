@@ -198,10 +198,13 @@ func NewCritiqueGate(cfg CritiqueConfig) (ToolMiddleware, error) {
 // critic saw that one. A critic that echoes it, steered or by accident, would
 // close the fence from inside.
 //
-// It does not reuse delimitMark: that sentence names a tool and says the
-// content was fetched from outside, and neither is true of a verdict written
-// in-process by the critic. A fence whose explanation is false is the failure
-// mode issue 1273 is about.
+// It does not reuse delimitMark, which named two problems and now has one.
+// That sentence claimed the content was fetched from outside, which #1273
+// softened to "not vouched for" and which would now be true of a verdict. It
+// still names a tool, and a critique verdict is not a tool result, so the two
+// stay separate. Collapsing them would mean delimitMark taking a
+// caller-supplied source clause, which is a bigger change than either fence
+// currently justifies.
 func fenceCritiqueReason(reason string) (string, error) {
 	marker, err := newMarker()
 	if err != nil {

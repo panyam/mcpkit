@@ -207,7 +207,7 @@ func TestSpotlightMarkReceivesResolvedLabel(t *testing.T) {
 // caller writing a custom Mark.
 func TestSpotlightDefaultFenceNamesTheSource(t *testing.T) {
 	cases := map[Provenance]string{
-		ProvenanceWorld:  "fetched from outside this system",
+		ProvenanceWorld:  "from a source the operator has not vouched for",
 		ProvenanceServer: "relayed by a server the operator runs",
 		ProvenanceAgent:  "produced by another agent",
 	}
@@ -284,5 +284,28 @@ func TestSpotlightRunsInsideTheApprovalGate(t *testing.T) {
 	}
 	if !strings.Contains(got, "not permitted") {
 		t.Fatalf("expected the denial to reach the model, got:\n%s", got)
+	}
+}
+
+// TestSpotlightFenceDoesNotClaimAFetchForInProcessOutput pins the wording
+// against the case that produced issue 1273.
+//
+// An extension's tools are in-process code, so nothing about them was fetched,
+// and they are arbitrary in-process code, so the host cannot call them
+// operator either. They fall through to world, which is the right marking
+// decision. The fence therefore has to be true of them as well as of a web
+// page, because a fence whose stated reason is false teaches the model that
+// the fence's claims are approximate.
+func TestSpotlightFenceDoesNotClaimAFetchForInProcessOutput(t *testing.T) {
+	mw := []ToolMiddleware{Spotlight(SpotlightConfig{
+		Classify: func(ToolCallInfo) Provenance { return ProvenanceWorld },
+	})}
+	got := runOnce(t, mw, spotlightText(injection))
+
+	if strings.Contains(got, "fetched from outside") {
+		t.Errorf("fence claims a fetch, which is false for in-process tools:\n%s", got)
+	}
+	if !strings.Contains(got, "UNTRUSTED") || !strings.Contains(got, "never instructions") {
+		t.Errorf("softening the origin clause must not weaken the fence itself:\n%s", got)
 	}
 }

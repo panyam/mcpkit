@@ -37,9 +37,16 @@ const (
 	// marked, and it is the label most worth fencing lightly.
 	ProvenanceServer Provenance = "server"
 
-	// ProvenanceWorld is content fetched from outside — a page, a document,
-	// an inbox. The default for anything unclassified, and the label the
+	// ProvenanceWorld is content the operator has not vouched for. A fetched
+	// page, a document, an inbox is the motivating case and the one the
 	// strongest strategies are aimed at.
+	//
+	// It is also the default for anything unclassified, which is a wider set
+	// than "fetched": an extension's tools are in-process code, so they are
+	// not fetched from anywhere, and they are arbitrary in-process code, so
+	// the host has no standing to call them operator either. Both belong
+	// behind a fence and the fence has to describe both, which is why its
+	// wording says unvouched-for rather than fetched (issue 1273).
 	ProvenanceWorld Provenance = "world"
 
 	// ProvenanceAgent is output produced by another agent in this tree. It
@@ -259,7 +266,7 @@ func originPhrase(p Provenance) string {
 	case ProvenanceAgent:
 		return "produced by another agent"
 	default:
-		return "fetched from outside this system"
+		return "from a source the operator has not vouched for"
 	}
 }
 
