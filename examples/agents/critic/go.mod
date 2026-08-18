@@ -20,9 +20,9 @@ require (
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.5.1 // indirect
 	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.5.1 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect

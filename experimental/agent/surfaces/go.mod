@@ -18,9 +18,9 @@ require (
 	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.5.1 // indirect
 	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.5.1 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect

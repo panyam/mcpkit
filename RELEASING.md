@@ -112,5 +112,9 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin 
 - [ ] `CHANGELOG.md` `[X.Y.0]` finalized with real PR references + date;
       `docs/releases/vX.Y.0.md` written
 - [ ] `make bump-root V=vX.Y.0` + commit
+- [ ] `make verify-submodule-deps-resolve` green. This is the network check: the
+      default `verify-submodule-deps` only asks whether a pinned version *looks*
+      like a real tag, so a sibling pinned at a tag nobody pushed passes it and
+      breaks `go get` for every outside consumer. That is what #1291 was.
 - [ ] `make tag-push V=vX.Y.0`; verify `go get …@vX.Y.0`
 - [ ] GitHub Release published (browser, per the token note)

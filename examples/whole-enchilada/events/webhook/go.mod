@@ -21,7 +21,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.5.1 // indirect
 	github.com/panyam/servicekit v0.1.4 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

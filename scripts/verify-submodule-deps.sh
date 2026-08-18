@@ -31,6 +31,19 @@
 
 set -euo pipefail
 
+# --resolve additionally checks that every version a published module names
+# actually exists in the module proxy.
+#
+# Off by default because it needs the network, and CI should not fail on a
+# proxy hiccup. It is the check that would have caught #1291 years earlier:
+# the format check below only asks whether a version looks like a real tag,
+# not whether that tag was ever pushed. Run it before a release; see
+# RELEASING.md.
+RESOLVE=0
+if [ "${1:-}" = "--resolve" ]; then
+    RESOLVE=1
+fi
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 ROOT_MOD="github.com/panyam/mcpkit"
@@ -39,29 +52,11 @@ AGENT_RE='^experimental/agent(/|$)'
 # Modules that are tagged but never imported as a library.
 NONLIB_RE='^(cmd|tests|examples|conformance|docs)/'
 
-# Pre-existing placeholder pins in published modules, tracked in #1291.
-#
-# These are real breaks: each module is tagged and pushed on every release, and
-# `go get <module>@vX.Y.Z` does not resolve for an outside consumer. They are
-# NOT new. They survived because the original version of this script parsed only
-# the root require, and they surfaced the moment that blind spot was closed.
-#
-# Allowlisted rather than fixed here because the fix asserts a pin version for
-# modules the agent move has no business touching, and the go.sum churn would
-# risk failing CI in a module that change did not edit. Delete an entry as each
-# one is fixed; the list reaching empty closes #1291.
-KNOWN_PLACEHOLDER_PINS="
-experimental/ext/agents/clients/go github.com/panyam/mcpkit/experimental/ext/agents
-experimental/ext/events/clients/go github.com/panyam/mcpkit/experimental/ext/events
-experimental/ext/events/stores/gorm github.com/panyam/mcpkit/experimental/ext/events
-experimental/ext/events/stores/memory github.com/panyam/mcpkit/experimental/ext/events
-experimental/ext/events/stores/redis github.com/panyam/mcpkit/stores/redis
-"
-
-# is_known_pin <submodule> <module>
-is_known_pin() {
-    echo "$KNOWN_PLACEHOLDER_PINS" | grep -qxF "$1 $2"
-}
+# The allowlist that used to sit here is gone: #1291 fixed the five placeholder
+# pins it covered, so the protocol policy is now enforced with no exceptions.
+# Reintroducing an exception should mean fixing the pin instead, because a
+# published module that does not resolve is a worse break than one whose API
+# moved.
 
 # Discover every sub-module dynamically (mirrors the Makefile's SUB_MODS_ALL)
 # so the check never goes stale when a sub-module is added or moved. For example,
@@ -103,6 +98,19 @@ direct_requires() {
     | sed 's/[[:space:]]\+/ /g'
 }
 
+# resolve_check <module> <version>. Confirms the proxy serves that version,
+# from a scratch module so this repo's replace directives cannot mask a break.
+RESOLVE_DIR=""
+resolve_check() {
+    [ "$RESOLVE" = "1" ] || return 0
+    if [ -z "$RESOLVE_DIR" ]; then
+        RESOLVE_DIR="$(mktemp -d)"
+        trap 'rm -rf "$RESOLVE_DIR"' EXIT
+        (cd "$RESOLVE_DIR" && go mod init verifypins >/dev/null 2>&1)
+    fi
+    (cd "$RESOLVE_DIR" && go list -m "$1@$2" >/dev/null 2>&1)
+}
+
 fail=0
 for sub in "${SUBMODULES[@]}"; do
     gomod="$REPO_ROOT/$sub/go.mod"
@@ -138,14 +146,14 @@ for sub in "${SUBMODULES[@]}"; do
         case "$policy" in
             protocol)
                 if is_placeholder "$version"; then
-                    if is_known_pin "$sub" "$mod"; then
-                        echo "KNOWN: $sub/go.mod requires $mod $version (pre-existing, #1291)"
-                    else
-                        echo "FAIL: $sub/go.mod requires $mod $version (placeholder)"
-                        echo "      A released module cannot pin a sibling at v0.0.0. It will not resolve"
-                        echo "      for downstream consumers, because Go ignores replace outside the main module."
-                        fail=1
-                    fi
+                    echo "FAIL: $sub/go.mod requires $mod $version (placeholder)"
+                    echo "      A released module cannot pin a sibling at v0.0.0. It will not resolve"
+                    echo "      for downstream consumers, because Go ignores replace outside the main module."
+                    fail=1
+                elif ! resolve_check "$mod" "$version"; then
+                    echo "FAIL: $sub/go.mod requires $mod $version, which the proxy does not serve"
+                    echo "      The version looks like a tag but no such tag was published."
+                    fail=1
                 fi
                 ;;
             agent)

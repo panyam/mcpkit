@@ -7,7 +7,7 @@ replace github.com/panyam/mcpkit => ../../../../..
 replace github.com/panyam/mcpkit/experimental/ext/events => ../..
 
 require (
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0-00010101000000-000000000000
+	github.com/panyam/mcpkit/experimental/ext/events v0.5.1
 	github.com/stretchr/testify v1.11.1
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/driver/sqlite v1.6.0

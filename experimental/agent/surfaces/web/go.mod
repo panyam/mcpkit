@@ -36,9 +36,9 @@ require (
 	github.com/panyam/mcpkit/experimental/agent/ext/lsp v0.0.0-00010101000000-000000000000 // indirect
 	github.com/panyam/mcpkit/experimental/agent/store/gorm v0.0.0 // indirect
 	github.com/panyam/mcpkit/experimental/agent/store/redis v0.0.0 // indirect
-	github.com/panyam/mcpkit/experimental/ext/agents v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/agents v0.5.1 // indirect
 	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.0.0 // indirect
+	github.com/panyam/mcpkit/experimental/ext/events v0.5.1 // indirect
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
 	github.com/panyam/mcpkit/ext/skills v0.0.0 // indirect
