@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/panyam/mcpkit/core"
 )
 
 func toolsFor(t *testing.T, root string, s stubScript) *source {
@@ -194,5 +197,45 @@ func TestNoResultsIsNotAnError(t *testing.T) {
 	}
 	if !strings.Contains(res.Content[0].Text, "no references found") {
 		t.Fatalf("want the empty answer stated, got %q", res.Content[0].Text)
+	}
+}
+
+// TestWedgedServerRefusesRatherThanHanging is the production shape of the
+// bound. The navigation tools pass the Runner's context straight down, and that
+// context often carries no deadline, so before the backstop a server that read
+// a request and never answered would hold the turn open with nothing to explain
+// it.
+func TestWedgedServerRefusesRatherThanHanging(t *testing.T) {
+	root := workspace(t, map[string]string{"a.go": "package a\n"})
+	ext := newStubExtension(t, root, stubScript{
+		IgnoreMethods: []string{"textDocument/documentSymbol"},
+	})
+	ext.pool.clients[0].conn.callTimeout = 300 * time.Millisecond
+
+	src, err := ext.Tools()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type outcome struct {
+		res *core.ToolResult
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		r, e := src.Call(context.Background(), "goto_definition", map[string]any{"path": "a.go", "symbol": "Get"})
+		done <- outcome{r, e}
+	}()
+
+	select {
+	case got := <-done:
+		if got.err != nil {
+			t.Fatalf("a wedged server is the model's problem to report, not a dispatch failure: %v", got.err)
+		}
+		if !got.res.IsError {
+			t.Fatalf("want a refusal, got %q", got.res.Content[0].Text)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the tool call hung on a server that never answered")
 	}
 }

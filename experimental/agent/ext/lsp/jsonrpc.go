@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // errServerGone is what an in-flight request gets when the read loop ends
@@ -45,6 +46,20 @@ type rpcError struct {
 
 func (e *rpcError) Error() string { return fmt.Sprintf("lsp: rpc error %d: %s", e.Code, e.Message) }
 
+// defaultCallTimeout bounds a single request to the server.
+//
+// It exists because nothing else does. A server that accepts a request, never
+// answers it, and keeps its stdout open gives the read loop nothing to fail
+// on, so the loop never exits, c.done never closes, and a caller waits on its
+// own context. The navigation tools pass the Runner's context straight down,
+// and that context often carries no deadline, so a single wedged server could
+// hang a turn with no error anywhere to explain it.
+//
+// Generous, because every request under it is a local IPC round trip that a
+// healthy server answers in milliseconds. It is a backstop against a hang, not
+// a latency budget.
+const defaultCallTimeout = 30 * time.Second
+
 // conn is a JSON-RPC 2.0 connection over the LSP base protocol: a
 // Content-Length header, a blank line, then the JSON body.
 //
@@ -72,14 +87,19 @@ type conn struct {
 	// call learns the server is gone.
 	done     chan struct{}
 	doneOnce sync.Once
+
+	// callTimeout bounds every request. Per-conn rather than a package var so
+	// a test can shorten it without reaching into global state (constraint C3).
+	callTimeout time.Duration
 }
 
 func newConn(w io.WriteCloser, r io.Reader) *conn {
 	return &conn{
-		w:       w,
-		r:       bufio.NewReader(r),
-		pending: map[int64]chan *message{},
-		done:    make(chan struct{}),
+		w:           w,
+		r:           bufio.NewReader(r),
+		pending:     map[int64]chan *message{},
+		done:        make(chan struct{}),
+		callTimeout: defaultCallTimeout,
 	}
 }
 
@@ -164,6 +184,11 @@ func (c *conn) shutdown() {
 // if the caller gives up. A cancelled call drops its pending entry, so a late
 // reply is discarded rather than delivered to a receiver nobody is reading.
 func (c *conn) call(ctx context.Context, method string, params, result any) error {
+	// Always bounded, and never extended: a caller with a shorter deadline
+	// keeps it, a caller with none gets this one.
+	ctx, cancel := context.WithTimeout(ctx, c.callTimeout)
+	defer cancel()
+
 	c.mu.Lock()
 	c.nextID++
 	id := c.nextID

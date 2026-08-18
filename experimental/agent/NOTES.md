@@ -914,6 +914,31 @@ The general lesson is the same one the eval PRs keep producing: a suite that onl
 implementation proves the code agrees with that implementation. `TestServers` exists so the next
 server-shaped assumption costs a test run rather than a merged bug.
 
+### An RPC to a subprocess needs its own deadline (#1308)
+
+The lsp suite hung once in CI and hit the 600-second default `go test` timeout, against 44.5s on
+every passing run. Chasing it found a production bug rather than a test one.
+
+`conn.call` waits on three things: the reply, the caller's context, and the read loop ending. The
+third is what covers a crashed server, and it does not cover a *wedged* one. A server that reads a
+request, never answers it, and keeps its stdout open leaves the read loop blocked in `readFrame`
+with nothing to fail on, so `done` never closes. That leaves only the caller's context, and
+`source.navigate` passes the Runner's context straight down, which frequently has no deadline. One
+misbehaving language server could hold a turn open forever with nothing logged.
+
+Every call is now bounded, with the caller's deadline winning when it is shorter. The bound lives on
+the `conn` rather than in a package var, per constraint C3.
+
+The general form is worth keeping: **a wait that is only bounded by the peer dying is not bounded.**
+Process death is the easy failure to handle and the rare one; the common failure is a peer that is
+still there and no longer answering.
+
+The CI step also gained an explicit `-timeout 180s`, so the next hang produces a goroutine dump
+naming the blocked call instead of a bare line at 600s. That is diagnosis rather than a fix, and it
+stays useful whether or not this was the cause: the hang was never reproduced locally across
+repeated `-race` runs and six concurrent ones, so this closes the class rather than a confirmed
+instance.
+
 ### Sub-agent personas
 
 `Config.SubAgents []SubAgentConfig{Name, Description, Instructions, Allow, MaxDepth}` builds
