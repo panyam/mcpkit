@@ -56,7 +56,7 @@ func liveWorkspace(t *testing.T) (string, ServerSpec) {
 func TestLiveDiagnosticsReportARealCompileError(t *testing.T) {
 	root, spec := liveWorkspace(t)
 	ext, err := New(Config{
-		Root:               root,
+		Roots:              []string{root},
 		Servers:            []ServerSpec{spec},
 		Writes:             []WriteSpec{{Tool: "edit_file", Paths: pathArg}},
 		DiagnosticsTimeout: 30 * time.Second,
@@ -87,7 +87,7 @@ func TestLiveDiagnosticsReportARealCompileError(t *testing.T) {
 // test wrote, while gopls names methods and functions its own way.
 func TestLiveNavigationResolvesBySymbolName(t *testing.T) {
 	root, spec := liveWorkspace(t)
-	ext, err := New(Config{Root: root, Servers: []ServerSpec{spec}, DiagnosticsTimeout: 30 * time.Second})
+	ext, err := New(Config{Roots: []string{root}, Servers: []ServerSpec{spec}, DiagnosticsTimeout: 30 * time.Second})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestLiveNavigationResolvesBySymbolName(t *testing.T) {
 // real subprocess rather than the stub.
 func TestLiveServerExits(t *testing.T) {
 	root, spec := liveWorkspace(t)
-	ext, err := New(Config{Root: root, Servers: []ServerSpec{spec}})
+	ext, err := New(Config{Roots: []string{root}, Servers: []ServerSpec{spec}})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

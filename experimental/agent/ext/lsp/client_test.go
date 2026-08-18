@@ -10,7 +10,7 @@ import (
 
 func startStub(t *testing.T, root string, s stubScript) *client {
 	t.Helper()
-	c, err := startClient(context.Background(), stubSpec(t, s), root)
+	c, err := startClient(context.Background(), stubSpec(t, s), []string{root})
 	if err != nil {
 		t.Fatalf("startClient: %v", err)
 	}
@@ -43,10 +43,10 @@ func TestDiagnosticsArriveFromPublish(t *testing.T) {
 		"a.go": {{Range: textRange{Start: position{Line: 3, Character: 6}}, Severity: severityError, Message: "undefined: foo"}},
 	}})
 
-	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 5*time.Second) {
 		t.Fatal("refresh reported no publication")
 	}
-	got := c.diagnostics("a.go")
+	got := c.diagnostics(filepath.Join(root, "a.go"))
 	if len(got) != 1 || got[0].Message != "undefined: foo" {
 		t.Fatalf("diagnostics = %+v", got)
 	}
@@ -63,10 +63,10 @@ func TestRefreshTimesOutRatherThanReportingStale(t *testing.T) {
 		NoPublish:   true,
 	})
 
-	if c.refresh(context.Background(), "a.go", 200*time.Millisecond) {
+	if c.refresh(context.Background(), filepath.Join(root, "a.go"), 200*time.Millisecond) {
 		t.Fatal("refresh claimed success from a server that published nothing")
 	}
-	if got := c.diagnostics("a.go"); len(got) != 0 {
+	if got := c.diagnostics(filepath.Join(root, "a.go")); len(got) != 0 {
 		t.Fatalf("diagnostics = %+v, want nothing held for a file never published", got)
 	}
 }
@@ -75,7 +75,7 @@ func TestRefreshTimesOutRatherThanReportingStale(t *testing.T) {
 // Without a shutdown seam this subprocess outlives the App that spawned it.
 func TestCloseStopsTheServerProcess(t *testing.T) {
 	root := workspace(t, map[string]string{"a.go": "package a\n"})
-	c, err := startClient(context.Background(), stubSpec(t, stubScript{}), root)
+	c, err := startClient(context.Background(), stubSpec(t, stubScript{}), []string{root})
 	if err != nil {
 		t.Fatalf("startClient: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestCloseStopsTheServerProcess(t *testing.T) {
 // polite path has a deadline and the kill follows.
 func TestCloseKillsAServerThatIgnoresShutdown(t *testing.T) {
 	root := workspace(t, map[string]string{"a.go": "package a\n"})
-	c, err := startClient(context.Background(), stubSpec(t, stubScript{IgnoreShutdown: true}), root)
+	c, err := startClient(context.Background(), stubSpec(t, stubScript{IgnoreShutdown: true}), []string{root})
 	if err != nil {
 		t.Fatalf("startClient: %v", err)
 	}
@@ -133,21 +133,21 @@ func TestStartClientReportsAMissingBinary(t *testing.T) {
 	_, err := startClient(context.Background(), ServerSpec{
 		Command:    []string{"definitely-not-a-language-server-xyz"},
 		Extensions: []string{".go"},
-	}, root)
+	}, []string{root})
 	if err == nil {
 		t.Fatal("want an error naming the command that could not start")
 	}
 }
 
-func TestRelFromURIRefusesOutsideTheRoot(t *testing.T) {
+func TestPathFromURIRefusesOutsideEveryRoot(t *testing.T) {
 	root := workspace(t, map[string]string{"a.go": "package a\n"})
 	c := startStub(t, root, stubScript{})
 
-	if _, ok := c.relFromURI(pathToURI(root + "/a.go")); !ok {
-		t.Fatal("a file inside the root should resolve")
+	if _, ok := c.pathFromURI(pathToURI(root + "/a.go")); !ok {
+		t.Fatal("a file inside a root should resolve")
 	}
-	if _, ok := c.relFromURI("file:///etc/passwd"); ok {
-		t.Fatal("a path outside the root must not resolve to a workspace path")
+	if _, ok := c.pathFromURI("file:///etc/passwd"); ok {
+		t.Fatal("a path outside every root must not resolve to a workspace path")
 	}
 }
 
@@ -155,7 +155,7 @@ func startStubSettle(t *testing.T, root string, s stubScript, settle time.Durati
 	t.Helper()
 	spec := stubSpec(t, s)
 	spec.SettleDelay = settle
-	c, err := startClient(context.Background(), spec, root)
+	c, err := startClient(context.Background(), spec, []string{root})
 	if err != nil {
 		t.Fatalf("startClient: %v", err)
 	}
@@ -177,10 +177,10 @@ func TestRefreshWaitsPastAProvisionalEmptyPublication(t *testing.T) {
 		},
 	}, 2*time.Second)
 
-	if !c.refresh(context.Background(), "a.go", 10*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 10*time.Second) {
 		t.Fatal("refresh reported no publication")
 	}
-	got := c.diagnostics("a.go")
+	got := c.diagnostics(filepath.Join(root, "a.go"))
 	if len(got) != 1 || got[0].Message != "undefined: foo" {
 		t.Fatalf("settled on the provisional empty set instead of the real one: %+v", got)
 	}
@@ -198,17 +198,17 @@ func TestRefreshNeedsNoRoundTripWhenContentIsUnchanged(t *testing.T) {
 		},
 	})
 
-	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 5*time.Second) {
 		t.Fatal("the first refresh should open the file and get diagnostics")
 	}
 	start := time.Now()
-	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 5*time.Second) {
 		t.Fatal("a second refresh over unchanged content should answer from what we hold")
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("unchanged content took %s, so a didChange was sent and waited on", elapsed)
 	}
-	if got := c.diagnostics("a.go"); len(got) != 1 {
+	if got := c.diagnostics(filepath.Join(root, "a.go")); len(got) != 1 {
 		t.Fatalf("diagnostics = %+v, want the set from the open", got)
 	}
 }
@@ -219,11 +219,11 @@ func TestRefreshDropsItsWaiterOnTimeout(t *testing.T) {
 	root := workspace(t, map[string]string{"a.go": "package a\n"})
 	c := startStub(t, root, stubScript{NoPublish: true})
 
-	if c.refresh(context.Background(), "a.go", 150*time.Millisecond) {
+	if c.refresh(context.Background(), filepath.Join(root, "a.go"), 150*time.Millisecond) {
 		t.Fatal("refresh claimed success from a server that published nothing")
 	}
 	c.mu.Lock()
-	left := len(c.waiters["a.go"])
+	left := len(c.waiters[filepath.Join(root, "a.go")])
 	c.mu.Unlock()
 	if left != 0 {
 		t.Fatalf("%d waiter(s) left behind after a timeout", left)
@@ -265,14 +265,14 @@ func TestRefreshWaitsWhenTheServerHasNotAnsweredYet(t *testing.T) {
 	})
 
 	// Open the document without waiting, the way a navigation call does.
-	if _, err := c.sync("a.go"); err != nil {
+	if _, err := c.sync(filepath.Join(root, "a.go")); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 
-	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 5*time.Second) {
 		t.Fatal("refresh gave up on a file the server had not answered for")
 	}
-	if got := c.diagnostics("a.go"); len(got) != 1 {
+	if got := c.diagnostics(filepath.Join(root, "a.go")); len(got) != 1 {
 		t.Fatalf("diagnostics = %+v, want the server's answer rather than a premature clean", got)
 	}
 }
@@ -288,7 +288,7 @@ func TestRefreshReturnsAtOnceOnRealProblems(t *testing.T) {
 	}, 5*time.Second)
 
 	start := time.Now()
-	if !c.refresh(context.Background(), "a.go", 20*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 20*time.Second) {
 		t.Fatal("refresh reported no publication")
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
@@ -304,7 +304,7 @@ func TestRefreshWaitsOutTheSettleOnAnEmptyResult(t *testing.T) {
 	c := startStubSettle(t, root, stubScript{}, 600*time.Millisecond)
 
 	start := time.Now()
-	if !c.refresh(context.Background(), "a.go", 20*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 20*time.Second) {
 		t.Fatal("refresh reported no publication")
 	}
 	if elapsed := time.Since(start); elapsed < 500*time.Millisecond {
@@ -338,7 +338,7 @@ func TestSyncSavesSoSaveDrivenServersRecheck(t *testing.T) {
 		},
 	})
 
-	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 5*time.Second) {
 		t.Fatal("a save-driven server was never told the file was saved on open")
 	}
 
@@ -349,13 +349,13 @@ func TestSyncSavesSoSaveDrivenServersRecheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.mu.Lock()
-	c.diags["a.go"] = nil
+	c.diags[filepath.Join(root, "a.go")] = nil
 	c.mu.Unlock()
 
-	if !c.refresh(context.Background(), "a.go", 5*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 5*time.Second) {
 		t.Fatal("a changed file was never reported as saved, so the server never re-checked")
 	}
-	if got := c.diagnostics("a.go"); len(got) != 1 {
+	if got := c.diagnostics(filepath.Join(root, "a.go")); len(got) != 1 {
 		t.Fatalf("diagnostics = %+v, want the set the save produced", got)
 	}
 }
@@ -374,10 +374,10 @@ func TestBusyServerExtendsTheWait(t *testing.T) {
 		},
 	}, 100*time.Millisecond)
 
-	if !c.refresh(context.Background(), "a.go", 10*time.Second) {
+	if !c.refresh(context.Background(), filepath.Join(root, "a.go"), 10*time.Second) {
 		t.Fatal("refresh reported no publication")
 	}
-	if got := c.diagnostics("a.go"); len(got) != 1 {
+	if got := c.diagnostics(filepath.Join(root, "a.go")); len(got) != 1 {
 		t.Fatalf("diagnostics = %+v: a 100ms settle gave up on a busy server", got)
 	}
 }

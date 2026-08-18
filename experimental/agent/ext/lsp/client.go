@@ -76,8 +76,8 @@ type documentSymbol struct {
 
 // client drives one language server subprocess.
 type client struct {
-	spec ServerSpec
-	root string
+	spec  ServerSpec
+	roots []string
 
 	cmd  *exec.Cmd
 	conn *conn
@@ -122,12 +122,15 @@ type client struct {
 // initialize cannot be sent anything else, and deferring the failure would
 // turn "gopls is not installed" into a diagnostics block that is silently
 // always empty.
-func startClient(ctx context.Context, spec ServerSpec, root string) (*client, error) {
+func startClient(ctx context.Context, spec ServerSpec, roots []string) (*client, error) {
 	if len(spec.Command) == 0 {
 		return nil, fmt.Errorf("lsp: ServerSpec.Command is required")
 	}
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("lsp: at least one root is required")
+	}
 	cmd := exec.Command(spec.Command[0], spec.Command[1:]...)
-	cmd.Dir = root
+	cmd.Dir = roots[0]
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, fmt.Errorf("lsp: %s stdin: %w", spec.Command[0], err)
@@ -146,7 +149,7 @@ func startClient(ctx context.Context, spec ServerSpec, root string) (*client, er
 
 	c := &client{
 		spec:       spec,
-		root:       root,
+		roots:      roots,
 		cmd:        cmd,
 		conn:       newConn(stdin, stdout),
 		diags:      map[string][]diagnostic{},
@@ -167,12 +170,18 @@ func startClient(ctx context.Context, spec ServerSpec, root string) (*client, er
 }
 
 func (c *client) initialize(ctx context.Context) error {
+	folders := make([]map[string]any, 0, len(c.roots))
+	for _, r := range c.roots {
+		folders = append(folders, map[string]any{"uri": pathToURI(r), "name": filepath.Base(r)})
+	}
 	params := map[string]any{
 		"processId": os.Getpid(),
-		"rootUri":   pathToURI(c.root),
-		"workspaceFolders": []map[string]any{
-			{"uri": pathToURI(c.root), "name": filepath.Base(c.root)},
-		},
+		// rootUri is the first root and workspaceFolders carries them all. The
+		// field is singular and deprecated; servers that predate folders still
+		// read it, and every server measured answers correctly for a file in a
+		// folder that is not this one.
+		"rootUri":          pathToURI(c.roots[0]),
+		"workspaceFolders": folders,
 		"capabilities": map[string]any{
 			// utf-8 first, so a server that negotiates gives us byte offsets
 			// and the conversion in offsetFor becomes a no-op. gopls declines
@@ -188,7 +197,7 @@ func (c *client) initialize(ctx context.Context) error {
 				"definition":         map[string]any{},
 				"references":         map[string]any{},
 			},
-			"workspace": map[string]any{"configuration": true},
+			"workspace": map[string]any{"configuration": true, "workspaceFolders": true},
 		},
 	}
 	var result struct {
@@ -225,15 +234,15 @@ func (c *client) onNotify(method string, params json.RawMessage) {
 	if err := json.Unmarshal(params, &p); err != nil {
 		return
 	}
-	rel, ok := c.relFromURI(p.URI)
+	abs, ok := c.pathFromURI(p.URI)
 	if !ok {
 		return
 	}
 	c.mu.Lock()
-	c.diags[rel] = p.Diagnostics
-	c.answered[rel] = c.sent[rel]
-	waiters := c.waiters[rel]
-	delete(c.waiters, rel)
+	c.diags[abs] = p.Diagnostics
+	c.answered[abs] = c.sent[abs]
+	waiters := c.waiters[abs]
+	delete(c.waiters, abs)
 	c.mu.Unlock()
 	for _, ch := range waiters {
 		close(ch)
@@ -275,36 +284,36 @@ func (c *client) busy() bool {
 	return len(c.busyTokens) > 0
 }
 
-// awaitPublish registers interest in the next diagnostics for rel.
+// awaitPublish registers interest in the next diagnostics for abs.
 //
 // Registered before the didChange that will cause them, because the server can
 // publish before the notify call returns and a waiter installed afterwards
 // would miss the very publication it is waiting for. Every channel it hands
 // out is either closed by a publication or dropped by dropWait; one that is
 // neither stays in the map until the next publication for that file.
-func (c *client) awaitPublish(rel string) chan struct{} {
+func (c *client) awaitPublish(abs string) chan struct{} {
 	ch := make(chan struct{})
 	c.mu.Lock()
-	c.waiters[rel] = append(c.waiters[rel], ch)
+	c.waiters[abs] = append(c.waiters[abs], ch)
 	c.mu.Unlock()
 	return ch
 }
 
 // dropWait removes a waiter that gave up, so a run of timeouts cannot grow the
 // waiter list without bound.
-func (c *client) dropWait(rel string, ch chan struct{}) {
+func (c *client) dropWait(abs string, ch chan struct{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	list := c.waiters[rel]
+	list := c.waiters[abs]
 	for i, w := range list {
 		if w == ch {
-			c.waiters[rel] = append(list[:i:i], list[i+1:]...)
+			c.waiters[abs] = append(list[:i:i], list[i+1:]...)
 			return
 		}
 	}
 }
 
-// sync tells the server about the current on-disk content of rel, opening the
+// sync tells the server about the current on-disk content of abs, opening the
 // document the first time and revising it afterwards. It reports whether
 // anything was actually sent.
 //
@@ -312,25 +321,25 @@ func (c *client) dropWait(rel string, ch chan struct{}) {
 // recompute on every navigation call, this is load-bearing for refresh: clangd
 // does not re-publish for a didChange whose content is identical, so resending
 // would leave a caller waiting for a publication that is never coming.
-func (c *client) sync(rel string) (bool, error) {
-	body, err := os.ReadFile(filepath.Join(c.root, rel))
+func (c *client) sync(abs string) (bool, error) {
+	body, err := os.ReadFile(abs)
 	if err != nil {
 		return false, err
 	}
 	sum := sha256.Sum256(body)
 
 	c.mu.Lock()
-	version, isOpen := c.open[rel]
-	if isOpen && c.sent[rel] == sum {
+	version, isOpen := c.open[abs]
+	if isOpen && c.sent[abs] == sum {
 		c.mu.Unlock()
 		return false, nil
 	}
 	version++
-	c.open[rel] = version
-	c.sent[rel] = sum
+	c.open[abs] = version
+	c.sent[abs] = sum
 	c.mu.Unlock()
 
-	uri := pathToURI(filepath.Join(c.root, rel))
+	uri := pathToURI(abs)
 	if !isOpen {
 		if err := c.conn.notify("textDocument/didOpen", map[string]any{
 			"textDocument": map[string]any{
@@ -375,7 +384,7 @@ func (c *client) save(uri, text string) error {
 	})
 }
 
-// refresh syncs rel and waits for the diagnostics that follow, up to timeout.
+// refresh syncs abs and waits for the diagnostics that follow, up to timeout.
 //
 // # Why it waits for quiet rather than for one publication
 //
@@ -398,16 +407,16 @@ func (c *client) save(uri, text string) error {
 // we happen to be holding. Stale problems presented as the result of the edit
 // that just ran are worse than saying nothing: the model would go fix an error
 // it already fixed.
-func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration) bool {
+func (c *client) refresh(ctx context.Context, abs string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
-	first := c.awaitPublish(rel)
+	first := c.awaitPublish(abs)
 
-	changed, err := c.sync(rel)
+	changed, err := c.sync(abs)
 	if err != nil {
-		c.dropWait(rel, first)
+		c.dropWait(abs, first)
 		return false
 	}
-	if !changed && c.hasAnswered(rel) {
+	if !changed && c.hasAnswered(abs) {
 		// The server has this exact content and has already reported on it,
 		// so nothing further is coming and what we hold is current. Waiting
 		// would report a timeout for a file we can already answer about,
@@ -417,11 +426,11 @@ func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration)
 		// enough: right after a didOpen the server has the content and has
 		// not replied yet, and returning here would report a file as clean
 		// before anything had looked at it.
-		c.dropWait(rel, first)
+		c.dropWait(abs, first)
 		return true
 	}
 
-	if !c.waitPublish(ctx, rel, first, time.Until(deadline)) {
+	if !c.waitPublish(ctx, abs, first, time.Until(deadline)) {
 		return false
 	}
 	// Quiet is the moment we stop waiting for a correction. It moves whenever
@@ -433,7 +442,7 @@ func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration)
 		switch {
 		case ctx.Err() != nil, now.After(deadline):
 			return true
-		case len(c.diagnostics(rel)) > 0:
+		case len(c.diagnostics(abs)) > 0:
 			// Something real to report beats waiting for more of it. A later
 			// publication can only add problems, and the next turn's context
 			// stage carries the full current set anyway, so holding the model
@@ -451,8 +460,8 @@ func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration)
 		// provisional empty set and only then announces the work, so a single
 		// sample taken right after the first publication misses it.
 		wait := min(quiet.Sub(now), deadline.Sub(now))
-		next := c.awaitPublish(rel)
-		if c.waitPublish(ctx, rel, next, wait) {
+		next := c.awaitPublish(abs)
+		if c.waitPublish(ctx, abs, next, wait) {
 			quiet = time.Now().Add(c.settle)
 		}
 	}
@@ -460,22 +469,22 @@ func (c *client) refresh(ctx context.Context, rel string, timeout time.Duration)
 
 // hasAnswered reports whether the diagnostics we hold describe the content the
 // server currently has.
-func (c *client) hasAnswered(rel string) bool {
+func (c *client) hasAnswered(abs string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	sent, open := c.sent[rel]
+	sent, open := c.sent[abs]
 	if !open {
 		return false
 	}
-	answered, ok := c.answered[rel]
+	answered, ok := c.answered[abs]
 	return ok && answered == sent
 }
 
 // waitPublish blocks until ch fires, the wait elapses, or ctx ends, dropping
 // the waiter in the two cases where nothing arrived.
-func (c *client) waitPublish(ctx context.Context, rel string, ch chan struct{}, wait time.Duration) bool {
+func (c *client) waitPublish(ctx context.Context, abs string, ch chan struct{}, wait time.Duration) bool {
 	if wait <= 0 {
-		c.dropWait(rel, ch)
+		c.dropWait(abs, ch)
 		return false
 	}
 	timer := time.NewTimer(wait)
@@ -484,19 +493,19 @@ func (c *client) waitPublish(ctx context.Context, rel string, ch chan struct{}, 
 	case <-ch:
 		return true
 	case <-timer.C:
-		c.dropWait(rel, ch)
+		c.dropWait(abs, ch)
 		return false
 	case <-ctx.Done():
-		c.dropWait(rel, ch)
+		c.dropWait(abs, ch)
 		return false
 	}
 }
 
-func (c *client) diagnostics(rel string) []diagnostic {
+func (c *client) diagnostics(abs string) []diagnostic {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]diagnostic, len(c.diags[rel]))
-	copy(out, c.diags[rel])
+	out := make([]diagnostic, len(c.diags[abs]))
+	copy(out, c.diags[abs])
 	return out
 }
 
@@ -506,8 +515,8 @@ func (c *client) tracked() []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make([]string, 0, len(c.open))
-	for rel := range c.open {
-		out = append(out, rel)
+	for abs := range c.open {
+		out = append(out, abs)
 	}
 	return out
 }
@@ -551,20 +560,24 @@ func pathToURI(path string) string {
 	return u.String()
 }
 
-// relFromURI converts a server-supplied URI back to a workspace-relative path,
-// reporting false for anything outside the root.
+// pathFromURI converts a server-supplied URI to an absolute path, reporting
+// false for anything outside every workspace root.
 //
 // Out-of-root results are normal rather than exceptional: a definition in the
 // standard library or a module cache is a real answer to a real question, and
-// it is simply not a file this workspace can talk about by relative path.
-func (c *client) relFromURI(uri string) (string, bool) {
+// it is simply not a file this workspace can talk about.
+func (c *client) pathFromURI(uri string) (string, bool) {
 	u, err := url.Parse(uri)
 	if err != nil || u.Scheme != "file" {
 		return "", false
 	}
-	rel, err := filepath.Rel(c.root, filepath.FromSlash(u.Path))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", false
+	abs := filepath.Clean(filepath.FromSlash(u.Path))
+	for _, root := range c.roots {
+		rel, relErr := filepath.Rel(root, abs)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		return abs, true
 	}
-	return rel, true
+	return "", false
 }

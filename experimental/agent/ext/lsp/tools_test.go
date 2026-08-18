@@ -154,7 +154,7 @@ func TestPathOutsideTheRootIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
-	if !res.IsError || !strings.Contains(res.Content[0].Text, "outside the workspace root") {
+	if !res.IsError || !strings.Contains(res.Content[0].Text, "outside every workspace root") {
 		t.Fatalf("want a confinement refusal, got %+v", res.Content[0])
 	}
 }

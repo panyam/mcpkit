@@ -25,7 +25,7 @@ func pathArg(args map[string]any) []string {
 func newStubExtension(t *testing.T, root string, s stubScript, writes ...WriteSpec) *Extension {
 	t.Helper()
 	ext, err := New(Config{
-		Root:               root,
+		Roots:              []string{root},
 		Servers:            []ServerSpec{stubSpec(t, s)},
 		Writes:             writes,
 		DiagnosticsTimeout: 3 * time.Second,
@@ -153,7 +153,7 @@ func TestMiddlewareSkipsACallThatFailed(t *testing.T) {
 func TestMiddlewareReportsATimeoutRatherThanStaleDiagnostics(t *testing.T) {
 	root := workspace(t, map[string]string{"a.go": "package a\n"})
 	ext, err := New(Config{
-		Root:               root,
+		Roots:              []string{root},
 		Servers:            []ServerSpec{stubSpec(t, stubScript{NoPublish: true})},
 		Writes:             []WriteSpec{{Tool: "edit_file", Paths: pathArg}},
 		DiagnosticsTimeout: 150 * time.Millisecond,
@@ -234,7 +234,7 @@ func TestStageSaysNothingWhenNothingIsWrong(t *testing.T) {
 // unconditionally: a surface with no language server configured gets an
 // extension that adds no tools, no prompt, no middleware, and no stage.
 func TestNoServersMeansNoContributions(t *testing.T) {
-	ext, err := New(Config{Root: workspace(t, nil)})
+	ext, err := New(Config{Roots: []string{workspace(t, nil)}})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestNewRequiresARoot(t *testing.T) {
 }
 
 func TestNewRejectsAnIncompleteWriteSpec(t *testing.T) {
-	_, err := New(Config{Root: workspace(t, nil), Writes: []WriteSpec{{Tool: "edit_file"}}})
+	_, err := New(Config{Roots: []string{workspace(t, nil)}, Writes: []WriteSpec{{Tool: "edit_file"}}})
 	if err == nil {
 		t.Fatal("want an error for a WriteSpec with no Paths")
 	}
@@ -302,7 +302,7 @@ func TestMiddlewareDoesNotReportCleanForAProvisionalPublication(t *testing.T) {
 	})
 	spec.SettleDelay = 2 * time.Second
 	ext, err := New(Config{
-		Root:               root,
+		Roots:              []string{root},
 		Servers:            []ServerSpec{spec},
 		Writes:             []WriteSpec{{Tool: "edit_file", Paths: pathArg}},
 		DiagnosticsTimeout: 10 * time.Second,

@@ -33,7 +33,7 @@ func TestLiveRustWriteCycle(t *testing.T) {
 	os.WriteFile(filepath.Join(resolved, "src/main.rs"), []byte("fn get() -> i32 { 1 }\n\nfn main() { let _ = get(); }\n"), 0o644)
 
 	ext, err := New(Config{
-		Root:    resolved,
+		Roots:   []string{resolved},
 		Servers: []ServerSpec{{Command: []string{"rust-analyzer"}, Extensions: []string{".rs"}, LanguageID: "rust"}},
 		Writes:  []WriteSpec{{Tool: "edit_file", Paths: pathArg}},
 	})

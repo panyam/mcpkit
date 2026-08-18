@@ -61,10 +61,15 @@ type WriteSpec struct {
 
 // Config configures the extension.
 type Config struct {
-	// Root is the workspace the servers are started in. Required, and should
-	// match files.Config.Root: a server rooted somewhere else resolves imports
-	// against a tree the agent cannot edit.
-	Root string
+	// Roots are the workspaces the servers cover. At least one is required,
+	// and they should match files.Config.Roots: a server rooted somewhere else
+	// resolves imports against a tree the agent cannot edit.
+	//
+	// One server instance covers all of them, via the workspaceFolders array
+	// the protocol has had since 3.6. Measured against gopls, rust-analyzer
+	// and typescript-language-server: each answers correctly for a file in a
+	// folder that is not the rootUri, so this needs no instance per root.
+	Roots []string
 
 	// Servers are the language servers to run. Empty means the extension
 	// contributes nothing, so a surface can wire it unconditionally.
@@ -115,15 +120,15 @@ const startTimeout = 20 * time.Second
 
 // pool holds the running servers and routes a file to the one that handles it.
 type pool struct {
-	root    string
+	roots   []string
 	clients []*client
 	byExt   map[string]*client
 }
 
 func startPool(ctx context.Context, cfg Config) (*pool, error) {
-	p := &pool{root: cfg.Root, byExt: map[string]*client{}}
+	p := &pool{roots: cfg.Roots, byExt: map[string]*client{}}
 	for _, spec := range cfg.Servers {
-		c, err := startClient(ctx, spec, cfg.Root)
+		c, err := startClient(ctx, spec, cfg.Roots)
 		if err != nil {
 			// Everything started so far is shut down: a half-started pool
 			// would leave orphaned subprocesses behind a constructor that
@@ -185,21 +190,21 @@ func (s *source) navigate(ctx context.Context, args map[string]any, method strin
 	if path == "" || symbol == "" {
 		return toolError("needs both path and symbol")
 	}
-	rel, err := s.pool.rel(path)
+	abs, err := s.pool.resolve(path)
 	if err != nil {
 		return toolError(err.Error())
 	}
-	c := s.pool.forPath(rel)
+	c := s.pool.forPath(abs)
 	if c == nil {
-		return toolError(fmt.Sprintf("no language server configured for %s", filepath.Ext(rel)))
+		return toolError(fmt.Sprintf("no language server configured for %s", filepath.Ext(abs)))
 	}
-	if _, err := c.sync(rel); err != nil {
+	if _, err := c.sync(abs); err != nil {
 		return toolError(fmt.Sprintf("%s: %v", path, err))
 	}
 
 	var syms []documentSymbol
 	if err := c.conn.call(ctx, "textDocument/documentSymbol", map[string]any{
-		"textDocument": map[string]any{"uri": pathToURI(filepath.Join(c.root, rel))},
+		"textDocument": map[string]any{"uri": pathToURI(abs)},
 	}, &syms); err != nil {
 		return toolError(fmt.Sprintf("%s: %v", path, err))
 	}
@@ -209,7 +214,7 @@ func (s *source) navigate(ctx context.Context, args map[string]any, method strin
 	}
 
 	params := map[string]any{
-		"textDocument": map[string]any{"uri": pathToURI(filepath.Join(c.root, rel))},
+		"textDocument": map[string]any{"uri": pathToURI(abs)},
 		"position":     sym.SelectionRange.Start,
 	}
 	if references {
@@ -247,20 +252,20 @@ func (s *source) render(c *client, locs []location) string {
 			break
 		}
 		shown++
-		rel, inRoot := c.relFromURI(loc.URI)
+		path, inRoot := c.pathFromURI(loc.URI)
 		if !inRoot {
 			fmt.Fprintf(&b, "%s:%d: (outside the workspace)\n", loc.URI, loc.Range.Start.Line+1)
 			continue
 		}
-		line := s.lineText(rel, loc.Range.Start.Line)
+		line := s.lineText(path, loc.Range.Start.Line)
 		col := byteColumn(line, loc.Range.Start.Character, c.encoding)
-		fmt.Fprintf(&b, "%s:%d:%d: %s\n", rel, loc.Range.Start.Line+1, col+1, strings.TrimSpace(line))
+		fmt.Fprintf(&b, "%s:%d:%d: %s\n", path, loc.Range.Start.Line+1, col+1, strings.TrimSpace(line))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func (s *source) lineText(rel string, line int) string {
-	body, err := os.ReadFile(filepath.Join(s.pool.root, rel))
+func (s *source) lineText(path string, line int) string {
+	body, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
@@ -271,18 +276,29 @@ func (s *source) lineText(rel string, line int) string {
 	return strings.TrimRight(lines[line], "\r")
 }
 
-// rel resolves a caller-supplied path against the workspace root and refuses
-// anything that leaves it.
-func (p *pool) rel(path string) (string, error) {
-	abs := path
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(p.root, path)
+// resolve maps a caller-supplied path to an absolute one inside a workspace
+// root, refusing anything that falls outside every root.
+//
+// Absolute paths are the normal case, because agent/ext/files emits them for
+// exactly the reason they are needed here: two repositories can both hold
+// src/main.go, so a bare relative path names either. A relative path is still
+// accepted and resolves against the first root.
+func (p *pool) resolve(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path")
 	}
-	rel, err := filepath.Rel(p.root, filepath.Clean(abs))
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("refusing %s: outside the workspace root", path)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(p.roots[0], path)
 	}
-	return rel, nil
+	clean := filepath.Clean(path)
+	for _, r := range p.roots {
+		rel, err := filepath.Rel(r, clean)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		return clean, nil
+	}
+	return "", fmt.Errorf("refusing %s: outside every workspace root", path)
 }
 
 func toolDefs() []core.ToolDef {

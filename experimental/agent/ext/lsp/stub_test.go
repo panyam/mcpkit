@@ -23,6 +23,10 @@ import (
 // to build and no dependency to add.
 const stubEnv = "LSP_STUB_SCRIPT"
 
+// stubFoldersFile is where the stub records the workspaceFolders it was sent,
+// inside its working directory, which is the first root.
+const stubFoldersFile = ".stub-workspace-folders.json"
+
 func TestMain(m *testing.M) {
 	if script := os.Getenv(stubEnv); script != "" {
 		runStubServer(script)
@@ -38,6 +42,10 @@ type stubScript struct {
 	// operative encoding.
 	Encoding string `json:"encoding,omitempty"`
 
+	// Symbols and Diagnostics are keyed by path relative to the stub's working
+	// directory, which is the first root. The key "*" matches any file, which
+	// is what a multi-root test wants: a file in the second folder has no
+	// stable relative name from the first.
 	Symbols     map[string][]documentSymbol `json:"symbols,omitempty"`
 	Definition  []location                  `json:"definition,omitempty"`
 	References  []location                  `json:"references,omitempty"`
@@ -111,8 +119,10 @@ func runStubServer(script string) {
 		send(&message{JSONRPC: "2.0", Method: "$/progress", Params: params})
 	}
 	publish := func(uri string) {
-		rel := stubRel(root, uri)
-		diags := s.Diagnostics[rel]
+		diags, ok := s.Diagnostics[stubRel(root, uri)]
+		if !ok {
+			diags = s.Diagnostics["*"]
+		}
 		if diags == nil {
 			diags = []diagnostic{}
 		}
@@ -165,6 +175,23 @@ func runStubServer(script string) {
 
 		switch msg.Method {
 		case "initialize":
+			// Record what the client actually put on the wire, so a test can
+			// assert the folders were sent rather than only that the client
+			// holds them in a field.
+			var ip struct {
+				WorkspaceFolders []struct {
+					URI string `json:"uri"`
+				} `json:"workspaceFolders"`
+			}
+			if json.Unmarshal(msg.Params, &ip) == nil {
+				var got []string
+				for _, f := range ip.WorkspaceFolders {
+					got = append(got, f.URI)
+				}
+				if b, err := json.Marshal(got); err == nil {
+					_ = os.WriteFile(filepath.Join(root, stubFoldersFile), b, 0o644)
+				}
+			}
 			caps := map[string]any{}
 			if s.Encoding != "" {
 				caps["positionEncoding"] = s.Encoding
@@ -202,7 +229,10 @@ func runStubServer(script string) {
 				} `json:"textDocument"`
 			}
 			_ = json.Unmarshal(msg.Params, &p)
-			syms := s.Symbols[stubRel(root, p.TextDocument.URI)]
+			syms, ok := s.Symbols[stubRel(root, p.TextDocument.URI)]
+			if !ok {
+				syms = s.Symbols["*"]
+			}
 			if syms == nil {
 				syms = []documentSymbol{}
 			}

@@ -986,11 +986,17 @@ The confinement mechanism did not weaken. It is still one `os.Root` handle per r
 resolution at open time; a path now has to land inside one of them rather than inside the one. The
 symlink-escape test still passes unchanged, which was the assertion worth watching.
 
-**`lsp` is deliberately still single-root**, and it is the harder half. A language server is rooted,
-so spanning repositories means an instance per root per language rather than a longer path list. The
-protocol is already ahead of us: the client sends `workspaceFolders` as an array because that field
-is plural, and some servers accept several folders in one instance. Which ones do is worth measuring
-rather than assuming.
+**`lsp` followed, and measuring changed its design.** #1314 assumed a language server is rooted, so
+spanning repositories would mean an instance per root per language: N servers, N indexes, N cold
+starts for a session over N repositories.
+
+Probed instead. gopls, rust-analyzer and typescript-language-server **all** answer correctly for a
+file in a `workspaceFolders` entry that is not the `rootUri`, for both diagnostics and
+documentSymbol. So one instance per language covers every root, and the change collapsed to sending
+the folder array and keying state on absolute paths.
+
+That is the second time in this epic that measuring beat the written-down assumption, and both times
+the assumption was mine. Worth the ten minutes every time.
 
 **Cross-language references stay out of reach** and no amount of this fixes them. A Go server cannot
 tell you that a TypeScript file calls the endpoint you renamed. That boundary belongs to the language
