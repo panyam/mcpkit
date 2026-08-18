@@ -323,8 +323,9 @@ server the operator runs that returns a third-party document is a courier, not a
 pass-through: a finer taxonomy is a plausible want, but opening it later is additive while closing
 it later would break callers.
 
-The default fence names the origin in prose ("fetched from outside this system") rather than
-emitting the raw label, so the sentence reads to a model that was never told what `world` means.
+The default fence names the origin in prose ("from a source the operator has not vouched for")
+rather than emitting the raw label, so the sentence reads to a model that was never told what
+`world` means.
 
 ### Provenance is derived from the source, not restated in config (#1268, PR 1274)
 
@@ -362,9 +363,28 @@ The classifier is bounded by a 2s timeout because `SpotlightConfig.Classify` tak
 an index miss makes `MultiSource` re-list every source, which reaches the network. An unreachable
 server must not stall tool dispatch.
 
-Known wart: an extension's tools get the `world` fence, which reads "fetched from outside this
-system" about code that ran in-process and fetched nothing. Right marking decision, false sentence.
-Options and the decision are #1273; it was deliberately not fixed by widening the enum.
+#1273 was this: an extension's tools got the `world` fence, which read "fetched from outside this
+system" about code that ran in-process and fetched nothing. The marking was right and the sentence
+was false, which is the worst combination for a safety feature, because a fence whose stated reason
+is wrong teaches the model that its claims are approximate.
+
+Fixed by softening the clause to "from a source the operator has not vouched for", which is true of
+a fetched page and of an in-process extension tool alike. The enum stayed at four labels: a fifth
+(`local`, `unvouched`) would reopen the taxonomy #1262 settled for one case, and letting an
+extension declare its own provenance would put a security-relevant claim in the hands of the thing
+being classified, which is exactly why a server does not get to label its own output.
+
+The cost is real and small: the `world` fence is now marginally less specific for genuine web
+content, which is the case the strongest strategies target. What carries the weight (UNTRUSTED,
+DATA never instructions) is untouched, and `ProvenanceWorld`'s doc still names web content as the
+motivating case.
+
+**One thing this did NOT buy**, contrary to how it was written up beforehand: the tree's two fence
+texts do not collapse. `fenceCritiqueReason` gives two reasons for not reusing `delimitMark`, that
+the sentence names a tool and that it claims a fetch. This fixes only the second. Collapsing them
+would need `delimitMark` to stop naming a tool or to take a caller-supplied source clause, which is
+a refactor rather than a byproduct, and the two describe different things anyway: a tool result
+versus a policy verdict.
 
 Also corrected in that PR: three comments in `agent/multi_source.go` described the qualified form
 as `sourceID_name` while the code has always joined with `/` — and `Add` rejects `/` in a source id
@@ -913,6 +933,31 @@ would resolve every symbol to line 0.
 The general lesson is the same one the eval PRs keep producing: a suite that only ever drives one
 implementation proves the code agrees with that implementation. `TestServers` exists so the next
 server-shaped assumption costs a test run rather than a merged bug.
+
+### An RPC to a subprocess needs its own deadline (#1308)
+
+The lsp suite hung once in CI and hit the 600-second default `go test` timeout, against 44.5s on
+every passing run. Chasing it found a production bug rather than a test one.
+
+`conn.call` waits on three things: the reply, the caller's context, and the read loop ending. The
+third is what covers a crashed server, and it does not cover a *wedged* one. A server that reads a
+request, never answers it, and keeps its stdout open leaves the read loop blocked in `readFrame`
+with nothing to fail on, so `done` never closes. That leaves only the caller's context, and
+`source.navigate` passes the Runner's context straight down, which frequently has no deadline. One
+misbehaving language server could hold a turn open forever with nothing logged.
+
+Every call is now bounded, with the caller's deadline winning when it is shorter. The bound lives on
+the `conn` rather than in a package var, per constraint C3.
+
+The general form is worth keeping: **a wait that is only bounded by the peer dying is not bounded.**
+Process death is the easy failure to handle and the rare one; the common failure is a peer that is
+still there and no longer answering.
+
+The CI step also gained an explicit `-timeout 180s`, so the next hang produces a goroutine dump
+naming the blocked call instead of a bare line at 600s. That is diagnosis rather than a fix, and it
+stays useful whether or not this was the cause: the hang was never reproduced locally across
+repeated `-race` runs and six concurrent ones, so this closes the class rather than a confirmed
+instance.
 
 ### Sub-agent personas
 

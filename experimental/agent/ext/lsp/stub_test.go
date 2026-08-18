@@ -67,6 +67,12 @@ type stubScript struct {
 	// so the server is visibly working while the caller waits.
 	BusyAroundPublish bool `json:"busyAroundPublish,omitempty"`
 
+	// IgnoreMethods names requests the server reads and never answers, while
+	// keeping the connection open. This is the wedge case: the read loop has
+	// nothing to fail on, so without a bound on the call the caller waits for
+	// ever.
+	IgnoreMethods []string `json:"ignoreMethods,omitempty"`
+
 	// IgnoreShutdown makes the server refuse to exit politely, which is what
 	// the kill path in client.close exists for.
 	IgnoreShutdown bool `json:"ignoreShutdown,omitempty"`
@@ -138,6 +144,15 @@ func runStubServer(script string) {
 		}
 		var msg message
 		if json.Unmarshal(frame, &msg) != nil {
+			continue
+		}
+		ignored := false
+		for _, m := range s.IgnoreMethods {
+			if m == msg.Method {
+				ignored = true
+			}
+		}
+		if ignored {
 			continue
 		}
 		reply := func(result any) {

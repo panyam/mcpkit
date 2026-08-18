@@ -162,6 +162,19 @@ mechanisms for one question, with the better one arriving later and having to
 argue against an incumbent. `textDocument/documentSymbol` is called internally
 for symbol resolution, so the capability is here and only the tool is withheld.
 
+## Every request is bounded
+
+A request to a language server is a local IPC round trip that a healthy server
+answers in milliseconds, so each one carries a 30-second backstop. A caller with
+a shorter deadline keeps it; the backstop never extends one.
+
+It exists because nothing else bounded it. A server that reads a request, never
+answers, and keeps its stdout open gives the read loop nothing to fail on, so
+the "server exited" path never fires. The navigation tools pass the Runner's
+context straight down and that context often carries no deadline, so one wedged
+server could hold a turn open with no error anywhere to explain it. A wedged
+server now comes back as a refusal the model can act on.
+
 ## Closing
 
 This is the first extension to own a subprocess, which is why `host.Extension`

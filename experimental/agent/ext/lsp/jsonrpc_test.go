@@ -205,3 +205,46 @@ func TestUnknownServerRequestStillGetsAReply(t *testing.T) {
 		t.Fatalf("reply id = %v, want %d", reply.ID, id)
 	}
 }
+
+// TestCallIsBoundedWithoutACallerDeadline pins the backstop. A server that
+// reads a request, never answers it, and keeps its stdout open gives the read
+// loop nothing to fail on, so errServerGone never fires and a caller with no
+// deadline of its own would wait for ever.
+func TestCallIsBoundedWithoutACallerDeadline(t *testing.T) {
+	c, serverIn, _ := pipePair(t)
+	c.callTimeout = 200 * time.Millisecond
+	go c.run()
+	go func() { _, _ = readFrame(serverIn) }() // read it, never answer
+
+	done := make(chan error, 1)
+	go func() { done <- c.call(context.Background(), "test/method", nil, nil) }()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want a deadline", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("call hung on a server that never answered")
+	}
+}
+
+// TestCallKeepsAShorterCallerDeadline pins that the backstop never extends a
+// caller's own bound.
+func TestCallKeepsAShorterCallerDeadline(t *testing.T) {
+	c, serverIn, _ := pipePair(t)
+	c.callTimeout = time.Hour
+	go c.run()
+	go func() { _, _ = readFrame(serverIn) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	if err := c.call(ctx, "test/method", nil, nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want a deadline", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("took %s: the backstop overrode a shorter caller deadline", elapsed)
+	}
+}

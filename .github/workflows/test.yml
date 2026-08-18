@@ -91,8 +91,11 @@ jobs:
       # The lsp suite drives a stub language server that is this test binary
       # re-executed, so it needs no server installed. The lsp_live tag runs the
       # same surface against a real gopls and is deliberately not wired here.
+      # Explicit timeout, well above the ~45s this takes, so a hang produces a
+      # goroutine dump naming the blocked call instead of a bare line at the
+      # 600s default. See #1308.
       - name: Run experimental/agent/ext/lsp tests
-        run: cd experimental/agent/ext/lsp && go test ./... -v -race
+        run: cd experimental/agent/ext/lsp && go test ./... -v -race -timeout 180s
 
       - name: Run experimental/agent/surfaces shared-module tests
         run: cd experimental/agent/surfaces && go test ./... -v
