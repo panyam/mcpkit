@@ -64,8 +64,8 @@ type Extension struct {
 // With no servers configured nothing is started and every seam contributes
 // nothing, so a surface can wire this unconditionally.
 func New(cfg Config) (*Extension, error) {
-	if cfg.Root == "" {
-		return nil, fmt.Errorf("lsp: Config.Root is required")
+	if len(cfg.Roots) == 0 {
+		return nil, fmt.Errorf("lsp: Config.Roots needs at least one directory")
 	}
 	writes := make(map[string]WriteSpec, len(cfg.Writes))
 	for _, w := range cfg.Writes {
@@ -197,31 +197,31 @@ func (e *Extension) checkAfterWrite(ctx context.Context, info agent.ToolCallInfo
 func (e *Extension) recheck(ctx context.Context, paths []string) string {
 	var b strings.Builder
 	for _, path := range paths {
-		rel, err := e.pool.rel(path)
+		abs, err := e.pool.resolve(path)
 		if err != nil {
 			continue
 		}
-		c := e.pool.forPath(rel)
+		c := e.pool.forPath(abs)
 		if c == nil {
 			continue
 		}
 		e.mu.Lock()
-		e.touched[rel] = true
+		e.touched[abs] = true
 		e.mu.Unlock()
 
-		if !c.refresh(ctx, rel, e.timeout) {
+		if !c.refresh(ctx, abs, e.timeout) {
 			// Nothing arrived in time. Saying so beats both silence, which
 			// reads as "no problems", and stale diagnostics, which read as
 			// problems this edit caused.
-			fmt.Fprintf(&b, "\n%s: the language server did not report back within %s", rel, e.timeout)
+			fmt.Fprintf(&b, "\n%s: the language server did not report back within %s", abs, e.timeout)
 			continue
 		}
-		diags := c.diagnostics(rel)
+		diags := c.diagnostics(abs)
 		if len(diags) == 0 {
-			fmt.Fprintf(&b, "\n%s: no problems reported", rel)
+			fmt.Fprintf(&b, "\n%s: no problems reported", abs)
 			continue
 		}
-		fmt.Fprintf(&b, "\n%s: %d problem(s) after this edit:\n%s", rel, len(diags), renderDiagnostics(c, rel, diags, e.maxDiag))
+		fmt.Fprintf(&b, "\n%s: %d problem(s) after this edit:\n%s", abs, len(diags), renderDiagnostics(c, abs, diags, e.maxDiag))
 	}
 	if b.Len() == 0 {
 		return ""
@@ -239,17 +239,17 @@ func (e *Extension) recheck(ctx context.Context, paths []string) string {
 func (e *Extension) injectDiagnostics(_ context.Context, msgs []agent.Message) []agent.Message {
 	var b strings.Builder
 	total := 0
-	for _, rel := range e.trackedFiles() {
-		c := e.pool.forPath(rel)
+	for _, abs := range e.trackedFiles() {
+		c := e.pool.forPath(abs)
 		if c == nil {
 			continue
 		}
-		diags := c.diagnostics(rel)
+		diags := c.diagnostics(abs)
 		if len(diags) == 0 {
 			continue
 		}
 		total += len(diags)
-		fmt.Fprintf(&b, "\n%s:\n%s", rel, renderDiagnostics(c, rel, diags, e.maxDiag))
+		fmt.Fprintf(&b, "\n%s:\n%s", abs, renderDiagnostics(c, abs, diags, e.maxDiag))
 	}
 	if total == 0 {
 		return msgs

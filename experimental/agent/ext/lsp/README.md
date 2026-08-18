@@ -9,7 +9,7 @@ string matches, and cannot tell a call site from a comment that mentions it.
 
 ```go
 ext, _ := lsp.New(lsp.Config{
-    Root: "/work/project",
+    Roots: []string{"/work/mcpkit", "/work/mcpkit-contribs"},
     Servers: []lsp.ServerSpec{
         {Command: []string{"gopls"}, Extensions: []string{".go"}, LanguageID: "go"},
     },
@@ -161,6 +161,27 @@ the whole tree rather than one file at a time. Shipping both would mean two
 mechanisms for one question, with the better one arriving later and having to
 argue against an incumbent. `textDocument/documentSymbol` is called internally
 for symbol resolution, so the capability is here and only the tool is withheld.
+
+## One server covers every root
+
+`Roots` matches `files.Config.Roots`, and **one server instance covers all of
+them** through the `workspaceFolders` array the protocol has carried since 3.6.
+
+That was measured rather than assumed, and the measurement changed the design.
+gopls, rust-analyzer and typescript-language-server each answer correctly for a
+file in a folder that is not the `rootUri`, so a session spanning three
+repositories runs one gopls rather than three, with one index and one cold
+start. `TestServersSpanTwoWorkspaceFolders` keeps that honest against real
+servers.
+
+Paths are absolute, in and out, for the reason `ext/files` gives: two
+repositories can both hold `src/main.go`, so a bare relative path names either.
+A relative path on the way in still resolves against the first root.
+
+**Cross-language references remain out of reach.** A Go server cannot tell you
+that a TypeScript file calls the endpoint you renamed. That boundary belongs to
+the language server, not to the number of roots, so a cross-language rename is
+`search_files` and judgement.
 
 ## Every request is bounded
 

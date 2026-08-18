@@ -95,7 +95,7 @@ func TestServers(t *testing.T) {
 			spec := ServerSpec{Command: tc.command, Extensions: []string{tc.ext}, LanguageID: tc.langID}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			c, err := startClient(ctx, spec, resolved)
+			c, err := startClient(ctx, spec, []string{resolved})
 			if err != nil {
 				t.Fatalf("FAIL start: %v", err)
 			}
@@ -167,6 +167,76 @@ func TestServers(t *testing.T) {
 			t.Logf("diagnostics published=%v after %s: %+v", got, time.Since(start).Round(time.Millisecond), diags)
 			if len(diags) == 0 {
 				t.Fatalf("%s reported no problems for a file that does not compile", tc.name)
+			}
+		})
+	}
+}
+
+// TestServersSpanTwoWorkspaceFolders is the measurement #1314's design rests
+// on: one server instance, two roots, and a correct answer for a file in the
+// folder that is not the rootUri.
+//
+// It decides the shape rather than confirming it. The issue originally assumed
+// an instance per root per language, which would have meant N servers, N
+// indexes, and N cold starts for a session spanning N repositories.
+func TestServersSpanTwoWorkspaceFolders(t *testing.T) {
+	cases := []struct {
+		name    string
+		command []string
+		langID  string
+		ext     string
+		file    string
+		a, b    map[string]string
+	}{
+		{
+			name: "gopls", command: []string{"gopls"}, langID: "go", ext: ".go", file: "x.go",
+			a: map[string]string{"go.mod": "module a\n\ngo 1.21\n", "x.go": "package a\n\nfunc A() int { return undefinedA() }\n"},
+			b: map[string]string{"go.mod": "module b\n\ngo 1.21\n", "x.go": "package b\n\nfunc B() int { return undefinedB() }\n"},
+		},
+		{
+			name: "typescript", command: []string{"typescript-language-server", "--stdio"}, langID: "typescript", ext: ".ts", file: "x.ts",
+			a: map[string]string{"x.ts": "export function A(): number { return undefinedA() }\n"},
+			b: map[string]string{"x.ts": "export function B(): number { return undefinedB() }\n"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.command[0]); err != nil {
+				t.Skipf("%s not installed", tc.command[0])
+			}
+			mk := func(files map[string]string) string {
+				dir, err := filepath.EvalSymlinks(t.TempDir())
+				if err != nil {
+					t.Fatal(err)
+				}
+				for n, c := range files {
+					if err := os.WriteFile(filepath.Join(dir, n), []byte(c), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				return dir
+			}
+			a, b := mk(tc.a), mk(tc.b)
+
+			c, err := startClient(context.Background(),
+				ServerSpec{Command: tc.command, Extensions: []string{tc.ext}, LanguageID: tc.langID},
+				[]string{a, b})
+			if err != nil {
+				t.Fatalf("startClient: %v", err)
+			}
+			defer func() { _ = c.close() }()
+
+			for _, root := range []string{a, b} {
+				path := filepath.Join(root, tc.file)
+				if !c.refresh(context.Background(), path, 30*time.Second) {
+					t.Fatalf("%s published nothing for %s", tc.name, path)
+				}
+				diags := c.diagnostics(path)
+				t.Logf("%s %s: %d diagnostic(s)", tc.name, path, len(diags))
+				if len(diags) == 0 {
+					t.Fatalf("%s reported nothing for a file in %s, so one instance does not cover both folders", tc.name, root)
+				}
 			}
 		})
 	}

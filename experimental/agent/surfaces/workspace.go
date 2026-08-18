@@ -135,11 +135,8 @@ func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
 		// must see a file before it is written; this must see it after. Its
 		// middleware therefore has to sit innermost of the three, which
 		// registration order gives it.
-		// lsp is still single-root (issue 1314), so it gets the primary one.
-		// A language server is rooted, so spanning repositories there means an
-		// instance per root per language rather than a wider path list.
 		lx, lspErr := lsp.New(lsp.Config{
-			Root:    cfg.Roots[0],
+			Roots:   cfg.Roots,
 			Servers: cfg.LanguageServers,
 			Writes: []lsp.WriteSpec{
 				{Tool: "write_file", Paths: files.PathArg},
