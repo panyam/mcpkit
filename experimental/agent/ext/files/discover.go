@@ -53,9 +53,18 @@ const (
 
 // walkOpts is the shared traversal configuration for both discovery tools.
 type walkOpts struct {
+	root    *workspaceRoot
 	dir     string
 	exclude []string
 	limit   int
+}
+
+// walkTarget is one root and the subtree within it to traverse. A call with no
+// dir produces one target per root, which is what makes a listing span the
+// workspace rather than whichever root happened to be first.
+type walkTarget struct {
+	root *workspaceRoot
+	dir  string
 }
 
 // excluded reports whether a directory name is skipped.
@@ -91,7 +100,7 @@ type walkResult struct {
 	total      int
 }
 
-// walk traverses the root, honouring excludes and the limit.
+// walk traverses one root, honouring excludes and the limit.
 //
 // It walks fs.WalkDir over the Root's fs.FS rather than filepath.WalkDir over
 // a joined path. That is the confinement: the walk cannot leave the root, and
@@ -103,7 +112,7 @@ func (s *Source) walk(o walkOpts) (walkResult, error) {
 	var res walkResult
 	seenDir := map[string]bool{}
 
-	err := fs.WalkDir(s.root.FS(), o.dir, func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(o.root.h.FS(), o.dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// One unreadable directory should not abort a listing of
 			// everything else. It is recorded as skipped rather than dropped.
@@ -194,18 +203,64 @@ func (m match) String() string {
 	return fmt.Sprintf("%s:%d: %s", m.path, m.line, t)
 }
 
-// dirArg resolves the optional dir argument to a walk root. Absent means the
-// whole workspace, which fs.FS spells ".".
-func (s *Source) dirArg(args map[string]any) (string, error) {
+// targetLabel names what a listing covered, for the "no files under X" and
+// error messages. Several roots have no single name, so it says so rather than
+// picking one and reading as though the others were not searched.
+func targetLabel(targets []walkTarget) string {
+	if len(targets) == 1 {
+		return targets[0].root.abs(targets[0].dir)
+	}
+	return fmt.Sprintf("%d workspace roots", len(targets))
+}
+
+// walkTargets resolves the optional dir argument to the subtrees to traverse.
+//
+// Absent means every root, because a workspace is the set of them and a
+// listing that silently covered only the first would read as complete. A dir
+// names one subtree of one root, resolved the same way every other path is.
+func (s *Source) walkTargets(args map[string]any) ([]walkTarget, error) {
 	d, _ := args["dir"].(string)
 	if d == "" || d == "." || d == "/" {
-		return ".", nil
+		out := make([]walkTarget, 0, len(s.roots))
+		for _, r := range s.roots {
+			out = append(out, walkTarget{root: r, dir: "."})
+		}
+		return out, nil
 	}
-	rel, err := s.rel(d)
+	wr, rel, err := s.resolve(d)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return rel, nil
+	return []walkTarget{{root: wr, dir: rel}}, nil
+}
+
+// walkAll traverses every target and renders results as absolute paths.
+//
+// The limit is applied to the merged list rather than per root, so raising the
+// number of roots does not quietly raise the cap. Each root is walked with the
+// full limit and the merge truncates, which over-collects by at most one
+// limit per root and keeps the per-root walk unaware that it has siblings.
+func (s *Source) walkAll(targets []walkTarget, limit int) (walkResult, error) {
+	var out walkResult
+	for _, t := range targets {
+		res, err := s.walk(walkOpts{root: t.root, dir: t.dir, exclude: s.exclude, limit: limit})
+		if err != nil {
+			return out, err
+		}
+		for _, p := range res.paths {
+			out.paths = append(out.paths, t.root.abs(p))
+		}
+		for _, d := range res.skippedDir {
+			out.skippedDir = append(out.skippedDir, t.root.abs(d))
+		}
+		out.total += res.total
+		out.truncated = out.truncated || res.truncated
+	}
+	if len(out.paths) > limit {
+		out.paths = out.paths[:limit]
+		out.truncated = true
+	}
+	return out, nil
 }
 
 // limitArg reads an optional positive limit, falling back to a default. JSON
@@ -225,13 +280,14 @@ func limitArg(args map[string]any, def int) int {
 }
 
 func (s *Source) list(args map[string]any) *core.ToolResult {
-	dir, err := s.dirArg(args)
+	targets, err := s.walkTargets(args)
 	if err != nil {
 		return toolError(err.Error())
 	}
+	dir := targetLabel(targets)
 	limit := limitArg(args, DefaultListLimit)
 
-	res, err := s.walk(walkOpts{dir: dir, exclude: s.exclude, limit: limit})
+	res, err := s.walkAll(targets, limit)
 	if err != nil {
 		return toolError(escapeMessage(dir, err))
 	}
@@ -261,15 +317,16 @@ func (s *Source) search(args map[string]any) *core.ToolResult {
 	if err != nil {
 		return toolError(err.Error())
 	}
-	dir, err := s.dirArg(args)
+	targets, err := s.walkTargets(args)
 	if err != nil {
 		return toolError(err.Error())
 	}
+	dir := targetLabel(targets)
 	limit := limitArg(args, DefaultSearchLimit)
 
 	// Every file is a candidate, so the walk is unbounded and the limit is
 	// applied to matches instead.
-	walked, err := s.walk(walkOpts{dir: dir, exclude: s.exclude, limit: 1 << 30})
+	walked, err := s.walkAll(targets, 1<<30)
 	if err != nil {
 		return toolError(escapeMessage(dir, err))
 	}
@@ -280,7 +337,12 @@ func (s *Source) search(args map[string]any) *core.ToolResult {
 	total := 0
 
 	for _, p := range walked.paths {
-		info, err := fs.Stat(s.root.FS(), p)
+		wr, rel, rerr := s.resolve(p)
+		if rerr != nil {
+			unreadable++
+			continue
+		}
+		info, err := fs.Stat(wr.h.FS(), rel)
 		if err != nil {
 			// A symlink pointing out of the root lands here, which is the
 			// point: it stays visible as a name and is never read through.
@@ -291,7 +353,7 @@ func (s *Source) search(args map[string]any) *core.ToolResult {
 			oversize++
 			continue
 		}
-		content, err := fs.ReadFile(s.root.FS(), p)
+		content, err := fs.ReadFile(wr.h.FS(), rel)
 		if err != nil {
 			unreadable++
 			continue

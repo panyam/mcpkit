@@ -16,22 +16,38 @@ import (
 // agentchat and agentweb need the identical wiring, and getting it wrong is
 // silent in one specific way (see WorkspaceExtensions), so it is written once.
 type WorkspaceConfig struct {
-	// Root confines every path the file tools will touch. Empty disables the
-	// whole set: no file tools, no checkpoint.
+	// Roots confine every path the file tools will touch. Empty disables the
+	// whole set: no file tools, no checkpoint. The first is primary, and a
+	// relative path resolves against it.
+	//
+	// A set rather than one directory because a session that stays inside a
+	// single repository is the exception (issue 1314). An agent given one root
+	// edits an API and reports success while the caller it broke sits in
+	// another repository it cannot see.
 	//
 	// There is deliberately no "unset means the current directory" default.
-	// files.Config.Root documents why the tools themselves refuse to run
+	// files.Config.Roots documents why the tools themselves refuse to run
 	// unconfined, and the same reasoning applies to choosing the confinement
 	// for a user: a model's instructions can come from content it read, so an
 	// editor rooted somewhere nobody named is an injected instruction away
-	// from writing anywhere under it. Enabling these is a choice with a
-	// directory attached.
-	Root string
+	// from writing anywhere under it. Enabling these is a choice with
+	// directories attached.
+	Roots []string
 
 	// Exclude overrides the directories list_files and search_files skip.
 	// Nil means files.DefaultExclude; an explicitly empty non-nil slice means
 	// exclude nothing.
 	Exclude []string
+
+	// CheckpointStore is where snapshots live. Empty puts them under the
+	// primary root.
+	//
+	// It is separate from Roots because a snapshot store inside a workspace is
+	// a directory the agent can read, search, and edit, and one that grows
+	// with every write. With several roots there is also no obvious one to
+	// pick. Naming a location outside them all is the cleaner arrangement and
+	// is what a caller should usually do.
+	CheckpointStore string
 
 	// NoCheckpoint drops the snapshot-and-restore safety net, leaving the file
 	// tools with no /undo. Opt-out rather than opt-in because a write tool
@@ -79,15 +95,20 @@ type WorkspaceConfig struct {
 // argument names a path, files exports the reader for its own tools, and
 // neither module imports the other.
 func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
-	if cfg.Root == "" {
+	if len(cfg.Roots) == 0 {
 		return nil, nil
 	}
 
 	var exts []host.Extension
 
+	store := cfg.CheckpointStore
+	if store == "" {
+		store = cfg.Roots[0]
+	}
+
 	if !cfg.NoCheckpoint {
 		cx, err := checkpoint.New(checkpoint.Config{
-			Root: cfg.Root,
+			Root: store,
 			Writes: []checkpoint.WriteSpec{
 				{Tool: "write_file", Paths: files.PathArg},
 				{Tool: "edit_file", Paths: files.PathArg},
@@ -103,7 +124,7 @@ func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
 	// section describing the read-then-edit contract along with the tools.
 	// Registering the tools alone leaves that contract discoverable only by
 	// failing an edit.
-	fx, err := files.New(files.Config{Root: cfg.Root, Exclude: cfg.Exclude})
+	fx, err := files.New(files.Config{Roots: cfg.Roots, Exclude: cfg.Exclude})
 	if err != nil {
 		return nil, fmt.Errorf("workspace files: %w", err)
 	}
@@ -114,8 +135,11 @@ func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
 		// must see a file before it is written; this must see it after. Its
 		// middleware therefore has to sit innermost of the three, which
 		// registration order gives it.
+		// lsp is still single-root (issue 1314), so it gets the primary one.
+		// A language server is rooted, so spanning repositories there means an
+		// instance per root per language rather than a wider path list.
 		lx, lspErr := lsp.New(lsp.Config{
-			Root:    cfg.Root,
+			Root:    cfg.Roots[0],
 			Servers: cfg.LanguageServers,
 			Writes: []lsp.WriteSpec{
 				{Tool: "write_file", Paths: files.PathArg},

@@ -7,7 +7,7 @@ import (
 )
 
 func TestExtensionContributesToolsAndPrompt(t *testing.T) {
-	e, err := New(Config{Root: t.TempDir()})
+	e, err := New(Config{Roots: []string{t.TempDir()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestExtensionContributesToolsAndPrompt(t *testing.T) {
 // apart. A refusal the prompt never warned about reaches the model as a
 // surprise it can only learn by failing.
 func TestPromptStatesTheRulesTheToolsEnforce(t *testing.T) {
-	e, err := New(Config{Root: t.TempDir()})
+	e, err := New(Config{Roots: []string{t.TempDir()}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestNewRejectsBadConfig(t *testing.T) {
 	if _, err := New(Config{}); err == nil {
 		t.Fatal("New should refuse an empty Root")
 	}
-	if _, err := New(Config{Root: "/no/such/directory/anywhere"}); err == nil {
+	if _, err := New(Config{Roots: []string{"/no/such/directory/anywhere"}}); err == nil {
 		t.Fatal("New should refuse a Root that does not exist")
 	}
 }

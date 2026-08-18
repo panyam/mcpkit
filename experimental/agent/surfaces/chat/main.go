@@ -18,12 +18,12 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
+	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/agent"
 	"github.com/panyam/mcpkit/experimental/agent/host"
 	gormstore "github.com/panyam/mcpkit/experimental/agent/store/gorm"
 	redisstore "github.com/panyam/mcpkit/experimental/agent/store/redis"
 	"github.com/panyam/mcpkit/experimental/agent/surfaces"
-	"github.com/panyam/mcpkit/core"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -180,9 +180,10 @@ func newRoot() (*cobra.Command, *viper.Viper) {
 	fl.Bool("memory-session-scoped", false, "with --memory, give each session (--session id) its own memory scratchpad so recall never crosses sessions (needs --session-store; default = one shared scratchpad)")
 	fl.Int("compact-tokens", 0, "compact history when its estimated token count exceeds N: summarize the head, keep a recent tail (0 = off)")
 	fl.Int("compact-keep-recent", 0, "with --compact-tokens, how many trailing messages to keep verbatim (0 = default 6)")
-	fl.String("workspace", "", "expose file tools (read/edit/write/list/search) confined to this directory, plus checkpoint /undo (empty = off; there is no default directory on purpose)")
+	fl.StringSlice("workspace", nil, "expose file tools (read/edit/write/list/search) confined to these directories, plus checkpoint /undo. Repeatable: a session that spans repositories passes each one. The first is primary, so a relative path resolves against it (empty = off; there is no default directory on purpose)")
 	fl.StringSlice("workspace-exclude", nil, "with --workspace, directories list_files/search_files skip, by base name or path.Match pattern (empty = built-in defaults)")
 	fl.Bool("no-checkpoint", false, "with --workspace, skip the file snapshot taken before each write, disabling /undo and /checkpoints")
+	fl.String("checkpoint-store", "", "with --workspace, where snapshots live (empty = under the first workspace directory). Worth setting when there are several, since a store inside a workspace is a directory the agent can also read and edit)")
 	fl.String("exporter", "", "telemetry exporter: stdout | otlp | auto (empty = off)")
 	fl.String("otlp-endpoint", "", "OTLP gRPC endpoint (default localhost:4317)")
 	if err := v.BindPFlags(fl); err != nil {
@@ -351,9 +352,10 @@ func runChat(v *viper.Viper) error {
 		wsExclude = ex
 	}
 	wsExts, err := surfaces.WorkspaceExtensions(surfaces.WorkspaceConfig{
-		Root:         v.GetString("workspace"),
-		Exclude:      wsExclude,
-		NoCheckpoint: v.GetBool("no-checkpoint"),
+		Roots:           v.GetStringSlice("workspace"),
+		Exclude:         wsExclude,
+		CheckpointStore: v.GetString("checkpoint-store"),
+		NoCheckpoint:    v.GetBool("no-checkpoint"),
 	})
 	if err != nil {
 		return err

@@ -14,7 +14,7 @@ func newSourceWith(t *testing.T, cfg Config) (*Source, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.Root = root
+	cfg.Roots = []string{root}
 	s, err := NewSource(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +295,7 @@ func TestDiscoveryRefusesToEscapeTheRoot(t *testing.T) {
 			if !isErr {
 				t.Fatalf("%s should refuse a dir outside the root, got:\n%s", tool, text)
 			}
-			if !strings.Contains(text, "outside the workspace root") {
+			if !strings.Contains(text, "outside every workspace root") {
 				t.Errorf("refusal should say why: %s", text)
 			}
 		})

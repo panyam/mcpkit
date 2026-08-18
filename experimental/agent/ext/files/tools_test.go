@@ -18,7 +18,7 @@ func newTestSource(t *testing.T) (*Source, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewSource(Config{Root: root})
+	s, err := NewSource(Config{Roots: []string{root}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestEditCannotWriteThroughASymlink(t *testing.T) {
 	}
 	got, _ := os.ReadFile(target)
 	if string(got) != original {
-		t.Fatalf("wrote outside the workspace root: %q", got)
+		t.Fatalf("wrote outside every workspace root: %q", got)
 	}
 }
 

@@ -126,7 +126,7 @@ func TestWriteRefusesToEscapeTheRoot(t *testing.T) {
 	if !isErr {
 		t.Fatalf("write_file should refuse a path outside the root, got: %s", text)
 	}
-	if !strings.Contains(text, "outside the workspace root") {
+	if !strings.Contains(text, "outside every workspace root") {
 		t.Errorf("refusal should say why: %s", text)
 	}
 }
@@ -156,7 +156,7 @@ func TestWriteRefusesToWriteThroughASymlink(t *testing.T) {
 		t.Fatalf("write_file should refuse to write through a symlink, got: %s", text)
 	}
 	if got := readFile(t, target); got != original {
-		t.Fatalf("wrote outside the workspace root: %q", got)
+		t.Fatalf("wrote outside every workspace root: %q", got)
 	}
 }
 
@@ -207,11 +207,11 @@ func TestSymlinkOutOfRootReadsAsAnEscapeNotACreate(t *testing.T) {
 	if !isErr {
 		t.Fatalf("write_file should refuse, got: %s", text)
 	}
-	if !strings.Contains(text, "outside the workspace root") {
+	if !strings.Contains(text, "outside every workspace root") {
 		t.Errorf("refusal should name the boundary, not read as a write failure: %s", text)
 	}
 	if got := readFile(t, target); got != "keep me\n" {
-		t.Fatalf("wrote outside the workspace root: %q", got)
+		t.Fatalf("wrote outside every workspace root: %q", got)
 	}
 }
 
