@@ -10,16 +10,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.13.0",
+    "@bufbuild/protobuf": "^2.14.0",
     "@connectrpc/connect": "^2.1.0",
     "@connectrpc/connect-web": "^2.1.0",
     "@panyam/tsappkit": "^0.0.5",
     "@panyam/tsappkit-solid": "^0.0.1",
-    "dockview-core": "^7.0.4",
+    "dockview-core": "^8.1.0",
     "solid-js": "^1.9.7"
   },
   "devDependencies": {
-    "@bufbuild/protoc-gen-es": "^2.13.0",
+    "@bufbuild/protoc-gen-es": "^2.14.0",
     "esbuild": "^0.28.2",
     "esbuild-plugin-solid": "^0.6.0",
     "typescript": "^7.0.2",
