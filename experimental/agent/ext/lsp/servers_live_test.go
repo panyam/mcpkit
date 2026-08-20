@@ -104,14 +104,15 @@ func TestServers(t *testing.T) {
 			t.Logf("positionEncoding: %q", c.encoding)
 
 			// Raw documentSymbol, to see which of the two shapes came back.
-			if _, err := c.sync(tc.file); err != nil {
+			target := filepath.Join(resolved, tc.file)
+			if _, err := c.sync(target); err != nil {
 				t.Fatalf("sync: %v", err)
 			}
 			var raw json.RawMessage
 			symCtx, symCancel := context.WithTimeout(context.Background(), 25*time.Second)
 			defer symCancel()
 			if err := c.conn.call(symCtx, "textDocument/documentSymbol", map[string]any{
-				"textDocument": map[string]any{"uri": pathToURI(filepath.Join(resolved, tc.file))},
+				"textDocument": map[string]any{"uri": pathToURI(target)},
 			}, &raw); err != nil {
 				t.Fatalf("documentSymbol: %v", err)
 			}
@@ -162,8 +163,8 @@ func TestServers(t *testing.T) {
 			// reports nothing here is the #1303 failure: a broken file
 			// reported as clean.
 			start := time.Now()
-			got := c.refresh(context.Background(), tc.file, 30*time.Second)
-			diags := c.diagnostics(tc.file)
+			got := c.refresh(context.Background(), target, 30*time.Second)
+			diags := c.diagnostics(target)
 			t.Logf("diagnostics published=%v after %s: %+v", got, time.Since(start).Round(time.Millisecond), diags)
 			if len(diags) == 0 {
 				t.Fatalf("%s reported no problems for a file that does not compile", tc.name)

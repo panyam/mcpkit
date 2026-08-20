@@ -169,3 +169,17 @@ func TestWorkspaceExtensionsFailsOnAnUnstartableServer(t *testing.T) {
 		t.Fatalf("error should name the failing extension: %v", err)
 	}
 }
+
+// TestWorkspaceRepoMapNeedsALanguageServer pins that the map is not silently
+// enabled without the servers it draws symbols from.
+func TestWorkspaceRepoMapNeedsALanguageServer(t *testing.T) {
+	exts, err := WorkspaceExtensions(WorkspaceConfig{Roots: []string{t.TempDir()}, RepoMap: true})
+	if err != nil {
+		t.Fatalf("WorkspaceExtensions: %v", err)
+	}
+	for _, e := range exts {
+		if e.Name() == "lsp" {
+			t.Fatal("RepoMap alone must not start a language server")
+		}
+	}
+}

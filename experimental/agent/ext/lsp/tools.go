@@ -91,6 +91,15 @@ type Config struct {
 	// MaxDiagnostics caps how many problems one injected block carries. Zero
 	// means DefaultMaxDiagnostics. What the cap drops is always reported.
 	MaxDiagnostics int
+
+	// RepoMap adds a ranked repository map to the system prompt. Nil leaves it
+	// off.
+	//
+	// It lives here rather than in its own extension because it needs the same
+	// language servers this one already runs. A separate module could not
+	// import this one (constraint C4), so it would start a second gopls over
+	// the same tree to ask the same questions.
+	RepoMap *RepoMapConfig
 }
 
 // Defaults for the bounds in Config and ServerSpec.

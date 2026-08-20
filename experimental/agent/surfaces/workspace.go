@@ -54,6 +54,15 @@ type WorkspaceConfig struct {
 	// whose effects cannot be reversed is the case checkpoint was built for.
 	NoCheckpoint bool
 
+	// RepoMap adds a ranked repository map to the system prompt, which needs
+	// LanguageServers to be set: the map's symbols come from them.
+	//
+	// Opt-in because indexing costs a round trip per file, and because a map
+	// is prompt weight every turn. It is worth it for orientation on an
+	// unfamiliar tree and wasted on a task the operator already knows the
+	// shape of.
+	RepoMap bool
+
 	// LanguageServers adds LSP-in-loop: navigation tools, and diagnostics
 	// after every write and in each turn's context. Empty adds nothing.
 	//
@@ -135,8 +144,13 @@ func WorkspaceExtensions(cfg WorkspaceConfig) ([]host.Extension, error) {
 		// must see a file before it is written; this must see it after. Its
 		// middleware therefore has to sit innermost of the three, which
 		// registration order gives it.
+		var mapCfg *lsp.RepoMapConfig
+		if cfg.RepoMap {
+			mapCfg = &lsp.RepoMapConfig{}
+		}
 		lx, lspErr := lsp.New(lsp.Config{
 			Roots:   cfg.Roots,
+			RepoMap: mapCfg,
 			Servers: cfg.LanguageServers,
 			Writes: []lsp.WriteSpec{
 				{Tool: "write_file", Paths: files.PathArg},

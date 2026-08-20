@@ -1002,6 +1002,36 @@ the assumption was mine. Worth the ten minutes every time.
 tell you that a TypeScript file calls the endpoint you renamed. That boundary belongs to the language
 server, so a cross-language rename is `search_files` and judgement.
 
+### The repo map could not be its own module (#1311)
+
+#1311 specified a new `agent/ext/repomap` drawing symbols from `ext/lsp`. Constraint C4 forbids that
+import, and `make check-ext-isolation` enforces it in CI.
+
+The constraint turned out to be pointing at a real cost rather than a bureaucratic one. Two modules
+means two `pool`s, which means **two language servers over the same tree**, each indexing it, to
+answer questions about the same files. The map and the diagnostics feature want to share one server.
+So the map is a second contribution from the `ext/lsp` extension, gated by `Config.RepoMap`.
+
+Worth remembering as a shape: when C4 blocks a split, check whether the thing the two would have
+shared is expensive. If it is, C4 is describing the design rather than obstructing it.
+
+Two smaller decisions:
+
+- **Edges are lexical, definitions are not.** Symbols come from `documentSymbol`, which is accurate
+  and language-agnostic. Edges come from whole-identifier text matching, because a `references`
+  request per symbol is thousands of round trips to order a list nobody reads past the top of.
+  Names shorter than four characters are dropped from the graph: `Get`, `New` and `id` collide
+  across languages and would wire nearly every file to nearly every other.
+- **Indexed once, in the background.** A `PromptSection` is rebuilt every turn, and indexing costs a
+  round trip per file, so building it inline would put a tree scan in front of every turn. The
+  section is empty until the index finishes, and the prompt builder drops empty sections, so an
+  early turn is missing the map rather than blocked on it.
+
+The mutation run caught something worth recording. `TestRankIgnoresSubstringMatches` tests
+`mentions` directly, and replacing the *call site* in `rank` with `strings.Contains` still passed
+it. A unit test of a helper is not a test of the caller that uses it, and the end-to-end version is
+what actually pins the behaviour.
+
 ### Sub-agent personas
 
 `Config.SubAgents []SubAgentConfig{Name, Description, Instructions, Allow, MaxDepth}` builds
