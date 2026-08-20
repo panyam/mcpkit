@@ -2,10 +2,23 @@
 """Guard against silently-thinning conformance scenarios.
 
 A scenario that fails at setup emits only a shadow of its real check
-surface: the SEP-2352 migration scenario spent months reporting 3 checks
-where 31 belong, because the client died at the wire handshake before the
-OAuth flow started (fixed in PR 1113). Scenario-level pass/fail cannot see
-this; the emitted-check COUNT can.
+surface. The SEP-2352 migration scenario spent months reporting 3 countable
+checks where 31 belong, because the client died at the wire handshake before
+the OAuth flow started (fixed in PR 1113). Scenario-level pass/fail cannot
+see this, but the emitted-check COUNT can.
+
+Denominators differ, so be explicit about which one is in play. That
+scenario writes 79 entries to checks.json once healthy, of which 31 are
+countable in the "Passed: N/M" summary and 16 are unique substantive check
+IDs. The rest are incoming-request / outgoing-response INFO rows.
+
+This script snapshots len(checks), the raw entry count, because it needs a
+single number that moves monotonically with depth and costs nothing to
+compute. That denominator includes the INFO rows, so it partly tracks HTTP
+traffic volume and can shift when request patterns change with no loss of
+coverage. Treat a drop as a signal to look, not as proof of a regression.
+Conformance issue 451 proposes an upstream per-scenario expected-vs-emitted
+signal keyed on unique check IDs, which would replace this guard outright.
 
 This script compares each PASSING scenario's emitted-check count in a
 fresh run artifact against the committed snapshot

@@ -77,15 +77,24 @@ client default.
 ## The thin-shadow failure class
 
 **A scenario that dies at setup emits a fraction of its check surface while the scenario-level
-verdict still looks normal.** The migration scenario emitted 3 of 79 checks for months without
-anyone noticing.
+verdict still looks normal.** The migration scenario emitted 3 of the 31 countable checks for
+months without anyone noticing, which is 3 of 16 unique substantive check IDs.
+
+Mind the denominator. A run of that scenario writes 79 entries to `checks.json`, but 48 of them are
+`incoming-request` / `outgoing-response` INFO rows, which are wire logs rather than conformance
+checks. Only 31 are countable in the `Passed: N/M` summary, and those collapse to 16 unique IDs
+because a check can emit more than once. An earlier version of this note said "3 of 79" and was
+comparing the before-run's countable checks against the after-run's raw entry count.
 
 Guard: `make testconf-client` snapshots per-scenario emitted-check counts into
 `conformance/client-check-counts.json` (`scripts/check_client_check_counts.py`). A passing
 scenario's count *dropping* fails the target. Refresh deliberately with
-`CONF_CLIENT_UPDATE_COUNTS=1`.
+`CONF_CLIENT_UPDATE_COUNTS=1`. Known weakness: the snapshot stores `len(checks)`, INFO rows
+included, so it partly tracks HTTP traffic volume and will move when request patterns change.
 
-A systemic upstream fix is in flight as conformance PR 327, which was commented with this incident.
+A systemic upstream fix is in flight as conformance PR 327, which was commented with this incident,
+and as conformance issue 451, which asks for per-scenario expected-vs-emitted coverage. If 451
+ships, this guard and its snapshot should be retired rather than maintained.
 
 ---
 
