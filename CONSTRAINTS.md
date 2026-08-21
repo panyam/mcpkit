@@ -20,6 +20,13 @@ Current state, worth knowing before trusting one:
 Prefer a script in `scripts/` wired into CI over a snippet here. When a snippet is genuinely the
 right weight, say plainly that it is manual so nobody mistakes it for a gate.
 
+A second failure mode, found during a checkpoint in 2026-08: **a recipe whose path no longer exists
+reads as a pass.** `grep -rn ... agent/host/` prints a warning to stderr and exits 0 once the tree
+moves, so running it looks like a clean result. Every `Verify` line in `experimental/agent/CONSTRAINTS.md`
+had been in that state since #1290 relocated the agent SDK, and one of them (A5) was hiding a real
+violation the whole time. When a constraint's path changes, the recipe is part of the move. When a
+recipe returns nothing, check that it returned nothing *because it ran*.
+
 One lesson from making C4 real: **a gate's precision is a correctness property, not a nicety.** The
 published C4 snippet matched every `go.mod` line mentioning another extension, which fired 16 times
 on a clean tree once `agent/ext/` was in scope, because `replace` directives and `// indirect`
@@ -142,5 +149,5 @@ enforcement in name only. Decided and recorded on issue 1312, with the rationale
 **Verify:** the host must not spawn or kill processes. Must print nothing:
 
 ```bash
-grep -rn 'os/exec\|exec\.Command\|\.Process\b\|syscall\.\(Kill\|Exec\)\|StartProcess' agent/host/ --include='*.go' | grep -v '_test.go'
+grep -rn 'os/exec\|exec\.Command\|\.Process\b\|syscall\.\(Kill\|Exec\)\|StartProcess' experimental/agent/host/ --include='*.go' | grep -v '_test.go'
 ```

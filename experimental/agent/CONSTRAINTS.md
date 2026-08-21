@@ -6,7 +6,7 @@ Module-specific rules. Project-wide constraints in the root `CONSTRAINTS.md` als
 
 No package outside `agent/` (root module, other sub-modules, examples that do not embed the agent) may import an LLM-provider SDK or this module. `agent/` depends downward on `core/`, `client/`, and optionally sibling sub-modules; nothing depends upward on it except applications and examples that embed the host.
 
-**Verify:** `grep -rn "mcpkit/agent" core/ server/ client/ ext/ stores/ experimental/ --include='*.go'` returns nothing.
+**Verify:** `grep -rn "panyam/mcpkit/experimental/agent" core/ server/ client/ ext/ stores/ experimental/ext/ --include='*.go'` returns nothing. (`experimental/ext/`, not `experimental/`, or the recipe matches this module's own imports and reports its every file as a violation.)
 
 ## A2: Runner events are wire-serializable
 
@@ -18,19 +18,19 @@ Every event type the Runner emits carries JSON tags, a stable `kind` discriminat
 
 All vendor-namespaced `_meta` keys this module reads or writes use `io.github.panyam.mcpkit/` (pinned in `docs/AGENT_DESIGN.md`). No ad-hoc prefixes.
 
-**Verify:** `grep -rn '_meta\|Meta\[' agent/ --include='*.go' | grep -i 'io\.github\|dev\.\|com\.'` shows only the pinned prefix.
+**Verify:** `grep -rn '_meta\|Meta\[' experimental/agent/ --include='*.go' | grep -i 'io\.github\|dev\.\|com\.'` shows only the pinned prefix. Manual; read the hits.
 
 ## A4: The loop never owns the user interface or process-global output
 
 The Runner exposes callbacks and event streams; it never prints, prompts, or renders. Logging is the same: agent code logs only through an injected *slog.Logger (nil discards), never fmt, os.Stdout/Stderr, log, or slog.Default. Anything user-facing lives in surfaces (agentchat, web hosts) built on the module.
 
-**Verify:** `grep -rn "fmt.Print\|os.Stdout\|os.Stdin\|slog.Default\|log.Print" agent/ --include='*.go' | grep -v _test.go` returns nothing.
+**Verify:** `grep -rn "fmt.Print\|os.Stdout\|os.Stdin\|slog.Default\|log.Print" experimental/agent/ --include='*.go' | grep -v _test.go | grep -v '/surfaces/'` returns nothing. The surfaces exclusion is the constraint, not a fudge: printing is what a surface is for, and without it the recipe returns 30 legitimate hits and gets ignored.
 
 ## A5: core.RawJSON for JSON-valued public fields
 
 JSON-valued fields in this module's public types use `core.RawJSON` (wire-transparent, parse-once, typed Bind), never bare `json.RawMessage`. JSON-fragment fields (streamed argument pieces in Deltas) stay strings; the Accumulator's fold is the promotion boundary where fragments become a RawJSON value.
 
-**Verify:** `grep -n "json.RawMessage" agent/*.go | grep -v _test | grep -v NewRawJSON` shows only conversion sites, no struct fields.
+**Verify:** `grep -n "json.RawMessage" experimental/agent/*.go | grep -v _test | grep -v NewRawJSON` shows only conversion sites, no struct fields. **This currently fails**: `AgentSourceConfig.InputSchema` is a public struct field holding a whole JSON document, which is what A5 says should be `core.RawJSON`. Found when the path was corrected during a checkpoint, having been unrunnable since #1290 moved the tree. Tracked in #1326.
 
 ## A6: Mechanisms in the client, policy in the agent
 
@@ -73,7 +73,7 @@ The property this protects is that `agent/` is cheap to embed: it pulls mcpkit's
 
 Adding a dependency-free implementation beside its interface is always fine. Adding one that carries a driver is the violation, and the fix is a new satellite module rather than a new direct require.
 
-**Verify:** `cd agent && go mod edit -json | jq -r '.Require[] | select(.Indirect|not) | .Path'` lists only `github.com/panyam/mcpkit` and `github.com/panyam/servicekit`. Any other entry means a dependency landed in the core agent module: justify it as genuinely dep-free infrastructure, or move the code to a satellite module.
+**Verify:** `cd experimental/agent && go mod edit -json | jq -r '.Require[] | select(.Indirect|not) | .Path'` lists only `github.com/panyam/mcpkit` and `github.com/panyam/servicekit`. Any other entry means a dependency landed in the core agent module: justify it as genuinely dep-free infrastructure, or move the code to a satellite module.
 
 ## A11: Only a true inverse runs unattended
 
@@ -101,6 +101,6 @@ A corollary that is easy to lose: a reversal path must **report what it could no
 that says "3 files restored" while a created issue goes unmentioned is a safety net with an unreported
 hole, and an unreported hole stops being checked.
 
-**Verify:** `grep -n "func (r Reversal) Reversible" agent/ext/checkpoint/reverser.go` returns a body
+**Verify:** `grep -n "func (r Reversal) Reversible" experimental/agent/ext/checkpoint/reverser.go` returns a body
 testing `Restore` only; `TestCompensateAloneIsNotReversible` and `TestProposalNeverRunsWithoutApproval`
 pin both halves.

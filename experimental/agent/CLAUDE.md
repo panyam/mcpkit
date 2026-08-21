@@ -52,6 +52,19 @@ integrated with a dedicated engine.
 - **Memory injection never writes into `a.history`.** Summary and recall are transient per-turn
   producers; appending them to history stacks them up in both history and the RunStore log.
 - **The CI `test-agent` job hardcodes its steps** in `.github/workflows/test.yml` rather than
-  calling `make test-agent`. Adding or moving an example needs the workflow updated too — and so
+  calling `make test-agent`. Adding or moving an example needs the workflow updated too, and so
   does **adding a sub-module**, which otherwise builds fine locally and never runs in CI. A new
-  sub-module needs three edits: `SUB_MODS_TO_TAG`, the `test-agent` target, and that workflow.
+  sub-module here needs three edits: **`AGENT_MODS_TO_TAG`**, the `test-agent` target, and that
+  workflow. Not `SUB_MODS_TO_TAG`: agent modules are off the protocol release train by design, and
+  `scripts/verify-submodule-deps.sh` fails the build if one lands there.
+- **A tool's safety annotations are per `ToolDef`, so they constrain tool shape.** `toolHints`
+  resolves `readOnlyHint` / `destructiveHint` by tool name, which means one tool covering N
+  operations gives all N the same approval disposition. An extension cannot work around it:
+  extension middleware runs *before* the host's permission gate, and `ApprovalRenderer` only
+  changes the wording. This is why `ext/exec` emits one tool per allowlisted command.
+- **Tools are re-listed every step**, not once per turn, and `RunnerConfig.Selector` narrows the
+  offered set per step. A context-varying tool set is already supported, and needs nothing new.
+- **A sandbox profile is only checked by a tagged live test.** `ext/exec`'s golden test covers
+  profile generation and runs anywhere. CI is Linux and the backend is darwin-only, so **nothing in
+  CI exercises a real sandbox**. Run `go test -tags exec_live ./...` in that module before believing
+  a profile change. It caught two real bugs the golden could not.
