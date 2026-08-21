@@ -145,15 +145,38 @@ It is not the primary defense. The approval gate is. The sandbox earns its
 place under `ModeAlwaysAllow` and the auto modes, which is when these run
 unattended, and as the thing that keeps the allowlist honest.
 
-That second part is the specific hole it closes. Allowlisting `make test` looks
-like granting one capability. It grants whatever the Makefile says, and the
-Makefile is workspace content that `ext/files` can rewrite before `run_command`
-is called. Neither extension is wrong on its own; they compose into arbitrary
-execution.
-
 `sandbox-exec` has also been deprecated for years with an undocumented profile
 language. The golden test pins what we generate. It cannot pin that Apple keeps
 honoring it, and the live suite is the only thing that checks the other half.
+
+### The allowlist names commands, not capabilities
+
+This is the part to understand before trusting an allowlist, and it is stronger
+than a composition problem between two extensions.
+
+**Most useful entries execute workspace code by design.** `make test` runs
+whatever the Makefile says. `go test` compiles and runs test code from the
+repo. `npm run build` runs the scripts in `package.json`. So the allowlist
+constrains which *program* starts, and for any real build command it says
+almost nothing about what that program will do, because the program's behaviour
+is defined by files in the workspace.
+
+`ext/files` makes this sharper by letting the agent rewrite those files first,
+but the property holds without it. A repository is content, and running a build
+in a repository you did not write is running that repository's code. That is
+true of a cloned dependency and of a PR branch under review, with no model
+involved at all.
+
+**A generic binary with a loose `ArgPolicy` is close to a shell.** `git` with
+`Match: ".*"` reaches `-c core.pager=`, aliases, and hooks. Nothing here
+detects that: `Match` is required to be non-empty and `.*` satisfies it. Keep
+patterns narrow, and prefer a specific subcommand in `Argv` over a bare binary
+plus permissive arguments.
+
+What follows is that for a test or build loop the allowlist is a statement of
+*intent*, useful for review and for the approval prompt, and the sandbox is
+what does the containing. Treating the allowlist as the boundary is the mistake
+this section exists to prevent.
 
 ## Reading the result
 
@@ -209,4 +232,6 @@ believing a change to the profile.
 
 Experimental, on the unreleased agent line. Issue 1312; child of the coding
 epic 1252. The Linux backend is 1320, and the test and build feedback loop that
-consumes this is 1313.
+consumes this is 1313. Two open questions about the tool set itself: 1323 on
+what happens when an allowlist gets large, and 1324 on whether it may change
+after construction and who is allowed to widen it.
