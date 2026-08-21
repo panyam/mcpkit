@@ -41,6 +41,7 @@ upstream changes to watch.
 | `experimental/agent/host/` — Reusable, surface-agnostic host application core | `experimental/agent/host/README.md` |
 | `experimental/agent/ext/checkpoint/` — Reversal seam (restore vs compensate) + file checkpoints | `experimental/agent/ext/checkpoint/README.md` |
 | `experimental/agent/ext/files/` — Workspace file tools: read, edit, write, list, search (stale and ambiguous edits refused) | `experimental/agent/ext/files/README.md` |
+| `experimental/agent/ext/exec/` — Allowlisted project commands, sandboxed (darwin backend; elsewhere refuses) | `experimental/agent/ext/exec/README.md` |
 | `experimental/agent/ext/lsp/` — Language servers in the loop: diagnostics on two paths, symbol-addressed navigation | `experimental/agent/ext/lsp/README.md` |
 | `experimental/agent/surfaces/chat/` — Terminal CLI (binary: `agentchat`) | `README.md`, `NOTES.md`, `CLAUDE.md` in that dir |
 | `experimental/agent/surfaces/web/` — Connect bridge + DockView frontend (binary: `agentweb`) | `experimental/agent/surfaces/web/README.md`, `docs/AGENT_WEB_UI_EPIC.md` |
