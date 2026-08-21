@@ -88,6 +88,14 @@ jobs:
       - name: Run experimental/agent/ext/files tests
         run: cd experimental/agent/ext/files && go test ./... -v -race
 
+      # Commands here are this test binary re-executed, so nothing needs
+      # installing. The exec_live tag runs the same surface under a real
+      # sandbox-exec and is darwin-only, so no sandbox backend is exercised on
+      # this runner: the platform's own backend refuses and the tests name
+      # Unconfined explicitly. See the module README.
+      - name: Run experimental/agent/ext/exec tests
+        run: cd experimental/agent/ext/exec && go test ./... -v -race -timeout 180s
+
       # The lsp suite drives a stub language server that is this test binary
       # re-executed, so it needs no server installed. The lsp_live tag runs the
       # same surface against a real gopls and is deliberately not wired here.

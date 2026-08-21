@@ -34,7 +34,7 @@ AGENT_MODS_TO_TAG := \
 	experimental/agent experimental/agent/host \
 	experimental/agent/surfaces experimental/agent/surfaces/web experimental/agent/surfaces/chat \
 	experimental/agent/store/redis experimental/agent/store/gorm \
-	experimental/agent/ext/checkpoint experimental/agent/ext/files experimental/agent/ext/lsp
+	experimental/agent/ext/checkpoint experimental/agent/ext/files experimental/agent/ext/exec experimental/agent/ext/lsp
 
 # Conformance test orchestration lives in `conformance/Makefile`.
 # Per-suite MCPCONFORMANCE_*_PATH vars are documented there.
@@ -183,6 +183,7 @@ test-agent: ## Run agent sub-module tests
 	cd experimental/agent/store/gorm && go test ./... -count=1 -timeout 60s
 	cd experimental/agent/ext/checkpoint && go test ./... -count=1 -timeout 60s
 	cd experimental/agent/ext/files && go test ./... -count=1 -timeout 60s
+	cd experimental/agent/ext/exec && go test ./... -count=1 -timeout 120s
 	cd experimental/agent/ext/lsp && go test ./... -count=1 -timeout 120s
 	cd experimental/agent/host && go test ./... -count=1 -timeout 60s
 	cd experimental/agent/surfaces && go test ./... -count=1 -timeout 60s
