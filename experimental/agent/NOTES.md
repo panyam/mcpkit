@@ -1032,6 +1032,60 @@ The mutation run caught something worth recording. `TestRankIgnoresSubstringMatc
 it. A unit test of a helper is not a test of the caller that uses it, and the end-to-end version is
 what actually pins the behaviour.
 
+### Running a command, and what an allowlist actually constrains (#1312)
+
+`agent/ext/exec` is the first thing in the tree that runs a command. Two findings from building it
+are worth more than the module.
+
+**The approval gate decided the tool shape.** The obvious design is one `run_command` tool whose
+`name` parameter is an enum over the operator's allowlist. It contains the model exactly as well as
+one tool per command does, and it cannot express what an operator wants, because `toolHints` resolves
+`readOnlyHint` / `destructiveHint` per `ToolDef`. Collapsed into one tool, every command shares one
+`destructiveHint`, so `ModeReversibleAuto` prompts for `go build` and `terraform apply` together or
+for neither. There is no way to recover per-command gating from inside an extension: extension
+middleware runs *before* the host's permission gate and cannot influence it, and `ApprovalRenderer`
+only changes the wording. So the allowlist emits one `ToolDef` each. The cost is a tool list that
+grows linearly, which is #1323.
+
+**The allowlist names which program starts, not what it does.** `make test` runs whatever the
+Makefile says, `go test` compiles and runs the repo's test code, `npm run build` runs its scripts.
+For any real build command the allowlist states intent and the sandbox does the containing. The
+first framing of this tied it to `ext/files` being able to rewrite the Makefile first, which reads
+as a quirk of running two extensions together; it holds without `ext/files`, because running a build
+in a repository is running that repository's code, as true of a cloned dependency or a PR branch
+under review as of a file an agent just edited.
+
+**Only a tagged live test checks a sandbox profile, and it earned that in one run.** The unit suite
+covers profile *generation* against a golden, which is the half that can be tested anywhere. The
+`exec_live` suite runs the real `sandbox-exec` and caught two things the golden could not:
+
+- Profile paths were not symlink-resolved. Seatbelt matches the resolved path, so every rule naming
+  `/tmp` or `$TMPDIR` matched nothing on darwin. A read denial sat in the profile looking enforced
+  while permitting the read, which is worse than an absent one.
+- A real `go build` failed on its build cache before compiling anything, because the write paths
+  were spelled unresolved too.
+
+CI is Linux and this backend is darwin-only, so **nothing in CI exercises a real sandbox.** Run
+`go test -tags exec_live ./...` before believing a profile change.
+
+**Seatbelt takes the last matching rule**, which reads backwards: the denials come *after* the
+blanket allow they carve into. A denial placed first is present and inert. `sandbox-exec` is also
+deprecated with an undocumented profile language, so the golden pins what we generate and nothing
+pins that Apple keeps honoring it.
+
+**Two things the epic said that were wrong.** Sandboxed execution does not go in a `ToolSource`
+wrapper: most tools here are in-process Go functions or MCP calls with no subprocess to confine, and
+confining those means confining the agent process, which is a deployment decision. And the sandbox
+is not the primary defense, the approval gate is. C6 gained a second sanctioned exception for
+extension-owned subprocesses (`gopls`, and `exec`'s own commands), on the property that both come
+from operator config and are unreachable from a tool argument.
+
+**A find that predates this and nobody had connected:** the Runner re-lists tools **every step**,
+not once per turn, and `RunnerConfig.Selector` narrows the offered set per step as a pure function of
+history. A tool source whose set varies by context is already legal and needs nothing new. That is
+the cheapest answer to #1323, and `FilterSource` is the static version, filtering *calling* as well
+as listing so it is a boundary rather than a presentation hint.
+
 ### Sub-agent personas
 
 `Config.SubAgents []SubAgentConfig{Name, Description, Instructions, Allow, MaxDepth}` builds
