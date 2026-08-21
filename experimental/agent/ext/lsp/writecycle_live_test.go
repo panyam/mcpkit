@@ -44,11 +44,12 @@ func TestLiveRustWriteCycle(t *testing.T) {
 
 	// Warm: open the file and let startup settle, as a session would.
 	c := ext.pool.clients[0]
-	if _, err := c.sync("src/main.rs"); err != nil {
+	main := filepath.Join(resolved, "src/main.rs")
+	if _, err := c.sync(main); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(8 * time.Second)
-	t.Logf("after warmup: %+v", c.diagnostics("src/main.rs"))
+	t.Logf("after warmup: %+v", c.diagnostics(main))
 
 	wants := []string{"nope1", "no problems reported", "nope2"}
 	for i, body := range []string{

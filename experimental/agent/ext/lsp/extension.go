@@ -50,6 +50,8 @@ type Extension struct {
 	timeout time.Duration
 	maxDiag int
 
+	repoMap *repoMap
+
 	mu      sync.Mutex
 	touched map[string]bool
 }
@@ -93,8 +95,13 @@ func New(cfg Config) (*Extension, error) {
 	if err != nil {
 		return nil, err
 	}
+	var rm *repoMap
+	if cfg.RepoMap != nil && len(p.clients) > 0 {
+		rm = startRepoMap(p, *cfg.RepoMap)
+	}
 	return &Extension{
 		pool:    p,
+		repoMap: rm,
 		writes:  writes,
 		timeout: timeout,
 		maxDiag: maxDiag,
@@ -137,7 +144,7 @@ func (e *Extension) PromptSections() []host.PromptSection {
 	if len(e.pool.clients) == 0 {
 		return nil
 	}
-	return []host.PromptSection{host.PromptSectionFunc(func(context.Context) string {
+	sections := []host.PromptSection{host.PromptSectionFunc(func(context.Context) string {
 		return `## Navigating code
 
 goto_definition and find_references ask a language server, so they know what a
@@ -153,6 +160,16 @@ Diagnostics from the server are reported to you automatically after you edit a
 file, and the current set is included in your context each turn. You do not need
 to ask for them.`
 	})}
+
+	// The map is empty until the background index finishes, and empty sections
+	// are dropped by the prompt builder. So an early turn is missing the map
+	// rather than blocked on it, which is the right trade for orientation.
+	if e.repoMap != nil {
+		sections = append(sections, host.PromptSectionFunc(func(context.Context) string {
+			return e.repoMap.get()
+		}))
+	}
+	return sections
 }
 
 // Close shuts every language server down.

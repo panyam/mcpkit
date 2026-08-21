@@ -154,6 +154,44 @@ A location outside the workspace is named but not quoted, since a definition in
 a dependency is a real answer and reading that file would reach outside the root
 that confines everything else.
 
+## The repository map
+
+`Config.RepoMap` adds a ranked summary of the tree to the system prompt, so the
+model is oriented before it knows what to ask for. That is also why it is not a
+tool: a tool you have to know to call does not orient you, because the model
+that would think to call it already has some idea what it is looking at.
+
+```
+## Repository map
+
+The files the rest of the code leans on most, and what they declare.
+Ranked, not complete: use list_files and search_files for the rest.
+
+/work/mcpkit/core/session.go
+  Session, SessionStore, NewSession, and 9 more
+/work/mcpkit/server/server.go
+  Server, Dispatch, RegisterTool, ...
+
+18 more file(s) not shown, ranked lower.
+```
+
+**Definitions come from the language server** and edges are lexical: a file
+references another if it mentions a name that other file declares, matched as a
+whole identifier. Reference edges from the server would be more accurate and
+cost a request per symbol, which is thousands of round trips to order a list
+nobody reads past the top of. Ranking is PageRank over that graph, because what
+a new contributor needs first is what the rest of the code leans on, and that is
+a question about the graph rather than about file size or recency.
+
+**It lives here rather than in its own extension** because it needs the same
+servers this extension already runs. A separate module could not import this one
+(constraint C4), so it would start a second `gopls` over the same tree to ask
+the same questions.
+
+Indexing runs in the background and the section is empty until it finishes, so
+an early turn is missing the map rather than waiting on it. Both caps, the token
+budget and the file limit, report what they dropped.
+
 ## There is no `document_symbols` tool
 
 The file outline is the repo map's question, and the repo map answers it across
