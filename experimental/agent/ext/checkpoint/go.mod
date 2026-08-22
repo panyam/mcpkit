@@ -7,7 +7,7 @@ replace github.com/panyam/mcpkit => ../../../..
 replace github.com/panyam/mcpkit/experimental/agent => ../..
 
 require (
-	github.com/panyam/mcpkit v0.5.1
+	github.com/panyam/mcpkit v0.5.2
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/host v0.0.0-00010101000000-000000000000
 )

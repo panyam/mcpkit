@@ -25,7 +25,7 @@ replace github.com/panyam/mcpkit/experimental/ext/events => ../../../../experime
 replace github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../../../experimental/ext/events/clients/go
 
 require (
-	github.com/panyam/mcpkit v0.5.1
+	github.com/panyam/mcpkit v0.5.2
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/host v0.0.0-00010101000000-000000000000
 )

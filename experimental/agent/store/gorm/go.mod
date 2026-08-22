@@ -7,7 +7,7 @@ replace github.com/panyam/mcpkit => ../../../..
 replace github.com/panyam/mcpkit/experimental/agent => ../..
 
 require (
-	github.com/panyam/mcpkit v0.5.1
+	github.com/panyam/mcpkit v0.5.2
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
 	github.com/pgvector/pgvector-go v0.4.1
 	gorm.io/driver/postgres v1.6.2

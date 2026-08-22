@@ -9,6 +9,32 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-21
+
+A patch release. `ctx` now reaches the wire, so an ordinary MCP call is
+cancellable; the rest is module and CI hygiene. No protocol changes and no
+breaking API changes. Full write-up:
+[`docs/releases/v0.5.2.md`](docs/releases/v0.5.2.md).
+
+### Fixed
+- **`ctx` is threaded to the transport**, so cancelling a context or setting a
+  deadline actually stops an in-flight call. `Client.callImpl` accepted a `ctx`
+  and dropped it before `callDirect`, and the streamable transport defaulted to
+  `context.Background()` unless the caller hand-built a `CallContext`. Only the
+  streamable HTTP transport honours cancellation; legacy SSE and the core
+  adapter document that they ignore it, unchanged.
+- **Five placeholder sibling pins resolve.** `verify-submodule-deps.sh` parsed
+  only the root require and skipped sibling requires, so unresolvable pins
+  passed CI.
+
+### Changed
+- **C4 extension isolation is a real CI gate** (`scripts/check-ext-isolation.sh`)
+  rather than an unrun shell block in `CONSTRAINTS.md`. Membership derives from
+  the module path, so new extension trees are covered on arrival.
+- **The agent SDK left the release train.** `agent/` moved to
+  `experimental/agent/`, absent from `SUB_MODS_TO_TAG`, untagged, no
+  compatibility promise. See `VERSIONING.md` § Agent SDK.
+
 ## [0.5.1] - 2026-08-07
 
 A security patch. Three dependencies carrying published advisories move to fixed

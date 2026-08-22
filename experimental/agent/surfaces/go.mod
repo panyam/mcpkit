@@ -49,7 +49,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.8 // indirect
-	github.com/panyam/mcpkit v0.5.1 // indirect
+	github.com/panyam/mcpkit v0.5.2 // indirect
 	github.com/panyam/mcpkit/experimental/agent/ext/checkpoint v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/ext/files v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/host v0.0.0

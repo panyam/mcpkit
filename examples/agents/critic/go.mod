@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/agents/critic
 go 1.26.5
 
 require (
-	github.com/panyam/mcpkit v0.5.1
+	github.com/panyam/mcpkit v0.5.2
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/host v0.0.0
 )

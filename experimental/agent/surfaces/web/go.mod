@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	connectrpc.com/connect v1.19.2
-	github.com/panyam/mcpkit v0.5.1
+	github.com/panyam/mcpkit v0.5.2
 	github.com/panyam/mcpkit/experimental/agent v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/host v0.0.0
 	github.com/panyam/mcpkit/experimental/agent/surfaces v0.0.0
