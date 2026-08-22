@@ -266,18 +266,13 @@ via <code>just readme</code>).</p>
 </span></span><span style="display:flex;"><span>just tui         <span style="color:#998;font-style:italic"># interactive TUI (paginated, key-driven)</span>
 </span></span><span style="display:flex;"><span>just note        <span style="color:#998;font-style:italic"># notebook mode (Bubble Tea cells)</span>
 </span></span></code></pre><h3 id="agent-mode">Agent mode <a class="anchor" href="#agent-mode">¶</a></h3>
-<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just agent                                  <span style="color:#998;font-style:italic"># scripted agent, no LLM (also the golden test via just agent-test)</span>
-</span></span><span style="display:flex;"><span><span style="color:#008080">MODEL</span><span style="color:#000;font-weight:bold">=</span>qwen2.5-7b-instruct just agent-live   <span style="color:#998;font-style:italic"># a live model improvising against the same server</span>
-</span></span></code></pre><p><code>just agent</code> runs a scripted agent (mcpkit&rsquo;s host layer plus a deterministic<br />
-<code>StubProvider</code>) against an in-process copy of this server, so it needs no second<br />
-terminal and no model. It shows what skills are <em>for</em> on the agent side: the<br />
-host discovers the server&rsquo;s skills, digest-verifies them, and injects them into<br />
-the model&rsquo;s system instructions before the first turn. The agent then answers a<br />
-git question by the team&rsquo;s <code>git-workflow</code> conventions and a PDF question by the<br />
-<code>pdf-processing</code> skill, with no tool call. The knowledge rides in the prompt.<br />
-The whole run is deterministic, so it doubles as a golden-transcript test<br />
-(<code>agent_scenario_test.go</code>). With <code>MODEL=... just agent-live</code> a real model derives the same<br />
-answers from the injected blocks instead of reciting scripted ones.</p>
+<p>Moved. An agent consuming this server&rsquo;s skills is now demonstrated in<br />
+<a href="https://github.com/panyam/chakra">chakra</a>, the agent SDK, which was extracted from mcpkit into its<br />
+own repository. Its <code>host</code> package discovers a server&rsquo;s skills, digest-verifies them, and injects<br />
+them into the model&rsquo;s system instructions before the first turn, covered there by<br />
+<code>host/skills_test.go</code>.</p>
+<p>This example stays focused on the server side: serving SEP-2640 skills from a directory, an archive,<br />
+or GitHub, and the security harness below.</p>
 <h3 id="security--conformance-harness">Security &amp; conformance harness <a class="anchor" href="#security--conformance-harness">¶</a></h3>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just security        <span style="color:#998;font-style:italic"># run the harness (no LLM, non-interactive, screen-shareable)</span>
 </span></span><span style="display:flex;"><span>just security-test   <span style="color:#998;font-style:italic"># the same, as a Go regression test</span>

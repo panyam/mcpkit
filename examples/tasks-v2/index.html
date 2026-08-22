@@ -333,22 +333,12 @@
 </span></span><span style="display:flex;"><span>just demo     <span style="color:#998;font-style:italic"># terminal 2: demokit walkthrough (7 steps)</span>
 </span></span></code></pre><p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks-v2/WALKTHROUGH.md">WALKTHROUGH.md</a> for the full step-by-step description and sequence diagram.</p>
 <h2 id="agent-mode">Agent mode <a class="anchor" href="#agent-mode">¶</a></h2>
-<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just agent                                  <span style="color:#998;font-style:italic"># scripted agent, no LLM (also the golden test via just agent-test)</span>
-</span></span><span style="display:flex;"><span><span style="color:#008080">MODEL</span><span style="color:#000;font-weight:bold">=</span>qwen2.5-7b-instruct just agent-live   <span style="color:#998;font-style:italic"># a live model improvising against the same server</span>
-</span></span></code></pre><p><code>just agent</code> runs a scripted agent (mcpkit&rsquo;s host layer plus a deterministic<br />
-<code>StubProvider</code>) against an in-process copy of this server, so it needs no second<br />
-terminal and no model. It shows the point of v2 from the <em>agent&rsquo;s</em> side: the<br />
-model calls a sync-only tool (<code>greet</code>) and a server-directed async tool<br />
-(<code>slow_compute</code>) the exact same way. The server alone decides <code>slow_compute</code><br />
-runs as a task; the host creates it, runs it to completion, and hands the result<br />
-back as an ordinary tool result. The SEP-2663 task machinery never surfaces to<br />
-the model. The whole run is deterministic, so it doubles as a golden-transcript<br />
-test (<code>agent_scenario_test.go</code>).</p>
-<p>When a task genuinely outlives its grace window the host detaches it and later<br />
-delivers a <code>task.completed</code> event, which a standing trigger can turn into a<br />
-proactive turn. That background-detach path is exercised in the agentchat tests<br />
-and the <code>agent-async</code> example; here the computation finishes fast to keep the<br />
-demo deterministic.</p>
+<p>Moved. An agent driving these task tools is now demonstrated in<br />
+<a href="https://github.com/panyam/chakra">chakra</a>, the agent SDK, which was extracted from mcpkit into its<br />
+own repository. The point it made still holds and is covered there by <code>host/tasks_test.go</code> and the<br />
+<code>agent-async</code> example: a model calls a sync-only tool and a server-directed async tool the same way,<br />
+and the SEP-2663 task machinery never surfaces to it.</p>
+<p>This example stays focused on the server side.</p>
 <h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
 <ul>
 <li>Tasks-as-extension negotiation — <code>client.WithTasksExtension()</code> opts in during initialize; servers gate task-creating <code>tools/call</code> and every <code>tasks/*</code> method on it.</li>
