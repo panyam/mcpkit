@@ -1,57 +1,40 @@
 # examples/agents
 
-Agent-focused examples grouped together, sharing a common demo harness.
+Examples of the **server side** of agent work: MCP servers that advertise a roster of specialist
+agents, and a server set broad enough to exercise a host end to end.
 
-- **`agent-async`** — an agent managing async work (events + tasks) through chat.
-- **`multi-agent`** — Phase 3 composition: sub-agents-as-tools + handoff.
-- **`critic`** — a second model watches the primary agent's turns and injects graded steering notes.
-- **`deep-agent-supervisor`** — a supervisor over a server-advertised roster of specialist agents.
-- **`kitchen-sink`** — every agent feature wired at once.
+- **`deep-agent-supervisor`** — a server advertising a roster of specialist agents over
+  `experimental/ext/agents`, the pre-SEP server-declared discovery extension.
+- **`kitchen-sink`** — the demo, skills, and events servers wired together so one host can reach
+  every surface at once.
 
-## One config per example, shared across surfaces
+## The agent SDK examples moved
 
-Every example runs off **one host config** that all its surfaces load:
+`agent-async`, `multi-agent`, and `critic` imported the agent SDK, so they followed it to
+[chakra](https://github.com/panyam/chakra) and now live under that repo's `examples/`. So did the
+shared `llm.json`, `common.just`, and the `agentchat-multi-agent.json` sub-agent host config, along
+with `examples/playground`.
 
-| Recipe | Surface | What it does |
-|---|---|---|
-| `just agent` | scripted | deterministic StubProviders, no LLM (the golden test) |
-| `just demo` | CLI (live) | a live model against the same server; resolves model/endpoint from `llm.json` |
-| `just serve` | server | boots the demo MCP server the live surfaces point at |
-| `just chat` | CLI (`agentchat`) | the terminal surface, `--config <config>.json` |
-| `just web` | browser (`agentweb`) | the browser surface, `--config <config>.json --addr :8090` |
+The two examples above stayed because they demonstrate a protocol extension rather than the SDK, and
+never import it.
 
-`chat` and `web` are shared recipes in `common.just`, parameterized by `CONFIG`
-(default `config.json`) and `ADDR`. The already-config-driven examples
-(`deep-agent-supervisor`, `kitchen-sink`, `examples/playground`) carry their own
-variable-driven justfiles and gained the same `web` surface.
+## Driving these with a host
 
-The three code-driven examples (`agent-async`, `multi-agent`, `critic`) each
-ship a `config.json` too. Their deterministic scenario loads that same
-`config.json` and keeps only the piece JSON cannot express in code — the
-scripted `StubProvider` (and, for `multi-agent`/`critic`, the hand-wired
-composition). Each example's README documents its own split.
-
-## `llm.json` — providers, no secrets
-
-`llm.json` lists named connections (local, cloud, a router) in the same shape as
-the host `ConnectionsConfig`. It carries **only** endpoint + model + the *name*
-of the env var holding the key (`apiKeyEnv`) — **never a key**, so it is safe to
-commit. The active connection is a local model, so `just demo` works offline
-against a running LM Studio / Ollama with nothing to configure. A model router
-(OpenRouter, LiteLLM, a gateway) is just another connection — point `baseURL` at
-it. For machine-specific overrides, copy it to `llm.local.json` (gitignored).
-
-## Multi-agent via host config (agentchat)
-
-`agentchat-multi-agent.json` is a sample host config declaring **sub-agent
-personas** (`subAgents`): each is a specialist the main agent delegates to as a
-tool, running on the same provider over a filtered view of the same server
-tools, with its own instructions. Run it:
+Both examples ship a host config and expect a client to point at it. The terminal
+(`agentchat`) and browser (`agentweb`) surfaces live in chakra now, so install from there:
 
 ```bash
-agentchat --config examples/agents/agentchat-multi-agent.json   # needs the demo server running
+go install github.com/panyam/chakra/surfaces/chat@latest   # agentchat
+go install github.com/panyam/chakra/surfaces/web/cmd/agentweb@latest
 ```
 
-The sub-agents' activity renders **nested** under the main agent's turn
-(`HostSubAgentEvent`). This is the declarative counterpart to the `multi-agent`
-example, which wires the same `AgentSource`/`Team` primitives by hand.
+Each example's `justfile` still carries `serve`, `run` / `chat`, and `web` recipes; they invoke
+whichever binary is on your `PATH`. Nothing here depends on chakra at build time, so `make test`
+covers the servers with no agent toolchain present.
+
+## Server lifecycle stays decoupled
+
+`kitchen-sink` is the reference for a host never owning its servers' processes: `servers.sh`
+(`just servers-up` / `servers-down` / `servers`) owns them, and the run recipe only *checks* the
+ports and points at `servers-up` if any are down. It never boots or kills them. The constraint that
+rule belongs to travelled to chakra with the host it constrains.

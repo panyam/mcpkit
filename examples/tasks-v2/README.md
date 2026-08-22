@@ -38,26 +38,13 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full step-by-step description and s
 
 ## Agent mode
 
-```bash
-just agent                                  # scripted agent, no LLM (also the golden test via just agent-test)
-MODEL=qwen2.5-7b-instruct just agent-live   # a live model improvising against the same server
-```
+Moved. An agent driving these task tools is now demonstrated in
+[chakra](https://github.com/panyam/chakra), the agent SDK, which was extracted from mcpkit into its
+own repository. The point it made still holds and is covered there by `host/tasks_test.go` and the
+`agent-async` example: a model calls a sync-only tool and a server-directed async tool the same way,
+and the SEP-2663 task machinery never surfaces to it.
 
-`just agent` runs a scripted agent (mcpkit's host layer plus a deterministic
-`StubProvider`) against an in-process copy of this server, so it needs no second
-terminal and no model. It shows the point of v2 from the *agent's* side: the
-model calls a sync-only tool (`greet`) and a server-directed async tool
-(`slow_compute`) the exact same way. The server alone decides `slow_compute`
-runs as a task; the host creates it, runs it to completion, and hands the result
-back as an ordinary tool result. The SEP-2663 task machinery never surfaces to
-the model. The whole run is deterministic, so it doubles as a golden-transcript
-test (`agent_scenario_test.go`).
-
-When a task genuinely outlives its grace window the host detaches it and later
-delivers a `task.completed` event, which a standing trigger can turn into a
-proactive turn. That background-detach path is exercised in the agentchat tests
-and the `agent-async` example; here the computation finishes fast to keep the
-demo deterministic.
+This example stays focused on the server side.
 
 ## What it demonstrates
 

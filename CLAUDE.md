@@ -1,7 +1,9 @@
 # CLAUDE.md — MCPKit
 
-Go library for building production-grade MCP servers and clients, plus an agent SDK layered above
-the protocol.
+Go library for building production-grade MCP servers and clients.
+
+The agent SDK that used to sit above the protocol here now lives in its own repository,
+[chakra](https://github.com/panyam/chakra). Nothing in this tree depends on it.
 
 This file is a router. Detail lives beside the code it describes — see **Where knowledge lives**
 below before adding anything here.
@@ -13,7 +15,6 @@ are an experiment; `make` is authoritative when they disagree.
 
 ```bash
 make test              # Core tests (core/server/client/testutil)
-make test-agent        # experimental/agent/ and its sub-modules
 make test-auth         # ext/auth sub-module
 make test-ui           # ext/ui sub-module
 make test-e2e          # E2E tests (auth + apps)
@@ -37,14 +38,6 @@ upstream changes to watch.
 | `core/` — Protocol types, typed contexts, session APIs | `core/README.md`, `core/CONSTRAINTS.md` |
 | `server/` — Server, transports, middleware, v1 tasks (frozen) | `server/README.md`, `server/CONSTRAINTS.md`, `server/NOTES.md` |
 | `client/` — Client, transports, reconnection, auth retry | `client/README.md`, `client/CONSTRAINTS.md` |
-| `experimental/agent/` — Provider, Runner loop, ToolSource, memory, composition | `experimental/agent/CLAUDE.md`, `experimental/agent/CONSTRAINTS.md`, `experimental/agent/NOTES.md` |
-| `experimental/agent/host/` — Reusable, surface-agnostic host application core | `experimental/agent/host/README.md` |
-| `experimental/agent/ext/checkpoint/` — Reversal seam (restore vs compensate) + file checkpoints | `experimental/agent/ext/checkpoint/README.md` |
-| `experimental/agent/ext/files/` — Workspace file tools: read, edit, write, list, search (stale and ambiguous edits refused) | `experimental/agent/ext/files/README.md` |
-| `experimental/agent/ext/exec/` — Allowlisted project commands, sandboxed (darwin backend; elsewhere refuses) | `experimental/agent/ext/exec/README.md` |
-| `experimental/agent/ext/lsp/` — Language servers in the loop: diagnostics on two paths, symbol-addressed navigation | `experimental/agent/ext/lsp/README.md` |
-| `experimental/agent/surfaces/chat/` — Terminal CLI (binary: `agentchat`) | `README.md`, `NOTES.md`, `CLAUDE.md` in that dir |
-| `experimental/agent/surfaces/web/` — Connect bridge + DockView frontend (binary: `agentweb`) | `experimental/agent/surfaces/web/README.md`, `docs/AGENT_WEB_UI_EPIC.md` |
 | `ext/auth/` — JWT, PRM, OAuth | `ext/auth/docs/DESIGN.md`, `ext/auth/NOTES.md` |
 | `ext/tasks/` — SEP-2663 v2 tasks extension | `ext/tasks/README.md` |
 | `ext/skills/` — SEP-2640 skills (data-only, enforced) | `ext/skills/NOTES.md` |
@@ -68,13 +61,13 @@ Three kinds of file, three audiences. Put new material in the right one rather t
   This is where implementation lore belongs.
 - **`CLAUDE.md`** (this file, plus nested ones) — routing and the rules that cause wrong edits when
   missed. A nested `CLAUDE.md` loads automatically when working in that subtree, so keep it short.
-  `experimental/agent/` and `experimental/agent/surfaces/chat/` have one.
+  `conformance/` has one.
 - **`CONSTRAINTS.md`** — enforceable architectural rules. Project-wide at the root; per-package in
-  `core/`, `server/`, `client/`, `experimental/agent/`.
+  `core/`, `server/`, `client/`.
 
-Design docs live in `docs/`: `ARCHITECTURE.md`, `AGENT_DESIGN.md`, `AGENT_COMPOSITION.md`,
-`AGENT_MEMORY_FLOW.md`, `AGENT_SDK_ROADMAP.md`, `AGENT_WEB_UI_EPIC.md`, `APPS_DESIGN.md`,
-`SEP_414_OTEL.md`, and the per-SEP migration guides.
+Design docs live in `docs/`: `ARCHITECTURE.md`, `APPS_DESIGN.md`, `SEP_414_OTEL.md`, and the
+per-SEP migration guides. The `AGENT_*.md` set left with the agent SDK and now lives in
+[chakra](https://github.com/panyam/chakra) under its `docs/`.
 
 **`CAPABILITIES.md` was retired** (commit `ebc41058`). Checkpoint and start_pr must not sync or
 recreate it. Fold learnings into the per-package `NOTES.md`, the design docs, and the roadmap.
@@ -90,21 +83,11 @@ fails in a module you did not edit.
 `docs/site/` is the GitHub Pages renderer. It is a tool, not a library, and is excluded from
 `SUB_MODS_TO_TAG`.
 
-**The agent SDK is on a separate, unreleased version line.** `experimental/agent/` and its nine
-sub-modules are absent from `SUB_MODS_TO_TAG` by design and are listed in `AGENT_MODS_TO_TAG`
-instead, tagged by the staged `make tag-agent` (which refuses to run without `AGENT_RELEASE_OK=1`).
-Two rules follow, both CI-enforced by `scripts/verify-submodule-deps.sh`:
-
-- **Do not add an agent module to `SUB_MODS_TO_TAG`**, and do not run `tag-agent` as part of a
-  protocol release. The point of the split is that the protocol surface can commit to API stability
-  while the agent surface keeps breaking things.
-- **Do not "fix" the `v0.0.0` pins in agent `go.mod` files.** Agent-to-agent requires sit at
-  `v0.0.0` behind `replace` directives, and since Go ignores replace outside the main module, that
-  is what keeps the tree unresolvable from outside. Bumping one to a real version is the failure the
-  inverted check exists to catch. Requiring a *published* module (`ext/otel`, `ext/auth`) at a real
-  tag is fine and already happens.
-
-Rationale and the extraction path are in `VERSIONING.md` § Agent SDK.
+**The agent SDK is not in this repo.** It was extracted to
+[chakra](https://github.com/panyam/chakra) and consumes mcpkit as an ordinary dependency. The
+dependency runs one way: nothing here may require chakra. `scripts/verify-submodule-deps.sh` now
+enforces two policies rather than three, protocol and non-library, the agent policy having left with
+the tree.
 
 ## Cross-cutting rules
 

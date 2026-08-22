@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [main, agent]
+    branches: [main]
   pull_request:
-    branches: [main, agent]
+    branches: [main]
 
 jobs:
   test:
@@ -47,8 +47,8 @@ jobs:
         run: python3 scripts/check_dep_consistency.py
 
       # Dependabot ignores a configured directory that does not exist, without
-      # warning. /agent/web/web went unmonitored that way after the
-      # experimental/agent/surfaces refactor moved it.
+      # warning. A frontend dir went unmonitored that way after a refactor
+      # moved it.
       - name: Check Dependabot directories exist
         run: python3 scripts/check_dependabot_dirs.py
 
@@ -67,67 +67,6 @@ jobs:
       - name: Run conformance suite
         run: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
 
-  test-agent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-
-      - name: Run agent sub-module tests
-        run: cd experimental/agent && go test ./... -v
-
-      - name: Run experimental/agent/host tests
-        run: cd experimental/agent/host && go test ./... -v
-
-      - name: Run experimental/agent/ext/checkpoint tests
-        run: cd experimental/agent/ext/checkpoint && go test ./... -v -race
-
-      - name: Run experimental/agent/ext/files tests
-        run: cd experimental/agent/ext/files && go test ./... -v -race
-
-      # Commands here are this test binary re-executed, so nothing needs
-      # installing. The exec_live tag runs the same surface under a real
-      # sandbox-exec and is darwin-only, so no sandbox backend is exercised on
-      # this runner: the platform's own backend refuses and the tests name
-      # Unconfined explicitly. See the module README.
-      - name: Run experimental/agent/ext/exec tests
-        run: cd experimental/agent/ext/exec && go test ./... -v -race -timeout 180s
-
-      # The lsp suite drives a stub language server that is this test binary
-      # re-executed, so it needs no server installed. The lsp_live tag runs the
-      # same surface against a real gopls and is deliberately not wired here.
-      # Explicit timeout, well above the ~45s this takes, so a hang produces a
-      # goroutine dump naming the blocked call instead of a bare line at the
-      # 600s default. See #1308.
-      - name: Run experimental/agent/ext/lsp tests
-        run: cd experimental/agent/ext/lsp && go test ./... -v -race -timeout 180s
-
-      - name: Run experimental/agent/surfaces shared-module tests
-        run: cd experimental/agent/surfaces && go test ./... -v
-
-      - name: Run agentchat (experimental/agent/surfaces/chat) tests
-        run: cd experimental/agent/surfaces/chat && go test ./... -v
-
-      - name: Run agent-async example test
-        run: cd examples/agents/agent-async && go test ./... -v
-
-      - name: Run multi-agent example test
-        run: cd examples/agents/multi-agent && go test ./... -v
-
-      - name: Run critic example test
-        run: cd examples/agents/critic && go test ./... -v
-
-      - name: Run deep-agent-supervisor roster test
-        run: cd examples/agents/deep-agent-supervisor/server && go test ./... -v
-
-      - name: Run skills agent-mode + security tests
-        run: cd examples/skills && go test ./... -v -run 'TestAgentScenario|TestSecurityDemo'
-
-      - name: Run tasks-v2 agent-mode test
-        run: cd examples/tasks-v2 && go test ./... -v -run TestAgentScenario
 
   test-auth:
     runs-on: ubuntu-latest

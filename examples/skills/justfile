@@ -6,17 +6,8 @@ serve:
 	go run . --serve --source=multi
 
 # Run the scripted agent scenario (no LLM): an agent loads the served skills and answers by them
-agent:
-	go run . --agent
-
 # Run the agent scenario against a live model (MODEL=<name> [BASE_URL=<url>])
-agent-live:
-	go run . --agent --model {{MODEL}} {{if BASE_URL != '' { '--base-url ' + BASE_URL } else { '' }}}
-
 # Run the agent golden-transcript test
-agent-test:
-	go test ./... -count=1 -run TestAgentScenario
-
 # Run the SEP-2640 security/conformance harness (no LLM, non-interactive)
 security:
 	go run . --security

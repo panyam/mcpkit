@@ -2,7 +2,7 @@
 
 mcpkit follows [semantic versioning](https://semver.org). The root module and the releasable protocol sub-modules are tagged in lock-step at the same version via `make tag-push V=vX.Y.Z` (see `RELEASING.md`), so a single version string identifies a consistent set across modules.
 
-The agent SDK is not on that train. Everything below applies to the protocol modules; the agent track has its own section at the end.
+Everything below applies to the protocol modules. The agent SDK left this repository; see the note at the end.
 
 ## Release types
 
@@ -24,14 +24,13 @@ Within a minor line, upgrading a patch version is always safe. Across minor vers
 
 ## Agent SDK
 
-The agent SDK (`experimental/agent/` and its nine sub-modules) is **unreleased and carries no compatibility promise**. It is not tagged, not part of `make tag-push`, and nothing above applies to it.
+The agent SDK is **no longer in this repository**. It was extracted to
+[chakra](https://github.com/panyam/chakra), which consumes mcpkit as an ordinary dependency and
+carries its own version line.
 
-This is deliberate. The protocol surface is at the conformance and policy bar for a stable release, while the agent track shipped in roughly two months and still takes breaking reshapes by design. Holding both to one version line would either freeze the agent surface before it has been pressure-tested or hold the protocol surface back. Separating the version lines costs nothing, because Go's compatibility contract is per module path and these were always separate modules.
+Nothing above applies to it, and nothing here depends on it. The dependency runs one way, and
+`scripts/verify-submodule-deps.sh` enforces the two policies that remain, protocol and non-library.
 
-Practical consequences:
-
-- **There is no version to depend on.** `go get github.com/panyam/mcpkit/experimental/agent@main` resolves to a pseudo-version. That works, and it is the whole signal you get: a pseudo-version and an `experimental/` import path.
-- **Most of the tree does not resolve at all.** Every agent module above the base pins its agent-to-agent dependencies at `v0.0.0` behind `replace` directives, and Go ignores replace outside the main module. This is enforced by `scripts/verify-submodule-deps.sh`, which will fail if someone "fixes" those pins.
-- **The old `agent/vX.Y.Z` tags are not retracted.** `github.com/panyam/mcpkit/agent` stays resolvable at `v0.4.0`, `v0.5.0`, and `v0.5.1` forever, because module proxy content is immutable. Those tags predate this policy and the path they refer to no longer exists in the tree.
-
-`make tag-agent` / `make tag-push-agent` exist over `AGENT_MODS_TO_TAG` and refuse to run without `AGENT_RELEASE_OK=1`. They are staged so that extracting this tree to its own repository is a copy rather than an invention, not because a release is planned from here.
+The old `agent/vX.Y.Z` tags are not retracted. `github.com/panyam/mcpkit/agent` stays resolvable at
+`v0.4.0`, `v0.5.0`, and `v0.5.1` forever, because module proxy content is immutable. Those tags
+predate the split and the path they refer to no longer exists in this tree.

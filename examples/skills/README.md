@@ -34,21 +34,14 @@ just note        # notebook mode (Bubble Tea cells)
 
 ### Agent mode
 
-```bash
-just agent                                  # scripted agent, no LLM (also the golden test via just agent-test)
-MODEL=qwen2.5-7b-instruct just agent-live   # a live model improvising against the same server
-```
+Moved. An agent consuming this server's skills is now demonstrated in
+[chakra](https://github.com/panyam/chakra), the agent SDK, which was extracted from mcpkit into its
+own repository. Its `host` package discovers a server's skills, digest-verifies them, and injects
+them into the model's system instructions before the first turn, covered there by
+`host/skills_test.go`.
 
-`just agent` runs a scripted agent (mcpkit's host layer plus a deterministic
-`StubProvider`) against an in-process copy of this server, so it needs no second
-terminal and no model. It shows what skills are *for* on the agent side: the
-host discovers the server's skills, digest-verifies them, and injects them into
-the model's system instructions before the first turn. The agent then answers a
-git question by the team's `git-workflow` conventions and a PDF question by the
-`pdf-processing` skill, with no tool call. The knowledge rides in the prompt.
-The whole run is deterministic, so it doubles as a golden-transcript test
-(`agent_scenario_test.go`). With `MODEL=... just agent-live` a real model derives the same
-answers from the injected blocks instead of reciting scripted ones.
+This example stays focused on the server side: serving SEP-2640 skills from a directory, an archive,
+or GitHub, and the security harness below.
 
 ### Security & conformance harness
 

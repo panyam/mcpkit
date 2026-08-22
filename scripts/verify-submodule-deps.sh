@@ -12,22 +12,14 @@
 #               name a real tag, or the published module is broken. This is the
 #               original check (#189).
 #
-#   AGENT       Lives under experimental/agent, deliberately unreleased (see
-#               VERSIONING.md). Its agent-to-agent requires must STAY at v0.0.0,
-#               because that is what makes the tree unresolvable from outside
-#               while working fine in-repo. The inverted assertion is the point:
-#               it stops someone "fixing" the pins and silently publishing the
-#               agent surface. On extraction day, move these modules to the
-#               protocol policy and run `make tag-agent`.
-#
 #   NON-LIBRARY cmd/*, tests/*, examples/*. Tagged for reproducibility but never
 #               imported as libraries, so a v0.0.0 sibling pin harms nobody. The
 #               root require is still checked.
 #
 # Failure mode the original version missed: it parsed ONLY the root
 # github.com/panyam/mcpkit require and skipped every sibling require in the
-# file. That is how agent/host pinned seven published modules at v0.0.0 and
-# passed CI for months. Sibling requires are now in scope.
+# file, so a module could pin seven published siblings at v0.0.0 and pass CI
+# for months. Sibling requires are now in scope.
 
 set -euo pipefail
 
@@ -47,8 +39,6 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 ROOT_MOD="github.com/panyam/mcpkit"
-# Modules on the agent release line (unreleased on purpose).
-AGENT_RE='^experimental/agent(/|$)'
 # Modules that are tagged but never imported as a library.
 NONLIB_RE='^(cmd|tests|examples|conformance|docs)/'
 
@@ -120,9 +110,7 @@ for sub in "${SUBMODULES[@]}"; do
         continue
     fi
 
-    if [[ "$sub" =~ $AGENT_RE ]]; then
-        policy="agent"
-    elif [[ "$sub" =~ $NONLIB_RE ]]; then
+    if [[ "$sub" =~ $NONLIB_RE ]]; then
         policy="non-library"
     else
         policy="protocol"
@@ -153,25 +141,6 @@ for sub in "${SUBMODULES[@]}"; do
                 elif ! resolve_check "$mod" "$version"; then
                     echo "FAIL: $sub/go.mod requires $mod $version, which the proxy does not serve"
                     echo "      The version looks like a tag but no such tag was published."
-                    fail=1
-                fi
-                ;;
-            agent)
-                # Only intra-agent requires carry the invariant. An agent module
-                # pinning a *published* module (ext/otel, ext/auth) at a real tag
-                # is harmless: that pin resolves, and unresolvability comes from
-                # the agent-to-agent edges, which can never resolve because these
-                # modules are never tagged. agentchat pins ext/otel v0.3.1 and is
-                # still unreachable from outside via its ten agent-to-agent pins.
-                case "$mod" in
-                    "$ROOT_MOD"/experimental/agent|"$ROOT_MOD"/experimental/agent/*) ;;
-                    *) continue ;;
-                esac
-                if ! is_placeholder "$version"; then
-                    echo "FAIL: $sub/go.mod requires $mod $version (expected v0.0.0)"
-                    echo "      Agent modules are unreleased on purpose, and their agent-to-agent pins"
-                    echo "      are what keep them unresolvable from outside. See VERSIONING.md."
-                    echo "      If you are extracting the tree, change AGENT_RE in this script instead."
                     fail=1
                 fi
                 ;;

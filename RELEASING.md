@@ -6,12 +6,6 @@ mcpkit is a multi-module repo: the root module plus a set of sub-modules
 sub-module in `SUB_MODS_TO_TAG` (see the `Makefile`) at the same version, so
 `go get github.com/panyam/mcpkit/<sub-module>@<version>` resolves consistently.
 
-**The agent SDK is not part of a release.** `experimental/agent/` and its nine
-sub-modules are unreleased on purpose and absent from `SUB_MODS_TO_TAG`; see
-`VERSIONING.md` § Agent SDK. `make tag-agent` / `make tag-push-agent` exist over
-`AGENT_MODS_TO_TAG` and refuse to run without `AGENT_RELEASE_OK=1`. They are
-staged for the eventual extraction to a separate repository, not for publishing
-from here. Do not run them as part of a protocol release.
 
 ## Version forms
 

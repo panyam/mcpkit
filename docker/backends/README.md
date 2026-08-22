@@ -29,6 +29,10 @@ own `just up` / `make up`. Both join the shared `mcpkit` network.
 
 ## The agent stack — wiring agentchat / agent examples
 
+The agent SDK and its `agentchat` binary live in
+[chakra](https://github.com/panyam/chakra) now, not this repo. The flags below are chakra's, kept
+here because this stack is what they are pointed at and the compose files that back them are here.
+
 With this stack up, point the agent knobs at it (all from the host, terminal-run):
 
 | Agent knob | Value against this stack |

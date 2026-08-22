@@ -18,21 +18,8 @@ require (
 )
 
 require (
-	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fernet/fernet-go v0.0.0-20240119011108-303da6aec611 // indirect
-	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/panyam/mcpkit/experimental/ext/agents v0.5.1 // indirect
-	github.com/panyam/mcpkit/experimental/ext/agents/clients/go v0.0.0 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.5.1 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0 // indirect
-	github.com/panyam/mcpkit/ext/auth v0.0.0 // indirect
-	github.com/panyam/oneauth v0.1.36 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/crypto v0.52.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 )
 
 require (
@@ -73,8 +60,6 @@ require (
 	github.com/panyam/demokit/notebook v0.0.28 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/mcpkit/experimental/agent v0.0.0
-	github.com/panyam/mcpkit/experimental/agent/host v0.0.0
 	github.com/panyam/mcpkit/ext/otel v0.0.0-20260608053428-44b944d79f00 // indirect
 	github.com/panyam/servicekit v0.1.4 // indirect
 	github.com/panyam/templar v0.1.0 // indirect
@@ -111,10 +96,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/panyam/mcpkit/experimental/agent => ../../experimental/agent
-
-replace github.com/panyam/mcpkit/experimental/agent/host => ../../experimental/agent/host
 
 replace github.com/panyam/mcpkit/ext/auth => ../../ext/auth
 
