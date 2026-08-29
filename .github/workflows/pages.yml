@@ -74,7 +74,19 @@ jobs:
       # must satisfy both modules.
       - name: Coverage badge
         run: |
-          go test ./... -coverprofile=/tmp/cover.out -covermode=atomic > /dev/null
+          # Output is captured rather than discarded. Sending it to /dev/null
+          # left a bare exit code on failure, so a flake here (#1337) gave a red
+          # X and nothing to read. Captured output keeps a passing run quiet and
+          # dumps everything when it fails.
+          if ! go test ./... -coverprofile=/tmp/cover.out -covermode=atomic > /tmp/cover-test.log 2>&1; then
+            echo "::group::go test output"
+            cat /tmp/cover-test.log
+            echo "::endgroup::"
+            echo "Failing packages:"
+            grep -E '^(FAIL|---[[:space:]]+FAIL)' /tmp/cover-test.log || echo "  (none matched; see the group above)"
+            echo "::error::Coverage run failed. Full go test output is in the 'go test output' group."
+            exit 1
+          fi
           PCT=$(go tool cover -func=/tmp/cover.out | tail -1 | awk '{gsub(/%/,"",$3); print $3}')
           COLOR=$(awk -v p="$PCT" 'BEGIN{print (p>=80)?"brightgreen":(p>=70)?"green":(p>=60)?"yellowgreen":(p>=50)?"yellow":"orange"}')
           mkdir -p docs/site/dist/docs/coverage
