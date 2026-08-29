@@ -19,35 +19,32 @@ func TestSkillsExtension_Metadata(t *testing.T) {
 	if ext.ID != skills.ExtensionID {
 		t.Errorf("ID = %q, want %q", ext.ID, skills.ExtensionID)
 	}
-	if ext.SpecVersion == "" {
-		t.Errorf("SpecVersion is empty")
-	}
-	if ext.Stability != core.Experimental {
-		t.Errorf("Stability = %q, want experimental", ext.Stability)
+	if skills.SpecVersion == "" {
+		t.Errorf("skills.SpecVersion is empty")
 	}
 }
 
-// TestSkillsExtension_DirectoryReadConfig confirms the SEP-2640
+// TestSkillsExtension_DirectoryReadSettings confirms the SEP-2640
 // directoryRead flag (added by commit 2e04c48d on 2026-06-09) emits on
-// the wire when set. The bare SkillsExtension{} keeps Config nil so
+// the wire when set. The bare SkillsExtension{} keeps Settings nil so
 // servers that wire the extension directly without an attached
 // directory handler don't accidentally advertise a method they don't
 // actually serve.
-func TestSkillsExtension_DirectoryReadConfig(t *testing.T) {
-	// Default: no Config.
+func TestSkillsExtension_DirectoryReadSettings(t *testing.T) {
+	// Default: no settings.
 	defaultExt := skills.SkillsExtension{}.Extension()
-	if defaultExt.Config != nil {
-		t.Errorf("default SkillsExtension Config = %v, want nil", defaultExt.Config)
+	if defaultExt.Settings != nil {
+		t.Errorf("default SkillsExtension Settings = %v, want nil", defaultExt.Settings)
 	}
 
-	// Opted-in: Config carries directoryRead: true.
+	// Opted-in: settings carry directoryRead: true.
 	onExt := skills.SkillsExtension{DirectoryRead: true}.Extension()
-	v, ok := onExt.Config[skills.CapabilityDirectoryRead].(bool)
+	v, ok := onExt.Settings[skills.CapabilityDirectoryRead].(bool)
 	if !ok {
-		t.Fatalf("Config[%q] missing or wrong type; Config=%v", skills.CapabilityDirectoryRead, onExt.Config)
+		t.Fatalf("Settings[%q] missing or wrong type; Settings=%v", skills.CapabilityDirectoryRead, onExt.Settings)
 	}
 	if !v {
-		t.Errorf("Config[%q] = false, want true", skills.CapabilityDirectoryRead)
+		t.Errorf("Settings[%q] = false, want true", skills.CapabilityDirectoryRead)
 	}
 }
 

@@ -1,5 +1,7 @@
 package core
 
+import "encoding/json"
+
 // Protocol-level types shared between server and client packages.
 // These are MCP spec types that appear in both directions of communication.
 
@@ -117,18 +119,32 @@ type InitializeResult struct {
 	ServerInfo      ServerInfo         `json:"serverInfo"`
 }
 
-// ExtensionCapability describes a server extension's metadata in the
-// initialize response capabilities.
+// ExtensionCapability is one extension's settings object as it appears in
+// capabilities.extensions, keyed by the extension identifier.
 //
-// Config carries extension-specific settings. SEP-2640 (Skills) uses it
-// for the directoryRead flag added in commit 2e04c48d on 2026-06-09;
-// other extensions define their own shape under their own reverse-domain
-// ID. Absent or empty when the extension declares no settings (the
-// wire-level value is then the bare empty object {}).
-type ExtensionCapability struct {
-	SpecVersion string         `json:"specVersion"`
-	Stability   string         `json:"stability"`
-	Config      map[string]any `json:"config,omitempty"`
+// SEP-2133 (Final) defines extensions as "a map of extension identifiers to
+// per-extension settings objects", so the settings sit directly under the
+// identifier with no envelope around them. SEP-2640 (Skills) matches that
+// shape for its directoryRead flag:
+//
+//	"extensions": {"io.modelcontextprotocol/skills": {"directoryRead": true}}
+//
+// Each extension defines its own key schema under its own reverse-domain
+// identifier, so the value type is deliberately untyped. Callers should read
+// unknown keys permissively.
+//
+// A nil capability marshals to {} rather than null, because SEP-2133 gives the
+// empty object the specific meaning "no settings" and most extensions declare
+// none.
+type ExtensionCapability map[string]any
+
+// MarshalJSON renders a nil capability as the empty object. Without it a nil
+// map would emit null, which SEP-2133 does not define as a settings value.
+func (e ExtensionCapability) MarshalJSON() ([]byte, error) {
+	if e == nil {
+		return []byte("{}"), nil
+	}
+	return json.Marshal(map[string]any(e))
 }
 
 // StreamableHTTPAccept is the Accept header value for Streamable HTTP requests.

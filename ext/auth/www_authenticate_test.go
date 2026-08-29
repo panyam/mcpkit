@@ -131,11 +131,8 @@ func TestExtension(t *testing.T) {
 	if ext.ID != "io.mcpkit/auth" {
 		t.Errorf("ID = %q, want %q", ext.ID, "io.mcpkit/auth")
 	}
-	if ext.SpecVersion != "2025-11-25" {
-		t.Errorf("SpecVersion = %q, want %q", ext.SpecVersion, "2025-11-25")
-	}
-	if ext.Stability != "experimental" {
-		t.Errorf("Stability = %q, want %q", ext.Stability, "experimental")
+	if ext.Settings != nil {
+		t.Errorf("Settings = %v, want nil; the auth extension declares no settings", ext.Settings)
 	}
 }
 

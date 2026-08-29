@@ -19,11 +19,8 @@ func TestUIExtensionMetadata(t *testing.T) {
 	if ext.ID != core.UIExtensionID {
 		t.Errorf("ID = %q, want %q", ext.ID, core.UIExtensionID)
 	}
-	if ext.SpecVersion != "2026-01-26" {
-		t.Errorf("SpecVersion = %q, want %q", ext.SpecVersion, "2026-01-26")
-	}
-	if ext.Stability != core.Experimental {
-		t.Errorf("Stability = %q, want %q", ext.Stability, core.Experimental)
+	if ext.Settings != nil {
+		t.Errorf("Settings = %v, want nil; MCP Apps declares no settings", ext.Settings)
 	}
 }
 

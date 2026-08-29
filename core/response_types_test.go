@@ -19,7 +19,7 @@ func TestInitializeResultJSON(t *testing.T) {
 			Prompts:   &PromptsCap{ListChanged: true},
 			Logging:   &struct{}{},
 			Extensions: map[string]ExtensionCapability{
-				"io.example/ext": {SpecVersion: "2025-01-01", Stability: "stable"},
+				"io.example/ext": {"someSetting": "on"},
 			},
 		},
 		ServerInfo: ServerInfo{Name: "test-server", Version: "1.0"},
@@ -52,8 +52,8 @@ func TestInitializeResultJSON(t *testing.T) {
 
 	exts := caps["extensions"].(map[string]any)
 	ext := exts["io.example/ext"].(map[string]any)
-	if ext["specVersion"] != "2025-01-01" {
-		t.Errorf("extension specVersion = %v", ext["specVersion"])
+	if ext["someSetting"] != "on" {
+		t.Errorf("extension settings sit inline; got %v", ext)
 	}
 
 	// Round-trip back into typed struct
@@ -67,7 +67,7 @@ func TestInitializeResultJSON(t *testing.T) {
 	if parsed.ServerInfo.Name != result.ServerInfo.Name {
 		t.Errorf("round-trip serverInfo.name = %q, want %q", parsed.ServerInfo.Name, result.ServerInfo.Name)
 	}
-	if parsed.Capabilities.Extensions["io.example/ext"].SpecVersion != "2025-01-01" {
+	if parsed.Capabilities.Extensions["io.example/ext"]["someSetting"] != "on" {
 		t.Error("round-trip lost extension data")
 	}
 }

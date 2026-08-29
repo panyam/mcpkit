@@ -147,8 +147,8 @@ func TestParseURI_Errors(t *testing.T) {
 		{"http scheme", "http://example.com/x", skills.ErrInvalidScheme},
 		{"no path", "skill://", skills.ErrEmptySkillPath},
 		{"consecutive slashes", "skill://foo//SKILL.md", skills.ErrEmptyPathSegment},
-		{"nested SKILL.md", "skill://outer/SKILL.md/inner/something.md", skills.ErrManifestNotInRoot},
-		{"middle SKILL.md", "skill://outer/inner/SKILL.md/x", skills.ErrManifestNotInRoot},
+		{"SKILL.md as directory", "skill://outer/SKILL.md/inner/something.md", skills.ErrManifestNotADirectory},
+		{"SKILL.md mid-path", "skill://outer/inner/SKILL.md/x", skills.ErrManifestNotADirectory},
 		{"uppercase skill name", "skill://Git-Workflow/SKILL.md", skills.ErrInvalidSkillName},
 		{"trailing hyphen", "skill://refunds-/SKILL.md", skills.ErrInvalidSkillName},
 		{"leading hyphen", "skill://-refunds/SKILL.md", skills.ErrInvalidSkillName},
@@ -326,14 +326,66 @@ func TestResolveRelative_RejectsCrossOrigin(t *testing.T) {
 	}
 }
 
-func TestResolveRelative_RejectsNestedManifest(t *testing.T) {
+// TestResolveRelative_ResolvesNestedManifestAsSupportingContent pins the
+// 2026-08-21 SEP-2640 reversal. A nested SKILL.md resolves rather than
+// erroring, and comes back with IsManifest false so the enclosing skill treats
+// it as ordinary markdown and does not act on its frontmatter.
+func TestResolveRelative_ResolvesNestedManifestAsSupportingContent(t *testing.T) {
 	root, err := skills.ParseURI("skill://git-workflow/SKILL.md")
 	if err != nil {
 		t.Fatalf("ParseURI: %v", err)
 	}
-	_, err = skills.ResolveRelative(root, "references/SKILL.md")
-	if !errors.Is(err, skills.ErrManifestNotInRoot) {
-		t.Errorf("ResolveRelative(refs/SKILL.md) err = %v, want ErrManifestNotInRoot", err)
+	got, err := skills.ResolveRelative(root, "references/SKILL.md")
+	if err != nil {
+		t.Fatalf("ResolveRelative(references/SKILL.md) err = %v, want nil", err)
+	}
+	if got.IsManifest {
+		t.Error("IsManifest = true; a nested manifest read through the enclosing skill is supporting content")
+	}
+	if strings.Join(got.SkillPath, "/") != "git-workflow" {
+		t.Errorf("SkillPath = %v, want [git-workflow] (identity stays with the enclosing skill)", got.SkillPath)
+	}
+	if strings.Join(got.FilePath, "/") != "references/SKILL.md" {
+		t.Errorf("FilePath = %v, want [references SKILL.md]", got.FilePath)
+	}
+}
+
+// TestParseURI_NestedManifestIsItsOwnSkill covers the flat-publication half of
+// the same rule: addressed directly, a nested SKILL.md is a skill in its own
+// right whose URI merely shares a path prefix with its parent.
+func TestParseURI_NestedManifestIsItsOwnSkill(t *testing.T) {
+	got, err := skills.ParseURI("skill://git-workflow/references/SKILL.md")
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	if !got.IsManifest {
+		t.Error("IsManifest = false, want true")
+	}
+	if got.SkillName != "references" {
+		t.Errorf("SkillName = %q, want %q", got.SkillName, "references")
+	}
+	if strings.Join(got.SkillPath, "/") != "git-workflow/references" {
+		t.Errorf("SkillPath = %v, want [git-workflow references]", got.SkillPath)
+	}
+}
+
+// TestSplitAt_NestedManifestBelowBoundary confirms the enclosing skill can
+// address a nested skill's manifest as one of its own supporting files, which
+// the SEP's completeness rule requires.
+func TestSplitAt_NestedManifestBelowBoundary(t *testing.T) {
+	parts, err := skills.ParseURI("skill://git-workflow/references/SKILL.md")
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	got, err := parts.SplitAt(1)
+	if err != nil {
+		t.Fatalf("SplitAt(1) err = %v, want nil", err)
+	}
+	if got.IsManifest {
+		t.Error("IsManifest = true; below the enclosing boundary this is supporting content")
+	}
+	if strings.Join(got.FilePath, "/") != "references/SKILL.md" {
+		t.Errorf("FilePath = %v, want [references SKILL.md]", got.FilePath)
 	}
 }
 

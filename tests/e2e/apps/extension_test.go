@@ -118,15 +118,14 @@ func TestServerAdvertisesUIExtensionE2E(t *testing.T) {
 		t.Fatalf("UI extension not in response, got keys: %v", resp.Capabilities.Extensions)
 	}
 
-	var uiExt struct {
-		SpecVersion string `json:"specVersion"`
-		Stability   string `json:"stability"`
+	// SEP-2133 maps the identifier straight to a settings object. MCP Apps
+	// declares no settings on the server side, so the value is the empty
+	// object, and none of the retired envelope keys may appear.
+	var uiExt map[string]any
+	if err := json.Unmarshal(uiRaw, &uiExt); err != nil {
+		t.Fatalf("decode UI extension settings: %v (raw=%s)", err, uiRaw)
 	}
-	json.Unmarshal(uiRaw, &uiExt)
-	if uiExt.SpecVersion != "2026-01-26" {
-		t.Errorf("specVersion = %q, want %q", uiExt.SpecVersion, "2026-01-26")
-	}
-	if uiExt.Stability != "experimental" {
-		t.Errorf("stability = %q, want %q", uiExt.Stability, "experimental")
+	if len(uiExt) != 0 {
+		t.Errorf("UI extension settings = %v, want {}", uiExt)
 	}
 }

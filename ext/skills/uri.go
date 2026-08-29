@@ -78,15 +78,17 @@ type URIParts struct {
 //   - No segment may be empty, e.g. from consecutive slashes
 //     (ErrEmptyPathSegment).
 //   - SKILL.md, when present, MUST be the final segment of the URI; it MUST
-//     NOT appear at any non-terminal position (ErrManifestNotInRoot).
+//     NOT appear at any non-terminal position, which would treat the manifest
+//     as a directory (ErrManifestNotADirectory). A descendant SKILL.md at the
+//     terminal position is a nested skill's manifest and is valid.
 //   - For manifest URIs the final skill-path segment (i.e. the segment just
 //     before SKILL.md) MUST be a valid Agent Skills name: lowercase letters,
 //     digits, and hyphens, neither leading nor trailing hyphen
 //     (ErrInvalidSkillName / ErrEmptySkillName).
 //
 // ParseURI does not require a manifest URI. Non-manifest URIs validate
-// scheme, segments, and the no-nested-SKILL.md rule, but SkillPath and
-// FilePath are left empty (see URIParts).
+// scheme and segments, but SkillPath and FilePath are left empty (see
+// URIParts).
 func ParseURI(s string) (URIParts, error) {
 	if s == "" {
 		return URIParts{}, fmt.Errorf("%w: empty URI", ErrInvalidScheme)
@@ -108,12 +110,13 @@ func ParseURI(s string) (URIParts, error) {
 		return URIParts{}, ErrEmptySkillPath
 	}
 
-	// SEP-2640: no SKILL.md may appear in a descendant directory. We allow
-	// a single SKILL.md at the terminal position; any other position is a
-	// nesting violation.
+	// SKILL.md names a file, so it cannot also be a directory component.
+	// This is a well-formedness rule, not the retired nesting rule: a
+	// descendant SKILL.md at a terminal position is a nested skill's
+	// manifest and parses fine.
 	for i, seg := range segments[:len(segments)-1] {
 		if seg == ManifestFilename {
-			return URIParts{}, fmt.Errorf("%w: SKILL.md at segment %d", ErrManifestNotInRoot, i)
+			return URIParts{}, fmt.Errorf("%w: SKILL.md at segment %d", ErrManifestNotADirectory, i)
 		}
 	}
 
@@ -195,11 +198,14 @@ func splitURIPath(u *url.URL) ([]string, error) {
 // FilePath. This is the explicit-boundary form callers use when the skill
 // path is known from an index entry or a prior manifest read.
 //
-// SplitAt validates that:
-//   - n is in range [1, len(AllSegments)],
-//   - the segment at position n-1 is a valid skill name,
-//   - no SKILL.md appears in FilePath at a non-root position (only allowed
-//     when FilePath is exactly ["SKILL.md"]).
+// SplitAt validates that n is in range [1, len(AllSegments)] and that the
+// segment at position n-1 is a valid skill name.
+//
+// A SKILL.md deeper in FilePath is a nested skill's manifest, which SEP-2640
+// (2026-08-21) permits and treats as ordinary supporting content of the
+// enclosing skill. IsManifest is therefore true only when FilePath is exactly
+// ["SKILL.md"], so a caller splitting at the enclosing skill's boundary sees
+// the nested manifest as a plain file and will not act on its frontmatter.
 func (p URIParts) SplitAt(n int) (URIParts, error) {
 	if n < 1 || n > len(p.AllSegments) {
 		return URIParts{}, fmt.Errorf("%w: SplitAt n=%d, segments=%d", ErrEmptySkillPath, n, len(p.AllSegments))
@@ -209,12 +215,6 @@ func (p URIParts) SplitAt(n int) (URIParts, error) {
 	name := skillPath[len(skillPath)-1]
 	if err := ValidateSkillName(name); err != nil {
 		return URIParts{}, err
-	}
-	// SKILL.md only valid as the sole file-path segment.
-	for i, seg := range filePath {
-		if seg == ManifestFilename && !(len(filePath) == 1 && i == 0) {
-			return URIParts{}, fmt.Errorf("%w: SKILL.md inside skill", ErrManifestNotInRoot)
-		}
 	}
 	out := URIParts{
 		Scheme:      p.Scheme,
@@ -328,8 +328,10 @@ func ValidateSkillName(name string) error {
 //     skillRoot.SkillPath. Otherwise the reference escaped (e.g., excess
 //     ".." segments) and ErrRelativeEscapesSkill is returned.
 //   - A resolved URI whose final segment is SKILL.md at a deeper position
-//     than the skill root is rejected with ErrManifestNotInRoot because
-//     SEP-2640 forbids skill nesting.
+//     than the skill root is a nested skill's manifest. SEP-2640 (2026-08-21)
+//     permits nesting and treats that file as ordinary supporting content of
+//     the enclosing skill, so it resolves rather than erroring, and the result
+//     reports IsManifest false.
 //   - The result reuses skillRoot.SkillPath. FilePath holds the resolved
 //     file path segments. IsManifest is set when the resolution lands on
 //     the skill's own SKILL.md (the idempotent case).
@@ -386,14 +388,6 @@ func ResolveRelative(skillRoot URIParts, rel string) (URIParts, error) {
 	// rel normalized to no path segments). Treat as a caller mistake.
 	if len(parsed.AllSegments) == len(skillRoot.SkillPath) {
 		return URIParts{}, fmt.Errorf("%w: resolves to skill root", ErrEmptyPathSegment)
-	}
-
-	// ParseURI treats any terminal SKILL.md as a manifest URI. After
-	// resolution, a manifest deeper than the original skill root means the
-	// reference pointed at a nested skill, which SEP-2640 forbids. The
-	// idempotent case (resolving back to the same manifest) is allowed.
-	if parsed.IsManifest && len(parsed.SkillPath) > len(skillRoot.SkillPath) {
-		return URIParts{}, fmt.Errorf("%w: nested SKILL.md in resolved path", ErrManifestNotInRoot)
 	}
 
 	// Re-split at the original skill boundary so the result reflects this

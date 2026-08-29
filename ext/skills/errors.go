@@ -20,10 +20,20 @@ var (
 	// digits, hyphens).
 	ErrInvalidSkillName = errors.New("skills: invalid skill name")
 
-	// ErrManifestNotInRoot is returned when a SKILL.md appears anywhere
-	// other than the immediate root of a skill. SEP-2640 forbids nested
-	// skills.
-	ErrManifestNotInRoot = errors.New("skills: SKILL.md must be at skill root")
+	// ErrManifestNotInRoot is returned when a source FS carries a SKILL.md
+	// at its own root, where the root is the container for skill
+	// directories rather than a skill itself.
+	//
+	// This no longer covers descendant manifests. The 2026-08-21 SEP-2640
+	// revision reversed the nesting rule, so a SKILL.md in a subdirectory
+	// is a nested skill and is permitted.
+	ErrManifestNotInRoot = errors.New("skills: SKILL.md must not be at the source root")
+
+	// ErrManifestNotADirectory is returned when SKILL.md appears as a
+	// non-terminal path segment, which would treat the manifest file as a
+	// directory. Distinct from nesting: a descendant SKILL.md at a terminal
+	// position is a nested skill's manifest and is valid.
+	ErrManifestNotADirectory = errors.New("skills: SKILL.md cannot be a directory component")
 
 	// ErrEmptyPathSegment is returned when a URI contains an empty path
 	// segment (consecutive slashes).
