@@ -2,9 +2,9 @@
 
 ## Overview
 
-MCPKit Gateway extends MCPKit from a library for building MCP servers to a **universal MCP gateway** that exposes any HTTP or gRPC service as MCP tools — without modifying the backend service. The gateway handles MCP protocol, transport, auth, scoping, and audit. Backend services continue serving HTTP/gRPC as before.
+MCPKit Gateway extends MCPKit from a library for building MCP servers to a **universal MCP gateway** that exposes any HTTP or gRPC service as MCP tools, without modifying the backend service. The gateway handles MCP protocol, transport, auth, scoping, and audit. Backend services continue serving HTTP/gRPC as before.
 
-This positions MCPKit as a lightweight, embeddable alternative to Kong AI MCP Proxy, IBM ContextForge, and Envoy AI Gateway — purpose-built for MCP rather than bolted onto a general API gateway.
+This positions MCPKit as a fairly lightweight, embeddable alternative to Kong AI MCP Proxy, IBM ContextForge, and Envoy AI Gateway, purpose-built for MCP rather than bolted onto a general API gateway.
 
 ## Problem
 
@@ -561,7 +561,7 @@ Gateway startup                   gRPC Backend
 
 ### Runtime SDK Loader (Phase 4)
 
-For services that want to self-register. Thin HTTP contract — no MCP awareness needed.
+For services that want to self-register. Thin HTTP contract, no MCP awareness needed.
 
 ```
 Backend Service                     Gateway

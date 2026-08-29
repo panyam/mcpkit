@@ -1,6 +1,6 @@
 # SEP-2577 — Deprecation of Roots, Sampling, and Logging
 
-[SEP-2577](https://github.com/modelcontextprotocol/specification/pull/2577) lands in the MCP 2026-07-28 RC (locked 2026-05-21). It puts three protocol features on a deprecation path: **Roots**, **Sampling**, and **Logging**. mcpkit is on the 12-month annotation-only path — every existing call still works at runtime; godoc `// Deprecated:` blocks fire `staticcheck SA1019` (and any IDE that consumes it) at call sites so consumers see the warning the moment they upgrade.
+[SEP-2577](https://github.com/modelcontextprotocol/specification/pull/2577) lands in the MCP 2026-07-28 RC (locked 2026-05-21). It puts three protocol features on a deprecation path: **Roots**, **Sampling**, and **Logging**. mcpkit is on the 12-month annotation-only path, and every existing call still works at runtime; godoc `// Deprecated:` blocks fire `staticcheck SA1019` (and any IDE that consumes it) at call sites so consumers see the warning the moment they upgrade.
 
 **Removal target:** a future major release, no earlier than the spec window below (~2027). Removal was **deferred out of 0.4** (tracked in issue 850): 0.4 keeps the surfaces fully functional alongside the deprecation comments, so *no behavior changes* at the 0.4 cut. Removing them at 0.4 would break mcpkit's own 12-month annotation window (closes ~2027-05-21) and drop it below 100% conformance / Tier-1 while the features remain in the targeted spec version.
 
@@ -26,7 +26,7 @@ The MCP working group's framing (paraphrased from SEP-2577 discussion): **Roots*
 | 2027-05-21 | 12-month annotation window minimum closes |
 | a future major release (≥ 2027) | mcpkit removes the deprecated symbols — no earlier than the spec window above. Deferred out of 0.4 (issue 850). |
 
-Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removing them earlier would break the annotation window above and drop mcpkit below Tier-1 while the features are still in the targeted spec version. If the spec window extends, mcpkit's removal follows it — the deprecation doc is the source of truth, not a calendar date.
+Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removing them earlier would break the annotation window above and drop mcpkit below Tier-1 while the features are still in the targeted spec version. If the spec window extends, mcpkit's removal follows it. The deprecation doc is the source of truth, not a calendar date.
 
 ## Affected symbols
 
@@ -68,10 +68,10 @@ Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removin
 | `core.LogMessage` | Wire-level type for the deprecated `notifications/message`; no replacement at this surface. |
 | `core.MCPLogHandler` (slog → MCP bridge) | Drop the bridge; route slog to stderr / file / aggregator as you would in any other Go service. |
 
-**Migration sketch:** mcpkit's logging existed to bridge tool output back to the MCP client over the wire. After deprecation, the client is no longer responsible for surfacing server logs — operators read them where every other Go service's logs go. If you need observability inside a host UI, that's an application-level feature now, not a protocol one.
+**Migration sketch:** mcpkit's logging existed to bridge tool output back to the MCP client over the wire. After deprecation, the client is no longer responsible for surfacing server logs. Operators read them where every other Go service's logs go. If you need observability inside a host UI, that's an application-level feature now, not a protocol one.
 
 ## Notes for mcpkit contributors
 
-- `// Deprecated:` blocks are per Go convention: blank-line-separated paragraph starting with `Deprecated:`. `staticcheck -checks SA1019` enforces no internal call sites accidentally regress to *new* uses of the deprecated symbols — current call sites are grandfathered through 0.4.x but should be tracked so the eventual removal is mechanical.
-- Examples (`examples/mrtr`, `examples/apps/*`, `examples/stateless`, `examples/tasks`) still demo the deprecated surfaces — they're working illustrations of how the API behaves in 0.4.x. Each affected example carries a README banner pointing here. After the removal cut, the examples migrate or get retired with the symbols they demo.
-- The deprecation surfaces are wire-level: this doc does **not** deprecate `slog` integration as a general pattern, only mcpkit's MCP-protocol bridge for it. Same with model-client wiring — only the protocol-mediated path is leaving.
+- `// Deprecated:` blocks are per Go convention: blank-line-separated paragraph starting with `Deprecated:`. `staticcheck -checks SA1019` enforces no internal call sites accidentally regress to *new* uses of the deprecated symbols. Current call sites are grandfathered through 0.4.x but should be tracked so the eventual removal is mechanical.
+- Examples (`examples/mrtr`, `examples/apps/*`, `examples/stateless`, `examples/tasks`) still demo the deprecated surfaces, since they're working illustrations of how the API behaves in 0.4.x. Each affected example carries a README banner pointing here. After the removal cut, the examples migrate or get retired with the symbols they demo.
+- The deprecation surfaces are wire-level: this doc does **not** deprecate `slog` integration as a general pattern, only mcpkit's MCP-protocol bridge for it. Same with model-client wiring, where only the protocol-mediated path is leaving.

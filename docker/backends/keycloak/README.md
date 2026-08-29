@@ -20,14 +20,14 @@ Each realm contains three confidential OAuth clients:
 | `mcp-events-poller` | `make poller TENANT=...` | `authorization_code` + PKCE, `password` (ROPC for CI) |
 | `mcp-events-webhook` | `make webhook TENANT=...` | Same as poller |
 
-**All client secrets are pre-baked as `mcpkit-demo-secret-DEMO-ONLY`.** They are clearly labeled, identical across both realms, and ARE NOT suitable for any non-demo deployment — they only exist so anyone can clone the repo and run the demo without first generating credentials in Keycloak.
+**All client secrets are pre-baked as `mcpkit-demo-secret-DEMO-ONLY`.** They are clearly labeled, identical across both realms, and ARE NOT suitable for any non-demo deployment. They only exist so anyone can clone the repo and run the demo without first generating credentials in Keycloak.
 
 ## Operator surfaces
 
 The Keycloak admin UI is the operator surface for the demo's revocation walkthrough step:
 
 - **Admin URL**: <http://localhost:8180/admin/>
-- **Admin credentials**: `admin` / `admin` (set on the Keycloak service env in `docker-compose.yaml` — also DEMO ONLY).
+- **Admin credentials**: `admin` / `admin` (set on the Keycloak service env in `docker-compose.yaml`, also DEMO ONLY).
 - **Revoke a user**: open `localhost:8180/admin/master/console/#/<realm>/users` → click user → "Sessions" tab → "Sign out" per session, or "Sign out all sessions" globally.
 
 Within `OAUTH_CACHE_TTL` seconds (default 5s), the event-server's introspection cache expires, the next introspection call returns `active: false`, and the affected client receives `-32012 Forbidden`. Other tenants and other users are unaffected.
@@ -43,7 +43,7 @@ If you want to point your own MCP client at the demo's Keycloak:
 5. **Save**, then **Credentials** tab → copy the generated secret.
 6. Configure your client with `client_id`, `client_secret`, and the AS URL `http://localhost:8180/realms/<realm>/`.
 
-The event-server's introspection validator already accepts any token issued by either of the two realms — your custom client's tokens work end-to-end with no further configuration on the resource-server side.
+The event-server's introspection validator already accepts any token issued by either of the two realms, so your custom client's tokens work end-to-end with no further configuration on the resource-server side.
 
 ## Bring your own AS (JWT mode)
 
@@ -59,4 +59,4 @@ docker volume prune       # optional: clear Keycloak's volume so the next start 
 make demo-up              # restart; new realm config takes effect
 ```
 
-Realm-export schema is Keycloak's documented format — see [Keycloak admin docs](https://www.keycloak.org/server/importExport). The version pinned in `docker-compose.yaml` is `26.0`.
+Realm-export schema is Keycloak's documented format. See [Keycloak admin docs](https://www.keycloak.org/server/importExport). The version pinned in `docker-compose.yaml` is `26.0`.

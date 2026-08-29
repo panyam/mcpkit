@@ -8,7 +8,7 @@ Dispatch and protocol lore. For the public API see `README.md`; for enforceable 
 ## Version negotiation and version-gated features
 
 **`server/protocol_features.go` is the single source of truth.** Do not scatter fresh
-`negotiatedVersion == "..."` checks anywhere else — that is what let the legacy and stateless
+`negotiatedVersion == "..."` checks anywhere else, which is what let the legacy and stateless
 wires drift apart before.
 
 - `negotiateProtocolVersion(requested)` implements the MCP 2025-03-26 handshake. A supported
@@ -32,7 +32,7 @@ through the resolver when #493 collapses the package.
 **`server/stateless_backend.go::callToolForStateless` must mirror every pre-handler step
 `Dispatcher.handleToolsCall` runs**, or features silently no-op on the SEP-2575 wire.
 
-This has bitten repeatedly. A dispatch feature added to the legacy path but not to
+This has bitten us repeatedly. A dispatch feature added to the legacy path but not to
 `callToolForStateless` works on legacy and fails silently on stateless, and conformance often
 misses it because the task and file-input suites run legacy while the stateless suite uses the
 cart fixture.
@@ -69,9 +69,9 @@ so a non-`AuthError` middleware error now maps to HTTP 401 (matching the legacy 
 
 ## Wire mode defaults are deliberately asymmetric
 
-- Server: `stateless.DefaultMode = stateless.ModeDual`. Additive on upgrade — every existing
+- Server: `stateless.DefaultMode = stateless.ModeDual`. Additive on upgrade, so every existing
   server gains the stateless wire on one URL.
-- Client: `client.DefaultClientMode = client.ClientModeLegacyOnly`. Conservative — `Adaptive`
+- Client: `client.DefaultClientMode = client.ClientModeLegacyOnly`. Conservative, since `Adaptive`
   would have silently broken 11 pre-existing client tests that assume the legacy initialize
   handshake.
 
@@ -80,7 +80,7 @@ Override per deployment via constructor option (`server.WithStatelessMode(...)` 
 `init()` flip of the package var. The shipping client default may flip to `Adaptive` in a future
 major release; the doc block spells out the migration.
 
-This asymmetry was empirically re-confirmed by the client conformance harness: a blanket
+This asymmetry was empirically re-confirmed by the client conformance harness, where a blanket
 `ClientModeAdaptive` breaks legacy mocks in the same suite.
 
 ---
@@ -94,10 +94,10 @@ Concrete `ToolResponse` variants: `ToolResult` (sync), `InputRequiredResult` (MR
 `CreateTaskResult` (SEP-2663 task envelope), `GoAsyncResult` (in-process spawn signal).
 
 `core.ToolResult` no longer carries `IsInputRequired` / `InputRequests` / `GoAsync` sentinel
-fields — they live on dedicated variant types. `ctx.RequestInput` returns
+fields. They live on dedicated variant types. `ctx.RequestInput` returns
 `(core.InputRequiredResult, error)`.
 
-Handler bodies usually do not change: `return core.ToolResult{...}, nil` still compiles. Use
+Handler bodies mostly do not change, and `return core.ToolResult{...}, nil` still compiles. Use
 `core.TypedTool[X, core.ToolResponse]` for handlers returning polymorphic variants. Migration
 recipe: `docs/HANDLER_RETURNS_MIGRATION.md`.
 
@@ -105,7 +105,7 @@ recipe: `docs/HANDLER_RETURNS_MIGRATION.md`.
 
 ## Reverse-call restrictions on the stateless wire
 
-**`ctx.Sample` and `ctx.Elicit` are forbidden on the stateless wire** — server-initiated push does
+**`ctx.Sample` and `ctx.Elicit` are forbidden on the stateless wire**, since server-initiated push does
 not exist there. The legacy push API errors with `ErrNoRequestFunc` on stateless requests by
 construction.
 
@@ -118,8 +118,8 @@ spell out the migration with worked examples.
 ## SEP-2549 `ttlMs` is two-state client-side
 
 The merged spec treats an absent `ttlMs` the same as `0` (both "immediately stale"). mcpkit still
-types it `*int` so a server can emit an explicit `ttlMs: 0` distinct from omitting the field —
-plain `int` plus omitempty cannot express that.
+types it `*int` so a server can emit an explicit `ttlMs: 0` distinct from omitting the field.
+Plain `int` plus omitempty cannot express that.
 
 `cacheScope` is a plain `string` with omitempty; absent defaults to `"public"` client-side.
 
@@ -130,18 +130,18 @@ The field was renamed from `ttl` (seconds) during the spec's final review. See
 
 ## `HandleStore[T]` is opt-in scaffolding, not a contract
 
-SEP-2567 is design guidance only: no wire contract, no upstream conformance. Any storage a tool
+SEP-2567 is design guidance only, with no wire contract and no upstream conformance. Any storage a tool
 handler can call (Redis, SQL, `sync.Map`, custom RPC) satisfies the pattern.
 
 `server.HandleStore[T]` ships the typed in-memory default plus the interface seam. Use it, replace
-it, or skip it — all three are equally SEP-2567-compliant. See `docs/SEP_2567_HANDLES.md`.
+it, or skip it, and all three are equally SEP-2567-compliant. See `docs/SEP_2567_HANDLES.md`.
 
 ---
 
 ## SEP-2577 deprecations: annotated, not removed
 
 Roots, Sampling, and Logging surfaces carry `// Deprecated:` blocks pointing at
-`docs/SEP_2577_DEPRECATIONS.md`. **They keep working — no behavior change.** Only
+`docs/SEP_2577_DEPRECATIONS.md`. **They keep working, with no behavior change.** Only
 `staticcheck SA1019` warnings fire at call sites.
 
 Removal is deferred to a future release (~2027, no earlier than the spec dropping them plus the

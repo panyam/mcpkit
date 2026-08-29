@@ -84,7 +84,7 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks/scenarios.test.ts
 | 18 | TTL — no early expiry | Task must not expire before TTL | Task accessible well before TTL elapses |
 | 21 | Execution in tools/list | `tools/list` includes `execution.taskSupport` | `optional`, `required`, absent per tool |
 
-> **Note on TTL/pollInterval:** The client's `task.ttl` is a statement of intent — the
+> **Note on TTL/pollInterval:** The client's `task.ttl` is a statement of intent, and the
 > server MAY use a different value. `pollInterval` is a server response field, not a client
 > request parameter (the TS SDK's client-side `pollInterval` param was a bug). The suite
 > only verifies these fields are present and valid, not that they match client hints.
@@ -116,7 +116,7 @@ SERVER_URL=http://localhost:8080/mcp npx tsx --test tasks/scenarios.test.ts
 | 25 | Status notifications | Status change on completion | Well-formed and matches task state if received (not required) |
 
 > **Note on notifications:** Progress and status notifications are optional per spec.
-> The suite verifies they are well-formed *if* received — it does not require the server
+> The suite verifies they are well-formed *if* received, and it does not require the server
 > to send them. If notifications are sent, they must match the actual task state at that
 > moment.
 

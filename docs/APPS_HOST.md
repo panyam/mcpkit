@@ -8,7 +8,7 @@ See [APPS_DESIGN.md](APPS_DESIGN.md) for the core protocol design and [APPS_ONBO
 
 ### Overview
 
-`AppHost` (`ext/ui/app_host.go`) wraps an MCP `Client` and an `AppBridge` to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations — agent harnesses, desktop apps, or custom UIs — to manage app-provided tools.
+`AppHost` (`ext/ui/app_host.go`) wraps an MCP `Client` and an `AppBridge` to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations (agent harnesses, desktop apps, or custom UIs) to manage app-provided tools.
 
 ### Architecture
 
@@ -115,7 +115,7 @@ Implementations:
 
 ### Usage with OAuth Authentication
 
-AppHost does not own auth — the caller wires `ext/auth.OAuthTokenSource` into the Client. Auth retry (401/403) happens transparently at the Client's transport layer.
+AppHost does not own auth. The caller wires `ext/auth.OAuthTokenSource` into the Client. Auth retry (401/403) happens transparently at the Client's transport layer.
 
 ```go
 // 1. Create OAuth token source

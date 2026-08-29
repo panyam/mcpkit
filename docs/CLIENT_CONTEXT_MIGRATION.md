@@ -2,7 +2,7 @@
 
 Every `client.Client` method that performs I/O now takes a `context.Context` as
 its first argument. Accessors (`SessionID`, `URL`, `ServerSupportsUI`, ...) are
-unchanged — they touch no network.
+unchanged, since they touch no network.
 
 This is a breaking change. It ships alongside a start-up readiness signal on the
 server and a stricter `Server.Register`; see [What else changed](#what-else-changed).
@@ -16,7 +16,7 @@ none. Two consequences:
 - **No cancellation or timeout** on the calls people make most. A hung
   `tools/call` could not be abandoned.
 - **A latent panic.** Because half the surface took a `ctx`, callers reasonably
-  passed one — including `nil`. Go permits an untyped `nil` for a
+  passed one, including `nil`. Go permits an untyped `nil` for a
   `context.Context` parameter and neither the compiler nor `go vet` flags it, so
   `ListTools(nil)` compiled and then crashed with a nil-pointer dereference
   inside the pagination loop.
@@ -111,7 +111,7 @@ cancel()          // the handshake budget is spent
 defer c.Close()   // this is what ends the session
 ```
 
-`WithConnectTimeout` still applies and composes with the context — whichever
+`WithConnectTimeout` still applies and composes with the context, whichever
 fires first wins.
 
 ### A nil context no longer panics
@@ -126,7 +126,7 @@ Two adjacent fixes ship in the same release.
 
 ### Server readiness
 
-`Run` and `ListenAndServe` block, so they are normally started in a goroutine —
+`Run` and `ListenAndServe` block, so they are normally started in a goroutine,
 but nothing reported when the listener was bound, which forced a
 `time.Sleep` before connecting. Two additions remove the guess:
 
@@ -148,7 +148,7 @@ case err := <-errCh:
 }
 ```
 
-`RunWithListener(ln)` is the strongest form — the caller owns the bind, so the
+`RunWithListener(ln)` is the strongest form. The caller owns the bind, so the
 port is reachable before serving even starts and there is no window to race.
 
 ### Register rejects unsupported types

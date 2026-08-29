@@ -45,7 +45,7 @@ srv.Run(":8787")
 ```
 
 Swap `stdouttrace` for any OTel exporter (OTLP, Jaeger, Datadog, ...)
-and the surface is unchanged — the adapter consumes an
+and the surface is unchanged, since the adapter consumes an
 `otel/trace.TracerProvider`, not a specific exporter.
 
 ## What the adapter does
@@ -69,7 +69,7 @@ and the surface is unchanged — the adapter consumes an
   a second `End` as a no-op. The wrapper short-circuits before the
   underlying SDK can log its "span already ended" warning.
 - **`RecordError(err)` emits both an OTel exception event and sets the
-  span status to `codes.Error`.** This matches the OTel idiom — backends
+  span status to `codes.Error`.** This matches the OTel idiom, where backends
   use `Status.Code` for filtering / counting error spans, separately
   from the recorded event payload.
 
@@ -124,7 +124,7 @@ Every measurement forwards the active context to the underlying OTel
 instrument. The OTel SDK's default exemplar filter
 (`AlwaysOnSampleParent`) reads the active span via the same ctx
 accessor `core.SpanFromContext` consumes and stamps an exemplar on
-the measurement — Grafana + Mimir render clickable dots that pivot
+the measurement, so Grafana + Mimir render clickable dots that pivot
 to the matching Tempo trace, closing the metric ↔ trace loop the
 SEP-414 work opened.
 
@@ -148,7 +148,7 @@ make test-otel-example      # smoke test for the stdout example
 ```
 
 The runnable demo lives at [`examples/otel/stdout`](../../examples/otel/stdout/)
-and prints exported spans as JSON on stdout — no exporter
+and prints exported spans as JSON on stdout, with no exporter
 infrastructure required.
 
 ## Out of scope (other SEP-414 phases)

@@ -30,7 +30,7 @@ The output is intentionally free of wall-clock timestamps. The header stamps:
 - Upstream conformance commit SHA (so an upstream-driven check-ID change diffs)
 - MCP protocol version
 
-The mcpkit commit SHA is **not** stamped — including it would diff the file on every commit even when no scenarios changed, defeating the CI staleness gate. `git blame CONFORMANCE.md` gives the same provenance.
+The mcpkit commit SHA is **not** stamped, because including it would diff the file on every commit even when no scenarios changed, defeating the CI staleness gate. `git blame CONFORMANCE.md` gives the same provenance.
 
 ## Tests
 

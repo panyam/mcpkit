@@ -4,7 +4,7 @@
 
 MCPKit adds support for the MCP Apps extension (`io.modelcontextprotocol/ui`), enabling servers to return interactive HTML user interfaces that render inline in host conversations (Claude, ChatGPT, VS Code Copilot, Goose, etc.). This document covers the architecture, protocol surface, edge cases, conformance strategy, and the slyds reference integration.
 
-MCP Apps combines two existing MCP primitives — tools declare a UI resource via `_meta.ui.resourceUri`, and resources serve the HTML content with MIME type `text/html;profile=mcp-app`. The interactive iframe↔host protocol (JSON-RPC over `postMessage`) is the host's responsibility; mcpkit's scope is the server-side metadata, resource serving, capability negotiation, and client-side detection.
+MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `_meta.ui.resourceUri`, and resources serve the HTML content with MIME type `text/html;profile=mcp-app`. The interactive iframe↔host protocol (JSON-RPC over `postMessage`) is the host's responsibility; mcpkit's scope is the server-side metadata, resource serving, capability negotiation, and client-side detection.
 
 ## Design Principles
 
@@ -27,7 +27,7 @@ MCP Apps combines two existing MCP primitives — tools declare a UI resource vi
 ### Implementation notes
 
 - Standard `Permissions` values: `"camera"`, `"microphone"`, `"geolocation"`, `"clipboardWrite"`
-- `PrefersBorder` and `Domain` fields may be host-specific — not all hosts honor them
+- `PrefersBorder` and `Domain` fields may be host-specific, and not all hosts honor them
 - Hosts may preload `ui://` resources before tools/call for faster rendering
 
 ## Architecture
@@ -361,7 +361,7 @@ are not specified in the ext-apps spec and vary by host.
 ### Pre-fetch timing
 
 MCPJam pre-fetches `resources/read` for `_meta.ui.resourceUri` **immediately
-before** `tools/call` — not at connection time or `tools/list` time. The
+before** `tools/call`, not at connection time or `tools/list` time. The
 pre-fetch and tool call happen in parallel (resource read ~300ms before tool
 result arrives). The iframe boots from the pre-fetched HTML while the tool
 executes.
@@ -387,7 +387,7 @@ Instead, it forwards the tool result to the already-loaded iframe via
 for updating its DOM based on the tool result.
 
 This means:
-- The initial `resources/read` HTML is the **app shell** — it boots the
+- The initial `resources/read` HTML is the **app shell**, and it boots the
   iframe and sets up the postMessage listener
 - Tool results are delivered as structured data, not as new HTML
 - `notifications/resources/updated` does not trigger a resource re-fetch
@@ -415,7 +415,7 @@ in an object (e.g., `{"decks": [...]}`).
 
 3. **Unclear role of `notifications/resources/updated`.** The spec defines
    this notification for resource subscriptions, but its interaction with
-   MCP Apps iframes is unspecified. MCPJam ignores it for app resources —
+   MCP Apps iframes is unspecified. MCPJam ignores it for app resources, and
    tool results flow through `postMessage` instead.
 
 These observations have been filed as feedback to the ext-apps spec:
@@ -431,7 +431,7 @@ These observations have been filed as feedback to the ext-apps spec:
 - Base64-encoded images inflate 33%
 
 **Mitigation:**
-- `ResourceReadContent.Blob` (base64) is available alongside `.Text` — hosts should accept both
+- `ResourceReadContent.Blob` (base64) is available alongside `.Text`, and hosts should accept both
 - Servers SHOULD keep HTML under 5MB when possible (practical limit observed in Claude)
 - For large assets, use `UICSPConfig.ResourceDomains` to allow loading from external CDN instead of inlining
 - Document size guidance in API docs; don't enforce in the library (host limits vary)
@@ -477,7 +477,7 @@ These observations have been filed as feedback to the ext-apps spec:
 - mcpkit `tools/list` returns ALL tools, including app-only ones (visibility metadata included)
 - Hosts filter before presenting to the LLM
 - mcpkit's Go client adds a `ListToolsForModel()` helper that filters locally (useful for testing)
-- Server-side `tools/call` does NOT enforce visibility — any authenticated caller can invoke any tool. Visibility is a presentation concern, not an access control mechanism.
+- Server-side `tools/call` does NOT enforce visibility. Any authenticated caller can invoke any tool. Visibility is a presentation concern, not an access control mechanism.
 
 **Rationale:** The spec places enforcement responsibility on the host. Server-side enforcement would break legitimate use cases (automated testing, admin tools calling app-only tools directly).
 
@@ -492,11 +492,11 @@ These observations have been filed as feedback to the ext-apps spec:
 
 ### 7. ui:// Scheme is Not Special in MCP Protocol
 
-**Problem:** `ui://` is a URI convention, not a protocol-level concept. `resources/read` works with any URI. A host could fetch `ui://foo` or `https://example.com/foo` — the scheme doesn't change the transport.
+**Problem:** `ui://` is a URI convention, not a protocol-level concept. `resources/read` works with any URI. A host could fetch `ui://foo` or `https://example.com/foo`, and the scheme doesn't change the transport.
 
 **Mitigation:**
-- mcpkit treats `ui://` URIs like any other — they're just strings matched against registered resources/templates
-- Validation: `UIMetadata.ResourceUri` SHOULD start with `ui://` — emit a warning log if it doesn't, but don't reject
+- mcpkit treats `ui://` URIs like any other, so they're just strings matched against registered resources/templates
+- Validation: `UIMetadata.ResourceUri` SHOULD start with `ui://`, so emit a warning log if it doesn't, but don't reject
 - Template matching already works: `ui://decks/{name}/view` matches `ui://decks/demo/view`
 
 ### 8. Blob vs Text Content Delivery
@@ -519,7 +519,7 @@ These observations have been filed as feedback to the ext-apps spec:
 **Problem:** The spec defines `ui/resource-teardown` as a host→iframe notification. There is no corresponding teardown notification from host to server. The server has no way to know when the iframe is closed.
 
 **Mitigation:**
-- This is by design — the server is stateless with respect to UI rendering
+- This is by design, since the server is stateless with respect to UI rendering
 - Tool handlers should not assume the UI is visible
 - For slyds: slide builds are idempotent, no cleanup needed
 
@@ -543,11 +543,11 @@ These observations have been filed as feedback to the ext-apps spec:
 
 ### 13. Host Doesn't Support Apps Extension
 
-**Problem:** If the host doesn't advertise `io.modelcontextprotocol/ui` in its client capabilities (or doesn't send an `extensions` field at all), the server's UI tools still work — they just return text content without the iframe rendering.
+**Problem:** If the host doesn't advertise `io.modelcontextprotocol/ui` in its client capabilities (or doesn't send an `extensions` field at all), the server's UI tools still work. They just return text content without the iframe rendering.
 
 **Decision:**
 - Tools MUST always return useful text content in `ToolResult`, regardless of UI support
-- `_meta.ui` is informational — a bonus for capable hosts
+- `_meta.ui` is informational, a bonus for capable hosts
 - The server can check `ClientSupportsUI()` and conditionally add richer text output for non-UI clients (e.g., ASCII table of slide titles instead of rendered deck)
 
 ```go
@@ -675,18 +675,18 @@ The ext-apps repo has Playwright-based e2e tests in `tests/e2e/`. These test the
 2. Run the ext-apps Playwright suite against it
 3. Track results in `conformance/baseline.yml` under `apps:` section
 
-This is Phase 4 work — requires Node.js + Playwright + a basic host harness.
+This is Phase 4 work, requiring Node.js + Playwright + a basic host harness.
 
 
 ## Tracing across the Apps Bridge (SEP-414 P6, issue 660)
 
-MCP Apps run an `iframe ↔ Bridge JS ↔ host ↔ server` loop. A user gesture in the iframe triggers a tool call. If the iframe has its own observability (browser OTel SDK, RUM), the trace **starts in the browser** — but without explicit propagation, the postMessage hop strips the W3C trace context and the backend tool-call span emitted by the MCP server can't stitch to its browser-side parent. Structurally this is the same "non-MCP propagation hop" as the events EventBus, just across the JS/Go boundary instead of replica/replica.
+MCP Apps run an `iframe ↔ Bridge JS ↔ host ↔ server` loop. A user gesture in the iframe triggers a tool call. If the iframe has its own observability (browser OTel SDK, RUM), the trace **starts in the browser**, but without explicit propagation the postMessage hop strips the W3C trace context and the backend tool-call span emitted by the MCP server can't stitch to its browser-side parent. Structurally this is the same "non-MCP propagation hop" as the events EventBus, just across the JS/Go boundary instead of replica/replica.
 
-mcpkit's Apps Bridge relays W3C trace context across the boundary by carrying `traceparent` / `tracestate` inside `params._meta` on the bridge envelope — the same shape SEP-414 uses on the MCP wire. The relay is **off by default** (no provider wired = no propagation, zero overhead); adopters opt in on each side independently.
+mcpkit's Apps Bridge relays W3C trace context across the boundary by carrying `traceparent` / `tracestate` inside `params._meta` on the bridge envelope, the same shape SEP-414 uses on the MCP wire. The relay is **off by default** (no provider wired = no propagation, zero overhead); adopters opt in on each side independently.
 
 ### Iframe side (TS bridge)
 
-`MCPApp.setTraceContextProvider(fn)` registers a function the bridge calls before sending each outbound request and notification. The function returns `{traceparent?, tracestate?}` (or null to skip). When a traceparent is supplied, it merges into `params._meta` — caller-set `_meta.traceparent` wins (the provider is a fallback, never a clobber, mirroring Go-side `core.InjectTraceContextIntoParams`).
+`MCPApp.setTraceContextProvider(fn)` registers a function the bridge calls before sending each outbound request and notification. The function returns `{traceparent?, tracestate?}` (or null to skip). When a traceparent is supplied, it merges into `params._meta`, and caller-set `_meta.traceparent` wins (the provider is a fallback, never a clobber, mirroring Go-side `core.InjectTraceContextIntoParams`).
 
 Wiring against the OTel JS SDK (typical production setup):
 
@@ -707,7 +707,7 @@ MCPApp.setTraceContextProvider(() => ({
 }));
 ```
 
-The hook ships dep-free — mcp-app-bridge.ts pulls no OTel JS dependency. Bundle size unchanged for adopters who don't wire the hook.
+The hook ships dep-free, and mcp-app-bridge.ts pulls no OTel JS dependency. Bundle size unchanged for adopters who don't wire the hook.
 
 ### Host side (Go AppHost)
 
@@ -728,7 +728,7 @@ iframe-stamped traceparent      (browser OTel; the parent)
 
 ### Open: should the Apps spec mandate this?
 
-The Apps Bridge is a non-MCP transport. SEP-414 governs only the MCP wire. **Whether `traceparent` rides the bridge envelope as a cross-SDK interop contract belongs in the ext-ui / Apps spec, not SEP-414.** mcpkit ships the relay; if cross-SDK adopters need to interop, the Apps WG can lift this shape into the spec. Filed as a follow-up if upstream interest surfaces — for now, documented here and shipped per mcpkit's own design.
+The Apps Bridge is a non-MCP transport. SEP-414 governs only the MCP wire. **Whether `traceparent` rides the bridge envelope as a cross-SDK interop contract belongs in the ext-ui / Apps spec, not SEP-414.** mcpkit ships the relay; if cross-SDK adopters need to interop, the Apps WG can lift this shape into the spec. Filed as a follow-up if upstream interest surfaces. For now it is documented here and shipped per mcpkit's own design.
 
 ## Related Docs
 

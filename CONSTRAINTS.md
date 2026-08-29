@@ -39,7 +39,7 @@ When passing domain-specific state through context, use typed context structs (e
 
 Functions that receive a context should accept the most specific typed context they need, not `context.Context`.
 
-**Verify:** `grep -rn 'ctx context.Context' core/ server/ experimental/ --include='*.go' | grep -v '_test.go' | grep -v 'func.*context.WithValue'` — new handler signatures should use typed contexts.
+**Verify:** `grep -rn 'ctx context.Context' core/ server/ experimental/ --include='*.go' | grep -v '_test.go' | grep -v 'func.*context.WithValue'`. New handler signatures should use typed contexts.
 
 ## C2: Consolidated entry structs over parallel maps
 
@@ -64,7 +64,7 @@ tasks map[string]*taskEntry
 
 This makes it easier to add fields later without scattering state across multiple data structures, and ensures consistency (no orphaned keys in one map but not another).
 
-**Verify:** `grep -rn 'map\[string\]' --include='*.go' | grep -v '_test.go'` — check that structs with multiple same-keyed maps have been consolidated.
+**Verify:** `grep -rn 'map\[string\]' --include='*.go' | grep -v '_test.go'`. Check that structs with multiple same-keyed maps have been consolidated.
 
 ## C3: No package-level global mutable state
 
@@ -72,7 +72,7 @@ Don't use package-level `var` for mutable state that should be per-instance (e.g
 
 Scope mutable state to the struct/instance created during registration. E.g., the `Register()` function should create a struct that both middleware and handlers close over.
 
-**Verify:** `grep -rn 'var.*sync.Map\|var.*make(map' --include='*.go' | grep -v '_test.go' | grep -v 'func '` — package-level mutable maps should not exist.
+**Verify:** `grep -rn 'var.*sync.Map\|var.*make(map' --include='*.go' | grep -v '_test.go' | grep -v 'func '`. Package-level mutable maps should not exist.
 
 ## C4: No cross-extension dependencies unless SEP-mandated
 
@@ -83,7 +83,7 @@ The rule prevents two failure modes:
 - **Hidden coupling cascade**: a single test-only import (e.g., `ext/otel` importing `ext/skills` for an e2e) silently inverts the layering. The adapter that other extensions consume now depends on one of those extensions, and version bumps become entangled.
 - **Drive-by interop expectations**: when extension A imports extension B, the API of B is implicitly stabilized for A's benefit, even though no SEP says they must interoperate. Future B-only refactors break A.
 
-Real-world example: `ext/otel` is the OTel SDK adapter implementing `core.TracerProvider`. Every extension that wants real spans imports it. If `ext/otel` were to import `ext/skills` (e.g., to ship an e2e test that exercises both), the layering inverts — `ext/skills` can no longer evolve without considering `ext/otel`'s test surface, and the adapter's go.sum drags in skills-specific deps.
+Real-world example: `ext/otel` is the OTel SDK adapter implementing `core.TracerProvider`. Every extension that wants real spans imports it. If `ext/otel` were to import `ext/skills` (e.g., to ship an e2e test that exercises both), the layering inverts, and `ext/skills` can no longer evolve without considering `ext/otel`'s test surface, and the adapter's go.sum drags in skills-specific deps.
 
 Escape hatch for cross-extension e2e tests: put the test in a separate top-level module (e.g., `tests/<ext-a>_<ext-b>_e2e/`) that imports both. Keeps the cross-cut isolated from either extension's go.mod.
 
@@ -111,9 +111,9 @@ Adopters deploying mcpkit at N>1 MUST either:
 
 1. **Configure a `NotificationRelay`** for capability + subscription-shaped notifications (`server.WithNotificationRelay(redisstore.NewCapabilityBus(...))`) AND a `redisstore.Bus` for events. The reference wiring is in `docs/MULTI_REPLICA.md` § Configuration recipes.
 2. **Use sticky sessions** so each client only ever hits one replica. The notifications stay broken cross-replica but a single client's experience is consistent.
-3. **Document the limitation** if they use neither — adopters should not silently ship a broken setup expecting the notifications to work.
+3. **Document the limitation** if they use neither, since adopters should not silently ship a broken setup expecting the notifications to work.
 
 The full architecture (Pattern B, NotificationRelay seam, NotificationRelayReceiver routing, per-surface end-to-end flows, scenario walkthroughs) is in `docs/MULTI_REPLICA.md`. Issue 755 tracks the work.
 
-**Verify:** there is no automated check today — the constraint is documented to prevent silent breakage, not enforced at build time. Adopters running N>1 should verify their wiring matches one of the recipes in `docs/MULTI_REPLICA.md` § Configuration recipes.
+**Verify:** there is no automated check today. The constraint is documented to prevent silent breakage, not enforced at build time. Adopters running N>1 should verify their wiring matches one of the recipes in `docs/MULTI_REPLICA.md` § Configuration recipes.
 

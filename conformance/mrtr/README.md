@@ -1,10 +1,10 @@
 # mcpkit/conformance/mrtr — sentinel
 
-The full SEP-2322 MRTR server-conformance suite — 8 checks: basic
+The full SEP-2322 MRTR server-conformance suite (8 checks: basic
 elicitation, sampling, and roots/list round-trips; `requestState`
 validation; multi-input single round; multi-round answer accumulation;
 wrong-key tolerance; and the SEP-2663 **MRTR → Tasks composition flow**
-— lives in the
+) lives in the
 [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance)
 fork on the
 [`feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension)
@@ -16,14 +16,14 @@ just testconf-mrtr
 ```
 
 The Makefile target invokes vitest in the fork (auto-spawning the
-`examples/mrtr` Go fixture — which registers `test_tool_with_task` for
+`examples/mrtr` Go fixture, which registers `test_tool_with_task` for
 the composition scenario) and then runs this folder's local sentinel
 afterward.
 
 ## What lives here
 
 This folder is a sentinel placeholder for **future mcpkit-stricter
-MRTR scenarios** — assertions that go beyond what SEP-2322 mandates
+MRTR scenarios**, assertions that go beyond what SEP-2322 mandates
 because mcpkit deliberately picks the louder/safer option where the
 spec is silent. Today there are no such tests; `scenarios.test.ts` is
 a placeholder so the folder is discoverable.

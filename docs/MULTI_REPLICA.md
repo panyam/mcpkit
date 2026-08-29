@@ -2,7 +2,7 @@
 
 This document describes how mcpkit fans server-pushed notifications across an N-replica deployment, and how adopters wire each notification surface to work correctly at N>1.
 
-If you run mcpkit at N=1 (single server process), this doc is informational — nothing here is required. If you run N>1 (multiple replicas behind a load balancer or service mesh), **the surfaces enumerated here do not work without explicit wiring**, and a session connected to one replica will silently miss notifications generated on another.
+If you run mcpkit at N=1 (single server process), this doc is informational and nothing here is required. If you run N>1 (multiple replicas behind a load balancer or service mesh), **the surfaces enumerated here do not work without explicit wiring**, and a session connected to one replica will silently miss notifications generated on another.
 
 The architecture lifted from issue 755 (PR A `#757`, PR B1 `#759`, PR B2 `#768`, PR B3 this doc).
 
@@ -26,7 +26,7 @@ Each replica runs a publisher + subscriber pair against a shared pub/sub transpo
 
 1. Delivered locally to K's own connected clients (current behavior, unchanged).
 2. Published outward through the transport.
-3. Received on every other replica K′, which routes them through its local delivery machinery — applying its per-replica subscription filters as if the notification had been generated there.
+3. Received on every other replica K′, which routes them through its local delivery machinery, applying its per-replica subscription filters as if the notification had been generated there.
 
 Self-publish dedup happens inside the transport adapter, invisibly: each publisher carries a process-unique origin marker; the colocated subscriber drops messages carrying its own marker before invoking the receiver.
 
@@ -170,7 +170,7 @@ flowchart TB
     BroadcastToSessions --> Sessions
 ```
 
-`Broadcast` always fires `BroadcastToSessions`. The relay's `Publish` runs ALSO when a relay is installed. There's no else branch — local fan-out is universal.
+`Broadcast` always fires `BroadcastToSessions`. The relay's `Publish` runs ALSO when a relay is installed. There's no else branch, so local fan-out is universal.
 
 `BroadcastToSessions` is the **local-only** path. The receive side of Pattern B calls this (NOT `Broadcast`) so a cross-replica relay receive doesn't re-publish through the relay and loop.
 
@@ -191,7 +191,7 @@ sequenceDiagram
     Note right of S: local delivery happens regardless<br/>of relay errors (fire-and-forget)
 ```
 
-`NotificationRelay` is fire-and-forget — errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.
+`NotificationRelay` is fire-and-forget, so errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.
 
 ### `NotificationRelayReceiver` — receive side
 
@@ -287,7 +287,7 @@ sequenceDiagram
     end
 ```
 
-`YieldingSource.Receive` is a thin adapter; `LocalDeliver` is the work — runs the per-slot fanout loop without firing the configured `Emitter` (so no re-publish).
+`YieldingSource.Receive` is a thin adapter; `LocalDeliver` is the work, running the per-slot fanout loop without firing the configured `Emitter` (so no re-publish).
 
 ### `redisstore.CapabilityBus` — capability-shaped Pattern B
 
@@ -313,7 +313,7 @@ flowchart LR
     end
 ```
 
-Wire format: per-method channel `<ChannelPrefix>.broadcast.<method>`. Payload is a JSON envelope `{"origin": "<uuid>", "params": <json>}`. Origin lives in the envelope, NOT in `params._meta` — capability-shaped notifications often have `nil params`, so the marker can't live there.
+Wire format: per-method channel `<ChannelPrefix>.broadcast.<method>`. Payload is a JSON envelope `{"origin": "<uuid>", "params": <json>}`. Origin lives in the envelope, NOT in `params._meta`, because capability-shaped notifications often have `nil params` and the marker can't live there.
 
 ### `redisstore.Bus` — events-typed Pattern B
 
@@ -362,7 +362,7 @@ flowchart LR
     Note["Each Bus drops messages tagged<br/>with its own origin marker"]
 ```
 
-Test-only — same shape as `redisstore.Bus` but uses goroutines + channels in the same process. Lets the events SDK be exercised in multi-replica mode without standing up Redis.
+Test-only, the same shape as `redisstore.Bus` but using goroutines + channels in the same process. Lets the events SDK be exercised in multi-replica mode without standing up Redis.
 
 ## Per-surface end-to-end flows
 
@@ -396,7 +396,7 @@ sequenceDiagram
     Srv2->>Cli2: notify("notifications/tools/list_changed", nil)
 ```
 
-Same flow for `resources/list_changed` and `prompts/list_changed` — only the method name changes.
+Same flow for `resources/list_changed` and `prompts/list_changed`, with only the method name changing.
 
 ### `notifications/resources/updated`
 
@@ -634,7 +634,7 @@ Key landmarks:
 | `tenantMatch` per slot | The filter that drops babylon for asgard event | adopter's `EventDef.Match` |
 | Stream handler reads slot channel + `ctx.Notify` | SSE frame to client | `stream.go:331, :404` |
 
-The key insight from this trace: **`EventDef.Match` runs once per slot on EVERY replica that holds a matching slot.** The transport just sprays; each replica's `LocalDeliver` independently filters. There's no central routing decision and no cross-replica subscription registry — each replica owns its own subscriber state and applies its own filter.
+The key insight from this trace is that **`EventDef.Match` runs once per slot on EVERY replica that holds a matching slot.** The transport just sprays; each replica's `LocalDeliver` independently filters. There's no central routing decision and no cross-replica subscription registry. Each replica owns its own subscriber state and applies its own filter.
 
 ## Scenario walkthroughs
 
@@ -701,7 +701,7 @@ sequenceDiagram
 
 ### Tenant scoping cross-replica
 
-The bug that motivated issue 755: an asgard event reaches babylon's streamer because the cross-replica broadcast bypassed per-slot `Match`. With the fix (`LocalDeliver` routes through the slot system on every replica), `Match` runs per-slot per-replica and tenant scoping holds.
+The bug that motivated issue 755 was an asgard event reaching babylon's streamer, because the cross-replica broadcast bypassed per-slot `Match`. With the fix (`LocalDeliver` routes through the slot system on every replica), `Match` runs per-slot per-replica and tenant scoping holds.
 
 ```mermaid
 sequenceDiagram
@@ -732,7 +732,7 @@ sequenceDiagram
 
 ### Slow subscriber — drop policy
 
-When a Bus's incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry — adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.
+When a Bus's incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry, so adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.
 
 In Pattern B with Redis pubsub specifically:
 
@@ -895,27 +895,27 @@ func (b *MyKafkaBus) Run(ctx context.Context) error {
 }
 ```
 
-The two interface implementations are independent — same struct can satisfy both, or separate publisher/subscriber types. Reference impls: `redisstore.CapabilityBus` (catalog-shaped) and `redisstore.Bus` (events-shaped).
+The two interface implementations are independent, so one struct can satisfy both or separate publisher/subscriber types can be used. Reference impls: `redisstore.CapabilityBus` (catalog-shaped) and `redisstore.Bus` (events-shaped).
 
 ## Trade-offs and gotchas
 
 ### Eventual consistency
 
-Pattern B is asynchronous. A `tools/list_changed` fired on K1 reaches K2's clients with some latency (Redis pubsub roundtrip — typically single-digit milliseconds, but adversarial network conditions can extend this).
+Pattern B is asynchronous. A `tools/list_changed` fired on K1 reaches K2's clients with some latency (a Redis pubsub roundtrip, typically single-digit milliseconds, though adversarial network conditions can extend this).
 
-For applications that need synchronous cross-replica state, mcpkit's catalog mutations are NOT a synchronization primitive — the catalog itself remains per-replica. If K1 adds a tool and K2 doesn't acknowledge before a client on K2 calls `tools/list`, the call returns K2's view (pre-add).
+For applications that need synchronous cross-replica state, mcpkit's catalog mutations are NOT a synchronization primitive, and the catalog itself remains per-replica. If K1 adds a tool and K2 doesn't acknowledge before a client on K2 calls `tools/list`, the call returns K2's view (pre-add).
 
 For most adopters this is fine: list_changed notifications are advisory; the next `tools/list` call on K2 (potentially triggered by the notification) reflects K2's updated state after K2 picks up the new tool via its own registration path.
 
 ### Not at-least-once
 
-Redis pubsub does NOT persist messages. A replica that's offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups) — the `NotificationRelay` + `NotificationRelayReceiver` shapes accommodate either, but the reference `redisstore.CapabilityBus` uses pubsub specifically.
+Redis pubsub does NOT persist messages. A replica that's offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups). The `NotificationRelay` + `NotificationRelayReceiver` shapes accommodate either, but the reference `redisstore.CapabilityBus` uses pubsub specifically.
 
 For events, the `EventBufferStore` + `events/poll` path gives at-least-once for clients that opt in.
 
 ### Subscribe state stays per-replica
 
-A client subscribed to `resources/subscribe(file:///x)` on K1 is subscribed ON K1 ONLY. The cross-replica `notifications/resources/updated` reaches K2; if a client on K2 ALSO subscribed to `file:///x`, K2's `subscriptionRegistry` fires that client. There's no cross-replica subscription registry — each replica filters its own local set.
+A client subscribed to `resources/subscribe(file:///x)` on K1 is subscribed ON K1 ONLY. The cross-replica `notifications/resources/updated` reaches K2; if a client on K2 ALSO subscribed to `file:///x`, K2's `subscriptionRegistry` fires that client. There's no cross-replica subscription registry. Each replica filters its own local set.
 
 This means: clients DO NOT roam between replicas mid-session. If your deployment moves a client from K1 to K2 (load balancer reroutes, replica restart), the new connection re-subscribes from scratch.
 

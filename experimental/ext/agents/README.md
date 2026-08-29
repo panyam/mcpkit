@@ -62,7 +62,7 @@ error.
 
 Set `Config.TracerProvider` to opt the discovery handlers into spans:
 `agents.list` (attribute `agents.count`) and `agents.get` (`mcp.agent.id`,
-`agents.found`). Nil or `core.NoopTracerProvider{}` — the default — emits
+`agents.found`). Nil or `core.NoopTracerProvider{}` (the default) emits
 nothing with zero allocation, and the extension depends only on the core
 tracing abstraction, never on `ext/otel`. A resolved specialist's own execution
 is traced by the child `Runner` the host builds from an `agents/get` result;
@@ -89,7 +89,7 @@ empty slice, not an error.
 ## Deliberate non-coupling
 
 `tasksEnabled` ties conceptually to SEP-2663 (an async delegate is a Task) and
-`skillUri` to the skills work, but this package couples to neither — they are an
+`skillUri` to the skills work, but this package couples to neither, and they are an
 advertised bool and an advertised string. Turning an `agents/get` result into a
 Runner-backed `AgentSource` is agent-layer work (#1144), not here: per
 `agent/CONSTRAINTS.md` A6 this package traffics only in protocol objects.

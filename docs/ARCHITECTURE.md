@@ -2,7 +2,7 @@
 
 ## Overview
 
-MCPKit is a Go library for building production-grade MCP (Model Context Protocol) servers. It provides the transport, middleware, and operational infrastructure so that application code only needs to register tools and handle requests.
+MCPKit is a Go library for building production-grade MCP (Model Context Protocol) servers. It provides the transport, middleware, and operational infrastructure so that application code mostly only needs to register tools and handle requests.
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -50,7 +50,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
-├── go.mod                       # servicekit v0.0.22
+├── go.mod                       # servicekit v0.1.4
 ├── core/                        # Protocol types + tool-handler APIs
 │   ├── jsonrpc.go               # Request, Response, Error, ErrCode*
 │   ├── tool.go                  # ToolDef, ToolRequest, ToolResult, Content, ToolHandler
@@ -211,7 +211,7 @@ spec-canonical shape on write:
 
 Logic lives in `core/cardinality.go`. Widening (e.g., #141 multi-part sampling)
 replaces a call to `decodeContentSingle` with `decodeContentSlice` at the
-UnmarshalJSON call site — the helper semantics do not change.
+UnmarshalJSON call site, and the helper semantics do not change.
 
 ## Protocol Version Negotiation
 
@@ -241,7 +241,7 @@ MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func
 3. Tool handlers call `EmitLog(ctx, level, logger, data)` which checks the session's log level and calls the notify func
 4. SSE transport: `notifyFunc` pushes via `hub.SendEvent` (real-time delivery)
 5. Streamable HTTP POST: when client sends `Accept: text/event-stream`, `handlePostSSE` passes a request-scoped notifyFunc via `dispatchWithNotify` (no shared state mutation)
-6. Streamable HTTP GET: client opens `GET /mcp` with `Mcp-Session-Id` header, server wires `dispatcher.SetNotifyFunc()` to push via SSEHub. Client enables this via `WithGetSSEStream()` — notifications arrive on the background GET stream
+6. Streamable HTTP GET: client opens `GET /mcp` with `Mcp-Session-Id` header, server wires `dispatcher.SetNotifyFunc()` to push via SSEHub. Client enables this via `WithGetSSEStream()`, so notifications arrive on the background GET stream
 
 ### Logging
 
@@ -259,12 +259,12 @@ Clients can subscribe to resource URIs and receive `notifications/resources/upda
 - `resources/subscribe` handler registers the session's Dispatcher under the URI
 - `resources/unsubscribe` handler removes it
 - `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.getNotifyFunc()` outside the lock
-- `Server.Broadcast(method, params)` fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses `sessionBroadcasters` — each transport registers a closure that iterates its session map. Pattern mirrors `CloseAllSessions`.
+- `Server.Broadcast(method, params)` fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses `sessionBroadcasters`, where each transport registers a closure that iterates its session map. Pattern mirrors `CloseAllSessions`.
 - Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up
 
-**Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change — Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.getNotifyFunc()` at notification time handles this correctly. Access to `notifyFunc` is protected by `notifyMu` (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.
+**Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change, since Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.getNotifyFunc()` at notification time handles this correctly. Access to `notifyFunc` is protected by `notifyMu` (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.
 
-**Session cleanup:** All per-session teardown is centralized in `Dispatcher.Close()`. Transports call it in their disconnect path (SSE `OnClose`, Streamable `handleDelete`/`closeSession`, memory `close`). New per-session state should add its cleanup to `Close()` — not to each transport individually.
+**Session cleanup:** All per-session teardown is centralized in `Dispatcher.Close()`. Transports call it in their disconnect path (SSE `OnClose`, Streamable `handleDelete`/`closeSession`, memory `close`). New per-session state should add its cleanup to `Close()`, not to each transport individually.
 
 ## Argument Completion
 
@@ -285,7 +285,7 @@ Notifications emitted during a tool call (logging, progress) are delivered to th
 
 **Cross-request isolation (Streamable HTTP):** Each POST gets its own `requestNotify` closure. Notifications from concurrent tool calls never leak to other requests' response streams.
 
-**Client-side delivery:** `WithNotificationCallback(fn)` works across all transports. The handler receives `(method string, params any)` where params is always `map[string]any` (JSON-roundtripped for consistency, including in-memory). When `WithGetSSEStream()` is enabled, notifications may arrive concurrently from the GET stream and POST SSE responses — the callback must be goroutine-safe.
+**Client-side delivery:** `WithNotificationCallback(fn)` works across all transports. The handler receives `(method string, params any)` where params is always `map[string]any` (JSON-roundtripped for consistency, including in-memory). When `WithGetSSEStream()` is enabled, notifications may arrive concurrently from the GET stream and POST SSE responses, so the callback must be goroutine-safe.
 
 ## Tool Error Semantics
 
@@ -319,11 +319,11 @@ MCPKit supports the MCP Tasks protocol (spec 2025-11-25) in `server/task_*.go` a
 
 **Architecture:** Tasks are implemented as a middleware + custom method handlers in the server package. `server.RegisterTasks(TasksConfig)` hooks everything up:
 
-1. **Middleware** intercepts `tools/call` — when the client includes `_meta.task` and the tool doesn't forbid it, the middleware creates a task, runs the tool in a detached goroutine, and returns `CreateTaskResult` immediately.
+1. **Middleware** intercepts `tools/call`. When the client includes `_meta.task` and the tool doesn't forbid it, the middleware creates a task, runs the tool in a detached goroutine, and returns `CreateTaskResult` immediately.
 2. **Method handlers** for `tasks/get`, `tasks/result`, `tasks/list`, `tasks/cancel` are registered via `Server.HandleMethod()`.
 3. **TaskStore interface** abstracts state persistence. `InMemoryTaskStore` shipped as default; interface exists for multi-node scenarios (e.g., Redis-backed).
-4. **Capability advertisement** via `Server.SetTasksCap()` — the `tasks` field appears in the initialize response.
+4. **Capability advertisement** via `Server.SetTasksCap()`, so the `tasks` field appears in the initialize response.
 
 **Per-tool control:** `ToolDef.Execution.TaskSupport` declares `required` (must use tasks), `optional` (client's choice), or `forbidden` (always sync). The middleware enforces these semantics.
 
-**Why middleware, not core:** Tasks are optional and experimental. The middleware pattern keeps the dispatcher simple and lets the feature evolve without touching core dispatch logic. The `InMemoryTaskStore` uses `sync.Cond` for `WaitForResult` blocking — this is task-lifecycle-specific and not a generic store pattern.
+**Why middleware, not core:** Tasks are optional and experimental. The middleware pattern keeps the dispatcher simple and lets the feature evolve without touching core dispatch logic. The `InMemoryTaskStore` uses `sync.Cond` for `WaitForResult` blocking, which is task-lifecycle-specific and not a generic store pattern.

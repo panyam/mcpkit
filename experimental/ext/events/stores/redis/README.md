@@ -2,7 +2,7 @@
 
 Events-typed Pattern B transport. `Bus` implements `events.Emitter` and routes received events through a `server.NotificationRelayReceiver` (typically `events.YieldingSource` or an adapter wrapping a registry).
 
-Companion capability/subscription-shaped transport (`CapabilityBus` for `tools/list_changed`, `resources/list_changed`, `prompts/list_changed`, `resources/updated`) lives at the root `stores/redis/` module — it's not events-specific. See [`../../../../stores/redis/README.md`](../../../../stores/redis/README.md).
+Companion capability/subscription-shaped transport (`CapabilityBus` for `tools/list_changed`, `resources/list_changed`, `prompts/list_changed`, `resources/updated`) lives at the root `stores/redis/` module, since it's not events-specific. See [`../../../../stores/redis/README.md`](../../../../stores/redis/README.md).
 
 Both Buses hide origin-marker self-publish dedup internally. Adopters wire `NewBus(opts, receiver)` and the round-trip is automatic.
 
@@ -29,7 +29,7 @@ cfg.Emitter = bus
 events.Register(cfg)
 ```
 
-For custom codecs (non-JSON wire format), call `bus.WithCodec(codec)` after construction. The Codec is parameterized over `events.Event` and lives in root `stores/redis/` as `Codec[T any]` — the events SDK re-exports it as `redisstore.Codec` and `redisstore.JSONCodec` for convenience.
+For custom codecs (non-JSON wire format), call `bus.WithCodec(codec)` after construction. The Codec is parameterized over `events.Event` and lives in root `stores/redis/` as `Codec[T any]`. The events SDK re-exports it as `redisstore.Codec` and `redisstore.JSONCodec` for convenience.
 
 ## Capability + subscription-shaped notifications
 
@@ -37,9 +37,9 @@ If your server also needs `tools/list_changed`, `resources/list_changed`, `promp
 
 ## Why Redis-only outbound (Pattern B)
 
-This shape — `cfg.Emitter = pub` (not a composite with local) — is what we call **Pattern B**: a single PUBLISH per yielded event; the subscriber loop is the sole local-delivery path on every replica.
+This shape, `cfg.Emitter = pub` rather than a composite with local, is what we call **Pattern B**: a single PUBLISH per yielded event; the subscriber loop is the sole local-delivery path on every replica.
 
-The obvious alternative — `cfg.Emitter = events.NewCompositeEmitter(local, pub)` — feels simpler ("compose local with redis fanout") but **double-delivers events on the publishing replica**. That replica's composite fires local (1× delivery) AND publishes; then its own subscriber receives the PUBLISH back and delivers local again (2× delivery for the same event).
+The obvious alternative, `cfg.Emitter = events.NewCompositeEmitter(local, pub)`, feels simpler ("compose local with redis fanout") but **double-delivers events on the publishing replica**. That replica's composite fires local (1× delivery) AND publishes; then its own subscriber receives the PUBLISH back and delivers local again (2× delivery for the same event).
 
 Pattern A is only safe when the application carries a publisher-id tag on each event and the subscriber filters out messages it published. That plumbing is real work; defer until you actually need it. Default to Pattern B; the round-trip-through-Redis latency is a few milliseconds and the wiring stays symmetric across N=1 and N≥2 deployments.
 
@@ -51,7 +51,7 @@ A naive setup that wires the subscriber's `deliverFn` to `cfg.Emitter` (instead 
 publisher → Redis → subscriber → publisher (LOOP)
 ```
 
-The Pattern B example above avoids this by handing the subscriber the **local** emitter — never `cfg.Emitter`:
+The Pattern B example above avoids this by handing the subscriber the **local** emitter, never `cfg.Emitter`:
 
 ```
 publisher → Redis → subscriber → local (terminal sink)
@@ -68,7 +68,7 @@ That's the load-bearing detail. If you're seeing every event delivered ad infini
 - Network blip between publisher and Redis (`Emit` returns the error to the caller)
 - Decode failure on the subscriber side (logged, dropped, subscriber keeps draining)
 
-For the whole-enchilada demo (#407) this is acceptable per the data-tier acceptance criteria — counters resetting on restart is the same property.
+For the whole-enchilada demo (#407) this is acceptable per the data-tier acceptance criteria, since counters resetting on restart is the same property.
 
 Higher delivery floors are deferred to follow-up issues:
 
@@ -83,11 +83,11 @@ One channel per event name, prefix-namespaced:
 <ChannelPrefix>.<event.Name>
 ```
 
-Default `ChannelPrefix` is `EventsChannelPrefix` (`"mcpkit.events"`) — distinct from the root `stores/redis` neutral default (`"mcpkit"`). Override `Options.ChannelPrefix` if multiple isolated stacks share one Redis cluster.
+Default `ChannelPrefix` is `EventsChannelPrefix` (`"mcpkit.events"`), distinct from the root `stores/redis` neutral default (`"mcpkit"`). Override `Options.ChannelPrefix` if multiple isolated stacks share one Redis cluster.
 
 ## Codec
 
-Wire-format is `Codec`-pluggable. Default is `JSONCodec` (`encoding/json` over the wire). Implement the `Codec` interface for protobuf, msgpack, or any other format — both publisher and subscriber MUST use the same codec.
+Wire-format is `Codec`-pluggable. Default is `JSONCodec` (`encoding/json` over the wire). Implement the `Codec` interface for protobuf, msgpack, or any other format. Both publisher and subscriber MUST use the same codec.
 
 The `Codec` interface lives in this sub-module for now. When a second cross-process backend (Kafka, NATS) wants the same shape, we promote it to the parent package.
 
@@ -98,7 +98,7 @@ Trace context propagates across the Redis pubsub hop end-to-end:
 - `Publisher.Emit(ctx, event)` reads the W3C `TraceContext` off `ctx` via `core.TraceContextFromContext` and stamps `traceparent` + `tracestate` onto `event.Meta` under the bare-name keys (matching the wire convention for every other mcpkit transport).
 - `Subscriber` extracts the same keys off each received `event.Meta` via `core.ExtractTraceContext` and derives a per-message `ctx` via `core.WithTraceContext`. The `DeliverFunc` receives that child `ctx`, so any span it opens parents to the publisher-side span automatically.
 
-Caller-set precedence: if you explicitly stamped `_meta.traceparent` on an event before calling `Emit`, that value wins — the publisher will NOT overwrite it. Mirrors `core.InjectTraceContextIntoParams`'s "caller-set wins" rule for MCP wire calls.
+Caller-set precedence: if you explicitly stamped `_meta.traceparent` on an event before calling `Emit`, that value wins and the publisher will NOT overwrite it. Mirrors `core.InjectTraceContextIntoParams`'s "caller-set wins" rule for MCP wire calls.
 
 ## Quota
 
@@ -111,14 +111,14 @@ cfg.Quota = events.NewQuota(qs, events.WithMaxSubscriptionsPerPrincipal("chat.me
 
 **Atomic primitives.** `ReserveQuota` and `ReleaseQuota` each run a Lua script server-side via `EVALSHA` (with `EVAL` fallback on `NOSCRIPT`). One round trip per call; the check + increment + EXPIRE on Reserve, and decrement + delete-if-zero on Release, all happen atomically on the Redis side. Concurrent `Reserve`s on the same key under high contention never over-grant.
 
-**Sliding TTL** (`Options.QuotaTTL`, default `1h`). Every successful `Reserve` refreshes the counter's TTL — active counters never expire under load. A counter that's been leaked (caller crashed before `Release`) drops after `QuotaTTL` of inactivity. Set `QuotaTTL` shorter for faster leak recovery, longer for safer tolerance of slow Reserve→Release loops.
+**Sliding TTL** (`Options.QuotaTTL`, default `1h`). Every successful `Reserve` refreshes the counter's TTL, so active counters never expire under load. A counter that's been leaked (caller crashed before `Release`) drops after `QuotaTTL` of inactivity. Set `QuotaTTL` shorter for faster leak recovery, longer for safer tolerance of slow Reserve→Release loops.
 
-**Release semantics.** `Release` at zero is a silent no-op (matches the in-memory store's contract — `double-Release` shouldn't underflow). When `Release` brings the counter to zero, the script deletes the key so `redis-cli KEYS` doesn't show drifted zero rows.
+**Release semantics.** `Release` at zero is a silent no-op (matches the in-memory store's contract, where `double-Release` shouldn't underflow). When `Release` brings the counter to zero, the script deletes the key so `redis-cli KEYS` doesn't show drifted zero rows.
 
 **Out of scope for v1:**
 
 - Cluster-aware key sharding (hash-tag co-location)
-- Sliding-window quotas (this is fixed-bucket — same as the in-memory + GORM defaults)
+- Sliding-window quotas (this is fixed-bucket, the same as the in-memory + GORM defaults)
 - Cross-tenant aggregate quotas
 
 ### Redis-client-level spans (opt-in)
@@ -136,7 +136,7 @@ _ = redisotel.InstrumentTracing(cli)  // emits redis.publish / redis.subscribe s
 opts := redisstore.Options{Client: cli}
 ```
 
-This is a deliberate opt-in — `Options` doesn't take a `TracerProvider` because OTel SDK wiring is the user's choice, and pinning a specific OTel pipeline inside this sub-module would couple it to one observability stack.
+This is a deliberate opt-in. `Options` doesn't take a `TracerProvider` because OTel SDK wiring is the user's choice, and pinning a specific OTel pipeline inside this sub-module would couple it to one observability stack.
 
 ## Testing
 
@@ -147,7 +147,7 @@ just updb         # start the Redis container long-running
 just downdb       # stop it
 ```
 
-The same test bodies run against either backend — `MCPKIT_EVENTS_TEST_REDIS_ADDR=<addr>` flips the test fixture from miniredis to a live Redis.
+The same test bodies run against either backend, and `MCPKIT_EVENTS_TEST_REDIS_ADDR=<addr>` flips the test fixture from miniredis to a live Redis.
 
 ## Out of scope (this sub-module)
 

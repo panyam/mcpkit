@@ -17,8 +17,8 @@ These bite together when touching this package.
 The JSON tag flipped on all four request structs (`events/subscribe`, `/poll`, `/unsubscribe`,
 `/stream`) **and** the Go field was renamed `Params` → `Arguments`.
 
-That second half was deliberate: a compiler-driven sweep catches every call site, where a
-grep-only rename silently leaves sub-modules behind. Touched `RegisterParams.Arguments`,
+That second half was deliberate, since a compiler-driven sweep catches every call site where a
+grep-only rename would silently leave sub-modules behind. Touched `RegisterParams.Arguments`,
 `WebhookTarget.Arguments`, `SubscribeOpts.Arguments`, the Go SDK's `SubscribeOptions.Arguments` and
 `StreamOptions.Arguments`, and the GORM `webhookRow.Arguments` column.
 
@@ -42,7 +42,7 @@ is a no-expiry request, otherwise parse int64.
 decode, clamp to `[MinWebhookTTL, MaxWebhookTTL]`, honor `WithUnsafeWebhookTTLBypass`, and gate
 null acceptance behind `WithAllowInfiniteWebhookTTL`.
 
-**Per spec there is no rejection path for TTL values** — malformed input collapses silently to the
+**Per spec there is no rejection path for TTL values**, so malformed input collapses silently to the
 server default.
 
 `refreshBefore` is `*time.Time` everywhere and is always present on the wire (RFC3339 for finite,
@@ -57,7 +57,7 @@ Default off. Without it, `ttlMs: null` collapses to the server default.
 
 Operators flipping it on **without** `WithWebhookStore(persistent)` get a stark warning at
 construction (`warnIfInfiniteTTLWithDefaultStore`): no-expiry subscriptions in the in-memory store
-violate the spec's "MUST persist across restarts" obligation. It warns rather than rejects, because
+violate the spec's "MUST persist across restarts" obligation. It warns rather than rejects, mostly because
 dev and test setups may legitimately opt in.
 
 ---

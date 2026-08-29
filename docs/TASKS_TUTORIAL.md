@@ -2,7 +2,7 @@
 
 Everything you need to know to write tools that run as long-lived background tasks, gather input mid-execution, surface progress, and compose cleanly with the MRTR (SEP-2322) sync round-trip pattern.
 
-> **Status.** Reflects SEP-2663 (merged Final 2026-05-15), SEP-2575 (stateless wire), and SEP-2322 (MRTR — see [`docs/MRTR_TUTORIAL.md`](MRTR_TUTORIAL.md)).
+> **Status.** Reflects SEP-2663 (merged Final 2026-05-15), SEP-2575 (stateless wire), and SEP-2322 (MRTR, see [`docs/MRTR_TUTORIAL.md`](MRTR_TUTORIAL.md)).
 >
 > mcpkit's reference fixtures live under [`examples/tasks-v2`](../examples/tasks-v2) and [`examples/mrtr`](../examples/mrtr); the conformance suite is in [panyam/mcpconformance](https://github.com/panyam/mcpconformance), branch `feat/tasks-mrtr-extension`. The migration guide for v1 → v2 is at [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md).
 
@@ -10,7 +10,7 @@ Everything you need to know to write tools that run as long-lived background tas
 
 ## 1. The core idea: server-directed async execution
 
-A **task** is a long-running tool invocation that gets a stable identifier and outlives any single HTTP round-trip. The client doesn't ask for one — the *server* decides whether a given `tools/call` should run as a task, based on a single piece of static metadata on the tool definition (`Execution.TaskSupport`) plus what the handler returns at runtime.
+A **task** is a long-running tool invocation that gets a stable identifier and outlives any single HTTP round-trip. The client doesn't ask for one. The *server* decides whether a given `tools/call` should run as a task, based on a single piece of static metadata on the tool definition (`Execution.TaskSupport`) plus what the handler returns at runtime.
 
 The decision flow on the server is intentionally simple:
 
@@ -33,7 +33,7 @@ Handler returned what?
   └── core.ToolResult (or any other variant) → mint born-terminal task
 ```
 
-The four return shapes are the four concrete variants of the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface — `ToolResult` for sync results, `InputRequiredResult` for MRTR rounds, `CreateTaskResult` for already-shaped task envelopes (rarely returned directly by handlers), and `GoAsyncResult` as the in-process marker that asks the middleware to mint a task and continue in a goroutine.
+The four return shapes are the four concrete variants of the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface, with `ToolResult` for sync results, `InputRequiredResult` for MRTR rounds, `CreateTaskResult` for already-shaped task envelopes (rarely returned directly by handlers), and `GoAsyncResult` as the in-process marker that asks the middleware to mint a task and continue in a goroutine.
 
 This is the heart of SEP-2663's *"server decides"* posture: the v1 `task` hint in the client request is gone. The server runs the handler, sees what it produced, and decides whether to wrap it in task envelopes.
 
@@ -46,7 +46,7 @@ This is the heart of SEP-2663's *"server decides"* posture: the v1 `task` hint i
 | **Born-terminal task** | Tool was declared `TaskSupport=optional/required` for wire consistency, but a particular invocation happens to finish synchronously (cache hit, instant compute, etc.) | `CreateTaskResult` with `status: completed` |
 | **GoAsync task** | Tool's real work is long, needs the goroutine, can call `TaskElicit`/`TaskSample`, emits progress, may need cancellation | `CreateTaskResult` + later `tasks/get` polling |
 
-The killer feature — and the focus of §7 — is that **MRTR rounds and GoAsync tasks compose**: a single tool can do MRTR rounds for upfront input, then escalate to a task for the long work, then call `TaskElicit` mid-task if more input becomes necessary.
+The killer feature, and the focus of §7, is that **MRTR rounds and GoAsync tasks compose**: a single tool can do MRTR rounds for upfront input, then escalate to a task for the long work, then call `TaskElicit` mid-task if more input becomes necessary.
 
 ---
 
@@ -78,7 +78,7 @@ The flat intersection of `Result` and `Task` (per SEP-2663):
 }
 ```
 
-MUST NOT carry `result`, `error`, `inputRequests`, or `requestState` — those live on `DetailedTask` returned by `tasks/get`.
+MUST NOT carry `result`, `error`, `inputRequests`, or `requestState`. Those live on `DetailedTask` returned by `tasks/get`.
 
 ### `DetailedTask` (returned from `tasks/get` and on `notifications/tasks`)
 
@@ -191,7 +191,7 @@ The handler signals async escalation by returning a dedicated variant on the sea
 
 ### Why the middleware peeks at the response
 
-The middleware runs the handler **synchronously first**, then dispatches on the concrete `ToolResponse` variant the handler returned. This is what makes the MRTR↔Tasks composition (a single tool gathering input via MRTR rounds first, then escalating to async) possible — if the middleware created the task before the handler ran, round 1 would always emit `CreateTaskResult` and the handler would never get to return `InputRequiredResult`.
+The middleware runs the handler **synchronously first**, then dispatches on the concrete `ToolResponse` variant the handler returned. This is what makes the MRTR↔Tasks composition (a single tool gathering input via MRTR rounds first, then escalating to async) possible. If the middleware created the task before the handler ran, round 1 would always emit `CreateTaskResult` and the handler would never get to return `InputRequiredResult`.
 
 The flow:
 
@@ -206,7 +206,7 @@ This is what the [`mrtr-tasks-composition`](https://github.com/panyam/mcpconform
 
 ### The handler is a state machine
 
-`GoAsyncResult` is a marker variant — it carries no payload, just type identity. So the goroutine **re-invokes the same handler** with the TaskContext plumbed in; the handler is a single function that branches on whether a TaskContext is present:
+`GoAsyncResult` is a marker variant that carries no payload, just type identity. So the goroutine **re-invokes the same handler** with the TaskContext plumbed in; the handler is a single function that branches on whether a TaskContext is present:
 
 ```go
 func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
@@ -238,13 +238,13 @@ func slowTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, er
 
 This is the canonical pattern and what every fixture in [`examples/tasks-v2/main.go`](../examples/tasks-v2/main.go) uses.
 
-> **Note.** The handler runs **twice** for any GoAsync `tools/call`: once sync (returns `core.GoAsyncResult{}`), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing — a handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.
+> **Note.** The handler runs **twice** for any GoAsync `tools/call`: once sync (returns `core.GoAsyncResult{}`), once in the goroutine (does the work). The TaskContext gate is what prevents side effects from double-firing. A handler that does logging / metrics / DB writes on the non-GoAsync branch will fire twice unless gated.
 
 ### What happens to a sync handler on a `TaskSupport=optional` tool?
 
-The middleware still creates a task — but the task is **born terminal**. `Status: completed`, result already stored, one `notifications/tasks` event fired. The wire response is still `CreateTaskResult`, so the client sees task shape; `tasks/get` returns the answer immediately. No goroutine runs.
+The middleware still creates a task, but the task is **born terminal**. `Status: completed`, result already stored, one `notifications/tasks` event fired. The wire response is still `CreateTaskResult`, so the client sees task shape; `tasks/get` returns the answer immediately. No goroutine runs.
 
-The trade-off: the SEP-2663 G6 filter (no `notifications/progress` / `notifications/message` on tasks — see §8) is **not** applied on this path. The handler ran on the unfiltered POST ctx and is responsible for not emitting those notifications itself.
+The trade-off: the SEP-2663 G6 filter (no `notifications/progress` / `notifications/message` on tasks, see §8) is **not** applied on this path. The handler ran on the unfiltered POST ctx and is responsible for not emitting those notifications itself.
 
 ---
 
@@ -267,7 +267,7 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 
 ### `SetStatus`
 
-Transitions the task's status and fires a `notifications/tasks` event. Use it to mark transitions other than the implicit `working → completed/failed` (e.g., when a long-running job hits an interesting milestone you want to surface). Status transitions enforce a state machine — see §6.
+Transitions the task's status and fires a `notifications/tasks` event. Use it to mark transitions other than the implicit `working → completed/failed` (e.g., when a long-running job hits an interesting milestone you want to surface). Status transitions enforce a state machine. See §6.
 
 ### `TaskElicit` and `TaskSample` — the in-task input flow
 
@@ -275,7 +275,7 @@ These are the equivalents of MRTR's `elicitation/create` and `sampling/createMes
 
 ### What's missing from the v1 surface
 
-Notably absent: any equivalent of v1's `ProgressToken` parameter on `SetStatus`, or v1's `EmitProgress`-via-task-channel. SEP-2663's G6 rule says tasks don't speak progress/message — surface progress through `SetStatus(...)` and `statusMessage` instead. See §8.
+Notably absent: any equivalent of v1's `ProgressToken` parameter on `SetStatus`, or v1's `EmitProgress`-via-task-channel. SEP-2663's G6 rule says tasks don't speak progress/message, so surface progress through `SetStatus(...)` and `statusMessage` instead. See §8.
 
 ---
 
@@ -358,7 +358,7 @@ The call reads as synchronous, but under the hood:
 
 1. `TaskElicit` mints a stable key (`elicit-1`, `elicit-2`, ...), stashes the request on the task's `inputState`, and returns a per-key waiter channel.
 2. The task's status is updated to `input_required` and a `notifications/tasks` event fires (so clients listening on the SSE stream see the transition).
-3. The goroutine `<-waiter` blocks. `ctx.Done()` is honored — if the task is cancelled, the wait unblocks with the context error.
+3. The goroutine `<-waiter` blocks. `ctx.Done()` is honored, so if the task is cancelled, the wait unblocks with the context error.
 4. The client observes the pending input via `tasks/get` (which surfaces `inputState.snapshot()` on `DetailedTask.InputRequests`).
 5. The client sends `tasks/update` with the matching key in `inputResponses`.
 6. The server delivers the payload to the waiter channel.
@@ -428,7 +428,7 @@ The conformance scenario for partial fulfillment asserts that the client can ans
 
 ### Map keys are server-chosen and opaque
 
-mcpkit picks readable keys (`elicit-1`, `sample-2`) for debuggability, but the keys are a server-internal convention. Per SEP-2663 / SEP-2322 the wire contract is *"keys are opaque echo strings — clients MUST NOT parse them."* We're free to change the generator (e.g., to UUIDs) without breaking any conformant client.
+mcpkit picks readable keys (`elicit-1`, `sample-2`) for debuggability, but the keys are a server-internal convention. Per SEP-2663 / SEP-2322 the wire contract is *"keys are opaque echo strings that clients MUST NOT parse."* We're free to change the generator (e.g., to UUIDs) without breaking any conformant client.
 
 ---
 
@@ -438,7 +438,7 @@ mcpkit picks readable keys (`elicit-1`, `sample-2`) for debuggability, but the k
 
 The lifecycle event stream. Server emits one whenever a task's status transitions; the payload is a full `DetailedTask` (status, result if completed, error if failed, inputRequests if input_required, etc.). Wire-shape-identical to the response of `tasks/get`.
 
-On the legacy wire, these fan out on the persistent GET SSE stream. On the stateless wire, they fan out on `subscriptions/listen` (when the client opted into a listener) — note: stateless support for `notifications/tasks` lands in follow-up work; today the stateless path silently drops the emission, matching the spec's "no server-initiated push" baseline.
+On the legacy wire, these fan out on the persistent GET SSE stream. On the stateless wire, they fan out on `subscriptions/listen` (when the client opted into a listener). Note that stateless support for `notifications/tasks` lands in follow-up work; today the stateless path silently drops the emission, matching the spec's "no server-initiated push" baseline.
 
 ### The G6 filter — what gets dropped inside a task
 
@@ -461,11 +461,11 @@ bgCtx = core.ApplySessionNotifyFilter(bgCtx,
 )
 ```
 
-So a handler written for the pre-G6 world doesn't break — it just stops emitting those notifications when running as the GoAsync continuation. The migration is mechanical, not behavioral.
+So a handler written for the pre-G6 world doesn't break. It just stops emitting those notifications when running as the GoAsync continuation. The migration is mechanical, not behavioral.
 
 ### Filter scope is goroutine-only
 
-The filter is applied **only** to the continuation goroutine's `bgCtx`. A sync handler returning a `ToolResult` (or running an MRTR round) on a `TaskSupport=optional/required` tool runs on the **unfiltered** POST ctx — `EmitProgress` and `EmitLog` work normally there. This is a deliberate narrowing: sync handlers are responsible for not leaking notifications they shouldn't.
+The filter is applied **only** to the continuation goroutine's `bgCtx`. A sync handler returning a `ToolResult` (or running an MRTR round) on a `TaskSupport=optional/required` tool runs on the **unfiltered** POST ctx, where `EmitProgress` and `EmitLog` work normally. This is a deliberate narrowing: sync handlers are responsible for not leaking notifications they shouldn't.
 
 For deeper coverage of how `progressToken` works across both paths, see [`docs/MRTR_TUTORIAL.md` §5](MRTR_TUTORIAL.md#5-progresstoken--who-mints-it-and-what-its-for).
 
@@ -484,7 +484,7 @@ For deeper coverage of how `progressToken` works across both paths, see [`docs/M
 ### Handler responsibilities
 
 - **Long-running blocking work** should `select` on `ctx.Done()` alongside whatever else it's waiting on. The `slow_compute` fixture demonstrates this pattern.
-- **`TaskElicit` / `TaskSample`** already honor `ctx.Done()` — the waiter `<-` unblocks with the context error if the task is cancelled while parked.
+- **`TaskElicit` / `TaskSample`** already honor `ctx.Done()`, and the waiter `<-` unblocks with the context error if the task is cancelled while parked.
 - **Cleanup** should be in `defer` blocks. The middleware's recovery handles panics; you handle resource cleanup.
 
 ### Cancel-during-input-required
@@ -569,7 +569,7 @@ func quickInteractive(ctx core.ToolContext, req core.ToolRequest) (core.ToolResp
 }
 ```
 
-(Register without `Execution.TaskSupport` set — pure sync, no extension dependency.)
+(Register without `Execution.TaskSupport` set, so pure sync with no extension dependency.)
 
 ---
 
@@ -592,7 +592,7 @@ What this means in practice:
 
 Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. Multi-tenant deployments have a real isolation hole today: `tasks/get`, `tasks/cancel`, and `tasks/update` look up by `(taskID, sessionID)`, and with `sessionID=""` across users they can read / cancel / update each other's tasks.
 
-The fix is tracked in [issue 485](https://github.com/panyam/mcpkit/issues/485) — a `TaskBucketKeyer` seam that lets deployers derive the bucket key from an auth subject (or any other request attribute) without `ext/tasks` taking a hard dependency on `ext/auth`. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.
+The fix is tracked in [issue 485](https://github.com/panyam/mcpkit/issues/485), a `TaskBucketKeyer` seam that lets deployers derive the bucket key from an auth subject (or any other request attribute) without `ext/tasks` taking a hard dependency on `ext/auth`. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.
 
 ---
 
