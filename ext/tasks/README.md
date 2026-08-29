@@ -2,7 +2,7 @@
 
 Go module for the v2 task surface defined by [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (merged Final 2026-05-15). Provides server-directed async task execution registered as a protocol extension under `capabilities.extensions["io.modelcontextprotocol/tasks"]`.
 
-> **Looking for a guided walk-through?** Read [`docs/TASKS_TUTORIAL.md`](../../docs/TASKS_TUTORIAL.md) — covers when to use tasks vs sync vs MRTR, the GoAsync sentinel + middleware peek, lifecycle, the in-task input flow (`TaskElicit` / `TaskSample`), notifications + the G6 filter, cancellation semantics, and the multi-tenancy caveat on stateless. For the sibling MRTR surface (SEP-2322 multi-round-trip requests), see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md). This README is the API reference; the tutorials are the conceptual walk-throughs.
+> **Looking for a guided walk-through?** Read [`docs/TASKS_TUTORIAL.md`](../../docs/TASKS_TUTORIAL.md), which covers when to use tasks vs sync vs MRTR, the GoAsync sentinel + middleware peek, lifecycle, the in-task input flow (`TaskElicit` / `TaskSample`), notifications + the G6 filter, cancellation semantics, and the multi-tenancy caveat on stateless. For the sibling MRTR surface (SEP-2322 multi-round-trip requests), see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md). This README is the API reference; the tutorials are the conceptual walk-throughs.
 
 ## Why a sub-module
 
@@ -41,7 +41,7 @@ tasks.Register(tasks.Config{Server: srv})
 
 `tasks.Register` installs the v2 middleware that intercepts `tools/call` for task-eligible tools, registers the `tasks/get` / `tasks/update` / `tasks/cancel` method handlers (all gated on the client declaring the extension), and advertises the extension in the `initialize` response.
 
-`ToolHandler` returns the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface; the middleware dispatches on the concrete variant — `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, or `GoAsyncResult`.
+`ToolHandler` returns the sealed [`core.ToolResponse`](https://github.com/panyam/mcpkit/blob/main/core/tool.go) interface; the middleware dispatches on the concrete variant, one of `ToolResult`, `InputRequiredResult`, `CreateTaskResult`, or `GoAsyncResult`.
 
 ## Handler pattern
 
@@ -77,9 +77,9 @@ func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, e
 }
 ```
 
-The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact pattern end-to-end (drives the matching `mrtr-tasks-composition` conformance scenario). For the full conceptual walk-through — MRTR as a stateless continuation primitive, capabilities across wires, progressToken, the G6 filter replacement table, MRTR vs push vs task-input-flow — see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md).
+The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact pattern end-to-end (drives the matching `mrtr-tasks-composition` conformance scenario). For the full conceptual walk-through (MRTR as a stateless continuation primitive, capabilities across wires, progressToken, the G6 filter replacement table, MRTR vs push vs task-input-flow), see [`docs/MRTR_TUTORIAL.md`](../../docs/MRTR_TUTORIAL.md).
 
-**G6 filter scope:** the SEP-2663 G6 session-notify filter (`notifications/progress` and `notifications/message` MUST NOT be sent on tasks) is installed only on the continuation goroutine's `bgCtx`. A sync-returning handler runs on the unfiltered POST ctx — it is responsible for not leaking those notifications itself.
+**G6 filter scope:** the SEP-2663 G6 session-notify filter (`notifications/progress` and `notifications/message` MUST NOT be sent on tasks) is installed only on the continuation goroutine's `bgCtx`. A sync-returning handler runs on the unfiltered POST ctx and is responsible for not leaking those notifications itself.
 
 ## Surface
 
@@ -103,10 +103,10 @@ tasks.Register(tasks.Config{
 
 What gets emitted:
 
-- **`task.execute` span on the GoAsync path** — a NEW root trace (not a child of the create span — the work outlives the `tools/call` dispatch span) carrying a `Link` back to the originating `tools/call` create span. Attributes: `mcp.task.id` (at start), `mcp.task.status` (stamped at End from the final stored status — `completed` / `failed` / `cancelled` / `input_required`). `RecordError` fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to `completed` with `IsError=true` per SEP-2663 semantics.
+- **`task.execute` span on the GoAsync path** — a NEW root trace (not a child of the create span, since the work outlives the `tools/call` dispatch span) carrying a `Link` back to the originating `tools/call` create span. Attributes: `mcp.task.id` (at start), `mcp.task.status` (stamped at End from the final stored status, one of `completed` / `failed` / `cancelled` / `input_required`). `RecordError` fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to `completed` with `IsError=true` per SEP-2663 semantics.
 - **`AddLink` on each `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span** — points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.
 
-Nil or `core.NoopTracerProvider{}` (the default) skips the install — zero overhead, zero allocation. ext/tasks depends on `core` only; no compile-time dep on ext/otel. The contract details (`core.WithNewRootSpan`, `core.LinkedTracerProvider`, `core.Link`) live in `docs/SEP_414_OTEL.md` § Span links and § New-root-span marker.
+Nil or `core.NoopTracerProvider{}` (the default) skips the install, with zero overhead and zero allocation. ext/tasks depends on `core` only; no compile-time dep on ext/otel. The contract details (`core.WithNewRootSpan`, `core.LinkedTracerProvider`, `core.Link`) live in `docs/SEP_414_OTEL.md` § Span links and § New-root-span marker.
 
 The wire types (`CreateTaskResult`, `DetailedTask`, `UpdateTaskRequest`, `TaskInfoV2`, etc.) live in `core/task_v2.go` since they're consumed by both server and client.
 
@@ -118,7 +118,7 @@ The wire types (`CreateTaskResult`, `DetailedTask`, `UpdateTaskRequest`, `TaskIn
 
 ## Where the conformance suite lives
 
-[`panyam/mcpconformance`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) on the `feat/tasks-mrtr-extension` branch. Run via `just testconf-tasks-v2` in the root repo — it spawns `examples/tasks-v2/tasks-v2 --serve` as the reference implementation fixture.
+[`panyam/mcpconformance`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) on the `feat/tasks-mrtr-extension` branch. Run via `just testconf-tasks-v2` in the root repo, which spawns `examples/tasks-v2/tasks-v2 --serve` as the reference implementation fixture.
 
 ## V1-RETIREMENT markers
 

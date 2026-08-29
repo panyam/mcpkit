@@ -8,18 +8,14 @@ import (
 // SEP-414 / W3C Trace Context — contract surface.
 //
 // This file defines the dependency-free interfaces and propagation
-// primitives needed for distributed tracing across the MCP wire. It is
-// the Phase 1 deliverable from issue #312: it locks the contracts so
-// downstream packages (server middleware, client outbound calls,
-// experimental/ext/events cross-replica bus) can plumb a TracerProvider
-// without an import cycle and without forcing an OpenTelemetry SDK
-// dependency on every mcpkit consumer.
+// primitives needed for distributed tracing across the MCP wire. It locks
+// the contracts so downstream packages (server middleware, client outbound
+// calls, experimental/ext/events cross-replica bus) can plumb a
+// TracerProvider without an import cycle and without forcing an
+// OpenTelemetry SDK dependency on every mcpkit consumer (issue #312).
 //
-// What this file does NOT do:
-//   - Start any spans (no transport or middleware uses TracerProvider yet —
-//     that lands in P2 with server/middleware.go).
-//   - Provide an OTel adapter (lands in P4 as ext/otel/, a separate go.mod).
-//   - Mutate any outbound _meta envelope (P2 / P3).
+// Spans are started in server/trace_middleware.go and the client middleware;
+// the OTel adapter lives in ext/otel/ as a separate go.mod.
 //
 // Spec references:
 //   - SEP-414: OpenTelemetry trace context propagation for MCP

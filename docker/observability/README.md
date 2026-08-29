@@ -25,7 +25,7 @@ cd docker/observability && just down  # tear it down
 To point a mcpkit example at the stack, configure its OTel SDK to
 export OTLP at `localhost:4317` (gRPC) or `localhost:4318` (HTTP).
 [`examples/otel/stdout/`](../../examples/otel/stdout/) is the
-reference — pass `--exporter=otlp` to its `serve` or `demo` target.
+reference. Pass `--exporter=otlp` to its `serve` or `demo` target.
 
 ## What lights up today
 
@@ -48,15 +48,15 @@ reference — pass `--exporter=otlp` to its `serve` or `demo` target.
 - **Metrics** (Mimir lane) — wired via `commonotel.SetupMetrics`
   (issue 668 metrics half, pairs with the `core.MeterProvider` seam
   added in issue 7). Examples that adopt it emit four canonical
-  instruments — `mcp.tool.calls`, `mcp.jsonrpc.errors`,
-  `mcp.tool.duration` (ms), `mcp.sessions.active` — through the OTel
+  instruments (`mcp.tool.calls`, `mcp.jsonrpc.errors`,
+  `mcp.tool.duration` (ms), `mcp.sessions.active`) through the OTel
   meter adapter → OTLP → Collector → Mimir. Exemplars are stamped
   by default so Grafana panels link directly to the matching trace
   in Tempo. The bundled
   [`mcpkit — overview`](http://localhost:3000/d/mcpkit-overview)
   dashboard works for ANY example: pick the example from the
   `$service` dropdown. Per-example dashboards are an escape hatch
-  for genuinely-bespoke metrics — see `examples/CONVENTIONS.md`
+  for genuinely-bespoke metrics. See `examples/CONVENTIONS.md`
   § Grafana dashboards.
 
 Shipping the full LGTM stack now means no rework when the empty lanes
@@ -74,7 +74,7 @@ Auto-provisioned on container start:
 - **Mimir** — Prometheus query API; treats Mimir as the Prometheus
   data source type with `prometheusType: Mimir`.
 
-No login required — `GF_AUTH_ANONYMOUS_ENABLED=true` +
+No login required, since `GF_AUTH_ANONYMOUS_ENABLED=true` +
 `GF_AUTH_DISABLE_LOGIN_FORM=true` make Grafana a single-click open.
 
 ## Bringing data in
@@ -113,7 +113,7 @@ mode; the env vars are documented here for non-mcpkit OTLP emitters.
 
 ## Production note
 
-This stack is sized for a developer laptop — single-binary modes,
+This stack is sized for a developer laptop, with single-binary modes,
 local filesystem storage, no replication. It exists for demoing
 mcpkit examples and validating SEP-414 wiring, not for serving
 real workloads. A production deployment would split each backend

@@ -160,7 +160,7 @@ The HTML is rendered in a **sandboxed iframe** with restrictive defaults. Here's
 
 #### Option A: Self-contained HTML (simplest, recommended for v1)
 
-Bundle everything — CSS, JS, images — into a single HTML file. No external requests, no CSP worries.
+Bundle everything (CSS, JS, images) into a single HTML file. No external requests, no CSP worries.
 
 ```html
 <!DOCTYPE html>
@@ -279,7 +279,7 @@ Then in Claude:
 
 #### ChatGPT
 
-ChatGPT supports MCP Apps via its connector system. The flow is similar — expose your server URL and register it as a connector.
+ChatGPT supports MCP Apps via its connector system. The flow is similar, so expose your server URL and register it as a connector.
 
 #### VS Code Copilot
 
@@ -297,7 +297,7 @@ Add to your VS Code MCP settings (`.vscode/mcp.json` or user settings):
 
 #### For production deployment
 
-In production, your MCP server runs behind HTTPS (not a tunnel). The same `/mcp` endpoint serves both regular MCP tools and UI resources. No special deployment changes are needed for MCP Apps — it's the same server, same endpoint, same transport.
+In production, your MCP server runs behind HTTPS (not a tunnel). The same `/mcp` endpoint serves both regular MCP tools and UI resources. No special deployment changes are needed for MCP Apps, since it's the same server, same endpoint, same transport.
 
 ```
 Production deployment:
@@ -315,7 +315,7 @@ Production deployment:
 
 ### Step 8: Add Interactivity (optional)
 
-So far your app is read-only — the host renders HTML, the user views it. To make it interactive (user clicks a button in the iframe → calls a tool on your server), add a thin JS bridge to your HTML:
+So far your app is read-only. The host renders HTML and the user views it. To make it interactive (user clicks a button in the iframe → calls a tool on your server), add a thin JS bridge to your HTML:
 
 ```javascript
 // Minimal MCP App bridge — add to your HTML's <script>

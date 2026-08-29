@@ -10,7 +10,7 @@ two places, and several spec requirements lack test coverage.
 ### Fix 0: Revert result_type → resultType (camelCase)
 
 Luca confirmed camelCase is the spec standard. We had renamed to snake_case
-based on upstream conformance PR 188, but that PR is also wrong — Luca will
+based on upstream conformance PR 188, but that PR is also wrong, and Luca will
 fix it on their side.
 
 Files changed:
@@ -44,7 +44,7 @@ negative assertion, `conformance/mrtr/scenarios.test.ts`,
 
 ### Fix 1: Flatten CreateTaskResult
 
-SEP-2663 defines `CreateTaskResult = Result & Task` — a flat intersection where
+SEP-2663 defines `CreateTaskResult = Result & Task`, a flat intersection where
 `taskId`, `status`, `ttlSeconds`, etc. sit at the top level alongside `result_type`.
 
 **Current (wrong):**
@@ -63,7 +63,7 @@ Files to change:
 
 - [x] `core/task_v2.go` — `CreateTaskResult` now embeds `TaskInfoV2` directly,
   so `encoding/json` promotes the task fields to the parent (same trick
-  `DetailedTask` already used). No custom `MarshalJSON`/`UnmarshalJSON` needed —
+  `DetailedTask` already used). No custom `MarshalJSON`/`UnmarshalJSON` needed, since
   marshal and unmarshal both round-trip the flat shape automatically.
 - [x] `core/task_v2_test.go` — `TestCreateTaskResultWireShape` rewritten:
   asserts `taskId` / `status` / `ttlSeconds` / `pollIntervalMilliseconds` at
@@ -123,12 +123,12 @@ SEP-2663: "Servers MUST tolerate receiving a stale or outdated value gracefully.
 
 - [x] `server/tasks_v2_test.go` — `TestV2_RequestState_StaleTolerance`: create
   task, mint tokenA, sleep ≥1s (unix-seconds expiry granularity), tasks/get
-  with tokenA mints tokenB, then echo the older tokenA — server MUST accept.
+  with tokenA mints tokenB, then echo the older tokenA, which the server MUST accept.
 - [x] `conformance/tasks-v2/scenarios.test.ts` — `v2-28` mirrors the same
   flow against any conformant server.
 
 Confirmed: our HMAC verifier checks signature + expiry only, never "latest
-version" — stale-but-valid tokens already work. The new tests lock in that
+version". Stale-but-valid tokens already work. The new tests lock in that
 behavior so a "track latest only" refactor would fail loudly.
 
 ### Fix 5: Strong consistency (immediate tasks/get after create)
@@ -138,7 +138,7 @@ that is, until a tasks/get for the returned taskId would resolve."
 
 - [x] `server/tasks_v2_test.go` — `TestV2_StrongConsistency_ImmediateGet`:
   tools/call → CreateTaskResult → immediate tasks/get (no sleep, no goroutine
-  yield) — must resolve, not -32602.
+  yield), which must resolve rather than -32602.
 - [x] `conformance/tasks-v2/scenarios.test.ts` — `v2-27` mirrors the same flow.
 
 Confirmed: middleware calls `store.Create` synchronously before building
@@ -165,8 +165,8 @@ SEP-2243 requires both `Mcp-Name` AND `Mcp-Method` headers. v2-24 covers Mcp-Nam
   removed; replaced with a pointer to v2-17 (which exercises tasks/update).
 - [x] `conformance/tasks-v2/README.md` — Added a paragraph at the top noting
   this suite tracks spec text + mcpkit's end-to-end behavior, not the
-  published SEP TypeScript declarations (which may lag — most recent
-  example: the upstream conformance PR briefly used snake_case
+  published SEP TypeScript declarations (which may lag, the most recent
+  example being the upstream conformance PR briefly using snake_case
   `result_type`, but Luca confirmed camelCase is the standard).
 
 ## Implementation order
@@ -190,7 +190,7 @@ done in parallel after Fix 1 lands.
   needed; mrtr-08 conformance skip already exists in
   `conformance/mrtr/scenarios.test.ts`).
 - MRTR resultType discriminator collision (`"input_required"` vs
-  `"incomplete"`) — Resolved on the SEP-2322 side. Caitie's pre-merge
+  `"incomplete"`). Resolved on the SEP-2322 side. Caitie's pre-merge
   commit de6d76fb (merged 2026-05-06) renamed IncompleteResult to
   InputRequiredResult and the wire literal from `"incomplete"` to
   `"input_required"` per dsp-ant request. mcpkit and the conformance
@@ -209,7 +209,7 @@ done in parallel after Fix 1 lands.
   modelcontextprotocol/specification commit d963ad0. Our -32602 is
   spec-aligned; the v2-08 test comment now points to that commit.
 - assertCreateTaskResult forbidden-field validation (no result / error /
-  inputRequests on the envelope) — added to the helper.
+  inputRequests on the envelope), added to the helper.
 - ISO-8601 timestamp validation on createdAt + lastUpdatedAt — added to
   the helper alongside the forbidden-field rule.
 - v2-30 (tasks/get with unknown taskId returns -32602) — new scenario
@@ -223,7 +223,7 @@ done in parallel after Fix 1 lands.
   don't briefly flip status to "working" and back.
 - v2-24 / v2-24b / v2-24c repurposed from response-header assertions
   (mcpkit-specific echo behavior, already covered by Go tests
-  `TestV2_McpName*` / `TestV2_McpMethod*`) to request-header tolerance —
+  `TestV2_McpName*` / `TestV2_McpMethod*`) to request-header tolerance,
   a real SEP-2243 conformance check (server tolerates `Mcp-Method` /
   `Mcp-Name` request headers; body is authoritative). Required adding
   `opts.headers` to the raw fetch helpers so tests can attach arbitrary
@@ -244,7 +244,7 @@ Draft PR `modelcontextprotocol/conformance#262` opened against
 
 Mcpkit's `conformance/tasks-v2/` and `conformance/mrtr/` folders now
 host vitest sentinels (placeholder tests) reserved for future
-mcpkit-stricter scenarios — assertions that go beyond what the spec
+mcpkit-stricter scenarios, assertions that go beyond what the spec
 mandates because mcpkit deliberately picks the louder / safer option in
 spec-silent corners. `just testconf-tasks-v2` and `just testconf-mrtr`
 delegate to the fork via `MCPCONFORMANCE_PATH` and chain the local

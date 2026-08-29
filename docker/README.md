@@ -13,7 +13,7 @@ you want and run `make up`:
   (relational state), Redis (cache + pub/sub). Shared across any
   example that needs auth + persistence.
 
-The stacks are independent — bring up whichever subset an example
+The stacks are independent, so bring up whichever subset an example
 needs.
 
 ## Quick start
@@ -44,9 +44,9 @@ Each stack exposes the same target set: `up` / `down` / `logs` /
   every time. Schema bumps (Tempo / Loki / Mimir) need an explicit
   version bump in the compose file.
 - **Sized for a laptop.** Configs use single-binary modes and local
-  filesystem storage. Production deployment is out of scope — these
+  filesystem storage. Production deployment is out of scope, and these
   stacks exist for demoing mcpkit examples and validating SEP-414
   wiring, not for serving real workloads.
-- **Stateless by default.** No volume mounts for data dirs — tearing
+- **Stateless by default.** No volume mounts for data dirs, so tearing
   the stack down (`make down`) wipes traces / logs / metrics. Add
   named volumes if a future stack needs persistence across restarts.

@@ -16,17 +16,17 @@ the lower-level spawn primitives (`os.StartProcess`, `syscall.Exec` / `ForkExec`
 specifically so it cannot be bypassed by dropping below `os/exec`.
 
 **A loader that downloads and persists remote skills to the serving folder would trip this by
-design.** Such a loader belongs *outside* core `ext/skills` — opt-in, e.g. `ext/skills/loader` —
+design.** Such a loader belongs *outside* core `ext/skills` (opt-in, e.g. `ext/skills/loader`)
 with the archive traversal / symlink / bomb guards re-applied at the write boundary and integrity
 verification on fetch.
 
 `FetchGitHubArchive` already loads from GitHub without disk staging (fetch → in-memory `SourceFS`
-→ serve), so that stays the default.
+→ serve), so that stays the default, at least for now.
 
 `adversarial_test.go` maps this package case-by-case onto the WG's `dangerous-skills-mcp` corpus
 (the non-archive slice: digest mismatch, frontmatter, directory-read traversal) and asserts the one
 known gap: **a non-archive index digest covers `SKILL.md` only, so supporting files are unpinned.**
-Whole-skill-digest is still open upstream.
+Whole-skill-digest is still open upstream, as far as we can tell.
 
 ---
 
@@ -36,7 +36,7 @@ Whole-skill-digest is still open upstream.
   resources plus `skill://index.json` plus tool handling, file mode only. This is the scoped-down
   core the WG blessed 2026-06-30.
 - **`examples/skills`** is the full surface (archives, remote sources, fsnotify) **and** the
-  `testconf-skills` conformance fixture — `conformance/Makefile` spawns it on :18099.
+  `testconf-skills` conformance fixture, and `conformance/Makefile` spawns it on :18099.
 
 **Do not rename `examples/skills`.** The conformance wiring and the module path both depend on it.
 
@@ -48,9 +48,9 @@ template is in `examples/CONVENTIONS.md`.
 
 `examples/skills` ships a SEP-2640 security/conformance harness (`security_demo.go`). `make
 security` (`--security`) runs the host-side defenses over the fixture against an in-process
-server — progressive disclosure, supporting-file digest (`ErrDigestMismatch` /
+server, covering progressive disclosure, supporting-file digest (`ErrDigestMismatch` /
 `ErrSupportingFileUnpinned`), resource byte budget (`ErrResourceTooLarge`), `file://` scheme
-rejection (`ErrInvalidScheme`) — each step printing its SEP/threat-model anchor plus PASS/REJECT.
+rejection (`ErrInvalidScheme`), with each step printing its SEP/threat-model anchor plus PASS/REJECT.
 It doubles as `TestSecurityDemo` in CI.
 
 **Two surfaces by design**: the `--security` harness owns its in-process server so it can stage a

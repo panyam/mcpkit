@@ -110,7 +110,7 @@ section. Two obligations fall on server authors:
 
 1. **`cacheScope` MUST reflect intended visibility.** A `"public"` response
    may be served across authorization contexts even when it came from an
-   authenticated endpoint — different access tokens can share the same
+   authenticated endpoint, where different access tokens can share the same
    cache entry. Marking a per-user tool list as `"public"` leaks one user's
    primitives to another. Any response whose contents differ per
    authorization context MUST be `"private"`.
@@ -144,7 +144,7 @@ A Security Implications section landed in `caching.mdx` on 2026-05-14.
 ## Migrating from the pre-merge implementation
 
 If you adopted mcpkit's pre-merge SEP-2549 release (roughly 2026-04-30
-onward), the rename is a breaking change. It is loud — old code stops
+onward), the rename is a breaking change. It is loud, and old code stops
 compiling rather than silently changing units.
 
 | Pre-merge | Final |

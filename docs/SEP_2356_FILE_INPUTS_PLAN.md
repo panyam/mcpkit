@@ -71,7 +71,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 - [x] `core.FileMatchesAccept` — exact / wildcard subtype / extension hint matcher (mirrors JS-side `fileMatchesAccept` in `ext/ui/assets/file-picker.ts` so both sides agree).
 - [x] Typed errors `core.FileTooLargeError` + `core.FileTypeNotAcceptedError` carrying structured `Data()` payloads. Sentinels `core.ErrFileTooLarge` + `core.ErrFileTypeNotAccepted` for `errors.Is`.
 - [x] Reason constants `core.FileInputReasonTooLarge` ("file_too_large") and `core.FileInputReasonTypeNotAccepted` ("file_type_not_accepted") align with bridge JS sentinel error names.
-- [x] `server.WithFileInputValidation()` Option enables the dispatcher hook. Disabled by default — handlers can opt in.
+- [x] `server.WithFileInputValidation()` Option enables the dispatcher hook. Disabled by default, and handlers can opt in.
 - [x] Dispatcher walks the tool's InputSchema for `x-mcp-file` properties (single + array `items` shape), runs `core.ValidateFileInput` on every matching arg, returns `-32602` with structured `data: {reason, field, actualSize, maxSize}` (too-large) or `data: {reason, field, mediaType, accept}` (wrong MIME) on failure. Wire shape frozen by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).
 - [x] `examples/file-inputs/` opts into the validator — manual hand-rolled checks dropped.
 - [x] 11 new core unit tests + 5 new server unit tests + 2 conformance scenarios (`file-inputs-04` + `file-inputs-05`) flipped from red to green.
@@ -81,7 +81,7 @@ Two phases: core protocol support (Phase 1), then MCP Apps bridge integration
 **Files:** `core/file_input.go`, `core/file_input_test.go`, `core/handler_context.go`, `server/dispatch.go`, `server/file_validation_test.go`
 
 - [x] `core.StripFileInputKeywords(schema any) any` — pure function, deep-copy walk that removes the keyword from every property (single + array items). Foreign shapes (typed structs, json.RawMessage on the elicitation path) pass through unchanged.
-- [x] Dispatcher's `handleToolsList` strips when `d.clientCaps.FileInputs == nil`. Stored ToolDef.InputSchema in the registry is never mutated — different clients on the same server may declare the cap and need the keyword back.
+- [x] Dispatcher's `handleToolsList` strips when `d.clientCaps.FileInputs == nil`. Stored ToolDef.InputSchema in the registry is never mutated, because different clients on the same server may declare the cap and need the keyword back.
 - [x] `BaseContext.Elicit` strips `requestedSchema` (json.RawMessage decode → strip → re-encode) when `clientCaps.FileInputs == nil`. Round-trip cost only paid for cap-less clients.
 - [x] **Spec interpretation locked**: strip the keyword, keep the property visible (legacy clients still call the tool with a text-input fallback). Documented in the SEP-2356 conformance README on the panyam/mcpconformance `pending` branch. Asserted by check `file-inputs-x-mcp-file-stripped-without-cap`.
 - [x] Tests: 2 core (strip + foreign-shape passthrough), 2 server (cap-aware sees keyword, cap-less sees stripped property), 1 conformance scenario flipped red→green.
@@ -128,7 +128,7 @@ Conformance-style tests:
 - [x] Multi-file array input works
 - [x] Filename with special chars round-trips through percent-encoding
 
-**`just testconf-file-inputs` — 7/7 passing.** Phase 1 of SEP-2356 fully implemented mcpkit-side. Suite is now the WG-facing acceptance bar — any reference impl can be pointed at it.
+**`just testconf-file-inputs` — 7/7 passing.** Phase 1 of SEP-2356 fully implemented mcpkit-side. Suite is now the WG-facing acceptance bar, and any reference impl can be pointed at it.
 
 ## Phase 2: MCP Apps bridge integration
 
@@ -142,7 +142,7 @@ Conformance-style tests:
 - [x] Client-side validation runs BEFORE FileReader: `maxSize` byte check, accept-pattern matcher (exact MIME / wildcard subtype / extension hint).
 - [x] Sentinel errors: `MCPFileSelectionCanceled`, `MCPFileTooLarge`, `MCPFileTypeNotAccepted`. `reason` fields align with server-side `-32602` codes from #361.
 - [x] Cancel detection: native `cancel` event (Chrome 113+ / Safari 17+ / Firefox 91+) plus focus-return fallback.
-- [x] Picker code lives in its own `file-picker.ts` module (extracted from the main bridge file); bundled via esbuild — build switched from `tsc` to `esbuild --bundle --format=iife`.
+- [x] Picker code lives in its own `file-picker.ts` module (extracted from the main bridge file); bundled via esbuild, with the build switched from `tsc` to `esbuild --bundle --format=iife`.
 - [x] 13 new vitest cases (61/61 total) covering happy path, percent-encoding, accept propagation, oversized rejection, MIME mismatch, wildcard match, extension match, empty descriptor, cancel, multi-file ordering, binary round-trip, canonical `core.EncodeDataURI` interop.
 - [x] Apps-mode fixtures in `examples/file-inputs/apps/` — `apps_upload_image` and `apps_analyze_documents` tools register `ui://` resources whose HTML drives `mcp.selectFile` / `mcp.selectFiles` then routes through the existing tool handlers.
 - [x] Host-mediated variant (`via: "host"` to route through host postMessage) deferred to follow-up issue #370.
@@ -161,7 +161,7 @@ Conformance-style tests:
 - [ ] Document: data URIs in `postMessage` can be slow for large files
 - [ ] Consider `maxSize` guidance: recommend ≤10MB for inline data URIs
 - [ ] Future: `URL.createObjectURL` + blob transfer for larger files
-  (out of scope for SEP-2356 — spec explicitly uses data URIs)
+  (out of scope for SEP-2356, since the spec explicitly uses data URIs)
 
 ### 2.4: CSP considerations
 
@@ -197,7 +197,7 @@ separate PR.
 
 1. **Capability gating behavior:** When client lacks `fileInputs`, does the server
    strip `x-mcp-file` from the schema (tool still visible, just no file picker hint)?
-   Or hide the entire tool? Spec says "MUST NOT include file input fields" — likely
+   Or hide the entire tool? Spec says "MUST NOT include file input fields", so likely
    means strip the keyword, not hide the tool.
 2. **Elicitation StringSchema in Go:** Do we have a typed `StringSchema` in core?
    Or is elicitation `requestedSchema` just `json.RawMessage`? Need to check.

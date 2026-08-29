@@ -17,8 +17,8 @@ sub-module in `SUB_MODS_TO_TAG` (see the `Makefile`) at the same version, so
   - Pre-releases sort *below* the final version, so `go get …@latest` keeps
     returning the highest **stable** tag. Consumers opt into a pre-release
     explicitly: `go get …@v0.4.0-b1`.
-  - A `-bN` pre-release is not a "stable release" for MCP SDK Tier-1 purposes —
-    that's expected; a beta is a beta.
+  - A `-bN` pre-release is not a "stable release" for MCP SDK Tier-1 purposes.
+    That's expected; a beta is a beta.
 
 Pre-1.0 note: while there are no external clients, breaking changes may ride
 intermediate `v0.3.x` tags until a minor is complete. `CHANGELOG.md` keeps the
@@ -55,7 +55,7 @@ From a green `main`:
 ## GitHub Release: token limitation
 
 Creating a GitHub **Release** via `gh release create` currently fails from the
-maintainer's setup — the personal access token can create PRs/issues/comments
+maintainer's setup, where the personal access token can create PRs/issues/comments
 and push tags, but lacks **Contents: write** (403 on Releases), and the
 alternate keyring account can't reach this repo. Until the PAT is granted
 Contents: read-and-write, create the release in the browser with a prefilled

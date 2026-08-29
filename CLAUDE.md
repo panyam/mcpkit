@@ -5,7 +5,7 @@ Go library for building production-grade MCP servers and clients.
 The agent SDK that used to sit above the protocol here now lives in its own repository,
 [chakra](https://github.com/panyam/chakra). Nothing in this tree depends on it.
 
-This file is a router. Detail lives beside the code it describes — see **Where knowledge lives**
+This file is a router. Detail lives beside the code it describes. See **Where knowledge lives**
 below before adding anything here.
 
 ## Quick Commands
@@ -74,7 +74,7 @@ recreate it. Fold learnings into the per-package `NOTES.md`, the design docs, an
 
 ## Sub-Modules
 
-**`SUB_MODS_TO_TAG` in the root `Makefile` is the authoritative list** — do not maintain a copy
+**`SUB_MODS_TO_TAG` in the root `Makefile` is the authoritative list.** Do not maintain a copy
 here, it rots. `make test` does not cover sub-modules; each has its own target.
 
 Run **`make tidy-all` after touching `core/` imports** or sub-module `go.sum` files drift and CI
@@ -102,18 +102,18 @@ These span packages and will bite on a task that never opens a routed doc.
   commit. Nine accumulated this way before a `git filter-repo` purge took `.git` from 466 MB to
   23 MB. Two layers now gate it, both detecting by **magic bytes, not filename**:
   `scripts/pre-commit-hook.sh` (local, opt-in via `make setup-hooks`) and
-  `scripts/check-no-binaries.sh` (whole-tree, wired into `test.yml` — the actual gate).
+  `scripts/check-no-binaries.sh` (whole-tree, wired into `test.yml`, the actual gate).
   `HANDOFF.md` / `HANDOFF_*.md` are gitignored for the same `git add -A` reason.
 - **`govulncheck` green does not mean dependencies are current.** Default govulncheck is
   *reachability*-based, so it exits 0 while advisories sit unfixed in required modules. Version
   matching is a separate pass. Command, blockers, and rationale: `DEPENDENCY_POLICY.md`
   § Security updates.
-- **GitHub access needs the personal token and key.** `GH_TOKEN="$GH_PERSONAL_TOKEN"` — the EMU
+- **GitHub access needs the personal token and key.** `GH_TOKEN="$GH_PERSONAL_TOKEN"`, because the EMU
   account cannot reach personal repos. `git push` to `panyam-github` likewise needs the key pinned,
   because the ssh-agent offers the EMU key first and GitHub rejects it before reaching
   `~/.ssh/id_github`:
   `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push …`.
-  Release creation and editing have their own PAT gap — see `RELEASING.md`.
+  Release creation and editing have their own PAT gap. See `RELEASING.md`.
 - **Stacked PRs get no CI** when the base is not `main`. Verify locally, then either retarget to
   main after the base merges or push an empty commit to fire checks. GitHub's `Closes #N` only
   fires on a merge to the **default** branch, so carry it on whichever PR actually reaches main.
@@ -121,7 +121,7 @@ These span packages and will bite on a task that never opens a routed doc.
   merge; land the shared base before branching the second consumer.
 - **Repo security settings are settings, not files.** Dependabot alerts, security updates, and
   private vulnerability reporting need no commit; `dependabot.yml` governs *version* updates only.
-  A 403 is not a 404 — a status check that treats any non-success as "disabled" reports a
+  A 403 is not a 404, and a status check that treats any non-success as "disabled" reports a
   configured repo as unprotected.
 
 ## Conformance

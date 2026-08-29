@@ -24,7 +24,7 @@ Validates `_meta.ui` on tool definitions: `resourceUri`, `visibility`, `csp`, `p
 
 ### Visibility Filtering (`visibility_test.go`)
 
-Tests `ListToolsForModel()` filtering — tools with `visibility: ["app"]` are excluded from the model-facing list, while tools with `visibility: ["model", "app"]` or no visibility are included.
+Tests `ListToolsForModel()` filtering, where tools with `visibility: ["app"]` are excluded from the model-facing list, while tools with `visibility: ["model", "app"]` or no visibility are included.
 
 ### Resource Serving (`resources_test.go`)
 

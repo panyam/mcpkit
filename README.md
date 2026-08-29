@@ -43,7 +43,7 @@ srv.Run(":8787") // Streamable HTTP — blocks
 ```
 
 `Run` blocks. When you start it in a goroutine, wait for `Ready()` instead of
-sleeping — it closes once the listener is bound and the port is accepting:
+sleeping. It closes once the listener is bound and the port is accepting:
 
 ```go
 go srv.Run(":8787")
@@ -84,7 +84,7 @@ out, err := c.ToolCall(ctx, "greet", map[string]any{"name": "world"})
 
 ## Conformance
 
-mcpkit passes the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) for the base protocol **and** the conformance scenarios for a long list of draft/recent SEPs — the "batteries" that set it apart from a minimal SDK:
+mcpkit passes the [official MCP conformance suite](https://github.com/modelcontextprotocol/conformance) for the base protocol **and** the conformance scenarios for a long list of draft/recent SEPs, the "batteries" that set it apart from a minimal SDK:
 
 | Suite | Spec | Result |
 |-------|------|--------|
@@ -187,4 +187,4 @@ For best performance, configure your authorization server to use **ES256 (ECDSA 
 
 [![Star History Chart](https://api.star-history.com/svg?repos=panyam/mcpkit&type=Date)](https://star-history.com/#panyam/mcpkit&Date)
 
-If mcpkit is useful to you, starring the repo is the cheapest way to help — it's the main signal we use to prioritize what to ship next.
+If mcpkit is useful to you, starring the repo is the cheapest way to help, since it's the main signal we use to prioritize what to ship next.

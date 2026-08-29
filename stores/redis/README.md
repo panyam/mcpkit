@@ -1,6 +1,6 @@
 # stores/redis — shared Redis adapter for mcpkit
 
-Generic Redis primitives + the capability-shaped Pattern B transport. This module is **events-free** — nothing here references `events.Event`, so non-events surfaces (capability-shaped notifications, future request relays, etc.) can adopt without dragging in the events SDK.
+Generic Redis primitives + the capability-shaped Pattern B transport. This module is **events-free**, and nothing here references `events.Event`, so non-events surfaces (capability-shaped notifications, future request relays, etc.) can adopt without dragging in the events SDK.
 
 What lives here:
 

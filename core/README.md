@@ -2,7 +2,7 @@
 
 MCP protocol types and tool-handler APIs.
 
-This package defines the shared types used by both `server/` and `client/`. It has **no dependencies** on either — only stdlib and encoding/json.
+This package defines the shared types used by both `server/` and `client/`. It has **no dependencies** on either, only stdlib and encoding/json.
 
 ## What belongs here
 

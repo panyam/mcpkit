@@ -31,8 +31,8 @@ import (
 //     ASCII, control-char rejection, size cap) protects against
 //     header-injection / amplification per SEP-2028 §3.1; deeper
 //     parsing belongs in adapters.
-//   - Emit any spans (the server/client trace middleware widens to
-//     consume baggage in the same PR; this file is the contract).
+//   - Emit any spans. This file is the contract; server/trace_middleware.go
+//     bridges the inbound HTTP Baggage header via core.WithBaggage.
 //
 // Spec references:
 //   - W3C Baggage: https://www.w3.org/TR/baggage/

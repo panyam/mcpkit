@@ -37,4 +37,4 @@ transport := server.NewInProcessTransport(srv,
 c := client.NewClient("memory://", info, client.WithTransport(transport))
 ```
 
-The in-process transport passes `*core.Request`/`*core.Response` directly — no JSON envelope serialization. This catches logic bugs; HTTP transport tests catch wire format bugs.
+The in-process transport passes `*core.Request`/`*core.Response` directly, with no JSON envelope serialization. This catches logic bugs; HTTP transport tests catch wire format bugs.

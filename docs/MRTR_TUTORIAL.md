@@ -8,7 +8,7 @@ Everything you need to know to write tools that gather input from the client cle
 
 ## 1. The core idea: a stateless continuation primitive
 
-When a tool needs the client to do something — pick a file, confirm an action, sample a model, list its open workspaces — the spec gives the server a single mechanism: it returns an **`InputRequiredResult`** from `tools/call` describing what it needs, and the client re-invokes the same `tools/call` carrying the answer.
+When a tool needs the client to do something (pick a file, confirm an action, sample a model, list its open workspaces), the spec gives the server a single mechanism: it returns an **`InputRequiredResult`** from `tools/call` describing what it needs, and the client re-invokes the same `tools/call` carrying the answer.
 
 The mental model that breaks:
 
@@ -20,14 +20,14 @@ The mental model that works:
 
 > The server returns a **continuation token** (`requestState`). The client carries it forward. The server reconstructs context from the token on the next round, runs the same handler again with the accumulated answers, and either yields again or returns the final result.
 
-State lives **in the token**, not in server memory. The handler is the same function on every round; it just sees a richer `ToolRequest.InputResponses` each time. This is what lets MRTR work identically on legacy session-based transports and on serverless stateless ones — the server can be a different Lambda invocation each round and the conversation still resumes.
+State lives **in the token**, not in server memory. The handler is the same function on every round; it just sees a richer `ToolRequest.InputResponses` each time. This is what lets MRTR work identically on legacy session-based transports and on serverless stateless ones. The server can be a different Lambda invocation each round and the conversation still resumes.
 
 If you've seen any of these elsewhere, the shape will feel familiar:
 
 - **Algebraic effects / handlers** (Koka, Eff, Unison). The handler "performs an effect"; the client handles it and returns control. The cleanest analogy.
 - **Generators / async iterators.** The handler "yields" an InputRequest and is resumed with the response. With a wrinkle: real generators preserve stack frames; MRTR replays from the top with accumulated state.
-- **OAuth authorization-code flow.** Server says "I need consent, here's an opaque state token, come back with it"; client does its part; server validates state and resumes. The structural similarity is exact — mcpkit even uses HMAC-SHA256 on the token, same posture as a signed JWT continuation.
-- **Continuation-passing style** at the protocol level. The `requestState` token IS the continuation — a serialized "where to resume" handle.
+- **OAuth authorization-code flow.** Server says "I need consent, here's an opaque state token, come back with it"; client does its part; server validates state and resumes. The structural similarity is exact, and mcpkit even uses HMAC-SHA256 on the token, the same posture as a signed JWT continuation.
+- **Continuation-passing style** at the protocol level. The `requestState` token IS the continuation, a serialized "where to resume" handle.
 
 ---
 
@@ -73,18 +73,18 @@ The client picks up the request, satisfies it (asks the user / samples the model
 }
 ```
 
-A round can carry **multiple** input requests at once (the map is plural). All of them resolve in a single client round-trip. Likewise a handler can take **multiple rounds** — each round mints a fresh `requestState`, and the server forwards prior-round answers via the token so the handler sees the full accumulated state on the final round.
+A round can carry **multiple** input requests at once (the map is plural). All of them resolve in a single client round-trip. Likewise a handler can take **multiple rounds**, where each round mints a fresh `requestState` and the server forwards prior-round answers via the token so the handler sees the full accumulated state on the final round.
 
 ### Map keys are opaque
 
-`"user_name"` is server-chosen and opaque to the client. The spec says clients MUST treat them as round-trip echo strings — never parse or interpret them. mcpkit picks readable names for debuggability; that's a server-side convention, not a wire contract.
+`"user_name"` is server-chosen and opaque to the client. The spec says clients MUST treat them as round-trip echo strings, never parsing or interpreting them. mcpkit picks readable names for debuggability; that's a server-side convention, not a wire contract.
 
 ### `requestState` is the continuation token
 
 The server can sign it (HMAC) or run it as plaintext. mcpkit's signed mode encodes `{tool, accumulated answers, exp}` as the state; the verifier rejects:
 
 - malformed tokens (`ErrRequestStateMalformed`),
-- signature mismatches or **tool-name mismatches** ("token issued for tool A replayed against tool B" — `ErrRequestStateInvalidSignature`),
+- signature mismatches or **tool-name mismatches** ("token issued for tool A replayed against tool B", `ErrRequestStateInvalidSignature`),
 - expired tokens (`ErrRequestStateExpired`).
 
 Production deployments should always set a signing key via `server.WithRequestStateSigning(...)`. Plaintext mode is for tests and demos.
@@ -93,7 +93,7 @@ Production deployments should always set a signing key via `server.WithRequestSt
 
 ## 3. What server-to-client methods does MRTR cover?
 
-The `method` field on each `InputRequest` is one of the **methods the client offered** — i.e., the menu the client published in its capabilities. In practice, the three the spec scopes MRTR to are:
+The `method` field on each `InputRequest` is one of the **methods the client offered**, i.e. the menu the client published in its capabilities. In practice, the three the spec scopes MRTR to are:
 
 | Method | What the server is asking for | Client capability that enables it |
 |---|---|---|
@@ -101,11 +101,11 @@ The `method` field on each `InputRequest` is one of the **methods the client off
 | `sampling/createMessage` | A model completion the client routes to its LLM | `sampling: {}` |
 | `roots/list` | The client's current set of workspace roots (URIs) | `roots: {}` |
 
-The server doesn't get to invent new MRTR methods. It picks from what the client offered in `initialize` (legacy) or per-request `_meta.clientCapabilities` (stateless) — see §4.
+The server doesn't get to invent new MRTR methods. It picks from what the client offered in `initialize` (legacy) or per-request `_meta.clientCapabilities` (stateless). See §4.
 
 ### What's `roots/list` and why does it exist?
 
-A **root** is a URI the client tells the server represents "where the user is currently working." Each root is a `{uri, name?}` pair — typically `file://`, `https://`, or some scheme-prefixed location.
+A **root** is a URI the client tells the server represents "where the user is currently working." Each root is a `{uri, name?}` pair, typically `file://`, `https://`, or some scheme-prefixed location.
 
 Examples:
 
@@ -127,7 +127,7 @@ Roots gives the server a structured, programmatic way to ask the client *"what i
 - A diagnostics server reads `roots/list` to know which file tree to type-check.
 - A docs server scopes its lookup index to the project root.
 
-**Why it's its own method instead of an elicitation.** Elicitation asks the user a free-form question; the answer is whatever the user types and is request-scoped. Roots are structured data the host already has — no user prompt needed — and they're stable across the session. Making it its own method lets clients return roots without user friction and lets hosts model "what's open" as first-class state.
+**Why it's its own method instead of an elicitation.** Elicitation asks the user a free-form question; the answer is whatever the user types and is request-scoped. Roots are structured data the host already has (no user prompt needed) and they're stable across the session. Making it its own method lets clients return roots without user friction and lets hosts model "what's open" as first-class state.
 
 A handler that needs the current roots issues:
 
@@ -140,7 +140,7 @@ return ctx.RequestInput(core.InputRequests{
 })
 ```
 
-— see [`basicListRootsTool`](../examples/mrtr/main.go) (the A3 fixture).
+See [`basicListRootsTool`](../examples/mrtr/main.go) (the A3 fixture).
 
 ---
 
@@ -177,7 +177,7 @@ On stateless, the envelope is required on every request:
 }
 ```
 
-A stateless request that omits `clientCapabilities` (or omits `_meta` entirely) is — from the server's perspective — a client that supports nothing. The server can't fall back to session state because there isn't any. The contract is *"if you want the server to ask you for X, declare X in `_meta` every time you might want to be asked."* This is the price stateless pays for being restart-safe.
+A stateless request that omits `clientCapabilities` (or omits `_meta` entirely) is, from the server's perspective, a client that supports nothing. The server can't fall back to session state because there isn't any. The contract is *"if you want the server to ask you for X, declare X in `_meta` every time you might want to be asked."* This is the price stateless pays for being restart-safe.
 
 ### The mcpkit helper
 
@@ -187,7 +187,7 @@ A stateless request that omits `clientCapabilities` (or omits `_meta` entirely) 
 
 ## 5. `progressToken` — who mints it and what it's for
 
-**The client mints it.** It's a single-source-of-truth correlation tag: the client picks an opaque value (any JSON scalar — string, number, even null), attaches it to the outgoing request under `_meta.progressToken`, and uses that same value to match incoming `notifications/progress` events back to the request that asked for them.
+**The client mints it.** It's a single-source-of-truth correlation tag: the client picks an opaque value (any JSON scalar, including string, number, and null), attaches it to the outgoing request under `_meta.progressToken`, and uses that same value to match incoming `notifications/progress` events back to the request that asked for them.
 
 ```jsonc
 // client → server
@@ -231,7 +231,7 @@ if progressToken == nil {
 }
 ```
 
-— that's the app synthesizing a token because the client didn't, *as a convenience*. The protocol doesn't define this fallback; it's app-level behavior.
+That's the app synthesizing a token because the client didn't, *as a convenience*. The protocol doesn't define this fallback; it's app-level behavior.
 
 ---
 
@@ -246,7 +246,7 @@ SEP-2663's **G6 rule** says: **a task's notification channel is reserved for `no
 
 Three reasons the spec went this way:
 
-1. **Wire homogeneity.** A task is observed via `tasks/get` polling or `notifications/tasks` SSE. Mixing in progress/message events on the same stream would force every task-aware client to disambiguate between "task lifecycle event" and "tool-internal status" — and they'd need to do that in a way that's consistent across servers. Cleaner: tasks emit task events, full stop.
+1. **Wire homogeneity.** A task is observed via `tasks/get` polling or `notifications/tasks` SSE. Mixing in progress/message events on the same stream would force every task-aware client to disambiguate between "task lifecycle event" and "tool-internal status", and they'd need to do that in a way that's consistent across servers. Cleaner: tasks emit task events, full stop.
 2. **Stateless-wire feasibility.** Progress/message both assume a long-lived push channel. On the SEP-2575 stateless wire there isn't one. Tasks are how stateless servers expose long-running work; saying "tasks don't speak progress/message" lets stateless servers be fully spec-compliant for tasks without implementing a streaming back-channel they fundamentally can't have.
 3. **No silent loss.** A handler emitting progress on legacy lands on the GET SSE stream; the same handler under stateless silently fails to deliver. Forbidding them everywhere makes the contract uniform.
 
@@ -269,9 +269,9 @@ bgCtx = core.ApplySessionNotifyFilter(bgCtx,
 )
 ```
 
-So a handler written for the pre-G6 world doesn't *break* when run as a task — it just stops emitting those notifications. They no-op silently. That's what made the migration to GoAsync mechanical instead of a behavioral change.
+So a handler written for the pre-G6 world doesn't *break* when run as a task. It just stops emitting those notifications. They no-op silently. That's what made the migration to GoAsync mechanical instead of a behavioral change.
 
-The filter is **goroutine-scoped only**. A handler that returns sync (no GoAsync, no MRTR round) runs on the unfiltered POST ctx and can still emit. That's a deliberate narrowing — sync handlers on `TaskSupport=optional/required` tools are responsible for not leaking notifications they shouldn't.
+The filter is **goroutine-scoped only**. A handler that returns sync (no GoAsync, no MRTR round) runs on the unfiltered POST ctx and can still emit. That's a deliberate narrowing, since sync handlers on `TaskSupport=optional/required` tools are responsible for not leaking notifications they shouldn't.
 
 ---
 
@@ -303,13 +303,13 @@ Once SEP-2322 is widely negotiated, the push path is reachable by deprecation:
 
 1. **Today.** `ctx.Sample` / `ctx.Elicit` work on legacy, error out on stateless. Use MRTR for new tool code that wants to work on both wires.
 2. **Next.** Document MRTR as the recommended path; keep `ctx.Sample` / `ctx.Elicit` as legacy aliases that internally route through MRTR where possible.
-3. **Eventually.** When tools' `requiredCapabilities` can opt into "MRTR-aware client only", the push path becomes dead code for sampling/elicitation/roots/list. **Notifications remain** on the push channel (lifecycle events, list-changed events) — those don't have an MRTR shape.
+3. **Eventually.** When tools' `requiredCapabilities` can opt into "MRTR-aware client only", the push path becomes dead code for sampling/elicitation/roots/list. **Notifications remain** on the push channel (lifecycle events, list-changed events), and those don't have an MRTR shape.
 
 ---
 
 ## 8. Two mechanisms, two phases — MRTR vs in-task input flow
 
-The pattern the previous section's table hints at deserves a closer look because it's the conceptual symmetry at the heart of SEP-2322 + SEP-2663. The spec gives you **two different mechanisms for "the server asks the client for something,"** scoped to two different phases of a tool's lifetime. They look superficially similar but have completely different mechanics — and they're different on purpose, because the phases have different constraints.
+The pattern the previous section's table hints at deserves a closer look because it's the conceptual symmetry at the heart of SEP-2322 + SEP-2663. The spec gives you **two different mechanisms for "the server asks the client for something,"** scoped to two different phases of a tool's lifetime. They look superficially similar but have completely different mechanics, and they're different on purpose, because the phases have different constraints.
 
 ### The two phases
 
@@ -365,9 +365,9 @@ The pattern the previous section's table hints at deserves a closer look because
 
 ### The "pause and resume" intuition — when it actually applies
 
-A natural first-pass intuition for either mechanism is *"the server pauses the handler and resumes it when the client replies."* This intuition is **wrong for MRTR but right for the task input flow** — and recognizing the difference makes the mental model click:
+A natural first-pass intuition for either mechanism is *"the server pauses the handler and resumes it when the client replies."* This intuition is **wrong for MRTR but right for the task input flow**, and recognizing the difference makes the mental model click:
 
-- **MRTR is not pause and resume.** The handler **returns** on every round. State is serialized into the `requestState` token. The server is stateless across rounds — same handler, same registration, just different `inputResponses` in the `ToolRequest`. It's a state machine that *replays* with accumulated state, not a coroutine that's paused.
+- **MRTR is not pause and resume.** The handler **returns** on every round. State is serialized into the `requestState` token. The server is stateless across rounds, with the same handler, the same registration, and just different `inputResponses` in the `ToolRequest`. It's a state machine that *replays* with accumulated state, not a coroutine that's paused.
 - **The task input flow *is* pause and resume.** The goroutine literally blocks on a `<-waiter` channel call. State lives in the in-process `activeTask` + `inputState`. The server is stateful across the suspended call. The client's `tasks/update` is the resume signal.
 
 Both look identical from the handler author's perspective (you write what looks like a synchronous "ask for X, get answer Y"), but the *mechanics* are completely different. The asymmetry is the whole reason the spec defines both.
@@ -376,9 +376,9 @@ Both look identical from the handler author's perspective (you write what looks 
 
 You might ask: *why not just use the task input flow for everything?* Or: *why not just use MRTR for everything?* The spec keeps both because each has a constraint the other doesn't satisfy:
 
-- **MRTR can't pause a running computation.** Once the handler has returned `core.GoAsyncResult{}` and the goroutine is busy with real work, there's no way to issue an `InputRequiredResult` — the response to the original `tools/call` already went out (as `CreateTaskResult`).
-- **Task input flow requires a task to exist.** You can't use `TaskElicit` from a sync handler that hasn't been escalated yet — there's no `TaskContext` to call it on, no goroutine to park, no `inputState` to enqueue against.
-- **MRTR is replica-portable.** A stateless deployment where each round can land on a different Lambda invocation: MRTR just works (the token has everything). The task input flow doesn't — the goroutine is pinned.
+- **MRTR can't pause a running computation.** Once the handler has returned `core.GoAsyncResult{}` and the goroutine is busy with real work, there's no way to issue an `InputRequiredResult`, because the response to the original `tools/call` already went out (as `CreateTaskResult`).
+- **Task input flow requires a task to exist.** You can't use `TaskElicit` from a sync handler that hasn't been escalated yet, since there's no `TaskContext` to call it on, no goroutine to park, no `inputState` to enqueue against.
+- **MRTR is replica-portable.** A stateless deployment where each round can land on a different Lambda invocation: MRTR just works (the token has everything). The task input flow doesn't, because the goroutine is pinned.
 - **Task input flow can react to *what work uncovered*.** A long-running compute that hits a missing dependency at minute 8 and needs the user to pick a version: you couldn't have asked for that up front because you didn't know it would be needed. MRTR can't gracefully discover and ask for that mid-flight.
 
 The two mechanisms aren't redundant; they sit at different abstraction levels and answer different questions. MRTR is the **stateless wire-layer** mechanism; the task input flow is the **stateful task-layer** mechanism.
@@ -393,7 +393,7 @@ Per SEP-2663, asserted by the [`mrtr-tasks-composition`](https://github.com/pany
 
 This is the property that makes the MRTR-then-GoAsync-then-TaskElicit composition (see §10) *actually work*: a single tool can use all three mechanisms without their state spaces colliding.
 
-For the full tasks-side picture — task lifecycle, the `tc.TaskElicit` / `tc.TaskSample` API, wire choreography for `tasks/update`, parallel fan-out, cancellation — see [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md), in particular §7 (in-task input flow).
+For the full tasks-side picture (task lifecycle, the `tc.TaskElicit` / `tc.TaskSample` API, wire choreography for `tasks/update`, parallel fan-out, cancellation), see [`docs/TASKS_TUTORIAL.md`](TASKS_TUTORIAL.md), in particular §7 (in-task input flow).
 
 ---
 
@@ -448,11 +448,11 @@ func multiRoundTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolRespon
 }
 ```
 
-The dispatcher merges prior-round answers from `requestState` into `InputResponses` before invoking the handler — so the handler always sees the full accumulated map regardless of round count.
+The dispatcher merges prior-round answers from `requestState` into `InputResponses` before invoking the handler, so the handler always sees the full accumulated map regardless of round count.
 
 ### Wrong-key tolerance
 
-If the client sends an `inputResponses` key the server didn't emit, the handler's `InputResponse("user_name")` check returns `nil` and the handler re-requests. The conformance suite asserts this is the right behavior (vs erroring) — clients can race against state, and re-requesting is more user-friendly.
+If the client sends an `inputResponses` key the server didn't emit, the handler's `InputResponse("user_name")` check returns `nil` and the handler re-requests. The conformance suite asserts this is the right behavior (vs erroring), since clients can race against state and re-requesting is more user-friendly.
 
 ---
 
@@ -491,15 +491,15 @@ Three phases, one handler:
 
 ### Spec separation that you can rely on (per SEP-2663)
 
-- MRTR `requestState` does **not** carry into the task's `requestState` — the task gets its own per-task input state.
-- Task `inputRequests` keys (if the goroutine later calls `TaskElicit`) are scoped to the task lifetime — distinct from MRTR phase keys.
+- MRTR `requestState` does **not** carry into the task's `requestState`. The task gets its own per-task input state.
+- Task `inputRequests` keys (if the goroutine later calls `TaskElicit`) are scoped to the task lifetime, distinct from MRTR phase keys.
 - Clients don't need to deduplicate across the two flows.
 
 mcpkit's [`mrtr-08`](https://github.com/panyam/mcpconformance) conformance scenario asserts all three.
 
 ### Why the middleware peeks at the response
 
-The middleware runs the handler synchronously first, then dispatches on the concrete `core.ToolResponse` variant the handler returned. This is what makes the MRTR-then-task composition work — if the middleware created the task before the handler ran, round 1 would always emit `CreateTaskResult` and the handler would never get to return `InputRequiredResult` to drive the MRTR loop.
+The middleware runs the handler synchronously first, then dispatches on the concrete `core.ToolResponse` variant the handler returned. This is what makes the MRTR-then-task composition work. If the middleware created the task before the handler ran, round 1 would always emit `CreateTaskResult` and the handler would never get to return `InputRequiredResult` to drive the MRTR loop.
 
 ---
 
@@ -600,6 +600,6 @@ tasks.Register(tasks.Config{Server: srv})  // if any tools opt into TaskSupport
 
 ## Tracing across MRTR rounds
 
-`CallToolWithInputs` automatically stitches multi-round traces when the client has a `TracerProvider` configured. Round 1's outbound traceparent is captured and stamped onto rounds 2+ as `_meta.io.modelcontextprotocol/tracelink`; the server's trace middleware reads the link and calls `AddLink` on the round-N dispatch span. Star semantic — every round 2+ links to round 1, not the previous round.
+`CallToolWithInputs` automatically stitches multi-round traces when the client has a `TracerProvider` configured. Round 1's outbound traceparent is captured and stamped onto rounds 2+ as `_meta.io.modelcontextprotocol/tracelink`; the server's trace middleware reads the link and calls `AddLink` on the round-N dispatch span. The star semantic means every round 2+ links to round 1, not the previous round.
 
 See [`docs/SEP_414_OTEL.md`](SEP_414_OTEL.md) § **MRTR multi-round trace stitching** for the full wire-shape design, considered alternatives, and the end-to-end correctness test. The `examples/mrtr/` walkthrough has a beat showing the stitched trace in Grafana.

@@ -18,7 +18,7 @@ sentinel afterward.
 ## What lives here
 
 This folder is a sentinel placeholder. It exists to host **future
-mcpkit-stricter scenarios** — assertions that go beyond what the spec
+mcpkit-stricter scenarios**, assertions that go beyond what the spec
 mandates because mcpkit deliberately picks the louder/safer option
 where the spec is silent (e.g., `-32602` over silent ack on edge
 cases). Today there are no such tests; the placeholder
@@ -34,7 +34,7 @@ npx vitest run tasks-v2/
 ```
 
 Once the test passes, the next `just testconf-tasks-v2` will pick it
-up automatically — the Makefile target chains the fork run with
+up automatically, since the Makefile target chains the fork run with
 `vitest run tasks-v2/`.
 
 ## When to upstream a stricter test

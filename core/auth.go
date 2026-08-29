@@ -91,8 +91,8 @@ type ClaimsProvider interface {
 //
 // Usage in a tool handler:
 //
-//	func myHandler(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-//	    claims := mcpkit.AuthClaims(ctx)
+//	func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+//	    claims := core.AuthClaims(ctx)
 //	    if claims != nil {
 //	        log.Printf("called by %s", claims.Subject)
 //	    }

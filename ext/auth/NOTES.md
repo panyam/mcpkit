@@ -24,7 +24,7 @@ deferred state, so the retry acquires via the PRM `scopes_supported` fallback in
 Mechanism: an `armed bool` gate in `Token()`, set by `TokenForScopes`. **`Invalidate` deliberately
 leaves `armed` set**, so a step-up retry does not re-defer.
 
-Discovery no longer pins scope. **`MCPAuthInfo.Scopes` is removed** — both the probe
+Discovery no longer pins scope. **`MCPAuthInfo.Scopes` is removed**, and both the probe
 `WWW-Authenticate` scope capture and the Step-5 PRM-fallback assignment were dropped. Acquisition
 reads the catalog from `info.PRM.ScopesSupported`, as does `ClientCredentialsTokenSource` (which
 stays eager).
@@ -68,7 +68,7 @@ The grant `assertion` is distinct from the private_key_jwt `client_assertion` cl
 conflate them.
 
 Built on oneauth's `AuthClient.JwtBearerGrant`, which has shipped since v0.1.5. **Check the
-oneauth primitive before assuming a pushdown or version bump is needed** — this one was already
+oneauth primitive before assuming a pushdown or version bump is needed**, since this one was already
 there.
 
 ---
@@ -81,7 +81,7 @@ there.
 - `OneauthTracerProvider trace.TracerProvider` is the **OTel SDK type**, not mcpkit's abstraction,
   threaded via `keys.WithTracerProvider` to enable oneauth's internal spans.
 
-They stay separate because oneauth's API takes the OTel SDK type directly, and unwrapping inside
+They stay separate mostly because oneauth's API takes the OTel SDK type directly, and unwrapping inside
 ext/auth would couple it to `ext/otel`. Adopters bridge with
 `commonotel.UnderlyingOTelTP(tp)`, which type-asserts to `*mcpotel.Provider` and returns nil for
 Noop. ext/auth depends on the core abstraction only; there is no compile-time dependency on
@@ -113,4 +113,4 @@ Current pin: v0.1.19. Version-specific fixes worth knowing:
   `ClientSecret`, and `oneauth token password` gained `--client-secret`.
 
 Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.19`. Use it from
-PATH — `go run @ver` gets confused by oneauth's own replace directives.
+PATH, since `go run @ver` gets confused by oneauth's own replace directives.

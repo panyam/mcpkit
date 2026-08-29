@@ -202,12 +202,6 @@ func (bc BaseContext) Span() Span {
 // the handler starts (typically by passing ctx — which carries the same
 // value — to TracerProvider.StartSpan). Use TraceContext.IsZero to
 // detect absence.
-//
-// Until SEP-414 P2 lands (server middleware that actually extracts
-// `_meta.traceparent` on the dispatch path), this accessor returns the
-// zero value on every request — the contract is in place so downstream
-// code (events EventBus, middleware) can be written and reviewed against
-// the eventual wire.
 func (bc BaseContext) TraceContext() TraceContext {
 	return TraceContextFromContext(bc.Context)
 }

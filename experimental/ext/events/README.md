@@ -36,7 +36,7 @@ A cursored event's `cursor` orders it within its source; `events/poll` returns e
 | **Shared counter** | `WithCursorProvider(events.NewInt64IncrCursors(incr, ""))` | multiple replicas write one source. `incr` is any `Incrementer` (a Redis `INCR`, a SQL sequence, etc.); shared across replicas it is cross-replica + restart-safe. A ready-made Redis adapter can live in `stores/redis`. |
 | **Store-minted** | a buffer store that implements `CursorProvidingStore` (e.g. `gormstore.NewEventBufferStore(db, gormstore.WithProvideCursors())`) | you already share a durable buffer store. The store assigns the cursor from its own write sequence on `Append` — mcpkit mints nothing, one round trip. |
 
-Precedence per source: an explicit `WithCursorProvider` wins; otherwise a cursor-providing store mints on write; otherwise `InProcessCursors`. Bring your own by implementing `events.CursorProvider` (`Next(ctx, source) (string, error)` — must return a monotone base-10 integer).
+Precedence per source: an explicit `WithCursorProvider` wins; otherwise a cursor-providing store mints on write; otherwise `InProcessCursors`. Bring your own by implementing `events.CursorProvider` (`Next(ctx, source) (string, error)`, which must return a monotone base-10 integer).
 
 The default is unchanged: with no store and no provider, cursors count `1, 2, 3` per source exactly as before.
 
@@ -167,7 +167,7 @@ webhooks := events.NewWebhookRegistry(
 
 Per spec, `delivery.secret` is **client-supplied and REQUIRED** on every `events/subscribe` call. The format is `whsec_` + base64 of 24-64 random bytes (Standard Webhooks profile). The server validates the format at subscribe time and rejects malformed values with `-32602 InvalidParams`. The server stores the value as-is and signs every delivery with it; the receiver verifies with the same value.
 
-The server does NOT generate or echo the secret — the client owns it from end to end. This closes a third-party-target abuse where, with server-generated secrets, anyone could subscribe with `url=<victim>` and the server would happily POST signed events to the victim. With client-supplied, HMAC proves "the endpoint owner asked for this delivery" rather than just "this came from the MCP server".
+The server does NOT generate or echo the secret. The client owns it from end to end. This closes a third-party-target abuse where, with server-generated secrets, anyone could subscribe with `url=<victim>` and the server would happily POST signed events to the victim. With client-supplied, HMAC proves "the endpoint owner asked for this delivery" rather than just "this came from the MCP server".
 
 Both client SDKs auto-generate a spec-conformant `whsec_` value when the application doesn't supply one:
 
@@ -182,9 +182,9 @@ secret = generate_webhook_secret()
 
 ### Subscription identity and auth gate
 
-Per spec §"Subscription Identity" L361-378, webhook subscribe and unsubscribe MUST require an authenticated principal; the registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)` and derives a routing handle (`X-MCP-Subscription-Id`) over the same canonical bytes. Two distinct tenants subscribing to the same `(name, params, url)` get distinct subscriptions — cross-tenant isolation by construction.
+Per spec §"Subscription Identity" L361-378, webhook subscribe and unsubscribe MUST require an authenticated principal; the registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)` and derives a routing handle (`X-MCP-Subscription-Id`) over the same canonical bytes. Two distinct tenants subscribing to the same `(name, params, url)` get distinct subscriptions, which is cross-tenant isolation by construction.
 
-The handler reads the principal via mcpkit's core auth abstraction (`core.MethodContext.AuthClaims().Subject`), so **any** auth provider that populates `core.Claims` works — JWT/OIDC via mcpkit's `ext/auth`, mTLS-derived principals, session cookies, custom validators, etc. Events depends on the `core.Claims` interface, **not** on `ext/auth` or any specific implementation. See "Auth + extension composition" below.
+The handler reads the principal via mcpkit's core auth abstraction (`core.MethodContext.AuthClaims().Subject`), so **any** auth provider that populates `core.Claims` works, whether that is JWT/OIDC via mcpkit's `ext/auth`, mTLS-derived principals, session cookies, custom validators, etc. Events depends on the `core.Claims` interface, **not** on `ext/auth` or any specific implementation. See "Auth + extension composition" below.
 
 For demos and unauthenticated mcpkit servers that want to exercise webhook delivery without standing up an auth provider, `events.Config.UnsafeAnonymousPrincipal` is a deliberate spec-deviating escape hatch:
 
@@ -214,11 +214,11 @@ your code   ──→  server.WithAuth(your favorite validator)
 The Events implementation has zero compile-time dependency on `ext/auth`. You can:
 
 - Use mcpkit's `ext/auth` for JWT/OIDC (what the demos do)
-- Use mTLS — populate Claims from the cert subject
-- Use session cookies — populate Claims from your session store
-- Use no auth at all — set `UnsafeAnonymousPrincipal` for demos
+- Use mTLS, populating Claims from the cert subject
+- Use session cookies, populating Claims from your session store
+- Use no auth at all, setting `UnsafeAnonymousPrincipal` for demos
 
-This is the right composition shape for MCP extensions — extensions depend on stable core abstractions, not on each other.
+This is the right composition shape for MCP extensions, which depend on stable core abstractions rather than on each other.
 
 ### Header mode (`WebhookHeaderMode`)
 
@@ -236,11 +236,11 @@ events.VerifyMCPSignature(body, secret, ts, sig)
 events.VerifyStandardWebhooksSignature(body, secret, msgID, ts, sig)
 ```
 
-The Python `events_client.py` receiver auto-detects which header set is on the inbound request and verifies accordingly — no client-side mode flag needed.
+The Python `events_client.py` receiver auto-detects which header set is on the inbound request and verifies accordingly, with no client-side mode flag needed.
 
 ### Unsubscribe
 
-Today: keyed on the canonical tuple `(principal, name, params, url)` per spec §"Subscription Identity" → "Key composition" L363. The derived id is NOT accepted as input on `events/unsubscribe` — callers resolve via the same tuple they used to subscribe.
+Today: keyed on the canonical tuple `(principal, name, params, url)` per spec §"Subscription Identity" → "Key composition" L363. The derived id is NOT accepted as input on `events/unsubscribe`. Callers resolve via the same tuple they used to subscribe.
 
 ```jsonc
 {"id": "sub-1", "delivery": {"url": "https://..."}}
@@ -316,11 +316,11 @@ for ev := range recv.Events() {
 
 ## Deployment
 
-For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md) — covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, and TTL refresh as keepalive.
+For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md), which covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, and TTL refresh as keepalive.
 
 ## Multi-replica deployments
 
-`notifications/events/event` is one of five server-pushed notification surfaces that silently break at N>1 (multiple server replicas) without explicit Pattern B wiring. The events SDK's `YieldingSource` implements `server.NotificationRelayReceiver` so the receive side of Pattern B routes through its slot system on every replica — per-slot `EventDef.Match` runs the same as for a local yield, preserving tenant scoping and per-subscription filters.
+`notifications/events/event` is one of five server-pushed notification surfaces that silently break at N>1 (multiple server replicas) without explicit Pattern B wiring. The events SDK's `YieldingSource` implements `server.NotificationRelayReceiver` so the receive side of Pattern B routes through its slot system on every replica, where per-slot `EventDef.Match` runs the same as for a local yield, preserving tenant scoping and per-subscription filters.
 
 The full architecture (Pattern B, `redisstore.Bus` for events, `redisstore.CapabilityBus` for capability + sub-shaped notifications, the `NotificationRouter` recipe, per-surface end-to-end flows) lives in [`docs/MULTI_REPLICA.md`](../../../docs/MULTI_REPLICA.md). The configuration recipe for events specifically:
 
@@ -367,7 +367,7 @@ W3C Trace Context propagates across every gate in the event lifecycle so a yield
 | 3. `WebhookRegistry.Deliver(ctx, event)` → outbound HTTP | HTTP `traceparent` header | `deliver()` extracts from `ctx` (preferred) or `event.Meta` (fallback for replayed events), stamps the header before `client.Do` |
 | 4. `HTTPSource.serveInject` (receiving replica) | inbound HTTP header → `ctx` → `event.Meta` | The handler reads the `traceparent` header, builds `core.TraceContext`, attaches via `core.WithTraceContext`, and calls `s.yield(ctx, data)` — closes the round-trip |
 
-**Caller-preserves rule.** If `SetMetaFunc` pre-stamps `event.Meta.traceparent`, the yield-time auto-injection is skipped — matches the same caller-wins semantic used by `core.InjectTraceContextIntoParams` (server outbound `_meta`) and the TS-side Apps Bridge relay (PR 702). The rule is uniform across every trace-context carrier in mcpkit.
+**Caller-preserves rule.** If `SetMetaFunc` pre-stamps `event.Meta.traceparent`, the yield-time auto-injection is skipped, matching the same caller-wins semantic used by `core.InjectTraceContextIntoParams` (server outbound `_meta`) and the TS-side Apps Bridge relay (PR 702). The rule is uniform across every trace-context carrier in mcpkit.
 
 **Why three carriers, not one?** `ctx` is gone the moment a goroutine exits or an HTTP request crosses the wire. `event.Meta` survives JSON serialization, persistence, and replay. HTTP headers survive the network hop. Each carrier is appropriate to its gate; together they keep the trace ID intact across every transition.
 

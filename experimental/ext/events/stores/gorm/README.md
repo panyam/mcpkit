@@ -2,7 +2,7 @@
 
 GORM-backed implementations of the `experimental/ext/events` storage seams for multi-replica deployments where the in-memory default can't share state across processes.
 
-This is a **separate Go module**. The events library does not import GORM — deployments that don't need a persistent backend never pull GORM, pgx, or sqlite into their build graph.
+This is a **separate Go module**. The events library does not import GORM, so deployments that don't need a persistent backend never pull GORM, pgx, or sqlite into their build graph.
 
 ## Stores
 
@@ -83,13 +83,13 @@ The primary key for `webhooks` is the spec's canonical-tuple bytes (BYTEA on Pos
 
 ## Secret-at-rest
 
-`webhooks.secret` is stored as the raw HMAC signing material — the same bytes the client supplied on subscribe. Operators relying on disk-level encryption (encrypted EBS volumes, Cloud SQL CMEK, etc.) for confidentiality at rest can stop here. Stronger protection (pgcrypto column-level encryption, KMS-wrapped secrets) is a future-hardening follow-up; for the prod-events demo's threat model, disk-level encryption is the documented posture.
+`webhooks.secret` is stored as the raw HMAC signing material, the same bytes the client supplied on subscribe. Operators relying on disk-level encryption (encrypted EBS volumes, Cloud SQL CMEK, etc.) for confidentiality at rest can stop here. Stronger protection (pgcrypto column-level encryption, KMS-wrapped secrets) is a future-hardening follow-up; for the prod-events demo's threat model, disk-level encryption is the documented posture.
 
 ## Tenant isolation
 
 Tenant-id is not a first-class column. The events library encodes tenancy upstream into `principal` (e.g. `principal = "<tenant>/<subject>"`) so the same canonical key under different tenants is two distinct subscriptions; quota counters scope by the same encoded principal. The store treats principal as opaque.
 
-This matches the demo's acceptance criteria (Tenant A and Tenant B see fully isolated subscription state and quota caps). If first-class per-tenant operator queries become a hard requirement, the Request types are structs — adding a `TenantID` field later is backwards-compatible.
+This matches the demo's acceptance criteria (Tenant A and Tenant B see fully isolated subscription state and quota caps). If first-class per-tenant operator queries become a hard requirement, the Request types are structs, so adding a `TenantID` field later is backwards-compatible.
 
 ## Tests
 
@@ -112,7 +112,7 @@ The conformance suite runs the same assertion body against every available backe
 
 Two reasons over hand-written `database/sql`:
 
-- **Multi-dialect from one impl.** Adding SQLite costs us essentially nothing — operators get a no-Docker local default. Adding MySQL later costs only a `ReserveQuota` dialect branch.
+- **Multi-dialect from one impl.** Adding SQLite costs us essentially nothing, and operators get a no-Docker local default. Adding MySQL later costs only a `ReserveQuota` dialect branch.
 - **Schema-from-struct.** `AutoMigrate` is the demo's default; pre-baked SQL migrations are the production posture. Both share one source of truth (the model struct tags).
 
-The atomic CAS for `ReserveQuota` uses an explicit transaction with `clause.Locking{Strength: "UPDATE"}` rather than GORM's `clause.OnConflict` helper because the latter loses behavioral parity across dialects when the conflict clause refuses to update — we need the "deny + return current count" branch, not "silently no-op".
+The atomic CAS for `ReserveQuota` uses an explicit transaction with `clause.Locking{Strength: "UPDATE"}` rather than GORM's `clause.OnConflict` helper because the latter loses behavioral parity across dialects when the conflict clause refuses to update. We need the "deny + return current count" branch, not "silently no-op".

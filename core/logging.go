@@ -72,10 +72,10 @@ type LogMessage struct {
 //
 // Usage in a tool handler:
 //
-//	func myHandler(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-//	    mcpkit.EmitLog(ctx, mcpkit.LogInfo, "my-tool", "processing started")
+//	func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+//	    core.EmitLog(ctx, core.LogInfo, "my-tool", "processing started")
 //	    // ... do work ...
-//	    return mcpkit.TextResult("done"), nil
+//	    return core.TextResult("done"), nil
 //	}
 //
 // Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.

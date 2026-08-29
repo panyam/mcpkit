@@ -1,7 +1,7 @@
 # Contributing to mcpkit
 
-Thanks for your interest in mcpkit! Contributions — bug reports, fixes,
-examples, docs, and new SEP implementations — are all welcome.
+Thanks for your interest in mcpkit! Contributions (bug reports, fixes,
+examples, docs, and new SEP implementations) are all welcome.
 
 ## Ground rules
 
@@ -9,7 +9,7 @@ examples, docs, and new SEP implementations — are all welcome.
   aim to complement the official SDKs, not compete with them.
 - Keep changes focused. One logical change per pull request.
 - Add or update tests for any behavior change. The conformance suites are
-  the contract — a green suite is the bar for merge.
+  the contract, and a green suite is the bar for merge.
 
 ## Getting started
 
@@ -82,7 +82,7 @@ worktrees; see the `MCPCONFORMANCE_*_PATH` notes in
 ## Reporting bugs and requesting features
 
 Open an issue at https://github.com/panyam/mcpkit/issues. For security
-reports, please avoid filing a public issue — contact the maintainer
+reports, please avoid filing a public issue and contact the maintainer
 directly.
 
 ## License

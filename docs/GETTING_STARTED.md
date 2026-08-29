@@ -2,14 +2,14 @@
 
 mcpkit is a batteries-included Go SDK for the [Model Context
 Protocol](https://modelcontextprotocol.io). You get a spec-conformant server and
-client, plus working implementations of a stack of draft and recent SEPs — auth,
-long-running tasks, interactive apps, tracing, events, skills — that most SDKs
+client, plus working implementations of a stack of draft and recent SEPs (auth,
+long-running tasks, interactive apps, tracing, events, skills) that most SDKs
 haven't shipped yet.
 
 This page takes you from nothing to a running server-and-client in about two
 minutes. Every snippet below is lifted from
 [`examples/getting-started`](https://github.com/panyam/mcpkit/tree/main/examples/getting-started),
-which is compiled in CI — so it works.
+which is compiled in CI, so it works.
 
 ## Install
 

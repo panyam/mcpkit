@@ -4,7 +4,7 @@ Server-declared agent discovery (agents-wg issue 20, pre-SEP). For the API see `
 
 Research surface under `experimental/ext/`, with its own go.mod, mirroring `experimental/ext/events`.
 **Promote to `ext/agents` only when a SEP merges.** Like `experimental/ext/events`, it is **not in
-the per-PR `test.yml` matrix** — it runs via the experimental umbrella and `make testall` only.
+the per-PR `test.yml` matrix**. It runs via the experimental umbrella and `make testall` only.
 
 ---
 
@@ -18,7 +18,7 @@ routing, so a supervisor host never eager-loads a flat `tools/list` of every spe
 1. `capabilities.extensions["io.modelcontextprotocol/agents"]`, advertised via the
    `core.ExtensionProvider` mechanism
 2. `agents/list` → a roster of `AgentSummary` (agentId, description, capabilities, exampleTasks,
-   delegateTool, tasksEnabled, skillUri) — **no tool schemas**
+   delegateTool, tasksEnabled, skillUri), with **no tool schemas**
 3. `agents/get {agentId}` → `AgentDetail` (the summary **embedded**, plus instructions and scoped
    `tools[]`)
 
@@ -33,8 +33,8 @@ There is deliberately **no** `core.ServerCapabilities.Agents` field. It is adver
 under `capabilities.extensions`, matching skills, tasks, and UI, which reuses
 `ServerSupportsExtension` and keeps a churning pre-SEP surface out of `core/`.
 
-The research doc's "capabilities.agents" is the conceptual capability, realized as the advertised
-extension entry. Which the WG actually intends is an open question, since it changes the
+The research doc's "capabilities.agents" is basically the conceptual capability, realized as the advertised
+extension entry. Which the WG actually intends is still an open question, and a fairly consequential one, since it changes the
 negotiation envelope.
 
 ---
@@ -49,8 +49,8 @@ instead of `initialize` (both call `captureServerExtensions`), so `SupportsAgent
 
 Guarded by `TestStatelessWireParity`.
 
-This is the general datapoint worth remembering: **keeping only discovery as new surface kept the
-primitive small enough to inherit both wires unchanged.** It is exactly the legacy-vs-stateless
+The general datapoint worth remembering is that **keeping only discovery as new surface kept the
+primitive small enough to inherit both wires unchanged.** That is the same legacy-vs-stateless
 dispatch-parity trap that bites `server/` repeatedly (see `server/NOTES.md`), dodged here by
 construction plus a regression test.
 

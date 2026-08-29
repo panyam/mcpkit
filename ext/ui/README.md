@@ -4,14 +4,14 @@ Go server-side support for the MCP Apps extension (`io.modelcontextprotocol/ui`)
 
 Separate Go module (`github.com/panyam/mcpkit/ext/ui`) so the core mcpkit module stays zero-deps. Import this package only when you want to advertise MCP Apps support.
 
-> **Looking for the architecture overview?** Read [`examples/apps/FLOW.md`](../../examples/apps/FLOW.md) — explains how basic-host, the sandbox iframe, the App, the bridge JS, and the MCP server fit together.
+> **Looking for the architecture overview?** Read [`examples/apps/FLOW.md`](../../examples/apps/FLOW.md), which explains how basic-host, the sandbox iframe, the App, the bridge JS, and the MCP server fit together.
 
 ## Why the bridge exists
 
 The App is a regular HTML/JS bundle running inside a sandboxed iframe in the host's browser. The MCP server is a separate process speaking JSON-RPC. Three problems immediately:
 
 1. **The App can't speak MCP/JSON-RPC directly.** It's in a sandboxed iframe with no network access to the server (sandbox attribute + CSP enforce this).
-2. **The App needs to talk to the *host*, not just the server.** Things like "push a message into the chat", "trigger a file download", "request fullscreen" — those aren't MCP tool calls; they're host capabilities the App needs to invoke.
+2. **The App needs to talk to the *host*, not just the server.** Things like "push a message into the chat", "trigger a file download", "request fullscreen". Those aren't MCP tool calls; they're host capabilities the App needs to invoke.
 3. **The host and the App live in different iframe origins** (basic-host on `:8080`, sandbox iframe on `:8081`, App iframe nested inside the sandbox). Cross-origin communication has to go through `postMessage`.
 
 The bridge is what lets the App act on all three needs without seeing the MCP protocol directly:
@@ -67,7 +67,7 @@ sequenceDiagram
     Host->>Host: handle locally —<br/>e.g., chat insert, log line
 ```
 
-This is why mcpkit ships **both** server-side Go code (`core/`, `server/`, `ext/ui/`) **and** a bridge JS library (`ext/ui/assets/mcp-app-bridge.ts` → compiled JS). You need both to write an App from scratch — server-side for the MCP surface, browser-side for the App's interactive behavior.
+This is why mcpkit ships **both** server-side Go code (`core/`, `server/`, `ext/ui/`) **and** a bridge JS library (`ext/ui/assets/mcp-app-bridge.ts` → compiled JS). You need both to write an App from scratch, server-side for the MCP surface and browser-side for the App's interactive behavior.
 
 In the apps-compat flow we test against (`examples/apps/compat/`), the App HTML comes from upstream verbatim and embeds upstream's bridge, so our Go fixtures only need the server side. But when *you* write a new App, mcpkit's bridge JS is what goes in your App HTML.
 
@@ -75,7 +75,7 @@ In the apps-compat flow we test against (`examples/apps/compat/`), the App HTML 
 
 A plain MCP **tool** is any callable function a client/host can invoke via `tools/call`. It returns text or structured content. No UI.
 
-An **App tool** is a tool that *also* exposes an interactive UI — its definition carries `_meta.ui.resourceUri` pointing at HTML the host fetches and renders as an iframe. Mechanically it's just a tool with extra metadata + a paired resource.
+An **App tool** is a tool that *also* exposes an interactive UI, and its definition carries `_meta.ui.resourceUri` pointing at HTML the host fetches and renders as an iframe. Mechanically it's just a tool with extra metadata + a paired resource.
 
 | Pattern | API | When to use |
 |---|---|---|
@@ -89,7 +89,7 @@ So **every App tool is also an MCP tool**; "App tool" is shorthand for "tool wit
 
 ## How the server and the App actually talk
 
-The server and the App page **never communicate directly** — they talk through the host (basic-host, Claude.ai, ChatGPT, etc.) using two completely different channels.
+The server and the App page **never communicate directly**. They talk through the host (basic-host, Claude.ai, ChatGPT, etc.) using two completely different channels.
 
 ```mermaid
 flowchart LR
@@ -144,11 +144,11 @@ sequenceDiagram
 
 Three concrete consequences for Go developers:
 
-1. **You don't need a separate HTTP server for your App's HTML.** The App is delivered as a `resources/read` JSON-RPC response payload — the same `/mcp` endpoint mcpkit's server already exposes handles it. (Even stdio MCP servers can expose Apps; the host just gets the HTML over stdio.)
+1. **You don't need a separate HTTP server for your App's HTML.** The App is delivered as a `resources/read` JSON-RPC response payload, and the same `/mcp` endpoint mcpkit's server already exposes handles it. (Even stdio MCP servers can expose Apps; the host just gets the HTML over stdio.)
 2. **The App can't `fetch()` your Go server.** If it tries, browser same-origin policy blocks it (the iframe runs at the host's sandbox origin, not your server's origin). All interaction goes through the bridge.
 3. **You need both halves of mcpkit to write a real App from scratch.** The Go side (`core/` + `server/` + `ext/ui/`) handles Channel 1. The JS bridge (`ext/ui/assets/mcp-app-bridge.ts` → compiled JS) handles Channel 2's App end. In compat fixtures the App HTML comes from upstream verbatim, so the JS bridge is upstream's; for non-compat Apps the JS bridge is mcpkit's.
 
-For the full runtime architecture — iframe nesting, postMessage relay details, where the App HTML comes from — see [`examples/apps/FLOW.md`](../../examples/apps/FLOW.md).
+For the full runtime architecture (iframe nesting, postMessage relay details, where the App HTML comes from), see [`examples/apps/FLOW.md`](../../examples/apps/FLOW.md).
 
 ## What this package provides
 
@@ -254,7 +254,7 @@ func main() {
 }
 ```
 
-The flat `ui/resourceUri` key alongside the nested `ui.resourceUri` is a backward-compat fallback for older clients — mcpkit's `core.ToolMeta` emits both via custom `MarshalJSON` (added in PR 538, mirrors upstream's ext-apps SDK behavior). Unmarshaling accepts either form.
+The flat `ui/resourceUri` key alongside the nested `ui.resourceUri` is a backward-compat fallback for older clients, and mcpkit's `core.ToolMeta` emits both via custom `MarshalJSON` (added in PR 538, mirrors upstream's ext-apps SDK behavior). Unmarshaling accepts either form.
 
 ## Escape hatches
 
@@ -282,7 +282,7 @@ The flat `ui/resourceUri` key alongside the nested `ui.resourceUri` is a backwar
 - **Tool without a UI resource**: `RegisterTypedAppTool` requires a `ResourceURI` + `ResourceHandler` pair. For tools that don't have their own UI (app-only helpers sharing an iframe), use `core.TypedTool` + `srv.RegisterTool` directly with manual `ToolDef.Meta.UI` construction. Improvement tracked in issue 548.
 - **Comma-bearing defaults/descriptions in struct tags**: invopop's tag parser splits on commas; values containing commas get silently truncated. Use `InputSchemaOverride` to bypass. See issue 542 (closed by PR 545).
 - **`interface{}` / `any` field in input struct**: produces a schema the MCP SDK client-side zod validator rejects. Use `InputSchemaOverride` with an explicit empty-shape map (`{}` for the `any` field). Tracked in issue 548.
-- **Background goroutines** that outlive the tool handler: use `core.DetachForBackground(ctx)` (not `context.WithoutCancel`) — preserves the session-level push channel.
+- **Background goroutines** that outlive the tool handler: use `core.DetachForBackground(ctx)` rather than `context.WithoutCancel`, which preserves the session-level push channel.
 
 ## Tracing across the Apps Bridge
 

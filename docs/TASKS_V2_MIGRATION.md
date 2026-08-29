@@ -29,7 +29,7 @@ SEP-2663 evolves the v1 task surface in five ways. Each one has a wire-format di
 
 ### 2. tools/call response is polymorphic (`resultType` discriminator)
 
-v1 server decides based on whether the client sent a `task` hint. v2 server decides unilaterally — and the client doesn't send a hint. The response carries a `resultType` discriminator so the client knows which shape arrived.
+v1 server decides based on whether the client sent a `task` hint. v2 server decides unilaterally, and the client doesn't send a hint. The response carries a `resultType` discriminator so the client knows which shape arrived.
 
 ```jsonc
 // v1 — sync
@@ -115,7 +115,7 @@ After `tasks/cancel`, observe the resulting `cancelled` status via the next `tas
 |---|---|---|
 | Status notification method | `notifications/tasks/status` | `notifications/tasks` |
 
-Payload shape is unchanged on the v2 path (still a `DetailedTask` carrying the SEP-2322 `requestState`). Only the JSON-RPC method name moved. The v1 method name is preserved, so hybrid servers emit both names — v2 clients subscribe to `notifications/tasks`, v1 clients keep their existing `notifications/tasks/status` subscription. (Spec commit `1d3813ab` in PR 2663.)
+Payload shape is unchanged on the v2 path (still a `DetailedTask` carrying the SEP-2322 `requestState`). Only the JSON-RPC method name moved. The v1 method name is preserved, so hybrid servers emit both names. v2 clients subscribe to `notifications/tasks`, v1 clients keep their existing `notifications/tasks/status` subscription. (Spec commit `1d3813ab` in PR 2663.)
 
 ## Server migration paths
 
@@ -126,7 +126,7 @@ srv := server.NewServer(info)
 server.RegisterTasksV1(server.TasksConfigV1{Server: srv})
 ```
 
-That's it. v1 stays where it always was — `server/tasks_v1.go`.
+That's it. v1 stays where it always was, in `server/tasks_v1.go`.
 
 ### Pure v2 server
 
@@ -207,7 +207,7 @@ client.CancelTask(c, taskID)
 
 The expected flow for a deployment migrating from v1 to v2 without downtime:
 
-1. **Server**: install both surfaces side-by-side. Call `server.RegisterTasksV1(...)` then `tasks.Register(...)`. v1 clients hit the v1 paths (`tasks/result`, `tasks/list`, and `tasks/get` if no extension is declared — though see the dispatch caveat in the "v1 + v2 on the same endpoint" section above).
+1. **Server**: install both surfaces side-by-side. Call `server.RegisterTasksV1(...)` then `tasks.Register(...)`. v1 clients hit the v1 paths (`tasks/result`, `tasks/list`, and `tasks/get` if no extension is declared, though see the dispatch caveat in the "v1 + v2 on the same endpoint" section above).
 2. **Clients**: roll out the v2-aware client one cohort at a time. Each upgraded client adds `client.WithTasksExtension()` and switches to the v2 helpers.
 3. Once the v1 client population is empty, drop the `server.RegisterTasksV1(...)` line. Only `tasks.Register(...)` remains.
 
@@ -243,7 +243,7 @@ The spec added the requirement that a server which cannot service a request with
 
 The merged SEP-2663 dropped the `requestState?: string` field from the `Task` base interface and removed the entire "Request State Management" section. mcpkit's `core.DetailedTask`, `core.UpdateTaskRequest`, `tasks/get` inline param struct, and `tasks/cancel` inline param struct no longer carry the field; the runtime helpers (`v2TaskRuntime.makeRequestState` / `verifyRequestState`) and per-registration signing config (`TasksConfig.RequestStateKey` / `RequestStateTTL`) are removed. The client surface drops `TaskOptions.RequestState`; `client.GetTask` and `client.CancelTask` simplify to `(c, taskID)` signatures, and `WaitForTask` no longer threads requestState through its poll loop.
 
-SEP-2322's `core.InputRequiredResult.RequestState` (the MRTR multi-round-trip surface) is unchanged. The server-wide `WithRequestStateSigning` option stays — MRTR's dispatcher still uses it via `s.dispatcher.mrtr` for signing the MRTR round state. The `core.SignRequestState` / `core.VerifyRequestState` helpers are retained because `server/mrtr.go` reads legacy single-round MRTR tokens with the older payload shape for backward compatibility; that shim is removable once in-flight rounds rotate past.
+SEP-2322's `core.InputRequiredResult.RequestState` (the MRTR multi-round-trip surface) is unchanged. The server-wide `WithRequestStateSigning` option stays, and MRTR's dispatcher still uses it via `s.dispatcher.mrtr` for signing the MRTR round state. The `core.SignRequestState` / `core.VerifyRequestState` helpers are retained because `server/mrtr.go` reads legacy single-round MRTR tokens with the older payload shape for backward compatibility; that shim is removable once in-flight rounds rotate past.
 
 ## Reference
 
