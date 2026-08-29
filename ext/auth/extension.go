@@ -24,9 +24,5 @@ type AuthExtension struct{}
 
 // Extension returns the MCP auth extension metadata.
 func (AuthExtension) Extension() core.Extension {
-	return core.Extension{
-		ID:          "io.mcpkit/auth",
-		SpecVersion: "2025-11-25",
-		Stability:   core.Experimental,
-	}
+	return core.Extension{ID: "io.mcpkit/auth"}
 }

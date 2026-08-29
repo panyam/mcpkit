@@ -50,8 +50,7 @@ func TestExtensionAdvertised(t *testing.T) {
 
 	cap, ok := tc.ServerExtensionCapability(agents.ExtensionID)
 	require.True(t, ok)
-	assert.Equal(t, agents.SpecVersion, cap.SpecVersion)
-	assert.Equal(t, string(core.Experimental), cap.Stability)
+	assert.Empty(t, cap, "agents declares no settings, so the object is empty per SEP-2133")
 }
 
 // TestListReturnsRosterWithoutSchemas is the load-bearing progressive-

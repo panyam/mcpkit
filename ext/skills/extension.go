@@ -23,9 +23,9 @@ import "github.com/panyam/mcpkit/core"
 type SkillsExtension struct {
 	// DirectoryRead reports the server's support for the SEP-2640
 	// resources/directory/read method (added by SEP commit 2e04c48d on
-	// 2026-06-09). When true, the extension's wire-level Config carries
-	// {"directoryRead": true}; when false the Config is omitted and clients
-	// MUST NOT call the method per the SEP's normative wording.
+	// 2026-06-09). When true, the extension's settings object carries
+	// {"directoryRead": true}; when false the settings object is empty and
+	// clients MUST NOT call the method per the SEP's normative wording.
 	//
 	// Provider.RegisterWith sets this to true automatically because a
 	// Provider can always enumerate directories from its underlying fs.FS.
@@ -40,19 +40,15 @@ type SkillsExtension struct {
 // key without re-stringing the literal.
 const CapabilityDirectoryRead = "directoryRead"
 
-// Extension implements core.ExtensionProvider. It returns the SEP-2640
-// extension metadata. When DirectoryRead is set, the Config map carries
-// the directoryRead capability flag; otherwise Config stays nil and the
-// wire-level value is the empty JSON object {} (not [] — see SEP-2640 PR
-// discussion).
+// Extension implements core.ExtensionProvider. When DirectoryRead is set the
+// settings object carries the directoryRead flag, landing on the wire as
+// {"io.modelcontextprotocol/skills": {"directoryRead": true}} per SEP-2133.
+// Otherwise Settings stays nil and the wire-level value is the empty JSON
+// object {} (not [] — see SEP-2640 PR discussion).
 func (e SkillsExtension) Extension() core.Extension {
-	ext := core.Extension{
-		ID:          ExtensionID,
-		SpecVersion: SpecVersion,
-		Stability:   core.Experimental,
-	}
+	ext := core.Extension{ID: ExtensionID}
 	if e.DirectoryRead {
-		ext.Config = map[string]any{CapabilityDirectoryRead: true}
+		ext.Settings = map[string]any{CapabilityDirectoryRead: true}
 	}
 	return ext
 }

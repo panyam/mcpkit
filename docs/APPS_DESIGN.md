@@ -45,7 +45,7 @@ MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `
 │                                                                      │
 │  EXISTING (unchanged):                                               │
 │  ├─ ExtensionProvider                                                │
-│  ├─ Extension, Stability                                             │
+│  ├─ Extension (ID + Settings)                                        │
 │  └─ RegisterResource, RegisterTool, etc.                             │
 ├──────────────────────────────────────────────────────────────────────┤
 │  mcpkit/ui (optional sub-module, future)                             │
@@ -237,11 +237,9 @@ import "github.com/panyam/mcpkit"
 type UIExtension struct{}
 
 func (UIExtension) Extension() mcpkit.Extension {
-    return mcpkit.Extension{
-        ID:          "io.modelcontextprotocol/ui",
-        SpecVersion: "2026-01-26",
-        Stability:   mcpkit.Experimental,
-    }
+    // No settings: MCP Apps declares no optional server-side features, so
+    // this reaches the wire as the empty object per SEP-2133.
+    return mcpkit.Extension{ID: "io.modelcontextprotocol/ui"}
 }
 ```
 
@@ -258,7 +256,7 @@ sequenceDiagram
     Note over C: extensions - io.modelcontextprotocol/ui<br/>mimeTypes - text/html, profile=mcp-app
     Note right of S: Store client extension caps<br/>ClientSupportsUI = true
     S-->>C: initialize result with UI extension
-    Note over S: io.modelcontextprotocol/ui<br/>specVersion 2026-01-26<br/>stability experimental
+    Note over S: io.modelcontextprotocol/ui<br/>empty settings object
 ```
 
 ### Flow B: Tool with UI — full lifecycle (host perspective)

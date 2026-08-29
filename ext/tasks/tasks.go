@@ -317,11 +317,7 @@ type tasksExtensionProvider struct{}
 //
 //nolint:unused // referenced by Register only when the v2 path is wired
 func (tasksExtensionProvider) Extension() core.Extension {
-	return core.Extension{
-		ID:          core.TasksExtensionID,
-		SpecVersion: "draft", // SEP-2663 is in draft
-		Stability:   core.Experimental,
-	}
+	return core.Extension{ID: core.TasksExtensionID}
 }
 
 // Register hooks up v2 tasks support on the given server:

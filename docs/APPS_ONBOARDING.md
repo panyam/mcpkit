@@ -69,10 +69,7 @@ This adds the extension to your initialize response:
     "tools": {},
     "resources": {},
     "extensions": {
-      "io.modelcontextprotocol/ui": {
-        "specVersion": "2026-01-26",
-        "stability": "experimental"
-      }
+      "io.modelcontextprotocol/ui": {}
     }
   }
 }

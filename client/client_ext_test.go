@@ -13,11 +13,7 @@ import (
 type testUIExtension struct{}
 
 func (testUIExtension) Extension() core.Extension {
-	return core.Extension{
-		ID:          core.UIExtensionID,
-		SpecVersion: "2026-01-26",
-		Stability:   core.Experimental,
-	}
+	return core.Extension{ID: core.UIExtensionID}
 }
 
 // newUITestServer creates a server with UIExtension registered and tools with

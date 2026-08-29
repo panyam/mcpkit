@@ -202,32 +202,25 @@ type InvalidatingTokenSource interface {
 	Invalidate()
 }
 
-// Stability represents the maturity level of an extension.
-type Stability string
-
-const (
-	// Experimental indicates the extension is in development and may change.
-	Experimental Stability = "experimental"
-	// Stable indicates the extension is production-ready.
-	Stable Stability = "stable"
-	// Deprecated indicates the extension will be removed in a future version.
-	Deprecated Stability = "deprecated"
-)
-
-// Extension describes a protocol extension with maturity metadata.
-// Extensions are advertised in the initialize response under capabilities.extensions.
+// Extension is one extension's declaration, which the server renders into
+// capabilities.extensions during initialize.
+//
+// SEP-2133 (Final) maps an extension identifier straight to its settings
+// object, so ID becomes the map key and Settings becomes the value. The SEP
+// defines no envelope and has nowhere to put spec-version or stability
+// metadata, so mcpkit no longer carries either on the wire. Where an
+// implementation wants to record which spec revision it tracks, the convention
+// is a package-level constant in the extension's own package (see
+// skills.SpecVersion).
 type Extension struct {
-	// ID is the extension identifier (e.g., "io.mcpkit/auth").
-	ID string `json:"id"`
+	// ID is the extension identifier (e.g., "io.mcpkit/auth"). It is the key
+	// under capabilities.extensions, never a field inside the value.
+	ID string
 
-	// SpecVersion is the version of the spec this extension implements.
-	SpecVersion string `json:"specVersion"`
-
-	// Stability indicates the maturity of this extension.
-	Stability Stability `json:"stability"`
-
-	// Config holds extension-specific configuration, if any.
-	Config map[string]any `json:"config,omitempty"`
+	// Settings holds the extension's settings object, whose schema each
+	// extension defines for itself. Nil means the extension declares no
+	// settings, which reaches the wire as the empty object {}.
+	Settings map[string]any
 }
 
 // ExtensionProvider is implemented by sub-modules to declare their extension.

@@ -1619,11 +1619,12 @@ func (c *Client) UsingStatelessWire() bool {
 // server advertised for id during initialize, or false when the server
 // did not declare the extension.
 //
-// Use this to inspect extension-specific Config settings (e.g., the
-// SEP-2640 directoryRead flag). The returned capability is decoded from
-// the raw JSON captured at initialize time and reflects whatever the
-// server emitted on the wire; callers should treat unknown Config keys
-// permissively.
+// The returned value is the extension's settings object, indexed directly
+// by setting name (e.g. cap["directoryRead"] for SEP-2640). SEP-2133 puts
+// the settings inline under the extension identifier, so there is no
+// envelope to unwrap. It is decoded from the raw JSON captured at
+// initialize time and reflects whatever the server emitted on the wire;
+// callers should treat unknown keys permissively.
 func (c *Client) ServerExtensionCapability(id string) (core.ExtensionCapability, bool) {
 	raw, ok := c.serverExtensions[id]
 	if !ok {

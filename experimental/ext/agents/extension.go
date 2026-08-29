@@ -22,9 +22,5 @@ type AgentsExtension struct{}
 // extension metadata at Experimental stability. Config stays nil (empty {} on
 // the wire) — discovery happens through agents/list, not the capability body.
 func (AgentsExtension) Extension() core.Extension {
-	return core.Extension{
-		ID:          ExtensionID,
-		SpecVersion: SpecVersion,
-		Stability:   core.Experimental,
-	}
+	return core.Extension{ID: ExtensionID}
 }

@@ -33,6 +33,13 @@ jobs:
       - name: No cross-extension requires
         run: ./scripts/check-ext-isolation.sh
 
+      # examples/ holds 58 modules but `make test-examples` only runs the ~10
+      # that have tests, so nothing compiled the rest. apps/react/server was
+      # broken from c45ccb78 until it was found by hand, with CI green
+      # throughout. Build-only, so it stays fast.
+      - name: Examples compile
+        run: ./scripts/check-examples-build.sh
+
       - name: Run unit tests
         run: go test ./... -v
 
