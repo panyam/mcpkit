@@ -269,7 +269,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    }),
 </span></span><span style="display:flex;"><span>)
 </span></span><span style="display:flex;"><span>c <span style="color:#000;font-weight:bold">:=</span> client.<span style="color:#900;font-weight:bold">NewClient</span>(<span style="color:#d14">&#34;memory://&#34;</span>, info, client.<span style="color:#900;font-weight:bold">WithTransport</span>(transport))
-</span></span></code></pre><p>The in-process transport passes <code>*core.Request</code>/<code>*core.Response</code> directly — no JSON envelope serialization. This catches logic bugs; HTTP transport tests catch wire format bugs.</p>
+</span></span></code></pre><p>The in-process transport passes <code>*core.Request</code>/<code>*core.Response</code> directly, with no JSON envelope serialization. This catches logic bugs; HTTP transport tests catch wire format bugs.</p>
 
 
     </div>

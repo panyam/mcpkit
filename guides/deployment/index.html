@@ -239,7 +239,7 @@
         
 <h1 id="multi-replica-notification-delivery">Multi-replica notification delivery <a class="anchor" href="#multi-replica-notification-delivery">¶</a></h1>
 <p>This document describes how mcpkit fans server-pushed notifications across an N-replica deployment, and how adopters wire each notification surface to work correctly at N&gt;1.</p>
-<p>If you run mcpkit at N=1 (single server process), this doc is informational — nothing here is required. If you run N&gt;1 (multiple replicas behind a load balancer or service mesh), <strong>the surfaces enumerated here do not work without explicit wiring</strong>, and a session connected to one replica will silently miss notifications generated on another.</p>
+<p>If you run mcpkit at N=1 (single server process), this doc is informational and nothing here is required. If you run N&gt;1 (multiple replicas behind a load balancer or service mesh), <strong>the surfaces enumerated here do not work without explicit wiring</strong>, and a session connected to one replica will silently miss notifications generated on another.</p>
 <p>The architecture lifted from issue 755 (PR A <code>#757</code>, PR B1 <code>#759</code>, PR B2 <code>#768</code>, PR B3 this doc).</p>
 <h2 id="the-problem-at-n1">The problem at N&gt;1 <a class="anchor" href="#the-problem-at-n1">¶</a></h2>
 <p>Every server-pushed notification mcpkit emits today reaches only the clients connected to the replica that generated it:</p>
@@ -285,7 +285,7 @@
 <ol>
 <li>Delivered locally to K&rsquo;s own connected clients (current behavior, unchanged).</li>
 <li>Published outward through the transport.</li>
-<li>Received on every other replica K′, which routes them through its local delivery machinery — applying its per-replica subscription filters as if the notification had been generated there.</li>
+<li>Received on every other replica K′, which routes them through its local delivery machinery, applying its per-replica subscription filters as if the notification had been generated there.</li>
 </ol>
 <p>Self-publish dedup happens inside the transport adapter, invisibly: each publisher carries a process-unique origin marker; the colocated subscriber drops messages carrying its own marker before invoking the receiver.</p>
 <pre><code class="language-mermaid">flowchart LR
@@ -457,7 +457,7 @@
     HasRelay --&gt;|no / yes| BroadcastToSessions
     BroadcastToSessions --&gt; Sessions
 </code></pre>
-<p><code>Broadcast</code> always fires <code>BroadcastToSessions</code>. The relay&rsquo;s <code>Publish</code> runs ALSO when a relay is installed. There&rsquo;s no else branch — local fan-out is universal.</p>
+<p><code>Broadcast</code> always fires <code>BroadcastToSessions</code>. The relay&rsquo;s <code>Publish</code> runs ALSO when a relay is installed. There&rsquo;s no else branch, so local fan-out is universal.</p>
 <p><code>BroadcastToSessions</code> is the <strong>local-only</strong> path. The receive side of Pattern B calls this (NOT <code>Broadcast</code>) so a cross-replica relay receive doesn&rsquo;t re-publish through the relay and loop.</p>
 <h3 id="notificationrelay--publish-side"><code>NotificationRelay</code> — publish side <a class="anchor" href="#notificationrelay--publish-side">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -473,7 +473,7 @@
     S-&gt;&gt;S: BroadcastToSessions(method, params)
     Note right of S: local delivery happens regardless&lt;br/&gt;of relay errors (fire-and-forget)
 </code></pre>
-<p><code>NotificationRelay</code> is fire-and-forget — errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.</p>
+<p><code>NotificationRelay</code> is fire-and-forget, so errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.</p>
 <h3 id="notificationrelayreceiver--receive-side"><code>NotificationRelayReceiver</code> — receive side <a class="anchor" href="#notificationrelayreceiver--receive-side">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant T as Transport subscriber
@@ -548,7 +548,7 @@
         end
     end
 </code></pre>
-<p><code>YieldingSource.Receive</code> is a thin adapter; <code>LocalDeliver</code> is the work — runs the per-slot fanout loop without firing the configured <code>Emitter</code> (so no re-publish).</p>
+<p><code>YieldingSource.Receive</code> is a thin adapter; <code>LocalDeliver</code> is the work, running the per-slot fanout loop without firing the configured <code>Emitter</code> (so no re-publish).</p>
 <h3 id="redisstorecapabilitybus--capability-shaped-pattern-b"><code>redisstore.CapabilityBus</code> — capability-shaped Pattern B <a class="anchor" href="#redisstorecapabilitybus--capability-shaped-pattern-b">¶</a></h3>
 <pre><code class="language-mermaid">flowchart LR
     subgraph &quot;Publish (origin)&quot;
@@ -570,7 +570,7 @@
         S3 --&gt;|no| S5
     end
 </code></pre>
-<p>Wire format: per-method channel <code>&lt;ChannelPrefix&gt;.broadcast.&lt;method&gt;</code>. Payload is a JSON envelope <code>{&quot;origin&quot;: &quot;&lt;uuid&gt;&quot;, &quot;params&quot;: &lt;json&gt;}</code>. Origin lives in the envelope, NOT in <code>params._meta</code> — capability-shaped notifications often have <code>nil params</code>, so the marker can&rsquo;t live there.</p>
+<p>Wire format: per-method channel <code>&lt;ChannelPrefix&gt;.broadcast.&lt;method&gt;</code>. Payload is a JSON envelope <code>{&quot;origin&quot;: &quot;&lt;uuid&gt;&quot;, &quot;params&quot;: &lt;json&gt;}</code>. Origin lives in the envelope, NOT in <code>params._meta</code>, because capability-shaped notifications often have <code>nil params</code> and the marker can&rsquo;t live there.</p>
 <h3 id="redisstorebus--events-typed-pattern-b"><code>redisstore.Bus</code> — events-typed Pattern B <a class="anchor" href="#redisstorebus--events-typed-pattern-b">¶</a></h3>
 <pre><code class="language-mermaid">flowchart LR
     subgraph &quot;Emit (origin)&quot;
@@ -611,7 +611,7 @@
     Hub --&gt; Run_B
     Note[&quot;Each Bus drops messages tagged&lt;br/&gt;with its own origin marker&quot;]
 </code></pre>
-<p>Test-only — same shape as <code>redisstore.Bus</code> but uses goroutines + channels in the same process. Lets the events SDK be exercised in multi-replica mode without standing up Redis.</p>
+<p>Test-only, the same shape as <code>redisstore.Bus</code> but using goroutines + channels in the same process. Lets the events SDK be exercised in multi-replica mode without standing up Redis.</p>
 <h2 id="per-surface-end-to-end-flows">Per-surface end-to-end flows <a class="anchor" href="#per-surface-end-to-end-flows">¶</a></h2>
 <h3 id="notificationstoolslist-changed"><code>notifications/tools/list_changed</code> <a class="anchor" href="#notificationstoolslist-changed">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -640,7 +640,7 @@
     Cap-&gt;&gt;Srv2: BroadcastToSessions(method, nil)
     Srv2-&gt;&gt;Cli2: notify(&quot;notifications/tools/list_changed&quot;, nil)
 </code></pre>
-<p>Same flow for <code>resources/list_changed</code> and <code>prompts/list_changed</code> — only the method name changes.</p>
+<p>Same flow for <code>resources/list_changed</code> and <code>prompts/list_changed</code>, with only the method name changing.</p>
 <h3 id="notificationsresourcesupdated"><code>notifications/resources/updated</code> <a class="anchor" href="#notificationsresourcesupdated">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     autonumber
@@ -938,7 +938,7 @@
 </tr>
 </tbody>
 </table>
-<p>The key insight from this trace: <strong><code>EventDef.Match</code> runs once per slot on EVERY replica that holds a matching slot.</strong> The transport just sprays; each replica&rsquo;s <code>LocalDeliver</code> independently filters. There&rsquo;s no central routing decision and no cross-replica subscription registry — each replica owns its own subscriber state and applies its own filter.</p>
+<p>The key insight from this trace is that <strong><code>EventDef.Match</code> runs once per slot on EVERY replica that holds a matching slot.</strong> The transport just sprays; each replica&rsquo;s <code>LocalDeliver</code> independently filters. There&rsquo;s no central routing decision and no cross-replica subscription registry. Each replica owns its own subscriber state and applies its own filter.</p>
 <h2 id="scenario-walkthroughs">Scenario walkthroughs <a class="anchor" href="#scenario-walkthroughs">¶</a></h2>
 <h3 id="single-replica-yield-n1-no-relay">Single-replica yield (N=1, no relay) <a class="anchor" href="#single-replica-yield-n1-no-relay">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -990,7 +990,7 @@
     Note over Bus: receiver NOT invoked → no double-fire
 </code></pre>
 <h3 id="tenant-scoping-cross-replica">Tenant scoping cross-replica <a class="anchor" href="#tenant-scoping-cross-replica">¶</a></h3>
-<p>The bug that motivated issue 755: an asgard event reaches babylon&rsquo;s streamer because the cross-replica broadcast bypassed per-slot <code>Match</code>. With the fix (<code>LocalDeliver</code> routes through the slot system on every replica), <code>Match</code> runs per-slot per-replica and tenant scoping holds.</p>
+<p>The bug that motivated issue 755 was an asgard event reaching babylon&rsquo;s streamer, because the cross-replica broadcast bypassed per-slot <code>Match</code>. With the fix (<code>LocalDeliver</code> routes through the slot system on every replica), <code>Match</code> runs per-slot per-replica and tenant scoping holds.</p>
 <pre><code class="language-mermaid">sequenceDiagram
     autonumber
     participant App as App on K3
@@ -1017,7 +1017,7 @@
     end
 </code></pre>
 <h3 id="slow-subscriber--drop-policy">Slow subscriber — drop policy <a class="anchor" href="#slow-subscriber--drop-policy">¶</a></h3>
-<p>When a Bus&rsquo;s incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry — adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.</p>
+<p>When a Bus&rsquo;s incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry, so adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.</p>
 <p>In Pattern B with Redis pubsub specifically:</p>
 <table>
 <thead>
@@ -1168,17 +1168,17 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#998;font-style:italic">// 3. b.receiver.Receive(ctx, method, params)
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    }
 </span></span><span style="display:flex;"><span>}
-</span></span></code></pre><p>The two interface implementations are independent — same struct can satisfy both, or separate publisher/subscriber types. Reference impls: <code>redisstore.CapabilityBus</code> (catalog-shaped) and <code>redisstore.Bus</code> (events-shaped).</p>
+</span></span></code></pre><p>The two interface implementations are independent, so one struct can satisfy both or separate publisher/subscriber types can be used. Reference impls: <code>redisstore.CapabilityBus</code> (catalog-shaped) and <code>redisstore.Bus</code> (events-shaped).</p>
 <h2 id="trade-offs-and-gotchas">Trade-offs and gotchas <a class="anchor" href="#trade-offs-and-gotchas">¶</a></h2>
 <h3 id="eventual-consistency">Eventual consistency <a class="anchor" href="#eventual-consistency">¶</a></h3>
-<p>Pattern B is asynchronous. A <code>tools/list_changed</code> fired on K1 reaches K2&rsquo;s clients with some latency (Redis pubsub roundtrip — typically single-digit milliseconds, but adversarial network conditions can extend this).</p>
-<p>For applications that need synchronous cross-replica state, mcpkit&rsquo;s catalog mutations are NOT a synchronization primitive — the catalog itself remains per-replica. If K1 adds a tool and K2 doesn&rsquo;t acknowledge before a client on K2 calls <code>tools/list</code>, the call returns K2&rsquo;s view (pre-add).</p>
+<p>Pattern B is asynchronous. A <code>tools/list_changed</code> fired on K1 reaches K2&rsquo;s clients with some latency (a Redis pubsub roundtrip, typically single-digit milliseconds, though adversarial network conditions can extend this).</p>
+<p>For applications that need synchronous cross-replica state, mcpkit&rsquo;s catalog mutations are NOT a synchronization primitive, and the catalog itself remains per-replica. If K1 adds a tool and K2 doesn&rsquo;t acknowledge before a client on K2 calls <code>tools/list</code>, the call returns K2&rsquo;s view (pre-add).</p>
 <p>For most adopters this is fine: list_changed notifications are advisory; the next <code>tools/list</code> call on K2 (potentially triggered by the notification) reflects K2&rsquo;s updated state after K2 picks up the new tool via its own registration path.</p>
 <h3 id="not-at-least-once">Not at-least-once <a class="anchor" href="#not-at-least-once">¶</a></h3>
-<p>Redis pubsub does NOT persist messages. A replica that&rsquo;s offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups) — the <code>NotificationRelay</code> + <code>NotificationRelayReceiver</code> shapes accommodate either, but the reference <code>redisstore.CapabilityBus</code> uses pubsub specifically.</p>
+<p>Redis pubsub does NOT persist messages. A replica that&rsquo;s offline when a publish happens misses the message permanently. If your application semantics require at-least-once delivery (e.g., billing events), use a persistent transport (Redis Streams, Kafka with consumer groups). The <code>NotificationRelay</code> + <code>NotificationRelayReceiver</code> shapes accommodate either, but the reference <code>redisstore.CapabilityBus</code> uses pubsub specifically.</p>
 <p>For events, the <code>EventBufferStore</code> + <code>events/poll</code> path gives at-least-once for clients that opt in.</p>
 <h3 id="subscribe-state-stays-per-replica">Subscribe state stays per-replica <a class="anchor" href="#subscribe-state-stays-per-replica">¶</a></h3>
-<p>A client subscribed to <code>resources/subscribe(file:///x)</code> on K1 is subscribed ON K1 ONLY. The cross-replica <code>notifications/resources/updated</code> reaches K2; if a client on K2 ALSO subscribed to <code>file:///x</code>, K2&rsquo;s <code>subscriptionRegistry</code> fires that client. There&rsquo;s no cross-replica subscription registry — each replica filters its own local set.</p>
+<p>A client subscribed to <code>resources/subscribe(file:///x)</code> on K1 is subscribed ON K1 ONLY. The cross-replica <code>notifications/resources/updated</code> reaches K2; if a client on K2 ALSO subscribed to <code>file:///x</code>, K2&rsquo;s <code>subscriptionRegistry</code> fires that client. There&rsquo;s no cross-replica subscription registry. Each replica filters its own local set.</p>
 <p>This means: clients DO NOT roam between replicas mid-session. If your deployment moves a client from K1 to K2 (load balancer reroutes, replica restart), the new connection re-subscribes from scratch.</p>
 <h3 id="origin-marker-is-transport-internal">Origin marker is transport-internal <a class="anchor" href="#origin-marker-is-transport-internal">¶</a></h3>
 <p>Adopters never see origin markers. Transport adapters handle them internally:</p>

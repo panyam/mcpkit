@@ -370,7 +370,7 @@ section. Two obligations fall on server authors:</p>
 <ol>
 <li><strong><code>cacheScope</code> MUST reflect intended visibility.</strong> A <code>&quot;public&quot;</code> response<br />
 may be served across authorization contexts even when it came from an<br />
-authenticated endpoint — different access tokens can share the same<br />
+authenticated endpoint, where different access tokens can share the same<br />
 cache entry. Marking a per-user tool list as <code>&quot;public&quot;</code> leaks one user&rsquo;s<br />
 primitives to another. Any response whose contents differ per<br />
 authorization context MUST be <code>&quot;private&quot;</code>.</li>
@@ -401,7 +401,7 @@ covered only the four list endpoints).</li>
 <p>A Security Implications section landed in <code>caching.mdx</code> on 2026-05-14.</p>
 <h2 id="migrating-from-the-pre-merge-implementation">Migrating from the pre-merge implementation <a class="anchor" href="#migrating-from-the-pre-merge-implementation">¶</a></h2>
 <p>If you adopted mcpkit&rsquo;s pre-merge SEP-2549 release (roughly 2026-04-30<br />
-onward), the rename is a breaking change. It is loud — old code stops<br />
+onward), the rename is a breaking change. It is loud, and old code stops<br />
 compiling rather than silently changing units.</p>
 <table>
 <thead>

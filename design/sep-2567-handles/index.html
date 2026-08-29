@@ -239,8 +239,8 @@
         
 <h1 id="sep-2567--explicit-state-handles-in-mcpkit">SEP-2567 — Explicit State Handles in mcpkit <a class="anchor" href="#sep-2567--explicit-state-handles-in-mcpkit">¶</a></h1>
 <p><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567">SEP-2567</a> (&ldquo;Sessionless MCP via Explicit State Handles&rdquo;) is the SEP-2575 stateless wire&rsquo;s <em>application-layer</em> counterpart: the wire removes session machinery; SEP-2567 explains how to model stateful flows <em>without</em> sessions, using explicit server-minted handles threaded through tool parameters.</p>
-<p><strong>SEP-2567 is design guidance — there is no wire contract and no upstream conformance suite.</strong> Any storage you can hand a tool handler satisfies it: Redis, SQL, an in-memory <code>sync.Map</code>, a custom RPC backend, whatever. The SEP cares about <em>behavior</em> (server-minted opaque ids, threaded through tool args, no implicit session state) — not about any specific Go API.</p>
-<p>mcpkit ships <code>server.HandleStore[T]</code> as <strong>opt-in scaffolding</strong> for the common case where you don&rsquo;t already have a store wired up. It handles opaque-id minting (collision-resistant base32), TTL/GC, and typed get/put/delete behind a small interface. Use it, replace it with your own store, or skip it entirely — all three are equally SEP-2567-compliant. The worked example in <code>examples/stateless/</code>&rsquo;s cart story uses <code>HandleStore</code> for the on-ramp; a production deployment would as likely call Redis directly.</p>
+<p><strong>SEP-2567 is design guidance, with no wire contract and no upstream conformance suite.</strong> Any storage you can hand a tool handler satisfies it: Redis, SQL, an in-memory <code>sync.Map</code>, a custom RPC backend, whatever. The SEP cares about <em>behavior</em> (server-minted opaque ids, threaded through tool args, no implicit session state), not about any specific Go API.</p>
+<p>mcpkit ships <code>server.HandleStore[T]</code> as <strong>opt-in scaffolding</strong> for the common case where you don&rsquo;t already have a store wired up. It handles opaque-id minting (collision-resistant base32), TTL/GC, and typed get/put/delete behind a small interface. Use it, replace it with your own store, or skip it entirely, and all three are equally SEP-2567-compliant. The worked example in <code>examples/stateless/</code>&rsquo;s cart story uses <code>HandleStore</code> for the on-ramp; a production deployment would as likely call Redis directly.</p>
 <h2 id="the-pattern-in-one-example">The pattern in one example <a class="anchor" href="#the-pattern-in-one-example">¶</a></h2>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">type</span> Cart <span style="color:#000;font-weight:bold">struct</span> {
 </span></span><span style="display:flex;"><span>    Items []Item
@@ -360,7 +360,7 @@
 </tr>
 </tbody>
 </table>
-<p>A stateless mcpkit server using <code>HandleStore[T]</code> for cart-style tools is the canonical post-SEP-2575 server: zero session storage in the process, every tool call is independent, but tools that need cross-call state thread an opaque handle through arguments — and the wire shape stays cacheable.</p>
+<p>A stateless mcpkit server using <code>HandleStore[T]</code> for cart-style tools is the canonical post-SEP-2575 server: zero session storage in the process, every tool call is independent, but tools that need cross-call state thread an opaque handle through arguments, and the wire shape stays cacheable.</p>
 <h2 id="when-not-to-use-a-handle">When <em>not</em> to use a handle <a class="anchor" href="#when-not-to-use-a-handle">¶</a></h2>
 <ul>
 <li>When the cross-call state is small enough to fit in the tool result (let the client carry it).</li>
@@ -370,7 +370,7 @@
 <h2 id="persistent-backends">Persistent backends <a class="anchor" href="#persistent-backends">¶</a></h2>
 <p><code>InMemoryHandleStore[T]</code> is in-memory and process-local. For real stateless deployments behind a load balancer where Mint and Get might hash to different replicas:</p>
 <ul>
-<li>Persistent backends (Redis, etc.) tracked in <a href="https://github.com/panyam/mcpkit/issues/471">panyam/mcpkit#471</a>. Drop-in via the <code>HandleStore[T]</code> interface — no parent-package changes needed.</li>
+<li>Persistent backends (Redis, etc.) tracked in <a href="https://github.com/panyam/mcpkit/issues/471">panyam/mcpkit#471</a>. Drop-in via the <code>HandleStore[T]</code> interface, with no parent-package changes needed.</li>
 <li>Admin endpoints over the store (introspection, eviction) tracked in <a href="https://github.com/panyam/mcpkit/issues/472">panyam/mcpkit#472</a>.</li>
 </ul>
 <h2 id="when-to-migrate-existing-examples">When to migrate existing examples <a class="anchor" href="#when-to-migrate-existing-examples">¶</a></h2>

@@ -405,7 +405,7 @@
 </span></span></code></pre><h3 id="step-5-prepare-your-html">Step 5: Prepare Your HTML <a class="anchor" href="#step-5-prepare-your-html">¶</a></h3>
 <p>The HTML is rendered in a <strong>sandboxed iframe</strong> with restrictive defaults. Here&rsquo;s what that means for your content:</p>
 <h4 id="option-a-self-contained-html-simplest-recommended-for-v1">Option A: Self-contained HTML (simplest, recommended for v1) <a class="anchor" href="#option-a-self-contained-html-simplest-recommended-for-v1">¶</a></h4>
-<p>Bundle everything — CSS, JS, images — into a single HTML file. No external requests, no CSP worries.</p>
+<p>Bundle everything (CSS, JS, images) into a single HTML file. No external requests, no CSP worries.</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#999;font-weight:bold;font-style:italic">&lt;!DOCTYPE html&gt;</span>
 </span></span><span style="display:flex;"><span>&lt;<span style="color:#000080">html</span> <span style="color:#008080">lang</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;en&#34;</span>&gt;
 </span></span><span style="display:flex;"><span>&lt;<span style="color:#000080">head</span>&gt;
@@ -539,7 +539,7 @@ connect-src 'none';
 </ol>
 <p><strong>Note:</strong> Custom connectors require a paid Claude plan (Pro, Max, or Team).</p>
 <h4 id="chatgpt">ChatGPT <a class="anchor" href="#chatgpt">¶</a></h4>
-<p>ChatGPT supports MCP Apps via its connector system. The flow is similar — expose your server URL and register it as a connector.</p>
+<p>ChatGPT supports MCP Apps via its connector system. The flow is similar, so expose your server URL and register it as a connector.</p>
 <h4 id="vs-code-copilot">VS Code Copilot <a class="anchor" href="#vs-code-copilot">¶</a></h4>
 <p>Add to your VS Code MCP settings (<code>.vscode/mcp.json</code> or user settings):</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>{
@@ -550,7 +550,7 @@ connect-src 'none';
 </span></span><span style="display:flex;"><span>  }
 </span></span><span style="display:flex;"><span>}
 </span></span></code></pre><h4 id="for-production-deployment">For production deployment <a class="anchor" href="#for-production-deployment">¶</a></h4>
-<p>In production, your MCP server runs behind HTTPS (not a tunnel). The same <code>/mcp</code> endpoint serves both regular MCP tools and UI resources. No special deployment changes are needed for MCP Apps — it&rsquo;s the same server, same endpoint, same transport.</p>
+<p>In production, your MCP server runs behind HTTPS (not a tunnel). The same <code>/mcp</code> endpoint serves both regular MCP tools and UI resources. No special deployment changes are needed for MCP Apps, since it&rsquo;s the same server, same endpoint, same transport.</p>
 <pre><code>Production deployment:
 
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
@@ -564,7 +564,7 @@ connect-src 'none';
                                               └──────────────────┘
 </code></pre>
 <h3 id="step-8-add-interactivity-optional">Step 8: Add Interactivity (optional) <a class="anchor" href="#step-8-add-interactivity-optional">¶</a></h3>
-<p>So far your app is read-only — the host renders HTML, the user views it. To make it interactive (user clicks a button in the iframe → calls a tool on your server), add a thin JS bridge to your HTML:</p>
+<p>So far your app is read-only. The host renders HTML and the user views it. To make it interactive (user clicks a button in the iframe → calls a tool on your server), add a thin JS bridge to your HTML:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Minimal MCP App bridge — add to your HTML&#39;s &lt;script&gt;
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>(<span style="color:#000;font-weight:bold">function</span>() {
 </span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> (<span style="color:#0086b3">window</span>.parent <span style="color:#000;font-weight:bold">===</span> <span style="color:#0086b3">window</span>) <span style="color:#000;font-weight:bold">return</span>; <span style="color:#998;font-style:italic">// not in iframe

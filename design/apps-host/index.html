@@ -242,7 +242,7 @@
 <p>See <a href="/mcpkit/packages/ext-ui/">APPS_DESIGN.md</a> for the core protocol design and <a href="/mcpkit/design/apps-onboarding/">APPS_ONBOARDING.md</a> for shipping your app.</p>
 <h2 id="apphost--host-side-app-management">AppHost — Host-Side App Management <a class="anchor" href="#apphost--host-side-app-management">¶</a></h2>
 <h3 id="overview">Overview <a class="anchor" href="#overview">¶</a></h3>
-<p><code>AppHost</code> (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/app_host.go"><code>ext/ui/app_host.go</code></a>) wraps an MCP <code>Client</code> and an <code>AppBridge</code> to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations — agent harnesses, desktop apps, or custom UIs — to manage app-provided tools.</p>
+<p><code>AppHost</code> (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/app_host.go"><code>ext/ui/app_host.go</code></a>) wraps an MCP <code>Client</code> and an <code>AppBridge</code> to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations (agent harnesses, desktop apps, or custom UIs) to manage app-provided tools.</p>
 <h3 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h3>
 <pre><code>┌─────────────────┐     ┌───────────────┐     ┌──────────────┐
 │   MCP Server    │◄────│   AppHost     │────►│   MCP App    │
@@ -327,7 +327,7 @@
 <li><strong>Native bridge</strong> (future) — for desktop apps using webview/wails JS↔Go bindings.</li>
 </ul>
 <h3 id="usage-with-oauth-authentication">Usage with OAuth Authentication <a class="anchor" href="#usage-with-oauth-authentication">¶</a></h3>
-<p>AppHost does not own auth — the caller wires <code>ext/auth.OAuthTokenSource</code> into the Client. Auth retry (401/403) happens transparently at the Client&rsquo;s transport layer.</p>
+<p>AppHost does not own auth. The caller wires <code>ext/auth.OAuthTokenSource</code> into the Client. Auth retry (401/403) happens transparently at the Client&rsquo;s transport layer.</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// 1. Create OAuth token source
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>ts <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">&amp;</span>auth.OAuthTokenSource{
 </span></span><span style="display:flex;"><span>    ServerURL:   <span style="color:#d14">&#34;https://api.example.com/mcp&#34;</span>,

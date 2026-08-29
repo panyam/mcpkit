@@ -314,7 +314,7 @@
 </tbody>
 </table>
 <h3 id="2-toolscall-response-is-polymorphic-resulttype-discriminator">2. tools/call response is polymorphic (<code>resultType</code> discriminator) <a class="anchor" href="#2-toolscall-response-is-polymorphic-resulttype-discriminator">¶</a></h3>
-<p>v1 server decides based on whether the client sent a <code>task</code> hint. v2 server decides unilaterally — and the client doesn&rsquo;t send a hint. The response carries a <code>resultType</code> discriminator so the client knows which shape arrived.</p>
+<p>v1 server decides based on whether the client sent a <code>task</code> hint. v2 server decides unilaterally, and the client doesn&rsquo;t send a hint. The response carries a <code>resultType</code> discriminator so the client knows which shape arrived.</p>
 <pre><code class="language-jsonc">// v1 — sync
 { &quot;content&quot;: [...], &quot;isError&quot;: false }
 // v1 — task (when client sent params.task)
@@ -416,12 +416,12 @@
 </tr>
 </tbody>
 </table>
-<p>Payload shape is unchanged on the v2 path (still a <code>DetailedTask</code> carrying the SEP-2322 <code>requestState</code>). Only the JSON-RPC method name moved. The v1 method name is preserved, so hybrid servers emit both names — v2 clients subscribe to <code>notifications/tasks</code>, v1 clients keep their existing <code>notifications/tasks/status</code> subscription. (Spec commit <code>1d3813ab</code> in PR 2663.)</p>
+<p>Payload shape is unchanged on the v2 path (still a <code>DetailedTask</code> carrying the SEP-2322 <code>requestState</code>). Only the JSON-RPC method name moved. The v1 method name is preserved, so hybrid servers emit both names. v2 clients subscribe to <code>notifications/tasks</code>, v1 clients keep their existing <code>notifications/tasks/status</code> subscription. (Spec commit <code>1d3813ab</code> in PR 2663.)</p>
 <h2 id="server-migration-paths">Server migration paths <a class="anchor" href="#server-migration-paths">¶</a></h2>
 <h3 id="pure-v1-server-no-change-required">Pure v1 server (no change required) <a class="anchor" href="#pure-v1-server-no-change-required">¶</a></h3>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info)
 </span></span><span style="display:flex;"><span>server.<span style="color:#900;font-weight:bold">RegisterTasksV1</span>(server.TasksConfigV1{Server: srv})
-</span></span></code></pre><p>That&rsquo;s it. v1 stays where it always was — <a href="https://github.com/panyam/mcpkit/blob/main/server/tasks_v1.go"><code>server/tasks_v1.go</code></a>.</p>
+</span></span></code></pre><p>That&rsquo;s it. v1 stays where it always was, in <a href="https://github.com/panyam/mcpkit/blob/main/server/tasks_v1.go"><code>server/tasks_v1.go</code></a>.</p>
 <h3 id="pure-v2-server">Pure v2 server <a class="anchor" href="#pure-v2-server">¶</a></h3>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
 </span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>
@@ -478,7 +478,7 @@
 <h2 id="rolling-upgrade-recipe">Rolling-upgrade recipe <a class="anchor" href="#rolling-upgrade-recipe">¶</a></h2>
 <p>The expected flow for a deployment migrating from v1 to v2 without downtime:</p>
 <ol>
-<li><strong>Server</strong>: install both surfaces side-by-side. Call <code>server.RegisterTasksV1(...)</code> then <code>tasks.Register(...)</code>. v1 clients hit the v1 paths (<code>tasks/result</code>, <code>tasks/list</code>, and <code>tasks/get</code> if no extension is declared — though see the dispatch caveat in the &ldquo;v1 + v2 on the same endpoint&rdquo; section above).</li>
+<li><strong>Server</strong>: install both surfaces side-by-side. Call <code>server.RegisterTasksV1(...)</code> then <code>tasks.Register(...)</code>. v1 clients hit the v1 paths (<code>tasks/result</code>, <code>tasks/list</code>, and <code>tasks/get</code> if no extension is declared, though see the dispatch caveat in the &ldquo;v1 + v2 on the same endpoint&rdquo; section above).</li>
 <li><strong>Clients</strong>: roll out the v2-aware client one cohort at a time. Each upgraded client adds <code>client.WithTasksExtension()</code> and switches to the v2 helpers.</li>
 <li>Once the v1 client population is empty, drop the <code>server.RegisterTasksV1(...)</code> line. Only <code>tasks.Register(...)</code> remains.</li>
 </ol>
@@ -498,7 +498,7 @@
 <p>The spec added the requirement that a server which cannot service a request without returning <code>CreateTaskResult</code> (i.e. a tool with <code>TaskSupport=required</code>) MUST return error <code>-32021</code> (Missing Required Client Capability) with a <code>data.requiredCapabilities</code> payload, rather than silently downgrading. mcpkit&rsquo;s <code>taskV2Middleware</code> now evaluates <code>TaskSupport</code> before checking extension declaration; required tools called by clients that have not declared <code>io.modelcontextprotocol/tasks</code> get <code>-32021</code> with a structured payload. <code>TaskSupport=optional</code> retains the sync-fallback behaviour because the server can still service those without a task. The new error code is exported as <code>core.ErrCodeMissingRequiredClientCapability</code>.</p>
 <h3 id="requeststate-removed-from-the-tasks-v2-wire">requestState removed from the tasks-v2 wire <a class="anchor" href="#requeststate-removed-from-the-tasks-v2-wire">¶</a></h3>
 <p>The merged SEP-2663 dropped the <code>requestState?: string</code> field from the <code>Task</code> base interface and removed the entire &ldquo;Request State Management&rdquo; section. mcpkit&rsquo;s <code>core.DetailedTask</code>, <code>core.UpdateTaskRequest</code>, <code>tasks/get</code> inline param struct, and <code>tasks/cancel</code> inline param struct no longer carry the field; the runtime helpers (<code>v2TaskRuntime.makeRequestState</code> / <code>verifyRequestState</code>) and per-registration signing config (<code>TasksConfig.RequestStateKey</code> / <code>RequestStateTTL</code>) are removed. The client surface drops <code>TaskOptions.RequestState</code>; <code>client.GetTask</code> and <code>client.CancelTask</code> simplify to <code>(c, taskID)</code> signatures, and <code>WaitForTask</code> no longer threads requestState through its poll loop.</p>
-<p>SEP-2322&rsquo;s <code>core.InputRequiredResult.RequestState</code> (the MRTR multi-round-trip surface) is unchanged. The server-wide <code>WithRequestStateSigning</code> option stays — MRTR&rsquo;s dispatcher still uses it via <code>s.dispatcher.mrtr</code> for signing the MRTR round state. The <code>core.SignRequestState</code> / <code>core.VerifyRequestState</code> helpers are retained because <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> reads legacy single-round MRTR tokens with the older payload shape for backward compatibility; that shim is removable once in-flight rounds rotate past.</p>
+<p>SEP-2322&rsquo;s <code>core.InputRequiredResult.RequestState</code> (the MRTR multi-round-trip surface) is unchanged. The server-wide <code>WithRequestStateSigning</code> option stays, and MRTR&rsquo;s dispatcher still uses it via <code>s.dispatcher.mrtr</code> for signing the MRTR round state. The <code>core.SignRequestState</code> / <code>core.VerifyRequestState</code> helpers are retained because <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> reads legacy single-round MRTR tokens with the older payload shape for backward compatibility; that shim is removable once in-flight rounds rotate past.</p>
 <h2 id="reference">Reference <a class="anchor" href="#reference">¶</a></h2>
 <ul>
 <li>SEP-2663 (Tasks Extension): <a href="https://github.com/modelcontextprotocol/specification/pull/2663">https://github.com/modelcontextprotocol/specification/pull/2663</a></li>
