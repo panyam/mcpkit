@@ -72,11 +72,7 @@ func (b *statelessBackend) Capabilities() core.ServerCapabilities {
 	if exts := b.s.dispatcher.extensions; len(exts) > 0 {
 		caps.Extensions = make(map[string]core.ExtensionCapability, len(exts))
 		for id, e := range exts {
-			caps.Extensions[id] = core.ExtensionCapability{
-				SpecVersion: e.SpecVersion,
-				Stability:   string(e.Stability),
-				Config:      e.Config,
-			}
+			caps.Extensions[id] = core.ExtensionCapability(e.Settings)
 		}
 	}
 	return caps

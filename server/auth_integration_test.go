@@ -175,11 +175,7 @@ func TestStaticTokenSource(t *testing.T) {
 
 func TestExtensionRegistration(t *testing.T) {
 	ext := testExtension{
-		ext: core.Extension{
-			ID:          "io.test/foo",
-			SpecVersion: "2025-01-01",
-			Stability:   core.Experimental,
-		},
+		ext: core.Extension{ID: "io.test/foo", Settings: map[string]any{"someSetting": true}},
 	}
 
 	srv := NewServer(
@@ -224,11 +220,13 @@ func TestExtensionRegistration(t *testing.T) {
 	if !ok {
 		t.Fatal("io.test/foo not in extensions")
 	}
-	if fooExt["stability"] != "experimental" {
-		t.Errorf("stability = %v, want experimental", fooExt["stability"])
+	if fooExt["someSetting"] != true {
+		t.Errorf("someSetting = %v, want true at the top level of the settings object", fooExt["someSetting"])
 	}
-	if fooExt["specVersion"] != "2025-01-01" {
-		t.Errorf("specVersion = %v, want 2025-01-01", fooExt["specVersion"])
+	for _, envelopeKey := range []string{"config", "specVersion", "stability", "id"} {
+		if _, present := fooExt[envelopeKey]; present {
+			t.Errorf("settings object carries %q; SEP-2133 defines no envelope", envelopeKey)
+		}
 	}
 }
 

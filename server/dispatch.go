@@ -540,11 +540,7 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	if len(d.extensions) > 0 {
 		exts := make(map[string]core.ExtensionCapability, len(d.extensions))
 		for id, ext := range d.extensions {
-			exts[id] = core.ExtensionCapability{
-				SpecVersion: ext.SpecVersion,
-				Stability:   string(ext.Stability),
-				Config:      ext.Config,
-			}
+			exts[id] = core.ExtensionCapability(ext.Settings)
 		}
 		caps.Extensions = exts
 	}

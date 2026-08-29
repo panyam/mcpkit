@@ -22,9 +22,12 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.3
 done
 # The SEP-2640 server surface is split across three scenarios (mcpconformance
-# PR 330): index shape, SKILL.md manifest, and resources/directory/read. Each is
+# PR 330): enumeration, SKILL.md manifest, and resources/directory/read. Each is
 # registered in both the active and pending suites and run by exact name.
-SKILLS_SCENARIOS="sep-2640-skills-index sep-2640-skills-manifest sep-2640-skills-directory"
+#
+# `sep-2640-skills-index` was renamed to `sep-2640-skills-enumeration` when the
+# 2026-08-21 SEP revision retired skill://index.json in favour of skills/list.
+SKILLS_SCENARIOS="sep-2640-skills-enumeration sep-2640-skills-manifest sep-2640-skills-directory"
 RC=0
 for S in ${SKILLS_SCENARIOS}; do
     (cd "${MCPCONFORMANCE_SKILLS_PATH}" && \

@@ -21,9 +21,9 @@ func TestDirectoryRead_Capability_OnByDefault(t *testing.T) {
 	if !ok {
 		t.Fatalf("server did not advertise %q", skills.ExtensionID)
 	}
-	v, _ := cap.Config[skills.CapabilityDirectoryRead].(bool)
+	v, _ := cap[skills.CapabilityDirectoryRead].(bool)
 	if !v {
-		t.Errorf("Config[%q] = %v, want true", skills.CapabilityDirectoryRead, cap.Config)
+		t.Errorf("settings[%q] = %v, want true", skills.CapabilityDirectoryRead, cap)
 	}
 }
 

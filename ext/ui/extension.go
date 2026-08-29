@@ -32,11 +32,7 @@ type UIExtension struct{}
 
 // Extension returns the MCP Apps extension metadata.
 func (UIExtension) Extension() core.Extension {
-	return core.Extension{
-		ID:          core.UIExtensionID,
-		SpecVersion: "2026-01-26",
-		Stability:   core.Experimental,
-	}
+	return core.Extension{ID: core.UIExtensionID}
 }
 
 // ValidateRefs checks that all tools with _meta.ui.resourceUri reference a

@@ -97,6 +97,11 @@ func (c *Client) SupportsSkills() bool {
 // resources/directory/read against a server that has not declared
 // directoryRead: true. ReadDirectory's pre-call guard uses this check.
 //
+// The flag is read from the top level of the extension's settings object,
+// the only location SEP-2133 defines. A server that buries it in an
+// envelope reads here as not having declared the method, which matches
+// what a spec-conformant client would see.
+//
 // The signal is read from the cached initialize/discover response; this
 // method does not issue a network call.
 func (c *Client) SupportsDirectoryRead() bool {
@@ -104,7 +109,7 @@ func (c *Client) SupportsDirectoryRead() bool {
 	if !ok {
 		return false
 	}
-	v, _ := cap.Config[CapabilityDirectoryRead].(bool)
+	v, _ := cap[CapabilityDirectoryRead].(bool)
 	return v
 }
 

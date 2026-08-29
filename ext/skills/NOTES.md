@@ -77,7 +77,32 @@ build`. The harness runs `node dist/index.js`, so a stale `dist/` runs the OLD s
 
 Verified green against mcpkit: 6/6, 6/6, 7/7.
 
-**Open spec finding**: SEP-2640 and SEP-2133 disagree on where the `directoryRead` capability flag
-nests. SEP-2640's example is inline (`extensions[id].directoryRead`); the SEP-2133 negotiation
-envelope that SEP-2640 defers to puts it at `extensions[id].config.directoryRead`. mcpkit emits the
-`config` envelope and the scenario accepts both. Open WG question.
+**Settled, and it was ours to fix** (#1334, was recorded here as an open WG question). SEP-2640 and
+SEP-2133 do not disagree about where `directoryRead` sits. SEP-2133 is Final and defines
+`extensions` as a map of identifiers to settings objects, with no envelope and no slot for `id`,
+`specVersion` or `stability`. SEP-2640's example matches. The `config` envelope was mcpkit's own
+invention, so both SEPs said inline and only mcpkit said otherwise.
+
+The cost was larger than a shape mismatch. A conformant client reads
+`extensions[id].directoryRead`; under the envelope that key sat one level deeper, so the client saw
+an extension declaring nothing and mcpkit's directory-read support was invisible. The conformance
+suite scored that as six SKIPPED checks rather than a failure, because a server that has not
+declared the flag need not serve the method. `sep-2640-skills-directory` reported 1/1 passed while
+exercising none of the surface. It now runs 7/7. See `docs/SEP_2133_EXTENSIONS.md`.
+
+**Nesting reversed** (#1336). The June text forbade a `SKILL.md` in any descendant directory; the
+2026-08-21 revision permits it and defines nested semantics. Worth knowing before touching
+`uri.go`: `ParseURI` was never the blocker, despite the issue saying so. It already accepted
+`skill://outer/inner/SKILL.md`, because its loop only rejected `SKILL.md` at a *non-terminal*
+position, which is a file-cannot-be-a-directory rule rather than a nesting rule. That loop stays,
+now returning `ErrManifestNotADirectory`. The two real blockers were `SplitAt` (rejected a deeper
+`SKILL.md` anywhere in the file path) and `ResolveRelative` (rejected resolving onto a nested
+manifest). Both are gone.
+
+`IsManifest` carries the SEP's "nested content is supporting content" rule for free: it is true only
+when `FilePath` is exactly `["SKILL.md"]`, so an enclosing skill splitting at its own boundary sees
+a nested manifest as plain markdown and will not act on its frontmatter. Addressed directly, the
+same file parses as its own skill, which is the flat-publication rule.
+
+`ErrManifestNotInRoot` survives for one caller (`provider.go`, a `SKILL.md` at a source FS root) and
+was re-worded to say only that.

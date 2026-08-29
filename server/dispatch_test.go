@@ -984,11 +984,7 @@ func TestToolsListMeta(t *testing.T) {
 // extension negotiation — both client→server and server→client directions.
 func TestInitializeWithClientExtensions(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
-	d.extensions[core.UIExtensionID] = core.Extension{
-		ID:          core.UIExtensionID,
-		SpecVersion: "2026-01-26",
-		Stability:   core.Experimental,
-	}
+	d.extensions[core.UIExtensionID] = core.Extension{ID: core.UIExtensionID}
 
 	// Client sends initialize with UI extension support
 	resp := d.Dispatch(context.Background(), &core.Request{
@@ -1033,17 +1029,15 @@ func TestInitializeWithClientExtensions(t *testing.T) {
 		t.Fatal("server response missing extensions in capabilities")
 	}
 
-	var exts map[string]map[string]string
+	var exts map[string]map[string]any
 	json.Unmarshal(caps["extensions"], &exts)
 	uiExt, ok := exts[core.UIExtensionID]
 	if !ok {
 		t.Fatal("UI extension not in server response")
 	}
-	if uiExt["specVersion"] != "2026-01-26" {
-		t.Errorf("specVersion = %q, want %q", uiExt["specVersion"], "2026-01-26")
-	}
-	if uiExt["stability"] != "experimental" {
-		t.Errorf("stability = %q, want %q", uiExt["stability"], "experimental")
+	// MCP Apps declares no settings, so SEP-2133 puts the empty object here.
+	if len(uiExt) != 0 {
+		t.Errorf("UI extension settings = %v, want {}", uiExt)
 	}
 }
 
