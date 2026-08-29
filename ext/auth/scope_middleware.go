@@ -29,6 +29,18 @@ type toolScopeConfig struct {
 // WWW-Authenticate scope parameter. Default is false (per-operation, matching
 // SEP-2350 semantics).
 //
+// This is not an mcpkit invention. The spec names it as the preferred strategy
+// (2025-11-25, Authorization § Scope Challenge Handling, "Server Scope
+// Management"), which lists three options and calls this one out:
+//
+//	Recommended approach: Include both existing relevant scopes and newly
+//	required scopes to prevent clients from losing previously granted
+//	permissions
+//
+// The default stays off because the spec grants servers latitude here and the
+// minimum approach is the least-privilege one. Turn it on when the deployment
+// matches the case below.
+//
 // When to opt in: facing non-mcpkit clients that may overwrite their scope
 // set on every challenge instead of accumulating it. The classic broken
 // behavior is "client sees insufficient_scope=docs:write, re-requests a token
