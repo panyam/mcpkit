@@ -14,7 +14,7 @@ import "context"
 //
 // Usage in a tool handler:
 //
-//	func updateWidget(ctx context.Context, req core.ToolRequest) (core.ToolResponse, error) {
+//	func updateWidget(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 //	    db.UpdateWidget(args.ID, args.Name)
 //	    core.NotifyResourceUpdated(ctx, "widgets/" + args.ID)
 //	    return core.TextResult("updated"), nil

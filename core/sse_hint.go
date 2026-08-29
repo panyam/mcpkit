@@ -10,7 +10,7 @@ import (
 // EmitSSERetry lets tool/resource/prompt handlers tell the connected client
 // "if you disconnect, reconnect after this long" by emitting an SSE "retry:"
 // field on the session's stream. It is the mcpkit-level entry point for the
-// servicekit v0.0.23 writer-side retry support.
+// servicekit writer-side retry support (added in servicekit v0.0.23).
 //
 // Use cases:
 //   - Long-running tool: "back off for 30s, I'll still be working when you come back"
@@ -44,14 +44,14 @@ import (
 //
 // Usage in a tool handler:
 //
-//	func longRunningTool(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
+//	func longRunningTool(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 //	    // Tell the client to back off for 30s before reconnecting if the
 //	    // connection drops. The tool continues running regardless.
-//	    mcpkit.EmitSSERetry(ctx, 30*time.Second)
+//	    core.EmitSSERetry(ctx, 30*time.Second)
 //
 //	    // ...do long work...
 //
-//	    return mcpkit.TextResult("done"), nil
+//	    return core.TextResult("done"), nil
 //	}
 func EmitSSERetry(ctx context.Context, retryAfter time.Duration) error {
 	if retryAfter <= 0 {

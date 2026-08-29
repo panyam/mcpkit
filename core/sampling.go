@@ -124,15 +124,15 @@ func (r *CreateMessageResult) UnmarshalJSON(data []byte) error {
 //
 // Usage in a tool handler:
 //
-//	func myHandler(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-//	    result, err := mcpkit.Sample(ctx, mcpkit.CreateMessageRequest{
-//	        Messages:  []mcpkit.SamplingMessage{{Role: "user", Content: mcpkit.Content{Type: "text", Text: "summarize this"}}},
+//	func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+//	    result, err := core.Sample(ctx, core.CreateMessageRequest{
+//	        Messages:  []core.SamplingMessage{{Role: "user", Content: core.Content{Type: "text", Text: "summarize this"}}},
 //	        MaxTokens: 1000,
 //	    })
 //	    if err != nil {
-//	        return mcpkit.ErrorResult(err.Error()), nil
+//	        return core.ErrorResult(err.Error()), nil
 //	    }
-//	    return mcpkit.TextResult(result.Content.Text), nil
+//	    return core.TextResult(result.Content.Text), nil
 //	}
 //
 // Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.

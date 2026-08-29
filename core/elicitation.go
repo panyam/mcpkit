@@ -76,8 +76,8 @@ type ElicitationCompleteParams struct {
 //
 // Usage in a tool handler:
 //
-//	func myHandler(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-//	    result, err := mcpkit.Elicit(ctx, mcpkit.ElicitationRequest{
+//	func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+//	    result, err := core.Elicit(ctx, core.ElicitationRequest{
 //	        Message: "Which database should I connect to?",
 //	        RequestedSchema: json.RawMessage(`{
 //	            "type": "object",
@@ -85,12 +85,12 @@ type ElicitationCompleteParams struct {
 //	        }`),
 //	    })
 //	    if err != nil {
-//	        return mcpkit.ErrorResult(err.Error()), nil
+//	        return core.ErrorResult(err.Error()), nil
 //	    }
 //	    if result.Action != "accept" {
-//	        return mcpkit.TextResult("User declined"), nil
+//	        return core.TextResult("User declined"), nil
 //	    }
-//	    return mcpkit.TextResult(fmt.Sprintf("Selected: %v", result.Content["database"])), nil
+//	    return core.TextResult(fmt.Sprintf("Selected: %v", result.Content["database"])), nil
 //	}
 func Elicit(ctx context.Context, req ElicitationRequest) (ElicitationResult, error) {
 	sc := sessionFromContext(ctx)

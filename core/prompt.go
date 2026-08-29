@@ -110,10 +110,8 @@ type PromptRequest struct {
 }
 
 // PromptResponse is the sealed interface returned by PromptHandler
-// implementations. Today only [PromptResult] (the sync wire envelope)
-// implements it; a future [InputRequiredResult] PromptResponse impl plugs in
-// by adding a one-line promptResponse() method (see issue #452 / SEP-2322
-// prompt scenarios).
+// implementations. [PromptResult] is the sync wire envelope;
+// [InputRequiredResult] is the SEP-2322 multi-round variant (issue #452).
 //
 // The interface is sealed via the unexported promptResponse() marker so
 // external types cannot impersonate a core response variant.

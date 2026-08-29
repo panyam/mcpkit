@@ -29,13 +29,13 @@ type ProgressNotification struct {
 //
 // Usage in a tool handler:
 //
-//	func myHandler(ctx context.Context, req mcpkit.ToolRequest) (mcpkit.ToolResult, error) {
-//	    mcpkit.EmitProgress(ctx, req.ProgressToken, 0, 100, "starting")
+//	func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+//	    core.EmitProgress(ctx, req.ProgressToken, 0, 100, "starting")
 //	    // ... do work ...
-//	    mcpkit.EmitProgress(ctx, req.ProgressToken, 50, 100, "halfway")
+//	    core.EmitProgress(ctx, req.ProgressToken, 50, 100, "halfway")
 //	    // ... more work ...
-//	    mcpkit.EmitProgress(ctx, req.ProgressToken, 100, 100, "done")
-//	    return mcpkit.TextResult("complete"), nil
+//	    core.EmitProgress(ctx, req.ProgressToken, 100, 100, "done")
+//	    return core.TextResult("complete"), nil
 //	}
 func EmitProgress(ctx context.Context, token any, progress, total float64, message string) {
 	if token == nil {
