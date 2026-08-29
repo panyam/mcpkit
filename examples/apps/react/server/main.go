@@ -25,6 +25,14 @@ import (
 	"github.com/panyam/mcpkit/server"
 )
 
+// getTimeOutput is the structured payload for get-time. RegisterTypedAppTool
+// reflects the tool's outputSchema from this type, so it has to be the domain
+// shape rather than a protocol envelope. Mirrors basic-vanillajs, which this
+// example tracks.
+type getTimeOutput struct {
+	Time string `json:"time"`
+}
+
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	flag.Parse()
@@ -60,12 +68,11 @@ func main() {
 	)
 
 	// get-time tool — matches upstream basic-server-vanillajs.
-	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, core.ToolResult]{
+	ui.RegisterTypedAppTool(srv, ui.TypedAppToolConfig[struct{}, getTimeOutput]{
 		Name:        "get-time",
 		Description: "Returns the current server time as an ISO 8601 string.",
-		Handler: func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
-			t := time.Now().UTC().Format(time.RFC3339)
-			return core.StructuredResult(t, map[string]string{"time": t}), nil
+		Handler: func(ctx core.ToolContext, _ struct{}) (getTimeOutput, error) {
+			return getTimeOutput{Time: time.Now().UTC().Format(time.RFC3339)}, nil
 		},
 		ResourceURI: "ui://get-time/react-app",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},
