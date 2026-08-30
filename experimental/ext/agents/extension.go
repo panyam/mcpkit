@@ -3,7 +3,7 @@ package agents
 import "github.com/panyam/mcpkit/core"
 
 // AgentsExtension declares support for the experimental agents discovery
-// primitive (io.modelcontextprotocol/agents).
+// primitive (io.mcpkit/agents).
 //
 // Register it on a server construction-time via server.WithExtension, or
 // post-construction via srv.RegisterExtension, mirroring the ext/skills and

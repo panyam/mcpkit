@@ -15,7 +15,7 @@ routing, so a supervisor host never eager-loads a flat `tools/list` of every spe
 
 **Three-level progressive disclosure**, the same shape as two-tier skills:
 
-1. `capabilities.extensions["io.modelcontextprotocol/agents"]`, advertised via the
+1. `capabilities.extensions["io.mcpkit/agents"]`, advertised via the
    `core.ExtensionProvider` mechanism
 2. `agents/list` → a roster of `AgentSummary` (agentId, description, capabilities, exampleTasks,
    delegateTool, tasksEnabled, skillUri), with **no tool schemas**
@@ -24,6 +24,30 @@ routing, so a supervisor host never eager-loads a flat `tools/list` of every spe
 
 **Only discovery is new wire surface.** Invocation rides the existing `tools/call` via each agent's
 advertised `delegateTool`.
+
+---
+
+## Why the identifier is `io.mcpkit/agents`, not `io.modelcontextprotocol/agents`
+
+It used to be the latter. The value tracked the Agents WG's working name, which read as harmless
+while the primitive was clearly experimental.
+
+It is not harmless, because the WG has not chosen among the three wire shapes its research doc
+lists (RPC, resources under `agent://`, or an extension) and mcpkit ships the RPC shape. Matching
+the *name* while the *shape* is unsettled is the worse of the two failure modes: a client that
+recognises the standard identifier negotiates it and then receives a payload that does not match
+what the eventual spec defines. A client that does not recognise `io.mcpkit/agents` simply skips
+the primitive, which is correct behaviour for an unratified surface. Not matching fails safely;
+matching wrongly does not.
+
+This is the same class of bug as the `config` envelope in #1334: a declaration that misrepresents
+what is behind it, where the mismatch surfaces as silence rather than an error.
+
+`io.mcpkit/auth` already set the vendor-namespace precedent for surfaces mcpkit originates.
+
+**Switch to the `io.modelcontextprotocol/` identifier when a SEP lands and this implementation
+matches the ratified shape** — not merely when the name becomes known. Renaming on the name alone
+would reintroduce exactly the problem this avoids.
 
 ---
 

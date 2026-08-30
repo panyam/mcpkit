@@ -24,7 +24,7 @@ func New(mcp *client.Client) *Client {
 }
 
 // SupportsAgents reports whether the connected server advertised the
-// io.modelcontextprotocol/agents extension in its initialize (or
+// io.mcpkit/agents extension in its initialize (or
 // server/discover) response. Reads the cached handshake — no network call.
 // Hosts iterating connected servers use this to skip ListAgents against
 // servers that do not speak the primitive.

@@ -18,7 +18,7 @@ shape as two-tier skills loading (#910):
 
 | Level | Wire | Payload |
 |-------|------|---------|
-| 1 | `capabilities.extensions["io.modelcontextprotocol/agents"]` | "this server has agents" |
+| 1 | `capabilities.extensions["io.mcpkit/agents"]` | "this server has agents" |
 | 2 | `agents/list` | the roster — `agentId`, `description`, `capabilities`, `exampleTasks`, `delegateTool`, `tasksEnabled`, `skillUri`. **No tool schemas.** |
 | 3 | `agents/get {agentId}` | one agent's `instructions` + scoped `tools[]` |
 
