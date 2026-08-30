@@ -15,7 +15,7 @@
 // pulls that specialist's instructions and scoped tool schemas. This is the
 // same progressive-disclosure shape as two-tier skills loading (#910):
 //
-//	level 1  capabilities.extensions[io.modelcontextprotocol/agents]  — "this server has agents"
+//	level 1  capabilities.extensions[io.mcpkit/agents]  — "this server has agents"
 //	level 2  agents/list                                              — the roster, no tool schemas
 //	level 3  agents/get {agentId}                                     — one agent's instructions + scoped tools
 //
@@ -38,11 +38,17 @@ package agents
 // speaks the agents discovery primitive. Clients gate agents/list and
 // agents/get behind ServerSupportsExtension(ExtensionID).
 //
-// The value tracks the MCP Agents WG's working name. It is provisional: the
-// WG has not chosen among the three wire shapes the research doc lists (RPC,
-// resources under agent://, or an extension), and mcpkit ships the RPC shape
-// behind this experimental extension advertisement.
-const ExtensionID = "io.modelcontextprotocol/agents"
+// The identifier sits in mcpkit's own namespace because no SEP defines this
+// primitive yet. The WG has not chosen among the three wire shapes its research
+// doc lists (RPC, resources under agent://, or an extension), and mcpkit ships
+// the RPC shape. Advertising io.modelcontextprotocol/agents would claim the
+// spec namespace for a shape the spec has not picked, so a client recognising
+// the standard identifier would negotiate it and then receive a payload that
+// does not match. Not matching is the safer failure.
+//
+// Switch to the io.modelcontextprotocol/ identifier when a SEP lands and this
+// implementation matches the ratified shape, not merely when the name is known.
+const ExtensionID = "io.mcpkit/agents"
 
 // SpecVersion is the draft the implementation tracks. There is no SEP yet, so
 // this is a date-stamped placeholder aligned with the agents-wg#20 research
