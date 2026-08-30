@@ -52,10 +52,16 @@ type indexerConfig struct {
 	// isFresh. Default true; WithMtimeChecks(false) disables it for
 	// backings where fs.Stat is expensive (issue 576).
 	mtimeChecks bool
+	// listTTLMs and listCacheScope are the SEP-2549 attributes attached to
+	// skills/list results. Zero / empty omit the attribute; see
+	// WithListCacheHints for why there is no default.
+	listTTLMs      int
+	listCacheScope string
 }
 
 type cacheEntry struct {
 	index   Index
+	entries []SkillEntry
 	builtAt time.Time
 	mtimes  map[string]time.Time // skill dir path → SKILL.md mtime at build time
 	version uint64               // Provider.Version() at the time this entry was built
@@ -93,6 +99,24 @@ func WithIndexerCacheTTL(d time.Duration) IndexerOption {
 func WithMtimeChecks(enabled bool) IndexerOption {
 	return func(c *indexerConfig) {
 		c.mtimeChecks = enabled
+	}
+}
+
+// WithListCacheHints sets the SEP-2549 list-caching attributes carried on
+// skills/list results (ttlMs and cacheScope), which SEP-2640 expects on
+// protocol 2026-07-28 and later.
+//
+// There is deliberately no default. Emitting cacheScope "public" unasked
+// would tell every intermediary that one server's skill listing is shareable
+// across users, which is wrong for any server whose catalog is tenant- or
+// principal-scoped. A missing hint costs a caching opportunity; a wrong one
+// leaks a listing. Servers that know their catalog is public opt in.
+//
+// ttlMs <= 0 or an empty scope omits that attribute.
+func WithListCacheHints(ttlMs int, cacheScope string) IndexerOption {
+	return func(c *indexerConfig) {
+		c.listTTLMs = ttlMs
+		c.listCacheScope = cacheScope
 	}
 }
 
@@ -360,11 +384,87 @@ func (i *Indexer) build() (Index, map[string]time.Time, bool, error) {
 	return NewIndex(entries...), mtimes, anyZeroMtime, nil
 }
 
-// RegisterWith installs the index resource onto srv. The handler calls
-// Index() at request time so the result reflects cache state plus any
-// invalidation since the last call.
+// RegisterWith installs the SEP-2640 skills surface onto srv: the skills/list
+// and skills/get methods, plus the legacy skill://index.json resource.
+//
+// The two methods are registered together because declaring the extension
+// commits a server to both. A server with nothing to enumerate returns an
+// empty skills/list rather than declining the method.
+//
+// index.json is retired by the 2026-08-21 SEP revision and is served here
+// only so consumers still reading it keep working across one release. It goes
+// away once ext/skills' own client stops reading it (issue 1333).
+//
+// Both surfaces call through to the same cache, so a listing and an index
+// read never disagree.
 func (i *Indexer) RegisterWith(srv *server.Server) {
+	srv.HandleMethod(MethodSkillsList, i.handleSkillsList)
+	srv.HandleMethod(MethodSkillsGet, i.handleSkillsGet)
 	srv.RegisterResource(IndexResourceDef, i.handler())
+}
+
+// Entries returns the SEP-2640 skill entries this server publishes, one per
+// skill, each carrying its verbatim frontmatter and complete resource
+// manifest.
+//
+// Shares the Index cache: entries are rebuilt on the same freshness rules
+// (version counter, TTL, mtime) documented on Indexer, so a skills/list and a
+// concurrent index read observe the same snapshot.
+//
+// Callers should treat the result as immutable; successive calls may return
+// the same backing array.
+func (i *Indexer) Entries() ([]SkillEntry, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	if i.isFresh() && i.cached.entries != nil {
+		return i.cached.entries, nil
+	}
+
+	version := i.provider.Version()
+	entries, err := i.buildEntries()
+	if err != nil {
+		return nil, err
+	}
+	if i.isFresh() {
+		// Cache is otherwise current; attach entries to it rather than
+		// discarding a valid index build.
+		i.cached.entries = entries
+		return entries, nil
+	}
+	idx, mtimes, noMtime, err := i.build()
+	if err != nil {
+		return nil, err
+	}
+	i.cached = &cacheEntry{
+		index:   idx,
+		entries: entries,
+		builtAt: time.Now(),
+		mtimes:  mtimes,
+		version: version,
+		noMtime: noMtime,
+	}
+	return entries, nil
+}
+
+// buildEntries walks every registered skill and produces its SkillEntry.
+// Sorted by URI so a listing is stable across calls, which matters for
+// cursor-based pagination.
+func (i *Indexer) buildEntries() ([]SkillEntry, error) {
+	out := make([]SkillEntry, 0, len(i.provider.skills))
+	for _, skill := range i.provider.skills {
+		resources, err := i.buildResources(skill)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SkillEntry{
+			URI:         skillManifestURI(skill.uriSegs),
+			Frontmatter: frontmatterJSON(skill.fm),
+			Resources:   resources,
+		})
+	}
+	sort.Slice(out, func(a, b int) bool { return out[a].URI < out[b].URI })
+	return out, nil
 }
 
 func (i *Indexer) handler() core.ResourceHandler {
