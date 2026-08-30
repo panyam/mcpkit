@@ -62,8 +62,10 @@ func TestSkillsList_EntryShape(t *testing.T) {
 			if f.Digest == "" {
 				t.Errorf("%s: resource %s has no digest", e.URI, f.URI)
 			}
-			if f.Size <= 0 {
-				t.Errorf("%s: resource %s has size %d, want > 0", e.URI, f.URI, f.Size)
+			if f.Size == nil {
+				t.Errorf("%s: resource %s carries no size", e.URI, f.URI)
+			} else if *f.Size <= 0 {
+				t.Errorf("%s: resource %s has size %d, want > 0", e.URI, f.URI, *f.Size)
 			}
 		}
 		if !sawSelf {

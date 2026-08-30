@@ -102,15 +102,20 @@ func WithMtimeChecks(enabled bool) IndexerOption {
 	}
 }
 
-// WithListCacheHints sets the SEP-2549 list-caching attributes carried on
-// skills/list results (ttlMs and cacheScope), which SEP-2640 expects on
-// protocol 2026-07-28 and later.
+// WithListCacheHints overrides the SEP-2549 list-caching attributes carried
+// on skills/list results, which SEP-2640 expects on protocol 2026-07-28 and
+// later.
 //
-// There is deliberately no default. Emitting cacheScope "public" unasked
-// would tell every intermediary that one server's skill listing is shareable
-// across users, which is wrong for any server whose catalog is tenant- or
-// principal-scoped. A missing hint costs a caching opportunity; a wrong one
-// leaks a listing. Servers that know their catalog is public opt in.
+// The default scope is "public", which is accurate for this Indexer: a
+// Provider draws from one fs.FS fixed at construction, so every caller gets
+// the same catalog and a shared cache can serve it to all of them. A Provider
+// that ever filters by principal must pass a narrower scope here, because
+// "public" would then let an intermediary hand one caller's listing to
+// another.
+//
+// The default ttlMs is the Indexer's own cache TTL when one is configured,
+// and omitted otherwise, so clients are never told to cache a listing for
+// longer than the server itself considers it fresh.
 //
 // ttlMs <= 0 or an empty scope omits that attribute.
 func WithListCacheHints(ttlMs int, cacheScope string) IndexerOption {
@@ -126,7 +131,10 @@ func WithListCacheHints(ttlMs int, cacheScope string) IndexerOption {
 // up here. Live mutation is the concern of ext/skills issue 564
 // (hot-reload).
 func NewIndexer(provider *Provider, opts ...IndexerOption) *Indexer {
-	idx := &Indexer{provider: provider, cfg: indexerConfig{mtimeChecks: true}}
+	idx := &Indexer{provider: provider, cfg: indexerConfig{
+		mtimeChecks:    true,
+		listCacheScope: CacheScopePublic,
+	}}
 	for _, opt := range opts {
 		opt(&idx.cfg)
 	}
