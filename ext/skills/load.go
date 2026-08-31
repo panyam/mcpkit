@@ -2,91 +2,82 @@ package skills
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 )
 
-// LoadedSkill is one index entry's load outcome. Exactly one of Body or Err
-// is meaningful: a nil Err means Body holds the verified SKILL.md bytes; a
-// non-nil Err (digest mismatch, read failure, unsupported type) means the
-// skill was skipped and the host should surface, not inject, it.
+// LoadedSkill is one skill's load outcome. Exactly one of Body or Err is
+// meaningful: a nil Err means Body holds the verified SKILL.md bytes; a
+// non-nil Err (digest mismatch, size mismatch, read failure) means the skill
+// was skipped and the host should surface it rather than inject it.
 type LoadedSkill struct {
-	Entry IndexEntry
+	Entry SkillEntry
 	Body  []byte
 	Err   error
 }
 
-// LoadAll fetches the discovery index and loads it via LoadIndex. The
-// returned error is non-nil only when the index itself cannot be fetched;
-// per-skill failures ride the results.
+// LoadAll enumerates the server's skills and loads each one.
+//
+// The returned error is non-nil only when the enumeration itself fails;
+// per-skill failures ride the results so one tampered or unreachable skill
+// never poisons the batch.
+//
+// An empty listing is not proof the server has no skills. SEP-2640 permits a
+// server to return an empty or partial listing and hosts MUST NOT read one as
+// absence, so a host holding a URI from elsewhere should still reach for
+// GetSkill.
 func (c *Client) LoadAll(ctx context.Context) ([]LoadedSkill, error) {
-	idx, err := c.ListSkills(ctx)
+	entries, err := c.ListSkillEntries(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return c.LoadIndex(ctx, idx), nil
+	return c.LoadEntries(ctx, entries), nil
 }
 
-// LoadIndex reads every skill-md entry of idx with digest verification.
-// Per-skill failures are isolated: one tampered or unreachable skill never
-// poisons the batch, it just comes back with Err set so hosts can warn and
-// continue. Archive entries are recorded as skipped (extraction is a host
-// decision with its own security posture, not an implicit side effect of
-// loading instructions).
+// LoadEntries reads each entry's SKILL.md through the full verification path:
+// the URI must be listed in the entry's own resources, the served length must
+// match the pinned size, and the digest must match.
 //
-// Results are ordered by entry URL so instruction assembly is deterministic
-// across runs regardless of index order. Callers that fetched (or filtered)
-// an index themselves use this directly; LoadAll is the fetch-then-load
-// convenience.
-func (c *Client) LoadIndex(ctx context.Context, idx Index) []LoadedSkill {
-	out := make([]LoadedSkill, 0, len(idx.Skills))
-	for _, entry := range idx.Skills {
+// Per-skill failures are isolated onto each result's Err. Results are ordered
+// by URI so instruction assembly is deterministic across runs regardless of
+// listing order.
+//
+// Callers that enumerated or filtered entries themselves use this directly;
+// LoadAll is the enumerate-then-load convenience.
+func (c *Client) LoadEntries(ctx context.Context, entries []SkillEntry) []LoadedSkill {
+	out := make([]LoadedSkill, 0, len(entries))
+	for _, entry := range entries {
 		ls := LoadedSkill{Entry: entry}
-		switch entry.Type {
-		case SkillTypeSkillMD:
-			res, err := c.ReadAndVerify(ctx, entry.URL, entry.Digest)
-			if err != nil {
-				ls.Err = err
-			} else {
-				ls.Body = res.Bytes
-			}
-		default:
-			ls.Err = fmt.Errorf("skills: entry type %q is not loaded by LoadIndex; read it explicitly", entry.Type)
+		res, err := c.ReadFromEntry(ctx, entry, entry.URI)
+		if err != nil {
+			ls.Err = err
+		} else {
+			ls.Body = res.Bytes
 		}
 		out = append(out, ls)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Entry.URL < out[j].Entry.URL })
+	sort.Slice(out, func(i, j int) bool { return out[i].Entry.URI < out[j].Entry.URI })
 	return out
 }
 
-// InstructionsBlock renders successfully loaded skills as a system-prompt
-// section: a header, then each skill's name, description, and SKILL.md body.
-// Failed skills are excluded (never inject unverified content); an empty or
-// all-failed batch renders to the empty string so callers can append the
-// result unconditionally. Ordering follows the input, which LoadAll already
-// made deterministic.
-// CatalogBlock renders a compact catalog of a server's skills — one line per
-// skill-md entry (name + description), the two-tier alternative to
-// InstructionsBlock's full-body injection (issue 910). It tells the model what
-// skills exist for roughly a tenth of the tokens; the body is fetched on demand
-// via a host load_skill tool. Archive entries are omitted (host-decided
-// extraction, like InstructionsBlock). Returns "" when there are no skill-md
-// entries.
-func CatalogBlock(idx Index) string {
+// CatalogBlock renders a compact catalog of a server's skills, one line per
+// skill (name and description).
+//
+// This is the two-tier alternative to InstructionsBlock's full-body injection
+// (issue 910): it tells the model what exists for roughly a tenth of the
+// tokens, and the body is fetched on demand via a host load_skill tool.
+// Returns "" when there is nothing to list.
+func CatalogBlock(entries []SkillEntry) string {
 	var b strings.Builder
-	for _, e := range idx.Skills {
-		if e.Type != SkillTypeSkillMD {
-			continue
-		}
-		name := e.Name
+	for _, e := range entries {
+		name := e.Name()
 		if name == "" {
-			name = e.URL
+			name = e.URI
 		}
-		if e.Description != "" {
-			fmt.Fprintf(&b, "- %s: %s\n", name, e.Description)
+		if desc := e.Description(); desc != "" {
+			b.WriteString("- " + name + ": " + desc + "\n")
 		} else {
-			fmt.Fprintf(&b, "- %s\n", name)
+			b.WriteString("- " + name + "\n")
 		}
 	}
 	if b.Len() == 0 {
@@ -95,23 +86,27 @@ func CatalogBlock(idx Index) string {
 	return "## Skills (catalog)\n\nThese skills are available. Call load_skill(name) to read a skill's full instructions before using it.\n\n" + b.String()
 }
 
-// InstructionsBlock renders the full SKILL.md body of every successfully loaded
-// skill for eager injection into the system prompt.
+// InstructionsBlock renders the full SKILL.md body of every successfully
+// loaded skill for eager injection into the system prompt.
+//
+// Failed skills are excluded, because injecting unverified content is the
+// thing verification exists to prevent. An empty or all-failed batch renders
+// to "" so callers can append the result unconditionally.
 func InstructionsBlock(loaded []LoadedSkill) string {
 	var b strings.Builder
 	for _, ls := range loaded {
 		if ls.Err != nil || len(ls.Body) == 0 {
 			continue
 		}
-		name := ls.Entry.Name
+		name := ls.Entry.Name()
 		if name == "" {
-			name = ls.Entry.URL
+			name = ls.Entry.URI
 		}
-		fmt.Fprintf(&b, "### Skill: %s\n", name)
-		if ls.Entry.Description != "" {
-			fmt.Fprintf(&b, "%s\n", ls.Entry.Description)
+		b.WriteString("### Skill: " + name + "\n")
+		if desc := ls.Entry.Description(); desc != "" {
+			b.WriteString(desc + "\n")
 		}
-		fmt.Fprintf(&b, "\n%s\n\n", strings.TrimSpace(string(ls.Body)))
+		b.WriteString("\n" + strings.TrimSpace(string(ls.Body)) + "\n\n")
 	}
 	if b.Len() == 0 {
 		return ""

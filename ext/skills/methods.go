@@ -106,6 +106,7 @@ func (i *Indexer) handleSkillsList(ctx core.MethodContext, id, params json.RawMe
 		res.TTLMs = &ttl
 	}
 	res.CacheScope = i.cfg.listCacheScope
+	res.Meta = map[string]any{MetaKeyVersion: i.provider.Version()}
 	return core.NewResponse(id, res)
 }
 

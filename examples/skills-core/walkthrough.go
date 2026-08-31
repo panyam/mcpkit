@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 
@@ -129,31 +128,33 @@ if err := c.Connect(); err != nil { /* run: just serve */ }`).Default(),
 			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource(skills.IndexURI)
 var idx skills.Index
 json.Unmarshal([]byte(body), &idx)
-for _, e := range idx.Skills {
-    fmt.Printf("%s digest=%s\n", e.Name, e.Digest)
+entries, _ := sc.ListSkillEntries(ctx)
+for _, e := range entries {
+    fmt.Printf("%s files=%d\n", e.Name(), len(e.Resources.Files))
 }`).Default(),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
 			}
-			body, err := c.ReadResource(ctx.Ctx, skills.IndexURI)
+			entries, err := skills.NewClient(c).ListSkillEntries(ctx.Ctx)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
-			var idx skills.Index
-			if err := json.Unmarshal([]byte(body), &idx); err != nil {
-				fmt.Printf("    ERROR: index does not parse: %v\n", err)
-				return nil
-			}
-			fmt.Printf("    $schema: %s\n", idx.Schema)
-			for _, e := range idx.Skills {
-				digest := e.Digest
-				if len(digest) > 14 {
-					digest = digest[:14] + "…"
+			for _, e := range entries {
+				fmt.Printf("      %s  uri=%s\n", e.Name(), e.URI)
+				for _, f := range e.Resources.Files {
+					digest := f.Digest
+					if len(digest) > 14 {
+						digest = digest[:14] + "…"
+					}
+					size := int64(-1)
+					if f.Size != nil {
+						size = *f.Size
+					}
+					fmt.Printf("        %s  digest=%s size=%d\n", f.URI, digest, size)
 				}
-				fmt.Printf("      %s  digest=%s\n        url=%s\n", e.Name, digest, e.URL)
 			}
 			return nil
 		})

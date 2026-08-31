@@ -24,9 +24,12 @@ func TestSecurityDemo(t *testing.T) {
 	if strings.Contains(out, "✗") {
 		t.Fatalf("transcript carries a failure marker:\n%s", out)
 	}
-	// The three defenses plus the unpinned-file guard: four rejections total.
-	if n := strings.Count(out, "REJECT"); n != 4 {
-		t.Fatalf("expected 4 REJECT outcomes, got %d:\n%s", n, out)
+	// Five rejections: unlisted URI, same-length tamper (digest),
+	// length-changing tamper (size), byte budget, and scheme. The two tampers
+	// are separate because SEP-2640 gives a host two independent checks and a
+	// length-changing edit never reaches the hash.
+	if n := strings.Count(out, "REJECT"); n != 5 {
+		t.Fatalf("expected 5 REJECT outcomes, got %d:\n%s", n, out)
 	}
 	// Every step's anchor family must be present — a dropped step is a silent
 	// coverage loss, not a failure the verdict would catch.

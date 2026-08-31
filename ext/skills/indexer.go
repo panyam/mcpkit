@@ -3,16 +3,13 @@ package skills
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
 )
 
@@ -60,7 +57,6 @@ type indexerConfig struct {
 }
 
 type cacheEntry struct {
-	index   Index
 	entries []SkillEntry
 	builtAt time.Time
 	mtimes  map[string]time.Time // skill dir path → SKILL.md mtime at build time
@@ -141,58 +137,6 @@ func NewIndexer(provider *Provider, opts ...IndexerOption) *Indexer {
 	return idx
 }
 
-// IndexResourceDef is the ResourceDef registered for skill://index.json.
-// Servers reuse this for documentation surfaces (READMEs, OpenAPI-style
-// catalogs) so the wire-level name stays in lock-step with the runtime
-// resource.
-var IndexResourceDef = core.ResourceDef{
-	URI:         IndexURI,
-	Name:        "Skill discovery index",
-	Description: "JSON catalog of skills served by this server per SEP-2640.",
-	MimeType:    "application/json",
-}
-
-// Index returns the discovery index per SEP-2640.
-//
-// Each entry's Digest is a sha256:{64-hex} string over the raw bytes of
-// the entry's canonical artifact. For skill-md entries that artifact is
-// the SKILL.md file; archive entries (ext/skills issue 561) will hash the
-// archive bytes instead.
-//
-// The returned Index is the cached value when cache freshness rules
-// allow; otherwise it is freshly computed. Callers should treat the
-// returned Index as immutable. Subsequent calls may return the same
-// underlying slices.
-//
-// Errors propagate the underlying fs.FS read errors with the source
-// path attached.
-func (i *Indexer) Index() (Index, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	if i.isFresh() {
-		return i.cached.index, nil
-	}
-
-	version := i.provider.Version()
-	idx, mtimes, noMtime, err := i.build()
-	if err != nil {
-		return Index{}, err
-	}
-	if idx.Meta == nil {
-		idx.Meta = map[string]any{}
-	}
-	idx.Meta[MetaPrefix+"version"] = version
-	i.cached = &cacheEntry{
-		index:   idx,
-		builtAt: time.Now(),
-		mtimes:  mtimes,
-		version: version,
-		noMtime: noMtime,
-	}
-	return idx, nil
-}
-
 // Invalidate marks the cached index entry stale so the next Index()
 // call rebuilds. Provider.NotifyChanged calls this when the version
 // counter bumps; tests can use it to drive cache regeneration
@@ -263,40 +207,6 @@ func (i *Indexer) skillMtime(skill *skillEntry) (time.Time, error) {
 	return mtimeOf(i.provider.cfg.fsys, manifestPath(skill.dirPath))
 }
 
-// supportingFileDigests walks a skill-md skill's directory and returns a
-// sorted, per-file SHA-256 pin for every regular file except SKILL.md.
-// Paths are relative to the skill directory (forward-slash), matching the
-// relative references Client.ReadSkillFile resolves against the manifest
-// root. Non-regular entries (symlinks, devices) are skipped — a skill is
-// data delivered over resource primitives, and only regular file bytes
-// are servable and pinnable.
-func (i *Indexer) supportingFileDigests(skillDir string) ([]FileDigest, error) {
-	var files []FileDigest
-	err := fs.WalkDir(i.provider.cfg.fsys, skillDir, func(p string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() || !d.Type().IsRegular() {
-			return nil
-		}
-		rel := strings.TrimPrefix(p, skillDir+"/")
-		if rel == ManifestFilename {
-			return nil // pinned by the entry's own Digest
-		}
-		raw, err := fs.ReadFile(i.provider.cfg.fsys, p)
-		if err != nil {
-			return fmt.Errorf("skills: read %s for digest: %w", p, err)
-		}
-		files = append(files, FileDigest{Path: rel, Digest: digestOf(raw)})
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(files, func(a, b int) bool { return files[a].Path < files[b].Path })
-	return files, nil
-}
-
 func subtreeMaxMtime(fsys fs.FS, root string) (time.Time, error) {
 	var latest time.Time
 	err := fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, walkErr error) error {
@@ -319,96 +229,17 @@ func subtreeMaxMtime(fsys fs.FS, root string) (time.Time, error) {
 	return latest, err
 }
 
-func (i *Indexer) build() (Index, map[string]time.Time, bool, error) {
-	entries := make([]IndexEntry, 0, len(i.provider.skills))
-	mtimes := make(map[string]time.Time, len(i.provider.skills))
-	var anyZeroMtime bool
-
-	for _, skill := range i.provider.skills {
-		var (
-			entryType   SkillType
-			entryURL    string
-			digestBytes []byte
-			files       []FileDigest
-		)
-
-		if i.provider.cfg.archiveMode != ArchiveFormatUnknown {
-			packed, err := PackSkill(i.provider.cfg.fsys, skill.dirPath, i.provider.cfg.archiveMode)
-			if err != nil {
-				return Index{}, nil, false, fmt.Errorf("skills: pack %s for digest: %w", skill.dirPath, err)
-			}
-			entryType = SkillTypeArchive
-			entryURL = Scheme + "://" + joinSegments(skill.uriSegs) + i.provider.cfg.archiveMode.Suffix()
-			digestBytes = packed
-		} else {
-			manifest := manifestPath(skill.dirPath)
-			raw, err := fs.ReadFile(i.provider.cfg.fsys, manifest)
-			if err != nil {
-				return Index{}, nil, false, fmt.Errorf("skills: read %s for digest: %w", manifest, err)
-			}
-			entryType = SkillTypeSkillMD
-			entryURL = skillManifestURI(skill.uriSegs)
-			digestBytes = raw
-			// Pin every supporting file so a re-verifying host can detect a
-			// swap on a resources/read fetch (issue 866), unless the operator
-			// selected SupportingDigestsOff for strict spec-only output.
-			// Archive entries skip this: the archive is integrity-checked as
-			// a unit.
-			if i.provider.cfg.supportingDigests == SupportingDigestsPerFile {
-				files, err = i.supportingFileDigests(skill.dirPath)
-				if err != nil {
-					return Index{}, nil, false, err
-				}
-			}
-		}
-
-		entry := IndexEntry{
-			Type:        entryType,
-			Name:        skill.fm.Name,
-			Description: skill.fm.Description,
-			URL:         entryURL,
-			Digest:      digestOf(digestBytes),
-		}
-		// Carry supporting-file pins under a reverse-domain _meta key so they
-		// cannot collide with a top-level field the SEP may later define
-		// (issues 780 / 839).
-		if len(files) > 0 {
-			entry.Meta = map[string]any{MetaKeyFileDigests: files}
-		}
-		entries = append(entries, entry)
-
-		mtime, err := i.skillMtime(skill)
-		if err != nil {
-			return Index{}, nil, false, fmt.Errorf("skills: mtime %s: %w", skill.dirPath, err)
-		}
-		if mtime.IsZero() {
-			anyZeroMtime = true
-		}
-		mtimes[skill.dirPath] = mtime
-	}
-
-	sortIndexEntries(entries)
-
-	return NewIndex(entries...), mtimes, anyZeroMtime, nil
-}
-
-// RegisterWith installs the SEP-2640 skills surface onto srv: the skills/list
-// and skills/get methods, plus the legacy skill://index.json resource.
+// RegisterWith installs the SEP-2640 skills/list and skills/get methods onto
+// srv. Both handlers call Entries() at request time so results reflect cache
+// state plus any invalidation since the last call.
 //
-// The two methods are registered together because declaring the extension
-// commits a server to both. A server with nothing to enumerate returns an
-// empty skills/list rather than declining the method.
-//
-// index.json is retired by the 2026-08-21 SEP revision and is served here
-// only so consumers still reading it keep working across one release. It goes
-// away once ext/skills' own client stops reading it (issue 1333).
-//
-// Both surfaces call through to the same cache, so a listing and an index
-// read never disagree.
+// Both are registered together because declaring the extension commits a
+// server to both. A server with nothing to enumerate returns an empty
+// skills/list rather than declining the method.
 func (i *Indexer) RegisterWith(srv *server.Server) {
 	srv.HandleMethod(MethodSkillsList, i.handleSkillsList)
 	srv.HandleMethod(MethodSkillsGet, i.handleSkillsGet)
-	srv.RegisterResource(IndexResourceDef, i.handler())
+	i.warnOnLimits()
 }
 
 // Entries returns the SEP-2640 skill entries this server publishes, one per
@@ -425,27 +256,16 @@ func (i *Indexer) Entries() ([]SkillEntry, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	if i.isFresh() && i.cached.entries != nil {
+	if i.isFresh() {
 		return i.cached.entries, nil
 	}
 
 	version := i.provider.Version()
-	entries, err := i.buildEntries()
-	if err != nil {
-		return nil, err
-	}
-	if i.isFresh() {
-		// Cache is otherwise current; attach entries to it rather than
-		// discarding a valid index build.
-		i.cached.entries = entries
-		return entries, nil
-	}
-	idx, mtimes, noMtime, err := i.build()
+	entries, mtimes, noMtime, err := i.buildEntries()
 	if err != nil {
 		return nil, err
 	}
 	i.cached = &cacheEntry{
-		index:   idx,
 		entries: entries,
 		builtAt: time.Now(),
 		mtimes:  mtimes,
@@ -455,44 +275,43 @@ func (i *Indexer) Entries() ([]SkillEntry, error) {
 	return entries, nil
 }
 
-// buildEntries walks every registered skill and produces its SkillEntry.
-// Sorted by URI so a listing is stable across calls, which matters for
-// cursor-based pagination.
-func (i *Indexer) buildEntries() ([]SkillEntry, error) {
+// buildEntries walks every registered skill and produces its SkillEntry,
+// alongside the per-skill mtimes the cache compares on the next call.
+//
+// noMtime reports that at least one skill's SKILL.md returned a zero ModTime
+// (notably embed.FS). The cache falls back to TTL-only freshness for that
+// build, since mtime comparison cannot distinguish anything then.
+//
+// Sorted by URI so a listing is stable across calls, which cursor-based
+// pagination depends on.
+func (i *Indexer) buildEntries() ([]SkillEntry, map[string]time.Time, bool, error) {
 	out := make([]SkillEntry, 0, len(i.provider.skills))
+	mtimes := make(map[string]time.Time, len(i.provider.skills))
+	var anyZeroMtime bool
+
 	for _, skill := range i.provider.skills {
 		resources, err := i.buildResources(skill)
 		if err != nil {
-			return nil, err
+			return nil, nil, false, err
 		}
 		out = append(out, SkillEntry{
 			URI:         skillManifestURI(skill.uriSegs),
 			Frontmatter: frontmatterJSON(skill.fm),
 			Resources:   resources,
 		})
-	}
-	sort.Slice(out, func(a, b int) bool { return out[a].URI < out[b].URI })
-	return out, nil
-}
 
-func (i *Indexer) handler() core.ResourceHandler {
-	return func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-		idx, err := i.Index()
+		mtime, err := i.skillMtime(skill)
 		if err != nil {
-			return core.ResourceResult{}, err
+			return nil, nil, false, fmt.Errorf("skills: mtime %s: %w", skill.dirPath, err)
 		}
-		body, err := json.Marshal(idx)
-		if err != nil {
-			return core.ResourceResult{}, fmt.Errorf("skills: marshal index: %w", err)
+		if mtime.IsZero() {
+			anyZeroMtime = true
 		}
-		return core.ResourceResult{
-			Contents: []core.ResourceReadContent{{
-				URI:      IndexURI,
-				MimeType: "application/json",
-				Text:     string(body),
-			}},
-		}, nil
+		mtimes[skill.dirPath] = mtime
 	}
+
+	sort.Slice(out, func(a, b int) bool { return out[a].URI < out[b].URI })
+	return out, mtimes, anyZeroMtime, nil
 }
 
 // digestOf computes the SEP-2640 digest format over the raw artifact
@@ -536,10 +355,4 @@ func joinSegments(segs []string) string {
 		out = out + "/" + s
 	}
 	return out
-}
-
-func sortIndexEntries(entries []IndexEntry) {
-	sort.SliceStable(entries, func(i, j int) bool {
-		return entries[i].URL < entries[j].URL
-	})
 }

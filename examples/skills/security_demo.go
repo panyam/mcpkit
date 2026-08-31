@@ -87,53 +87,63 @@ func runSecurityDemo(out io.Writer) (bool, error) {
 	// skill); the full body is fetched on demand and digest-verified.
 	r.step(1, "Progressive disclosure (frontmatter-only catalog + on-demand body)",
 		"SEP-2640 progressive disclosure · experimental-ext-skills#85 · mcpkit #910")
-	idx, err := sc.ListSkills(ctx)
+	entries, err := sc.ListSkillEntries(ctx)
 	if err != nil {
 		return false, fmt.Errorf("list skills: %w", err)
 	}
-	catalog := skills.CatalogBlock(idx)
-	entry, ok := findSkillMD(idx, refundsSkill)
+	catalog := skills.CatalogBlock(entries)
+	entry, ok := findSkill(entries, refundsSkill)
 	if !ok {
 		return false, fmt.Errorf("fixture missing %q skill", refundsSkill)
 	}
-	body, err := sc.ReadAndVerify(ctx, entry.URL, entry.Digest)
+	body, err := sc.ReadFromEntry(ctx, entry, entry.URI)
 	if err != nil {
 		return false, fmt.Errorf("read %q body: %w", refundsSkill, err)
 	}
 	bodyInCatalog := strings.Contains(catalog, refundsBodyMarker)
 	bodyInBody := strings.Contains(string(body.Bytes), refundsBodyMarker)
-	r.detail("catalog: %d bytes for %d skills, frontmatter only (body marker present=%v)", len(catalog), countSkillMD(idx), bodyInCatalog)
+	r.detail("catalog: %d bytes for %d skills, frontmatter only (body marker present=%v)", len(catalog), len(entries), bodyInCatalog)
 	r.detail("on demand: %q body is %d bytes, digest verified=%v", refundsSkill, len(body.Bytes), body.DigestVerified)
 	r.pass(strings.Contains(catalog, refundsSkill) && !bodyInCatalog && bodyInBody && body.DigestVerified,
 		"body text is absent from the catalog and arrives only via a digest-verified on-demand read")
 
 	// Step 2 — supporting-file integrity (threat model B1). A pinned file
 	// verifies; an unlisted file is refused; a post-listing tamper is rejected.
-	r.step(2, "Supporting-file digest verification (verify · unpinned · tamper)",
-		"threat model B1 · ErrDigestMismatch / ErrSupportingFileUnpinned · mcpkit #866")
-	manifest, err := sc.ReadSkillManifest(ctx, entry.URL)
-	if err != nil {
-		return false, fmt.Errorf("read manifest: %w", err)
-	}
-	if _, err := sc.ReadSkillFileVerified(ctx, entry, manifest, refundsRelFile); err != nil {
+	r.step(2, "Supporting-file digest verification (verify · unlisted · tamper)",
+		"threat model B1 · ErrDigestMismatch / ErrURINotInResources · mcpkit #866")
+	pinnedURI := skillFileURI(entry.URI, refundsRelFile)
+	unlistedURI := skillFileURI(entry.URI, unlistedRelFile)
+	if _, err := sc.ReadFromEntry(ctx, entry, pinnedURI); err != nil {
 		r.pass(false, fmt.Sprintf("verified read of pinned %q should succeed, got %v", refundsRelFile, err))
 	} else {
 		r.detail("verified read of pinned %q: ok", refundsRelFile)
 		r.pass(true, "a pinned supporting file reads and verifies")
 	}
-	_, errUnpinned := sc.ReadSkillFileVerified(ctx, entry, manifest, unlistedRelFile)
-	r.reject(errors.Is(errUnpinned, skills.ErrSupportingFileUnpinned), errUnpinned,
-		fmt.Sprintf("unlisted %q rejected as ErrSupportingFileUnpinned", unlistedRelFile))
+	_, errUnlisted := sc.ReadFromEntry(ctx, entry, unlistedURI)
+	r.reject(errors.Is(errUnlisted, skills.ErrURINotInResources), errUnlisted,
+		fmt.Sprintf("unlisted %q rejected as ErrURINotInResources", unlistedRelFile))
 
-	// Swap the file on disk AFTER listing, WITHOUT Refresh: the index keeps the
-	// original pin, the server streams the mutated bytes live, so verification
-	// must now fail.
-	if err := tamperFile(filepath.Join(served, refundsDiskFile)); err != nil {
-		return false, fmt.Errorf("tamper: %w", err)
+		// Swap the file on disk AFTER listing, WITHOUT Refresh: the entry keeps
+	// the original pin, the server streams the mutated bytes live, so
+	// verification must now fail.
+	//
+	// Two tampers, because SEP-2640 gives a host two independent checks. A
+	// length-changing edit trips the cheaper size check first and never
+	// reaches the hash; a same-length edit slips past size and is caught only
+	// by the digest. A demo that showed one would leave the other untested.
+	if err := tamperSameLength(filepath.Join(served, refundsDiskFile)); err != nil {
+		return false, fmt.Errorf("same-length tamper: %w", err)
 	}
-	_, errTamper := sc.ReadSkillFileVerified(ctx, entry, manifest, refundsRelFile)
-	r.reject(errors.Is(errTamper, skills.ErrDigestMismatch), errTamper,
-		"post-listing tamper rejected as ErrDigestMismatch")
+	_, errDigest := sc.ReadFromEntry(ctx, entry, pinnedURI)
+	r.reject(errors.Is(errDigest, skills.ErrDigestMismatch), errDigest,
+		"same-length post-listing tamper rejected as ErrDigestMismatch")
+
+	if err := tamperFile(filepath.Join(served, refundsDiskFile)); err != nil {
+		return false, fmt.Errorf("length-changing tamper: %w", err)
+	}
+	_, errSize := sc.ReadFromEntry(ctx, entry, pinnedURI)
+	r.reject(errors.Is(errSize, skills.ErrSizeMismatch), errSize,
+		"length-changing post-listing tamper rejected as ErrSizeMismatch, before the hash is computed")
 
 	// Step 3 — resource-fetch byte budget (threat model T6; the bound
 	// experimental-ext-skills#831 defers — mcpkit puts it at the fetch layer).
@@ -141,7 +151,7 @@ func runSecurityDemo(out io.Writer) (bool, error) {
 		"threat model T6 · experimental-ext-skills#831 · WithMaxResourceBytes / mcpkit #867")
 	capBytes := max(int64(len(body.Bytes)/2), 1)
 	budgeted := skills.NewClient(mcp, skills.WithMaxResourceBytes(capBytes))
-	_, errBudget := budgeted.ReadAndVerify(ctx, entry.URL, entry.Digest)
+	_, errBudget := budgeted.ReadFromEntry(ctx, entry, entry.URI)
 	r.detail("cap=%d bytes, %q body≈%d bytes", capBytes, refundsSkill, len(body.Bytes))
 	r.reject(errors.Is(errBudget, skills.ErrResourceTooLarge), errBudget,
 		"over-cap read rejected as ErrResourceTooLarge before decode")
@@ -157,29 +167,52 @@ func runSecurityDemo(out io.Writer) (bool, error) {
 	return r.allOK, nil
 }
 
-// findSkillMD returns the skill-md index entry with the given frontmatter name.
-func findSkillMD(idx skills.Index, name string) (skills.IndexEntry, bool) {
-	for _, e := range idx.Skills {
-		if e.Type == skills.SkillTypeSkillMD && e.Name == name {
+// findSkill returns the listed entry with the given frontmatter name.
+func findSkill(entries []skills.SkillEntry, name string) (skills.SkillEntry, bool) {
+	for _, e := range entries {
+		if e.Name() == name {
 			return e, true
 		}
 	}
-	return skills.IndexEntry{}, false
+	return skills.SkillEntry{}, false
 }
 
-// countSkillMD counts skill-md entries in an index (the catalog's line count).
-func countSkillMD(idx skills.Index) int {
-	n := 0
-	for _, e := range idx.Skills {
-		if e.Type == skills.SkillTypeSkillMD {
-			n++
-		}
+// skillFileURI resolves a skill-relative path against the skill's SKILL.md
+// URI, producing the absolute skill:// URI the resources manifest lists.
+func skillFileURI(manifestURI, relPath string) string {
+	root, err := skills.ParseURI(manifestURI)
+	if err != nil {
+		return ""
 	}
-	return n
+	resolved, err := skills.ResolveRelative(root, relPath)
+	if err != nil {
+		return ""
+	}
+	return resolved.String()
 }
 
 // tamperFile appends bytes to a served supporting file so its content no longer
 // matches the digest pinned at index time.
+// tamperSameLength flips bytes without changing the file's length, so the
+// size check passes and the digest check is the only thing standing between
+// the host and mutated content.
+func tamperSameLength(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if len(b) == 0 {
+		return fmt.Errorf("tamperSameLength: %s is empty", path)
+	}
+	for i := range b {
+		if b[i] >= 'a' && b[i] <= 'y' {
+			b[i]++
+			break
+		}
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
 func tamperFile(path string) error {
 	b, err := os.ReadFile(path)
 	if err != nil {

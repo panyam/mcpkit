@@ -339,4 +339,3 @@ func (fw *fsWatcher) shutdown(ctx context.Context) error {
 	}
 	return nil
 }
-

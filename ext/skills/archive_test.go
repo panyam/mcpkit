@@ -4,10 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net/http/httptest"
 	"os"
@@ -163,7 +160,6 @@ func TestProvider_ArchiveMode_RegistersArchiveResource(t *testing.T) {
 	p, err := skills.NewProvider(
 		skills.WithDirectory("testdata/valid"),
 		skills.WithArchiveMode(skills.ArchiveFormatTarGz),
-		skills.WithoutIndex(),
 	)
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
@@ -228,101 +224,6 @@ func TestProvider_ArchiveMode_HandlerServesArchive(t *testing.T) {
 	}
 	if len(entries) < 2 {
 		t.Errorf("expected pdf-processing to have multiple files in archive, got %d", len(entries))
-	}
-}
-
-func TestIndexer_ArchiveEntries(t *testing.T) {
-	p, err := skills.NewProvider(
-		skills.WithDirectory("testdata/valid"),
-		skills.WithArchiveMode(skills.ArchiveFormatTarGz),
-	)
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
-	idx, err := skills.NewIndexer(p).Index()
-	if err != nil {
-		t.Fatalf("Index: %v", err)
-	}
-	if len(idx.Skills) == 0 {
-		t.Fatal("expected populated Skills")
-	}
-	for _, e := range idx.Skills {
-		if e.Type != skills.SkillTypeArchive {
-			t.Errorf("entry %q type = %q, want archive", e.Name, e.Type)
-		}
-		if !strings.HasSuffix(e.URL, ".tar.gz") {
-			t.Errorf("entry %q URL %q does not end in .tar.gz", e.Name, e.URL)
-		}
-		if !strings.HasPrefix(e.Digest, "sha256:") || len(e.Digest) != len("sha256:")+64 {
-			t.Errorf("entry %q digest %q malformed", e.Name, e.Digest)
-		}
-	}
-}
-
-func TestIndexer_ArchiveDigest_MatchesPackOutput(t *testing.T) {
-	p, err := skills.NewProvider(
-		skills.WithDirectory("testdata/valid"),
-		skills.WithArchiveMode(skills.ArchiveFormatTarGz),
-	)
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
-	idx, err := skills.NewIndexer(p).Index()
-	if err != nil {
-		t.Fatalf("Index: %v", err)
-	}
-	wantPacked, err := skills.PackSkill(os.DirFS("testdata/valid"), "git-workflow", skills.ArchiveFormatTarGz)
-	if err != nil {
-		t.Fatalf("PackSkill: %v", err)
-	}
-	sum := sha256.Sum256(wantPacked)
-	wantDigest := "sha256:" + hex.EncodeToString(sum[:])
-	for _, e := range idx.Skills {
-		if e.URL == "skill://git-workflow.tar.gz" {
-			if e.Digest != wantDigest {
-				t.Errorf("digest = %q, want %q", e.Digest, wantDigest)
-			}
-			return
-		}
-	}
-	t.Fatal("git-workflow archive entry not found")
-}
-
-func TestProvider_ArchiveMode_IndexResourceServesArchiveIndex(t *testing.T) {
-	srv := server.NewServer(core.ServerInfo{Name: "skills-archive-boot", Version: "0.0.1"})
-	p, err := skills.NewProvider(
-		skills.WithDirectory("testdata/valid"),
-		skills.WithArchiveMode(skills.ArchiveFormatTarGz),
-	)
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
-	p.RegisterWith(srv)
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	t.Cleanup(ts.Close)
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-archive-boot-client", Version: "0.0.1"})
-	if err := c.Connect(t.Context()); err != nil {
-		t.Fatalf("client connect: %v", err)
-	}
-	t.Cleanup(func() { c.Close() })
-
-	body, err := c.ReadResource(t.Context(), skills.IndexURI)
-	if err != nil {
-		t.Fatalf("ReadResource index: %v", err)
-	}
-	var idx skills.Index
-	if err := json.Unmarshal([]byte(body), &idx); err != nil {
-		t.Fatalf("Unmarshal: %v\n%s", err, body)
-	}
-	if len(idx.Skills) == 0 {
-		t.Fatal("empty Skills in served index")
-	}
-	for _, e := range idx.Skills {
-		if e.Type != skills.SkillTypeArchive {
-			t.Errorf("served entry %q type = %q, want archive", e.Name, e.Type)
-		}
 	}
 }
 

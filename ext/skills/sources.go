@@ -414,8 +414,8 @@ func (t *tempfileZipFS) Close() error {
 type GitHubOption func(*githubConfig)
 
 type githubConfig struct {
-	subdir      string
-	fetchOpts   []FetchOption
+	subdir    string
+	fetchOpts []FetchOption
 }
 
 // WithGitHubSubdir re-roots the returned SourceFS into a subdirectory
@@ -450,9 +450,10 @@ func WithGitHubFetchOptions(opts ...FetchOption) GitHubOption {
 // engineering GitHub's encoding rules.
 //
 // Public repos work without auth. For private repos pass a PAT via
-// WithGitHubFetchOptions(WithRequestModifier(func(r *http.Request) {
-//   r.Header.Set("Authorization", "Bearer " + pat)
-// })).
+//
+//	WithGitHubFetchOptions(WithRequestModifier(func(r *http.Request) {
+//	  r.Header.Set("Authorization", "Bearer " + pat)
+//	})).
 func FetchGitHubArchive(ctx context.Context, owner, repo, ref string, opts ...GitHubOption) (SourceFS, error) {
 	cfg := githubConfig{}
 	for _, opt := range opts {

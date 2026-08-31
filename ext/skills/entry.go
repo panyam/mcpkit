@@ -193,6 +193,14 @@ type SkillsListResult struct {
 	// rather than under _meta, matching the base-protocol list methods.
 	TTLMs      *int   `json:"ttlMs,omitempty"`
 	CacheScope string `json:"cacheScope,omitempty"`
+
+	// Meta carries mcpkit's monotonic catalog version under MetaKeyVersion.
+	//
+	// It moved here from the retired index.json, where issue 795 put it so a
+	// stateless client could poll for change. TTLMs answers "how long may I
+	// cache this", which is a different question from "has it changed since I
+	// last looked", so the counter is not redundant with the cache hints.
+	Meta map[string]any `json:"_meta,omitempty"`
 }
 
 // SkillsGetRequest is the skills/get request payload.

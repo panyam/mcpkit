@@ -1,7 +1,6 @@
 package skills_test
 
 import (
-	"encoding/json"
 	"errors"
 	"maps"
 	"net/http/httptest"
@@ -152,25 +151,25 @@ func TestProvider_Catalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
-	cat := p.Catalog()
+	cat, err := skills.NewIndexer(p).Entries()
+	if err != nil {
+		t.Fatalf("Entries: %v", err)
+	}
 	if len(cat) != 3 {
 		t.Fatalf("catalog len = %d, want 3", len(cat))
 	}
 	for _, e := range cat {
-		if e.Type != skills.SkillTypeSkillMD {
-			t.Errorf("entry %q type = %q, want skill-md", e.Name, e.Type)
-		}
-		if e.Name == "" || e.Description == "" || e.URL == "" {
+		if e.Name() == "" || e.Description() == "" || e.URI == "" {
 			t.Errorf("entry has empty required field: %+v", e)
 		}
-		if e.Digest != "" {
-			t.Errorf("Digest should be empty pre-560: %q", e.Digest)
+		if len(e.Resources.Files) == 0 {
+			t.Errorf("entry %q has an empty resources manifest", e.URI)
 		}
 	}
-	// Stable URL-sorted order.
+	// Stable URI-sorted order.
 	urls := make([]string, len(cat))
 	for i, e := range cat {
-		urls[i] = e.URL
+		urls[i] = e.URI
 	}
 	sorted := append([]string(nil), urls...)
 	sort.Strings(sorted)
@@ -198,7 +197,10 @@ func TestProvider_AcceptsNonStrictPrefixSiblings(t *testing.T) {
 		t.Errorf("URIs = %v, want %v", got, want)
 	}
 
-	cat := p.Catalog()
+	cat, err := skills.NewIndexer(p).Entries()
+	if err != nil {
+		t.Fatalf("Entries: %v", err)
+	}
 	if len(cat) != 2 {
 		t.Errorf("catalog len = %d, want 2 (foo + foo-bar)", len(cat))
 	}
@@ -233,8 +235,12 @@ func TestProvider_EmptyFS(t *testing.T) {
 	if len(p.Resources()) != 0 {
 		t.Errorf("empty FS produced resources: %v", urisOf(p.Resources()))
 	}
-	if len(p.Catalog()) != 0 {
-		t.Errorf("empty FS produced catalog: %+v", p.Catalog())
+	cat, err := skills.NewIndexer(p).Entries()
+	if err != nil {
+		t.Fatalf("Entries: %v", err)
+	}
+	if len(cat) != 0 {
+		t.Errorf("empty FS produced catalog: %+v", cat)
 	}
 }
 
@@ -304,7 +310,6 @@ func TestProvider_Integration(t *testing.T) {
 		"skill://acme/billing/refunds/SKILL.md",
 		"skill://acme/billing/refunds/templates/email.md",
 		"skill://git-workflow/SKILL.md",
-		"skill://index.json",
 		"skill://pdf-processing/SKILL.md",
 		"skill://pdf-processing/references/FORMS.md",
 		"skill://pdf-processing/scripts/extract.py",
@@ -443,11 +448,7 @@ func TestProvider_NotifyChanged_InvalidatesIndexCache(t *testing.T) {
 	}
 	t.Cleanup(func() { c.Close() })
 
-	first, err := c.ReadResource(t.Context(), skills.IndexURI)
-	if err != nil {
-		t.Fatalf("ReadResource initial: %v", err)
-	}
-	v0 := indexVersion(t, first)
+	v0 := listVersion(t, c)
 	if v0 != 0 {
 		t.Errorf("initial index version = %d, want 0", v0)
 	}
@@ -456,17 +457,13 @@ func TestProvider_NotifyChanged_InvalidatesIndexCache(t *testing.T) {
 		t.Fatalf("Refresh: %v", err)
 	}
 
-	second, err := c.ReadResource(t.Context(), skills.IndexURI)
-	if err != nil {
-		t.Fatalf("ReadResource after Refresh: %v", err)
-	}
-	v1 := indexVersion(t, second)
+	v1 := listVersion(t, c)
 	if v1 != 1 {
 		t.Errorf("post-Refresh index version = %d, want 1", v1)
 	}
 }
 
-func TestIndex_VersionUnderMeta(t *testing.T) {
+func TestSkillsList_VersionUnderMeta(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "skills-test", Version: "0.0.1"})
 
 	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid"))
@@ -485,18 +482,18 @@ func TestIndex_VersionUnderMeta(t *testing.T) {
 	}
 	t.Cleanup(func() { c.Close() })
 
-	body, err := c.ReadResource(t.Context(), skills.IndexURI)
+	res, err := c.Call(t.Context(), skills.MethodSkillsList, skills.SkillsListRequest{})
 	if err != nil {
-		t.Fatalf("ReadResource: %v", err)
+		t.Fatalf("skills/list: %v", err)
 	}
 
 	var raw map[string]any
-	if err := json.Unmarshal([]byte(body), &raw); err != nil {
-		t.Fatalf("unmarshal index: %v", err)
+	if err := res.Unmarshal(&raw); err != nil {
+		t.Fatalf("decode skills/list: %v", err)
 	}
 	meta, ok := raw["_meta"].(map[string]any)
 	if !ok {
-		t.Fatalf("_meta missing or wrong type: %T (full body: %s)", raw["_meta"], body)
+		t.Fatalf("_meta missing or wrong type: %T (full result: %v)", raw["_meta"], raw)
 	}
 	const wantKey = "io.modelcontextprotocol.skills/version"
 	v, ok := meta[wantKey]
@@ -865,11 +862,17 @@ func listenForPayloads(t *testing.T, cwc *clientWithCallbacks, ch chan<- skills.
 	cwc.mu.Unlock()
 }
 
-func indexVersion(t *testing.T, body string) uint64 {
+// listVersion reads mcpkit's catalog version from the skills/list result
+// _meta, where it moved when index.json was retired (issue 795).
+func listVersion(t *testing.T, c *client.Client) uint64 {
 	t.Helper()
+	res, err := c.Call(t.Context(), skills.MethodSkillsList, skills.SkillsListRequest{})
+	if err != nil {
+		t.Fatalf("skills/list: %v", err)
+	}
 	var raw map[string]any
-	if err := json.Unmarshal([]byte(body), &raw); err != nil {
-		t.Fatalf("unmarshal index: %v", err)
+	if err := res.Unmarshal(&raw); err != nil {
+		t.Fatalf("decode skills/list: %v", err)
 	}
 	meta, _ := raw["_meta"].(map[string]any)
 	if meta == nil {

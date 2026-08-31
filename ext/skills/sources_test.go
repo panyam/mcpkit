@@ -629,7 +629,7 @@ func assertFileAbsent(t *testing.T, fsys skills.SourceFS, name string) {
 
 func assertProviderServes(t *testing.T, fsys skills.SourceFS, wantURIs []string) {
 	t.Helper()
-	p, err := skills.NewProvider(skills.WithFS(fsys), skills.WithoutIndex(), skills.WithoutDirectoryRead())
+	p, err := skills.NewProvider(skills.WithFS(fsys), skills.WithoutDirectoryRead())
 	if err != nil {
 		if len(wantURIs) == 0 {
 			return // empty catalog is allowed to error or just register nothing — pass
