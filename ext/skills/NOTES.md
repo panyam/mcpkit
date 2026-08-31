@@ -90,6 +90,43 @@ suite scored that as six SKIPPED checks rather than a failure, because a server 
 declared the flag need not serve the method. `sep-2640-skills-directory` reported 1/1 passed while
 exercising none of the surface. It now runs 7/7. See `docs/SEP_2133_EXTENSIONS.md`.
 
+## Interop: what checks what
+
+Two reference implementations, and each can only test the side mcpkit's own
+conformance suite cannot vouch for on its own. Both were run against the
+`examples/skills` fixture.
+
+- **hf-mcp-server** (Hugging Face) is a *server*, so it exercises mcpkit's
+  **client**. Run it with `HF_SKILLS_DIR` pointing at a snapshot dir holding
+  `skills.json` (`{skills: [{uri, frontmatter, resources:[{uri,digest}]}]}`)
+  plus the expanded skill trees; `WEB_APP_PORT` sets the port, not `PORT`.
+- **fast-agent** (evalstate) is a *host*, so it exercises mcpkit's **server**.
+  The sharp version of that test is not running the agent, it is feeding
+  mcpkit's raw bytes to fast-agent's own Pydantic models
+  (`fast_agent.mcp.skills_extension.ListSkillsResult` / `GetSkillResult`),
+  since those are what a shipping host actually parses.
+
+Both pinned SEP draft `d7490ec` as of 2026-08-31, which predates `size`,
+`"dynamic"` and the per-skill limits (added 2026-08-20). So they validate the
+common subset and nothing beyond it; mcpkit is first on those three and has no
+external check for them.
+
+**Two gates a third-party host hits before it ever reaches skills**, both
+correct and both version-gated, so worth knowing when an interop run fails
+early with something that looks unrelated:
+
+- On protocol **2026-07-28** mcpkit enforces SEP-2243 routing headers, so every
+  POST needs `Mcp-Method` mirroring the JSON-RPC method. Missing it is -32020.
+- On the same version SEP-2575 requires per-request `_meta` carrying
+  `io.modelcontextprotocol/protocolVersion` and friends. Missing it is -32602
+  "Missing required metadata".
+
+A host negotiating **2025-11-25** needs neither and still gets the skills
+extension, which is how fast-agent reaches it today. Both gates are the spec's,
+not mcpkit's.
+
+---
+
 **Nesting reversed** (#1336). The June text forbade a `SKILL.md` in any descendant directory; the
 2026-08-21 revision permits it and defines nested semantics. Worth knowing before touching
 `uri.go`: `ParseURI` was never the blocker, despite the issue saying so. It already accepted
@@ -106,3 +143,18 @@ same file parses as its own skill, which is the flat-publication rule.
 
 `ErrManifestNotInRoot` survives for one caller (`provider.go`, a `SKILL.md` at a source FS root) and
 was re-worded to say only that.
+
+**The Provider rejected nesting too, separately from `ParseURI`.** `walk()` ran a sorted-prefix check
+and returned `ErrNestedSkill` at construction, so the fixture never even loaded. That is gone, and
+`ErrNestedSkill` with it.
+
+The subtle part is resource ownership. A file under `outer/inner/` is claimed by both skills if each
+walks its own subtree, and `registerResource` errors on a duplicate URI. The split that resolves it:
+**resource registration goes to the innermost owning skill** (one file, one URI, served once), while
+**the entry manifest walks the whole subtree** (`Indexer.buildResources`), so the enclosing skill
+still lists the nested files. A file therefore appears in two manifests and at one URI, which is
+exactly the SEP's completeness rule rather than a workaround for it.
+
+`IsManifest` carries the "hosts MUST NOT act on a nested SKILL.md's frontmatter" rule with no
+nesting-aware branch anywhere: split at the enclosing boundary it is false, addressed directly it is
+true.
