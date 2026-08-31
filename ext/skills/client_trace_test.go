@@ -93,25 +93,22 @@ func (p *fakeTracerProvider) byName(name string) []*fakeSpan {
 	return out
 }
 
-// TestClient_ListSkills_EmitsSpan_WithCount is the SEP-414 P7 happy
-// path: ListSkills under a TracerProvider emits a `skills.list` span
-// carrying mcp.skill.uri (the index URI) and mcp.skill.count on
-// success.
-func TestClient_ListSkills_EmitsSpan_WithCount(t *testing.T) {
+// TestClient_ListSkillEntries_EmitsSpan_WithCount is the SEP-414 P7 happy
+// path: ListSkillEntries under a TracerProvider emits a `skills.list` span
+// carrying mcp.skill.count on success. There is no mcp.skill.uri attribute
+// any more: enumeration is a method call, not a read of one well-known URI.
+func TestClient_ListSkillEntries_EmitsSpan_WithCount(t *testing.T) {
 	tp := &fakeTracerProvider{}
 	sc, _ := connectSkillsClientWithClientOpts(t, "testdata/valid", skills.WithTracerProvider(tp))
 
-	_, err := sc.ListSkills(context.Background())
+	_, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
+		t.Fatalf("ListSkillEntries: %v", err)
 	}
 
 	spans := tp.byName("skills.list")
 	if len(spans) != 1 {
 		t.Fatalf("skills.list span count = %d, want 1", len(spans))
-	}
-	if got := spans[0].attr("mcp.skill.uri"); got != skills.IndexURI {
-		t.Errorf("mcp.skill.uri = %q, want %q", got, skills.IndexURI)
 	}
 	if got := spans[0].attr("mcp.skill.count"); got == "" || got == "0" {
 		t.Errorf("mcp.skill.count = %q, want a non-zero count", got)
@@ -175,16 +172,14 @@ func TestClient_ReadAndVerify_EmitsDigestVerified(t *testing.T) {
 	tp := &fakeTracerProvider{}
 	sc, _ := connectSkillsClientWithClientOpts(t, "testdata/valid", skills.WithTracerProvider(tp))
 
-	idx, err := sc.ListSkills(context.Background())
+	entries, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
+		t.Fatalf("ListSkillEntries: %v", err)
 	}
-	entry, ok := idx.Lookup("skill://git-workflow/SKILL.md")
-	if !ok {
-		t.Fatal("git-workflow not in index")
-	}
+	entry := entryFor(t, entries, "git-workflow")
+	self := entry.Resources.Files[0]
 
-	if _, err := sc.ReadAndVerify(context.Background(), entry.URL, entry.Digest); err != nil {
+	if _, err := sc.ReadAndVerify(context.Background(), self.URI, self.Digest); err != nil {
 		t.Fatalf("ReadAndVerify: %v", err)
 	}
 
@@ -192,11 +187,11 @@ func TestClient_ReadAndVerify_EmitsDigestVerified(t *testing.T) {
 	if len(spans) != 1 {
 		t.Fatalf("skills.read_and_verify span count = %d, want 1", len(spans))
 	}
-	if got := spans[0].attr("mcp.skill.uri"); got != entry.URL {
-		t.Errorf("mcp.skill.uri = %q, want %q", got, entry.URL)
+	if got := spans[0].attr("mcp.skill.uri"); got != self.URI {
+		t.Errorf("mcp.skill.uri = %q, want %q", got, self.URI)
 	}
-	if got := spans[0].attr("mcp.skill.expected_digest"); got != entry.Digest {
-		t.Errorf("mcp.skill.expected_digest = %q, want %q", got, entry.Digest)
+	if got := spans[0].attr("mcp.skill.expected_digest"); got != self.Digest {
+		t.Errorf("mcp.skill.expected_digest = %q, want %q", got, self.Digest)
 	}
 	if got := spans[0].attr("mcp.skill.digest_verified"); got != "true" {
 		t.Errorf("mcp.skill.digest_verified = %q, want %q", got, "true")
@@ -322,8 +317,8 @@ func TestClient_NoTracer_EmitsNoSpans(t *testing.T) {
 	// Deliberately NOT passing WithTracerProvider.
 	sc, _ := connectSkillsClient(t, "testdata/valid")
 
-	if _, err := sc.ListSkills(context.Background()); err != nil {
-		t.Fatalf("ListSkills: %v", err)
+	if _, err := sc.ListSkillEntries(context.Background()); err != nil {
+		t.Fatalf("ListSkillEntries: %v", err)
 	}
 	if _, err := sc.ReadSkillURI(context.Background(), "skill://git-workflow/SKILL.md"); err != nil {
 		t.Fatalf("ReadSkillURI: %v", err)

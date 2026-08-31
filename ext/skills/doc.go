@@ -44,18 +44,6 @@ const Scheme = "skill"
 // ManifestFilename is the required filename at the root of every skill.
 const ManifestFilename = "SKILL.md"
 
-// IndexPath is the well-known URI at which a server SHOULD expose its
-// discovery index. The full URI is skill://index.json.
-const IndexPath = "index.json"
-
-// IndexURI is the full well-known URI for the discovery index.
-const IndexURI = "skill://index.json"
-
-// IndexSchemaURI is the JSON schema version URI the SEP currently pins to.
-// Servers populate Index.Schema with this value; clients SHOULD compare
-// against a known set before processing the rest of the document.
-const IndexSchemaURI = "https://schemas.agentskills.io/discovery/0.2.0/schema.json"
-
 // MetaPrefix is the reverse-domain prefix recommended by the SEP for any
 // SKILL.md frontmatter fields surfaced through a resource's _meta object.
 const MetaPrefix = "io.modelcontextprotocol.skills/"

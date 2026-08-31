@@ -3,13 +3,11 @@ package skills_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io/fs"
 	"net/http/httptest"
 	"os"
 	"regexp"
 	"sort"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
@@ -21,39 +19,30 @@ import (
 	"github.com/panyam/mcpkit/server"
 )
 
-func TestIndexer_Index_SchemaURI(t *testing.T) {
+func TestIndexer_Entries_DigestFormat(t *testing.T) {
 	p := mustProvider(t, "testdata/valid")
-	idx, err := skills.NewIndexer(p).Index()
+	entries, err := skills.NewIndexer(p).Entries()
 	if err != nil {
-		t.Fatalf("Index: %v", err)
+		t.Fatalf("Entries: %v", err)
 	}
-	if idx.Schema != skills.IndexSchemaURI {
-		t.Errorf("Schema = %q, want %q", idx.Schema, skills.IndexSchemaURI)
-	}
-}
-
-func TestIndexer_Index_DigestFormat(t *testing.T) {
-	p := mustProvider(t, "testdata/valid")
-	idx, err := skills.NewIndexer(p).Index()
-	if err != nil {
-		t.Fatalf("Index: %v", err)
-	}
-	if len(idx.Skills) == 0 {
-		t.Fatal("expected populated Skills")
+	if len(entries) == 0 {
+		t.Fatal("expected populated entries")
 	}
 	re := regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
-	for _, e := range idx.Skills {
-		if !re.MatchString(e.Digest) {
-			t.Errorf("entry %q: digest %q does not match sha256:[a-f0-9]{64}", e.Name, e.Digest)
+	for _, e := range entries {
+		for _, f := range e.Resources.Files {
+			if !re.MatchString(f.Digest) {
+				t.Errorf("%s: digest %q does not match sha256:[a-f0-9]{64}", f.URI, f.Digest)
+			}
 		}
 	}
 }
 
-func TestIndexer_Index_DigestCorrectness(t *testing.T) {
+func TestIndexer_Entries_DigestCorrectness(t *testing.T) {
 	p := mustProvider(t, "testdata/valid")
-	idx, err := skills.NewIndexer(p).Index()
+	entries, err := skills.NewIndexer(p).Entries()
 	if err != nil {
-		t.Fatalf("Index: %v", err)
+		t.Fatalf("Entries: %v", err)
 	}
 	raw, err := os.ReadFile("testdata/valid/git-workflow/SKILL.md")
 	if err != nil {
@@ -63,10 +52,11 @@ func TestIndexer_Index_DigestCorrectness(t *testing.T) {
 	wantDigest := "sha256:" + hex.EncodeToString(sum[:])
 
 	var got string
-	for _, e := range idx.Skills {
-		if e.URL == "skill://git-workflow/SKILL.md" {
-			got = e.Digest
-			break
+	for _, e := range entries {
+		for _, f := range e.Resources.Files {
+			if f.URI == "skill://git-workflow/SKILL.md" {
+				got = f.Digest
+			}
 		}
 	}
 	if got != wantDigest {
@@ -74,40 +64,37 @@ func TestIndexer_Index_DigestCorrectness(t *testing.T) {
 	}
 }
 
-func TestIndexer_Index_URLSorted(t *testing.T) {
+func TestIndexer_Entries_URISorted(t *testing.T) {
 	p := mustProvider(t, "testdata/valid")
-	idx, err := skills.NewIndexer(p).Index()
+	entries, err := skills.NewIndexer(p).Entries()
 	if err != nil {
-		t.Fatalf("Index: %v", err)
+		t.Fatalf("Entries: %v", err)
 	}
-	urls := make([]string, len(idx.Skills))
-	for i, e := range idx.Skills {
-		urls[i] = e.URL
+	urls := make([]string, len(entries))
+	for i, e := range entries {
+		urls[i] = e.URI
 	}
 	sorted := append([]string(nil), urls...)
 	sort.Strings(sorted)
 	if !equalSlices(urls, sorted) {
-		t.Errorf("entries not URL-sorted: %v", urls)
+		t.Errorf("entries not URI-sorted: %v", urls)
 	}
 }
 
-func TestIndexer_Index_Empty(t *testing.T) {
+func TestIndexer_Entries_Empty(t *testing.T) {
 	p, err := skills.NewProvider(skills.WithFS(fstest.MapFS{}))
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
-	idx, err := skills.NewIndexer(p).Index()
+	entries, err := skills.NewIndexer(p).Entries()
 	if err != nil {
-		t.Fatalf("Index: %v", err)
+		t.Fatalf("Entries: %v", err)
 	}
-	if idx.Schema != skills.IndexSchemaURI {
-		t.Errorf("Schema = %q, want %q", idx.Schema, skills.IndexSchemaURI)
+	if entries == nil {
+		t.Errorf("entries slice should be non-nil when there are no skills")
 	}
-	if idx.Skills == nil {
-		t.Errorf("Skills slice should be non-nil for empty index")
-	}
-	if len(idx.Skills) != 0 {
-		t.Errorf("Skills should be empty, got %d entries", len(idx.Skills))
+	if len(entries) != 0 {
+		t.Errorf("entries should be empty, got %d", len(entries))
 	}
 }
 
@@ -117,11 +104,11 @@ func TestIndexer_CacheTTL_HitsAndMiss(t *testing.T) {
 	p := mustProviderFromFS(t, cfs)
 
 	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(50*time.Millisecond))
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #1: %v", err)
 	}
 	reads1 := atomic.LoadInt32(&cfs.openCount)
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #2 (within TTL): %v", err)
 	}
 	reads2 := atomic.LoadInt32(&cfs.openCount)
@@ -130,7 +117,7 @@ func TestIndexer_CacheTTL_HitsAndMiss(t *testing.T) {
 	}
 
 	time.Sleep(60 * time.Millisecond)
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #3 (after TTL): %v", err)
 	}
 	reads3 := atomic.LoadInt32(&cfs.openCount)
@@ -145,12 +132,12 @@ func TestIndexer_CacheMtimeInvalidates(t *testing.T) {
 	p := mustProviderFromFS(t, mfs)
 
 	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(time.Hour))
-	first, err := idx.Index()
+	first, err := idx.Entries()
 	if err != nil {
 		t.Fatalf("Index #1: %v", err)
 	}
-	if len(first.Skills) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(first.Skills))
+	if len(first) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(first))
 	}
 
 	// Mutate the SKILL.md bytes and bump mtime. Index() within TTL must
@@ -164,12 +151,12 @@ new body
 `)
 	mfs["solo/SKILL.md"].ModTime = original.Add(time.Minute)
 
-	second, err := idx.Index()
+	second, err := idx.Entries()
 	if err != nil {
 		t.Fatalf("Index #2: %v", err)
 	}
-	if second.Skills[0].Digest == first.Skills[0].Digest {
-		t.Errorf("digest did not change after mutating SKILL.md: %q", first.Skills[0].Digest)
+	if second[0].Resources.Files[0].Digest == first[0].Resources.Files[0].Digest {
+		t.Errorf("digest did not change after mutating SKILL.md: %q", first[0].Resources.Files[0].Digest)
 	}
 }
 
@@ -192,11 +179,11 @@ description: Zero-mtime fixture
 
 	// No TTL → recompute every call.
 	idx0 := skills.NewIndexer(p)
-	if _, err := idx0.Index(); err != nil {
+	if _, err := idx0.Entries(); err != nil {
 		t.Fatalf("Index #1: %v", err)
 	}
 	reads1 := atomic.LoadInt32(&cfs.openCount)
-	if _, err := idx0.Index(); err != nil {
+	if _, err := idx0.Entries(); err != nil {
 		t.Fatalf("Index #2: %v", err)
 	}
 	reads2 := atomic.LoadInt32(&cfs.openCount)
@@ -206,11 +193,11 @@ description: Zero-mtime fixture
 
 	// TTL set → cache by TTL even though mtime cannot drive invalidation.
 	idxT := skills.NewIndexer(p, skills.WithIndexerCacheTTL(time.Hour))
-	if _, err := idxT.Index(); err != nil {
+	if _, err := idxT.Entries(); err != nil {
 		t.Fatalf("TTL Index #1: %v", err)
 	}
 	readsA := atomic.LoadInt32(&cfs.openCount)
-	if _, err := idxT.Index(); err != nil {
+	if _, err := idxT.Entries(); err != nil {
 		t.Fatalf("TTL Index #2: %v", err)
 	}
 	readsB := atomic.LoadInt32(&cfs.openCount)
@@ -219,73 +206,45 @@ description: Zero-mtime fixture
 	}
 }
 
-func TestProvider_RegisterWith_IndexExposed(t *testing.T) {
-	srv, ts, c := boot(t, "testdata/valid")
-	_ = ts
+// TestProvider_RegisterWith_MethodsExposed replaces the old index-resource
+// test: enumeration is now two methods, and declaring the extension commits
+// the server to both.
+func TestProvider_RegisterWith_MethodsExposed(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
 
-	defs, err := c.ListResources(t.Context())
+	var lr skills.SkillsListResult
+	res, err := c.Call(t.Context(), skills.MethodSkillsList, skills.SkillsListRequest{})
 	if err != nil {
-		t.Fatalf("ListResources: %v", err)
+		t.Fatalf("skills/list: %v", err)
 	}
-	var found bool
-	for _, d := range defs {
-		if d.URI == skills.IndexURI {
-			found = true
-			if d.MimeType != "application/json" {
-				t.Errorf("index MimeType = %q, want application/json", d.MimeType)
-			}
-			break
-		}
+	if err := res.Unmarshal(&lr); err != nil {
+		t.Fatalf("decode skills/list: %v", err)
 	}
-	if !found {
-		t.Errorf("resources/list missing %q in %v", skills.IndexURI, urisOf(defs))
+	if len(lr.Skills) != 3 {
+		t.Errorf("skills count = %d, want 3 (testdata/valid has 3 skills)", len(lr.Skills))
 	}
 
-	body, err := c.ReadResource(t.Context(), skills.IndexURI)
-	if err != nil {
-		t.Fatalf("ReadResource %q: %v", skills.IndexURI, err)
+	if _, err := c.Call(t.Context(), skills.MethodSkillsGet, skills.SkillsGetRequest{URI: lr.Skills[0].URI}); err != nil {
+		t.Fatalf("skills/get: %v", err)
 	}
-	var idx skills.Index
-	if err := json.Unmarshal([]byte(body), &idx); err != nil {
-		t.Fatalf("Unmarshal index: %v\nbody=%s", err, body)
-	}
-	if idx.Schema != skills.IndexSchemaURI {
-		t.Errorf("Schema = %q", idx.Schema)
-	}
-	if len(idx.Skills) != 3 {
-		t.Errorf("Skills count = %d, want 3 (testdata/valid has 3 skills)", len(idx.Skills))
-	}
-	_ = srv
 }
 
-func TestProvider_WithoutIndex(t *testing.T) {
-	srv := server.NewServer(core.ServerInfo{Name: "skills-no-index", Version: "0.0.1"})
-	p, err := skills.NewProvider(
-		skills.WithDirectory("testdata/valid"),
-		skills.WithoutIndex(),
-	)
-	if err != nil {
-		t.Fatalf("NewProvider: %v", err)
-	}
-	p.RegisterWith(srv)
-
-	handler := srv.Handler(server.WithStreamableHTTP(true))
-	ts := httptest.NewServer(handler)
-	t.Cleanup(ts.Close)
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-no-index-client", Version: "0.0.1"})
-	if err := c.Connect(t.Context()); err != nil {
-		t.Fatalf("client connect: %v", err)
-	}
-	t.Cleanup(func() { c.Close() })
+// TestProvider_NoIndexResource pins the retirement: skill://index.json is no
+// longer served, so a read of it must miss rather than return a stale catalog.
+func TestProvider_NoIndexResource(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
 
 	defs, err := c.ListResources(t.Context())
 	if err != nil {
 		t.Fatalf("ListResources: %v", err)
 	}
 	for _, d := range defs {
-		if d.URI == skills.IndexURI {
-			t.Errorf("WithoutIndex did not suppress %q; resources = %v", skills.IndexURI, urisOf(defs))
+		if d.URI == "skill://index.json" {
+			t.Errorf("skill://index.json is still registered; the 08-21 SEP retired it")
 		}
+	}
+	if _, err := c.ReadResource(t.Context(), "skill://index.json"); err == nil {
+		t.Error("reading skill://index.json succeeded; it must no longer be served")
 	}
 }
 
@@ -312,12 +271,12 @@ func TestProvider_WithIndexCacheTTL_ForwardsToIndexer(t *testing.T) {
 	}
 	t.Cleanup(func() { c.Close() })
 
-	if _, err := c.ReadResource(t.Context(), skills.IndexURI); err != nil {
-		t.Fatalf("ReadResource #1: %v", err)
+	if _, err := c.Call(t.Context(), skills.MethodSkillsList, skills.SkillsListRequest{}); err != nil {
+		t.Fatalf("skills/list #1: %v", err)
 	}
 	reads1 := atomic.LoadInt32(&cfs.openCount)
-	if _, err := c.ReadResource(t.Context(), skills.IndexURI); err != nil {
-		t.Fatalf("ReadResource #2: %v", err)
+	if _, err := c.Call(t.Context(), skills.MethodSkillsList, skills.SkillsListRequest{}); err != nil {
+		t.Fatalf("skills/list #2: %v", err)
 	}
 	reads2 := atomic.LoadInt32(&cfs.openCount)
 	if reads2 != reads1 {
@@ -325,11 +284,10 @@ func TestProvider_WithIndexCacheTTL_ForwardsToIndexer(t *testing.T) {
 	}
 }
 
-func TestIndexer_RegisterWith_AddsIndexResource(t *testing.T) {
+func TestIndexer_RegisterWith_AddsMethods(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "skills-indexer-only", Version: "0.0.1"})
 	p, err := skills.NewProvider(
 		skills.WithDirectory("testdata/valid"),
-		skills.WithoutIndex(),
 	)
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
@@ -347,48 +305,56 @@ func TestIndexer_RegisterWith_AddsIndexResource(t *testing.T) {
 	}
 	t.Cleanup(func() { c.Close() })
 
-	body, err := c.ReadResource(t.Context(), skills.IndexURI)
+	res, err := c.Call(t.Context(), skills.MethodSkillsList, skills.SkillsListRequest{})
 	if err != nil {
-		t.Fatalf("ReadResource %q: %v", skills.IndexURI, err)
+		t.Fatalf("skills/list: %v", err)
 	}
-	if !strings.Contains(body, skills.IndexSchemaURI) {
-		t.Errorf("index body missing $schema URI: %s", body)
+	var lr skills.SkillsListResult
+	if err := res.Unmarshal(&lr); err != nil {
+		t.Fatalf("decode skills/list: %v", err)
+	}
+	if len(lr.Skills) == 0 {
+		t.Error("skills/list returned no entries")
 	}
 }
 
-func TestIndexer_Index_ConcurrentSafe(t *testing.T) {
+func TestIndexer_Entries_ConcurrentSafe(t *testing.T) {
 	// Race-detector smoke test. The cache mutex is taken at the top of
-	// Index() and held through both isFresh() and build(). Multiple
-	// goroutines hammering Index() with a short TTL must produce no
-	// data race and consistent digests for the same artifact.
+	// Entries() and held through both isFresh() and buildEntries().
+	// Multiple goroutines hammering Entries() with a short TTL must produce
+	// no data race and consistent digests for the same artifact.
 	p := mustProvider(t, "testdata/valid")
 	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(2*time.Millisecond))
 
 	const goroutines = 16
 	const iterations = 50
 
-	first, err := idx.Index()
+	first, err := idx.Entries()
 	if err != nil {
-		t.Fatalf("Index #1: %v", err)
+		t.Fatalf("Entries #1: %v", err)
 	}
-	wantDigests := make(map[string]string, len(first.Skills))
-	for _, e := range first.Skills {
-		wantDigests[e.URL] = e.Digest
+	wantDigests := make(map[string]string)
+	for _, e := range first {
+		for _, f := range e.Resources.Files {
+			wantDigests[f.URI] = f.Digest
+		}
 	}
 
 	errCh := make(chan error, goroutines)
 	for g := 0; g < goroutines; g++ {
 		go func() {
 			for i := 0; i < iterations; i++ {
-				got, err := idx.Index()
+				got, err := idx.Entries()
 				if err != nil {
 					errCh <- err
 					return
 				}
-				for _, e := range got.Skills {
-					if want := wantDigests[e.URL]; e.Digest != want {
-						errCh <- &digestDriftErr{url: e.URL, want: want, got: e.Digest}
-						return
+				for _, e := range got {
+					for _, f := range e.Resources.Files {
+						if want := wantDigests[f.URI]; f.Digest != want {
+							errCh <- &digestDriftErr{url: f.URI, want: want, got: f.Digest}
+							return
+						}
 					}
 				}
 			}
@@ -496,12 +462,12 @@ func TestIndexer_WithMtimeChecksDisabled_SkipsStatOnCacheHit(t *testing.T) {
 	p := mustProviderFromFS(t, cfs)
 
 	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(time.Hour), skills.WithMtimeChecks(false))
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #1: %v", err)
 	}
 	stats1 := atomic.LoadInt32(&cfs.statCount)
 
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #2 (within TTL): %v", err)
 	}
 	if stats2 := atomic.LoadInt32(&cfs.statCount); stats2 != stats1 {
@@ -517,12 +483,12 @@ func TestIndexer_MtimeChecksDefaultOn_StatsOnCacheHit(t *testing.T) {
 	p := mustProviderFromFS(t, cfs)
 
 	idx := skills.NewIndexer(p, skills.WithIndexerCacheTTL(time.Hour)) // mtime checks default on
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #1: %v", err)
 	}
 	stats1 := atomic.LoadInt32(&cfs.statCount)
 
-	if _, err := idx.Index(); err != nil {
+	if _, err := idx.Entries(); err != nil {
 		t.Fatalf("Index #2 (within TTL): %v", err)
 	}
 	if stats2 := atomic.LoadInt32(&cfs.statCount); stats2 == stats1 {

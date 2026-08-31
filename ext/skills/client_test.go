@@ -5,10 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io/fs"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -45,6 +46,30 @@ func connectSkillsClient(t *testing.T, dir string, opts ...skills.ProviderOption
 // connectSkillsClient that wires SEP-414 P7 (#748) Client options
 // (WithTracerProvider, WithActivationHook, ...) instead of provider
 // options. Used by client_trace_test.go.
+// connectSkillsClientFS is connectSkillsClient over an in-memory fs.FS, for
+// cases (an empty catalog) that no testdata directory can express, since git
+// cannot carry an empty directory.
+func connectSkillsClientFS(t *testing.T, fsys fs.FS) (*skills.Client, *client.Client) {
+	t.Helper()
+	srv := server.NewServer(core.ServerInfo{Name: "skills-client-test", Version: "0.0.1"})
+	p, err := skills.NewProvider(skills.WithFS(fsys))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	p.RegisterWith(srv)
+
+	handler := srv.Handler(server.WithStreamableHTTP(true))
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
+
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "skills-client-test", Version: "0.0.1"})
+	if err := c.Connect(t.Context()); err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { c.Close() })
+	return skills.NewClient(c), c
+}
+
 func connectSkillsClientWithClientOpts(t *testing.T, dir string, clientOpts ...skills.Option) (*skills.Client, *client.Client) {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "skills-client-test", Version: "0.0.1"})
@@ -91,58 +116,45 @@ func TestClient_SupportsSkills_PlainServer(t *testing.T) {
 	}
 }
 
-func TestClient_ListSkills_Populated(t *testing.T) {
+func TestClient_ListSkillEntries_Populated(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills(context.Background())
+	entries, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
+		t.Fatalf("ListSkillEntries: %v", err)
 	}
-	if idx.Schema != skills.IndexSchemaURI {
-		t.Errorf("Schema = %q, want %q", idx.Schema, skills.IndexSchemaURI)
-	}
-	if len(idx.Skills) != 3 {
-		t.Errorf("entry count = %d, want 3", len(idx.Skills))
+	if len(entries) != 3 {
+		t.Errorf("entry count = %d, want 3", len(entries))
 	}
 }
 
-func TestClient_ListSkills_Absent(t *testing.T) {
-	sc, _ := connectSkillsClient(t, "testdata/valid", skills.WithoutIndex())
-	idx, err := sc.ListSkills(context.Background())
+// An empty listing is conformant: SEP-2640 lets a server return one, and
+// hosts MUST NOT read it as proof the server has no skills.
+func TestClient_ListSkillEntries_Empty(t *testing.T) {
+	sc, _ := connectSkillsClientFS(t, fstest.MapFS{})
+	entries, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
-		t.Fatalf("ListSkills should tolerate missing index, got: %v", err)
+		t.Fatalf("an empty listing is conformant and must not error, got: %v", err)
 	}
-	if len(idx.Skills) != 0 {
-		t.Errorf("expected empty index, got %d entries", len(idx.Skills))
+	if len(entries) != 0 {
+		t.Errorf("expected an empty listing, got %d entries", len(entries))
 	}
 }
 
-func TestClient_Index_Lookup_Hit(t *testing.T) {
+func TestClient_GetSkill_Hit(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills(context.Background())
+	entry, err := sc.GetSkill(context.Background(), "skill://git-workflow/SKILL.md")
 	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
+		t.Fatalf("GetSkill: %v", err)
 	}
-	entry, ok := idx.Lookup("skill://git-workflow/SKILL.md")
-	if !ok {
-		t.Fatalf("Lookup miss for known URL")
-	}
-	if entry.Name != "git-workflow" {
-		t.Errorf("entry.Name = %q, want git-workflow", entry.Name)
+	if entry.Name() != "git-workflow" {
+		t.Errorf("entry name = %q, want git-workflow", entry.Name())
 	}
 }
 
-func TestClient_Index_Lookup_Miss(t *testing.T) {
+func TestClient_GetSkill_Miss(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills(context.Background())
-	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
-	}
-	entry, ok := idx.Lookup("skill://nonexistent/SKILL.md")
-	if ok {
-		t.Errorf("Lookup hit for unknown URL, got %+v", entry)
-	}
-	if !reflect.DeepEqual(entry, skills.IndexEntry{}) {
-		t.Errorf("miss should return zero IndexEntry, got %+v", entry)
+	if _, err := sc.GetSkill(context.Background(), "skill://nonexistent/SKILL.md"); err == nil {
+		t.Error("GetSkill on an unserved URI succeeded, want -32602")
 	}
 }
 
@@ -202,15 +214,13 @@ func TestClient_ReadSkillFile(t *testing.T) {
 
 func TestClient_ReadAndVerify_Match(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills(context.Background())
+	entries, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
+		t.Fatalf("ListSkillEntries: %v", err)
 	}
-	entry, ok := idx.Lookup("skill://git-workflow/SKILL.md")
-	if !ok {
-		t.Fatal("git-workflow not in index")
-	}
-	result, err := sc.ReadAndVerify(context.Background(), entry.URL, entry.Digest)
+	entry := entryFor(t, entries, "git-workflow")
+	self := entry.Resources.Files[0]
+	result, err := sc.ReadAndVerify(context.Background(), self.URI, self.Digest)
 	if err != nil {
 		t.Fatalf("ReadAndVerify match: %v", err)
 	}
@@ -250,34 +260,38 @@ func TestClient_ReadAndVerify_EmptyDigestDisables(t *testing.T) {
 
 func TestClient_RoundTrip_CatalogVerify(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills(context.Background())
+	entries, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
-		t.Fatalf("ListSkills: %v", err)
+		t.Fatalf("ListSkillEntries: %v", err)
 	}
 	verified := 0
-	for _, e := range idx.Skills {
-		if e.Type != skills.SkillTypeSkillMD {
-			continue
-		}
-		result, err := sc.ReadAndVerify(context.Background(), e.URL, e.Digest)
+	for _, e := range entries {
+		result, err := sc.ReadFromEntry(context.Background(), e, e.URI)
 		if err != nil {
-			t.Errorf("ReadAndVerify %s: %v", e.URL, err)
+			t.Errorf("ReadFromEntry %s: %v", e.URI, err)
 			continue
 		}
 		if !result.DigestVerified {
-			t.Errorf("%s: DigestVerified = false", e.URL)
+			t.Errorf("%s: DigestVerified = false", e.URI)
 			continue
 		}
-		// Recompute locally as a belt-and-braces check.
+		// Recompute locally as a belt-and-braces check against the entry's
+		// own pin for its SKILL.md.
+		var pin string
+		for _, f := range e.Resources.Files {
+			if f.URI == e.URI {
+				pin = f.Digest
+			}
+		}
 		sum := sha256.Sum256(result.Bytes)
 		got := "sha256:" + hex.EncodeToString(sum[:])
-		if got != e.Digest {
-			t.Errorf("%s: local digest %s != catalog %s", e.URL, got, e.Digest)
+		if got != pin {
+			t.Errorf("%s: local digest %s != manifest pin %s", e.URI, got, pin)
 		}
 		verified++
 	}
 	if verified == 0 {
-		t.Fatal("no skill-md entries verified end-to-end")
+		t.Fatal("no entries verified end-to-end")
 	}
 }
 

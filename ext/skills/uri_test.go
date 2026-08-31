@@ -417,18 +417,6 @@ func TestURIParts_String(t *testing.T) {
 	}
 }
 
-func TestIsIndexURI(t *testing.T) {
-	if !skills.IsIndexURI("skill://index.json") {
-		t.Errorf("IsIndexURI(skill://index.json) = false, want true")
-	}
-	if skills.IsIndexURI("skill://index.json/") {
-		t.Errorf("trailing slash should not match reserved URI")
-	}
-	if skills.IsIndexURI("skill://other/index.json") {
-		t.Errorf("non-root index.json should not match reserved URI")
-	}
-}
-
 func TestValidateSkillName(t *testing.T) {
 	good := []string{"a", "abc", "git-workflow", "acme-billing-refunds", "h2g2", "a1"}
 	for _, n := range good {

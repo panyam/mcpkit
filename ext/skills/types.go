@@ -1,152 +1,10 @@
 package skills
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
 )
-
-// SkillType is the discriminator for an entry in skill://index.json.
-type SkillType string
-
-const (
-	// SkillTypeSkillMD points at an individual SKILL.md resource. Supporting
-	// files are siblings under the same skill path.
-	SkillTypeSkillMD SkillType = "skill-md"
-
-	// SkillTypeArchive points at a packed skill directory served as a single
-	// resource. The archive's URL suffix (.tar.gz or .zip) determines the
-	// expected format.
-	SkillTypeArchive SkillType = "archive"
-)
-
-// Valid reports whether t is one of the SkillType values defined by SEP-2640.
-// The previously valid "mcp-resource-template" type was dropped from the SEP
-// on 2026-06-04; entries that carry it are now invalid.
-func (t SkillType) Valid() bool {
-	switch t {
-	case SkillTypeSkillMD, SkillTypeArchive:
-		return true
-	}
-	return false
-}
-
-// HasManifestFields reports whether entries of this type carry a Name and
-// Digest. After the 2026-06-04 SEP HEAD removal of mcp-resource-template,
-// both surviving types require both fields; the helper is retained for
-// callers that still want to dispatch on the type symbolically.
-func (t SkillType) HasManifestFields() bool {
-	return t == SkillTypeSkillMD || t == SkillTypeArchive
-}
-
-// IndexEntry is a single skill entry in a server's skill://index.json.
-//
-// Per SEP-2640, Name and Digest are required for both the skill-md and
-// archive types. The JSON encoding keeps `omitempty` on both fields so
-// future spec revisions that re-introduce a manifest-less entry type can
-// be parsed without a struct-shape change.
-type IndexEntry struct {
-	Type        SkillType `json:"type"`
-	Name        string    `json:"name,omitempty"`
-	Description string    `json:"description"`
-	URL         string    `json:"url"`
-	Digest      string    `json:"digest,omitempty"`
-
-	// Meta carries opt-in, reverse-domain-namespaced extension metadata per
-	// the MCP _meta convention. mcpkit uses MetaKeyFileDigests to pin
-	// supporting-file integrity (issue 866). Placing the pins under _meta,
-	// rather than a top-level field, keeps them from colliding with any
-	// field a future SEP revision may add to the entry — the supporting-
-	// file digest shape is still spec-undecided (issues 780 / 839). When
-	// the SEP settles, mcpkit maps to whatever shape it defines. Read the
-	// pins with FileDigests / FileDigest.
-	Meta map[string]any `json:"_meta,omitempty"`
-}
-
-// MetaKeyFileDigests is the reverse-domain _meta key under an IndexEntry
-// that carries the entry's supporting-file integrity pins as a
-// []FileDigest (issue 866). Namespaced so it cannot collide with a
-// top-level field a future SEP revision may define for the same purpose.
-const MetaKeyFileDigests = MetaPrefix + "file-digests"
-
-// FileDigest pins one supporting file within a skill-md skill to a
-// SHA-256 digest (issue 866). Path is the file's path relative to the
-// skill directory, forward-slash separated — the same relative reference
-// Client.ReadSkillFile resolves against the manifest root (e.g.
-// "references/GUIDE.md"). SKILL.md is pinned by IndexEntry.Digest and is
-// never repeated here.
-type FileDigest struct {
-	Path   string `json:"path"`
-	Digest string `json:"digest"`
-}
-
-// FileDigests returns the supporting-file pins carried under
-// MetaKeyFileDigests in the entry's _meta, or nil when none are present
-// (the server pinned SKILL.md only, or ran with WithSupportingFileDigests
-// set to SupportingDigestsOff). It handles both a freshly-built entry
-// (typed []FileDigest value) and a JSON-decoded one (generic []any), so
-// it works on both the serving and consuming sides.
-func (e IndexEntry) FileDigests() []FileDigest {
-	if e.Meta == nil {
-		return nil
-	}
-	raw, ok := e.Meta[MetaKeyFileDigests]
-	if !ok {
-		return nil
-	}
-	if fds, ok := raw.([]FileDigest); ok {
-		return fds
-	}
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return nil
-	}
-	var fds []FileDigest
-	if err := json.Unmarshal(b, &fds); err != nil {
-		return nil
-	}
-	return fds
-}
-
-// FileDigest returns the pinned SHA-256 for the supporting file at the
-// given skill-directory-relative path, and whether a pin exists. The
-// path is matched exactly against the canonical shape the Indexer writes
-// (clean, forward-slash, relative to the skill root — the same shape
-// ResolveRelative produces from a manifest URI + relative reference).
-func (e IndexEntry) FileDigest(relPath string) (string, bool) {
-	for _, f := range e.FileDigests() {
-		if f.Path == relPath {
-			return f.Digest, true
-		}
-	}
-	return "", false
-}
-
-// Validate checks the per-type field requirements from SEP-2640's index
-// table. It does not check digest format (use ValidateDigest separately)
-// or that URL is well-formed (use ParseURI).
-func (e IndexEntry) Validate() error {
-	if !e.Type.Valid() {
-		return fmt.Errorf("%w: %q", ErrUnknownSkillType, e.Type)
-	}
-	if e.Description == "" {
-		return ErrIndexEntryMissingDescription
-	}
-	if e.URL == "" {
-		return ErrIndexEntryMissingURL
-	}
-	if e.Type.HasManifestFields() {
-		if e.Name == "" {
-			return ErrIndexEntryMissingName
-		}
-		if e.Digest == "" {
-			return ErrIndexEntryMissingDigest
-		}
-	}
-	return nil
-}
 
 // MetaKeyVersion is the reverse-domain key under skill://index.json's
 // _meta map that carries Provider.Version() at index build time.
@@ -255,66 +113,6 @@ type PathsChangedPayload struct {
 	Version uint64                     `json:"version"`
 }
 
-// Index is the document served at the well-known IndexURI.
-//
-// Meta carries opt-in extension metadata under the `_meta` key per the
-// MCP convention. Keys are reverse-domain-namespaced
-// (io.modelcontextprotocol.skills/...) so they will not collide with
-// any field the SEP may add in the future. mcpkit populates
-// "io.modelcontextprotocol.skills/version" with Provider.Version() at
-// index build time; stateless clients poll the index and observe this
-// field bumping when content changes (issue #795).
-type Index struct {
-	Schema string         `json:"$schema"`
-	Skills []IndexEntry   `json:"skills"`
-	Meta   map[string]any `json:"_meta,omitempty"`
-}
-
-// NewIndex returns an Index pre-populated with the schema URI defined by
-// IndexSchemaURI.
-func NewIndex(entries ...IndexEntry) Index {
-	return Index{Schema: IndexSchemaURI, Skills: entries}
-}
-
-// Lookup returns the IndexEntry whose URL exactly matches uri. The
-// second return value reports whether a match was found.
-//
-// Client-side use: a host that receives a skill:// URI from server
-// instructions, the user, or another skill can call Lookup against
-// the index it fetched via ListSkills. A hit gives the host
-// digest-verifiable metadata; a miss is the SEP-2640-sanctioned
-// "skill exists but is not enumerated" case where the host falls back
-// to a bare ReadSkillURI.
-//
-// Comparison is exact-string. A trailing slash or differing percent
-// encoding on the input is the caller's bug, not Lookup's concern.
-func (i Index) Lookup(uri string) (IndexEntry, bool) {
-	for _, e := range i.Skills {
-		if e.URL == uri {
-			return e, true
-		}
-	}
-	return IndexEntry{}, false
-}
-
-// Validate checks every entry and the top-level shape. It is intended for
-// servers preparing an index for publication; clients receiving an index
-// SHOULD skip entries with unrecognized types rather than reject the
-// document, so they MAY validate individually.
-func (i Index) Validate() error {
-	if i.Schema == "" {
-		return ErrIndexMissingSchema
-	}
-	for n, e := range i.Skills {
-		if err := e.Validate(); err != nil {
-			return fmt.Errorf("skills[%d]: %w", n, err)
-		}
-	}
-	return nil
-}
-
-// Frontmatter is the YAML block at the head of a SKILL.md file.
-//
 // SEP-2640 requires only Name and Description; the Agent Skills
 // specification (delegated to by the SEP) may require additional fields,
 // and individual servers MAY surface arbitrary fields via the resource's
@@ -350,8 +148,7 @@ func (f Frontmatter) Get(key string) (any, bool) {
 
 // Metadata is the host-side view of a skill, populated from its SKILL.md
 // frontmatter plus the URI it was loaded from. It is what a SkillProvider
-// surfaces to higher layers and what a client receives from helpers like
-// ListSkills.
+// surfaces to higher layers.
 type Metadata struct {
 	Name        string
 	Description string
@@ -394,4 +191,3 @@ type DirectoryReadResult struct {
 	Resources  []core.ResourceDef `json:"resources"`
 	NextCursor string             `json:"nextCursor,omitempty"`
 }
-

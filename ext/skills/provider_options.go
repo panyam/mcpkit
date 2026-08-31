@@ -10,22 +10,21 @@ import (
 type ProviderOption func(*providerConfig)
 
 type providerConfig struct {
-	fsys                 fs.FS
-	root                 string
-	hostRoot             string // host filesystem path; populated by WithDirectory, empty for WithFS
-	uriPrefix            []string
-	metaPrefix           string
-	suppressIndex        bool
+	fsys                  fs.FS
+	root                  string
+	hostRoot              string // host filesystem path; populated by WithDirectory, empty for WithFS
+	uriPrefix             []string
+	metaPrefix            string
 	suppressDirectoryRead bool
-	indexCacheTTL        time.Duration
-	archiveMode          ArchiveFormat
-	archiveMaxBytes      int64
-	coalesceWindow       time.Duration
-	minBroadcastInterval time.Duration
-	fsWatcherEnabled     bool
-	fsWatcherIgnore      []string
-	fsWatcherErrHandler  func(error)
-	supportingDigests    SupportingDigestMode
+	indexCacheTTL         time.Duration
+	archiveMode           ArchiveFormat
+	archiveMaxBytes       int64
+	coalesceWindow        time.Duration
+	minBroadcastInterval  time.Duration
+	fsWatcherEnabled      bool
+	fsWatcherIgnore       []string
+	fsWatcherErrHandler   func(error)
+	supportingDigests     SupportingDigestMode
 }
 
 // SupportingDigestMode selects how a Provider pins the integrity of a
@@ -112,18 +111,6 @@ func WithURIPrefix(prefix string) ProviderOption {
 func WithMetaPrefix(prefix string) ProviderOption {
 	return func(c *providerConfig) {
 		c.metaPrefix = prefix
-	}
-}
-
-// WithoutIndex suppresses the auto-registration of skill://index.json
-// when the Provider's RegisterWith is called. Use this when the server
-// wants to expose individual skill files but not the discovery index
-// (e.g., a generated catalog the SEP says hosts MUST NOT treat absence
-// as proof of "no skills"), or when the caller wants to construct and
-// register an Indexer explicitly with non-default options.
-func WithoutIndex() ProviderOption {
-	return func(c *providerConfig) {
-		c.suppressIndex = true
 	}
 }
 

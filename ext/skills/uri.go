@@ -409,9 +409,3 @@ func hasPrefixSegments(segs, prefix []string) bool {
 	}
 	return true
 }
-
-// IsIndexURI reports whether s is the reserved skill://index.json URI.
-// The check is exact-match per SEP-2640's reservation rule.
-func IsIndexURI(s string) bool {
-	return s == IndexURI
-}

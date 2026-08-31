@@ -39,9 +39,9 @@ import (
 //     name-collision, live-read-divergence, cumulative-budget) — these
 //     require a full HOST (approval persistence, cross-origin trust, unpack
 //     budgets); a consumer library cannot satisfy them alone.
-//   - adv-supporting-file-digest-swap — COVERED as of issue 866: the
-//     Indexer pins every supporting file in IndexEntry.Files, and
-//     Client.ReadSkillFileVerified rejects a swapped file on read with
+//   - adv-supporting-file-digest-swap — COVERED: every file of a skill,
+//     SKILL.md included, is pinned in the entry's resources manifest, and
+//     Client.ReadFromEntry rejects a swapped file on read with
 //     ErrDigestMismatch. Asserted-as-covered below (was gap G13).
 func TestAdversarialCorpus_NonArchiveSlice(t *testing.T) {
 	// adv-content-rotation (Den D7) + the digest MUST at SEP line 204.
@@ -50,21 +50,18 @@ func TestAdversarialCorpus_NonArchiveSlice(t *testing.T) {
 	// ErrDigestMismatch from Client.ReadAndVerify.
 	t.Run("adv-content-rotation/digest-mismatch", func(t *testing.T) {
 		sc, _ := connectSkillsClient(t, "testdata/valid")
-		idx, err := sc.ListSkills(context.Background())
+		entries, err := sc.ListSkillEntries(context.Background())
 		if err != nil {
-			t.Fatalf("ListSkills: %v", err)
+			t.Fatalf("ListSkillEntries: %v", err)
 		}
-		entry, ok := idx.Lookup("skill://git-workflow/SKILL.md")
-		if !ok {
-			t.Fatal("git-workflow not in index")
-		}
-		// The digest-verified read must pass on the true digest...
-		if _, err := sc.ReadAndVerify(context.Background(), entry.URL, entry.Digest); err != nil {
-			t.Fatalf("ReadAndVerify on true digest: %v", err)
+		entry := entryFor(t, entries, "git-workflow")
+		// The verified read must pass against the entry's own manifest...
+		if _, err := sc.ReadFromEntry(context.Background(), entry, entry.URI); err != nil {
+			t.Fatalf("ReadFromEntry on true digest: %v", err)
 		}
 		// ...and a read whose advertised digest no longer matches the bytes
 		// (the TOCTOU/rotation shape) MUST be rejected, not used.
-		_, err = sc.ReadAndVerify(context.Background(), entry.URL, "sha256:"+strings.Repeat("0", 64))
+		_, err = sc.ReadAndVerify(context.Background(), entry.URI, "sha256:"+strings.Repeat("0", 64))
 		if !errors.Is(err, skills.ErrDigestMismatch) {
 			t.Errorf("rotated read: err = %v, want ErrDigestMismatch", err)
 		}
@@ -105,32 +102,38 @@ func TestAdversarialCorpus_NonArchiveSlice(t *testing.T) {
 		}
 	})
 
-	// adv-supporting-file-digest-swap (Den B1) — COVERED as of issue 866.
-	// The Indexer pins every supporting file in IndexEntry.Files, and
-	// Client.ReadSkillFileVerified rejects a swapped file on read. This was
-	// gap G13; the assertion now proves coverage so a regression flags it.
+	// adv-supporting-file-digest-swap (Den B1) — COVERED. Every file of a
+	// skill is pinned in the entry's resources manifest and ReadFromEntry
+	// rejects a swapped file on read. This was gap G13; the assertion proves
+	// coverage so a regression flags it.
 	t.Run("supporting-file-digest-swap", func(t *testing.T) {
 		sc, _ := connectSkillsClient(t, "testdata/valid")
-		idx, err := sc.ListSkills(context.Background())
+		entries, err := sc.ListSkillEntries(context.Background())
 		if err != nil {
-			t.Fatalf("ListSkills: %v", err)
+			t.Fatalf("ListSkillEntries: %v", err)
 		}
-		entry, ok := idx.Lookup(pdfManifestURI)
-		if !ok {
-			t.Fatal("pdf-processing not in index")
+		entry := entryFor(t, entries, "pdf-processing")
+		if len(entry.Resources.Files) < 2 {
+			t.Fatal("expected supporting files in the resources manifest; gap G13 has regressed")
 		}
-		pins := entry.FileDigests()
-		if len(pins) == 0 {
-			t.Fatal("expected supporting-file pins under _meta; gap G13 has regressed")
+		// Find a supporting file (not the SKILL.md itself) and point its pin
+		// at a divergent digest to model a swap. The re-verifying host MUST
+		// reject the read.
+		var idx = -1
+		for n, f := range entry.Resources.Files {
+			if f.URI != entry.URI {
+				idx = n
+				break
+			}
 		}
-		manifest, err := sc.ReadSkillManifest(context.Background(), pdfManifestURI)
-		if err != nil {
-			t.Fatalf("ReadSkillManifest: %v", err)
+		if idx < 0 {
+			t.Fatal("no supporting file in the manifest")
 		}
-		// Point the pin at a divergent digest to model a swapped supporting
-		// file. The re-verifying host MUST reject the read.
-		tampered := withTamperedPin(entry, pins[0].Path, "sha256:"+strings.Repeat("0", 64))
-		_, err = sc.ReadSkillFileVerified(context.Background(), tampered, manifest, pins[0].Path)
+		tampered := entry
+		tampered.Resources.Files = append([]skills.SkillResource(nil), entry.Resources.Files...)
+		tampered.Resources.Files[idx].Digest = "sha256:" + strings.Repeat("0", 64)
+
+		_, err = sc.ReadFromEntry(context.Background(), tampered, tampered.Resources.Files[idx].URI)
 		if !errors.Is(err, skills.ErrDigestMismatch) {
 			t.Fatalf("swapped supporting file err = %v, want ErrDigestMismatch", err)
 		}

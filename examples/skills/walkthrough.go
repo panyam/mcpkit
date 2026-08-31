@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,7 +32,6 @@ const (
 	uriRefundsManifest     = "skill://acme/billing/refunds/SKILL.md"
 	uriRefundsEmail        = "skill://acme/billing/refunds/templates/email.md"
 	uriRefundsTemplatesDir = "skill://acme/billing/refunds/templates"
-	uriIndex               = skills.IndexURI
 )
 
 // previewHeadTailLines bounds the head and the tail of every previewBody
@@ -196,8 +194,8 @@ for _, d := range defs {
 	)
 
 	var (
-		indexBody []byte
-		detected  modeInfo
+		listedEntries []skills.SkillEntry
+		detected      modeInfo
 	)
 
 	demo.Step("Read skill://index.json").
@@ -221,25 +219,15 @@ for _, e := range idx.Skills {
 			if c == nil {
 				return nil
 			}
-			body, err := c.ReadResource(ctx.Ctx, uriIndex)
+			entries, err := skills.NewClient(c).ListSkillEntries(ctx.Ctx)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
-			indexBody = []byte(body)
-			var idx skills.Index
-			if err := json.Unmarshal(indexBody, &idx); err != nil {
-				fmt.Printf("    ERROR: index does not parse: %v\n", err)
-				return nil
-			}
-			fmt.Printf("    $schema: %s\n", idx.Schema)
-			fmt.Printf("    %d entries:\n", len(idx.Skills))
-			for _, e := range idx.Skills {
-				suffix := ""
-				if e.Digest != "" {
-					suffix = " digest=" + e.Digest[:14] + "…"
-				}
-				fmt.Printf("      [%s] %s%s\n        url=%s\n", e.Type, e.Name, suffix, e.URL)
+			listedEntries = entries
+			fmt.Printf("    %d entries:\n", len(entries))
+			for _, e := range entries {
+				fmt.Printf("      %s\n        uri=%s  files=%d\n", e.Name(), e.URI, len(e.Resources.Files))
 			}
 			return nil
 		})
@@ -270,15 +258,15 @@ for _, e := range idx.Skills {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			if c == nil || len(indexBody) == 0 {
+			if c == nil {
 				return nil
 			}
-			var idx skills.Index
-			if err := json.Unmarshal(indexBody, &idx); err != nil {
+			defs, err := c.ListResources(ctx.Ctx)
+			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
-			detected = detectMode(idx)
+			detected = detectMode(defs)
 			if detected.archive {
 				fmt.Printf("    Detected mode: archive (%s)\n", detected.suffix)
 				fmt.Printf("    Each skill is one packed resource — see the Archive mode section below for read + verify + unpack.\n")
@@ -327,26 +315,20 @@ got := "sha256:" + hex.EncodeToString(sum[:])
 // compare got against e.Digest from skill://index.json — host MUST NOT use mismatched content`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			if c == nil || len(indexBody) == 0 {
-				return nil
-			}
-			var idx skills.Index
-			if err := json.Unmarshal(indexBody, &idx); err != nil {
+			if c == nil || len(listedEntries) == 0 {
 				return nil
 			}
 			target := uriGitWorkflow
-			if detected.archive {
-				target = "skill://git-workflow" + detected.suffix
-			}
 			var want string
-			for _, e := range idx.Skills {
-				if e.URL == target {
-					want = e.Digest
-					break
+			for _, e := range listedEntries {
+				for _, f := range e.Resources.Files {
+					if f.URI == target {
+						want = f.Digest
+					}
 				}
 			}
 			if want == "" {
-				fmt.Printf("    %s not found in index\n", target)
+				fmt.Printf("    %s not found in the listing\n", target)
 				return nil
 			}
 			result, err := c.ReadResourceFull(ctx.Ctx, target)
@@ -890,25 +872,18 @@ for _, f := range files {
 }`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			if c == nil || len(indexBody) == 0 {
+			if c == nil {
 				return nil
 			}
 			if !detected.archive {
 				fmt.Printf("    Detected file mode — archive-mode flow is gated; see the per-file read steps above for the equivalent file-mode story.\n")
 				return nil
 			}
-			var idx skills.Index
-			if err := json.Unmarshal(indexBody, &idx); err != nil {
-				return nil
-			}
+			// Archives no longer appear as listing entries (deferred to an
+			// appendix by the 2026-08-21 SEP revision), so the digest is
+			// computed from the fetched bytes rather than read from a pin.
 			target := "skill://pdf-processing" + detected.suffix
 			var want string
-			for _, e := range idx.Skills {
-				if e.URL == target {
-					want = e.Digest
-					break
-				}
-			}
 			result, err := c.ReadResourceFull(ctx.Ctx, target)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -958,7 +933,7 @@ for _, f := range files {
 		VerbatimVariants("Reproduce in Go",
 			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
 idx, _ := sc.ListSkills(ctx.Ctx)
-e, _ := findManifestEntry(idx, uriRefundsManifest)
+e, _ := findManifestEntry(entries, uriRefundsManifest)
 full, _ := sc.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
 capped := skills.NewClient(c, skills.WithMaxResourceBytes(int64(len(full.Bytes)/2)))
 _, err := capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)   // -> ErrResourceTooLarge`),
@@ -968,61 +943,55 @@ _, err := capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)   // -> ErrResourceTooL
 				return nil
 			}
 			sc := skills.NewClient(c)
-			idx, err := sc.ListSkills(ctx.Ctx)
+			entries, err := sc.ListSkillEntries(ctx.Ctx)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
-			e, ok := findManifestEntry(idx, uriRefundsManifest)
+			e, ok := findManifestEntry(entries, uriRefundsManifest)
 			if !ok {
-				fmt.Printf("    ERROR: %s not in index\n", uriRefundsManifest)
+				fmt.Printf("    ERROR: %s not in the listing\n", uriRefundsManifest)
 				return nil
 			}
-			full, err := sc.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+			full, err := sc.ReadFromEntry(ctx.Ctx, e, e.URI)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
 			capBytes := max(int64(len(full.Bytes)/2), 1)
 			capped := skills.NewClient(c, skills.WithMaxResourceBytes(capBytes))
-			_, err = capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+			_, err = capped.ReadFromEntry(ctx.Ctx, e, e.URI)
 			reportGuard(errors.Is(err, skills.ErrResourceTooLarge), err,
 				fmt.Sprintf("cap=%d bytes vs body≈%d bytes → ErrResourceTooLarge before decode", capBytes, len(full.Bytes)))
 			return nil
 		})
 
 	demo.Step("Refuse an unpinned supporting file (threat model B1)").
-		Note("ReadSkillFileVerified only reads supporting files the index pins a digest for. A path not in the index — an attacker's extra file, or a typo — is refused with ErrSupportingFileUnpinned rather than read unverified. Anchor: threat model B1 · issue 866.").
+		Note("ReadFromEntry only reads files the entry's resources manifest lists. The manifest is complete, so a URI absent from it is a file the skill does not contain — an attacker's extra file, or a typo — and is refused with ErrURINotInResources rather than read unverified. Anchor: threat model B1 · issue 866.").
 		VerbatimVariants("Reproduce in Go",
 			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
-idx, _ := sc.ListSkills(ctx.Ctx)
-e, _ := findManifestEntry(idx, uriRefundsManifest)
-m, _ := sc.ReadSkillManifest(ctx.Ctx, e.URL)
-_, err := sc.ReadSkillFileVerified(ctx.Ctx, e, m, "templates/ghost.md")   // -> ErrSupportingFileUnpinned`),
+entries, _ := sc.ListSkillEntries(ctx.Ctx)
+e, _ := findManifestEntry(entries, uriRefundsManifest)
+_, err := sc.ReadFromEntry(ctx.Ctx, e, "skill://acme/billing/refunds/templates/ghost.md") // -> ErrURINotInResources`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
 			}
 			sc := skills.NewClient(c)
-			idx, err := sc.ListSkills(ctx.Ctx)
+			entries, err := sc.ListSkillEntries(ctx.Ctx)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
 				return nil
 			}
-			e, ok := findManifestEntry(idx, uriRefundsManifest)
+			e, ok := findManifestEntry(entries, uriRefundsManifest)
 			if !ok {
-				fmt.Printf("    ERROR: %s not in index\n", uriRefundsManifest)
+				fmt.Printf("    ERROR: %s not in the listing\n", uriRefundsManifest)
 				return nil
 			}
-			m, err := sc.ReadSkillManifest(ctx.Ctx, e.URL)
-			if err != nil {
-				fmt.Printf("    ERROR: %v\n", err)
-				return nil
-			}
-			_, err = sc.ReadSkillFileVerified(ctx.Ctx, e, m, "templates/ghost.md")
-			reportGuard(errors.Is(err, skills.ErrSupportingFileUnpinned), err,
-				"unlisted templates/ghost.md → ErrSupportingFileUnpinned")
+			_, err = sc.ReadFromEntry(ctx.Ctx, e, "skill://acme/billing/refunds/templates/ghost.md")
+			reportGuard(errors.Is(err, skills.ErrURINotInResources), err,
+				"unlisted templates/ghost.md → ErrURINotInResources")
 			return nil
 		})
 
@@ -1065,15 +1034,15 @@ _, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat
 	demo.Execute()
 }
 
-// findManifestEntry returns the index entry whose URL matches url (a skill's
+// findManifestEntry returns the listed entry whose URI matches (a skill's
 // SKILL.md URI), used by the threat-model steps to pin their reads.
-func findManifestEntry(idx skills.Index, url string) (skills.IndexEntry, bool) {
-	for _, e := range idx.Skills {
-		if e.URL == url {
+func findManifestEntry(entries []skills.SkillEntry, uri string) (skills.SkillEntry, bool) {
+	for _, e := range entries {
+		if e.URI == uri {
 			return e, true
 		}
 	}
-	return skills.IndexEntry{}, false
+	return skills.SkillEntry{}, false
 }
 
 // reportGuard prints a threat-model step's outcome: ok true means the SEP-
@@ -1124,19 +1093,21 @@ func isInteractive() bool {
 	return true
 }
 
-// readIndexVersion fetches skill://index.json and returns the
-// _meta.io.modelcontextprotocol.skills/version counter (issue #795).
-// Returns 0 when the field is absent — the field is opt-in metadata,
-// not a SEP requirement, so older / non-mcpkit servers will lack it.
+// readIndexVersion reads the _meta.io.modelcontextprotocol.skills/version
+// counter from a skills/list result (issue #795). It moved there from the
+// retired skill://index.json.
+//
+// Returns 0 when the field is absent — it is opt-in mcpkit metadata, not a
+// SEP requirement, so non-mcpkit servers will lack it.
 func readIndexVersion(c *client.Client) uint64 {
-	body, err := c.ReadResource(context.Background(), skills.IndexURI)
+	res, err := c.Call(context.Background(), skills.MethodSkillsList, skills.SkillsListRequest{})
 	if err != nil {
 		return 0
 	}
 	var idx struct {
 		Meta map[string]any `json:"_meta"`
 	}
-	if err := json.Unmarshal([]byte(body), &idx); err != nil {
+	if err := res.Unmarshal(&idx); err != nil {
 		return 0
 	}
 	v, ok := idx.Meta["io.modelcontextprotocol.skills/version"]
@@ -1160,21 +1131,22 @@ type modeInfo struct {
 	suffix  string
 }
 
-// detectMode scans a parsed Index for the first archive-typed entry and
-// returns the implied distribution mode. Provider.WithArchiveMode is
-// per-Provider in this revision, so a mixed index is impossible today
-// and the first archive sighting decides for the whole index.
-func detectMode(idx skills.Index) modeInfo {
-	for _, e := range idx.Skills {
-		if e.Type != skills.SkillTypeArchive {
+// detectMode sniffs the server's registered resources for a packed-archive
+// URI and returns the implied distribution mode.
+//
+// It reads resources rather than the skills listing because the 2026-08-21
+// SEP revision removed the entry type discriminator: archives were deferred
+// to an appendix and no longer appear as listing entries. They are still
+// served as ordinary resources, so the suffix on a resource URI is what
+// remains to sniff. Provider.WithArchiveMode is per-Provider, so the first
+// archive sighting decides for the whole server.
+func detectMode(defs []core.ResourceDef) modeInfo {
+	for _, d := range defs {
+		f := skills.DetectArchiveFormat(d.URI, nil)
+		if f == skills.ArchiveFormatUnknown {
 			continue
 		}
-		f := skills.DetectArchiveFormat(e.URL, nil)
-		return modeInfo{
-			archive: true,
-			format:  f,
-			suffix:  f.Suffix(),
-		}
+		return modeInfo{archive: true, format: f, suffix: f.Suffix()}
 	}
 	return modeInfo{}
 }

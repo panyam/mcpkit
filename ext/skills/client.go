@@ -33,10 +33,11 @@ import (
 //	    skills.WithActivationHook(myMetrics.RecordSkillActivation),
 //	)
 //	if !sc.SupportsSkills() { return }
-//	idx, err := sc.ListSkills(ctx)
-//	for _, entry := range idx.Skills {
-//	    result, err := sc.ReadAndVerify(ctx, entry.URL, entry.Digest)
-//	    // result.DigestVerified is true on match; ErrDigestMismatch otherwise
+//	entries, err := sc.ListSkillEntries(ctx)
+//	for _, entry := range entries {
+//	    result, err := sc.ReadFromEntry(ctx, entry, entry.URI)
+//	    // result.DigestVerified is true on match; a size or digest
+//	    // mismatch, or a URI absent from entry.Resources, is an error
 //	}
 //	// At the point in the agent loop where the skill enters model context:
 //	sc.Activate(ctx, "skill://pdf-processing/SKILL.md",
@@ -81,7 +82,7 @@ func NewClient(mcp *client.Client, opts ...Option) *Client {
 // SupportsSkills reports whether the connected server advertises the
 // io.modelcontextprotocol/skills extension in its initialize (or
 // server/discover) response. Hosts iterating connected servers can
-// use this to skip ListSkills calls against servers that do not
+// use this to skip skills/list calls against servers that do not
 // support the extension.
 //
 // The signal is read from the cached initialize/discover response on
@@ -111,43 +112,6 @@ func (c *Client) SupportsDirectoryRead() bool {
 	}
 	v, _ := cap[CapabilityDirectoryRead].(bool)
 	return v
-}
-
-// ListSkills reads skill://index.json and returns the parsed Index.
-//
-// SEP-2640 makes the index OPTIONAL: a server MAY decline to expose
-// it. When the read returns a not-found error, ListSkills returns an
-// empty Index (with the Schema field unset) and no error so callers
-// can treat absent indexes the same as empty ones. Other read errors
-// (transport, malformed JSON) propagate.
-//
-// ctx parents the SEP-414 P7 (#748) `skills.list` span when a
-// TracerProvider is installed. On success the span carries
-// `mcp.skill.count`. ctx is not threaded to the underlying client
-// (the legacy ReadResource API is ctx-free); it only governs span
-// parentage.
-func (c *Client) ListSkills(ctx context.Context) (Index, error) {
-	_, span := c.cfg.tp.StartSpan(ctx, "skills.list",
-		core.Attribute{Key: "mcp.skill.uri", Value: IndexURI},
-	)
-	defer span.End()
-
-	body, err := c.mcp.ReadResource(ctx, IndexURI)
-	if err != nil {
-		if isNotFoundErr(err) {
-			span.SetAttribute("mcp.skill.index_absent", "true")
-			return Index{}, nil
-		}
-		span.RecordError(err)
-		return Index{}, fmt.Errorf("skills: read %s: %w", IndexURI, err)
-	}
-	var idx Index
-	if err := json.Unmarshal([]byte(body), &idx); err != nil {
-		span.RecordError(err)
-		return Index{}, fmt.Errorf("skills: parse %s: %w", IndexURI, err)
-	}
-	span.SetAttribute("mcp.skill.count", fmt.Sprintf("%d", len(idx.Skills)))
-	return idx, nil
 }
 
 // ReadSkillURI reads any skill:// URI and returns the bytes the server
@@ -328,49 +292,8 @@ func (c *Client) ReadSkillFile(ctx context.Context, manifest *SkillManifest, rel
 	return c.ReadSkillURI(ctx, resolved.String())
 }
 
-// ReadSkillFileVerified resolves relPath against the manifest's skill
-// root, reads it, and verifies the served bytes against the per-file
-// digest pinned in the entry's supporting-file pins (issue 866). It is the integrity-checked
-// counterpart to ReadSkillFile: use it for supporting files a re-
-// verifying host must not trust unverified (scripts, templates,
-// referenced docs), so a swapped file is rejected on read.
-//
-// entry is the IndexEntry for the skill (from ListSkills + Index.Lookup),
-// which carries the supporting-file pins mcpkit's Indexer writes under
-// MetaKeyFileDigests (read via entry.FileDigest). The lookup key is the
-// file's path relative to the skill root, derived from the resolved URI
-// so that "./x", "a/../b", and percent-encoded forms all match the
-// canonical pin.
-//
-// Errors:
-//   - ErrSupportingFileUnpinned when the entry carries no pin for the
-//     resolved path (secure default — no silent unverified fallback).
-//   - ErrDigestMismatch when the served bytes do not match the pin; per
-//     SEP-2640 the host MUST NOT use the bytes.
-//
-// On success returns a ReadResult with DigestVerified=true.
-func (c *Client) ReadSkillFileVerified(ctx context.Context, entry IndexEntry, manifest *SkillManifest, relPath string) (*ReadResult, error) {
-	if manifest == nil {
-		return nil, fmt.Errorf("skills: ReadSkillFileVerified: nil manifest")
-	}
-	root, err := ParseURI(manifest.URI)
-	if err != nil {
-		return nil, fmt.Errorf("skills: ReadSkillFileVerified: re-parse manifest URI: %w", err)
-	}
-	resolved, err := ResolveRelative(root, relPath)
-	if err != nil {
-		return nil, fmt.Errorf("skills: resolve %q against %s: %w", relPath, manifest.URI, err)
-	}
-	key := skillRelPath(root, resolved)
-	digest, ok := entry.FileDigest(key)
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrSupportingFileUnpinned, key)
-	}
-	return c.ReadAndVerify(ctx, resolved.String(), digest)
-}
-
-// skillRelPath returns the resolved file's path relative to the skill
-// root — the canonical key the supporting-file pins use. ResolveRelative
+// skillRelPath returns the resolved file's path relative to the skill root.
+// ResolveRelative
 // guarantees resolved.AllSegments is prefixed by root.SkillPath and lands
 // strictly below the skill directory, so the suffix is the in-skill
 // relative path.

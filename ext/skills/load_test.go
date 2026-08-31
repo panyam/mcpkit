@@ -9,6 +9,16 @@ import (
 	"github.com/panyam/mcpkit/ext/skills"
 )
 
+// entry is a minimal SkillEntry for the pure-rendering tests, which care only
+// about frontmatter and URI.
+func entry(name, description, uri string) skills.SkillEntry {
+	fm := map[string]any{"name": name}
+	if description != "" {
+		fm["description"] = description
+	}
+	return skills.SkillEntry{URI: uri, Frontmatter: fm}
+}
+
 func TestLoadAllVerifiedSkills(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
 	loaded, err := sc.LoadAll(context.Background())
@@ -20,33 +30,41 @@ func TestLoadAllVerifiedSkills(t *testing.T) {
 	}
 	for _, ls := range loaded {
 		if ls.Err != nil {
-			t.Fatalf("skill %s: %v", ls.Entry.URL, ls.Err)
+			t.Fatalf("skill %s: %v", ls.Entry.URI, ls.Err)
 		}
 		if len(ls.Body) == 0 {
-			t.Fatalf("skill %s: empty body", ls.Entry.URL)
+			t.Fatalf("skill %s: empty body", ls.Entry.URI)
 		}
 	}
 	for i := 1; i < len(loaded); i++ {
-		if loaded[i-1].Entry.URL >= loaded[i].Entry.URL {
-			t.Fatalf("results must be URL-ordered: %s before %s", loaded[i-1].Entry.URL, loaded[i].Entry.URL)
+		if loaded[i-1].Entry.URI >= loaded[i].Entry.URI {
+			t.Fatalf("results must be URI-ordered: %s before %s", loaded[i-1].Entry.URI, loaded[i].Entry.URI)
 		}
 	}
 }
 
-func TestLoadIndexIsolatesDigestMismatch(t *testing.T) {
+// TestLoadEntriesIsolatesDigestMismatch is the TOCTOU shape from the
+// adversarial suite: rotating one entry's pinned digest must fail that skill
+// alone while its siblings still load.
+func TestLoadEntriesIsolatesDigestMismatch(t *testing.T) {
 	sc, _ := connectSkillsClient(t, "testdata/valid")
-	idx, err := sc.ListSkills(context.Background())
+	entries, err := sc.ListSkillEntries(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(idx.Skills) < 2 {
-		t.Fatalf("fixture assumption: want 2+ skills, got %d", len(idx.Skills))
+	if len(entries) < 2 {
+		t.Fatalf("fixture assumption: want 2+ skills, got %d", len(entries))
 	}
-	// Rotate one entry's digest (the TOCTOU shape from the adversarial
-	// suite): that skill must fail in isolation while its siblings load.
-	idx.Skills[0].Digest = "sha256:" + strings.Repeat("0", 64)
 
-	loaded := sc.LoadIndex(context.Background(), idx)
+	// Rotate the pin covering the first entry's own SKILL.md.
+	entries[0].Resources.Files = append([]skills.SkillResource(nil), entries[0].Resources.Files...)
+	for i, f := range entries[0].Resources.Files {
+		if f.URI == entries[0].URI {
+			entries[0].Resources.Files[i].Digest = "sha256:" + strings.Repeat("0", 64)
+		}
+	}
+
+	loaded := sc.LoadEntries(context.Background(), entries)
 	var mismatches, ok int
 	for _, ls := range loaded {
 		switch {
@@ -56,16 +74,16 @@ func TestLoadIndexIsolatesDigestMismatch(t *testing.T) {
 			ok++
 		}
 	}
-	if mismatches != 1 || ok != len(idx.Skills)-1 {
-		t.Fatalf("want 1 isolated mismatch and %d loaded, got mismatches=%d ok=%d", len(idx.Skills)-1, mismatches, ok)
+	if mismatches != 1 || ok != len(entries)-1 {
+		t.Fatalf("want 1 isolated mismatch and %d loaded, got mismatches=%d ok=%d", len(entries)-1, mismatches, ok)
 	}
 }
 
 func TestInstructionsBlockExcludesFailuresAndIsDeterministic(t *testing.T) {
 	loaded := []skills.LoadedSkill{
-		{Entry: skills.IndexEntry{Name: "alpha", Description: "does alpha", URL: "skill://a/SKILL.md"}, Body: []byte("Use alpha wisely.")},
-		{Entry: skills.IndexEntry{Name: "broken", URL: "skill://b/SKILL.md"}, Err: skills.ErrDigestMismatch},
-		{Entry: skills.IndexEntry{Name: "gamma", URL: "skill://c/SKILL.md"}, Body: []byte("Gamma steps.")},
+		{Entry: entry("alpha", "does alpha", "skill://a/SKILL.md"), Body: []byte("Use alpha wisely.")},
+		{Entry: entry("broken", "", "skill://b/SKILL.md"), Err: skills.ErrDigestMismatch},
+		{Entry: entry("gamma", "", "skill://c/SKILL.md"), Body: []byte("Gamma steps.")},
 	}
 	block := skills.InstructionsBlock(loaded)
 	for _, want := range []string{"## Skills", "### Skill: alpha", "does alpha", "Use alpha wisely.", "### Skill: gamma"} {
@@ -80,7 +98,7 @@ func TestInstructionsBlockExcludesFailuresAndIsDeterministic(t *testing.T) {
 		t.Fatal("rendering must be deterministic")
 	}
 
-	if got := skills.InstructionsBlock([]skills.LoadedSkill{{Entry: skills.IndexEntry{Name: "x"}, Err: skills.ErrDigestMismatch}}); got != "" {
+	if got := skills.InstructionsBlock([]skills.LoadedSkill{{Entry: entry("x", "", ""), Err: skills.ErrDigestMismatch}}); got != "" {
 		t.Fatalf("all-failed batch must render empty, got %q", got)
 	}
 	if got := skills.InstructionsBlock(nil); got != "" {
@@ -89,12 +107,11 @@ func TestInstructionsBlockExcludesFailuresAndIsDeterministic(t *testing.T) {
 }
 
 func TestCatalogBlock(t *testing.T) {
-	idx := skills.NewIndex(
-		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "alpha", Description: "does alpha", URL: "skill://a/SKILL.md"},
-		skills.IndexEntry{Type: skills.SkillTypeSkillMD, Name: "beta", URL: "skill://b/SKILL.md"},
-		skills.IndexEntry{Type: skills.SkillTypeArchive, Name: "arch", Description: "a pack", URL: "skill://z.zip"},
-	)
-	block := skills.CatalogBlock(idx)
+	entries := []skills.SkillEntry{
+		entry("alpha", "does alpha", "skill://a/SKILL.md"),
+		entry("beta", "", "skill://b/SKILL.md"),
+	}
+	block := skills.CatalogBlock(entries)
 	if !strings.Contains(block, "## Skills (catalog)") || !strings.Contains(block, "load_skill") {
 		t.Fatalf("catalog header/hint missing:\n%s", block)
 	}
@@ -104,10 +121,7 @@ func TestCatalogBlock(t *testing.T) {
 	if !strings.Contains(block, "- beta\n") {
 		t.Fatalf("description-less skill should still list:\n%s", block)
 	}
-	if strings.Contains(block, "arch") {
-		t.Fatalf("archive entries must be excluded from the catalog:\n%s", block)
-	}
-	if got := skills.CatalogBlock(skills.NewIndex()); got != "" {
-		t.Fatalf("empty index catalog = %q, want \"\"", got)
+	if got := skills.CatalogBlock(nil); got != "" {
+		t.Fatalf("empty catalog = %q, want \"\"", got)
 	}
 }

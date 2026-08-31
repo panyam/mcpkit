@@ -277,15 +277,16 @@ func (p *Provider) Resources() []core.ResourceDef {
 // Unless WithoutDirectoryRead was supplied to NewProvider, RegisterWith
 // also installs the SEP-2640 resources/directory/read handler (added by
 // SEP commit 2e04c48d) and emits {"directoryRead": true} inside the
-// extension's capability Config. The Provider walks its underlying
+// extension's capability settings. The Provider walks its underlying
 // fs.FS at request time to enumerate the requested directory's direct
 // children.
 //
-// Unless WithoutIndex was supplied to NewProvider, RegisterWith also
-// constructs an internal Indexer and registers skill://index.json on
-// srv. Use WithIndexCacheTTL to tune the index's cache freshness or
-// WithoutIndex to suppress registration entirely (when, for example,
-// the caller wants to construct and register a custom Indexer).
+// RegisterWith also constructs an internal Indexer and registers the
+// skills/list and skills/get methods on srv. Both are registered
+// unconditionally, because declaring the extension commits a server to
+// serving both; a server with nothing to enumerate answers skills/list with
+// an empty array. Use WithIndexCacheTTL to tune the Indexer's cache
+// freshness.
 func (p *Provider) RegisterWith(srv *server.Server) {
 	p.versionMu.Lock()
 	p.srv = srv
@@ -301,17 +302,15 @@ func (p *Provider) RegisterWith(srv *server.Server) {
 	if !p.cfg.suppressDirectoryRead {
 		srv.HandleMethod(MethodResourcesDirectoryRead, p.handleDirectoryRead)
 	}
-	if !p.cfg.suppressIndex {
-		var opts []IndexerOption
-		if p.cfg.indexCacheTTL > 0 {
-			opts = append(opts, WithIndexerCacheTTL(p.cfg.indexCacheTTL))
-		}
-		idx := NewIndexer(p, opts...)
-		p.versionMu.Lock()
-		p.indexer = idx
-		p.versionMu.Unlock()
-		idx.RegisterWith(srv)
+	var opts []IndexerOption
+	if p.cfg.indexCacheTTL > 0 {
+		opts = append(opts, WithIndexerCacheTTL(p.cfg.indexCacheTTL))
 	}
+	idx := NewIndexer(p, opts...)
+	p.versionMu.Lock()
+	p.indexer = idx
+	p.versionMu.Unlock()
+	idx.RegisterWith(srv)
 	srv.UseMiddleware(skillURIValidationMiddleware)
 
 	if p.watcher != nil {
@@ -688,29 +687,6 @@ func (p *Provider) makeHandler(r *resourceEntry) core.ResourceHandler {
 		}
 		return core.ResourceResult{Contents: []core.ResourceReadContent{content}}, nil
 	}
-}
-
-// Catalog returns the index entries for every cataloged skill, suitable
-// for marshalling into skill://index.json by ext/skills issue 560.
-// The Digest field is left empty here. SHA-256 over the canonical
-// artifact (the SKILL.md bytes, or the archive bytes for archive-mode
-// skills) is computed at index generation time so its source of truth
-// is colocated with the canonicalization rule.
-func (p *Provider) Catalog() []IndexEntry {
-	out := make([]IndexEntry, 0, len(p.skills))
-	for _, s := range p.skills {
-		uri := Scheme + "://" + strings.Join(s.uriSegs, "/") + "/" + ManifestFilename
-		out = append(out, IndexEntry{
-			Type:        SkillTypeSkillMD,
-			Name:        s.fm.Name,
-			Description: s.fm.Description,
-			URL:         uri,
-		})
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].URL < out[j].URL
-	})
-	return out
 }
 
 func detectMimeType(segs []string) string {
