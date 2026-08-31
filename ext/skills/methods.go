@@ -47,10 +47,11 @@ func (i *Indexer) buildResources(skill *skillEntry) (SkillResources, error) {
 		}
 		rel := strings.TrimPrefix(p, skillDir+"/")
 		segs := append(append([]string{}, skill.uriSegs...), strings.Split(rel, "/")...)
+		size := int64(len(raw))
 		files = append(files, SkillResource{
 			URI:    Scheme + "://" + joinSegments(segs),
 			Digest: digestOf(raw),
-			Size:   int64(len(raw)),
+			Size:   &size,
 		})
 		return nil
 	})
@@ -101,8 +102,7 @@ func (i *Indexer) handleSkillsList(ctx core.MethodContext, id, params json.RawMe
 
 	page, next := paginateEntries(entries, req.Cursor, defaultSkillsListPageSize)
 	res := SkillsListResult{Skills: page, NextCursor: next}
-	if i.cfg.listTTLMs > 0 {
-		ttl := i.cfg.listTTLMs
+	if ttl := i.listTTLMs(); ttl > 0 {
 		res.TTLMs = &ttl
 	}
 	res.CacheScope = i.cfg.listCacheScope
@@ -165,4 +165,33 @@ func paginateEntries(entries []SkillEntry, cursor string, pageSize int) ([]Skill
 		return entries[start:], ""
 	}
 	return entries[start:end], fmt.Sprintf("%d", end)
+}
+
+// CacheScopePublic is the SEP-2549 scope an Indexer advertises by default: a
+// Provider's catalog comes from one fs.FS and does not vary by caller, so a
+// shared cache may serve it to everyone.
+const CacheScopePublic = "public"
+
+// DefaultListTTLMs is the ttlMs advertised on skills/list when the Indexer
+// has no cache TTL of its own.
+//
+// One minute is short on purpose. A client holding a stale listing reads a
+// stale digest, so the next verified read fails rather than silently serving
+// wrong content, and the host refetches. The failure is self-correcting, but
+// it is still a failure, so the window stays small.
+const DefaultListTTLMs = 60_000
+
+// listTTLMs resolves the ttlMs advertised on skills/list. An explicit
+// WithListCacheHints value wins; otherwise it mirrors the Indexer's own cache
+// TTL so a client is never told to hold a listing longer than the server
+// considers it fresh, falling back to DefaultListTTLMs when the Indexer
+// recomputes on every call.
+func (i *Indexer) listTTLMs() int {
+	if i.cfg.listTTLMs > 0 {
+		return i.cfg.listTTLMs
+	}
+	if i.cfg.ttl > 0 {
+		return int(i.cfg.ttl.Milliseconds())
+	}
+	return DefaultListTTLMs
 }

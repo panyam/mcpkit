@@ -28,6 +28,10 @@ type clientConfig struct {
 	// all skill:// reads. 0 (the default) disables the budget. See
 	// WithServerByteBudget.
 	serverByteBudget int64
+
+	// requireResourceSize makes ReadFromEntry reject an entry that omits
+	// size. Off by default. See WithRequireResourceSize.
+	requireResourceSize bool
 }
 
 // DefaultMaxResourceBytes is the per-resource size cap the Client applies
@@ -167,5 +171,23 @@ type activateConfig struct {
 func WithReason(reason string) ActivateOption {
 	return func(c *activateConfig) {
 		c.reason = reason
+	}
+}
+
+// WithRequireResourceSize makes ReadFromEntry reject a resource entry that
+// carries no size, with ErrSizeMissing.
+//
+// SEP-2640 makes size REQUIRED, so strictly an entry without one is
+// malformed. It is off by default because the field was added on 2026-08-20
+// and the shipping implementations predate it, so enabling it by default
+// would leave mcpkit unable to read from any of them. Their digests still
+// verify, and refusing every read would push hosts toward turning
+// verification off entirely, which is the worse outcome.
+//
+// Turn it on when talking to servers known to be current, or when a policy
+// requires the cheap length rejection before hashing.
+func WithRequireResourceSize(require bool) Option {
+	return func(c *clientConfig) {
+		c.requireResourceSize = require
 	}
 }

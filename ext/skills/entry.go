@@ -51,7 +51,13 @@ type SkillResource struct {
 	Digest string `json:"digest"`
 
 	// Size is the length in bytes of the raw content the digest covers.
-	Size int64 `json:"size"`
+	//
+	// A pointer because absent and zero are different facts and an empty file
+	// is legal: a plain int64 would read a server that omits the field as
+	// pinning every file at zero bytes, and reject every read. SEP-2640 added
+	// size on 2026-08-20, so entries from implementations pinned to an
+	// earlier revision legitimately have none.
+	Size *int64 `json:"size,omitempty"`
 }
 
 // SkillResources is a skill's resource manifest: either a complete list of
@@ -118,7 +124,9 @@ func (r SkillResources) TotalBytes() int64 {
 	}
 	var n int64
 	for _, f := range r.Files {
-		n += f.Size
+		if f.Size != nil {
+			n += *f.Size
+		}
 	}
 	return n
 }
