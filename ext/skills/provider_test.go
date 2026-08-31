@@ -185,7 +185,7 @@ func TestProvider_AcceptsNonStrictPrefixSiblings(t *testing.T) {
 	// independent skills, not parent and child.
 	p, err := skills.NewProvider(skills.WithDirectory("testdata/valid-prefix-pair"))
 	if err != nil {
-		t.Fatalf("NewProvider on prefix-pair siblings: %v (must NOT trip ErrNestedSkill)", err)
+		t.Fatalf("NewProvider on prefix-pair siblings: %v", err)
 	}
 
 	got := urisOf(p.Resources())
@@ -213,10 +213,17 @@ func TestProvider_RejectsNameMismatch(t *testing.T) {
 	}
 }
 
-func TestProvider_RejectsNestedSkill(t *testing.T) {
-	_, err := skills.NewProvider(skills.WithDirectory("testdata/bad-nested"))
-	if !errors.Is(err, skills.ErrNestedSkill) {
-		t.Errorf("err = %v, want ErrNestedSkill", err)
+// TestProvider_AcceptsNestedSkill pins the 2026-08-21 SEP-2640 reversal: a
+// SKILL.md in a descendant directory used to be rejected at construction and
+// is now a nested skill in its own right. Behaviour is covered in
+// nested_test.go; this asserts only that construction succeeds.
+func TestProvider_AcceptsNestedSkill(t *testing.T) {
+	p, err := skills.NewProvider(skills.WithDirectory("testdata/nested"))
+	if err != nil {
+		t.Fatalf("NewProvider on a nested fixture: %v", err)
+	}
+	if got := len(p.Resources()); got == 0 {
+		t.Error("nested fixture registered no resources")
 	}
 }
 

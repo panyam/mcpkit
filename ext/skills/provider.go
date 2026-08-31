@@ -76,8 +76,6 @@ type resourceEntry struct {
 //     malformed SKILL.md.
 //   - ErrSkillNameMismatch when frontmatter name does not equal the
 //     skill's parent directory base name.
-//   - ErrNestedSkill when a SKILL.md is found inside another skill's
-//     subtree.
 //   - ErrInvalidSkillName when the final skill-path segment violates the
 //     Agent Skills naming rules (the directory name and the matching
 //     frontmatter name must both satisfy them).
@@ -139,26 +137,37 @@ func (p *Provider) walk() error {
 
 	sort.Strings(skillDirs)
 
-	// Sorted-prefix nesting check. Any directory whose path is a strict
-	// child of an earlier entry (i.e. starts with prev + "/") is nested
-	// inside that earlier skill.
-	for i := 1; i < len(skillDirs); i++ {
-		prev := skillDirs[i-1]
-		cur := skillDirs[i]
-		if strings.HasPrefix(cur, prev+"/") {
-			return fmt.Errorf("%w: %q nested inside %q", ErrNestedSkill, cur, prev)
-		}
+	// Nesting is permitted as of the 2026-08-21 SEP-2640 revision, which
+	// reversed the June rule forbidding a SKILL.md in a descendant directory.
+	// Publication is flat: each skill below gets its own entry whose URI
+	// merely shares a path prefix with its parent's.
+	owned := make(map[string]bool, len(skillDirs))
+	for _, dir := range skillDirs {
+		owned[dir] = true
 	}
 
 	for _, dir := range skillDirs {
-		if err := p.registerSkill(dir); err != nil {
+		if err := p.registerSkill(dir, owned); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Provider) registerSkill(dirPath string) error {
+// registerSkill catalogs one skill and registers a resource for each file it
+// owns.
+//
+// owned is the set of every skill directory on the FS. A file inside a nested
+// skill is registered once, by that nested skill, not again by each ancestor:
+// one file is one resource at one URI, so registering it twice would be a
+// duplicate-URI error rather than a second copy.
+//
+// This is only about who serves the bytes. The enclosing skill still lists
+// those files in its own resources manifest, because SEP-2640 makes a
+// manifest complete over the whole subtree — see Indexer.buildResources. A
+// file therefore appears in two manifests and at one URI, which is exactly
+// what the SEP's completeness rule describes.
+func (p *Provider) registerSkill(dirPath string, owned map[string]bool) error {
 	skillFilePath := path.Join(dirPath, ManifestFilename)
 	src, err := fs.ReadFile(p.cfg.fsys, skillFilePath)
 	if err != nil {
@@ -199,6 +208,15 @@ func (p *Provider) registerSkill(dirPath string) error {
 		}
 		if d.IsDir() {
 			return nil
+		}
+		// Skip anything a nested skill owns; it registers those itself.
+		if d := path.Dir(walkPath); d != dirPath && owned[d] {
+			return nil
+		}
+		for d := path.Dir(walkPath); d != dirPath && d != "." && d != "/"; d = path.Dir(d) {
+			if owned[d] {
+				return nil
+			}
 		}
 		rel := strings.TrimPrefix(walkPath, dirPath)
 		rel = strings.TrimPrefix(rel, "/")

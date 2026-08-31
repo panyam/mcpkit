@@ -122,10 +122,6 @@ var (
 	// name. SEP-2640 requires the two to match.
 	ErrSkillNameMismatch = errors.New("skills: frontmatter name does not match directory")
 
-	// ErrNestedSkill is returned by NewProvider when a SKILL.md is found
-	// inside an existing skill's subtree. SEP-2640 forbids skill nesting.
-	ErrNestedSkill = errors.New("skills: nested skill")
-
 	// ErrFSWatcherMissingHostRoot is returned by NewProvider when
 	// WithFSWatcher is supplied alongside WithFS (which does not
 	// populate the hostRoot path). Watcher-based change detection
