@@ -268,8 +268,12 @@ function renderSepTable(input: RenderInput): string[] {
     return ['_No SEPs declared in upstream traceability manifest._'];
   }
   const lines: string[] = [];
-  lines.push('| SEP | Tested reqs | Excluded | Untested | Status |');
-  lines.push('|---|---:|---:|---:|---|');
+  lines.push(
+    '**These are requirement counts, not test results.** Each row counts the normative requirements extracted from that SEP\'s text, and whether upstream has a check ID mapped to each one. A SEP with 1 tested requirement may be covered by dozens of assertions, or by one; the numbers here say nothing about how many checks ran or whether mcpkit passed them. For pass/fail see `conformance/UPSTREAM_AUDIT.md`, and for the mcpkit-local suites see the table above.'
+  );
+  lines.push('');
+  lines.push('| SEP | Reqs | Tested | Excluded | Untested | Status |');
+  lines.push('|---|---:|---:|---:|---:|---|');
   for (const sep of sepIds) {
     const s = input.traceability.seps[sep];
     const label = s.specUrl ? `[SEP-${sep}](${s.specUrl})` : `SEP-${sep}`;
@@ -282,11 +286,15 @@ function renderSepTable(input: RenderInput): string[] {
     const tested = numericCell(s.summary.tested, sep, 'tested', summarizeTested(s));
     const excluded = numericCell(s.summary.excluded, sep, 'excluded', summarizeExcluded(s));
     const untested = numericCell(s.summary.untested, sep, 'untested', summarizeUntested(s));
-    lines.push(`| ${label} | ${tested} | ${excluded} | ${untested} | ${status} |`);
+    const total =
+      s.summary.tested + s.summary.excluded + s.summary.untested;
+    lines.push(
+      `| ${label} | ${total} | ${tested} | ${excluded} | ${untested} | ${status} |`
+    );
   }
   lines.push('');
   lines.push(
-    '_Numeric cells link to per-SEP detail below; hover/long-press surfaces a one-line summary. Status reflects upstream-declared requirements only — Scenario→SEP attribution is not exposed in tier-check JSON today; this column tracks "does upstream have a check ID for this SEP requirement", not "does mcpkit pass it". Per-SEP scenario pass/fail lives in `conformance/UPSTREAM_AUDIT.md`._'
+    '_Reqs is the total (tested + excluded + untested). Numeric cells link to per-SEP detail below; hover/long-press surfaces a one-line summary. Excluded means upstream decided a requirement is not harness-observable and recorded why, so it is a deliberate gap rather than an oversight; the reasons are in the per-SEP detail. Status tracks "does upstream have a check ID for this requirement", not "does mcpkit pass it", because Scenario→SEP attribution is not exposed in tier-check JSON today._'
   );
   return lines;
 }
