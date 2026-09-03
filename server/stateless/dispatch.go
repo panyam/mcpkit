@@ -149,7 +149,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, req *core.Request) (*core.Res
 	case "resources/list":
 		return d.handleResourcesList(id, req.Params.Raw()), nil
 	case "resources/read":
-		return d.handleResourcesRead(ctx, id, req.Params.Raw()), nil
+		return d.handleResourcesRead(ctx, id, req.Params.Raw())
 	case "resources/templates/list":
 		return d.handleResourcesTemplatesList(id, req.Params.Raw()), nil
 	case "prompts/list":

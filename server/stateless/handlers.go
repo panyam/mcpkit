@@ -122,25 +122,34 @@ type resourcesReadEnvelope struct {
 	URI string `json:"uri"`
 }
 
-func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
+	// Run the middleware chain, exactly as tools/call and prompts/get do.
+	// Without this a middleware-based gate silently does not apply to
+	// resource reads on this wire, which for an authorization middleware is
+	// a bypass rather than a missing feature.
+	req := &core.Request{
+		JSONRPC: "2.0",
+		ID:      id,
+		Method:  "resources/read",
+		Params:  core.NewRawJSON(params),
+	}
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
+	}
+
+	// Fallback path: backends with no middleware support (test fakes).
 	var env resourcesReadEnvelope
 	if err := json.Unmarshal(params, &env); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"invalid resources/read params: "+err.Error())
+			"invalid resources/read params: "+err.Error()), nil
 	}
-	_, handler, ok := d.Backend.Resource(env.URI)
-	if !ok {
-		// Concrete URIs miss → try templates. The legacy dispatcher does
-		// the same match-then-template fallback; we replicate just the
-		// match path for first-cut, deferring template matching to a
-		// follow-up commit alongside the example fixture's templated
-		// resources.
-		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"unknown resource: "+env.URI)
-	}
-	result, err := handler(core.NewResourceContext(ctx), core.ResourceRequest{URI: env.URI})
+	result, err := d.readResource(ctx, env.URI)
 	if err != nil {
-		return core.NewErrorResponse(id, core.ErrCodeResourceError, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeResourceError, err.Error()), nil
+	}
+	if result == nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+			"unknown resource: "+env.URI), nil
 	}
 	// SEP-2549: fill the resources/read cache-hint defaults for any field
 	// the handler left unset, mirroring the legacy dispatcher's
@@ -152,7 +161,28 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 	if result.CacheScope == "" {
 		result.CacheScope = d.Backend.ReadCacheScope()
 	}
-	return core.NewResponse(id, result)
+	return core.NewResponse(id, result), nil
+}
+
+// readResource resolves a URI the way the session dispatcher does: exact
+// resources first, then templates in registration order. Returns (nil, nil)
+// when nothing matches.
+func (d *Dispatcher) readResource(ctx context.Context, uri string) (*core.ResourceResult, error) {
+	if _, handler, ok := d.Backend.Resource(uri); ok {
+		res, err := handler(core.NewResourceContext(ctx), core.ResourceRequest{URI: uri})
+		if err != nil {
+			return nil, err
+		}
+		return &res, nil
+	}
+	if _, handler, params, ok := d.Backend.MatchResourceTemplate(uri); ok {
+		res, err := handler(core.NewResourceContext(ctx), uri, params)
+		if err != nil {
+			return nil, err
+		}
+		return &res, nil
+	}
+	return nil, nil
 }
 
 func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, _ json.RawMessage) *core.Response {

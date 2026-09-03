@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -210,6 +211,68 @@ func (b *statelessBackend) ListCacheScope() string {
 	return b.s.options.listCacheScope
 }
 
+// readResourceForStateless resolves and reads a resource on the stateless
+// wire, mirroring the session dispatcher: exact URIs first, then templates in
+// registration order, then the SEP-2549 cache-hint defaults.
+//
+// This runs inside the middleware chain (see InvokeWithMiddleware), which
+// tools/call and prompts/get already did and resources/read did not. That gap
+// meant a middleware-based gate did not apply to resource reads on this wire
+// at all, so an authorization middleware could be bypassed by asking for a
+// resource instead of calling a tool.
+func (b *statelessBackend) readResourceForStateless(ctx context.Context, req *core.Request) *core.Response {
+	var env struct {
+		URI string `json:"uri"`
+	}
+	if err := json.Unmarshal(req.Params.Raw(), &env); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid resources/read params: "+err.Error())
+	}
+
+	var (
+		result core.ResourceResult
+		err    error
+		found  bool
+	)
+	if _, handler, ok := b.Resource(env.URI); ok {
+		result, err = handler(core.NewResourceContext(ctx), core.ResourceRequest{URI: env.URI})
+		found = true
+	} else if _, handler, params, ok := b.MatchResourceTemplate(env.URI); ok {
+		result, err = handler(core.NewResourceContext(ctx), env.URI, params)
+		found = true
+	}
+	if !found {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"unknown resource: "+env.URI)
+	}
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeResourceError, err.Error())
+	}
+	if result.TTLMs == nil {
+		result.TTLMs = b.ReadTTLMs()
+	}
+	if result.CacheScope == "" {
+		result.CacheScope = b.ReadCacheScope()
+	}
+	return core.NewResponse(req.ID, result)
+}
+
+// MatchResourceTemplate matches uri against registered templates in
+// registration order, mirroring Dispatcher.handleResourcesRead on the session
+// wire so a URI resolves to the same definition on both.
+func (b *statelessBackend) MatchResourceTemplate(uri string) (core.ResourceTemplate, core.TemplateHandler, map[string]string, bool) {
+	r := b.s.Registry()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, tmplURI := range r.templateOrder {
+		entry := r.templates[tmplURI]
+		if params, ok := matchTemplate(entry.def.URITemplate, uri); ok {
+			return entry.def, entry.handler, params, true
+		}
+	}
+	return core.ResourceTemplate{}, nil, nil, false
+}
+
 // ReadTTLMs returns the SEP-2549 ttlMs default for resources/read responses.
 func (b *statelessBackend) ReadTTLMs() *int {
 	return b.s.options.readTTLMs
@@ -253,6 +316,8 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 			return b.callToolForStateless(ctx, req), nil
 		case "prompts/get":
 			return b.callPromptForStateless(ctx, req), nil
+		case "resources/read":
+			return b.readResourceForStateless(ctx, req), nil
 		default:
 			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
 				return h(core.NewMethodContext(ctx), req.ID, req.Params.Raw()), nil
