@@ -10,8 +10,20 @@ import (
 
 // ToolDefLookup is the minimal interface NewToolScopeMiddleware needs from
 // the server's tool registry. *server.Registry satisfies this.
+//
+// Deprecated: use ScopeLookup with NewScopeMiddleware, which gates resources
+// and prompts as well as tools.
 type ToolDefLookup interface {
 	ToolDef(name string) (core.ToolDef, bool)
+}
+
+// ScopeLookup is what NewScopeMiddleware needs from the server's registry.
+// *server.Registry satisfies it.
+type ScopeLookup interface {
+	ToolDef(name string) (core.ToolDef, bool)
+	ResourceDef(uri string) (core.ResourceDef, bool)
+	ResourceTemplateDefFor(uri string) (core.ResourceTemplate, bool)
+	PromptDef(name string) (core.PromptDef, bool)
 }
 
 // ToolScopeOption configures NewToolScopeMiddleware. Use the With* functions
@@ -168,4 +180,149 @@ func scopeGateSatisfied(ctx context.Context, def core.ToolDef) bool {
 		}
 	}
 	return true
+}
+
+// NewScopeMiddleware gates every scope-carrying primitive, not just tools:
+// tools/call, resources/read (exact URIs and templates), and prompts/get.
+// Anything else, and any primitive with no scope declared, passes straight
+// through, so adding this to an existing server changes nothing until a
+// definition opts in.
+//
+// It runs before dispatch, which is what lets a refusal become a real HTTP 403
+// with a WWW-Authenticate header rather than a JSON-RPC error inside an
+// already-committed 200 response. SDKs that resolve scope inside the handler
+// cannot do this once streaming has started and the headers are flushed.
+//
+//	srv := server.New("app", "1.0",
+//	    server.WithAuth(jwtValidator),
+//	    server.WithMiddleware(auth.NewScopeMiddleware(srv.Registry(),
+//	        auth.WithResourceMetadataURL(prmURL),
+//	    )),
+//	)
+//	srv.RegisterTool(core.ToolDef{
+//	    Name:           "update_doc",
+//	    ScopeChallenge: core.RequireScopes("docs:write"),
+//	}, handler)
+func NewScopeMiddleware(lookup ScopeLookup, opts ...ToolScopeOption) server.Middleware {
+	cfg := toolScopeConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	return func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
+		challenge, ok := resolveChallenge(lookup, req)
+		if !ok {
+			return next(ctx, req)
+		}
+
+		result, err := challenge(ctx, req)
+		if err != nil {
+			// Fail closed. The callback could not decide, so the caller does
+			// not get the benefit of the doubt.
+			return nil, &core.AuthError{
+				Code:            http.StatusForbidden,
+				Message:         "insufficient scope",
+				WWWAuthenticate: WWWAuth403(cfg.resourceMetadataURL),
+			}
+		}
+		if result == nil {
+			return next(ctx, req)
+		}
+
+		advertised := result.Scopes
+		if cfg.includeGrantedScopes && len(advertised) > 0 {
+			advertised = UnionScopes(core.GetScopes(ctx), advertised)
+		}
+		return nil, &core.AuthError{
+			Code:            http.StatusForbidden,
+			Message:         "insufficient scope",
+			WWWAuthenticate: WWWAuth403Desc(cfg.resourceMetadataURL, result.ErrorDescription, advertised...),
+		}
+	}
+}
+
+// resolveChallenge finds the challenge function guarding req, mirroring the
+// dispatcher's own resolution so the gate and the handler always agree on
+// which definition is in play. Returns false when nothing guards the request.
+func resolveChallenge(lookup ScopeLookup, req *core.Request) (core.ScopeChallengeFunc, bool) {
+	switch req.Method {
+	case "tools/call":
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := req.Params.Bind(&p); err != nil {
+			return nil, false // malformed params; let the dispatcher report it
+		}
+		def, ok := lookup.ToolDef(p.Name)
+		if !ok {
+			return nil, false // unknown tool; dispatcher returns method-not-found
+		}
+		fn := toolChallenge(def)
+		return fn, fn != nil
+
+	case "resources/read":
+		var p struct {
+			URI string `json:"uri"`
+		}
+		if err := req.Params.Bind(&p); err != nil {
+			return nil, false
+		}
+		// Exact resources win over templates, matching the dispatcher.
+		if def, ok := lookup.ResourceDef(p.URI); ok {
+			return def.ScopeChallenge, def.ScopeChallenge != nil
+		}
+		if def, ok := lookup.ResourceTemplateDefFor(p.URI); ok {
+			return def.ScopeChallenge, def.ScopeChallenge != nil
+		}
+		return nil, false
+
+	case "prompts/get":
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := req.Params.Bind(&p); err != nil {
+			return nil, false
+		}
+		def, ok := lookup.PromptDef(p.Name)
+		if !ok {
+			return nil, false
+		}
+		return def.ScopeChallenge, def.ScopeChallenge != nil
+
+	default:
+		return nil, false
+	}
+}
+
+// toolChallenge honors ToolDef.ScopeChallenge when set, and otherwise adapts
+// the deprecated RequiredScopes/AcceptedScopes pair so existing servers keep
+// their behavior unchanged. Returns nil when the tool declares no gate.
+func toolChallenge(def core.ToolDef) core.ScopeChallengeFunc {
+	if def.ScopeChallenge != nil {
+		return def.ScopeChallenge
+	}
+	if len(def.RequiredScopes) == 0 {
+		return nil
+	}
+	required := def.RequiredScopes
+	accepted := def.AcceptedScopes
+	return func(ctx context.Context, _ *core.Request) (*core.ScopeChallenge, error) {
+		// Legacy semantics preserved exactly: AcceptedScopes, when present,
+		// replaces the AND-over-RequiredScopes gate with an OR over itself,
+		// while the challenge still advertises only RequiredScopes.
+		if len(accepted) > 0 {
+			for _, s := range accepted {
+				if core.HasScope(ctx, s) {
+					return nil, nil
+				}
+			}
+			return &core.ScopeChallenge{Scopes: required}, nil
+		}
+		for _, s := range required {
+			if !core.HasScope(ctx, s) {
+				return &core.ScopeChallenge{Scopes: required}, nil
+			}
+		}
+		return nil, nil
+	}
 }

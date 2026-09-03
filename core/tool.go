@@ -56,6 +56,9 @@ type ToolDef struct {
 	// Not serialized to clients (it's enforcement metadata, not API contract).
 	// Empty/nil means no per-tool scope check; the tool is callable by any
 	// authenticated client (subject to global server.WithRequiredScopes).
+	// Deprecated: use ScopeChallenge with RequireScopes instead. Retained so
+	// existing servers keep working; it is honored only when ScopeChallenge is
+	// nil, and will be removed once the upstream design settles.
 	RequiredScopes []string `json:"-"`
 
 	// AcceptedScopes is an opt-in OR escape hatch on top of RequiredScopes'
@@ -73,7 +76,14 @@ type ToolDef struct {
 	// Aligns with the upstream TypeScript SDK PR modelcontextprotocol/typescript-sdk#1624.
 	//
 	// Not serialized to clients.
+	// Deprecated: use ScopeChallenge with AcceptAnyScope instead. Honored only
+	// when ScopeChallenge is nil.
 	AcceptedScopes []string `json:"-"`
+
+	// ScopeChallenge decides per request whether the caller needs more
+	// authorization, and takes precedence over RequiredScopes and
+	// AcceptedScopes when set. Nil leaves the deprecated fields in charge.
+	ScopeChallenge ScopeChallengeFunc `json:"-"`
 }
 
 // ToolsListResult is the typed result for tools/list responses.

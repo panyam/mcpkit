@@ -71,6 +71,50 @@ func (r *Registry) ToolDef(name string) (core.ToolDef, bool) {
 	return entry.def, true
 }
 
+// ResourceDef returns the definition for a registered resource, or false if
+// no resource is registered at that exact URI. Templates are not consulted;
+// see ResourceTemplateDefFor.
+func (r *Registry) ResourceDef(uri string) (core.ResourceDef, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.resources[uri]
+	if !ok {
+		return core.ResourceDef{}, false
+	}
+	return entry.def, true
+}
+
+// ResourceTemplateDefFor returns the definition of the first registered
+// template whose URI template matches uri, or false when none does.
+//
+// Resolution deliberately mirrors the dispatcher: exact resources win over
+// templates, and among templates the first match in registration order wins.
+// A caller that resolves differently from the dispatcher would gate one
+// definition and then execute another, which is how authorization bugs happen.
+func (r *Registry) ResourceTemplateDefFor(uri string) (core.ResourceTemplate, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, tmplURI := range r.templateOrder {
+		entry := r.templates[tmplURI]
+		if _, matched := matchTemplate(entry.def.URITemplate, uri); matched {
+			return entry.def, true
+		}
+	}
+	return core.ResourceTemplate{}, false
+}
+
+// PromptDef returns the definition for a registered prompt, or false if not
+// found.
+func (r *Registry) PromptDef(name string) (core.PromptDef, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.prompts[name]
+	if !ok {
+		return core.PromptDef{}, false
+	}
+	return entry.def, true
+}
+
 // SetToolCallbacks associates per-tool task callbacks with a registered tool.
 // The tool must already be registered. Thread-safe.
 func (r *Registry) SetToolCallbacks(name string, cb *TaskCallbacks) {
