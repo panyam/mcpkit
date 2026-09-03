@@ -104,6 +104,20 @@ These span packages and will bite on a task that never opens a routed doc.
   `scripts/pre-commit-hook.sh` (local, opt-in via `make setup-hooks`) and
   `scripts/check-no-binaries.sh` (whole-tree, wired into `test.yml`, the actual gate).
   `HANDOFF.md` / `HANDOFF_*.md` are gitignored for the same `git add -A` reason.
+- **A stateless handler that skips `InvokeWithMiddleware` is a silent middleware bypass.** The
+  session wire wraps `d.Dispatch` with the chain and filters by nothing, so it sees every method.
+  The SEP-2575 wire dispatches per method in `server/stateless/handlers.go` and reaches the chain
+  only if the handler calls `Backend.InvokeWithMiddleware` itself. Omit it and the method still
+  works, the response still looks right, and the middleware never runs. `resources/read` was in
+  that state until #1352: a scope gate held on `tools/call` and not on `resources/read`, so a caller
+  refused a tool could ask for the resource. Constraint C7, gated by
+  `make check-stateless-middleware`. Five handlers are still knowingly unrouted, listed in the
+  script's `ALLOWED`.
+- **`conformance/path-defaults.{mk,sh,just}` are generated, not hand-edited.** They come from
+  `conformance/local-suites.yaml` via `uv run scripts/gen_conf_paths.py --write`. Editing two of
+  the three by hand fails CI as "case E drift" in `check_local_suites.py`, and the `just` runner is
+  the one people forget. Adding a `testconf-*` target means adding a manifest entry too; the drift
+  check enforces both directions.
 - **`govulncheck` green does not mean dependencies are current.** Default govulncheck is
   *reachability*-based, so it exits 0 while advisories sit unfixed in required modules. Version
   matching is a separate pass. Command, blockers, and rationale: `DEPENDENCY_POLICY.md`
@@ -132,6 +146,16 @@ Client Auth 16/16.** Full client suite **41/43**, the two failures being `auth/d
 
 `CONFORMANCE.md` is generated and CI-gated for staleness; `conformance/UPSTREAM_AUDIT.md` grades
 mcpkit against every upstream scenario. Do not hand-edit either, or the README badge.
+
+`testconf-scope-challenge` runs mcpkit against the upstream SEP-2350 server scope-challenge
+scenario (`modelcontextprotocol/conformance` PR 481), currently 17/17. It is `INFO` rather than
+gating because it tracks an unmerged PR head, so a red run there means the fixture contract moved.
+Flip it to a gate against upstream `main` once 481 lands.
+
+**The SEP Coverage table counts requirements, not tests.** A SEP showing "1 tested" may be covered
+by dozens of assertions or by one; the two numbers are unrelated and reflect different upstream
+commits. Per-suite pass counts in the local-suites table are hand-recorded from a run, not ingested
+from artifacts, so treat them as claims with a date.
 
 ## Tasks v1 vs v2
 
