@@ -45,6 +45,9 @@ const (
 )
 
 const (
+	// scopeBaseline is all the under-scoped token carries, per the upstream
+	// SDK_INTEGRATION.md fixture contract.
+	scopeBaseline    = "mcp:conformance:baseline"
 	scopeToolsCall   = "mcp:conformance:tools:call"
 	scopeToolSimple  = "mcp:conformance:tools:test_simple_text"
 	scopeResRead     = "mcp:conformance:resources:read"
@@ -88,8 +91,10 @@ func (v *fixtureValidator) Claims(r *http.Request) *core.Claims {
 	case fullToken:
 		return &core.Claims{Subject: "conformance", Scopes: fullScopes}
 	case lowToken:
-		// Authenticated, but holds nothing any fixture asks for.
-		return &core.Claims{Subject: "conformance", Scopes: []string{"mcp:conformance:none"}}
+		// Authenticated, and holds only the baseline scope the upstream
+		// SDK_INTEGRATION.md contract specifies. No fixture asks for it, which
+		// is what makes the refusal a 403 rather than a 401.
+		return &core.Claims{Subject: "conformance", Scopes: []string{scopeBaseline}}
 	}
 	return nil
 }
