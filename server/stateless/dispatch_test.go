@@ -50,6 +50,9 @@ func (f *fakeBackend) ResourceTemplates() []core.ResourceTemplate { return nil }
 func (f *fakeBackend) ResourceTemplate(string) (core.ResourceTemplate, core.TemplateHandler, bool) {
 	return core.ResourceTemplate{}, nil, false
 }
+func (f *fakeBackend) MatchResourceTemplate(string) (core.ResourceTemplate, core.TemplateHandler, map[string]string, bool) {
+	return core.ResourceTemplate{}, nil, nil, false
+}
 func (f *fakeBackend) Prompts() []core.PromptDef { return nil }
 func (f *fakeBackend) Prompt(string) (core.PromptDef, core.PromptHandler, bool) {
 	return core.PromptDef{}, nil, false

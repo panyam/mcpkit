@@ -48,6 +48,13 @@ type Backend interface {
 	// ResourceTemplate returns def + handler for a template URI.
 	ResourceTemplate(uriTemplate string) (core.ResourceTemplate, core.TemplateHandler, bool)
 
+	// MatchResourceTemplate finds the first registered template whose URI
+	// template matches a concrete uri, returning it with the expanded
+	// variables. Matching lives on the backend because the RFC 6570 matcher
+	// is in the server package; resolution order mirrors the session
+	// dispatcher so both wires agree on which definition serves a URI.
+	MatchResourceTemplate(uri string) (core.ResourceTemplate, core.TemplateHandler, map[string]string, bool)
+
 	// Prompts returns a snapshot of registered prompt definitions.
 	Prompts() []core.PromptDef
 
