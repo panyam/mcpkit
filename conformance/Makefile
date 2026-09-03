@@ -72,6 +72,9 @@ testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/st
 # schema says ClientCapabilities object, which mcpkit follows). The target now
 # requires zero FAILURE rows — if upstream regresses, we want to catch it.
 
+testconf-scope-challenge: ## Run SEP-2350 server scope-challenge conformance — tracks the unmerged upstream PR 481 (informational; exit 0 regardless)
+	@bash $(CONFORMANCE_DIR)/scripts/conf-scope-challenge.sh
+
 testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
 	@bash $(CONFORMANCE_DIR)/scripts/conf-file-inputs.sh
 
