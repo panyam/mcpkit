@@ -65,7 +65,7 @@ _Scenarios authored by this project, typically in the `panyam/mcpconformance` fo
 | `testconf-auth-server` | MCP authz 2025-11-25 | 8g | **PASS** | [`panyam/mcpconformance@pending`](https://github.com/panyam/mcpconformance/tree/pending) | — |
 | `testconf-skills` | SEP-2640 Skills | 8h | _INFO_<sup>4</sup> | [`panyam/mcpconformance@chore/sep-2640-yaml`](https://github.com/panyam/mcpconformance/tree/chore/sep-2640-yaml) | mcpkit 567 |
 
-<sup>1</sup> Tracks an unmerged upstream PR, so a red run means the fixture contract moved rather than mcpkit regressing. Retarget to upstream main and flip to a hard gate once 481 lands. Drives examples/auth/conformance-scope-challenge over opaque tokens with no authorization server; the real-IdP counterpart is testconf-auth-server.
+<sup>1</sup> 17 pass / 0 fail / 0 warn / 0 skip as of 2026-09-03 against ccb0744 (hand-recorded from the target's own summary line, so re-run testconf-scope-challenge before trusting it). Tracks an unmerged upstream PR, so a red run means the fixture contract moved rather than mcpkit regressing. Retarget to upstream main and flip to a hard gate once 481 lands. Drives examples/auth/conformance-scope-challenge over opaque tokens with no authorization server; the real-IdP counterpart is testconf-auth-server.
 <sup>2</sup> Same scenario set tier-check's --client-cmd runs. Expected failures (extension + draft + backcompat categories, none tier-scored) live in conformance/baseline.yml.
 <sup>3</sup> 30/30 as of upstream 0.2.0-alpha.9 (#376 fixed the former array-vs-object requiredCapabilities test).
 <sup>4</sup> Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330.
