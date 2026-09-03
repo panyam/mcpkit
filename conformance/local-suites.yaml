@@ -30,6 +30,25 @@
 #   SKIP  — suite intentionally not run in this revision; explain why in note
 
 suites:
+  - suite: testconf-scope-challenge
+    sep: SEP-2350 server-side scope challenges
+    stage: '-'
+    status: INFO
+    source:
+      repo: modelcontextprotocol/conformance
+      branch: pull/481/head
+      path_var: MCPCONFORMANCE_SCOPE_CHALLENGE_PATH
+      default_path: ../conf-481
+    note: >-
+      17 pass / 0 fail / 0 warn / 0 skip as of 2026-09-03 against ccb0744
+      (hand-recorded from the target's own summary line, so re-run
+      testconf-scope-challenge before trusting it). Tracks an unmerged upstream
+      PR, so a red run means the fixture contract moved rather than mcpkit
+      regressing. Retarget to upstream main and flip to a hard gate once 481
+      lands. Drives examples/auth/conformance-scope-challenge over opaque tokens
+      with no authorization server; the real-IdP counterpart is
+      testconf-auth-server.
+    tracking: "conformance 481"
   - suite: testconf-tasks-v2
     sep: SEP-2663 Tasks v2
     stage: 8d

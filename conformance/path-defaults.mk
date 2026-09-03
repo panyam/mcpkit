@@ -7,10 +7,11 @@
 # REPO_ROOT must be defined by the including Makefile before this file is
 # included. conformance/Makefile sets it as $(abspath $(CONFORMANCE_DIR)/..).
 
-MCPCONFORMANCE_AUTH_PATH        ?= $(abspath $(REPO_ROOT)/../conf-pending)
-MCPCONFORMANCE_CLIENT_PATH      ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
-MCPCONFORMANCE_FILE_INPUTS_PATH ?= $(abspath $(REPO_ROOT)/../conf-pending)
-MCPCONFORMANCE_MRTR_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
-MCPCONFORMANCE_SKILLS_PATH      ?= $(abspath $(REPO_ROOT)/../conf-skills)
-MCPCONFORMANCE_STATELESS_PATH   ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
-MCPCONFORMANCE_TASKS_V2_PATH    ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
+MCPCONFORMANCE_AUTH_PATH            ?= $(abspath $(REPO_ROOT)/../conf-pending)
+MCPCONFORMANCE_CLIENT_PATH          ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
+MCPCONFORMANCE_FILE_INPUTS_PATH     ?= $(abspath $(REPO_ROOT)/../conf-pending)
+MCPCONFORMANCE_MRTR_PATH            ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
+MCPCONFORMANCE_SCOPE_CHALLENGE_PATH ?= $(abspath $(REPO_ROOT)/../conf-481)
+MCPCONFORMANCE_SKILLS_PATH          ?= $(abspath $(REPO_ROOT)/../conf-skills)
+MCPCONFORMANCE_STATELESS_PATH       ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
+MCPCONFORMANCE_TASKS_V2_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)

@@ -78,6 +78,10 @@ testconf-mrtr:
 testconf-stateless:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-stateless.sh
 
+# Run SEP-2350 server scope-challenge conformance — tracks the unmerged upstream PR 481 (informational)
+testconf-scope-challenge:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-scope-challenge.sh
+
 # Run SEP-2356 file-inputs conformance — fork-based scenarios (auto-spawns fixture)
 testconf-file-inputs:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-file-inputs.sh

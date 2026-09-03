@@ -36,12 +36,14 @@ Each suite's Makefile target reads `MCPCONFORMANCE_*_PATH` to find its scenario 
 
 ## SEP Coverage
 
-| SEP | Tested reqs | Excluded | Untested | Status |
-|---|---:|---:|---:|---|
-| [SEP-2322](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) | [1](#sep-2322-tested "Tested: sep-2322-result-type-included.") | [2](#sep-2322-excluded "1x Server-internal opaque blob — only protocol-observable invar; 1x Not protocol-observable post-parsing.") | [1](#sep-2322-untested "Untested: sep-2322-input-required-on-allowed-method.") | partial |
-| [SEP-2549](https://modelcontextprotocol.io/seps/2549-list-ttl) | [1](#sep-2549-tested "Tested: sep-2549-ttl-ms-respected.") | 0 | 0 | **pass** |
+**These are requirement counts, not test results.** Each row counts the normative requirements extracted from that SEP's text, and whether upstream has a check ID mapped to each one. A SEP with 1 tested requirement may be covered by dozens of assertions, or by one; the numbers here say nothing about how many checks ran or whether mcpkit passed them. For pass/fail see `conformance/UPSTREAM_AUDIT.md`, and for the mcpkit-local suites see the table above.
 
-_Numeric cells link to per-SEP detail below; hover/long-press surfaces a one-line summary. Status reflects upstream-declared requirements only — Scenario→SEP attribution is not exposed in tier-check JSON today; this column tracks "does upstream have a check ID for this SEP requirement", not "does mcpkit pass it". Per-SEP scenario pass/fail lives in `conformance/UPSTREAM_AUDIT.md`._
+| SEP | Reqs | Tested | Excluded | Untested | Status |
+|---|---:|---:|---:|---:|---|
+| [SEP-2322](https://modelcontextprotocol.io/specification/draft/basic/utilities/mrtr) | 4 | [1](#sep-2322-tested "Tested: sep-2322-result-type-included.") | [2](#sep-2322-excluded "1x Server-internal opaque blob — only protocol-observable invar; 1x Not protocol-observable post-parsing.") | [1](#sep-2322-untested "Untested: sep-2322-input-required-on-allowed-method.") | partial |
+| [SEP-2549](https://modelcontextprotocol.io/seps/2549-list-ttl) | 1 | [1](#sep-2549-tested "Tested: sep-2549-ttl-ms-respected.") | 0 | 0 | **pass** |
+
+_Reqs is the total (tested + excluded + untested). Numeric cells link to per-SEP detail below; hover/long-press surfaces a one-line summary. Excluded means upstream decided a requirement is not harness-observable and recorded why, so it is a deliberate gap rather than an oversight; the reasons are in the per-SEP detail. Status tracks "does upstream have a check ID for this requirement", not "does mcpkit pass it", because Scenario→SEP attribution is not exposed in tier-check JSON today._
 
 ## SEP Detail
 
