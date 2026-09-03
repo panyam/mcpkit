@@ -54,6 +54,33 @@ type JWTValidator struct {
 	// Per spec: clients use this to request scopes upfront, reducing step-up round-trips.
 	AllScopes []string
 
+	// ScopeExtractor overrides how scopes are read out of the verified claims.
+	// Nil (default) uses DefaultScopeExtractor, which covers the shapes every
+	// IdP we have tested emits.
+	//
+	// Override when the provider encodes scopes as something other than a flat
+	// list of free-form strings. FusionAuth's client_credentials grant is the
+	// motivating case: it is built on Entity Management, so scopes arrive as
+	// "target-entity:<entity-uuid>:<permission>" and a server that gates on
+	// "admin-write" never matches. The mapping is deployment-specific (the UUID
+	// is), so it cannot live in this package:
+	//
+	//	v.ScopeExtractor = func(claims map[string]any) []string {
+	//	    out := auth.DefaultScopeExtractor(claims)
+	//	    for i, s := range out {
+	//	        if idx := strings.LastIndex(s, ":"); idx >= 0 {
+	//	            out[i] = s[idx+1:]
+	//	        }
+	//	    }
+	//	    return out
+	//	}
+	//
+	// Without this hook the only way to change four lines of parsing is to
+	// reimplement the whole validator, including JWKS fetching, signature
+	// verification and the exp/aud/iss checks, all of which are security
+	// sensitive and none of which the caller wanted to touch.
+	ScopeExtractor func(claims map[string]any) []string
+
 	// recentClaims caches the most recently validated claims by token string.
 	// Used by Claims(r) to retrieve claims without re-parsing.
 	// A SyncMap is used for concurrent safety across requests.
@@ -257,21 +284,11 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 		return v.unauthorized("missing subject")
 	}
 
-	// Extract scopes — handle the formats different IdPs emit:
-	//   "scopes": ["read", "write"]  (oneauth array format)
-	//   "scp":    ["read", "write"]  (Okta / Azure AD / Entra array format)
-	//   "scope":  "read write"        (Keycloak / RFC 6749 space-delimited string)
-	//   "scp":    "read write"        (some IdPs emit scp as a space-delimited string)
-	var scopes []string
-	if arr := stringArrayClaim(mapClaims["scopes"]); arr != nil {
-		scopes = arr
-	} else if arr := stringArrayClaim(mapClaims["scp"]); arr != nil {
-		scopes = arr
-	} else if s := scopeStr(mapClaims["scope"]); s != "" {
-		scopes = strings.Fields(s)
-	} else if s := scopeStr(mapClaims["scp"]); s != "" {
-		scopes = strings.Fields(s)
+	extract := v.ScopeExtractor
+	if extract == nil {
+		extract = DefaultScopeExtractor
 	}
+	scopes := extract(mapClaims)
 
 	// Check required scopes
 	if len(v.RequiredScopes) > 0 && !oacore.ContainsAllScopes(scopes, v.RequiredScopes) {
@@ -478,4 +495,35 @@ func (v *JWTValidator) Start() {
 // Stop halts background JWKS key refresh.
 func (v *JWTValidator) Stop() {
 	v.ks.Stop()
+}
+
+// DefaultScopeExtractor reads scopes from whichever claim the issuer populated,
+// covering the shapes we have observed in the wild:
+//
+//	"scopes": ["read", "write"]   oneauth array format
+//	"scp":    ["read", "write"]   Okta / Azure AD / Entra array format
+//	"scope":  "read write"        Keycloak / RFC 6749 space-delimited string
+//	"scp":    "read write"        some IdPs emit scp as a space-delimited string
+//
+// First populated claim wins, in that order. Returns nil when none is present,
+// which the caller treats the same as an empty scope set.
+//
+// This handles variation in *which claim* carries the scopes. It does not, and
+// cannot, handle variation in what the scope values themselves look like: an
+// issuer that emits structured values rather than free-form strings needs a
+// deployment-specific mapping, which is what JWTValidator.ScopeExtractor is for.
+func DefaultScopeExtractor(claims map[string]any) []string {
+	if arr := stringArrayClaim(claims["scopes"]); arr != nil {
+		return arr
+	}
+	if arr := stringArrayClaim(claims["scp"]); arr != nil {
+		return arr
+	}
+	if s := scopeStr(claims["scope"]); s != "" {
+		return strings.Fields(s)
+	}
+	if s := scopeStr(claims["scp"]); s != "" {
+		return strings.Fields(s)
+	}
+	return nil
 }

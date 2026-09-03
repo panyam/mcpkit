@@ -97,6 +97,7 @@ func TypedTool[In, Out any](name, desc string,
 		Timeout:        cfg.timeout,
 		RequiredScopes: cfg.requiredScopes,
 		AcceptedScopes: cfg.acceptedScopes,
+		ScopeChallenge: cfg.scopeChallenge,
 		Execution:      cfg.toolExecution,
 	}
 
@@ -141,6 +142,7 @@ type typedToolConfig struct {
 	timeout              time.Duration
 	requiredScopes       []string
 	acceptedScopes       []string
+	scopeChallenge       ScopeChallengeFunc
 	inputSchemaOverride  any
 	outputSchemaOverride any
 	inputSchemaPatch     func(*SchemaBuilder)
@@ -163,7 +165,25 @@ func WithTypedToolTimeout(d time.Duration) TypedToolOption {
 	return func(c *typedToolConfig) { c.timeout = d }
 }
 
+// WithToolScopeChallenge sets the ScopeChallenge callback on the generated
+// ToolDef, and takes precedence over WithToolRequiredScopes and
+// WithToolAcceptedScopes. Use it when the required scope depends on the
+// request rather than only on which tool was called:
+//
+//	core.TextTool[putArgs]("put_file", "Write a file", handler,
+//	    core.WithToolScopeChallenge(func(ctx context.Context, r *core.Request) (*core.ScopeChallenge, error) {
+//	        // ... inspect r.Params, decide, return nil to allow
+//	    }),
+//	)
+//
+// core.RequireScopes and core.AcceptAnyScope cover the static cases.
+func WithToolScopeChallenge(fn ScopeChallengeFunc) TypedToolOption {
+	return func(c *typedToolConfig) { c.scopeChallenge = fn }
+}
+
 // WithToolRequiredScopes sets the RequiredScopes field on the generated ToolDef.
+//
+// Deprecated: use WithToolScopeChallenge with RequireScopes.
 // When auth.NewToolScopeMiddleware is registered on the server, calls to this
 // tool from clients without all of the named scopes are rejected at the
 // transport layer with HTTP 403 + WWW-Authenticate per RFC 6750.
@@ -171,6 +191,8 @@ func WithToolRequiredScopes(scopes ...string) TypedToolOption {
 	return func(c *typedToolConfig) { c.requiredScopes = scopes }
 }
 
+// Deprecated: use WithToolScopeChallenge with AcceptAnyScope.
+//
 // WithToolAcceptedScopes sets the AcceptedScopes OR-hierarchy escape hatch
 // on the generated ToolDef. When non-empty, the scope-check gate satisfaction
 // flips from "every RequiredScopes scope must be present" (AND) to "any

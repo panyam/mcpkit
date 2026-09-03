@@ -41,6 +41,16 @@ func WWWAuth401(resourceMetadataURL string, scopes ...string) string {
 //
 //	Bearer error="insufficient_scope", resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp", scope="admin:write files:read"
 func WWWAuth403(resourceMetadataURL string, scopes ...string) string {
+	return WWWAuth403Desc(resourceMetadataURL, "", scopes...)
+}
+
+// WWWAuth403Desc is WWWAuth403 plus the optional RFC 6750 error_description
+// parameter. Empty description behaves exactly like WWWAuth403.
+//
+// Quoting matters here: a description containing a double quote or backslash
+// would otherwise terminate the parameter early and corrupt the rest of the
+// header, so both are escaped per RFC 7235 quoted-string rules.
+func WWWAuth403Desc(resourceMetadataURL, description string, scopes ...string) string {
 	parts := []string{`error="insufficient_scope"`}
 	if resourceMetadataURL != "" {
 		parts = append(parts, fmt.Sprintf(`resource_metadata="%s"`, resourceMetadataURL))
@@ -48,7 +58,16 @@ func WWWAuth403(resourceMetadataURL string, scopes ...string) string {
 	if len(scopes) > 0 {
 		parts = append(parts, fmt.Sprintf(`scope="%s"`, strings.Join(scopes, " ")))
 	}
+	if description != "" {
+		parts = append(parts, fmt.Sprintf(`error_description="%s"`, quoteAuthParam(description)))
+	}
 	return "Bearer " + strings.Join(parts, ", ")
+}
+
+// quoteAuthParam escapes a value for embedding inside a quoted auth-param.
+func quoteAuthParam(v string) string {
+	v = strings.ReplaceAll(v, `\`, `\\`)
+	return strings.ReplaceAll(v, `"`, `\"`)
 }
 
 // ParseWWWAuthenticate extracts the resource_metadata URL and scopes from a

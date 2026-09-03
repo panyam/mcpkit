@@ -27,6 +27,10 @@ type ResourceDef struct {
 
 	// Timeout is a per-resource execution timeout. Not serialized to clients.
 	Timeout time.Duration `json:"-"`
+
+	// ScopeChallenge decides per request whether the caller needs more
+	// authorization before this resource may be read. Nil means no scope gate.
+	ScopeChallenge ScopeChallengeFunc `json:"-"`
 }
 
 // ResourceTemplate describes a parameterized resource URI template.
@@ -54,6 +58,13 @@ type ResourceTemplate struct {
 
 	// Timeout is a per-template execution timeout. Not serialized to clients.
 	Timeout time.Duration `json:"-"`
+
+	// ScopeChallenge decides per request whether the caller needs more
+	// authorization before a resource matching this template may be read.
+	// Nil means no scope gate. A template's challenge applies to every URI it
+	// matches, and the callback receives the request so it can vary the answer
+	// by the expanded URI.
+	ScopeChallenge ScopeChallengeFunc `json:"-"`
 }
 
 // ResourcesListResult is the typed result for resources/list responses.

@@ -24,6 +24,10 @@ type PromptDef struct {
 
 	// Timeout is a per-prompt execution timeout. Not serialized to clients.
 	Timeout time.Duration `json:"-"`
+
+	// ScopeChallenge decides per request whether the caller needs more
+	// authorization before this prompt may be fetched. Nil means no scope gate.
+	ScopeChallenge ScopeChallengeFunc `json:"-"`
 }
 
 // PromptsListResult is the typed result for prompts/list responses.
