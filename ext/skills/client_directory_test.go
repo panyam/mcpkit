@@ -29,6 +29,9 @@ func TestClient_ReadDirectory_HappyPath(t *testing.T) {
 	if len(result.Resources) != 1 || result.Resources[0].Name != "FORMS.md" {
 		t.Errorf("got %v, want [FORMS.md]", namesOf(result.Resources))
 	}
+	// Empty because this Provider takes the default page size of 0, not
+	// because directory reads never paginate. Set WithDirectoryReadPageSize
+	// and a cursor appears; see TestReadDirectoryAll_FollowsCursor.
 	if result.NextCursor != "" {
 		t.Errorf("NextCursor = %q, want empty", result.NextCursor)
 	}
