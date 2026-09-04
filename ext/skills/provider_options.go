@@ -127,12 +127,11 @@ func WithIndexCacheTTL(d time.Duration) ProviderOption {
 
 // WithArchiveMode publishes every skill as a single archive resource at
 // skill://<path><suffix> instead of registering each file individually.
-// Per SEP-2640, archive mode is a server-side packaging optimization
-// that delivers a multi-file skill atomically in one round trip without
-// changing the post-unpack virtual namespace hosts observe.
 //
-// Index entries for archive-mode skills carry Type:archive, URL ending
-// in the format suffix, and a Digest computed over the archive bytes.
+// This does NOT conform to SEP-2640 as accepted 2026-09-01, which defers
+// archives to an appendix and requires `resources` to list every file of the
+// skill individually. A conforming host declines every skill served this way.
+// Treat it as an explicit opt-out of conformance, not a tuning knob.
 //
 // Archive mode is per-Provider in this revision. Per-skill mode
 // (mixing archive-served and file-served skills under one Provider) is
