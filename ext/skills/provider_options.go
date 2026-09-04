@@ -25,6 +25,8 @@ type providerConfig struct {
 	fsWatcherIgnore       []string
 	fsWatcherErrHandler   func(error)
 	supportingDigests     SupportingDigestMode
+	skillsListPageSize    int
+	directoryReadPageSize int
 }
 
 // SupportingDigestMode selects how a Provider pins the integrity of a
@@ -123,6 +125,25 @@ func WithIndexCacheTTL(d time.Duration) ProviderOption {
 	return func(c *providerConfig) {
 		c.indexCacheTTL = d
 	}
+}
+
+// WithSkillsListPageSize caps how many entries a skills/list response
+// carries, emitting a nextCursor when more remain. Zero (the default)
+// returns every entry in one page and never emits a cursor, matching
+// mcpkit's server-wide defaultPageSize.
+//
+// Set this on any server whose catalog is large enough that one response
+// is a problem. SEP-2640 permits either shape, so this is a scale knob
+// rather than a conformance one.
+func WithSkillsListPageSize(n int) ProviderOption {
+	return func(c *providerConfig) { c.skillsListPageSize = n }
+}
+
+// WithDirectoryReadPageSize caps how many children a
+// resources/directory/read response carries. Zero (the default) returns
+// every child in one page. Same rationale as WithSkillsListPageSize.
+func WithDirectoryReadPageSize(n int) ProviderOption {
+	return func(c *providerConfig) { c.directoryReadPageSize = n }
 }
 
 // WithArchiveMode publishes every skill as a single archive resource at
