@@ -123,7 +123,11 @@ These span packages and will bite on a task that never opens a routed doc.
   matching is a separate pass. Command, blockers, and rationale: `DEPENDENCY_POLICY.md`
   § Security updates.
 - **GitHub access needs the personal token and key.** `GH_TOKEN="$GH_PERSONAL_TOKEN"`, because the EMU
-  account cannot reach personal repos. `git push` to `panyam-github` likewise needs the key pinned,
+  account cannot reach personal repos. That token is **fine-grained**, so it can read but never
+  write `modelcontextprotocol/*`. `gh pr edit` and REST `PATCH .../pulls/N` both 403 even on a PR
+  we authored, and no setting fixes it because fine-grained PATs only scope to repos in the owner's
+  account. Upstream PR titles, bodies and comments need the web UI or a classic PAT with
+  `public_repo`. Pushing to our fork branches is unaffected. See `conformance/NOTES.md`. `git push` to `panyam-github` likewise needs the key pinned,
   because the ssh-agent offers the EMU key first and GitHub rejects it before reaching
   `~/.ssh/id_github`:
   `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push …`.
@@ -138,6 +142,14 @@ These span packages and will bite on a task that never opens a routed doc.
   A 403 is not a 404, and a status check that treats any non-success as "disabled" reports a
   configured repo as unprotected.
 
+- **mcpkit does not paginate by default, anywhere.** `server/pagination.go` sets
+  `defaultPageSize = 0` for tools, resources, templates and prompts, which `paginate` reads as
+  "return everything, emit no cursor". `ext/skills` gained `WithSkillsListPageSize` and
+  `WithDirectoryReadPageSize` in 2026-09, and the four base methods still have no override. Conformant
+  (the spec makes paging optional) but it means a large catalog ships in one response, and it meant
+  the paging helpers were unreachable while unit tests certified them. Tracked as #1356 against the
+  1.0 freeze, since changing the default afterwards is a breaking wire change.
+
 ## Conformance
 
 All tier-scored surfaces are at 100% on upstream tier-check: **Server 30/30, Client Core 4/4,
@@ -146,6 +158,12 @@ Client Auth 16/16.** Full client suite **41/43**, the two failures being `auth/d
 
 `CONFORMANCE.md` is generated and CI-gated for staleness; `conformance/UPSTREAM_AUDIT.md` grades
 mcpkit against every upstream scenario. Do not hand-edit either, or the README badge.
+
+**SEP-2640 is Accepted** (CM vote 2026-09-01). Conformance tests are one of three deliverables
+gating Final and are ours: `modelcontextprotocol/conformance` PR 330, 96 requirement rows with 89
+checks of which 40 run on the wire. mcpkit passes 43/43. The suite is also run against other
+implementations on request, which is how a directory-pagination bug in it was found and fixed on
+2026-09-04. Detail in `ext/skills/NOTES.md`.
 
 `testconf-scope-challenge` runs mcpkit against the upstream SEP-2350 server scope-challenge
 scenario (`modelcontextprotocol/conformance` PR 481), currently 17/17. It is `INFO` rather than

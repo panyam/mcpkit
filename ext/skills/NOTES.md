@@ -59,23 +59,58 @@ digest-mismatch step forces the mismatch with a wrong pin instead.
 
 ---
 
-## Upstream conformance scenarios (mcpconformance PR 330)
+## Upstream conformance scenarios (conformance PR 330)
 
-Three server `ClientScenario`s in `src/scenarios/server/skills/`:
+Three server scenarios in `src/scenarios/server/skills/`:
 
-- `sep-2640-skills-index` — index.json shape, type enum, name, digest format, scheme
+- `sep-2640-skills-enumeration` — `skills/list` and `skills/get`, entry schema, `resources`
+  completeness, `size`, the `"dynamic"` sentinel, the 512/16 MiB limits, capability declaration.
+  Renamed 2026-08-28 from `sep-2640-skills-index`, which tested the retired `skill://index.json`.
 - `sep-2640-skills-manifest` — SKILL.md mimeType, metadata, final-segment-equals-name, meta prefix
-- `sep-2640-skills-directory` — `resources/directory/read`; capability read from `server/discover`,
-  brand-neutral dynamic discovery
+- `sep-2640-skills-directory` — `resources/directory/read`, capability read from `server/discover`
 
 `make testconf-skills` runs all three **by exact `--scenario` name**. The runner does not
-prefix-match, and the old single `sep-2640-skills` name is gone.
+prefix-match. Green against mcpkit at 30/30, 6/6, 7/7 (43 checks, 3 of which are the framework's
+`wire-schema-valid`).
 
-**Rebuild gotcha**: after fast-forwarding `../conf-skills` to a new fork commit, run `npm run
-build`. The harness runs `node dist/index.js`, so a stale `dist/` runs the OLD scenarios and
-`--scenario <new-name>` silently "matches nothing".
+**Two scenario kinds, and the names read backwards.** In the harness's `src/types.ts`:
 
-Verified green against mcpkit: 6/6, 6/6, 7/7.
+- `ClientScenario` means **the harness acts as a client** and the SUT is a **server**. All three
+  skills scenarios are these.
+- `Scenario` means **the harness stands up a server** and the SUT is a **client**. Everything under
+  `src/scenarios/client/` uses this, and mcpkit already runs 41/43 against it for other SEPs.
+
+That matters for SEP-2640's client-side MUSTs. No-prefetch, reads of URIs absent from `resources`,
+digest and size mismatch, and frontmatter disagreeing with the entry are all testable today with the
+`Scenario` mechanism. They are not unreachable "host obligations", which is how the first extraction
+framed them.
+
+**Invocation gotcha.** Against a server that does not speak `2026-07-28`, the scenarios need
+**both** flags:
+
+```
+--scenario sep-2640-skills-enumeration --spec-version 2025-11-25 --force
+```
+
+`--spec-version` selects the *wire lifecycle* (2025-x is stateful with an initialize handshake,
+2026-x is stateless and asserts `MCP-Protocol-Version` with no negotiation), and `--force`
+overrides the extension-applicability skip, because extension scenarios never match
+`--spec-version` on their own. Without both, a 2025-x server refuses with `-32022` and the failure
+reads as a missing method rather than a wire mismatch. The scenarios themselves are portable:
+verified 30/30 on both wires.
+
+**Rebuild gotcha**: after fast-forwarding `../conf-skills`, run `npm run build`. The harness runs
+`node dist/index.js`, so a stale `dist/` runs the OLD scenarios and `--scenario <new-name>` silently
+matches nothing.
+
+**A passing check is not an exercised check** (2026-09-04). The directory scenario read a single
+`resources/directory/read` and never followed `nextCursor`, so every child-inspection check below it
+saw one page. It passed against mcpkit forever because mcpkit hardcoded its page size to zero and
+never emitted a cursor. Sam Bloomberg found it by running the suite against `go-sdk#1238` with
+`DirectoryOptions{PageSize: 1}`: `sep-2640-directory-read-subdir-mimetype` failed against a
+*conformant* server whose subdirectory happened to land on page two. Fixed upstream with
+`directoryReadAll`. The same run caught a YAML normalization bug in the go-sdk, so both directions
+produced findings the same day and neither was reachable from one side.
 
 **Settled, and it was ours to fix** (#1334, was recorded here as an open WG question). SEP-2640 and
 SEP-2133 do not disagree about where `directoryRead` sits. SEP-2133 is Final and defines
@@ -89,6 +124,36 @@ an extension declaring nothing and mcpkit's directory-read support was invisible
 suite scored that as six SKIPPED checks rather than a failure, because a server that has not
 declared the flag need not serve the method. `sep-2640-skills-directory` reported 1/1 passed while
 exercising none of the surface. It now runs 7/7. See `docs/SEP_2133_EXTENSIONS.md`.
+
+## Pagination shipped unreachable until 2026-09-04 (#1356)
+
+`skills/list` and `resources/directory/read` both hardcoded their page size to zero, meaning
+"return everything, emit no cursor", with no option to change it. A server with thousands of skills
+returned the whole catalog in one response and an operator had to fork to avoid it.
+
+Not a conformance bug. The spec makes pagination optional for servers and a cursorless result is a
+complete listing. The defect was that the machinery shipped unreachable: `paginateEntries` and
+`paginateDirectoryRead` are both correct, the wire types carry `nextCursor`, the handlers accept a
+`cursor` they could never issue, and **five green unit tests called `paginateDirectoryRead(items,
+cursor, 2)` directly with a page size no caller could produce**. One wire test asserted
+`NextCursor == ""`, which pinned the gap as the contract, so adding paging later would have meant
+deleting a passing test.
+
+Fixed by `WithSkillsListPageSize` and `WithDirectoryReadPageSize` (defaults still zero, so behavior
+is unchanged unless a server opts in) plus `Client.ReadDirectoryAll`, since `ReadDirectory` returns
+one page and leaves the cursor to the caller. `pagination_scale_test.go` is the first coverage that
+pages over the wire rather than unit-testing the helper.
+
+**The same shape is still live for the base protocol.** `server/pagination.go` sets
+`defaultPageSize = 0` for `tools/list`, `resources/list`, `resources/templates/list` and
+`prompts/list`. Filed as #1356 against the 1.0 freeze, because changing a server's default page size
+after the freeze is a breaking wire change. The recommendation there is a non-zero default set high
+(250ish) rather than the 0-or-1 framing, since the real hazard is silent truncation against clients
+that ignore `nextCursor`, and a high threshold leaves every server that works today unchanged.
+
+The lesson worth carrying past this bug: **a unit test that passes the helper a value no production
+caller can produce is not coverage.** It is the same family as the thin-shadow failure class in
+`conformance/NOTES.md`.
 
 ## Interop: what checks what
 
