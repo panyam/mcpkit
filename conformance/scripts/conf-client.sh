@@ -20,10 +20,7 @@ require_conf_dir MCPCONFORMANCE_CLIENT_PATH \
 echo "Building testclient..."
 (cd "${REPO_ROOT}/cmd/testclient" && go build -buildvcs=false -o "${REPO_ROOT}/bin/testclient" .) || exit 1
 
-if [ ! -f "${MCPCONFORMANCE_CLIENT_PATH}/dist/index.js" ]; then
-    echo "Building upstream conformance dist/ (npm install)..."
-    (cd "${MCPCONFORMANCE_CLIENT_PATH}" && npm install --silent) || exit 1
-fi
+build_conf_dist MCPCONFORMANCE_CLIENT_PATH
 
 OUT=$(mktemp -d -t conf-client.XXXXXX)
 (cd "${MCPCONFORMANCE_CLIENT_PATH}" && \

@@ -31,3 +31,21 @@ require_conf_dir() {
         exit 1
     fi
 }
+
+# build_conf_dist VAR_NAME
+# Build the upstream conformance CLI in the worktree named by $VAR_NAME
+# (indirect), so `node dist/index.js` grades against the commit that is
+# currently checked out there.
+#
+# Always rebuilds. A `[ ! -f dist/index.js ]` guard cannot tell a fresh build
+# from one left over before a `git pull` in the worktree, and grading against a
+# stale validator is worse than not grading at all: it silently reports whatever
+# the previous checkout thought. This bit us on conformance issue 424, where a
+# dist/ predating the upstream PR 468 merge kept reporting wire-schema failures
+# that had already been fixed.
+build_conf_dist() {
+    local var_name="$1"
+    local dir="${!var_name}"
+    echo "Building conformance dist/ in ${dir} ..."
+    (cd "$dir" && npm install --silent && npm run build >/dev/null) || exit 1
+}

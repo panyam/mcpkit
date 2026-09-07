@@ -27,30 +27,6 @@ scenarios:
   "tasks-status-notifications":
     issue: "https://github.com/panyam/mcpkit/issues/433"
     note: "Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen (server/stateless/subscriptions.go) and is ready to be graded."
-  "tasks-capability-negotiation":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-dispatch-and-envelope":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-lifecycle":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-mrtr-composition":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-mrtr-input":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-request-headers":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-request-state-removal":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
-  "tasks-wire-fields":
-    issue: "https://github.com/modelcontextprotocol/conformance/issues/424"
-    note: "Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated as CallToolResult and fail on missing content. mcpkit's envelope is well-formed; tracked upstream in conformance issue 424."
   "server-stateless":
     issue: "upstream conformance test bug"
     note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."

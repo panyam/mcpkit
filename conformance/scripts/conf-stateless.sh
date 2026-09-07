@@ -12,6 +12,7 @@ require_conf_dir MCPCONFORMANCE_STATELESS_PATH \
     "Clone https://github.com/modelcontextprotocol/conformance there:" \
     "  git clone https://github.com/modelcontextprotocol/conformance.git ${MCPCONFORMANCE_STATELESS_PATH}" \
     "Or set MCPCONFORMANCE_STATELESS_PATH=<path-to-clone>."
+build_conf_dist MCPCONFORMANCE_STATELESS_PATH
 (cd "${REPO_ROOT}/examples/stateless" && go build -o stateless-demo .)
 OUT=$(mktemp -d -t conf-stateless.XXXXXX)
 echo "Spawning fixture on :18100, scratch dir $OUT"

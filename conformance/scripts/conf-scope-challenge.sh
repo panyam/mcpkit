@@ -23,6 +23,7 @@ require_conf_dir MCPCONFORMANCE_SCOPE_CHALLENGE_PATH \
     "  git clone https://github.com/modelcontextprotocol/conformance.git ${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH}" \
     "  git -C ${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH} fetch origin pull/481/head:pr-481 && git -C ${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH} checkout pr-481" \
     "Or set MCPCONFORMANCE_SCOPE_CHALLENGE_PATH=<path-to-clone>."
+build_conf_dist MCPCONFORMANCE_SCOPE_CHALLENGE_PATH
 
 PORT="${CONF_SCOPE_CHALLENGE_PORT:-18140}"
 (cd "${REPO_ROOT}/examples/auth" && go build -o scope-challenge-sut ./conformance-scope-challenge)

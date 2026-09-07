@@ -12,6 +12,7 @@ set -u
 require_conf_dir MCPCONFORMANCE_SKILLS_PATH \
     "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_SKILLS_PATH=<path-to-clone>." \
     "Default expects the chore/sep-2640-yaml branch checked out at ../conf-skills."
+build_conf_dist MCPCONFORMANCE_SKILLS_PATH
 (cd "${REPO_ROOT}/examples/skills" && go build -o skills-demo .)
 OUT=$(mktemp -d -t conf-skills.XXXXXX)
 echo "Spawning fixture on :18099, scratch dir $OUT"
