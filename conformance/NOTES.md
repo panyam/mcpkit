@@ -39,7 +39,33 @@ fail-fasts with a remediation message if its path is missing.
 fork drift would defeat its purpose.
 
 **Rebuild after moving a worktree.** The harness runs `node dist/index.js`, so a stale `dist/` runs
-the OLD scenarios and a `--scenario <new-name>` silently matches nothing. Run `npm run build`.
+the OLD scenarios and a `--scenario <new-name>` silently matches nothing. The conf scripts now call
+`build_conf_dist` (in `conformance/scripts/_common.sh`), which rebuilds unconditionally rather than
+guarding on `[ ! -f dist/index.js ]`. That guard cannot tell a fresh build from one left over before
+a `git pull`, and it bit us: a `dist/` predating the conformance PR 468 merge kept reporting the
+issue 424 wire-schema failures that had already been fixed upstream.
+
+**Two kinds of stale, and only one is auto-fixed.** Rebuilding `dist/` fixes a stale *build* of the
+checked-out commit. It does nothing about a stale *checkout*, where the worktree itself sits behind
+upstream and the whole suite is old. `require_conf_dir` therefore calls `conf_source_status`, which
+prints the checked-out branch and SHA on every run and warns when the worktree is behind its tracked
+branch:
+
+```
+MCPCONFORMANCE_MRTR_PATH: /path/to/conf-upstream-main
+  checked out main @ a983ba9
+  WARNING: 3 commit(s) behind @{u}. Grading against an older suite.
+           Re-run with CONF_PULL=1, or: git -C /path/to/conf-upstream-main pull --ff-only
+```
+
+It warns rather than pulling, on purpose. Auto-pulling would make a local `make testconf-*` start
+failing in the middle of unrelated work because upstream landed a scenario, would mutate a worktree
+four suites share (`../conf-upstream-main` backs tasks-v2, MRTR, client and stateless), and would
+fight `check-conformance-stale`, which pins `upstream-conformance@<sha>` in `CONFORMANCE.md`. Pass
+`CONF_PULL=1` to fast-forward deliberately. The freshness check is best-effort: offline, or on a
+PR-ref worktree like `../conf-481` with no tracking branch, it degrades to just the SHA line.
+
+This is the gap that let `../conf-pending` drift 45 commits behind without anyone noticing.
 
 ---
 

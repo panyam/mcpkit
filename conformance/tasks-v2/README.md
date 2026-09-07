@@ -1,19 +1,28 @@
 # mcpkit/conformance/tasks-v2 — sentinel
 
 The full SEP-2663 / SEP-2322 / SEP-2575 / SEP-2243 server-conformance
-suite migrated upstream to the
+suite lives in
+[`modelcontextprotocol/conformance`](https://github.com/modelcontextprotocol/conformance)
+on `main`. It travelled there through the
 [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork
-of `modelcontextprotocol/conformance`, on the
-[`feat/tasks-mrtr-extension`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension)
-branch. Run it from mcpkit via:
+(branch `feat/tasks-mrtr-extension`), but that hop is history:
+`MCPCONFORMANCE_TASKS_V2_PATH` defaults to `../conf-upstream-main`, a
+direct clone of upstream. Run it from mcpkit via:
 
 ```bash
-just testconf-tasks-v2
+make testconf-tasks-v2
 ```
 
-The Makefile target invokes vitest in the fork (auto-spawning the
-`examples/tasks-v2` Go fixture) and then runs this folder's local
-sentinel afterward.
+`conformance/scripts/conf-tasks-v2.sh` builds the upstream CLI, spawns
+the `examples/tasks-v2` Go fixture, runs every upstream `tasks-*`
+scenario through `node dist/index.js server`, gates on zero FAILURE
+rows, and then runs this folder's local sentinel.
+
+It does **not** invoke vitest in a fork. The old shape did, and that was
+the bug: it ran upstream's `all-scenarios.test.ts` with
+`TASKS_SERVER_URL` / `TASKS_SERVER_CMD` set, neither of which upstream
+reads, and that test file spawns its own `everything-server.ts`. The
+stage graded the TypeScript reference server and never touched mcpkit.
 
 ## What lives here
 
@@ -33,14 +42,12 @@ cd conformance && npm install
 npx vitest run tasks-v2/
 ```
 
-Once the test passes, the next `just testconf-tasks-v2` will pick it
-up automatically, since the Makefile target chains the fork run with
+Once the test passes, the next `make testconf-tasks-v2` picks it up
+automatically, since the script chains the upstream run with
 `vitest run tasks-v2/`.
 
 ## When to upstream a stricter test
 
 If a stricter assertion turns out to reflect a clarification that
-should land in the spec text, lift-shift it into the fork
-(`src/scenarios/server/tasks/`) and propose the spec edit. The fork
-follows upstream `modelcontextprotocol/conformance` conventions, so
-porting is mostly a file move.
+should land in the spec text, lift-shift it into upstream
+(`src/scenarios/server/tasks/`) and propose the spec edit.
