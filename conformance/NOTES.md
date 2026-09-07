@@ -174,6 +174,30 @@ required, so a genuinely missing field was under-reported.
 version reason below the floor, SUCCESS or FAILURE above it. Reported by Sam Bloomberg against the
 Go SDK, which was correct on both wires while the check mis-graded it on both.
 
+## Read the denominator, not just the ratio
+
+Upstream's runner builds the denominator from `SUCCESS + FAILURE` only (`src/runner/server.ts`,
+and the same in `client.ts`), so a WARNING or a SKIPPED check falls out of **both** halves of the
+ratio. A nine-check scenario with one warning prints `Passed: 8/8`, which at a glance is
+indistinguishable from a scenario where one check never ran at all.
+
+This cost real time on 2026-09-07. A draft review comment asserted that a FusionAuth fixture's
+`8/8` meant the OR-hierarchy check had gone SKIPPED because `ACCEPTED_TOKEN` was unset. All nine
+checks had in fact run and passed. The missing one was a WARNING for an unadvertised
+`resource_metadata`, which the fixture author's own README stated plainly. The claim would have
+been posted to a contributor had the numbers not been checked against the runner source first.
+
+Read the `N failed, M warnings` tail alongside the ratio, always. Our own `testconf-*` wrappers
+print `pass / fail / warn / skip` explicitly, so this only bites when reading upstream's default
+output or a run someone has pasted.
+
+## Debug the wire with a proxy, not by inference
+
+Working out why a scenario's requests behaved differently from hand-rolled curl took several rounds
+of guessing during the SEP-2350 work. A twenty-line logging proxy in front of the SUT answered it on
+the first run. The stateless envelope carries the handshake in `_meta` and sends `Mcp-Method`,
+neither of which is obvious from reading the scenario source.
+
 ## Writing to a repo we do not own
 
 `gh` writes against `modelcontextprotocol/*` fail with 403 "Resource not accessible by personal
@@ -212,3 +236,13 @@ actual testall run result without warning.
   tier scoring.
 - **DPoP** server/AS scenarios are incoming via upstream PRs 395/396. mcpkit defers until SEP-1932
   leaves draft (#803).
+- **SEP-2350 server scope-challenge** (upstream PR 481) was `CONFLICTING` as of 2026-09-07, waiting
+  on its author. `testconf-scope-challenge` tracks its head `992406b` and is green at 17/17. Flip
+  the target from INFO to gating once it lands on upstream `main`.
+- **go-sdk#1248** proposes upstreaming request-time scope challenges to the official Go SDK, so
+  mcpkit is not the only Go implementation that can pass 481. Filed 2026-09-07. go-sdk requires a
+  `proposal` issue carrying a maintainer's `proposal-accepted` label and open at least a week, so
+  **do not send the PR before 2026-09-14**. Two questions are open in it: `auth.RequireBearerToken`
+  is generic `net/http` middleware running before JSON-RPC dispatch, so a per-request scope callback
+  cannot see the tool name unless the caller parses the body, and the maintainers may prefer to
+  track `typescript-sdk` PR 1624's API shape rather than diverge from it.

@@ -177,6 +177,12 @@ by dozens of assertions or by one; the two numbers are unrelated and reflect dif
 commits. Per-suite pass counts in the local-suites table are hand-recorded from a run, not ingested
 from artifacts, so treat them as claims with a date.
 
+**A conformance ratio hides warnings and skips.** Upstream's runner counts only `SUCCESS + FAILURE`
+in the denominator, so nine checks with one warning print as `8/8`, reading exactly like a scenario
+where a check never ran. Read the `N failed, M warnings` tail too, and prefer our `testconf-*`
+wrappers, which print `pass / fail / warn / skip`. This produced a wrong claim in a draft review
+comment on 2026-09-07; see `conformance/NOTES.md` § Read the denominator, not just the ratio.
+
 ## Tasks v1 vs v2
 
 Two surfaces, two entry points: `server.RegisterTasksV1` (frozen) and `tasks.Register`

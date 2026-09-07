@@ -12,12 +12,13 @@ This roadmap tracks mcpkit's implementation of the MCP specification, per the [S
 
 All required (non-experimental) features of the current spec, including the optional sampling and elicitation capabilities, are implemented. Upstream conformance: 30/30 server scenarios and 41/43 client scenarios, the two failures being the draft-SEP DPoP pair (issue 803). See `CONFORMANCE.md`.
 
-Stable v0.4.0 shipped 2026-08-03, inside the 30-day window after the 2026-07-28 spec GA. Two releases have followed: v0.5.0 (2026-08-06) and v0.5.1 (2026-08-07). Scope and migrations for each are in `CHANGELOG.md` and `docs/releases/`.
+Stable v0.4.0 shipped 2026-08-03, inside the 30-day window after the 2026-07-28 spec GA. Three releases have followed: v0.5.0 (2026-08-06), v0.5.1 (2026-08-07) and v0.5.2 (2026-08-21). Scope and migrations for each are in `CHANGELOG.md` and `docs/releases/`. The tree is well past v0.5.2 and a cut is due, which also makes the SEP-2350 conformance result citable by version rather than by commit.
 
 ## Near-term
 
 - **SEP-2243 server-side custom param-header validation** (issue 1111), ahead of the upstream conformance suite activating those checks. Upstream conformance PR 325 is still open, so this is preparatory rather than blocking.
 - **Version-matching dependency scanning in CI.** `govulncheck` is reachability-based and stayed green through the advisories v0.5.1 fixed, so a second scanning pass is needed. The command, the four known blockers, and the rationale are in `DEPENDENCY_POLICY.md` under Security updates.
+- **Upstream SEP-2350 scope challenges to the official Go SDK** (`go-sdk#1248`, filed 2026-09-07), so mcpkit is not the only Go implementation that passes the upstream scope-challenge scenario. Blocked by go-sdk's own process: a `proposal` issue must carry a maintainer's `proposal-accepted` label and stay open a week, so no PR before 2026-09-14. Design questions and prior art are in `conformance/NOTES.md` § Upstream watch.
 
 Recently done: stable v0.4.0 and the v0.5.x line, client conformance harness (tier-check `--client-cmd`), 2025-03-26 legacy discovery fallback, WIF JWT-bearer grant, data-driven badges, triage auto-labeling, and the SEP-1730 Tier 1 documentation pass.
 
