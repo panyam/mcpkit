@@ -238,8 +238,8 @@
     <div class="content-body">
         
 <h1 id="upstream-conformance-audit">Upstream Conformance Audit <a class="anchor" href="#upstream-conformance-audit">¶</a></h1>
-<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@49103de</code> — <em>feat(sdk-runner): add rust-sdk + per-spec-version config overlays (#419)</em>.</p>
-<p><strong>mcpkit HEAD:</strong> <code>49103de</code><br />
+<p>Snapshot of mcpkit graded against <code>modelcontextprotocol/conformance@a983ba9</code> — <em>feat(authorization): send the RFC 8707 <code>resource</code> parameter (#466)</em>.</p>
+<p><strong>mcpkit HEAD:</strong> <code>a983ba9</code><br />
 <strong>Driver:</strong> <code>cmd/testserver</code> (server scenarios) + <code>cmd/testclient</code> (client scenarios). SEP-2663 <code>tasks-*</code> server scenarios are graded against <code>examples/tasks-v2</code> instead, which wires <code>ext/tasks</code> in its own module (keeping the root module free of that dependency) — mirroring how <code>testconf-stateless</code> uses <code>examples/stateless</code>.</p>
 <p>Informational report — not a CI gate. Regenerate via <code>just testconf-upstream-audit</code>.</p>
 <p>Status legend: <strong>pass</strong> = no FAILURE checks · <strong>partial</strong> = at least one SUCCESS and one FAILURE · <strong>fail</strong> = all checks FAILURE · <strong>harness-gap</strong> = no <code>checks.json</code> produced (driver missing) · <strong>fork-covered</strong> = same surface graded by an existing <code>testconf-*</code> SEP fork target.</p>
@@ -261,10 +261,10 @@
 <tbody>
 <tr>
 <td>Server</td>
-<td align="right">61</td>
-<td align="right">225</td>
-<td align="right">197</td>
-<td align="right">19</td>
+<td align="right">62</td>
+<td align="right">228</td>
+<td align="right">208</td>
+<td align="right">11</td>
 <td align="right">8</td>
 <td align="right">1</td>
 <td align="right">6</td>
@@ -272,9 +272,9 @@
 </tr>
 <tr>
 <td>Client</td>
-<td align="right">43</td>
-<td align="right">546</td>
-<td align="right">536</td>
+<td align="right">44</td>
+<td align="right">579</td>
+<td align="right">569</td>
 <td align="right">8</td>
 <td align="right">0</td>
 <td align="right">2</td>
@@ -283,10 +283,10 @@
 </tr>
 <tr>
 <td><strong>Total</strong></td>
-<td align="right"><strong>104</strong></td>
-<td align="right"><strong>771</strong></td>
-<td align="right"><strong>733</strong></td>
-<td align="right"><strong>27</strong></td>
+<td align="right"><strong>106</strong></td>
+<td align="right"><strong>807</strong></td>
+<td align="right"><strong>777</strong></td>
+<td align="right"><strong>19</strong></td>
 <td align="right"><strong>8</strong></td>
 <td align="right"><strong>3</strong></td>
 <td align="right"><strong>996</strong></td>
@@ -299,7 +299,7 @@
 <p><em>None — every scenario produced results.</em></p>
 <h2 id="by-sep">By SEP <a class="anchor" href="#by-sep">¶</a></h2>
 <p><a id="core-unattributed"></a></p>
-<h3 id="core--unattributed-53-scenarios">Core / Unattributed (53 scenarios) <a class="anchor" href="#core--unattributed-53-scenarios">¶</a></h3>
+<h3 id="core--unattributed-54-scenarios">Core / Unattributed (54 scenarios) <a class="anchor" href="#core--unattributed-54-scenarios">¶</a></h3>
 <table>
 <thead>
 <tr>
@@ -385,7 +385,7 @@
 <td><code>auth/metadata-default</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 34 info</td>
+<td>22 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
@@ -399,21 +399,21 @@
 <td><code>auth/metadata-var1</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 36 info</td>
+<td>22 pass / 36 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-var2</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 36 info</td>
+<td>22 pass / 36 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/metadata-var3</code></td>
 <td>client</td>
 <td>pass</td>
-<td>17 pass / 36 info</td>
+<td>22 pass / 36 info</td>
 <td></td>
 </tr>
 <tr>
@@ -469,21 +469,21 @@
 <td><code>auth/token-endpoint-auth-basic</code></td>
 <td>client</td>
 <td>pass</td>
-<td>22 pass / 34 info</td>
+<td>23 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/token-endpoint-auth-none</code></td>
 <td>client</td>
 <td>pass</td>
-<td>22 pass / 34 info</td>
+<td>23 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
 <td><code>auth/token-endpoint-auth-post</code></td>
 <td>client</td>
 <td>pass</td>
-<td>22 pass / 34 info</td>
+<td>23 pass / 34 info</td>
 <td></td>
 </tr>
 <tr>
@@ -606,6 +606,13 @@
 <td></td>
 </tr>
 <tr>
+<td><code>server-session-lifecycle</code></td>
+<td>server</td>
+<td>pass</td>
+<td>3 pass</td>
+<td></td>
+</tr>
+<tr>
 <td><code>tools_call</code></td>
 <td>client</td>
 <td>pass</td>
@@ -684,8 +691,8 @@
 </tr>
 </tbody>
 </table>
-<p><a id="sep-986"></a></p>
-<h3 id="sep-986httpsgithubcommodelcontextprotocolmodelcontextprotocolissues986-1-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986">SEP-986</a> (1 scenarios) <a class="anchor" href="#sep-986httpsgithubcommodelcontextprotocolmodelcontextprotocolissues986-1-scenarios">¶</a></h3>
+<p><a id="sep-986-history"></a></p>
+<h3 id="sep-986-historyhttpsgithubcommodelcontextprotocolmodelcontextprotocolissues986-1-scenarios"><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986">SEP-986-HISTORY</a> (1 scenarios) <a class="anchor" href="#sep-986-historyhttpsgithubcommodelcontextprotocolmodelcontextprotocolissues986-1-scenarios">¶</a></h3>
 <table>
 <thead>
 <tr>
@@ -809,7 +816,7 @@
 </tbody>
 </table>
 <p><a id="sep-1613"></a></p>
-<h3 id="sep-1613httpsgithubcommodelcontextprotocolspecificationpull655-1-scenarios"><a href="https://github.com/modelcontextprotocol/specification/pull/655">SEP-1613</a> (1 scenarios) <a class="anchor" href="#sep-1613httpsgithubcommodelcontextprotocolspecificationpull655-1-scenarios">¶</a></h3>
+<h3 id="sep-1613httpsgithubcommodelcontextprotocolspecificationpull655-2-scenarios"><a href="https://github.com/modelcontextprotocol/specification/pull/655">SEP-1613</a> (2 scenarios) <a class="anchor" href="#sep-1613httpsgithubcommodelcontextprotocolspecificationpull655-2-scenarios">¶</a></h3>
 <table>
 <thead>
 <tr>
@@ -826,6 +833,13 @@
 <td>server</td>
 <td>pass</td>
 <td>8 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>json-schema-2020-12-preservation</code></td>
+<td>client</td>
+<td>pass</td>
+<td>9 pass</td>
 <td></td>
 </tr>
 </tbody>
@@ -1057,9 +1071,9 @@
 <tr>
 <td><code>tasks-request-headers</code></td>
 <td>server</td>
-<td>partial</td>
-<td>4 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
+<td>pass</td>
+<td>5 pass</td>
+<td></td>
 </tr>
 </tbody>
 </table>
@@ -1080,7 +1094,7 @@
 <td><code>http-invalid-tool-headers</code></td>
 <td>client</td>
 <td>pass</td>
-<td>11 pass</td>
+<td>12 pass</td>
 <td></td>
 </tr>
 </tbody>
@@ -1120,20 +1134,6 @@
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><code>tasks-mrtr-composition</code></td>
-<td>server</td>
-<td>partial</td>
-<td>1 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
-</tr>
-<tr>
-<td><code>tasks-mrtr-input</code></td>
-<td>server</td>
-<td>partial</td>
-<td>3 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
-</tr>
 <tr>
 <td><code>input-required-result-basic-elicitation</code></td>
 <td>server</td>
@@ -1230,6 +1230,20 @@
 <td>server</td>
 <td>pass</td>
 <td>2 pass / 1 warn</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-mrtr-composition</code></td>
+<td>server</td>
+<td>pass</td>
+<td>2 pass</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tasks-mrtr-input</code></td>
+<td>server</td>
+<td>pass</td>
+<td>4 pass</td>
 <td></td>
 </tr>
 </tbody>
@@ -1330,37 +1344,30 @@
 <tr>
 <td><code>tasks-capability-negotiation</code></td>
 <td>server</td>
-<td>partial</td>
-<td>4 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
+<td>pass</td>
+<td>5 pass</td>
+<td></td>
 </tr>
 <tr>
 <td><code>tasks-dispatch-and-envelope</code></td>
 <td>server</td>
-<td>partial</td>
-<td>8 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
+<td>pass</td>
+<td>9 pass</td>
+<td></td>
 </tr>
 <tr>
 <td><code>tasks-lifecycle</code></td>
 <td>server</td>
-<td>partial</td>
-<td>8 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
+<td>pass</td>
+<td>9 pass</td>
+<td></td>
 </tr>
 <tr>
 <td><code>tasks-request-state-removal</code></td>
 <td>server</td>
-<td>partial</td>
-<td>2 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
-</tr>
-<tr>
-<td><code>tasks-wire-fields</code></td>
-<td>server</td>
-<td>partial</td>
-<td>3 pass / 1 fail</td>
-<td><a href="https://github.com/modelcontextprotocol/conformance/issues/424">tracked</a> — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated…</td>
+<td>pass</td>
+<td>3 pass</td>
+<td></td>
 </tr>
 <tr>
 <td><code>tasks-status-notifications</code></td>
@@ -1368,6 +1375,13 @@
 <td>pass</td>
 <td>1 skip</td>
 <td><a href="https://github.com/panyam/mcpkit/issues/433">tracked</a> — Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen (se…</td>
+</tr>
+<tr>
+<td><code>tasks-wire-fields</code></td>
+<td>server</td>
+<td>pass</td>
+<td>4 pass</td>
+<td></td>
 </tr>
 </tbody>
 </table>
