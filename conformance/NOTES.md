@@ -144,6 +144,36 @@ Two guards worth applying to any new scenario:
   configuration guaranteed not to surprise us. The same 09-04 run that exposed this also caught a
   YAML normalization bug in the go-sdk, so the traffic went both ways.
 
+## The fork's own main goes stale
+
+`origin` in the `conf-skills` worktree is `panyam/mcpconformance`, the fork, not
+`modelcontextprotocol/conformance`. The fork's `main` lags the real upstream, so **"am I up to date
+with `origin/main`" gives a false green**. Verified 2026-09-07: fork main sat at `74edef3` while
+upstream main was at `a983ba93`, six days newer.
+
+Check against the real thing:
+
+```bash
+gh api repos/modelcontextprotocol/conformance/commits/main --jq .sha
+git merge-base --is-ancestor <that-sha> HEAD && echo in-branch
+```
+
+Related trap when reporting branch state: re-fetch before claiming a commit is unpushed. A fetch
+taken several steps earlier is a snapshot, and "ahead 3" from a stale fetch reads exactly like real
+unpushed work.
+
+## Grading without the negotiated version
+
+A check that reads a field without checking whether the negotiated protocol defines it is wrong in
+**both** directions, not one. `sep-2640-skills-list-cache-attributes` warned when a pre-2026-07-28
+server omitted `ttlMs` and `cacheScope`, which that schema does not define at all, so the server was
+correct and the warning was noise. Above the floor the same check only warned where the fields are
+required, so a genuinely missing field was under-reported.
+
+`ctx.specVersion` is on `RunContext` and is the negotiated version. Gate on it: SKIPPED with a
+version reason below the floor, SUCCESS or FAILURE above it. Reported by Sam Bloomberg against the
+Go SDK, which was correct on both wires while the check mis-graded it on both.
+
 ## Writing to a repo we do not own
 
 `gh` writes against `modelcontextprotocol/*` fail with 403 "Resource not accessible by personal

@@ -70,8 +70,13 @@ Three server scenarios in `src/scenarios/server/skills/`:
 - `sep-2640-skills-directory` — `resources/directory/read`, capability read from `server/discover`
 
 `make testconf-skills` runs all three **by exact `--scenario` name**. The runner does not
-prefix-match. Green against mcpkit at 30/30, 6/6, 7/7 (43 checks, 3 of which are the framework's
-`wire-schema-valid`).
+prefix-match.
+
+Cross-checked against three implementations on 2026-09-07, all green. mcpkit and the Go SDK both
+score 43 at 2026-07-28 and 42 at 2025-11-25; the C# SDK scores 37 and 36 because it does not declare
+`directoryRead`, so those six checks skip. Every 2025-11-25 row is exactly one lower than its
+2026-07-28 counterpart because `ttlMs` and `cacheScope` are undefined below that version and the
+cache-attributes check SKIPs. Per-SDK setup is in `RUNNING_SEP2640.md` on the conformance branch.
 
 **Two scenario kinds, and the names read backwards.** In the harness's `src/types.ts`:
 
@@ -80,10 +85,22 @@ prefix-match. Green against mcpkit at 30/30, 6/6, 7/7 (43 checks, 3 of which are
 - `Scenario` means **the harness stands up a server** and the SUT is a **client**. Everything under
   `src/scenarios/client/` uses this, and mcpkit already runs 41/43 against it for other SEPs.
 
-That matters for SEP-2640's client-side MUSTs. No-prefetch, reads of URIs absent from `resources`,
-digest and size mismatch, and frontmatter disagreeing with the entry are all testable today with the
-`Scenario` mechanism. They are not unreachable "host obligations", which is how the first extraction
-framed them.
+That matters for SEP-2640's client-side MUSTs, and five are now built on PR 330 under
+`src/scenarios/client/skills/`: `sep-2640-client-no-prefetch` plus `-verify-{digest,size,frontmatter,unlisted}`.
+mcpkit's side is driven from `cmd/testclient` (`sep2640.go`), keyed on `MCP_CONFORMANCE_SCENARIO`
+the same way the SEP-2322 and SEP-2575 drivers are. They are not unreachable "host obligations",
+which is how the first extraction framed them: no-prefetch in particular reduces to whether a
+request arrived.
+
+**Rejection is detected by absence**, following `auth/resource-mismatch`. The client's contract is
+"load the skill, then read its supporting file", and a verifying client aborts on the load and never
+reaches the second read, so reaching it is the violation. Scenarios set `allowClientError` because a
+correctly-aborting client exits non-zero. The frontmatter variant recomputes digest and size for the
+tampered body, or the digest check catches it first and the scenario passes for the wrong reason.
+
+Roughly seven more rows are reachable the same way and are not written: the directory-extends-manifest
+rule, load-by-URI, the empty-listing assumption, and a two-server pair for cross-origin binding.
+Tracked in #1357.
 
 **Invocation gotcha.** Against a server that does not speak `2026-07-28`, the scenarios need
 **both** flags:

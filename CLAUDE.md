@@ -161,9 +161,11 @@ mcpkit against every upstream scenario. Do not hand-edit either, or the README b
 
 **SEP-2640 is Accepted** (CM vote 2026-09-01). Conformance tests are one of three deliverables
 gating Final and are ours: `modelcontextprotocol/conformance` PR 330, 96 requirement rows with 89
-checks of which 40 run on the wire. mcpkit passes 43/43. The suite is also run against other
-implementations on request, which is how a directory-pagination bug in it was found and fixed on
-2026-09-04. Detail in `ext/skills/NOTES.md`.
+checks, three server scenarios and five client scenarios. Cross-checked against three independent
+implementations (mcpkit, go-sdk, csharp-sdk), all green. Running it against someone else's
+implementation is how two bugs in the suite were found and fixed, neither reachable from mcpkit
+alone. Detail in `ext/skills/NOTES.md`, per-SDK setup in `RUNNING_SEP2640.md` on the conformance
+branch.
 
 `testconf-scope-challenge` runs mcpkit against the upstream SEP-2350 server scope-challenge
 scenario (`modelcontextprotocol/conformance` PR 481), currently 17/17. It is `INFO` rather than
