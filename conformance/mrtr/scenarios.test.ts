@@ -1,13 +1,20 @@
 /**
  * SEP-2322 MRTR conformance — mcpkit-local sentinel.
  *
- * The MRTR scenario suite was migrated upstream to the conformance fork
- * (panyam/mcpconformance, branch feat/tasks-mrtr-extension; eventually
- * upstreamed to modelcontextprotocol/conformance). Run it via:
+ * The MRTR scenario suite now lives in modelcontextprotocol/conformance on
+ * main. It travelled there through the panyam/mcpconformance fork (branch
+ * feat/tasks-mrtr-extension), but that hop is history:
+ * MCPCONFORMANCE_MRTR_PATH defaults to ../conf-upstream-main, a direct
+ * clone of upstream. Run it via:
  *
- *     just testconf-mrtr
+ *     make testconf-mrtr
  *
- * which delegates to vitest in the fork.
+ * which drives cmd/testserver through the upstream input-required-result-*
+ * scenarios via the conformance CLI, then runs upstream's negative-mrtr
+ * suite as a harness self-check. The fixture is cmd/testserver, not
+ * examples/mrtr: only cmd/testserver/conformance_input_required.go
+ * registers the test_input_required_result_* tools the scenarios call.
+ * See conformance/scripts/conf-mrtr.sh.
  *
  * This file is a placeholder. The folder is kept around for any
  * future mcpkit-stricter MRTR scenarios — checks that go beyond what
