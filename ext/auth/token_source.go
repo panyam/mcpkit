@@ -337,7 +337,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		ClientID:                 clientID,
 		ClientSecret:             clientSecret,
 		Scopes:                   scopes,
-		Resource:                 s.ServerURL, // RFC 8707 §2: send the resource parameter to bind the token to this MCP server
+		Resource:                 resourceIndicator(s.authInfo, s.ServerURL), // RFC 8707 §2: bind the token to this MCP server
 		OpenBrowser:              s.OpenBrowser,
 		OnCallback: func(_ context.Context, p client.CallbackParams) error {
 			return validateIss(p.Iss, expectedIssuer, asAdvertisedSupport)
@@ -582,3 +582,24 @@ func ValidatePKCES256(meta *client.ASMetadata) error {
 // Type aliases re-exported from oneauth/client for backward compatibility.
 // These types were moved to oneauth as part of mcpkit#158 (generic OAuth pushdown).
 type ClientCredentialsSource = client.ClientCredentialsSource
+
+// resourceIndicator returns the value to send as the RFC 8707 `resource`
+// parameter on authorization and token requests.
+//
+// It is the PRM document's published `resource` string verbatim, not the
+// server URL. The two are allowed to differ: validatePRMResource
+// deliberately accepts an origin-only PRM `resource` against a server
+// mounted at a path, and parsing serverURL through net/url can append a
+// trailing "/" to a pathless identifier. RFC 8707 §2 wants the identifier
+// exactly as the resource server published it, so echoing our own
+// normalized URL fails the upstream auth/metadata-var2 check
+// `resource-parameter-matches-prm`.
+//
+// Falls back to serverURL when the PRM omits `resource` — the
+// "no binding asserted" case validatePRMResource returns nil for.
+func resourceIndicator(info *MCPAuthInfo, serverURL string) string {
+	if info != nil && info.PRM != nil && info.PRM.Resource != "" {
+		return info.PRM.Resource
+	}
+	return serverURL
+}

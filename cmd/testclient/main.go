@@ -119,6 +119,11 @@ func main() {
 		tools, err := noAuthClient.ListTools(context.Background())
 		if err == nil {
 			switch {
+			case scenario == "json-schema-2020-12-preservation":
+				// Needs the focal tool's inputSchema handed back verbatim
+				// through the echo tool; the generic fallback below would
+				// call the wrong tool with synthesized args.
+				driveJSONSchemaPreservation(noAuthClient, tools)
 			case len(ctx.ToolCalls) > 0:
 				// Directed: scenario specified exact toolCalls to invoke.
 				driveToolCalls(noAuthClient, ctx.ToolCalls)

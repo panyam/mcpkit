@@ -166,3 +166,55 @@ func TestValidateHTTPS_AllHTTPS(t *testing.T) {
 		t.Fatalf("all HTTPS should pass: %v", err)
 	}
 }
+
+// resourceIndicator must echo the PRM's published `resource` string, not our
+// own normalized server URL. validatePRMResource deliberately accepts an
+// origin-only PRM resource against a pathed server, and net/url can append a
+// trailing "/" to a pathless identifier, so the two legitimately differ.
+// Upstream's auth/metadata-var2 grades this as resource-parameter-matches-prm.
+func TestResourceIndicator(t *testing.T) {
+	tests := []struct {
+		name      string
+		info      *MCPAuthInfo
+		serverURL string
+		want      string
+	}{
+		{
+			name:      "prm resource wins over server url",
+			info:      &MCPAuthInfo{PRM: &ProtectedResourceMetadata{Resource: "https://rs.example.com"}},
+			serverURL: "https://rs.example.com/mcp",
+			want:      "https://rs.example.com",
+		},
+		{
+			name:      "trailing slash from url parsing is not introduced",
+			info:      &MCPAuthInfo{PRM: &ProtectedResourceMetadata{Resource: "https://rs.example.com"}},
+			serverURL: "https://rs.example.com/",
+			want:      "https://rs.example.com",
+		},
+		{
+			name:      "empty prm resource falls back to server url",
+			info:      &MCPAuthInfo{PRM: &ProtectedResourceMetadata{Resource: ""}},
+			serverURL: "https://rs.example.com/mcp",
+			want:      "https://rs.example.com/mcp",
+		},
+		{
+			name:      "nil prm falls back to server url",
+			info:      &MCPAuthInfo{},
+			serverURL: "https://rs.example.com/mcp",
+			want:      "https://rs.example.com/mcp",
+		},
+		{
+			name:      "nil authInfo falls back to server url",
+			info:      nil,
+			serverURL: "https://rs.example.com/mcp",
+			want:      "https://rs.example.com/mcp",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resourceIndicator(tc.info, tc.serverURL); got != tc.want {
+				t.Errorf("resourceIndicator() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

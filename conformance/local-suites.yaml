@@ -58,6 +58,13 @@ suites:
       branch: main
       path_var: MCPCONFORMANCE_TASKS_V2_PATH
       default_path: ../conf-upstream-main
+    note: >-
+      44 pass / 0 fail / 1 skip across all 10 upstream tasks-* scenarios,
+      against examples/tasks-v2 at upstream a983ba9. Until 2026-09-07 this
+      target set TASKS_SERVER_URL / TASKS_SERVER_CMD and ran upstream's
+      all-scenarios.test.ts, which reads neither var and spawns its own
+      everything-server.ts, so it graded the TypeScript reference server and
+      never touched mcpkit. Now CLI-driven per scenario, gated on zero FAILURE.
 
   - suite: testconf-mrtr
     sep: SEP-2322 MRTR
@@ -68,6 +75,15 @@ suites:
       branch: main
       path_var: MCPCONFORMANCE_MRTR_PATH
       default_path: ../conf-upstream-main
+    note: >-
+      36 pass / 0 fail / 1 warn across all 14 upstream input-required-result-*
+      scenarios, against cmd/testserver at upstream a983ba9. The fixture is
+      cmd/testserver, not examples/mrtr: the scenarios call
+      test_input_required_result_* tools that only
+      cmd/testserver/conformance_input_required.go registers. Same dead-env-var
+      history as testconf-tasks-v2 (MRTR_SERVER_URL / MRTR_SERVER_CMD were read
+      by nothing upstream). Upstream's negative-mrtr suite still runs after the
+      gate; it spawns its own broken fixture and grades the harness, not mcpkit.
 
   - suite: testconf-file-inputs
     sep: SEP-2356 File inputs (withdrawn upstream)

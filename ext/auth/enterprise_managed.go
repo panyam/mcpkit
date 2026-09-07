@@ -209,7 +209,7 @@ func (s *EnterpriseManagedTokenSource) refetchLocked() (string, error) {
 		SubjectTokenType:   "urn:ietf:params:oauth:token-type:id_token",
 		RequestedTokenType: "urn:ietf:params:oauth:token-type:id-jag",
 		Audience:           []string{asIssuer},
-		Resource:           []string{s.ServerURL},
+		Resource:           []string{resourceIndicator(s.authInfo, s.ServerURL)},
 	})
 	if err != nil {
 		return "", fmt.Errorf("idp token exchange: %w", err)

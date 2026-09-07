@@ -1,8 +1,8 @@
 # Upstream Conformance Audit
 
-Snapshot of mcpkit graded against `modelcontextprotocol/conformance@49103de` — *feat(sdk-runner): add rust-sdk + per-spec-version config overlays (#419)*.
+Snapshot of mcpkit graded against `modelcontextprotocol/conformance@a983ba9` — *feat(authorization): send the RFC 8707 `resource` parameter (#466)*.
 
-**mcpkit HEAD:** `49103de`  
+**mcpkit HEAD:** `a983ba9`  
 **Driver:** `cmd/testserver` (server scenarios) + `cmd/testclient` (client scenarios). SEP-2663 `tasks-*` server scenarios are graded against `examples/tasks-v2` instead, which wires `ext/tasks` in its own module (keeping the root module free of that dependency) — mirroring how `testconf-stateless` uses `examples/stateless`.
 
 Informational report — not a CI gate. Regenerate via `just testconf-upstream-audit`.
@@ -13,9 +13,9 @@ Status legend: **pass** = no FAILURE checks · **partial** = at least one SUCCES
 
 | Surface | Scenarios | Graded checks | Pass | Fail | Warn | Skipped | Log rows (info) | Harness-gap |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Server | 61 | 225 | 197 | 19 | 8 | 1 | 6 | 0 |
-| Client | 43 | 546 | 536 | 8 | 0 | 2 | 990 | 0 |
-| **Total** | **104** | **771** | **733** | **27** | **8** | **3** | **996** | **0** |
+| Server | 62 | 228 | 208 | 11 | 8 | 1 | 6 | 0 |
+| Client | 44 | 579 | 569 | 8 | 0 | 2 | 990 | 0 |
+| **Total** | **106** | **807** | **777** | **19** | **8** | **3** | **996** | **0** |
 
 _Log rows are the harness's own request/response trace (`incoming-request` / `outgoing-response` entries in each scenario's `checks.json`) — diagnostic context, not graded assertions._
 
@@ -27,7 +27,7 @@ _None — every scenario produced results._
 
 <a id="core-unattributed"></a>
 
-### Core / Unattributed (53 scenarios)
+### Core / Unattributed (54 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
@@ -41,11 +41,11 @@ _None — every scenario produced results._
 | `auth/iss-supported-missing` | client | pass | 8 pass / 14 info |  |
 | `auth/iss-unexpected` | client | pass | 8 pass / 14 info |  |
 | `auth/iss-wrong-issuer` | client | pass | 8 pass / 14 info |  |
-| `auth/metadata-default` | client | pass | 17 pass / 34 info |  |
+| `auth/metadata-default` | client | pass | 22 pass / 34 info |  |
 | `auth/metadata-issuer-mismatch` | client | pass | 3 pass / 10 info |  |
-| `auth/metadata-var1` | client | pass | 17 pass / 36 info |  |
-| `auth/metadata-var2` | client | pass | 17 pass / 36 info |  |
-| `auth/metadata-var3` | client | pass | 17 pass / 36 info |  |
+| `auth/metadata-var1` | client | pass | 22 pass / 36 info |  |
+| `auth/metadata-var2` | client | pass | 22 pass / 36 info |  |
+| `auth/metadata-var3` | client | pass | 22 pass / 36 info |  |
 | `auth/pre-registration` | client | pass | 19 pass / 38 info |  |
 | `auth/resource-mismatch` | client | pass | 2 pass / 8 info |  |
 | `auth/scope-from-scopes-supported` | client | pass | 18 pass / 34 info |  |
@@ -53,9 +53,9 @@ _None — every scenario produced results._
 | `auth/scope-omitted-when-undefined` | client | pass | 18 pass / 34 info |  |
 | `auth/scope-retry-limit` | client | pass | 16 pass / 38 info |  |
 | `auth/scope-step-up` | client | pass | 24 pass / 46 info |  |
-| `auth/token-endpoint-auth-basic` | client | pass | 22 pass / 34 info |  |
-| `auth/token-endpoint-auth-none` | client | pass | 22 pass / 34 info |  |
-| `auth/token-endpoint-auth-post` | client | pass | 22 pass / 34 info |  |
+| `auth/token-endpoint-auth-basic` | client | pass | 23 pass / 34 info |  |
+| `auth/token-endpoint-auth-none` | client | pass | 23 pass / 34 info |  |
+| `auth/token-endpoint-auth-post` | client | pass | 23 pass / 34 info |  |
 | `completion-complete` | server | pass | 2 pass |  |
 | `dns-rebinding-protection` | server | pass | 2 pass |  |
 | `initialize` | client | pass | 1 pass / 1 info |  |
@@ -73,6 +73,7 @@ _None — every scenario produced results._
 | `resources-templates-read` | server | pass | 2 pass |  |
 | `resources-unsubscribe` | server | pass | 2 pass |  |
 | `server-initialize` | server | pass | 3 pass |  |
+| `server-session-lifecycle` | server | pass | 3 pass |  |
 | `tools_call` | client | pass | 2 pass |  |
 | `tools-call-audio` | server | pass | 2 pass |  |
 | `tools-call-elicitation` | server | pass | 2 pass |  |
@@ -85,9 +86,9 @@ _None — every scenario produced results._
 | `tools-call-with-logging` | server | pass | 2 pass |  |
 | `tools-call-with-progress` | server | pass | 2 pass |  |
 
-<a id="sep-986"></a>
+<a id="sep-986-history"></a>
 
-### [SEP-986](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986) (1 scenarios)
+### [SEP-986-HISTORY](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986) (1 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
@@ -129,11 +130,12 @@ _None — every scenario produced results._
 
 <a id="sep-1613"></a>
 
-### [SEP-1613](https://github.com/modelcontextprotocol/specification/pull/655) (1 scenarios)
+### [SEP-1613](https://github.com/modelcontextprotocol/specification/pull/655) (2 scenarios)
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
 | `json-schema-2020-12` | server | pass | 8 pass |  |
+| `json-schema-2020-12-preservation` | client | pass | 9 pass |  |
 
 <a id="sep-1699"></a>
 
@@ -210,7 +212,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `tasks-request-headers` | server | partial | 4 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-request-headers` | server | pass | 5 pass |  |
 
 <a id="sep-2243-x-mcp-header"></a>
 
@@ -218,7 +220,7 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `http-invalid-tool-headers` | client | pass | 11 pass |  |
+| `http-invalid-tool-headers` | client | pass | 12 pass |  |
 
 <a id="sep-2243-standard-headers"></a>
 
@@ -234,8 +236,6 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `tasks-mrtr-composition` | server | partial | 1 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
-| `tasks-mrtr-input` | server | partial | 3 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
 | `input-required-result-basic-elicitation` | server | pass | 3 pass |  |
 | `input-required-result-basic-list-roots` | server | pass | 3 pass |  |
 | `input-required-result-basic-sampling` | server | pass | 3 pass |  |
@@ -250,6 +250,8 @@ _None — every scenario produced results._
 | `input-required-result-tampered-state` | server | pass | 2 pass |  |
 | `input-required-result-unsupported-methods` | server | pass | 2 pass |  |
 | `input-required-result-validate-input` | server | pass | 2 pass / 1 warn |  |
+| `tasks-mrtr-composition` | server | pass | 2 pass |  |
+| `tasks-mrtr-input` | server | pass | 4 pass |  |
 
 <a id="sep-2322-mrtr"></a>
 
@@ -283,12 +285,12 @@ _None — every scenario produced results._
 
 | Scenario | Surface | Status | Checks | Note |
 |---|---|---|---|---|
-| `tasks-capability-negotiation` | server | partial | 4 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
-| `tasks-dispatch-and-envelope` | server | partial | 8 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
-| `tasks-lifecycle` | server | partial | 8 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
-| `tasks-request-state-removal` | server | partial | 2 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
-| `tasks-wire-fields` | server | partial | 3 pass / 1 fail | [tracked](https://github.com/modelcontextprotocol/conformance/issues/424) — Upstream wire-schema validator gap: SEP-2663 task envelopes (resultType task, an extension result absent from the core schema) are validated… |
+| `tasks-capability-negotiation` | server | pass | 5 pass |  |
+| `tasks-dispatch-and-envelope` | server | pass | 9 pass |  |
+| `tasks-lifecycle` | server | pass | 9 pass |  |
+| `tasks-request-state-removal` | server | pass | 3 pass |  |
 | `tasks-status-notifications` | server | pass | 1 skip | [tracked](https://github.com/panyam/mcpkit/issues/433) — Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen (se… |
+| `tasks-wire-fields` | server | pass | 4 pass |  |
 
 
 ## Methodology
