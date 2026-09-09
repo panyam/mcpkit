@@ -466,6 +466,9 @@ check-no-binaries: ## CI gate — fail if any tracked file is a compiled executa
 check-ext-isolation: ## CI gate — fail if one extension module requires another (C4)
 	@./scripts/check-ext-isolation.sh
 
+check-stateless-middleware: ## CI gate — fail if a stateless handler skips the middleware chain (C7)
+	@./scripts/check-stateless-middleware.sh
+
 setup: setup-tools setup-hooks ## Full development setup
 
 help: ## Show this help

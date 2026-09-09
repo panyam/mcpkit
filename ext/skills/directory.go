@@ -13,16 +13,8 @@ import (
 )
 
 // defaultDirectoryReadPageSize matches mcpkit's server-wide
-// defaultPageSize (0 = "return everything in one page, no cursor"). The
-// client-side cap added in #790 (Client.WithMaxListPages, default 1000)
-// handles the unbounded-server runaway case, so the server-side page
-// size doesn't need to enforce a ceiling here.
-//
-// Servers that need true paging on resources/directory/read can opt in
-// via a future WithDirectoryReadPageSize provider option — file when a
-// real deployment needs it. The paginateDirectoryRead helper below
-// already does the right thing for any positive override.
-const defaultDirectoryReadPageSize = 0
+// defaultPageSize (0 = "return everything in one page, no cursor").
+// Override per Provider with WithDirectoryReadPageSize.
 
 // handleDirectoryRead serves SEP-2640's resources/directory/read method.
 //
@@ -65,7 +57,7 @@ func (p *Provider) handleDirectoryRead(ctx core.MethodContext, id, params json.R
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 	}
 
-	page, next := paginateDirectoryRead(children, req.Cursor, defaultDirectoryReadPageSize)
+	page, next := paginateDirectoryRead(children, req.Cursor, p.cfg.directoryReadPageSize)
 	return core.NewResponse(id, DirectoryReadResult{Resources: page, NextCursor: next})
 }
 

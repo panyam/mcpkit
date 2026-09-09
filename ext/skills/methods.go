@@ -100,7 +100,7 @@ func (i *Indexer) handleSkillsList(ctx core.MethodContext, id, params json.RawMe
 		return core.NewErrorResponse(id, core.ErrCodeInternal, err.Error())
 	}
 
-	page, next := paginateEntries(entries, req.Cursor, defaultSkillsListPageSize)
+	page, next := paginateEntries(entries, req.Cursor, i.provider.cfg.skillsListPageSize)
 	res := SkillsListResult{Skills: page, NextCursor: next}
 	if ttl := i.listTTLMs(); ttl > 0 {
 		res.TTLMs = &ttl
@@ -140,10 +140,8 @@ func (i *Indexer) handleSkillsGet(ctx core.MethodContext, id, params json.RawMes
 		fmt.Sprintf("skills: skills/get: unknown skill URI: %s", req.URI))
 }
 
-// defaultSkillsListPageSize of 0 disables server-side paging, matching the
-// directory-read default: mcpkit returns every entry in one page and never
-// emits a cursor. Callers that need paging drive it from their own store.
-const defaultSkillsListPageSize = 0
+// Zero page size disables server-side paging, matching mcpkit's
+// server-wide defaultPageSize. Override with WithSkillsListPageSize.
 
 // paginateEntries slices entries by an integer offset cursor. Entries are
 // whole, so a skill's resources never straddle a page boundary.

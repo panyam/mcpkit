@@ -13,9 +13,13 @@ Current state, worth knowing before trusting one:
 | Constraint | Enforced? |
 |---|---|
 | C4 | **CI gate** — `make check-ext-isolation`, run by `.github/workflows/test.yml` |
+| C7 | **CI gate** — `make check-stateless-middleware`, run by `.github/workflows/test.yml` |
 | C1, C2, C3 | manual `grep` recipes; nothing runs them |
 | C5 | says so explicitly; no automated check exists |
-| C6 | manual `grep` recipe |
+
+C6 was an agent-SDK constraint and left with that tree in `caf24e8f`. Its row sat in this table
+afterwards, pointing at a constraint that no longer existed, which is the same drift the rest of
+this section is about. The number is retired rather than reused.
 
 Prefer a script in `scripts/` wired into CI over a snippet here. When a snippet is genuinely the
 right weight, say plainly that it is manual so nobody mistakes it for a gate.
@@ -116,3 +120,33 @@ Adopters deploying mcpkit at N>1 MUST either:
 The full architecture (Pattern B, NotificationRelay seam, NotificationRelayReceiver routing, per-surface end-to-end flows, scenario walkthroughs) is in `docs/MULTI_REPLICA.md`. Issue 755 tracks the work.
 
 **Verify:** there is no automated check today. The constraint is documented to prevent silent breakage, not enforced at build time. Adopters running N>1 should verify their wiring matches one of the recipes in `docs/MULTI_REPLICA.md` § Configuration recipes.
+
+## C7: Both wires must run the middleware chain for the same methods
+
+A middleware registered with `server.WithMiddleware` must see a given JSON-RPC method on the
+SEP-2575 stateless wire if and only if it sees it on the session wire. Anything else means a
+policy holds on one transport and not the other, and the deployment cannot tell.
+
+The session wire gets this for free: `server.go` wraps `d.Dispatch` with the chain and filters by
+nothing, so every method passes through. The stateless wire dispatches per method in
+`server/stateless/handlers.go`, and a handler reaches the chain only by calling
+`Backend.InvokeWithMiddleware` itself. Omitting that call is invisible: the method still works,
+the response still looks right, and the middleware simply never runs.
+
+That is not hypothetical. `handleResourcesRead` never called it, so a scope gate applied to
+`tools/call` and `prompts/get` and silently did not apply to `resources/read` on that wire. A
+caller refused a tool could ask for the resource instead and be served. Fixed in #1352, and found
+by an external conformance suite rather than by our own tests, which passed throughout.
+
+**Known divergence today.** Five handlers do not route, and are listed in the checker's `ALLOWED`:
+`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`, `completion/complete`.
+All five reach the middleware chain on the session wire, so the asymmetry the constraint forbids is
+still present for them. `completion/complete` is the one most like an invocation and the most
+likely real gap; the four enumeration methods raise a design question about whether a middleware
+should be able to filter listings at all. Shrinking `ALLOWED` is the point of keeping it visible,
+and issue 1355 tracks it.
+
+**Verify:** `make check-stateless-middleware`, wired into `.github/workflows/test.yml`. It parses
+each `handle*` in `server/stateless/handlers.go` and fails on any that neither calls
+`InvokeWithMiddleware` nor appears in `ALLOWED`. Confirmed to catch the real regression: removing
+the call from `handleResourcesRead` makes it exit 1 naming that handler.

@@ -69,6 +69,26 @@ func main() {
 		return
 	}
 
+	// SEP-2640 skills client scenarios. The harness is the server here and
+	// grades what we request, so each driver performs exactly the contract's
+	// interaction. See sep2640.go.
+	if scenario == "sep-2640-client-no-prefetch" {
+		if err := driveSEP2640NoPrefetch(serverURL); err != nil {
+			log.Fatalf("%s: %v", scenario, err)
+		}
+		log.Printf("SUCCESS: %s driven", scenario)
+		return
+	}
+
+	if strings.HasPrefix(scenario, "sep-2640-client-verify-") {
+		mode := strings.TrimPrefix(scenario, "sep-2640-client-verify-")
+		if err := driveSEP2640Verify(serverURL, mode); err != nil {
+			log.Fatalf("%s: %v", scenario, err)
+		}
+		log.Printf("SUCCESS: %s driven", scenario)
+		return
+	}
+
 	var ctx conformanceContext
 	if contextJSON != "" {
 		json.Unmarshal([]byte(contextJSON), &ctx)
