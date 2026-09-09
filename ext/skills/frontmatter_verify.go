@@ -68,7 +68,10 @@ func normalizeJSON(v any) (map[string]any, error) {
 // frontmatterDiff describes every field want and got disagree on, sorted.
 // Empty means they match.
 func frontmatterDiff(want, got map[string]any) []string {
-	seen := make(map[string]struct{}, len(want)+len(got))
+	// Sized from want alone. The union is at most len(want)+len(got), but that
+	// addition is an allocation-size computation CodeQL flags as overflowable,
+	// and capacity is only a hint: the map grows to hold both either way.
+	seen := make(map[string]struct{}, len(want))
 	for k := range want {
 		seen[k] = struct{}{}
 	}
