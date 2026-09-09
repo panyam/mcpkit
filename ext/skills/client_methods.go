@@ -136,6 +136,8 @@ func (c *Client) GetSkill(ctx context.Context, uri string) (SkillEntry, error) {
 //     checked before hashing, since it is the cheaper rejection and the SEP
 //     makes it a failure whether or not the digest is computed.
 //   - The served bytes must hash to the pinned digest: ErrDigestMismatch.
+//   - For the SKILL.md itself, its frontmatter must match the entry's:
+//     ErrFrontmatterMismatch.
 //
 // For a "dynamic" manifest there is nothing to verify against, so the read
 // proceeds unverified and the result reports DigestVerified false. That is
@@ -183,6 +185,14 @@ func (c *Client) ReadFromEntry(ctx context.Context, entry SkillEntry, uri string
 	sum := sha256.Sum256(body)
 	if got := "sha256:" + hex.EncodeToString(sum[:]); !strings.EqualFold(got, want.Digest) {
 		return nil, fmt.Errorf("%w: %s: want %s, got %s", ErrDigestMismatch, uri, want.Digest, got)
+	}
+	// The SKILL.md gets one check the supporting files do not: an entry can
+	// advertise one description and serve a SKILL.md declaring another with
+	// every digest intact.
+	if uri == entry.URI {
+		if err := VerifyFrontmatter(entry, body); err != nil {
+			return nil, err
+		}
 	}
 	return &ReadResult{URI: uri, Bytes: body, DigestVerified: true}, nil
 }

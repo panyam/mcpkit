@@ -25,6 +25,8 @@ type providerConfig struct {
 	fsWatcherIgnore       []string
 	fsWatcherErrHandler   func(error)
 	supportingDigests     SupportingDigestMode
+	skillsListPageSize    int
+	directoryReadPageSize int
 }
 
 // SupportingDigestMode selects how a Provider pins the integrity of a
@@ -125,14 +127,32 @@ func WithIndexCacheTTL(d time.Duration) ProviderOption {
 	}
 }
 
+// WithSkillsListPageSize caps how many entries a skills/list response
+// carries, emitting a nextCursor when more remain. Zero (the default)
+// returns every entry in one page and never emits a cursor, matching
+// mcpkit's server-wide defaultPageSize.
+//
+// Set this on any server whose catalog is large enough that one response
+// is a problem. SEP-2640 permits either shape, so this is a scale knob
+// rather than a conformance one.
+func WithSkillsListPageSize(n int) ProviderOption {
+	return func(c *providerConfig) { c.skillsListPageSize = n }
+}
+
+// WithDirectoryReadPageSize caps how many children a
+// resources/directory/read response carries. Zero (the default) returns
+// every child in one page. Same rationale as WithSkillsListPageSize.
+func WithDirectoryReadPageSize(n int) ProviderOption {
+	return func(c *providerConfig) { c.directoryReadPageSize = n }
+}
+
 // WithArchiveMode publishes every skill as a single archive resource at
 // skill://<path><suffix> instead of registering each file individually.
-// Per SEP-2640, archive mode is a server-side packaging optimization
-// that delivers a multi-file skill atomically in one round trip without
-// changing the post-unpack virtual namespace hosts observe.
 //
-// Index entries for archive-mode skills carry Type:archive, URL ending
-// in the format suffix, and a Digest computed over the archive bytes.
+// This does NOT conform to SEP-2640 as accepted 2026-09-01, which defers
+// archives to an appendix and requires `resources` to list every file of the
+// skill individually. A conforming host declines every skill served this way.
+// Treat it as an explicit opt-out of conformance, not a tuning knob.
 //
 // Archive mode is per-Provider in this revision. Per-skill mode
 // (mixing archive-served and file-served skills under one Provider) is

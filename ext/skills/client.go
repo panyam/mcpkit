@@ -575,3 +575,36 @@ func extractBytes(contents []core.ResourceReadContent, uri string) ([]byte, erro
 // directly (none today, but mcpkit's wire surface is split across
 // versions).
 var _ = json.Marshal
+
+// ReadDirectoryAll returns every child of uri, following NextCursor until it
+// clears. ReadDirectory returns a single page and leaves the cursor to the
+// caller, which is a footgun against a paginating server: "no subdirectory
+// here" and "the subdirectory is on page two" look identical.
+//
+// Bounded by the client's max-list-pages setting so an unbounded or repeating
+// cursor surfaces as ErrSkillsListOverrun rather than spinning.
+func (c *Client) ReadDirectoryAll(ctx context.Context, uri string) ([]core.ResourceDef, error) {
+	var (
+		out    []core.ResourceDef
+		cursor string
+		seen   = map[string]struct{}{}
+	)
+	for page := 0; ; page++ {
+		if page >= maxSkillsListPages {
+			return nil, fmt.Errorf("%w: %s: %d pages", ErrSkillsListOverrun, uri, page)
+		}
+		res, err := c.ReadDirectory(ctx, uri, WithDirectoryCursor(cursor))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, res.Resources...)
+		if res.NextCursor == "" {
+			return out, nil
+		}
+		if _, dup := seen[res.NextCursor]; dup {
+			return nil, fmt.Errorf("%w: %s: repeated cursor %q", ErrSkillsListOverrun, uri, res.NextCursor)
+		}
+		seen[res.NextCursor] = struct{}{}
+		cursor = res.NextCursor
+	}
+}

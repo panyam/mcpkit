@@ -124,6 +124,91 @@ ships, we should retire this guard and its snapshot rather than keep maintaining
 
 ---
 
+## A passing check is not an exercised check
+
+Sibling to the thin-shadow class above, and it bit the SEP-2640 suite on 2026-09-04. A check can
+report SUCCESS having verified nothing, because the condition it tests never arose.
+
+The directory scenario issued one `resources/directory/read` and never followed `nextCursor`, so
+every child-inspection check below it saw a single page. It passed for months, because every server
+it had ever run against returned one page. mcpkit in particular hardcoded its page size to zero and
+could not emit a cursor at all. The bug surfaced the first time the suite met a server with a
+different default: `go-sdk#1238` configured with `DirectoryOptions{PageSize: 1}` put the
+subdirectory on page two, and a **conformant** server was reported as failing.
+
+Two guards worth applying to any new scenario:
+
+- **Name what a check proves when the interesting case does not occur.** A pagination check that a
+  harness cannot force should say "cursors are honoured when present", not claim pagination coverage.
+- **Run against a second implementation before trusting the numbers.** Our own server is the one
+  configuration guaranteed not to surprise us. The same 09-04 run that exposed this also caught a
+  YAML normalization bug in the go-sdk, so the traffic went both ways.
+
+## The fork's own main goes stale
+
+`origin` in the `conf-skills` worktree is `panyam/mcpconformance`, the fork, not
+`modelcontextprotocol/conformance`. The fork's `main` lags the real upstream, so **"am I up to date
+with `origin/main`" gives a false green**. Verified 2026-09-07: fork main sat at `74edef3` while
+upstream main was at `a983ba93`, six days newer.
+
+Check against the real thing:
+
+```bash
+gh api repos/modelcontextprotocol/conformance/commits/main --jq .sha
+git merge-base --is-ancestor <that-sha> HEAD && echo in-branch
+```
+
+Related trap when reporting branch state: re-fetch before claiming a commit is unpushed. A fetch
+taken several steps earlier is a snapshot, and "ahead 3" from a stale fetch reads exactly like real
+unpushed work.
+
+## Grading without the negotiated version
+
+A check that reads a field without checking whether the negotiated protocol defines it is wrong in
+**both** directions, not one. `sep-2640-skills-list-cache-attributes` warned when a pre-2026-07-28
+server omitted `ttlMs` and `cacheScope`, which that schema does not define at all, so the server was
+correct and the warning was noise. Above the floor the same check only warned where the fields are
+required, so a genuinely missing field was under-reported.
+
+`ctx.specVersion` is on `RunContext` and is the negotiated version. Gate on it: SKIPPED with a
+version reason below the floor, SUCCESS or FAILURE above it. Reported by Sam Bloomberg against the
+Go SDK, which was correct on both wires while the check mis-graded it on both.
+
+## Read the denominator, not just the ratio
+
+Upstream's runner builds the denominator from `SUCCESS + FAILURE` only (`src/runner/server.ts`,
+and the same in `client.ts`), so a WARNING or a SKIPPED check falls out of **both** halves of the
+ratio. A nine-check scenario with one warning prints `Passed: 8/8`, which at a glance is
+indistinguishable from a scenario where one check never ran at all.
+
+This cost real time on 2026-09-07. A draft review comment asserted that a FusionAuth fixture's
+`8/8` meant the OR-hierarchy check had gone SKIPPED because `ACCEPTED_TOKEN` was unset. All nine
+checks had in fact run and passed. The missing one was a WARNING for an unadvertised
+`resource_metadata`, which the fixture author's own README stated plainly. The claim would have
+been posted to a contributor had the numbers not been checked against the runner source first.
+
+Read the `N failed, M warnings` tail alongside the ratio, always. Our own `testconf-*` wrappers
+print `pass / fail / warn / skip` explicitly, so this only bites when reading upstream's default
+output or a run someone has pasted.
+
+## Debug the wire with a proxy, not by inference
+
+Working out why a scenario's requests behaved differently from hand-rolled curl took several rounds
+of guessing during the SEP-2350 work. A twenty-line logging proxy in front of the SUT answered it on
+the first run. The stateless envelope carries the handshake in `_meta` and sends `Mcp-Method`,
+neither of which is obvious from reading the scenario source.
+
+## Writing to a repo we do not own
+
+`gh` writes against `modelcontextprotocol/*` fail with 403 "Resource not accessible by personal
+access token", **including on a PR we authored**. `$GH_PERSONAL_TOKEN` is a fine-grained PAT, and
+fine-grained PATs can only be scoped to repositories in the owner's own account, so no setting fixes
+this. Both `gh pr edit` and REST `PATCH /repos/{o}/{r}/pulls/{n}` are affected.
+
+The web UI works, because GitHub grants PR authors edit rights through the session. For API writes
+(title, body, comments, reviews) use a **classic** PAT with `public_repo`. Pushing to our own fork
+branches is unaffected, that is SSH.
+
 ## Generated artifacts
 
 `CONFORMANCE.md` is regenerated by `make refresh-conformance` (driver
@@ -151,3 +236,13 @@ actual testall run result without warning.
   tier scoring.
 - **DPoP** server/AS scenarios are incoming via upstream PRs 395/396. mcpkit defers until SEP-1932
   leaves draft (#803).
+- **SEP-2350 server scope-challenge** (upstream PR 481) was `CONFLICTING` as of 2026-09-07, waiting
+  on its author. `testconf-scope-challenge` tracks its head `992406b` and is green at 17/17. Flip
+  the target from INFO to gating once it lands on upstream `main`.
+- **go-sdk#1248** proposes upstreaming request-time scope challenges to the official Go SDK, so
+  mcpkit is not the only Go implementation that can pass 481. Filed 2026-09-07. go-sdk requires a
+  `proposal` issue carrying a maintainer's `proposal-accepted` label and open at least a week, so
+  **do not send the PR before 2026-09-14**. Two questions are open in it: `auth.RequireBearerToken`
+  is generic `net/http` middleware running before JSON-RPC dispatch, so a per-request scope callback
+  cannot see the tool name unless the caller parses the body, and the maintainers may prefer to
+  track `typescript-sdk` PR 1624's API shape rather than diverge from it.

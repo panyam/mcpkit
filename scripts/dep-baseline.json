@@ -4,10 +4,6 @@
     "github.com/panyam/goutils": [
       "v0.1.13",
       "v0.1.8"
-    ],
-    "golang.org/x/sys": [
-      "v0.45.0",
-      "v0.47.0"
     ]
   }
 }
