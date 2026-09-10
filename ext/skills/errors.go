@@ -4,8 +4,11 @@ import "errors"
 
 // URI parsing errors.
 var (
-	// ErrInvalidScheme is returned when a URI's scheme is not "skill".
-	ErrInvalidScheme = errors.New("skills: scheme must be skill://")
+	// ErrInvalidScheme is returned when a URI carries no scheme, or is too
+	// malformed for the scheme to be read. The scheme's *value* is not
+	// constrained: SEP-2640 makes skill:// a SHOULD and privileges no
+	// scheme, so a domain-native one such as github:// parses.
+	ErrInvalidScheme = errors.New("skills: URI must be absolute, with a scheme")
 
 	// ErrEmptySkillPath is returned when a skill:// URI has no path
 	// segments at all (e.g., "skill://").
