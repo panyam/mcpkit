@@ -217,4 +217,18 @@ type SkillsGetRequest struct {
 // server with an unenumerable or partial catalog stays useful.
 type SkillsGetResult struct {
 	Skill SkillEntry `json:"skill"`
+
+	// TTLMs and CacheScope are the SEP-2549 caching attributes, REQUIRED from
+	// protocol 2026-07-28 as they are on resources/read. SEP-2640 itself left
+	// this open ("whether the result should also carry the base protocol's
+	// caching attributes ... is left open"); the stable spec page closed it in
+	// the affirmative on 2026-09-10 (ext-skills#139).
+	//
+	// Here ttlMs is how long a host may treat the entry as current before
+	// re-calling skills/get, which is the single-entry counterpart of the
+	// listing's freshness hint. Neither field is an integrity property:
+	// verification against digest and size is unaffected by how fresh a held
+	// entry is.
+	TTLMs      *int   `json:"ttlMs,omitempty"`
+	CacheScope string `json:"cacheScope,omitempty"`
 }
