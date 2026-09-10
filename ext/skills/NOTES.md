@@ -92,6 +92,19 @@ the same way the SEP-2322 and SEP-2575 drivers are. They are not unreachable "ho
 which is how the first extraction framed them: no-prefetch in particular reduces to whether a
 request arrived.
 
+**The drivers derive every URI from the listing, and must keep doing so.** They first shipped
+hardcoding the harness's own fixture paths (`skill://pdf-processing/references/FORMS.md`,
+`.../scripts/extract.py`). The server-side scenarios go out of their way to hardcode no fixture
+URI and the SUT was doing the opposite, so a fixture rename upstream would have broken us with no
+signal the coupling existed. The supporting file is now the first `resources` entry that is not
+the manifest, and the unlisted probe is synthesized under the skill root and checked absent from
+`resources`. Deriving the probe needed a matching upstream change: the scenario had asserted
+against one literal URI, so a derived probe would have passed trivially. It now grades any read
+landing outside the entry's `resources`.
+
+All verification lives in `ext/skills`. The drivers check nothing themselves, which is what makes
+the suite grade mcpkit's client rather than a stand-in written to satisfy it. Keep it that way.
+
 **Rejection is detected by absence**, following `auth/resource-mismatch`. The client's contract is
 "load the skill, then read its supporting file", and a verifying client aborts on the load and never
 reaches the second read, so reaching it is the violation. Scenarios set `allowClientError` because a
@@ -240,3 +253,46 @@ exactly the SEP's completeness rule rather than a workaround for it.
 `IsManifest` carries the "hosts MUST NOT act on a nested SKILL.md's frontmatter" rule with no
 nesting-aware branch anywhere: split at the enclosing boundary it is false, addressed directly it is
 true.
+
+---
+
+## No scheme is privileged (#1369)
+
+`ParseURI` required the scheme be exactly `skill`, and it sits on the live client path
+(`ReadSkillManifest`, `ReadSkillFile`, `ReadDirectory`). A server serving a conforming catalog
+under a domain-native scheme was refused outright. The SEP says the opposite: `skill://` is a
+**SHOULD**, a server **MAY** use a scheme native to its domain
+(`github://owner/repo/skills/refunds/SKILL.md`), and "no scheme is privileged". It adds that a host
+**MUST NOT** conclude a resource is a skill merely because of its scheme, which is the same rule
+from the other side.
+
+So we enforced a SHOULD as a MUST, and `sep-2640-skill-uri-scheme` already graded it a WARNING.
+mcpkit's client was stricter than mcpkit's own suite, which is also why no scenario caught it: the
+suite has no *client* scenario for scheme-agnosticism at all. One is proposed under #1357.
+
+**Relaxing the parse alone would have been worse.** `String`, `SkillRootURI` and `ManifestURI`
+rebuilt from the `Scheme` constant rather than from what was parsed, so a `github://` URI came back
+out as `skill://` — a different resource the server does not serve, surfacing later as a digest
+mismatch or a missing resource rather than as anything to do with schemes. All three now rebuild
+from the parsed scheme, falling back to the constant for a `URIParts` assembled by hand.
+
+Every structural rule still applies to every scheme: traversal, empty segments, `SKILL.md`
+placement, the name grammar. `TestParseURI_SchemeAgnostic_StillStructural` pins that so the
+relaxation cannot quietly become a laxer parse. What is newly rejected is a URI with no scheme,
+which is a relative reference and belongs to `ResolveRelative`. Server-side construction is
+untouched and still emits `skill://`, which is the SHOULD.
+
+Found by reading the MCP Inspector's SEP-2640 writeup, which reaches the same reading
+independently.
+
+## Client-side obligations we do not implement yet
+
+- **Duplicate names.** The SEP makes it a host MUST: names are not guaranteed unique, and on a
+  collision hosts MUST disambiguate "rather than silently discarding or preferring one". Multi-
+  segment paths make this legal and ordinary — `skill://acme/reports/SKILL.md` and
+  `skill://globex/reports/SKILL.md` are both valid and both named `reports`. Nothing in
+  `ext/skills` handles it, so anything keying on `Name()` silently loses one. The server-side
+  `sep-2640-names-should-be-unique` check exists but is a WARNING and grades the wrong side.
+- **Length limits in code points.** If a `description` bound is ever enforced, Agent Skills
+  measures 1-1024 in Unicode code points. Go's `len()` is bytes and TypeScript's `.length` is
+  UTF-16 units, and both are wrong. Use `utf8.RuneCountInString`.
