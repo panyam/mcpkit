@@ -143,8 +143,8 @@ func TestParseURI_Errors(t *testing.T) {
 		want error
 	}{
 		{"empty", "", skills.ErrInvalidScheme},
-		{"wrong scheme", "https://example.com/skill", skills.ErrInvalidScheme},
-		{"http scheme", "http://example.com/x", skills.ErrInvalidScheme},
+		{"relative reference", "acme/refunds/SKILL.md", skills.ErrInvalidScheme},
+		{"scheme-relative", "//example.com/x", skills.ErrInvalidScheme},
 		{"no path", "skill://", skills.ErrEmptySkillPath},
 		{"consecutive slashes", "skill://foo//SKILL.md", skills.ErrEmptyPathSegment},
 		{"SKILL.md as directory", "skill://outer/SKILL.md/inner/something.md", skills.ErrManifestNotADirectory},
@@ -455,5 +455,87 @@ func TestErrors_Wrapped(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "BAD") {
 		t.Errorf("err message %q, expected to include offending name", err.Error())
+	}
+}
+
+// SEP-2640 makes skill:// a SHOULD and states that no scheme is privileged:
+// a server MAY serve skills under one native to its domain. Parsing used to
+// reject anything but skill://, so mcpkit's client refused a conforming
+// server outright, while the conformance suite graded the same thing a
+// warning. The structural rules still apply to every scheme.
+func TestParseURI_SchemeAgnostic(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		uri  string
+		root string
+		skil string
+	}{
+		{"skill", "skill://acme/refunds/SKILL.md", "skill://acme/refunds/", "refunds"},
+		{"github", "github://owner/repo/skills/refunds/SKILL.md", "github://owner/repo/skills/refunds/", "refunds"},
+		{"https", "https://example.com/skills/refunds/SKILL.md", "https://example.com/skills/refunds/", "refunds"},
+		{"custom", "acme-internal://team/onboarding/SKILL.md", "acme-internal://team/onboarding/", "onboarding"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			parts, err := skills.ParseURI(tt.uri)
+			if err != nil {
+				t.Fatalf("ParseURI(%q) = %v, want success", tt.uri, err)
+			}
+			if !parts.IsManifest {
+				t.Errorf("IsManifest = false, want true")
+			}
+			if parts.SkillName != tt.skil {
+				t.Errorf("SkillName = %q, want %q", parts.SkillName, tt.skil)
+			}
+			// Reconstruction must not rewrite the scheme: a skill:// copy of
+			// a github:// URI names a resource the server does not serve.
+			if got := parts.String(); got != tt.uri {
+				t.Errorf("String() = %q, want %q", got, tt.uri)
+			}
+			if got := parts.SkillRootURI(); got != tt.root {
+				t.Errorf("SkillRootURI() = %q, want %q", got, tt.root)
+			}
+			if got := parts.ManifestURI(); got != tt.uri {
+				t.Errorf("ManifestURI() = %q, want %q", got, tt.uri)
+			}
+		})
+	}
+}
+
+// The structural rules are scheme-independent, so a non-skill:// URI gets
+// the same errors rather than a laxer pass.
+func TestParseURI_SchemeAgnostic_StillStructural(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		uri  string
+		want error
+	}{
+		{"traversal", "github://owner/../etc/SKILL.md", skills.ErrPathTraversal},
+		{"empty segment", "github://owner//SKILL.md", skills.ErrEmptyPathSegment},
+		{"manifest as directory", "github://o/SKILL.md/inner/x.md", skills.ErrManifestNotADirectory},
+		{"bad skill name", "github://owner/Bad-Name/SKILL.md", skills.ErrInvalidSkillName},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := skills.ParseURI(tt.uri); !errors.Is(err, tt.want) {
+				t.Errorf("ParseURI(%q) err = %v, want %v", tt.uri, err, tt.want)
+			}
+		})
+	}
+}
+
+// ResolveRelative resolves against the skill root, which carries the
+// server's scheme. A relative reference inside a github://-served skill
+// must stay in that skill.
+func TestResolveRelative_PreservesScheme(t *testing.T) {
+	root, err := skills.ParseURI("github://owner/repo/skills/refunds/SKILL.md")
+	if err != nil {
+		t.Fatalf("ParseURI: %v", err)
+	}
+	got, err := skills.ResolveRelative(root, "references/GUIDE.md")
+	if err != nil {
+		t.Fatalf("ResolveRelative: %v", err)
+	}
+	want := "github://owner/repo/skills/refunds/references/GUIDE.md"
+	if got.String() != want {
+		t.Errorf("ResolveRelative = %q, want %q", got.String(), want)
 	}
 }

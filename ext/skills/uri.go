@@ -34,7 +34,9 @@ import (
 // skill path length is known from an index entry or a prior manifest read,
 // or by calling ResolveRelative from a known skill root.
 type URIParts struct {
-	// Scheme is always "skill" for URIs that pass ParseURI's validation.
+	// Scheme is the URI's scheme as written. Usually "skill", but SEP-2640
+	// privileges no scheme: a server MAY serve skills under one native to
+	// its domain, such as github://. Reconstruction preserves it.
 	Scheme string
 
 	// Raw is the original URI string ParseURI was called with.
@@ -72,8 +74,17 @@ type URIParts struct {
 // produce a precise InvalidParams error instead of a generic
 // "unknown resource" miss.
 //
+// Any scheme is accepted. SEP-2640 makes skill:// a SHOULD and states that
+// "no scheme is privileged", so a server MAY serve skills under a scheme
+// native to its domain (github://owner/repo/skills/refunds/SKILL.md). The
+// structural constraints below apply regardless. Rejecting on scheme would
+// also invert the SEP's rule that a host MUST NOT conclude a resource is a
+// skill merely because its URI carries a particular scheme.
+//
 // Validation rules:
-//   - Scheme must be exactly "skill" (ErrInvalidScheme otherwise).
+//   - The URI must be absolute, i.e. carry some scheme (ErrInvalidScheme
+//     otherwise). A relative reference is resolved by ResolveRelative, not
+//     parsed here.
 //   - At least one path segment is required (ErrEmptySkillPath).
 //   - No segment may be empty, e.g. from consecutive slashes
 //     (ErrEmptyPathSegment).
@@ -98,8 +109,8 @@ func ParseURI(s string) (URIParts, error) {
 	if err != nil {
 		return URIParts{}, fmt.Errorf("%w: %v", ErrInvalidScheme, err)
 	}
-	if u.Scheme != Scheme {
-		return URIParts{}, fmt.Errorf("%w: got %q", ErrInvalidScheme, u.Scheme)
+	if u.Scheme == "" {
+		return URIParts{}, fmt.Errorf("%w: %q has no scheme", ErrInvalidScheme, s)
 	}
 
 	segments, err := splitURIPath(u)
@@ -228,6 +239,17 @@ func (p URIParts) SplitAt(n int) (URIParts, error) {
 	return out, nil
 }
 
+// scheme returns the scheme to rebuild with: whatever was parsed, falling
+// back to skill:// for a zero-value URIParts assembled by hand. Rebuilding
+// with the constant would rewrite a github://-served skill into a skill://
+// one, which is a different resource the server does not serve.
+func (p URIParts) scheme() string {
+	if p.Scheme != "" {
+		return p.Scheme
+	}
+	return Scheme
+}
+
 // SkillRootURI returns the URI of the skill's root directory (the URI
 // obtained by stripping the trailing SKILL.md, with a trailing slash).
 // Returns the empty string if SkillPath is not populated.
@@ -235,7 +257,7 @@ func (p URIParts) SkillRootURI() string {
 	if len(p.SkillPath) == 0 {
 		return ""
 	}
-	return Scheme + "://" + strings.Join(escapeSegments(p.SkillPath), "/") + "/"
+	return p.scheme() + "://" + strings.Join(escapeSegments(p.SkillPath), "/") + "/"
 }
 
 // ManifestURI returns the URI of the skill's SKILL.md. Returns the empty
@@ -244,7 +266,7 @@ func (p URIParts) ManifestURI() string {
 	if len(p.SkillPath) == 0 {
 		return ""
 	}
-	return Scheme + "://" + strings.Join(escapeSegments(p.SkillPath), "/") + "/" + ManifestFilename
+	return p.scheme() + "://" + strings.Join(escapeSegments(p.SkillPath), "/") + "/" + ManifestFilename
 }
 
 // String reconstructs the URI from the parsed segments. If FilePath is
@@ -255,12 +277,12 @@ func (p URIParts) String() string {
 	if len(p.SkillPath) > 0 {
 		root := strings.Join(escapeSegments(p.SkillPath), "/")
 		if len(p.FilePath) == 0 {
-			return Scheme + "://" + root + "/"
+			return p.scheme() + "://" + root + "/"
 		}
-		return Scheme + "://" + root + "/" + strings.Join(escapeSegments(p.FilePath), "/")
+		return p.scheme() + "://" + root + "/" + strings.Join(escapeSegments(p.FilePath), "/")
 	}
 	if len(p.AllSegments) > 0 {
-		return Scheme + "://" + strings.Join(escapeSegments(p.AllSegments), "/")
+		return p.scheme() + "://" + strings.Join(escapeSegments(p.AllSegments), "/")
 	}
 	return p.Raw
 }
