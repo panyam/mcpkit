@@ -137,6 +137,13 @@ These span packages and will bite on a task that never opens a routed doc.
   fires on a merge to the **default** branch, so carry it on whichever PR actually reaches main.
   Two branches that both append tests to the end of the same file will re-conflict at every cross
   merge; land the shared base before branching the second consumer.
+- **`check-dep-consistency` failures want `--prune-baseline`, not `--update-baseline`.** The CI
+  error text suggests the latter, which also accepts any *new* divergence silently, defeating the
+  point of the baseline. Prune only drops entries that stopped diverging. A cross-module
+  `go mod tidy` sweep converges pins as a side effect, so this fires on dependency bumps that look
+  unrelated to it.
+- **CodeQL rejects `make(T, len(a)+len(b))`** as an allocation size that may overflow. Capacity is
+  a hint and the map or slice grows anyway, so size from one operand.
 - **Repo security settings are settings, not files.** Dependabot alerts, security updates, and
   private vulnerability reporting need no commit; `dependabot.yml` governs *version* updates only.
   A 403 is not a 404, and a status check that treats any non-success as "disabled" reports a
