@@ -19,7 +19,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -63,26 +62,6 @@ func supportingURI(e skills.SkillEntry) (string, bool) {
 	return "", false
 }
 
-// unlistedURI synthesizes a URI inside the skill's directory that the entry's
-// resources do not list.
-//
-// Derived rather than hardcoded: the requirement is "reads resolve only to
-// URIs listed in that entry's resources", so any unlisted path exercises it
-// and the scenario grades reads against the listed set rather than one path.
-func unlistedURI(e skills.SkillEntry) string {
-	root := strings.TrimSuffix(e.URI, "/"+skills.ManifestFilename)
-	listed := make(map[string]bool, len(e.Resources.Files))
-	for _, r := range e.Resources.Files {
-		listed[r.URI] = true
-	}
-	for i := 0; ; i++ {
-		candidate := fmt.Sprintf("%s/mcpkit-unlisted-probe-%d.md", root, i)
-		if !listed[candidate] {
-			return candidate
-		}
-	}
-}
-
 // driveSEP2640NoPrefetch connects, enumerates, and stops.
 //
 // SEP-2640 makes lazy retrieval a MUST NOT: a host may not fetch a skill's
@@ -107,14 +86,15 @@ func driveSEP2640NoPrefetch(serverURL string) error {
 	return nil
 }
 
-// driveSEP2640Verify exercises the four read-time verification MUSTs.
+// driveSEP2640Verify exercises the read-time verification MUSTs.
 //
-// Two behaviours, not four. `unlisted` asks for a URI the manifest does not
-// contain, which the client must refuse locally without putting a request on
-// the wire. The digest, size and frontmatter modes are one path: the server
-// has tampered with the SKILL.md in a mode-specific way, and the client's job
-// is identical in each case, which is to reject it and never reach the
-// supporting file.
+// One behaviour across all three modes: the server has tampered with the
+// SKILL.md in a mode-specific way, and the client's job is identical in each
+// case, which is to reject it and never reach the supporting file. The
+// manifest read is not incidental, it is the scenario's prerequisite: without
+// it an empty read log proves nothing and the check reports untestable.
+//
+// A fourth mode, `unlisted`, was retired from the suite on 2026-09-10.
 //
 // Errors are returned rather than swallowed, since the scenario sets
 // allowClientError and a non-zero exit here IS the pass.
@@ -129,14 +109,6 @@ func driveSEP2640Verify(serverURL, mode string) error {
 		return fmt.Errorf("listing was empty, nothing to verify against")
 	}
 	e := entries[0]
-
-	if mode == "unlisted" {
-		probe := unlistedURI(e)
-		if _, err := sc.ReadFromEntry(context.Background(), e, probe); err != nil {
-			return fmt.Errorf("correctly refused unlisted read of %s: %w", probe, err)
-		}
-		return fmt.Errorf("read unlisted URI %s without error, which the SEP forbids", probe)
-	}
 
 	if _, err := sc.ReadFromEntry(context.Background(), e, e.URI); err != nil {
 		return fmt.Errorf("correctly rejected tampered SKILL.md: %w", err)

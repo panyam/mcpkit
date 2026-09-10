@@ -85,8 +85,8 @@ cache-attributes check SKIPs. Per-SDK setup is in `RUNNING_SEP2640.md` on the co
 - `Scenario` means **the harness stands up a server** and the SUT is a **client**. Everything under
   `src/scenarios/client/` uses this, and mcpkit already runs 41/43 against it for other SEPs.
 
-That matters for SEP-2640's client-side MUSTs, and five are now built on PR 330 under
-`src/scenarios/client/skills/`: `sep-2640-client-no-prefetch` plus `-verify-{digest,size,frontmatter,unlisted}`.
+That matters for SEP-2640's client-side MUSTs, and four are built on PR 330 under
+`src/scenarios/client/skills/`: `sep-2640-client-no-prefetch` plus `-verify-{digest,size,frontmatter}`.
 mcpkit's side is driven from `cmd/testclient` (`sep2640.go`), keyed on `MCP_CONFORMANCE_SCENARIO`
 the same way the SEP-2322 and SEP-2575 drivers are. They are not unreachable "host obligations",
 which is how the first extraction framed them: no-prefetch in particular reduces to whether a
