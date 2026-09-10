@@ -132,6 +132,53 @@ func TestSkillsGet_ReturnsWrappedEntry(t *testing.T) {
 	}
 }
 
+// TestSkillsGet_CacheAttributes pins the requirement the stable spec page
+// closed on 2026-09-10 (ext-skills#139). SEP-2640 left it open, so this is a
+// behaviour change rather than a clarification, and a server conformant to
+// the SEP text alone omits both fields.
+//
+// GetSkillResult extends CacheableResult, so ttlMs and cacheScope are
+// REQUIRED as they are on resources/read. The answer matches skills/list
+// because it describes the same catalog.
+func TestSkillsGet_CacheAttributes(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
+
+	var lr skills.SkillsListResult
+	callSkillsMethod(t, c, skills.MethodSkillsList, skills.SkillsListRequest{}, &lr)
+	want := lr.Skills[0]
+
+	var res skills.SkillsGetResult
+	callSkillsMethod(t, c, skills.MethodSkillsGet, skills.SkillsGetRequest{URI: want.URI}, &res)
+
+	if res.TTLMs == nil {
+		t.Error("skills/get omitted ttlMs; CacheableResult makes it REQUIRED")
+	} else if *res.TTLMs <= 0 {
+		t.Errorf("ttlMs = %d, want a positive freshness hint", *res.TTLMs)
+	}
+	if res.CacheScope == "" {
+		t.Error("skills/get omitted cacheScope; CacheableResult makes it REQUIRED")
+	}
+
+	// Same catalog, same answer. A divergence here would tell a host the
+	// listing and the entry go stale at different times, which they do not.
+	if lr.TTLMs != nil && res.TTLMs != nil && *lr.TTLMs != *res.TTLMs {
+		t.Errorf("ttlMs = %d on skills/get but %d on skills/list", *res.TTLMs, *lr.TTLMs)
+	}
+	if lr.CacheScope != res.CacheScope {
+		t.Errorf("cacheScope = %q on skills/get but %q on skills/list", res.CacheScope, lr.CacheScope)
+	}
+
+	// The fields sit at the result's top level, not under _meta, matching the
+	// base-protocol methods CacheableResult already governs.
+	var generic map[string]json.RawMessage
+	callSkillsMethod(t, c, skills.MethodSkillsGet, skills.SkillsGetRequest{URI: want.URI}, &generic)
+	for _, k := range []string{"ttlMs", "cacheScope"} {
+		if _, ok := generic[k]; !ok {
+			t.Errorf("%q absent from the result's top level; got %v", k, genericKeys(generic))
+		}
+	}
+}
+
 // TestSkillsGet_UnknownURIIsInvalidParams pins the error code. hf-mcp-server
 // answers -32602 for an unserved URI, matching resources/read for an unknown
 // resource.

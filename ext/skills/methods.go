@@ -133,7 +133,15 @@ func (i *Indexer) handleSkillsGet(ctx core.MethodContext, id, params json.RawMes
 	}
 	for _, e := range entries {
 		if e.URI == req.URI {
-			return core.NewResponse(id, SkillsGetResult{Skill: e})
+			res := SkillsGetResult{Skill: e}
+			// Same catalog, so the same freshness answer. A server that wants
+			// to hint differently for a single entry than for the listing has
+			// no knob yet, and nothing has asked for one.
+			if ttl := i.listTTLMs(); ttl > 0 {
+				res.TTLMs = &ttl
+			}
+			res.CacheScope = i.cfg.listCacheScope
+			return core.NewResponse(id, res)
 		}
 	}
 	return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
