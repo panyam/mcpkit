@@ -81,13 +81,8 @@ testconf-file-inputs: ## Run SEP-2356 file-inputs conformance — fork-based sce
 testconf-auth-server: ## Run server-side auth conformance — fork-based scenarios (RFC 9728 PRM + RFC 8414 AS metadata + RFC 6750 Bearer enforcement)
 	@bash $(CONFORMANCE_DIR)/scripts/conf-auth-server.sh
 
-testconf-skills: ## Run SEP-2640 skills conformance — informational (exit 0 regardless of check results while WG iterates sep-2640.yaml). Drives examples/skills via the fork's scenario runner. Scenarios land in a follow-up using the Scenario class primitives PR 8 introduced; this target wires the fixture spawn + URL today so the conf-side PR plugs in cleanly.
+testconf-skills: ## Run SEP-2640 skills conformance — gating. Drives examples/skills through the three upstream sep-2640-skills-* server scenarios (enumeration, manifest, directory); requires zero FAILURE rows.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-skills.sh
-# Scenario class for SEP-2640 to be registered under the name
-# "sep-2640-skills" in the fork's src/scenarios/index.ts, mirroring how
-# tasks-v2 and stateless are wired. Per Paul Carleton's review, the
-# scenarios use ctx.connect() + Connection.request() primitives instead
-# of a per-SEP all-scenarios.test.ts file. Tracking: mcpkit#567.
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd $(CONFORMANCE_DIR) && npm install --silent && \
