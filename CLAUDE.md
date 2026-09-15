@@ -26,8 +26,8 @@ make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (RELEASING.md; pre-
 ```
 
 Conformance targets (`testconf`, `testconf-client`, `testconf-tasks-v2`, `testconf-mrtr`,
-`testconf-skills`, `testconf-stateless`, `testconf-upstream-audit`, `refresh-conformance`,
-`check-conformance-stale`, …) are orchestrated in `conformance/Makefile`, which also documents each
+`testconf-skills`, `testconf-events`, `testconf-stateless`, `testconf-upstream-audit`,
+`refresh-conformance`, `check-conformance-stale`, …) are orchestrated in `conformance/Makefile`, which also documents each
 suite's `MCPCONFORMANCE_*_PATH`. See `conformance/NOTES.md` for how they are wired and which
 upstream changes to watch.
 
@@ -61,7 +61,8 @@ Three kinds of file, three audiences. Put new material in the right one rather t
   This is where implementation lore belongs.
 - **`CLAUDE.md`** (this file, plus nested ones) — routing and the rules that cause wrong edits when
   missed. A nested `CLAUDE.md` loads automatically when working in that subtree, so keep it short.
-  `conformance/` has one.
+  There are none today; this is the only one in the tree. Conformance lore lives in
+  `conformance/NOTES.md`.
 - **`CONSTRAINTS.md`** — enforceable architectural rules. Project-wide at the root; per-package in
   `core/`, `server/`, `client/`.
 
@@ -69,8 +70,8 @@ Design docs live in `docs/`: `ARCHITECTURE.md`, `APPS_DESIGN.md`, `SEP_414_OTEL.
 per-SEP migration guides. The `AGENT_*.md` set left with the agent SDK and now lives in
 [chakra](https://github.com/panyam/chakra) under its `docs/`.
 
-**`CAPABILITIES.md` was retired** (commit `ebc41058`). Checkpoint and start_pr must not sync or
-recreate it. Fold learnings into the per-package `NOTES.md`, the design docs, and the roadmap.
+**Do not recreate `CAPABILITIES.md`** (retired 2026-07-18, `bc402a03`). Learnings go in the
+per-package `NOTES.md`, the design docs, and the roadmap.
 
 ## Sub-Modules
 
@@ -118,19 +119,36 @@ These span packages and will bite on a task that never opens a routed doc.
   the three by hand fails CI as "case E drift" in `check_local_suites.py`, and the `just` runner is
   the one people forget. Adding a `testconf-*` target means adding a manifest entry too; the drift
   check enforces both directions.
+- **Adding a `testconf-*` target trips two independent CI gates, and passing the first says
+  nothing about the second.** `check-local-suites-stale` covers the manifest and the generated
+  path-defaults; `check-conformance-stale` covers `CONFORMANCE.md` and the badge JSON, which are
+  rendered *from* `local-suites.yaml` and go stale the moment an entry is added. Run
+  `make refresh-conformance` and commit the result, or CI fails after everything else has gone
+  green. Cost a round-trip on #1378. The full checklist for a new target is in
+  `conformance/NOTES.md` § Adding a testconf-* target.
+- **The docs-site conformance page needs no separate update.**
+  `docs/site/content/conformance/index.html` is a shim that renders `CONFORMANCE.md` at build
+  time, so regenerating that file *is* the site update. Same for the audit pages.
 - **`govulncheck` green does not mean dependencies are current.** Default govulncheck is
   *reachability*-based, so it exits 0 while advisories sit unfixed in required modules. Version
   matching is a separate pass. Command, blockers, and rationale: `DEPENDENCY_POLICY.md`
   § Security updates.
-- **GitHub access needs the personal token and key.** `GH_TOKEN="$GH_PERSONAL_TOKEN"`, because the EMU
-  account cannot reach personal repos. That token is **fine-grained**, so it can read but never
-  write `modelcontextprotocol/*`. `gh pr edit` and REST `PATCH .../pulls/N` both 403 even on a PR
-  we authored, and no setting fixes it because fine-grained PATs only scope to repos in the owner's
-  account. Upstream PR titles, bodies and comments need the web UI or a classic PAT with
-  `public_repo`. Pushing to our fork branches is unaffected. See `conformance/NOTES.md`. `git push` to `panyam-github` likewise needs the key pinned,
-  because the ssh-agent offers the EMU key first and GitHub rejects it before reaching
-  `~/.ssh/id_github`:
-  `GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push …`.
+- **Two GitHub credentials, and the one you want depends on the repo.**
+  `GH_TOKEN="$GH_PERSONAL_TOKEN"` is **fine-grained** and scoped to the owner's account: use it for
+  `panyam/*`, where the EMU account cannot reach. It can read but never write
+  `modelcontextprotocol/*` — `POST .../pulls`, `gh pr edit` and `PATCH .../pulls/N` all 403 even on
+  a PR we authored, and no setting fixes it, because fine-grained PATs only scope to repos in the
+  owner's account.
+  **For upstream writes, use `gh`'s own stored login instead**: `env -u GH_TOKEN gh …` falls back to
+  the `gho_` OAuth token in `~/.config/gh/hosts.yml`, which carries full `repo` scope and *does*
+  create and edit PRs and post review comments on `modelcontextprotocol/*`. Verified on
+  conformance#504. An earlier version of this note said upstream edits need the web UI or a classic
+  PAT; that is only true of the fine-grained token.
+  Pushing to our fork branches is unaffected. See `conformance/NOTES.md`.
+  **SSH pushes use the agent, not a key file.** `~/.ssh/id_github` does not exist in the container —
+  only `~/.ssh/agent.sock`, which holds the right key. Use
+  `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`; the `-i ~/.ssh/id_github` form fails with
+  "Identity file not accessible" then "Permission denied (publickey)".
   Release creation and editing have their own PAT gap. See `RELEASING.md`.
 - **Stacked PRs get no CI** when the base is not `main`. Verify locally, then either retarget to
   main after the base merges or push an empty commit to fire checks. GitHub's `Closes #N` only
@@ -173,6 +191,16 @@ implementations (mcpkit, go-sdk, csharp-sdk), all green. Running it against some
 implementation is how two bugs in the suite were found and fixed, neither reachable from mcpkit
 alone. Detail in `ext/skills/NOTES.md`, per-SDK setup in `RUNNING_SEP2640.md` on the conformance
 branch.
+
+**MCP Events has a conformance suite, and it is red on purpose.** `testconf-events` (stage 8i,
+`INFO`) drives `examples/events/kitchen-sink` against scenarios proposed upstream as a draft in
+`modelcontextprotocol/conformance` PR 504. It scores against the design sketch that merged
+2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
+with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
+renamed before that PR can merge. Phase 1 ships 2 of 5 scenarios and emits 45 of 131 declared rows;
+push and webhook follow. Building it surfaced six divergences in our own implementation, three of
+which #1379 and #1381 have since closed; the rest are #1380. Detail in `conformance/NOTES.md`
+§ MCP Events suite.
 
 `testconf-scope-challenge` runs mcpkit against the upstream SEP-2350 server scope-challenge
 scenario (`modelcontextprotocol/conformance` PR 481), currently 17/17. It is `INFO` rather than

@@ -30,7 +30,8 @@ Defaults, resolved relative to `conformance/justfile`:
 | `MCPCONFORMANCE_TASKS_V2_PATH`, `MCPCONFORMANCE_MRTR_PATH` | `../conf-upstream-main` (upstream `main`) |
 | `MCPCONFORMANCE_BASE_PATH` | `../conf-upstream-main` (audit + stateless) |
 | `MCPCONFORMANCE_FILE_INPUTS_PATH`, `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` (fork `pending`) |
-| `MCPCONFORMANCE_SKILLS_PATH` | `../conf-skills` (fork `chore/sep-2640-yaml`) |
+| `MCPCONFORMANCE_SKILLS_PATH` | `../conf-upstream-main` (upstream `main`, retargeted once PR 330 merged) |
+| `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, draft upstream PR 504) |
 
 Override per invocation when a SEP splits to its own branch awaiting upstream approval. Each target
 fail-fasts with a remediation message if its path is missing.
@@ -205,9 +206,25 @@ access token", **including on a PR we authored**. `$GH_PERSONAL_TOKEN` is a fine
 fine-grained PATs can only be scoped to repositories in the owner's own account, so no setting fixes
 this. Both `gh pr edit` and REST `PATCH /repos/{o}/{r}/pulls/{n}` are affected.
 
-The web UI works, because GitHub grants PR authors edit rights through the session. For API writes
-(title, body, comments, reviews) use a **classic** PAT with `public_repo`. Pushing to our own fork
-branches is unaffected, that is SSH.
+The web UI works, because GitHub grants PR authors edit rights through the session.
+
+**But there is a second credential already on the box that does work, and it is easier than a new
+PAT.** `gh` keeps its own `gho_` OAuth login in `~/.config/gh/hosts.yml` with full `repo` scope.
+Dropping the env override falls back to it:
+
+```sh
+env -u GH_TOKEN gh pr create --repo modelcontextprotocol/conformance --draft …
+env -u GH_TOKEN gh pr edit 504 --repo modelcontextprotocol/conformance --body-file …
+env -u GH_TOKEN gh api -X POST repos/modelcontextprotocol/conformance/pulls/504/comments --input …
+```
+
+All three verified against PR 504 on 2026-09-15: create, edit, and an inline review comment. So the
+rule is not "upstream writes need the web UI", it is **"upstream writes need a credential that is
+not the fine-grained PAT"**, and we already have one. Keep `GH_TOKEN="$GH_PERSONAL_TOKEN"` for
+`panyam/*`, which the `gho_` token reaches too but which the EMU account does not.
+
+Pushing to our own fork branches is unaffected, that is SSH — via the agent socket, since
+`~/.ssh/id_github` does not exist in the container: `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`.
 
 **`modelcontextprotocol/conformance` dismisses stale reviews on push.** A commit landed after an
 approval flips that review to `DISMISSED` and `reviewDecision` back to `REVIEW_REQUIRED`. This cost
@@ -266,6 +283,83 @@ non-conformant artifact is the skill. If a check for it is ever added it belongs
 `sep-2640-skillmd-frontmatter` as a WARNING, naming Agent Skills rather than SEP-2640 as the
 authority. Every one of the 89 rows in `src/seps/sep-2640.yaml` carries a verbatim SEP quote, and
 there is no sentence to quote for this one.
+
+## Adding a `testconf-*` target
+
+Six places, and two independent CI gates. Passing the first gate says nothing about the second,
+which is how #1378 went green on everything except `conformance-report` and had to go round again.
+
+1. `conformance/scripts/conf-<name>.sh` — the runner. Source `_common.sh`, guard with
+   `require_conf_dir`, `build_conf_dist`, spawn the fixture, run each scenario by exact name.
+2. `conformance/Makefile` — the target, plus `.PHONY` and the `test:` umbrella.
+3. `conformance/justfile`, root `Makefile`, root `justfile` — the three mirrors. `just` is the one
+   people forget, and the drift check catches it.
+4. `scripts/testall.sh` — both the `resolve_script` case arm **and** a `run_stage <label> 9 <name>
+   <token> [info]` line.
+5. `conformance/local-suites.yaml` — the manifest entry. Then
+   `uv run scripts/gen_conf_paths.py --write`; never hand-edit `path-defaults.{mk,sh,just}`.
+6. `make refresh-conformance`, and commit the regenerated `CONFORMANCE.md` **and**
+   `docs/site/static/conformance/badge.json`.
+
+Gate one is `check-local-suites-stale` (`uv run scripts/check_local_suites.py`): manifest vs
+Makefile vs generated path-defaults. Gate two is `check-conformance-stale`: `CONFORMANCE.md` and the
+badge are *rendered from* `local-suites.yaml`, so adding an entry staled them even though gate one
+was clean. Run both locally before pushing.
+
+The docs site needs nothing extra. `docs/site/content/conformance/index.html` is a shim
+(`{{ renderMarkdownFile "CONFORMANCE.md" }}`), so step 6 is the site update; Pages rebuilds on merge.
+
+---
+
+## MCP Events suite
+
+`testconf-events`, stage 8i, `INFO`. Drives `examples/events/kitchen-sink`; scenarios live on
+`feat/events-conformance-suite` of the fork and are proposed upstream as a **draft**,
+`modelcontextprotocol/conformance` PR 504.
+
+**It scores against a design document, not a spec.** The source is
+`docs/design-sketch-proposal.md` on `main` of
+`modelcontextprotocol/experimental-ext-triggers-events`, merged 2026-09-08. There is no SEP, which
+has three consequences worth knowing before touching any of it:
+
+- **The SEP number is a placeholder.** `sep-9999`. Both traceability gates upstream are numeric —
+  the directory filter `/^sep-\d+\.yaml$/` and the check-id filter `/^sep-\d+-/` — and a
+  non-matching filename is *silently dropped* from the manifest rather than rejected, so there is no
+  honest name that works. Renaming is a **merge blocker** for PR 504, not a follow-up: merging under
+  9999 would publish it to plan.modelcontextprotocol.io as though it were real.
+- **`new-sep` does not apply cleanly.** It expects a PR in
+  `modelcontextprotocol/modelcontextprotocol` touching `docs/specification/draft/*.mdx`, and
+  `specPathToUrl` hard-requires that prefix, so `--spec-path` fails too. Scaffold with `--spec-url`.
+- **Most rows quote no RFC 2119 keyword.** 85 of 131 come from schema tables and example payloads,
+  which are normative but keyword-free, so "severity follows the keyword" is undefined for them. The
+  rule used is in the yaml header: a field the document marks required, or a wire fact a client
+  cannot work without, is `FAILURE`; anything from an example payload is `WARNING`. Pure `MAY` and
+  `OPTIONAL` sentences get no row at all.
+
+**The capability gate asks before it skips, and that is deliberate.** Every other extension scenario
+treats an undeclared optional capability as a clean SKIP. Events does not: it probes `events/list`
+first, and only a server that *both* declares nothing and implements nothing is skipped. A server
+that answers `events/list` while declaring no `capabilities.events` has a surface no spec-following
+client can reach, and a SKIP would report that as green. mcpkit is in exactly that state, so the
+conventional design would have hidden the single most consequential finding. Same reasoning as
+`declaredSkillsCapability` upstream, applied to an absent declaration rather than a malformed one.
+
+**Phase 1 is 2 of 5 scenarios**, emitting 45 of 131 declared rows; the other 86 report `untested`,
+which is the manifest working rather than a gap. `events-push` and `events-webhook` follow.
+`events-webhook-delivery` is split out because it needs a callback URL the server under test can
+reach over `https` — localhost cannot serve that, since the SSRF rules the suite itself checks
+require a conformant server to refuse it.
+
+**Building it found six divergences in mcpkit**, which was the point. #1379 closed the
+`nextPollSeconds` rename and #1381 added `list_changed`, termination, and `inputSchema` on the three
+real sources. The remaining five are #1380, and three of those collapse into one question: the
+`events.topology` meta-source does not keep the descriptor contract at all (`delivery: null`, no
+`inputSchema`, answers `events/poll` while advertising no poll delivery). Whether a meta-source
+belongs in `events/list` as a peer of real event types is worth settling before patching symptoms.
+
+Flip to a gate once #1380 closes and the spec text stabilises.
+
+---
 
 ## Generated artifacts
 
