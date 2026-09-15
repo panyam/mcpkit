@@ -69,6 +69,11 @@ Build it by URL-encoding the note (Python `urllib.parse.urlencode`). Tags
 themselves push fine via `make tag-push`; only the Release object needs the
 browser step.
 
+**Editing is blocked the same way.** `gh release edit` 403s on the same missing
+Contents: write, so a Release published with a missing or wrong body has to be
+fixed in the browser too: `pbcopy < docs/releases/<tag>.md`, then
+`open 'https://github.com/panyam/mcpkit/releases/edit/<tag>'` and paste.
+
 The encoded URL runs to a few KB. GitHub sometimes drops the `body` parameter on
 longer URLs, so copy the note to the clipboard first (`pbcopy < docs/releases/<tag>.md`)
 and paste if the description box comes up empty.

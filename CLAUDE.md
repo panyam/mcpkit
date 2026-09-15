@@ -177,12 +177,22 @@ These span packages and will bite on a task that never opens a routed doc.
 
 ## Conformance
 
-All tier-scored surfaces are at 100% on upstream tier-check: **Server 30/30, Client Core 4/4,
-Client Auth 16/16.** Full client suite **41/43**, the two failures being `auth/dpop` and
-`auth/dpop-nonce`, both gated on SEP-1932 leaving draft (#803).
+All tier-scored surfaces are at 100% on upstream tier-check: **Server 31/31** (checks 73/0) and
+**Client 21/21** (573/8), per the generated block in `CONFORMANCE.md`. Full client suite **41/43**,
+the two failures being `auth/dpop` and `auth/dpop-nonce`, both gated on SEP-1932 leaving draft
+(#803). Take the numbers from `CONFORMANCE.md` rather than this paragraph — the prose here went
+stale by a whole server scenario once already.
 
 `CONFORMANCE.md` is generated and CI-gated for staleness; `conformance/UPSTREAM_AUDIT.md` grades
 mcpkit against every upstream scenario. Do not hand-edit either, or the README badge.
+
+**A green suite is not proof it graded mcpkit.** `testconf-tasks-v2` and `testconf-mrtr` reported
+PASS for months while scoring upstream's own reference server, because they set env vars nothing
+upstream reads (#1358). Before trusting a new or edited suite, break its fixture and confirm the
+suite goes red. `conformance/NOTES.md` § A green suite is not proof it graded mcpkit also covers why
+the MRTR fixture is `cmd/testserver`, how to regenerate the reports when a red suite has left them
+stale, and the two inputs regeneration never touches (`known-gaps.yaml`,
+`client-check-counts.json`).
 
 **SEP-2640 is Accepted** (CM vote 2026-09-01). Conformance tests are one of three deliverables
 gating Final and are ours: `modelcontextprotocol/conformance` PR 330, 96 requirement rows with 89

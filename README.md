@@ -88,7 +88,7 @@ mcpkit passes the [official MCP conformance suite](https://github.com/modelconte
 
 | Suite | Spec | Result |
 |-------|------|--------|
-| Server (base protocol) | MCP 2025-11-25 | **30/30** scenarios |
+| Server (base protocol) | MCP 2025-11-25 | **31/31** scenarios |
 | Auth | MCP authorization | **14/14** scenarios |
 | MCP Apps | ext-apps | **21** tests |
 | Tasks v1 (frozen) | — | **26/27** (1 skipped — SDK-client limitation) |
