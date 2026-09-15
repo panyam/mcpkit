@@ -10,7 +10,7 @@ This roadmap tracks mcpkit's implementation of the MCP specification, per the [S
 
 ## Current status
 
-All required (non-experimental) features of the current spec, including the optional sampling and elicitation capabilities, are implemented. Upstream conformance: 30/30 server scenarios and 41/43 client scenarios, the two failures being the draft-SEP DPoP pair (issue 803). See `CONFORMANCE.md`.
+All required (non-experimental) features of the current spec, including the optional sampling and elicitation capabilities, are implemented. Upstream conformance: 31/31 server scenarios and 41/43 client scenarios, the two failures being the draft-SEP DPoP pair (issue 803). See `CONFORMANCE.md`.
 
 Stable v0.4.0 shipped 2026-08-03, inside the 30-day window after the 2026-07-28 spec GA. Three releases have followed: v0.5.0 (2026-08-06), v0.5.1 (2026-08-07) and v0.5.2 (2026-08-21). Scope and migrations for each are in `CHANGELOG.md` and `docs/releases/`. The tree is well past v0.5.2 and a cut is due, which also makes the SEP-2350 conformance result citable by version rather than by commit.
 
