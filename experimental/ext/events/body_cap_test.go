@@ -42,7 +42,7 @@ func TestDelivery_OversizedEventNotPosted(t *testing.T) {
 		WithWebhookAllowPrivateNetworks(true),
 		WithWebhookMaxBodyBytes(1024),
 	)
-	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
+	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	// Build a payload that, when JSON-marshaled with the envelope,
 	// exceeds 1 KiB. 2 KiB of "A" inside Data is enough.
@@ -74,7 +74,7 @@ func TestDelivery_OversizedEventLogged(t *testing.T) {
 		WithWebhookMaxBodyBytes(1024),
 	)
 	logCap.attach(r)
-	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
+	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	bigData, _ := json.Marshal(map[string]string{"text": strings.Repeat("B", 2048)})
 	r.Deliver(context.Background(), Event{
@@ -111,7 +111,7 @@ func TestDelivery_413NotRetried(t *testing.T) {
 	defer srv.Close()
 
 	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
-	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
+	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_413", "1", time.Now(),
 		map[string]string{"text": "tiny"}))

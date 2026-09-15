@@ -335,12 +335,12 @@ def cmd_stream(session: MCPSession, args):
     print(f"Session: {sid}")
     print(f"Opening events/stream for {args.event} (Ctrl-C to stop)...")
     if args.max_age > 0:
-        print(f"  maxAge: {args.max_age}s replay floor")
+        print(f"  maxAgeMs: {args.max_age * 1000} ({args.max_age}s replay floor)")
     print('  Inject in another terminal: make inject TEXT="hello"\n')
 
     params = {"name": args.event}
     if args.max_age > 0:
-        params["maxAge"] = args.max_age
+        params["maxAgeMs"] = args.max_age * 1000
 
     def on_frame(frame):
         method = frame.get("method", "")
@@ -439,9 +439,10 @@ class WebhookSubscription:
         on_recover: called when a refresh fails (subscription expired) and a
                     fresh subscribe succeeds. Receives no args. Both may fire
                     in the same cycle if the recovery succeeds.
-        max_age: per-subscription replay floor in seconds, sent on every
+        max_age: per-subscription replay floor in SECONDS, sent on every
                  subscribe per spec §"Cursor Lifecycle" → "Bounding replay
-                 with maxAge" L529. 0 means no floor. Bounds the worst-case
+                 with maxAgeMs" L580 as `maxAgeMs`, converted to milliseconds
+                 on the wire. 0 means no floor. Bounds the worst-case
                  replay on reconnect.
         """
         self.session = session
@@ -471,7 +472,7 @@ class WebhookSubscription:
             },
         }
         if self.max_age > 0:
-            params["maxAge"] = self.max_age
+            params["maxAgeMs"] = self.max_age * 1000
         resp = self.session.rpc("events/subscribe", params)
         result = resp.get("result", {})
         rb_str = result.get("refreshBefore")
@@ -724,7 +725,7 @@ def cmd_poll(session: MCPSession, args):
                 "cursor": cursor,
             }
             if args.max_age > 0:
-                poll_params["maxAge"] = args.max_age
+                poll_params["maxAgeMs"] = args.max_age * 1000
             resp = session.rpc("events/poll", poll_params)
             result = resp.get("result", {})
             events = result.get("events", [])
@@ -775,7 +776,7 @@ def main():
 
     sp = sub.add_parser("stream", help="events/stream — long-lived per-subscription POST (spec §'Push-Based Delivery' L223)")
     sp.add_argument("--max-age", type=int, default=0,
-                    help="Per-stream replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
+                    help="Per-stream replay floor in seconds (spec §'Cursor Lifecycle' L580; sent as maxAgeMs). 0 = no floor.")
 
     wp = sub.add_parser("webhook", help="Webhook receiver (auto-refreshes subscription)")
     wp.add_argument("--port", type=int, default=9999, help="Local receiver port")
@@ -783,12 +784,12 @@ def main():
     wp.add_argument("--refresh-factor", type=float, default=0.5,
                     help="Refresh subscription at this fraction of TTL (default 0.5)")
     wp.add_argument("--max-age", type=int, default=0,
-                    help="Per-subscription replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
+                    help="Per-subscription replay floor in seconds (spec §'Cursor Lifecycle' L580; sent as maxAgeMs). 0 = no floor.")
 
     pp = sub.add_parser("poll", help="Polling loop")
     pp.add_argument("--interval", type=int, default=5, help="Seconds between polls")
     pp.add_argument("--max-age", type=int, default=0,
-                    help="Per-poll replay floor in seconds (spec §'Cursor Lifecycle' L529). 0 = no floor.")
+                    help="Per-poll replay floor in seconds (spec §'Cursor Lifecycle' L580; sent as maxAgeMs). 0 = no floor.")
 
     args = parser.parse_args()
     session = MCPSession(args.mcp)

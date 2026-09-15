@@ -39,7 +39,7 @@ func TestReceiver_RoutesGapToCallback(t *testing.T) {
 
 	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	canonical := []byte("gap-test-key")
-	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_gap_test", URL: srv.URL, Secret: secret, MaxAgeSeconds: 0})
+	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_gap_test", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
 	r.PostGap(canonical, "fresh-c-77")
 
@@ -74,7 +74,7 @@ func TestReceiver_RoutesTerminatedToCallback(t *testing.T) {
 
 	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	canonical := []byte("terminated-test-key")
-	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_term_test", URL: srv.URL, Secret: secret, MaxAgeSeconds: 0})
+	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_term_test", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
 	r.PostTerminated(canonical, events.ControlError{Code: -32012, Message: "Unauthorized"})
 
@@ -104,7 +104,7 @@ func TestReceiver_NoCallbacksRegistered(t *testing.T) {
 	var serverPostFailed atomic.Bool
 	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
 	canonical := []byte("no-cb-key")
-	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_no_cb", URL: srv.URL, Secret: secret, MaxAgeSeconds: 0})
+	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_no_cb", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
 	r.PostGap(canonical, "c1")
 	require.Eventually(t, func() bool {

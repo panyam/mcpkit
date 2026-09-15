@@ -56,9 +56,10 @@ type SubscribeOptions struct {
 	Arguments map[string]any
 
 	// MaxAge is the per-subscription replay floor sent on every subscribe
-	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAge" L529.
-	// Zero means no floor (server defaults to "no maxAge"). Resolution is
-	// seconds; sub-second precision is dropped on the wire.
+	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAgeMs" L580.
+	// Zero means no floor (server defaults to no floor). Sent as the
+	// `maxAgeMs` integer; resolution is milliseconds, and sub-millisecond
+	// precision is dropped on the wire.
 	MaxAge time.Duration
 
 	// TTLMs is the client's suggested subscription lifetime in
@@ -229,7 +230,7 @@ func (s *Subscription) subscribe() error {
 		params["cursor"] = nil
 	}
 	if s.opts.MaxAge > 0 {
-		params["maxAge"] = int(s.opts.MaxAge / time.Second)
+		params["maxAgeMs"] = s.opts.MaxAge.Milliseconds()
 	}
 	if len(s.opts.Arguments) > 0 {
 		params["arguments"] = s.opts.Arguments

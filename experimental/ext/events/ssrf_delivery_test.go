@@ -99,7 +99,7 @@ func TestDelivery_RejectsLoopbackAtDialTime(t *testing.T) {
 	logCap := &captureLog{}
 	r := ssrfTestRegistry(false, logCap) // allowPrivate=false → loopback BLOCKED
 
-	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
+	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hi"}))
 
@@ -124,7 +124,7 @@ func TestDelivery_AllowsLoopbackWithEscape(t *testing.T) {
 	defer srv.Close()
 
 	r := ssrfTestRegistry(true, nil) // allowPrivate=true → demo mode
-	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
+	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hi"}))
 
@@ -225,7 +225,7 @@ func TestDelivery_DoesNotFollowRedirects(t *testing.T) {
 	// Use the loopback escape so we can test the redirect specifically,
 	// not the SSRF dial guard.
 	r := ssrfTestRegistry(true, nil)
-	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeSeconds: 0})
+	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(),
 		map[string]string{"text": "hi"}))
 

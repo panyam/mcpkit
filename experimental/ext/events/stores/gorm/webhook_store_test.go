@@ -14,15 +14,15 @@ func ptr[T any](v T) *T { return &v }
 
 func mkTarget(canonicalKey []byte, principal, eventName string) events.WebhookTarget {
 	return events.WebhookTarget{
-		CanonicalKey:  canonicalKey,
-		ID:            "sub_" + principal + "_" + eventName,
-		URL:           "https://example.test/webhook",
-		Secret:        "whsec_test",
-		ExpiresAt:     ptr(time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)),
-		MaxAgeSeconds: 60,
-		EventName:     eventName,
-		Principal:     principal,
-		Arguments:     map[string]any{"channel": "general", "n": float64(7)},
+		CanonicalKey: canonicalKey,
+		ID:           "sub_" + principal + "_" + eventName,
+		URL:          "https://example.test/webhook",
+		Secret:       "whsec_test",
+		ExpiresAt:    ptr(time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)),
+		MaxAgeMs:     60,
+		EventName:    eventName,
+		Principal:    principal,
+		Arguments:    map[string]any{"channel": "general", "n": float64(7)},
 		Status: events.DeliveryStatus{
 			Active:    true,
 			LastError: events.DeliveryErrorNone,

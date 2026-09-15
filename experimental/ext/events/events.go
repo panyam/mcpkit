@@ -65,11 +65,23 @@ func (e Event) CursorStr() string {
 // with `cursor: null`. Use this for ephemeral-state sources (typing
 // indicators, presence, current-readings) where replay carries no value.
 type EventDef struct {
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Delivery      []string `json:"delivery"`
-	PayloadSchema any      `json:"payloadSchema,omitempty"`
-	Cursorless    bool     `json:"cursorless,omitempty"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Delivery    []string `json:"delivery"`
+	// InputSchema is a JSON Schema describing valid subscription
+	// arguments, mirroring the inputSchema/arguments pairing on tools
+	// (spec §"Listing Available Events" L91). Optional: a source that
+	// takes no arguments leaves it nil and the key is omitted from
+	// events/list.
+	//
+	// When set, the library compiles it once at Register time and
+	// validates the `arguments` of every events/poll, events/subscribe
+	// and events/stream request against it, rejecting mismatches with
+	// -32602 InvalidParams (spec L115). Authors therefore do not need
+	// to re-validate inside Match / Transform / OnSubscribe.
+	InputSchema   any  `json:"inputSchema,omitempty"`
+	PayloadSchema any  `json:"payloadSchema,omitempty"`
+	Cursorless    bool `json:"cursorless,omitempty"`
 	// Meta is opaque per-event-type metadata (spec follow-on commit
 	// d4faef9 2026-05-01). Same `_meta` convention as Event /
 	// Tool / Resource / Prompt. Sources set it once at construction
@@ -497,11 +509,11 @@ func EmitToWebhooks(ctx context.Context, webhooks *WebhookRegistry, event Event)
 // the spec — single-sub call, single-sub response, single-sub error
 // path. See the NotFound branch in registerPoll.
 type pollResultWire struct {
-	Events          []Event `json:"events,omitempty"`
-	Cursor          *string `json:"cursor"`
-	HasMore         bool    `json:"hasMore"`
-	Truncated       bool    `json:"truncated,omitempty"`
-	NextPollSeconds int     `json:"nextPollSeconds,omitempty"`
+	Events     []Event `json:"events,omitempty"`
+	Cursor     *string `json:"cursor"`
+	HasMore    bool    `json:"hasMore"`
+	Truncated  bool    `json:"truncated,omitempty"`
+	NextPollMs int     `json:"nextPollMs,omitempty"`
 }
 
 // listResultWire is the events/list response shape (spec follow-on
@@ -534,14 +546,14 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		// Spec §"Poll-Based Delivery" → "Request: events/poll"
 		// L139-149: flat top-level shape — no subscriptions[]
-		// wrapper. MaxAge per spec §"Cursor Lifecycle" →
-		// "Bounding replay with maxAge" L529.
+		// wrapper. MaxAgeMs per spec §"Cursor Lifecycle" →
+		// "Bounding replay with maxAgeMs" L580.
 		var req struct {
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments,omitempty"` // spec PR1 commit 082166f0: renamed from params to match tools/call
 			Cursor    *string        `json:"cursor"`
 			MaxEvents int            `json:"maxEvents,omitempty"`
-			MaxAge    int            `json:"maxAge,omitempty"` // seconds; 0 = no floor
+			MaxAgeMs  int            `json:"maxAgeMs,omitempty"` // milliseconds; 0 = no floor
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -568,6 +580,9 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		source, ok := reg.Source(req.Name)
 		if !ok {
 			return newNotFoundError(id, "event", "NotFound")
+		}
+		if errResp := validateArguments(id, reg, req.Name, req.Arguments); errResp != nil {
+			return errResp
 		}
 
 		// Poll-lease bookkeeping per spec §"Server SDK Guidance" →
@@ -658,13 +673,13 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			events = kept
 		}
 
-		// maxAge replay floor per spec §"Cursor Lifecycle" →
-		// "Bounding replay with maxAge" L529. Drop events whose
-		// timestamp predates now - maxAge. If filtering removes any,
+		// maxAgeMs replay floor per spec §"Cursor Lifecycle" →
+		// "Bounding replay with maxAgeMs" L580. Drop events whose
+		// timestamp predates now - maxAgeMs. If filtering removes any,
 		// set Truncated=true (signals the gap to the client). When
-		// req.MaxAge is 0 (default), no filtering applies.
-		if req.MaxAge > 0 && len(events) > 0 {
-			floor := time.Now().Add(-time.Duration(req.MaxAge) * time.Second)
+		// req.MaxAgeMs is 0 (default), no filtering applies.
+		if req.MaxAgeMs > 0 && len(events) > 0 {
+			floor := time.Now().Add(-time.Duration(req.MaxAgeMs) * time.Millisecond)
 			kept := make([]Event, 0, len(events))
 			for _, e := range events {
 				ts, err := time.Parse(time.RFC3339, e.Timestamp)
@@ -696,11 +711,11 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		}
 
 		return core.NewResponse(id, pollResultWire{
-			Events:          events,
-			Cursor:          wireCursor,
-			HasMore:         hasMore,
-			Truncated:       pr.Truncated,
-			NextPollSeconds: 5,
+			Events:     events,
+			Cursor:     wireCursor,
+			HasMore:    hasMore,
+			Truncated:  pr.Truncated,
+			NextPollMs: 5000,
 		})
 	})
 }
@@ -753,8 +768,8 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 				URL    string `json:"url"`
 				Secret string `json:"secret,omitempty"`
 			} `json:"delivery"`
-			Cursor *string `json:"cursor"`
-			MaxAge int     `json:"maxAge,omitempty"` // spec §"Cursor Lifecycle" L529; seconds, 0 = no floor
+			Cursor   *string `json:"cursor"`
+			MaxAgeMs int     `json:"maxAgeMs,omitempty"` // spec §"Cursor Lifecycle" L580; milliseconds, 0 = no floor
 			// TTLMs is the client's suggested subscription lifetime
 			// (spec PR1 commit 99f3589c §"Subscription TTL"). Tristate:
 			// absent (server default), `null` (request no-expiry), or
@@ -777,6 +792,9 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		}
 		if _, ok := reg.Source(req.Name); !ok {
 			return newNotFoundError(id, "event", "NotFound")
+		}
+		if errResp := validateArguments(id, reg, req.Name, req.Arguments); errResp != nil {
+			return errResp
 		}
 		if req.Delivery.Mode != "webhook" {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "only webhook delivery mode is supported")
@@ -843,7 +861,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			DerivedID:         derivedID,
 			URL:               req.Delivery.URL,
 			Secret:            req.Delivery.Secret,
-			MaxAgeSeconds:     req.MaxAge,
+			MaxAgeMs:          req.MaxAgeMs,
 			EventName:         req.Name,
 			Principal:         principal,
 			Subject:           subSubject,

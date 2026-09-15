@@ -456,8 +456,8 @@ type WebhookTarget struct {
 	// termination per spec PR1 commit 99f3589c §"Subscription TTL". The
 	// prune loop and DeliverToTarget MUST guard the nil case; a missing
 	// guard would silently drop no-expiry subs on the first sweep.
-	ExpiresAt     *time.Time
-	MaxAgeSeconds int // per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
+	ExpiresAt *time.Time
+	MaxAgeMs  int // per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
 
 	EventName string         // event-type name (used by Match / Transform / OnRemove lookup)
 	Principal string         // resolved subscription principal (used by HookContext)
@@ -573,8 +573,8 @@ const (
 // subscription. Cross-tenant isolation is by construction since
 // principal is part of the key.
 type WebhookRegistry struct {
-	mu                   sync.RWMutex
-	store                WebhookStore // canonicalKey → WebhookTarget; default in-memory
+	mu                      sync.RWMutex
+	store                   WebhookStore // canonicalKey → WebhookTarget; default in-memory
 	client                  *http.Client
 	ttl                     time.Duration
 	ttlExplicit             bool // operator passed WithWebhookTTL (drives clamp decision)
@@ -586,11 +586,11 @@ type WebhookRegistry struct {
 	// TTL"). Default is 72h; tune via WithNoExpiryFailureGCWindow.
 	noExpiryFailureGCWindow time.Duration
 	headerMode              WebhookHeaderMode
-	allowPrivateNetworks bool          // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
-	extraHeaders         map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
-	maxBodyBytes         int           // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
-	suspendThreshold     int           // consecutive failures → Active=false (spec §"Webhook Delivery Status" L460); default 5
-	suspendWindow        time.Duration // sliding window over which failures accumulate; default 10min
+	allowPrivateNetworks    bool              // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
+	extraHeaders            map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
+	maxBodyBytes            int               // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
+	suspendThreshold        int               // consecutive failures → Active=false (spec §"Webhook Delivery Status" L460); default 5
+	suspendWindow           time.Duration     // sliding window over which failures accumulate; default 10min
 
 	// onRemoveHooks fire when a target is actually removed from the
 	// registry (Unregister, TTL prune, PostTerminated). The SDK uses
@@ -750,11 +750,11 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 		store:                   NewInMemoryWebhookStore(),
 		ttl:                     DefaultWebhookTTL,
 		headerMode:              StandardWebhooks,
-		maxBodyBytes:             defaultWebhookMaxBodyBytes,
-		suspendThreshold:         defaultWebhookSuspendThreshold,
-		suspendWindow:            defaultWebhookSuspendWindow,
-		noExpiryFailureGCWindow:  DefaultNoExpiryFailureGCWindow,
-		logf:                     log.Printf,
+		maxBodyBytes:            defaultWebhookMaxBodyBytes,
+		suspendThreshold:        defaultWebhookSuspendThreshold,
+		suspendWindow:           defaultWebhookSuspendWindow,
+		noExpiryFailureGCWindow: DefaultNoExpiryFailureGCWindow,
+		logf:                    log.Printf,
 	}
 	for _, o := range opts {
 		o(r)
@@ -874,11 +874,11 @@ func (r *WebhookRegistry) setLogfForTest(f func(format string, args ...any)) {
 // a positional list because EventName / Principal / Params took the
 // arg count past the readability ceiling.
 type RegisterParams struct {
-	CanonicalKey  []byte
-	DerivedID     string
-	URL           string
-	Secret        string
-	MaxAgeSeconds int
+	CanonicalKey []byte
+	DerivedID    string
+	URL          string
+	Secret       string
+	MaxAgeMs     int
 
 	// EventName / Principal / Arguments: copies of the identity
 	// components the registry stores so OnRemove hooks have full
@@ -942,7 +942,7 @@ type RegisterParams struct {
 // caller can derive once and reuse for both Register and the
 // subscribe-response body.
 //
-// MaxAgeSeconds is the per-subscription replay floor per spec
+// MaxAgeMs is the per-subscription replay floor per spec
 // §"Cursor Lifecycle" → "Bounding replay with maxAge" L529. Stored on
 // the target for use on (future) reconnect-with-replay; 0 means no
 // floor. On refresh, an explicit non-zero value replaces the prior
@@ -981,8 +981,8 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 		if p.Secret != "" {
 			existing.Secret = p.Secret
 		}
-		if p.MaxAgeSeconds > 0 {
-			existing.MaxAgeSeconds = p.MaxAgeSeconds
+		if p.MaxAgeMs > 0 {
+			existing.MaxAgeMs = p.MaxAgeMs
 		}
 		// A successful refresh reactivates a suspended target per spec
 		// §"Webhook Delivery Status" L460. Clear the failure run so
@@ -1000,17 +1000,17 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 		isNew = false
 	} else {
 		_, _ = r.store.SaveWebhook(context.Background(), SaveWebhookRequest{Target: WebhookTarget{
-			CanonicalKey:  p.CanonicalKey,
-			ID:            p.DerivedID,
-			URL:           p.URL,
-			Secret:        p.Secret,
-			ExpiresAt:     expiresAt,
-			MaxAgeSeconds: p.MaxAgeSeconds,
-			EventName:     p.EventName,
-			Principal:     p.Principal,
-			Subject:       p.Subject,
-			SessionID:     p.SessionID,
-			Arguments:     p.Arguments,
+			CanonicalKey: p.CanonicalKey,
+			ID:           p.DerivedID,
+			URL:          p.URL,
+			Secret:       p.Secret,
+			ExpiresAt:    expiresAt,
+			MaxAgeMs:     p.MaxAgeMs,
+			EventName:    p.EventName,
+			Principal:    p.Principal,
+			Subject:      p.Subject,
+			SessionID:    p.SessionID,
+			Arguments:    p.Arguments,
 			// Active defaults to true on first registration. The
 			// suspend state machine flips this to false after
 			// repeated failures (spec §"Webhook Delivery Status"
