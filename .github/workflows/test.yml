@@ -291,15 +291,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Also needed by the COMPAT.md freshness step below, which shells out to
+      # scripts/refresh-apps-compat-report.sh and installs this package there.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: pnpm
+          cache-dependency-path: tools/compat-reports/pnpm-lock.yaml
 
       - name: Run apps-compat renderer unit tests
         working-directory: tools/compat-reports
         run: |
-          npm install --silent
-          npm test
+          pnpm install --frozen-lockfile
+          pnpm test
 
       - name: Check conformance/apps/COMPAT.md is fresh
         env:

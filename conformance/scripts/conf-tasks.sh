@@ -18,8 +18,8 @@ for i in $(seq 1 30); do
         && break
     sleep 0.5
 done
-(cd "$CONFORMANCE_DIR" && npm install --silent && \
-    SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts)
+(cd "$CONFORMANCE_DIR" && pnpm install --silent && \
+    SERVER_URL=http://localhost:18091/mcp pnpm exec tsx --test tasks/scenarios.test.ts)
 RC=$?
 kill $PID 2>/dev/null
 wait $PID 2>/dev/null
