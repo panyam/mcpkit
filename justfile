@@ -150,6 +150,10 @@ testconf-stateless:
 testconf-skills:
     just -f conformance/justfile testconf-skills
 
+# Run MCP Events conformance — fork-based, informational (delegates to conformance/justfile)
+testconf-events:
+    just -f conformance/justfile testconf-events
+
 # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational; delegates to conformance/justfile)
 testconf-upstream-audit:
     just -f conformance/justfile testconf-upstream-audit

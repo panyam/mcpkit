@@ -42,7 +42,7 @@ default:
 # surfaces.
 
 # Run all conformance suites (needs fork worktrees + conf-upstream-main)
-test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-upstream-audit refresh-conformance
 
 # Run MCP conformance test suite (requires Node.js/npx)
 testconf:
@@ -95,6 +95,15 @@ testconf-auth-server:
 # directory); requires zero FAILURE rows.
 testconf-skills:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-skills.sh
+
+# Run MCP Events conformance — informational (exit 0 regardless of check
+# results). Drives examples/events/kitchen-sink via the fork's scenario runner.
+# Scores against the merged design sketch in
+# modelcontextprotocol/experimental-ext-triggers-events, which has no SEP number
+# yet, so check IDs carry the placeholder sep-9999- prefix. Expected to report
+# gaps G30/G31/G34. Tracking: mcpkit#1374.
+testconf-events:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-events.sh
 
 # Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 testconf-elicitation:
