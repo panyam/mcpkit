@@ -378,6 +378,14 @@
 <td><a href="https://github.com/panyam/mcpconformance/tree/pending"><code>panyam/mcpconformance@pending</code></a></td>
 <td>—</td>
 </tr>
+<tr>
+<td><code>testconf-events</code></td>
+<td>MCP Events (no SEP number yet)</td>
+<td align="center">8i</td>
+<td align="center"><em>INFO</em><sup>7</sup></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/feat/events-conformance-suite"><code>panyam/mcpconformance@feat/events-conformance-suite</code></a></td>
+<td>mcpkit 1374</td>
+</tr>
 </tbody>
 </table>
 <p><sup>1</sup> 17 pass / 0 fail / 0 warn / 0 skip as of 2026-09-03 against ccb0744 (hand-recorded from the target&rsquo;s own summary line, so re-run testconf-scope-challenge before trusting it). Tracks an unmerged upstream PR, so a red run means the fixture contract moved rather than mcpkit regressing. Retarget to upstream main and flip to a hard gate once 481 lands. Drives examples/auth/conformance-scope-challenge over opaque tokens with no authorization server; the real-IdP counterpart is testconf-auth-server.<br />
@@ -385,7 +393,8 @@
 <sup>3</sup> 36 pass / 0 fail / 1 warn across all 14 upstream input-required-result-* scenarios, against cmd/testserver at upstream a983ba9. The fixture is cmd/testserver, not examples/mrtr: the scenarios call test_input_required_result_* tools that only cmd/testserver/conformance_input_required.go registers. Same dead-env-var history as testconf-tasks-v2 (MRTR_SERVER_URL / MRTR_SERVER_CMD were read by nothing upstream). Upstream&rsquo;s negative-mrtr suite still runs after the gate; it spawns its own broken fixture and grades the harness, not mcpkit.<br />
 <sup>4</sup> Same scenario set tier-check&rsquo;s &ndash;client-cmd runs. Expected failures (extension + draft + backcompat categories, none tier-scored) live in conformance/baseline.yml.<br />
 <sup>5</sup> 30/30 as of upstream 0.2.0-alpha.9 (#376 fixed the former array-vs-object requiredCapabilities test).<br />
-<sup>6</sup> 45 pass / 0 fail / 0 warn across the three upstream server scenarios (enumeration 32, manifest 6, directory 7), against examples/skills at upstream 7169291. Retargeted from the panyam/mcpconformance fork branch chore/sep-2640-yaml once PR 330 merged to upstream main; the scenario names did not change, so the move was a path swap. Gating since the retarget — it was INFO only because the fork branch was mid-WG-iteration. Upstream also registers five client-side skills scenarios (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter}) that this target does not run.</p>
+<sup>6</sup> 45 pass / 0 fail / 0 warn across the three upstream server scenarios (enumeration 32, manifest 6, directory 7), against examples/skills at upstream 7169291. Retargeted from the panyam/mcpconformance fork branch chore/sep-2640-yaml once PR 330 merged to upstream main; the scenario names did not change, so the move was a path swap. Gating since the retarget — it was INFO only because the fork branch was mid-WG-iteration. Upstream also registers five client-side skills scenarios (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter}) that this target does not run.<br />
+<sup>7</sup> 27 pass / 13 fail / 5 warn across events-discovery (8/11) and events-poll (19/29) as of 2026-09-15, against examples/events/kitchen-sink at c9160cff (hand-recorded from the runner&rsquo;s own summary, so re-run before trusting it). Phase 1 of the suite: 45 of the 131 requirement rows in src/seps/sep-9999.yaml, proposed upstream as a draft in modelcontextprotocol/conformance 504 and tracked on the fork branch until it lands. INFO for two reasons. The suite scores against the design sketch merged 2026-09-08 in modelcontextprotocol/experimental-ext-triggers-events, which has no SEP number, so check IDs carry a placeholder sep-9999- prefix that gets renamed once one is reserved. And the failures are ours: the server answers events/list while declaring no capabilities.events, so the whole surface is unreachable for a client that reads capabilities first; events/poll omits the events key instead of returning an empty array; and the events.topology meta-source does not keep the descriptor contract, sending delivery null, carrying no inputSchema, and answering events/poll despite advertising no poll delivery. Tracked in 1380. 1379 closed the nextPollSeconds rename (G31) and 1381 added list_changed and termination (G34, G30) plus inputSchema on the three real sources, so those no longer appear here. Flip to a gate once 1380 closes and the spec text stabilises. Push and webhook land in later phases; webhook delivery additionally needs a callback URL the fixture can reach over https, which a localhost run cannot provide.</p>
 <h3 id="setup--clone-the-right-worktree-per-suite">Setup — clone the right worktree per suite <a class="anchor" href="#setup--clone-the-right-worktree-per-suite">¶</a></h3>
 <p>Each suite&rsquo;s Makefile target reads <code>MCPCONFORMANCE_*_PATH</code> to find its scenario worktree. Defaults assume sibling clones of the source repo at the relative path shown. Override per-invocation when the worktree lives elsewhere.</p>
 <table>
@@ -445,6 +454,12 @@
 <td><code>MCPCONFORMANCE_SKILLS_PATH</code></td>
 <td><code>../conf-upstream-main</code></td>
 <td><code>git clone -b main https://github.com/modelcontextprotocol/conformance.git ../conf-upstream-main</code></td>
+</tr>
+<tr>
+<td><code>testconf-events</code></td>
+<td><code>MCPCONFORMANCE_EVENTS_PATH</code></td>
+<td><code>../conf-events</code></td>
+<td><code>git clone -b feat/events-conformance-suite https://github.com/panyam/mcpconformance.git ../conf-events</code></td>
 </tr>
 </tbody>
 </table>
