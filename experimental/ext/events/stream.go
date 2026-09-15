@@ -112,6 +112,7 @@ type errorNotifParams struct {
 type errPayload struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartbeat time.Duration, idx SubscriptionIndexStore, quota *Quota) {
@@ -308,7 +309,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				if se.Terminated != nil {
 					ctx.Notify("notifications/events/terminated", errorNotifParams{
 						RequestID: id,
-						Error:     errPayload{Code: se.Terminated.Code, Message: se.Terminated.Message},
+						Error:     errPayload{Code: se.Terminated.Code, Message: se.Terminated.Message, Data: se.Terminated.Data},
 					})
 					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
 				}
@@ -320,7 +321,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				if se.Error != nil {
 					ctx.Notify("notifications/events/error", errorNotifParams{
 						RequestID: id,
-						Error:     errPayload{Code: se.Error.Code, Message: se.Error.Message},
+						Error:     errPayload{Code: se.Error.Code, Message: se.Error.Message, Data: se.Error.Data},
 					})
 					continue
 				}

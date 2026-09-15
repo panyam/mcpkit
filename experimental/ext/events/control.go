@@ -34,6 +34,14 @@ import (
 type ControlError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	// Data carries the code's typed discriminator, mirroring the `data`
+	// field of a JSON-RPC error. Spec §"Event Type Removal and Breaking
+	// Changes" requires it on both termination shapes: NotFoundData
+	// {kind:"event"} for a removed type, UnsupportedData
+	// {feature, reason:"schema_changed"} for one changed in place.
+	// Without it a receiver sees -32011 and cannot tell a removed event
+	// type from a missing subscription.
+	Data any `json:"data,omitempty"`
 }
 
 // controlEnvelope is the wire shape of a non-event webhook body per
@@ -159,6 +167,38 @@ func (r *WebhookRegistry) TerminateBySubject(sub string, controlErr ControlError
 	var killed int
 	for _, t := range listResp.Targets {
 		if t.Subject != sub {
+			continue
+		}
+		r.PostTerminated(t.CanonicalKey, controlErr)
+		killed++
+	}
+	return killed
+}
+
+// TerminateByEventName fires {type:terminated} envelopes to every
+// subscription for a given event name, removes them from the registry,
+// and fires onRemove per match. Returns the count terminated.
+//
+// Spec §"Event Type Removal and Breaking Changes" (commit 28ec35e9)
+// designates this shape: when a server stops offering an event type, the
+// subscriptions to it no longer hold a valid contract and SHOULD be ended
+// rather than left waiting on a name the server will never emit again.
+// Registry.RemoveSource is the caller.
+//
+// Same O(N) store scan as TerminateBySession, and the same note applies:
+// a future store.ListByEventName hook can replace the body without
+// touching the public API. name == "" is a no-op.
+func (r *WebhookRegistry) TerminateByEventName(name string, controlErr ControlError) int {
+	if name == "" {
+		return 0
+	}
+	r.mu.RLock()
+	listResp, _ := r.store.ListWebhooks(context.Background(), ListWebhooksRequest{})
+	r.mu.RUnlock()
+
+	var killed int
+	for _, t := range listResp.Targets {
+		if t.EventName != name {
 			continue
 		}
 		r.PostTerminated(t.CanonicalKey, controlErr)

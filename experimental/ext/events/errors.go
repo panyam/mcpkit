@@ -87,10 +87,25 @@ type ResourceExhaustedData struct {
 // Unsupported responses. Feature names the dimension the server is
 // rejecting on (e.g., "deliveryMode"); Value carries the specific
 // rejected input ("push", "webhook") when one applies.
+//
+// Reason distinguishes WHY the feature is unsupported when the feature
+// name alone is ambiguous. Spec §"Event Type Removal and Breaking
+// Changes" (commit 28ec35e9) defines one value today,
+// reason "schema_changed" with feature "payloadSchema" or "inputSchema",
+// which tells a client SDK to re-fetch events/list and resubscribe
+// against the current descriptor rather than treat the termination as an
+// authorization failure. Omitted when the feature name is self-explanatory.
 type UnsupportedData struct {
 	Feature string `json:"feature"`
 	Value   string `json:"value,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 }
+
+// ReasonSchemaChanged is the UnsupportedData.Reason value for a
+// subscription ended because its event type's inputSchema or
+// payloadSchema changed incompatibly in place, per spec
+// §"Event Type Removal and Breaking Changes".
+const ReasonSchemaChanged = "schema_changed"
 
 // CallbackEndpointErrorData is the typed `data` payload attached to
 // -32015 CallbackEndpointError responses. Reason mirrors the

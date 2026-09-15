@@ -17,13 +17,23 @@ import (
 // on the server. Subscribers to events.topology see one TopologyEvent
 // per successful AddSource / RemoveSource call.
 //
-// This is mcpkit's stand-in for the spec-shaped
-// `notifications/events/list_changed` notification, which does not
-// exist in the events SEP today. By making source lifecycle a normal
-// event stream the SDK avoids inventing protocol surface: any client
-// that can subscribe to a source can observe topology, and the events.*
-// reserved prefix signals "this name is SDK-owned, do not register a
-// user source with this name."
+// This sits ALONGSIDE the spec's `notifications/events/list_changed`,
+// which the registry also emits on every AddSource / RemoveSource (see
+// broadcastListChanged). The two carry different information and are
+// not substitutes: list_changed is a bare "re-fetch events/list" ping
+// with no payload, while events.topology says which source appeared or
+// disappeared and when, without a follow-up round trip.
+//
+// An earlier revision of this comment claimed list_changed "does not
+// exist in the events SEP today" and used that to justify the
+// meta-source as a replacement. That was wrong when written: the spec
+// has carried a Dynamic Event Types section for a long time, and spec
+// commit 28ec35e9 (2026-09-04) widened it to fire on descriptor
+// changes too. The meta-source stays because it is strictly more
+// informative, not because the spec surface was missing.
+//
+// The events.* reserved prefix signals "this name is SDK-owned, do not
+// register a user source with this name."
 //
 // The events.* prefix is reserved for SDK-internal sources. Callers
 // must not register an EventSource with a name starting with `events.`
@@ -178,6 +188,7 @@ func (r *Registry) AddSource(src EventSource) error {
 	}
 	r.mu.Unlock()
 	r.publishTopology(TopologyEventTypeAdded, name)
+	r.broadcastListChanged()
 	return nil
 }
 
@@ -201,15 +212,84 @@ func (r *Registry) RemoveSource(name string) error {
 		return fmt.Errorf("events: RemoveSource: %q uses the reserved %q prefix and cannot be removed", name, reservedSourceNamePrefix)
 	}
 	r.mu.Lock()
-	if _, ok := r.sources[name]; !ok {
+	src, ok := r.sources[name]
+	if !ok {
 		r.mu.Unlock()
 		return fmt.Errorf("events: source %q not registered", name)
 	}
 	delete(r.sources, name)
 	delete(r.schemas, name)
 	r.mu.Unlock()
+
+	// Spec §"Event Type Removal and Breaking Changes" (commit 28ec35e9):
+	// subscriptions to a removed type no longer hold a valid contract, so
+	// the server SHOULD end them with each mode's termination signal
+	// rather than leaving subscribers waiting on a name that is gone.
+	//
+	// Ordering matters. Terminate BEFORE announcing, so a client that
+	// reacts to list_changed by re-reading events/list finds the removal
+	// already reflected and its own subscription already closed, rather
+	// than racing the two.
+	r.terminateSubscriptions(name, src)
+
 	r.publishTopology(TopologyEventTypeRemoved, name)
+	r.broadcastListChanged()
 	return nil
+}
+
+// terminateSubscriptions ends every live subscription to a removed event
+// type, per spec §"Event Type Removal and Breaking Changes". Both modes
+// carry the same error, -32011 NotFound with data.kind "event", which is
+// what tells a client SDK to re-fetch events/list rather than treat the
+// close as an auth failure or a transport blip.
+//
+// Poll needs no equivalent: it holds no server-side subscription, and a
+// poll against a removed name already answers -32011 from the handler's
+// own lookup miss.
+func (r *Registry) terminateSubscriptions(name string, src EventSource) {
+	// Webhook subscriptions live in the WebhookRegistry, keyed by event
+	// name among other things.
+	if r.webhooks != nil {
+		r.webhooks.TerminateByEventName(name, ControlError{
+			Code:    ErrCodeNotFound,
+			Message: "event type " + name + " was removed",
+			Data:    NotFoundData{Kind: "event"},
+		})
+	}
+	// Push subscribers hold a channel handed out by the source itself, so
+	// only the source can signal them. YieldingSource can; a source that
+	// cannot implement the terminal signal simply closes its subscriber
+	// channels when it shuts down, which streams already treat as an end.
+	if t, ok := src.(sourceTerminator); ok {
+		_ = t.YieldTerminated(EventDeliveryError{
+			Code:    ErrCodeNotFound,
+			Message: "event type " + name + " was removed",
+			Data:    NotFoundData{Kind: "event"},
+		})
+	}
+}
+
+// sourceTerminator is implemented by sources that can push a terminal
+// signal to their live stream subscribers. YieldingSource satisfies it
+// for every payload type, since YieldTerminated's signature carries no
+// type parameter.
+type sourceTerminator interface {
+	YieldTerminated(err EventDeliveryError) error
+}
+
+// broadcastListChanged emits the spec's `notifications/events/list_changed`
+// (§"Dynamic Event Types") so clients know to re-read events/list. The
+// notification carries no payload by design: it is a ping, and the client
+// re-fetches to learn what actually changed.
+//
+// Fired on AddSource and RemoveSource. The spec also asks for it when an
+// existing type's DESCRIPTOR changes in place, which mcpkit cannot reach
+// today because there is no in-place mutation API on the registry.
+func (r *Registry) broadcastListChanged() {
+	if r.srv == nil {
+		return
+	}
+	r.srv.Broadcast(context.Background(), "notifications/events/list_changed", map[string]any{})
 }
 
 // publishTopology yields a TopologyEvent on the events.topology meta-

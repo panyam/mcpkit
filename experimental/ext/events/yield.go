@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	defaultYieldingMaxSize         = 1000
-	defaultSubscriberBufferSize    = 64
+	defaultYieldingMaxSize      = 1000
+	defaultSubscriberBufferSize = 64
 )
 
 // YieldingOption configures a YieldingSource at construction time.
@@ -71,6 +71,12 @@ type SubscriberEvent struct {
 type EventDeliveryError struct {
 	Code    int
 	Message string
+	// Data is the typed discriminator for Code, surfaced on the
+	// notifications/events/terminated and notifications/events/error
+	// frames. Same contract as ControlError.Data on the webhook side, so
+	// a push subscriber and a webhook subscriber learn the same thing
+	// from the same termination.
+	Data any
 }
 
 // subscriberSlot is one registered Subscribe channel. pendingTruncated is
@@ -933,6 +939,7 @@ func (noopFanoutSpan) AddLink(_ core.Link)      {}
 //     and the non-blocking + drop-with-Truncated semantics; same
 //     codepath as the targeted-deliver closure used by
 //     EmitToSubscription (spec §"Server SDK Guidance" L630).
+//
 // deliverEventToSlot returns (matched, transformed) so yield()'s fanout
 // span can stamp accurate counts. matched=false means Match returned
 // false (the subscriber was filtered out before delivery); transformed
