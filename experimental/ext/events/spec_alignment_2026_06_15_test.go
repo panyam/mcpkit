@@ -254,7 +254,7 @@ func TestWebhookDelivery_410GoneIsTerminalWithoutSubscriptionEffect(t *testing.T
 	r.SetDefResolver(defResolver)
 	r.Register(RegisterParams{
 		CanonicalKey: canonical, DerivedID: "sub_410", URL: receiver.URL,
-		Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeSeconds: 0,
+		Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeMs: 0,
 		EventName: "fake.event", Principal: "alice",
 	})
 

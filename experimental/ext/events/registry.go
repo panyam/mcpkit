@@ -89,10 +89,16 @@ const (
 // to events.topology sees the live source-lifecycle stream without a
 // dedicated protocol surface. See TopologyEvent for the payload shape.
 type Registry struct {
-	mu        sync.RWMutex
-	srv       *server.Server
-	webhooks  *WebhookRegistry
-	sources   map[string]EventSource
+	mu       sync.RWMutex
+	srv      *server.Server
+	webhooks *WebhookRegistry
+	sources  map[string]EventSource
+	// schemas holds each source's compiled EventDef.InputSchema, keyed
+	// by source name. Compiled once at registration rather than per
+	// request because compilation walks and resolves the whole schema
+	// while validation only evaluates it. Absent entry means the source
+	// declared no InputSchema, which the validator treats as accept-all.
+	schemas   map[string]*core.CompiledSchema
 	emitter   Emitter
 	tp        core.TracerProvider
 	metaYield func(context.Context, TopologyEvent) error
@@ -108,6 +114,7 @@ func newRegistry(srv *server.Server, webhooks *WebhookRegistry, emitter Emitter,
 		srv:      srv,
 		webhooks: webhooks,
 		sources:  make(map[string]EventSource),
+		schemas:  make(map[string]*core.CompiledSchema),
 		emitter:  emitter,
 		tp:       tp,
 	}
@@ -152,6 +159,13 @@ func (r *Registry) AddSource(src EventSource) error {
 	if strings.HasPrefix(name, reservedSourceNamePrefix) {
 		return fmt.Errorf("events: AddSource: name %q uses the reserved %q prefix", name, reservedSourceNamePrefix)
 	}
+	// Compile before taking the lock and before mutating the map, so a
+	// malformed InputSchema fails registration outright instead of
+	// leaving a source that rejects every request at dispatch time.
+	compiled, err := core.CompileSchema(src.Def().InputSchema)
+	if err != nil {
+		return fmt.Errorf("events: AddSource %q: inputSchema: %w", name, err)
+	}
 	r.mu.Lock()
 	if _, exists := r.sources[name]; exists {
 		r.mu.Unlock()
@@ -159,6 +173,9 @@ func (r *Registry) AddSource(src EventSource) error {
 	}
 	r.wireLocked(src)
 	r.sources[name] = src
+	if compiled != nil {
+		r.schemas[name] = compiled
+	}
 	r.mu.Unlock()
 	r.publishTopology(TopologyEventTypeAdded, name)
 	return nil
@@ -189,6 +206,7 @@ func (r *Registry) RemoveSource(name string) error {
 		return fmt.Errorf("events: source %q not registered", name)
 	}
 	delete(r.sources, name)
+	delete(r.schemas, name)
 	r.mu.Unlock()
 	r.publishTopology(TopologyEventTypeRemoved, name)
 	return nil
@@ -213,6 +231,16 @@ func (r *Registry) publishTopology(eventType, name string) {
 
 // Source looks up a registered source by name. Returns (nil, false)
 // when no source with that name is currently registered.
+// inputSchema returns the compiled InputSchema for a source, or nil
+// when the source declared none. A nil result is the accept-all case:
+// core.CompiledSchema.Validate is nil-safe and reports no violations,
+// so callers can validate unconditionally without a presence check.
+func (r *Registry) inputSchema(name string) *core.CompiledSchema {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.schemas[name]
+}
+
 func (r *Registry) Source(name string) (EventSource, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

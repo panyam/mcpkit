@@ -131,11 +131,11 @@ Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
 
 ```bash
 # events/subscribe in webhook mode; response carries id + refreshBefore but NOT the secret.
-# cursor:null = "from now"; maxAge:300 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})
+# cursor:null = "from now"; maxAgeMs:300000 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})
 # (mint $SID via initialize first — see the connect step)
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999/hook","secret":"whsec_<client-supplied>"},"cursor":null,"maxAge":300}}' | jq '.result'
+  -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999/hook","secret":"whsec_<client-supplied>"},"cursor":null,"maxAgeMs":300000}}' | jq '.result'
 ```
 
 ### Step 5: Live Telegram interaction (real message from a Telegram chat)

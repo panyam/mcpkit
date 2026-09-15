@@ -10,7 +10,7 @@ package events
 // "the SDK treats poll subscriptions as leased. The lease is keyed on
 // `(principal-or-null, eventName, canonicalHash(params))`... The lease
 // window is SDK-configurable and SHOULD default to a small multiple of
-// the server's typical nextPollSeconds."
+// the server's typical nextPollMs."
 //
 // Why a separate table rather than reusing WebhookRegistry's TTL state:
 // the registry is keyed on (principal, url, name, params) — webhook has

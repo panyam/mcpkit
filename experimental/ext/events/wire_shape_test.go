@@ -15,7 +15,7 @@ import (
 
 // TestPollResponse_FlatShape pins the events/poll success-response wire shape
 // against the spec: top-level fields {events, cursor, hasMore, truncated,
-// nextPollSeconds}, NO results[] wrapper, NO per-result `id`. Failing this
+// nextPollMs}, NO results[] wrapper, NO per-result `id`. Failing this
 // test means a client decoding the spec shape would not find its data — or
 // would find it under the legacy nested key path.
 //
@@ -27,11 +27,11 @@ import (
 func TestPollResponse_FlatShape(t *testing.T) {
 	cursor := "cursor_xyz"
 	wire := pollResultWire{
-		Events:          []Event{{EventID: "evt_1", Name: "demo", Timestamp: "t", Data: json.RawMessage(`{}`), Cursor: &cursor}},
-		Cursor:          &cursor,
-		HasMore:         false,
-		Truncated:       false,
-		NextPollSeconds: 5,
+		Events:     []Event{{EventID: "evt_1", Name: "demo", Timestamp: "t", Data: json.RawMessage(`{}`), Cursor: &cursor}},
+		Cursor:     &cursor,
+		HasMore:    false,
+		Truncated:  false,
+		NextPollMs: 5000,
 	}
 	raw, err := json.Marshal(wire)
 	require.NoError(t, err)
@@ -41,7 +41,9 @@ func TestPollResponse_FlatShape(t *testing.T) {
 	assert.Contains(t, body, `"events":`, "spec field events missing at top level")
 	assert.Contains(t, body, `"cursor":`, "spec field cursor missing at top level")
 	assert.Contains(t, body, `"hasMore":`, "spec field hasMore missing at top level")
-	assert.Contains(t, body, `"nextPollSeconds":`, "spec field nextPollSeconds missing at top level")
+	assert.Contains(t, body, `"nextPollMs":`, "spec field nextPollMs missing at top level")
+	assert.False(t, strings.Contains(body, `"nextPollSeconds"`),
+		"pre-rename nextPollSeconds must be gone (spec 197c32b4): got %s", body)
 
 	// No legacy wrapper or wrapper-only keys.
 	assert.False(t, strings.Contains(body, `"results"`),
@@ -57,11 +59,11 @@ func TestPollResponse_FlatShape(t *testing.T) {
 func TestPollResponse_FlatShape_Truncated(t *testing.T) {
 	cursor := "cursor_after_gap"
 	wire := pollResultWire{
-		Events:          nil,
-		Cursor:          &cursor,
-		HasMore:         false,
-		Truncated:       true,
-		NextPollSeconds: 5,
+		Events:     nil,
+		Cursor:     &cursor,
+		HasMore:    false,
+		Truncated:  true,
+		NextPollMs: 5000,
 	}
 	raw, err := json.Marshal(wire)
 	require.NoError(t, err)
@@ -139,8 +141,8 @@ func TestPoll_RejectsLegacyWrapper(t *testing.T) {
 	assert.Contains(t, resp.Error.Message, "L139", "error should cite the spec section")
 }
 
-// TestPoll_MaxAgeFiltersOldEvents verifies the spec's maxAge replay
-// floor per §"Cursor Lifecycle" → "Bounding replay with maxAge" L529.
+// TestPoll_MaxAgeFiltersOldEvents verifies the spec's maxAgeMs replay
+// floor per §"Cursor Lifecycle" → "Bounding replay with maxAgeMs" L580.
 // Server discards events whose timestamp predates `now - maxAge` and
 // signals the gap via Truncated=true. Without filtering, a long-offline
 // client reconnects with a stale cursor and triggers an unbounded
@@ -194,11 +196,13 @@ func TestPoll_MaxAgeFiltersOldEvents(t *testing.T) {
 		},
 	)
 
-	// Poll with maxAge=5s — should drop both old events, keep the fresh one.
+	// Poll with maxAgeMs=5000 (5s) — drops both old events, keeps the fresh
+	// one. The value doubles as a unit assertion: read as seconds it would be
+	// a 5000s floor and all three events would survive.
 	rawReq, _ := json.Marshal(map[string]any{
-		"name":   "fake.event",
-		"cursor": "0",
-		"maxAge": 5,
+		"name":     "fake.event",
+		"cursor":   "0",
+		"maxAgeMs": 5000,
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(rawReq),
@@ -212,11 +216,12 @@ func TestPoll_MaxAgeFiltersOldEvents(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &bodyMap))
 
 	events, _ := bodyMap["events"].([]any)
-	assert.Len(t, events, 1, "maxAge=5s must drop the 2 old events; got %d kept", len(events))
+	assert.Len(t, events, 1,
+		"maxAgeMs=5000 must be read as 5s and drop the 2 old events; got %d kept (5000s would keep all 3)", len(events))
 	assert.Equal(t, true, bodyMap["truncated"], "filtering must set truncated=true to signal the gap")
 }
 
-// TestPoll_MaxAgeZeroMeansNoFilter is the counter-test: maxAge omitted
+// TestPoll_MaxAgeZeroMeansNoFilter is the counter-test: maxAgeMs omitted
 // or set to 0 must NOT filter anything. Catches over-eager filtering
 // that would silently drop events when the client expects everything.
 func TestPoll_MaxAgeZeroMeansNoFilter(t *testing.T) {
@@ -238,7 +243,7 @@ func TestPoll_MaxAgeZeroMeansNoFilter(t *testing.T) {
 	rawReq, _ := json.Marshal(map[string]any{
 		"name":   "fake.event",
 		"cursor": "0",
-		// maxAge intentionally omitted
+		// maxAgeMs intentionally omitted
 	})
 	resp, err := srv.Dispatch(context.Background(), &core.Request{
 		JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "events/poll", Params: core.NewRawJSON(rawReq),
@@ -250,7 +255,7 @@ func TestPoll_MaxAgeZeroMeansNoFilter(t *testing.T) {
 	var bodyMap map[string]any
 	_ = json.Unmarshal(body, &bodyMap)
 	events, _ := bodyMap["events"].([]any)
-	assert.Len(t, events, 1, "no maxAge means no filter — ancient events must still be returned")
+	assert.Len(t, events, 1, "no maxAgeMs means no filter — ancient events must still be returned")
 	// Truncated may or may not be present depending on omitempty
 	if v, ok := bodyMap["truncated"]; ok {
 		assert.Equal(t, false, v, "no filtering happened — truncated must be false (or omitted)")
@@ -291,26 +296,26 @@ func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFil
 	return srv, src
 }
 
-// TestSubscribe_AcceptsMaxAge verifies the spec's maxAge floor on
+// TestSubscribe_AcceptsMaxAgeMs verifies the spec's maxAgeMs floor on
 // events/subscribe per §"Cursor Lifecycle" → "Bounding replay with
-// maxAge" L529. Client supplies a per-subscription replay floor that
+// maxAgeMs" L580. Client supplies a per-subscription replay floor that
 // the server records on the WebhookTarget for use on (future)
 // reconnect-with-replay.
 //
-// Without storing maxAge on the target, a long-offline subscriber's
+// Without storing maxAgeMs on the target, a long-offline subscriber's
 // reconnect would replay everything the cursor still covers; with
 // it, the server can bound replay to the requested floor.
-func TestSubscribe_AcceptsMaxAge(t *testing.T) {
+func TestSubscribe_AcceptsMaxAgeMs(t *testing.T) {
 	srv, webhooks := buildAuthGateStack(t, "test-principal")
 	params := validSubscribeParams()
-	params["maxAge"] = 300
+	params["maxAgeMs"] = 300000
 	resp := dispatchSubscribe(t, srv, params)
-	require.Nil(t, resp.Error, "subscribe with maxAge must succeed; got %+v", resp.Error)
+	require.Nil(t, resp.Error, "subscribe with maxAgeMs must succeed; got %+v", resp.Error)
 
 	targets := webhooks.Targets()
 	require.Len(t, targets, 1)
-	assert.Equal(t, 300, targets[0].MaxAgeSeconds,
-		"maxAge from subscribe request must be stored on WebhookTarget for reconnect-replay bounding")
+	assert.Equal(t, 300000, targets[0].MaxAgeMs,
+		"maxAgeMs from subscribe request must be stored on WebhookTarget, unscaled, for reconnect-replay bounding")
 }
 
 // TestSubscribe_DefaultsMaxAgeToZero is the counter-test: when maxAge is
@@ -327,7 +332,7 @@ func TestSubscribe_DefaultsMaxAgeToZero(t *testing.T) {
 
 	targets := webhooks.Targets()
 	require.Len(t, targets, 1)
-	assert.Equal(t, 0, targets[0].MaxAgeSeconds,
+	assert.Equal(t, 0, targets[0].MaxAgeMs,
 		"omitted maxAge must default to 0 (no floor)")
 }
 

@@ -109,7 +109,7 @@ myDB.OnInsert = func(row Row) {
 | Method | Description |
 |--------|-------------|
 | `events/list` | Returns event definitions with auto-derived `payloadSchema` and `cursorless` flag |
-| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollSeconds}`); error responses use spec error codes `-32011 NotFound` (`data.kind: "event"`) / `-32015 CallbackEndpointError` |
+| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollMs}`); error responses use spec error codes `-32011 NotFound` (`data.kind: "event"`) / `-32015 CallbackEndpointError` |
 | `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore`. `cursor: null` means "from now" — server resolves to source's current head |
 | `events/unsubscribe` | Webhook removal by `(url, id)` or `(url, secret)` |
 
@@ -138,7 +138,7 @@ type EventSource interface {
 
 // PollResult includes Truncated — true when the server started delivery
 // from a position later than the cursor the client supplied (events were
-// skipped: cursor outside retention, maxAge floor advanced, or server
+// skipped: cursor outside retention, maxAgeMs floor advanced, or server
 // replay ceiling). Clients SHOULD treat as a possible gap, persist the
 // fresh cursor, and re-fetch authoritative state via tools if it matters.
 type PollResult struct {
@@ -348,8 +348,8 @@ Based on Peter Alexander's design sketch (triggers-events-wg PR #1). Notable cho
 | Topic | Our approach |
 |-------|-------------|
 | **Cursors** | Opaque strings — store defines format. `YieldingSource` defaults to monotonic int64 |
-| **`truncated`** | Spec field — server signal that delivery started later than the supplied cursor (events skipped: retention, maxAge floor, or replay ceiling) |
-| **`nextPollSeconds`** | Per-subscription (follows spec schema); client SDK coalesces |
+| **`truncated`** | Spec field — server signal that delivery started later than the supplied cursor (events skipped: retention, maxAgeMs floor, or replay ceiling) |
+| **`nextPollMs`** | Per-subscription (follows spec schema); client SDK coalesces |
 | **`events/stream`** | Deferred — push uses `Server.Broadcast` for now |
 | **Typed contexts** | Handlers receive `core.MethodContext` (EmitLog, AuthClaims, etc.) |
 | **Yield-style SDK** | `YieldingSource` (Casey + Peter, WG PR #1 line 609) — non-normative SDK ergonomic |

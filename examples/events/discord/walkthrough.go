@@ -237,7 +237,7 @@ defer stream.Stop()`),
 	demo.Step("What if I can't keep a long-lived stream open?").
 		Arrow("Host", "Server", "events/poll {name: discord.message, cursor: <head>}").
 		DashedArrow("Server", "Host", "{events: [], cursor: <head>, hasMore: false}").
-		Note("Poll instead. `events/poll` is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: `{name, params, cursor, maxAge, maxEvents}` in, `{events, cursor, hasMore, truncated, nextPollSeconds}` out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client's polling loop has one code path.").
+		Note("Poll instead. `events/poll` is single-subscription per call (multi-sub batching was removed) with a flat top-level shape: `{name, arguments, cursor, maxAgeMs, maxEvents}` in, `{events, cursor, hasMore, truncated, nextPollMs}` out. Polling at the head returns no new events but advances the cursor — the response shape is identical whether or not events are waiting, so the client's polling loop has one code path.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# events/poll is single-subscription per call with a flat top-level shape.
 # Polling at the head returns no new events but advances the cursor — same shape either way.
@@ -271,7 +271,7 @@ fmt.Printf("events/poll response:\n%s\n", string(res.Raw))`),
 			}
 			// Re-indent the raw response so the demo output shows the actual
 			// wire shape — events/poll response per spec L139-149: flat
-			// {events, cursor, hasMore, [truncated], [nextPollSeconds]}.
+			// {events, cursor, hasMore, [truncated], [nextPollMs]}.
 			var v any
 			_ = json.Unmarshal(res.Raw, &v)
 			pretty, _ := json.MarshalIndent(v, "    ", "  ")
@@ -444,7 +444,7 @@ defer stream.Stop()`),
 # Tear down by tuple (name, params, delivery.url) — the derived id is not accepted as input.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":6,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<client-supplied>"},"maxAge":300}}' | jq '.result'
+  -d '{"jsonrpc":"2.0","id":6,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<client-supplied>"},"maxAgeMs":300000}}' | jq '.result'
 # later: events/unsubscribe { name, delivery: { url } }`).Default(),
 			demokit.MakeVariant("go", "go", `// events/subscribe via the typed SDK: subscribe + background auto-refresh at 0.5xTTL.
 // Secret auto-generated when empty; Receiver[Data] decodes the typed webhook envelope.
@@ -482,7 +482,7 @@ defer c.Call("events/unsubscribe", map[string]any{
 				OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 				// Bound worst-case replay on reconnect to 5 minutes
 				// per spec §"Cursor Lifecycle" → "Bounding replay
-				// with maxAge" L529. Stored on WebhookTarget for
+				// with maxAgeMs" L580. Stored on WebhookTarget for
 				// future reconnect-with-replay logic.
 				MaxAge: 5 * time.Minute,
 			})

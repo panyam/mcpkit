@@ -141,3 +141,39 @@ func newCallbackEndpointError(id json.RawMessage, reason, message string) *core.
 	return core.NewErrorResponseWithData(id, ErrCodeCallbackEndpointError, message,
 		CallbackEndpointErrorData{Reason: reason})
 }
+
+// newSchemaValidationError returns a -32602 InvalidParams response whose
+// data carries the per-field violations, per spec §"Error Codes" L115:
+// "arguments don't match the event's inputSchema".
+//
+// The typed payload is the difference between a client that can fix its
+// request and one that has to guess: -32602 alone says "wrong", errors[]
+// says which field and which keyword rejected it.
+func newSchemaValidationError(id json.RawMessage, name string, errs *core.ValidationErrors) *core.Response {
+	return core.NewErrorResponseWithData(id, core.ErrCodeInvalidParams,
+		"events: arguments do not match the inputSchema advertised for event "+name, errs)
+}
+
+// validateArguments checks a request's arguments against the compiled
+// InputSchema for the named source. Returns nil when the source declared
+// no schema (accept-all) or the arguments conform, otherwise the -32602
+// response to return directly.
+//
+// Applied on events/poll, events/subscribe and events/stream rather than
+// on subscribe alone: the spec scopes the obligation to the event's
+// inputSchema, not to one method, and a poll-mode client that never calls
+// subscribe would otherwise never learn its arguments are wrong.
+func validateArguments(id json.RawMessage, reg *Registry, name string, args map[string]any) *core.Response {
+	schema := reg.inputSchema(name)
+	if schema == nil {
+		return nil
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+	}
+	if errs := schema.Validate(raw); errs != nil {
+		return newSchemaValidationError(id, name, errs)
+	}
+	return nil
+}

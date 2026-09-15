@@ -227,12 +227,12 @@ stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
 		).
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# events/subscribe in webhook mode; response carries id + refreshBefore but NOT the secret.
-# cursor:null = "from now"; maxAge:300 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})
+# cursor:null = "from now"; maxAgeMs:300000 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})
 # (mint $SID via initialize first — see the connect step)
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999/hook","secret":"whsec_<client-supplied>"},"cursor":null,"maxAge":300}}' | jq '.result'`).Default(),
-			demokit.MakeVariant("go", "go", `// events/subscribe {name, delivery:{mode:"webhook", url, secret}, cursor:null, maxAge:300}
+  -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999/hook","secret":"whsec_<client-supplied>"},"cursor":null,"maxAgeMs":300000}}' | jq '.result'`).Default(),
+			demokit.MakeVariant("go", "go", `// events/subscribe {name, delivery:{mode:"webhook", url, secret}, cursor:null, maxAgeMs:300000}
 // via the typed Subscribe() helper (auto-generates whsec_ secret, runs the TTL refresh loop).
 sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
     EventName:   "telegram.message",
@@ -255,7 +255,7 @@ sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 				CallbackURL: hookSrv.URL,
 				// Bound worst-case replay on reconnect to 5 minutes
 				// per spec §"Cursor Lifecycle" → "Bounding replay
-				// with maxAge" L529. Stored on WebhookTarget for
+				// with maxAgeMs" L580. Stored on WebhookTarget for
 				// future reconnect-with-replay logic.
 				MaxAge: 5 * time.Minute,
 			})

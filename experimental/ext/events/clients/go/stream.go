@@ -43,9 +43,9 @@ type StreamOptions struct {
 	Cursor *string
 
 	// MaxAge is the per-stream replay floor sent on every events/stream
-	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAge" L529.
-	// Zero means no floor. Resolution is seconds; sub-second precision
-	// is dropped on the wire.
+	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAgeMs" L580.
+	// Zero means no floor. Sent as the `maxAgeMs` integer; resolution is
+	// milliseconds, and sub-millisecond precision is dropped on the wire.
 	MaxAge time.Duration
 
 	// Arguments is the per-subscription parameter bag the server's EventDef
@@ -187,7 +187,7 @@ func Stream(parent context.Context, sess *client.Client, opts StreamOptions) (*S
 		params["cursor"] = *opts.Cursor
 	}
 	if opts.MaxAge > 0 {
-		params["maxAge"] = int(opts.MaxAge / time.Second)
+		params["maxAgeMs"] = opts.MaxAge.Milliseconds()
 	}
 	if len(opts.Arguments) > 0 {
 		params["arguments"] = opts.Arguments

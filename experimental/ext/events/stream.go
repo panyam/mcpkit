@@ -125,7 +125,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			Name      string         `json:"name"`
 			Arguments map[string]any `json:"arguments,omitempty"` // spec PR1 commit 082166f0: renamed from params to match tools/call
 			Cursor    *string        `json:"cursor"`
-			MaxAge    int            `json:"maxAge,omitempty"`
+			MaxAgeMs  int            `json:"maxAgeMs,omitempty"`
 		}
 		if err := json.Unmarshal(params, &req); err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -133,6 +133,9 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		source, ok := reg.Source(req.Name)
 		if !ok {
 			return newNotFoundError(id, "event", "NotFound")
+		}
+		if errResp := validateArguments(id, reg, req.Name, req.Arguments); errResp != nil {
+			return errResp
 		}
 
 		// Spec §"Subscription Identity" → "Authentication required" L361:
