@@ -33,7 +33,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 .PHONY: test testconf testconfauth testconf-client \
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
-        testconf-stateless testconf-skills \
+        testconf-stateless testconf-skills testconf-events \
         testconf-elicitation testconf-upstream-audit \
         testconf-external-checker \
         refresh-conformance check-conformance-stale \
@@ -44,7 +44,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	cd $(REPO_ROOT) && bash scripts/conformance-test.sh
@@ -83,6 +83,9 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 
 testconf-skills: ## Run SEP-2640 skills conformance — gating. Drives examples/skills through the three upstream sep-2640-skills-* server scenarios (enumeration, manifest, directory); requires zero FAILURE rows.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-skills.sh
+
+testconf-events: ## Run MCP Events conformance — informational (exit 0 regardless of check results). Drives examples/events/kitchen-sink via the fork's scenario runner. Scores against the merged design sketch in modelcontextprotocol/experimental-ext-triggers-events, which has no SEP number yet, so check IDs carry the placeholder sep-9999- prefix. Expected to report gaps G30/G31/G34.
+	@bash $(CONFORMANCE_DIR)/scripts/conf-events.sh
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 	cd $(CONFORMANCE_DIR) && npm install --silent && \

@@ -147,3 +147,38 @@ suites:
       Upstream also registers five client-side skills scenarios
       (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter})
       that this target does not run.
+
+  - suite: testconf-events
+    sep: MCP Events (no SEP number yet)
+    stage: 8i
+    status: INFO
+    source:
+      repo: panyam/mcpconformance
+      branch: feat/events-conformance-suite
+      path_var: MCPCONFORMANCE_EVENTS_PATH
+      default_path: ../conf-events
+    note: >-
+      27 pass / 13 fail / 5 warn across events-discovery (8/11) and events-poll
+      (19/29) as of 2026-09-15, against examples/events/kitchen-sink at
+      c9160cff (hand-recorded from the runner's own summary, so re-run before
+      trusting it). Phase 1 of the suite: 45 of the 131 requirement rows in
+      src/seps/sep-9999.yaml, proposed upstream as a draft in
+      modelcontextprotocol/conformance 504 and tracked on the fork branch until
+      it lands. INFO for two reasons. The suite scores against the design
+      sketch merged 2026-09-08 in
+      modelcontextprotocol/experimental-ext-triggers-events, which has no SEP
+      number, so check IDs carry a placeholder sep-9999- prefix that gets
+      renamed once one is reserved. And the failures are ours: the server
+      answers events/list while declaring no capabilities.events, so the whole
+      surface is unreachable for a client that reads capabilities first;
+      events/poll omits the events key instead of returning an empty array; and
+      the events.topology meta-source does not keep the descriptor contract,
+      sending delivery null, carrying no inputSchema, and answering
+      events/poll despite advertising no poll delivery. Tracked in 1380.
+      1379 closed the nextPollSeconds rename (G31) and 1381 added
+      list_changed and termination (G34, G30) plus inputSchema on the three
+      real sources, so those no longer appear here. Flip to a gate once 1380
+      closes and the spec text stabilises. Push and webhook land in later
+      phases; webhook delivery additionally needs a callback URL the fixture
+      can reach over https, which a localhost run cannot provide.
+    tracking: "mcpkit 1374"

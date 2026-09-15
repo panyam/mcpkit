@@ -11,6 +11,7 @@
 
 : "${MCPCONFORMANCE_AUTH_PATH:="$REPO_ROOT/../conf-pending"}"
 : "${MCPCONFORMANCE_CLIENT_PATH:="$REPO_ROOT/../conf-upstream-main"}"
+: "${MCPCONFORMANCE_EVENTS_PATH:="$REPO_ROOT/../conf-events"}"
 : "${MCPCONFORMANCE_FILE_INPUTS_PATH:="$REPO_ROOT/../conf-pending"}"
 : "${MCPCONFORMANCE_MRTR_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH:="$REPO_ROOT/../conf-481"}"

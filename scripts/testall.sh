@@ -43,6 +43,7 @@ resolve_script() {
         testconf-file-inputs)                  echo "conformance/scripts/conf-file-inputs.sh" ;;
         testconf-auth-server)                  echo "conformance/scripts/conf-auth-server.sh" ;;
         testconf-skills)                       echo "conformance/scripts/conf-skills.sh" ;;
+        testconf-events)                       echo "conformance/scripts/conf-events.sh" ;;
         testkcl-auto)                          echo "scripts/testkcl-auto.sh" ;;
         *) echo "resolve_script: unknown stage token '$1'" >&2; return 1 ;;
     esac
@@ -122,6 +123,7 @@ run_stage 8e 9 mrtr-conformance testconf-mrtr
 run_stage 8f 9 file-inputs-conformance testconf-file-inputs
 run_stage 8g 9 auth-server-conformance testconf-auth-server
 run_stage 8h 9 skills-conformance testconf-skills
+run_stage 8i 9 events-conformance testconf-events info
 run_stage 9 9 keycloak testkcl-auto
 echo "" | tee -a "$REPORT_DIR/run.log"
 echo "=== Results: $PASS passed, $FAIL failed, $INFO informational ===" | tee -a "$REPORT_DIR/run.log"
