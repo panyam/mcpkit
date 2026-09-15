@@ -5,7 +5,8 @@
 #   3. driving tools/conformance-report to splice the result into CONFORMANCE.md
 #
 # Requires:
-#   - Node.js 22+ (npx)
+#   - Node.js 22+ (npx, for the upstream conformance CLI)
+#   - pnpm (tools/conformance-report is a pnpm package)
 #   - A clone of modelcontextprotocol/conformance at $MCPCONFORMANCE_BASE_PATH
 #     (defaults to ../conf-upstream-main relative to repo root)
 #   - GH_TOKEN or `gh auth login` — upstream tier-check still queries GitHub
@@ -46,6 +47,14 @@ fi
 
 if ! command -v npx >/dev/null 2>&1; then
     echo "refresh-conformance: npx not found. Install Node.js 22+." >&2
+    exit 1
+fi
+
+# The renderer in step 3 is a pnpm package. Check up front rather than after
+# the testserver build and the multi-minute tier-check run.
+if ! command -v pnpm >/dev/null 2>&1; then
+    echo "refresh-conformance: pnpm not found; tools/conformance-report needs it." >&2
+    echo "  Install with 'npm i -g pnpm' or 'corepack enable pnpm'." >&2
     exit 1
 fi
 
@@ -118,9 +127,12 @@ echo "=== Running upstream tier-check --output json ==="
 
 echo ""
 echo "=== Rendering CONFORMANCE.md ==="
-# Install renderer deps once; idempotent on rerun.
-(cd "$REPO_ROOT/tools/conformance-report" && npm install --silent)
-(cd "$REPO_ROOT/tools/conformance-report" && npx tsx src/index.ts \
+# Install renderer deps once; idempotent on rerun. Gated: an unguarded install
+# failure used to surface one line later as `Cannot find package 'yaml'` from
+# src/parse.ts, which points at the wrong problem entirely. pnpm defaults to
+# --frozen-lockfile under CI and a normal resolve locally.
+(cd "$REPO_ROOT/tools/conformance-report" && pnpm install --silent) || exit 1
+(cd "$REPO_ROOT/tools/conformance-report" && pnpm exec tsx src/index.ts \
     --scorecard "$WORK_DIR/scorecard.json" \
     --traceability "$CONF_DIR/src/seps/traceability.json" \
     --known-gaps "$REPO_ROOT/conformance/known-gaps.yaml" \

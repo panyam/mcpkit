@@ -158,9 +158,18 @@ jobs:
         with:
           go-version-file: mcpkit/go.mod
 
+      # Must precede setup-node so its pnpm cache resolution finds the binary.
+      # Also needed by the check-conformance-stale step below, which shells out
+      # to scripts/refresh-conformance.sh and installs the renderer there.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: pnpm
+          cache-dependency-path: mcpkit/tools/conformance-report/pnpm-lock.yaml
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -174,8 +183,8 @@ jobs:
       - name: Run renderer unit tests
         working-directory: mcpkit/tools/conformance-report
         run: |
-          npm install --silent
-          npm test
+          pnpm install --frozen-lockfile
+          pnpm test
 
       - name: Check CONFORMANCE.md is fresh
         working-directory: mcpkit

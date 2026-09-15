@@ -35,8 +35,8 @@ The mcpkit commit SHA is **not** stamped, because including it would diff the fi
 ## Tests
 
 ```
-npm install
-npm test
+pnpm install
+pnpm test
 ```
 
 Tests are fixture-driven: golden `expected.md` + recorded scorecard/traceability inputs in `test/fixtures/`.
