@@ -121,7 +121,7 @@ run_stage 8d 9 tasks-v2-conformance testconf-tasks-v2
 run_stage 8e 9 mrtr-conformance testconf-mrtr
 run_stage 8f 9 file-inputs-conformance testconf-file-inputs
 run_stage 8g 9 auth-server-conformance testconf-auth-server
-run_stage 8h 9 skills-conformance testconf-skills info
+run_stage 8h 9 skills-conformance testconf-skills
 run_stage 9 9 keycloak testkcl-auto
 echo "" | tee -a "$REPORT_DIR/run.log"
 echo "=== Results: $PASS passed, $FAIL failed, $INFO informational ===" | tee -a "$REPORT_DIR/run.log"

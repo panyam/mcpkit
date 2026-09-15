@@ -1,0 +1,13 @@
+# pnpm 10+ refuses to run a dependency's install scripts unless it is approved
+# here, and pnpm 12 errors (ERR_PNPM_IGNORED_BUILDS) rather than warning, so a
+# bare `pnpm install` fails without this file.
+#
+# esbuild arrives transitively via tsx and via vite under vitest. Its
+# postinstall is what puts the platform-native binary in place, so both the
+# renderer (npx tsx src/index.ts) and its vitest run need it to have executed.
+#
+# The setting is `allowBuilds` as of pnpm 12; it was `onlyBuiltDependencies`
+# (a list, and valid in package.json) through pnpm 11, and that older spelling
+# is silently ignored here. Regenerate with `pnpm approve-builds esbuild --yes`.
+allowBuilds:
+  esbuild: true

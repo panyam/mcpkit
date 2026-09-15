@@ -131,11 +131,19 @@ suites:
   - suite: testconf-skills
     sep: SEP-2640 Skills
     stage: 8h
-    status: INFO
+    status: PASS
     source:
-      repo: panyam/mcpconformance
-      branch: chore/sep-2640-yaml
+      repo: modelcontextprotocol/conformance
+      branch: main
       path_var: MCPCONFORMANCE_SKILLS_PATH
-      default_path: ../conf-skills
-    note: "Fixture spawns and runs cleanly. Fork-side Scenario classes blocked on WG iteration of sep-2640.yaml in panyam/mcpconformance PR 330."
-    tracking: "mcpkit 567"
+      default_path: ../conf-upstream-main
+    note: >-
+      45 pass / 0 fail / 0 warn across the three upstream server scenarios
+      (enumeration 32, manifest 6, directory 7), against examples/skills at
+      upstream 7169291. Retargeted from the panyam/mcpconformance fork branch
+      chore/sep-2640-yaml once PR 330 merged to upstream main; the scenario
+      names did not change, so the move was a path swap. Gating since the
+      retarget — it was INFO only because the fork branch was mid-WG-iteration.
+      Upstream also registers five client-side skills scenarios
+      (sep-2640-client-no-prefetch, sep-2640-client-verify-{digest,size,frontmatter})
+      that this target does not run.

@@ -1,3 +1,6 @@
 node_modules/
 dist/
+# This package is on pnpm; pnpm-lock.yaml is committed. A package-lock.json
+# here would mean someone ran npm, which is what let the installed tree
+# drift from package.json until `npm install` could no longer resolve it.
 package-lock.json

@@ -109,7 +109,7 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based, RFC 97
 testconf-elicitation: ## Run SEP-1036 elicitation conformance (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-elicitation
 
-testconf-skills: ## Run SEP-2640 skills conformance — fork-based (delegates to conformance/Makefile)
+testconf-skills: ## Run SEP-2640 skills conformance — upstream main (delegates to conformance/Makefile)
 	$(MAKE) -C conformance testconf-skills
 
 testconf-stateless: ## Run SEP-2575 stateless conformance — drives examples/stateless (delegates to conformance/Makefile)
