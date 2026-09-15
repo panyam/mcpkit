@@ -30,8 +30,15 @@ TEXT    ?= hello from `make inject`
 USER    ?=
 PASSWORD ?=
 
+# Published images the standalone events-stack.yaml pulls. Override REGISTRY
+# to push somewhere other than our GHCR org.
+REGISTRY         ?= ghcr.io/panyam
+IMAGE_TAG        ?= latest
+EVENT_SERVER_IMAGE ?= $(REGISTRY)/mcpkit-event-server:$(IMAGE_TAG)
+KEYCLOAK_IMAGE     ?= $(REGISTRY)/mcpkit-events-keycloak:$(IMAGE_TAG)
+
 KEYCLOAK_HOST    ?= http://localhost:8180
-ONEAUTH_VERSION  ?= v0.1.17
+ONEAUTH_VERSION  ?= v0.1.36
 ONEAUTH          := oneauth
 DEMO_CLIENT_ID   ?= mcp-events-poller
 DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
@@ -54,6 +61,7 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down infraup infradown test demo readme predemo \
+        stack-up stack-up-auth stack-down stack-smoke stack-logs images images-push \
         newtoken newtoken-ci poller streamer webhook inject drive-chat drive-presence \
         add-discord rm-source list-sources alllogs \
         hosts-install hosts-uninstall logs ps clean clean-backends clear_all_tokens clear-all
@@ -61,8 +69,8 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-gen-compose: ## Regenerate docker-compose.yaml + nginx/nginx.conf for N event-servers.
-	go -C tools/gen-compose run . -n=$(N) -out=../..
+gen-compose: ## Regenerate docker-compose.yaml + nginx/nginx.conf + events-stack.yaml for N event-servers.
+	go -C tools/gen-compose run . -n=$(N) -out=../.. -image=$(EVENT_SERVER_IMAGE) -keycloak-image=$(KEYCLOAK_IMAGE)
 
 build: ## Build all binaries locally (without Docker). push-server stays a reference for the production-shape HTTPSource pattern (run via `go -C push-server run .`).
 	go -C event-server build -o ../bin/event-server ./
@@ -89,6 +97,38 @@ up: gen-compose infraup ## Bring up backends then events. Reuses cached images. 
 
 down: ## docker compose down — tears down the events services only. Backends keep running (shared infra). Use `make infradown` to stop them too.
 	docker compose down
+
+# --- standalone stack (events-stack.yaml) --------------------------------
+#
+# The targets above are the DEVELOPMENT flow: they build event-server from
+# your checkout and split infra across docker/backends. The ones below drive
+# events-stack.yaml, the single self-contained compose published for people
+# who do not have this repo. Same generator, so the two cannot drift.
+
+stack-up: ## Bring up the standalone events-stack.yaml (pulls published images; anonymous auth).
+	docker compose -f events-stack.yaml up -d --wait --wait-timeout 180
+	@echo "standalone stack up; nginx on http://localhost:9090 — try: make stack-smoke"
+
+stack-up-auth: ## Same, plus Keycloak and the three demo realms (token introspection).
+	docker compose -f events-stack.yaml --profile auth up -d --wait --wait-timeout 300
+	@echo "standalone stack up WITH auth; Keycloak on http://localhost:8180"
+
+stack-down: ## Tear the standalone stack down, including its named volumes.
+	docker compose -f events-stack.yaml --profile auth down -v
+
+stack-smoke: ## Drive a real MCP session against the standalone stack and assert the spec wire.
+	./scripts/smoke-stack.sh
+
+stack-logs: ## Tail logs from the standalone stack.
+	docker compose -f events-stack.yaml logs -f --tail=100
+
+images: ## Build the published images locally (does not push).
+	docker build -t $(EVENT_SERVER_IMAGE) -f event-server/Dockerfile ../../..
+	docker build -t $(KEYCLOAK_IMAGE) ../../../docker/backends/keycloak
+
+images-push: images ## Build and push the published images. Requires `docker login ghcr.io`.
+	docker push $(EVENT_SERVER_IMAGE)
+	docker push $(KEYCLOAK_IMAGE)
 
 test: ## Run the walkthrough in non-interactive mode against the running docker stack.
 	go -C walkthrough run . --non-interactive

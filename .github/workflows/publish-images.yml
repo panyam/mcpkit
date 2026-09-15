@@ -1,0 +1,111 @@
+# Publishes the container images the standalone events stack pulls.
+#
+# examples/whole-enchilada/events/events-stack.yaml is meant to be curl'd and
+# run by people who do not have this repo, which only works if the images it
+# references actually exist in a registry. Nothing published them before this
+# workflow.
+#
+# Two images:
+#   mcpkit-event-server      the demo events server, built from the repo root
+#   mcpkit-events-keycloak   stock Keycloak with the three demo realms baked in,
+#                            needed only by the stack's `auth` profile
+#
+# Triggers on a version tag and on manual dispatch. Not on every push to main:
+# these are demo artifacts, and a moving `latest` under people testing against
+# us is worse than a stale one.
+name: Publish images
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to publish (default: latest)'
+        required: false
+        default: 'latest'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: mcpkit-event-server
+            context: .
+            dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
+          - image: mcpkit-events-keycloak
+            context: docker/backends/keycloak
+            dockerfile: docker/backends/keycloak/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A tag push publishes both the version and `latest`; a manual run
+      # publishes whatever the operator typed. `type=raw` rather than
+      # `type=semver` because the events demo is not on the library's release
+      # train and its tags need not parse as semver.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=${{ github.event.inputs.tag || 'latest' }}
+            type=ref,event=tag
+
+      # linux/amd64 plus arm64 because a good share of the people who will run
+      # this are on Apple silicon, where an amd64-only image runs under
+      # emulation and the Keycloak realm import gets slow enough to trip its
+      # own healthcheck.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Proves the published stack actually comes up, rather than trusting that a
+  # compose file that parses will also run. Pulls what the job above just
+  # pushed, waits for nginx to answer, and drives a real MCP session through
+  # to events/poll. Anonymous posture only: the auth profile needs a token
+  # dance that belongs in the Keycloak interop workflow, not here.
+  smoke:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Bring up the standalone stack
+        working-directory: examples/whole-enchilada/events
+        run: |
+          docker compose -f events-stack.yaml up -d --wait --wait-timeout 180
+
+      - name: events/poll answers with the spec wire
+        working-directory: examples/whole-enchilada/events
+        run: ./scripts/smoke-stack.sh http://localhost:9090/mcp
+
+      - name: Dump logs on failure
+        if: failure()
+        working-directory: examples/whole-enchilada/events
+        run: docker compose -f events-stack.yaml logs --tail=100
+
+      - name: Tear down
+        if: always()
+        working-directory: examples/whole-enchilada/events
+        run: docker compose -f events-stack.yaml down -v

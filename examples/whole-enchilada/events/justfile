@@ -6,7 +6,11 @@ TEXT := env('TEXT', 'hello from `just inject`')
 USER := env('USER', '')
 PASSWORD := env('PASSWORD', '')
 KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:8180')
-ONEAUTH_VERSION := env('ONEAUTH_VERSION', 'v0.1.17')
+ONEAUTH_VERSION := env('ONEAUTH_VERSION', 'v0.1.36')
+REGISTRY := env('REGISTRY', 'ghcr.io/panyam')
+IMAGE_TAG := env('IMAGE_TAG', 'latest')
+EVENT_SERVER_IMAGE := REGISTRY + '/mcpkit-event-server:' + IMAGE_TAG
+KEYCLOAK_IMAGE := REGISTRY + '/mcpkit-events-keycloak:' + IMAGE_TAG
 ONEAUTH := 'oneauth'
 DEMO_CLIENT_ID := env('DEMO_CLIENT_ID', 'mcp-events-poller')
 DEMO_CLIENT_SECRET := env('DEMO_CLIENT_SECRET', 'mcpkit-demo-secret-DEMO-ONLY')
@@ -38,7 +42,43 @@ help:
 
 # Regenerate docker-compose.yaml + nginx/nginx.conf for N event-servers.
 gen-compose:
-	go -C tools/gen-compose run . -n={{N}} -out=../..
+	go -C tools/gen-compose run . -n={{N}} -out=../.. -image={{EVENT_SERVER_IMAGE}} -keycloak-image={{KEYCLOAK_IMAGE}}
+
+# --- standalone stack (events-stack.yaml) ---
+# The recipes above build event-server from your checkout. These drive the
+# single self-contained compose published for people without this repo.
+
+# Bring up the standalone events-stack.yaml (pulls published images; anonymous auth).
+stack-up:
+	docker compose -f events-stack.yaml up -d --wait --wait-timeout 180
+	@echo "standalone stack up; nginx on http://localhost:9090 — try: just stack-smoke"
+
+# Same, plus Keycloak and the three demo realms (token introspection).
+stack-up-auth:
+	docker compose -f events-stack.yaml --profile auth up -d --wait --wait-timeout 300
+	@echo "standalone stack up WITH auth; Keycloak on http://localhost:8180"
+
+# Tear the standalone stack down, including its named volumes.
+stack-down:
+	docker compose -f events-stack.yaml --profile auth down -v
+
+# Drive a real MCP session against the standalone stack and assert the spec wire.
+stack-smoke:
+	./scripts/smoke-stack.sh
+
+# Tail logs from the standalone stack.
+stack-logs:
+	docker compose -f events-stack.yaml logs -f --tail=100
+
+# Build the published images locally (does not push).
+images:
+	docker build -t {{EVENT_SERVER_IMAGE}} -f event-server/Dockerfile ../../..
+	docker build -t {{KEYCLOAK_IMAGE}} ../../../docker/backends/keycloak
+
+# Build and push the published images. Requires `docker login ghcr.io`.
+images-push: images
+	docker push {{EVENT_SERVER_IMAGE}}
+	docker push {{KEYCLOAK_IMAGE}}
 
 # Build all binaries locally (without Docker). push-server stays a reference for the production-shape HTTPSource pattern (run via `go -C push-server run .`).
 build:

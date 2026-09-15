@@ -112,5 +112,5 @@ Current pin: v0.1.19. Version-specific fixes worth knowing:
   legacy `/auth/cli/token` JSON path remains the no-metadata fallback. `LoginRequest` gained
   `ClientSecret`, and `oneauth token password` gained `--client-secret`.
 
-Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.19`. Use it from
+Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.36`. Use it from
 PATH, since `go run @ver` gets confused by oneauth's own replace directives.
