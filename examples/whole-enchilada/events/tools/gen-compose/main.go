@@ -90,7 +90,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("render nginx for inlining: %v", err)
 	}
-	ctx.NginxConf = indent(nginxConf, "      ")
+	ctx.NginxConf = indent(escapeComposeVars(nginxConf), "      ")
 	if err := render(stackTmpl, ctx, filepath.Join(*outDir, "events-stack.yaml")); err != nil {
 		log.Fatalf("render stack: %v", err)
 	}
@@ -126,6 +126,21 @@ func renderString(tmpl string, ctx tmplCtx) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// escapeComposeVars doubles every `$` so Compose emits it literally.
+//
+// Compose interpolates the WHOLE file, `configs:` content included, and an
+// unset variable resolves to the empty string rather than an error. nginx
+// configs are full of bare variables ($host, $upstream, $idx, $rest), so
+// without this the inlined config ships as `proxy_set_header Host ;` and
+// nginx exits 1 on startup. `docker compose config` does not catch it: the
+// file resolves fine, it is the content that has been hollowed out.
+//
+// Applies only to the inlined copy. nginx/nginx.conf on disk is bind-mounted
+// by the dev overlay and must keep single `$`.
+func escapeComposeVars(s string) string {
+	return strings.ReplaceAll(s, "$", "$$")
 }
 
 // indent prefixes every non-empty line with pad. Blank lines are left bare

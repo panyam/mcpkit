@@ -81,19 +81,19 @@ configs:
               # of round-robin. Lets the evctl CLI pin admin operations to
               # specific replicas without requiring /etc/hosts entries — the
               # operator hits http://localhost:9090 throughout the demo.
-              location ~ ^/admin/replicas/(?<idx>\d+)(?<rest>/.*)$ {
+              location ~ ^/admin/replicas/(?<idx>\d+)(?<rest>/.*)$$ {
                   resolver 127.0.0.11 ipv6=off valid=10s;
-                  set $upstream "event-server-$idx";
-                  proxy_pass http://$upstream:8080/admin$rest;
+                  set $$upstream "event-server-$$idx";
+                  proxy_pass http://$$upstream:8080/admin$$rest;
                   proxy_http_version 1.1;
-                  proxy_set_header Host $host;
+                  proxy_set_header Host $$host;
                   proxy_set_header Connection "";
               }
 
               location / {
                   proxy_pass http://event-server-pool;
                   proxy_http_version 1.1;
-                  proxy_set_header Host $host;
+                  proxy_set_header Host $$host;
                   proxy_set_header Connection "";
               }
           }
@@ -105,7 +105,7 @@ configs:
               location / {
                   proxy_pass http://event-server-pool;
                   proxy_http_version 1.1;
-                  proxy_set_header Host $host;
+                  proxy_set_header Host $$host;
                   proxy_set_header Connection "";
               }
           }
@@ -113,13 +113,13 @@ configs:
           # event-server-<i>.whole-enchilada — direct pin via regex capture.
           server {
               listen 80;
-              server_name ~^event-server-(?<idx>\d+)\.whole-enchilada$;
+              server_name ~^event-server-(?<idx>\d+)\.whole-enchilada$$;
               resolver 127.0.0.11 ipv6=off valid=10s;
               location / {
-                  set $upstream "event-server-$idx";
-                  proxy_pass http://$upstream:8080;
+                  set $$upstream "event-server-$$idx";
+                  proxy_pass http://$$upstream:8080;
                   proxy_http_version 1.1;
-                  proxy_set_header Host $host;
+                  proxy_set_header Host $$host;
                   proxy_set_header Connection "";
               }
           }
