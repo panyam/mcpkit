@@ -7,6 +7,7 @@ USER := env('USER', '')
 PASSWORD := env('PASSWORD', '')
 KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:8180')
 ONEAUTH_VERSION := env('ONEAUTH_VERSION', 'v0.1.36')
+AUTH_INTROSPECTION_URLS := env('AUTH_INTROSPECTION_URLS', 'http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect')
 REGISTRY := env('REGISTRY', 'ghcr.io/panyam')
 IMAGE_TAG := env('IMAGE_TAG', 'latest')
 EVENT_SERVER_IMAGE := REGISTRY + '/mcpkit-event-server:' + IMAGE_TAG
@@ -53,10 +54,16 @@ stack-up:
 	docker compose -f events-stack.yaml up -d --wait --wait-timeout 180
 	@echo "standalone stack up; nginx on http://localhost:9090 — try: just stack-smoke"
 
-# Same, plus Keycloak and the three demo realms (token introspection).
+# Same, plus Keycloak and the three demo realms, with the replicas ON token introspection.
 stack-up-auth:
-	docker compose -f events-stack.yaml --profile auth up -d --wait --wait-timeout 300
+	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
+		docker compose -f events-stack.yaml --profile auth up -d --wait --wait-timeout 300
 	@echo "standalone stack up WITH auth; Keycloak on http://localhost:8180"
+	@echo "verify the replicas actually reject anonymous callers: just stack-smoke-auth"
+
+# Assert the auth stack REJECTS an anonymous subscriber (the check stack-smoke cannot make).
+stack-smoke-auth:
+	EXPECT_AUTH=1 ./scripts/smoke-stack.sh
 
 # Tear the standalone stack down, including its named volumes.
 stack-down:
