@@ -161,7 +161,7 @@ jobs:
       # Must precede setup-node so its pnpm cache resolution finds the binary.
       # Also needed by the check-conformance-stale step below, which shells out
       # to scripts/refresh-conformance.sh and installs the renderer there.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 12.4.1
 
