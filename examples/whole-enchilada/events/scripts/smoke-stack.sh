@@ -2,50 +2,57 @@
 # Drives a real MCP session against a running events stack and asserts the
 # wire shape the merged design sketch specifies.
 #
-#   ./scripts/smoke-stack.sh [endpoint]      # default http://localhost:9090/mcp
+#   ./scripts/smoke-stack.sh [endpoint]          # anonymous stack
+#   EXPECT_AUTH=1 ./scripts/smoke-stack.sh [..]  # auth stack: assert refusal
 #
 # Used by .github/workflows/publish-images.yml after `docker compose up`, and
-# by hand to check a stack you brought up locally. Prints the HTTP status and
-# body on any failure, so a red run says what went wrong rather than just
-# exiting non-zero.
+# by hand via `make stack-smoke` / `make stack-smoke-auth`.
 #
-# Speaks the SEP-2575 STATELESS wire: every request carries the namespaced
-# a namespaced params._meta envelope (protocolVersion plus the REQUIRED
-# clientCapabilities; clientInfo is optional but sent) and there is no
-# initialize and no Mcp-Session-Id. nginx round-robins
-# across the replicas with no session affinity (see nginx/nginx.conf), so a
-# legacy session established on replica 1 is unknown to replicas 2 and 3 on
-# the very next request. Stateless is the wire this topology supports, and the
-# wire the demo's own clients use.
+# Speaks the SEP-2575 STATELESS wire: every request carries a namespaced
+# params._meta envelope (protocolVersion plus the REQUIRED clientCapabilities)
+# and there is no initialize and no Mcp-Session-Id. nginx round-robins across
+# the replicas with no session affinity, so a legacy session established on
+# replica 1 is unknown to replicas 2 and 3 on the very next request.
+#
+# The two modes assert opposite things about the SAME first request, which is
+# why they share one code path. Against the default stack an anonymous caller
+# must be served. Against the auth profile it must be refused. Running the
+# anonymous assertions against an auth stack is what made an earlier version
+# of this script report a confusing 401 mid-run.
 #
 # Deliberately checks nextPollMs rather than merely "a response came back":
 # mcpkit shipped nextPollSeconds for four months against a spec that said
-# nextPollMs, and every test we had still passed. A smoke test that only
-# proved liveness would not have caught it either.
+# nextPollMs, and every test we had still passed.
 set -euo pipefail
 
 ENDPOINT="${1:-http://localhost:9090/mcp}"
-# EXPECT_AUTH=1 inverts the final assertion: instead of checking that an
-# anonymous caller is served, check that it is REFUSED. "Containers are
-# healthy" is not evidence the auth profile did anything, because Compose
-# reuses a running replica whose environment has not changed. This is.
-EXPECT_AUTH="${EXPECT_AUTH:-}"
 PROTOCOL="${MCP_PROTOCOL_VERSION:-2026-07-28}"
+EXPECT_AUTH="${EXPECT_AUTH:-}"
 
 fail() { echo "smoke-stack: FAIL: $*" >&2; exit 1; }
 
-# Emits the response body on stdout. On a non-2xx, reports the status and body
-# and exits. Keeps `set -e` from swallowing the one detail worth seeing.
-rpc() {
-  local method="$1" params_extra="${2:-}"
-  local meta="\"io.modelcontextprotocol/protocolVersion\":\"${PROTOCOL}\""
-  meta="${meta},\"io.modelcontextprotocol/clientCapabilities\":{}"
-  meta="${meta},\"io.modelcontextprotocol/clientInfo\":{\"name\":\"smoke-stack\",\"version\":\"1\"}"
-  local params="\"_meta\":{${meta}}"
-  [ -n "$params_extra" ] && params="${params},${params_extra}"
+# An events/list body is a few KB of JSON Schema. Printing it whole buries the
+# line that matters, so failures show a head and say how much was cut.
+brief() {
+  local s="$1" max=360
+  if [ "${#s}" -le "$max" ]; then printf '%s' "$s"; else
+    printf '%s... [%d more chars]' "${s:0:$max}" "$(( ${#s} - max ))"
+  fi
+}
 
-  local body status out
-  out=$(curl -sS -X POST "$ENDPOINT" \
+STATUS=""
+BODY=""
+
+# call sets STATUS and BODY. It never fails on a non-2xx, because both modes
+# need to inspect the refusal rather than abort on it.
+call() {
+  local method="$1" extra="${2:-}"
+  local meta="\"io.modelcontextprotocol/protocolVersion\":\"${PROTOCOL}\",\"io.modelcontextprotocol/clientCapabilities\":{}"
+  local params="\"_meta\":{${meta}}"
+  [ -n "$extra" ] && params="${params},${extra}"
+
+  local out
+  out=$(curl -sS --max-time 20 -X POST "$ENDPOINT" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' \
     -H "MCP-Protocol-Version: ${PROTOCOL}" \
@@ -53,72 +60,72 @@ rpc() {
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"${method}\",\"params\":{${params}}}") \
     || fail "${method}: curl could not reach ${ENDPOINT}"
 
-  status=$(printf '%s' "$out" | tail -1)
-  body=$(printf '%s' "$out" | sed '$d' | grep -v '^$' | tail -1 | sed 's/^data: //')
+  STATUS=$(printf '%s' "$out" | tail -1)
+  BODY=$(printf '%s' "$out" | sed '$d' | grep -v '^$' | tail -1 | sed 's/^data: //')
 
-  if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-    fail "${method}: HTTP ${status}
-  body: ${body}"
-  fi
-  case "$body" in
-    *'"error"'*) fail "${method}: JSON-RPC error
-  body: ${body}" ;;
+  # A legacy-wire answer means the envelope did not route as intended, and any
+  # assertion built on it proves nothing either way.
+  case "$BODY" in
+    *"missing Mcp-Session-Id"*)
+      fail "${method}: request landed on the legacy wire, so this run proved nothing.
+  The _meta envelope is malformed or not nested under params._meta.
+  body: $(brief "$BODY")" ;;
   esac
-  printf '%s' "$body"
 }
 
-echo "smoke-stack: ${ENDPOINT} (stateless wire, protocol ${PROTOCOL})"
+refused() {
+  case "$STATUS" in 401|403) return 0 ;; esac
+  case "$BODY" in *-32012*|*Forbidden*|*forbidden*) return 0 ;; esac
+  return 1
+}
 
-LIST=$(rpc "events/list")
-echo "$LIST" | grep -q '"chat.message"' \
-  || fail "events/list did not advertise chat.message
-  body: ${LIST}"
-echo "smoke-stack: events/list OK"
+echo "smoke-stack: ${ENDPOINT} (stateless wire, protocol ${PROTOCOL}${EXPECT_AUTH:+, expecting auth})"
 
-POLL=$(rpc "events/poll" '"name":"chat.message"')
-echo "$POLL" | grep -q '"nextPollMs"' \
-  || fail "events/poll is missing nextPollMs (spec 197c32b4)
-  body: ${POLL}"
-if echo "$POLL" | grep -q '"nextPollSeconds"'; then
-  fail "events/poll still emits the pre-rename nextPollSeconds
-  body: ${POLL}"
-fi
-
-echo "smoke-stack: events/poll OK -> ${POLL}"
+# One request decides everything. Both modes read it, in opposite directions.
+call "events/list"
 
 if [ -n "$EXPECT_AUTH" ]; then
-  # events/stream is the cheapest auth gate to probe: the handler resolves the
-  # principal right after the source lookup, so an unauthenticated caller gets
-  # an immediate -32012 instead of an opened stream. events/subscribe would
-  # work too but has to clear URL and secret validation first.
-  #
-  # --max-time guards the failure case: if auth is NOT on, the request opens a
-  # long-lived stream and would otherwise hang here rather than failing.
-  echo "smoke-stack: EXPECT_AUTH set — asserting an anonymous caller is refused"
-  # Must stay nested under _meta. Flattening it into params routes the
-  # request to the legacy wire, which answers "missing Mcp-Session-Id" and
-  # would satisfy a laxer assertion for entirely the wrong reason.
-  meta="\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"${PROTOCOL}\",\"io.modelcontextprotocol/clientCapabilities\":{}}"
-  out=$(curl -sS --max-time 10 -X POST "$ENDPOINT" \
-    -H 'Content-Type: application/json' \
-    -H 'Accept: application/json, text/event-stream' \
-    -H "MCP-Protocol-Version: ${PROTOCOL}" \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"events/stream\",\"params\":{${meta},\"name\":\"chat.message\"}}" 2>&1) \
-    || fail "events/stream probe did not return; if the stream stayed open, auth is NOT enabled and the replicas are still anonymous"
-
-  case "$out" in
-    *"missing Mcp-Session-Id"*)
-      fail "events/stream probe landed on the legacy wire, so this assertion proved nothing.
-  The _meta envelope is malformed or not nested. body: ${out}" ;;
-    *-32012*|*Forbidden*|*forbidden*)
-      echo "smoke-stack: anonymous events/stream refused as expected" ;;
-    *)
-      fail "auth profile is up but an anonymous events/stream was NOT refused.
+  if refused; then
+    echo "smoke-stack: anonymous events/list refused (HTTP ${STATUS})"
+    echo "smoke-stack: PASS"
+    exit 0
+  fi
+  fail "the auth profile is up but an anonymous events/list was SERVED (HTTP ${STATUS}).
   The replicas are still running with OAUTH_INTROSPECTION_URLS empty.
-  Compose reuses a container whose config has not changed, so bringing
-  Keycloak up alone does not switch them onto introspection.
-  body: ${out}" ;;
-  esac
+  Compose reuses a container whose config has not changed, so starting
+  Keycloak alone does not switch them onto introspection. Try:
+    make stack-down && make stack-up-auth
+  body: $(brief "$BODY")"
 fi
 
+if refused; then
+  fail "events/list was refused (HTTP ${STATUS}), so this stack requires auth.
+  Use 'make stack-smoke-auth' for an auth stack, or bring up the anonymous
+  one with 'make stack-down && make stack-up'.
+  body: $(brief "$BODY")"
+fi
+[ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ] \
+  || fail "events/list: HTTP ${STATUS}
+  body: $(brief "$BODY")"
+echo "$BODY" | grep -q '"chat.message"' \
+  || fail "events/list did not advertise chat.message
+  body: $(brief "$BODY")"
+echo "smoke-stack: events/list OK"
+
+call "events/poll" '"name":"chat.message"'
+[ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ] \
+  || fail "events/poll: HTTP ${STATUS}
+  body: $(brief "$BODY")"
+case "$BODY" in *'"error"'*) fail "events/poll returned a JSON-RPC error
+  body: $(brief "$BODY")" ;; esac
+
+echo "$BODY" | grep -q '"nextPollMs"' \
+  || fail "events/poll is missing nextPollMs (spec 197c32b4)
+  body: $(brief "$BODY")"
+if echo "$BODY" | grep -q '"nextPollSeconds"'; then
+  fail "events/poll still emits the pre-rename nextPollSeconds
+  body: $(brief "$BODY")"
+fi
+
+echo "smoke-stack: events/poll OK -> ${BODY}"
 echo "smoke-stack: PASS"
