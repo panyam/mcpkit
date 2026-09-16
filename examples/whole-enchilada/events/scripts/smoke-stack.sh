@@ -25,6 +25,11 @@
 set -euo pipefail
 
 ENDPOINT="${1:-http://localhost:9090/mcp}"
+# EXPECT_AUTH=1 inverts the final assertion: instead of checking that an
+# anonymous caller is served, check that it is REFUSED. "Containers are
+# healthy" is not evidence the auth profile did anything, because Compose
+# reuses a running replica whose environment has not changed. This is.
+EXPECT_AUTH="${EXPECT_AUTH:-}"
 PROTOCOL="${MCP_PROTOCOL_VERSION:-2026-07-28}"
 
 fail() { echo "smoke-stack: FAIL: $*" >&2; exit 1; }
@@ -80,4 +85,40 @@ if echo "$POLL" | grep -q '"nextPollSeconds"'; then
 fi
 
 echo "smoke-stack: events/poll OK -> ${POLL}"
+
+if [ -n "$EXPECT_AUTH" ]; then
+  # events/stream is the cheapest auth gate to probe: the handler resolves the
+  # principal right after the source lookup, so an unauthenticated caller gets
+  # an immediate -32012 instead of an opened stream. events/subscribe would
+  # work too but has to clear URL and secret validation first.
+  #
+  # --max-time guards the failure case: if auth is NOT on, the request opens a
+  # long-lived stream and would otherwise hang here rather than failing.
+  echo "smoke-stack: EXPECT_AUTH set — asserting an anonymous caller is refused"
+  # Must stay nested under _meta. Flattening it into params routes the
+  # request to the legacy wire, which answers "missing Mcp-Session-Id" and
+  # would satisfy a laxer assertion for entirely the wrong reason.
+  meta="\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"${PROTOCOL}\",\"io.modelcontextprotocol/clientCapabilities\":{}}"
+  out=$(curl -sS --max-time 10 -X POST "$ENDPOINT" \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: application/json, text/event-stream' \
+    -H "MCP-Protocol-Version: ${PROTOCOL}" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"events/stream\",\"params\":{${meta},\"name\":\"chat.message\"}}" 2>&1) \
+    || fail "events/stream probe did not return; if the stream stayed open, auth is NOT enabled and the replicas are still anonymous"
+
+  case "$out" in
+    *"missing Mcp-Session-Id"*)
+      fail "events/stream probe landed on the legacy wire, so this assertion proved nothing.
+  The _meta envelope is malformed or not nested. body: ${out}" ;;
+    *-32012*|*Forbidden*|*forbidden*)
+      echo "smoke-stack: anonymous events/stream refused as expected" ;;
+    *)
+      fail "auth profile is up but an anonymous events/stream was NOT refused.
+  The replicas are still running with OAUTH_INTROSPECTION_URLS empty.
+  Compose reuses a container whose config has not changed, so bringing
+  Keycloak up alone does not switch them onto introspection.
+  body: ${out}" ;;
+  esac
+fi
+
 echo "smoke-stack: PASS"
