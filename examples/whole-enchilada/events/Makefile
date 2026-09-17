@@ -51,11 +51,11 @@ ONEAUTH          := oneauth
 DEMO_CLIENT_ID   ?= mcp-events-poller
 DEMO_CLIENT_SECRET ?= mcpkit-demo-secret-DEMO-ONLY
 
-# Shared infra composes live under ../../../docker/ and run as their
-# own projects. `make up` here brings backends up first (with --wait
-# so Keycloak is healthy before event-server tries to introspect);
-# observability is optional and managed by the operator separately
-# via `cd ../../../docker/observability && make up`.
+# Shared infra composes live under ../../../docker/ and run as their own
+# projects. `make up` does not touch them any more: the events stack owns its
+# postgres, redis and keycloak since the compose merge. Observability stays
+# optional and operator-managed, via `make obsup` or
+# `cd ../../../docker/observability && make up`.
 # events-stack.yaml is the ONE canonical stack; compose.dev.yaml overlays it
 # for development (builds from the checkout, publishes DB ports, joins the
 # shared mcpkit network). Every recipe goes through one of these two, because
@@ -323,7 +323,7 @@ inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TE
 shellquote = '$(subst ','\'',$(1))'
 
 logs: ## Tail logs from all services.
-	docker compose logs -f --tail=200
+	$(COMPOSE) logs -f --tail=200
 
 ps: ## docker compose ps.
 	$(COMPOSE) ps
@@ -333,7 +333,7 @@ ps: ## docker compose ps.
 # compose stack — no surprises.
 
 psql-webhooks: ## Print the webhooks table from Postgres — used by the no-expiry restart-survival beat to confirm rows survive a `make restart-event-servers`.
-	docker compose -f $(BACKENDS_COMPOSE) exec -T postgres \
+	$(COMPOSE) exec -T postgres \
 		psql -U postgres -d events \
 		-c "SELECT id, principal, url, expires_at, status_failing_continuously_since FROM webhooks ORDER BY principal;"
 
