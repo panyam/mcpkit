@@ -29,7 +29,7 @@ Some operations don't fit the single-request → single-response model. They run
 - The task store — what's persisted, restart durability, query semantics
 - Detach/resume — how a task can outlive the originating request
 - Progress notifications integration: `progressToken` pairing for tasks. Note that SEP-2663 forbids `notifications/progress` and `notifications/message` on task streams; mcpkit drops them at the session-notify boundary.
-- The `input_required` state — tasks reuse MRTR's `InputRequiredResult` shape (see [mrtr Q6](./mrtr.md#q6--composition-with-tasks-v2))
+- The `input_required` state — tasks reuse MRTR's `InputRequiredResult` shape (see [mrtr Q6](./mrtr.md#q6-composition-with-tasks-v2))
 - Cancellation across task lifecycle (`notifications/cancelled` vs task-level cancel)
 
 ## Next to read
