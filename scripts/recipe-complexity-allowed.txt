@@ -11,14 +11,6 @@
 # Format: <path from repo root>::<recipe>
 # Regenerate the raw list with: scripts/check_recipe_complexity.py --list
 
-Makefile::bump-root
-Makefile::cover-all
-Makefile::setup-hooks
-Makefile::setup-tools
-Makefile::tag
-Makefile::test-experimental
-Makefile::tidy-all
-Makefile::vulncheck
 conformance/Makefile::refresh-conformance
 conformance/Makefile::testconf-upstream-audit
 conformance/justfile::check-conformance-stale
@@ -42,8 +34,6 @@ experimental/ext/events/stores/gorm/justfile::testpg
 experimental/ext/events/stores/gorm/justfile::updb
 experimental/ext/events/stores/redis/Makefile::updb
 experimental/ext/events/stores/redis/justfile::updb
-justfile::check-apps-compat-stale
-justfile::cover-all
 tutorials/walkthrough/Makefile::check
 tutorials/walkthrough/Makefile::missing
 tutorials/walkthrough/Makefile::stats

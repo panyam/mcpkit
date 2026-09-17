@@ -170,10 +170,10 @@ A single command spanning several lines by backslash continuation is one stateme
 inline. `echo` banners do not count at all. A `just` shebang recipe is judged by its body, since
 the shebang is only how `just` runs more than one line of bash.
 
-**Known divergence today.** 39 recipes predate this rule and are listed in
-`scripts/recipe-complexity-allowed.txt`, concentrated in the root `Makefile`/`justfile`,
-`tutorials/walkthrough` and `conformance/`. `examples/whole-enchilada/events` is done. They are
-being extracted area by area; the baseline only shrinks, and the checker fails on an entry that no
+**Known divergence today.** 29 recipes predate this rule and are listed in
+`scripts/recipe-complexity-allowed.txt`, spread across `tutorials/walkthrough`, `examples/host`,
+`conformance/` and the two experimental store modules. The root `Makefile`/`justfile` and
+`examples/whole-enchilada/events` are done. They are being extracted area by area; the baseline only shrinks, and the checker fails on an entry that no
 longer violates so it cannot rot the way a `--update-baseline` flag lets a baseline rot.
 
 **Verify:** `make check-recipe-complexity`, wired into `.github/workflows/test.yml`. Confirmed to
