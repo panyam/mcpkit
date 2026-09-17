@@ -174,7 +174,7 @@ func runListRotation(serverURL string) func(demokit.StepContext) *demokit.StepRe
 		if len(seen) < 2 {
 			return &demokit.StepResult{
 				Status:  demokit.StatusWarning,
-				Message: summary + " (only one replica reached — is the stack running with N>1? Verify with `docker compose ps event-server`)",
+				Message: summary + " (only one replica reached — is the stack running with N>1? Verify with `make ps`)",
 			}
 		}
 		return &demokit.StepResult{

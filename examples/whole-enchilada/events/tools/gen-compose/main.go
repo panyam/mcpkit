@@ -33,8 +33,8 @@ import (
 	"text/template"
 )
 
-//go:embed compose.tmpl
-var composeTmpl string
+//go:embed dev.tmpl
+var devTmpl string
 
 //go:embed nginx.tmpl
 var nginxTmpl string
@@ -74,28 +74,23 @@ func main() {
 		KeycloakImage:    *kcImage,
 	}
 
-	if err := render(composeTmpl, ctx, filepath.Join(*outDir, "docker-compose.yaml")); err != nil {
-		log.Fatalf("render compose: %v", err)
-	}
-	if err := render(nginxTmpl, ctx, filepath.Join(*outDir, "nginx", "nginx.conf")); err != nil {
-		log.Fatalf("render nginx: %v", err)
-	}
-
-	// The standalone stack inlines the SAME nginx config as a compose
-	// `configs:` entry rather than bind-mounting nginx/nginx.conf, since a
-	// curl'd compose file has no sibling files to mount. Rendering it from
-	// nginx.tmpl here rather than hand-maintaining a copy is what keeps the
-	// two stacks from drifting on upstream names or replica count.
+	// The nginx config is inlined as a compose `configs:` entry rather than
+	// written to disk and bind-mounted, because a curl'd compose file has no
+	// sibling files to mount. Nothing reads nginx/nginx.conf any more, so it
+	// is no longer emitted.
 	nginxConf, err := renderString(nginxTmpl, ctx)
 	if err != nil {
-		log.Fatalf("render nginx for inlining: %v", err)
+		log.Fatalf("render nginx: %v", err)
 	}
 	ctx.NginxConf = indent(escapeComposeVars(nginxConf), "      ")
 	if err := render(stackTmpl, ctx, filepath.Join(*outDir, "events-stack.yaml")); err != nil {
 		log.Fatalf("render stack: %v", err)
 	}
+	if err := render(devTmpl, ctx, filepath.Join(*outDir, "compose.dev.yaml")); err != nil {
+		log.Fatalf("render dev overlay: %v", err)
+	}
 
-	fmt.Fprintf(os.Stderr, "gen-compose: rendered N=%d event-servers into %s (docker-compose.yaml, nginx/nginx.conf, events-stack.yaml)\n", *n, *outDir)
+	fmt.Fprintf(os.Stderr, "gen-compose: rendered N=%d event-servers into %s (events-stack.yaml, compose.dev.yaml)\n", *n, *outDir)
 }
 
 func render(tmpl string, ctx tmplCtx, out string) error {
