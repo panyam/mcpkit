@@ -95,6 +95,42 @@ func TestCanonicalStackIsSelfContained(t *testing.T) {
 	}
 }
 
+// TestDevOverlayBuildsEveryPublishedImage is the general form of the failure
+// that broke the first `make up` after the compose merge. The canonical stack
+// references images we publish ourselves, and until #1391 runs, none of them
+// exist in any registry. Development therefore must not depend on pulling any
+// of them.
+//
+// The overlay covered event-server and not keycloak. The event-servers had a
+// build to fall back to and only warned; keycloak did not, and took the whole
+// stack down with `error from registry: denied`. Anything we publish needs a
+// build override here, so this asserts on the ghcr.io references rather than
+// on a list of service names that would go stale.
+func TestDevOverlayBuildsEveryPublishedImage(t *testing.T) {
+	stack := renderStack(t)
+	overlay := renderDev(t)
+
+	svc := regexp.MustCompile(`(?m)^  ([a-z0-9-]+):`)
+	var current string
+	var ours []string
+	for _, line := range strings.Split(stack, "\n") {
+		if m := svc.FindStringSubmatch(line); m != nil {
+			current = m[1]
+		}
+		if strings.Contains(line, "image:") && strings.Contains(line, "ghcr.io/") && current != "" {
+			ours = append(ours, current)
+		}
+	}
+	if len(ours) == 0 {
+		t.Fatal("expected the canonical stack to reference at least one image we publish")
+	}
+	for _, name := range ours {
+		if !strings.Contains(overlay, "  "+name+":") {
+			t.Errorf("%s pulls a ghcr.io image we have not published, and the dev overlay does not build it", name)
+		}
+	}
+}
+
 // TestDevOverlayBuildsEveryReplica catches the overlay going stale against N.
 // The canonical stack renders N replicas from EventServers; an overlay that
 // builds only some of them leaves the rest silently pulling a published image
