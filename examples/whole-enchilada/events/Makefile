@@ -68,7 +68,6 @@ COMPOSE_PUBLIC := docker compose -f $(STACK)
 # The events stack owns its own postgres + redis + keycloak now, so
 # docker/backends is no longer part of this example's flow. It stays reachable
 # for examples/agents, which still shares it.
-BACKENDS_COMPOSE      := ../../../docker/backends/docker-compose.yml
 OBSERVABILITY_COMPOSE := ../../../docker/observability/docker-compose.yml
 
 # tenant-realm maps a shorthand TENANT letter to the canonical realm
@@ -348,11 +347,7 @@ clean: ## Tear down the dev stack AND drop its postgres/redis volumes + built bi
 	rm -rf bin/
 
 clean-backends: ## Wipe the SHARED docker/backends data. NOT needed for events any more — this only affects examples/agents.
-	@echo "[clean-backends] events owns its own postgres/redis volumes since the compose merge."
-	@echo "[clean-backends] this wipes docker/backends, which examples/agents shares. Use 'make clean' for events."
-	@printf 'proceed? [y/N] ' && read ans && [ "$$ans" = "y" ] || exit 1
-	docker compose -f $(BACKENDS_COMPOSE) down -v 2>/dev/null || true
-	rm -rf ../../../docker/backends/data/
+	@RUNNER=make ./scripts/clean-backends.sh
 
 # Host /etc/hosts management — uses a marker comment so the edit is
 # idempotent and reversible. Requires sudo.
