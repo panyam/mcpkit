@@ -42,7 +42,10 @@ IMAGE_TAG        ?= latest
 EVENT_SERVER_IMAGE ?= $(REGISTRY)/mcpkit-event-server:$(IMAGE_TAG)
 KEYCLOAK_IMAGE     ?= $(REGISTRY)/mcpkit-events-keycloak:$(IMAGE_TAG)
 
-KEYCLOAK_HOST    ?= http://localhost:8180
+# Host port for the stack's Keycloak. docker/backends publishes one on 8180
+# too (for examples/agents), so set KEYCLOAK_PORT to run both at once.
+KEYCLOAK_PORT    ?= 8180
+KEYCLOAK_HOST    ?= http://localhost:$(KEYCLOAK_PORT)
 ONEAUTH_VERSION  ?= v0.1.36
 ONEAUTH          := oneauth
 DEMO_CLIENT_ID   ?= mcp-events-poller
@@ -78,7 +81,7 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down obsup obsdown test demo readme predemo \
-        stack-up stack-up-auth stack-down stack-smoke stack-smoke-auth stack-logs images images-push \
+        check-ports stack-up stack-up-auth stack-down stack-smoke stack-smoke-auth stack-logs images images-push \
         newtoken newtoken-ci poller streamer webhook inject drive-chat drive-presence \
         add-discord rm-source list-sources alllogs \
         hosts-install hosts-uninstall logs ps clean clean-backends clear_all_tokens clear-all
@@ -108,10 +111,24 @@ obsup: ## Bring up the observability stack (grafana/loki/tempo/mimir/otel-collec
 obsdown: ## Tear down the observability stack.
 	docker compose -f $(OBSERVABILITY_COMPOSE) down
 
-up: gen-compose ## Bring up the full dev stack (builds from your checkout, Keycloak + auth on). Pass BUILD=true to force a rebuild.
+# Fails fast with the fix rather than letting Docker report a bare
+# "port is already allocated" from whichever container got there first.
+check-ports:
+	@for p in 9090 $(KEYCLOAK_PORT); do \
+		if lsof -nP -iTCP:$$p -sTCP:LISTEN >/dev/null 2>&1; then \
+			echo "port $$p is already in use."; \
+			echo "  usually docker/backends (shared with examples/agents) or a stack you left up."; \
+			echo "  fixes: 'make stack-down', or 'cd ../../../docker/backends && make down',"; \
+			echo "         or run this stack beside it with 'make up KEYCLOAK_PORT=8181'."; \
+			exit 1; \
+		fi; \
+	done
+
+up: gen-compose check-ports ## Bring up the full dev stack (builds from your checkout, Keycloak + auth on). Pass BUILD=true to force a rebuild.
+	KEYCLOAK_PORT=$(KEYCLOAK_PORT) OAUTH_ISSUER_BASE="$(KEYCLOAK_HOST)" \
 	OAUTH_INTROSPECTION_URLS="$(AUTH_INTROSPECTION_URLS)" \
 		$(COMPOSE) --profile auth up -d --wait --wait-timeout 300 $(if $(BUILD),--build)
-	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090, Keycloak on http://localhost:8180"
+	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090, Keycloak on $(KEYCLOAK_HOST)"
 	@echo "postgres on 127.0.0.1:5433, redis on 127.0.0.1:6380 (offset so docker/backends can coexist)"
 
 down: ## Tear down the dev stack. Volumes are preserved — use `make clean` to drop them too.
@@ -129,9 +146,10 @@ stack-up: ## Bring up the standalone events-stack.yaml (pulls published images; 
 	@echo "standalone stack up; nginx on http://localhost:9090 — try: make stack-smoke"
 
 stack-up-auth: ## Same, plus Keycloak and the three demo realms, with the replicas ON token introspection.
+	KEYCLOAK_PORT=$(KEYCLOAK_PORT) OAUTH_ISSUER_BASE="$(KEYCLOAK_HOST)" \
 	OAUTH_INTROSPECTION_URLS="$(AUTH_INTROSPECTION_URLS)" \
 		$(COMPOSE_PUBLIC) --profile auth up -d --wait --wait-timeout 300
-	@echo "standalone stack up WITH auth; Keycloak on http://localhost:8180"
+	@echo "standalone stack up WITH auth; Keycloak on $(KEYCLOAK_HOST)"
 	@echo "verify the replicas actually reject anonymous callers: make stack-smoke-auth"
 
 stack-smoke-auth: ## Assert the auth stack REJECTS an anonymous subscriber (the check stack-smoke cannot make).

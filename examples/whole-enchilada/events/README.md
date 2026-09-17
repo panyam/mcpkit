@@ -50,7 +50,10 @@ This is the **same file** `make up` uses. Development layers `compose.dev.yaml`
 on top of it, which swaps the pulled images for builds off your checkout and
 publishes the database ports. There is one stack definition, not two.
 
-Add `--profile auth` for Keycloak and the three tenant realms. Requires Compose
+Add `--profile auth` for Keycloak and the three tenant realms. It publishes
+8180, the same port `docker/backends` uses for `examples/agents`, so set
+`KEYCLOAK_PORT` (and `OAUTH_ISSUER_BASE` to match) to run both at once.
+`make up KEYCLOAK_PORT=8181` handles both for you. Requires Compose
 v2.23+ for inline `configs:`. Verify it came up with
 `./scripts/smoke-stack.sh`, which drives a real MCP session through to
 `events/poll`.

@@ -25,7 +25,8 @@
 #   redis         -> cross-replica event fanout + global subscription caps
 #   auth          -> anonymous. Every caller is `demo-principal`.
 #
-# `--profile auth` adds Keycloak (:8180) with three tenant realms. It does NOT
+# `--profile auth` adds Keycloak (:8180, override with KEYCLOAK_PORT) with three
+# tenant realms. It does NOT
 # switch the replicas onto it by itself: OAUTH_INTROSPECTION_URLS has to be set
 # too, which `make stack-up-auth` does. Starting an identity provider that
 # nothing consults is a mistake this stack has already shipped once.
@@ -103,10 +104,17 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HTTP_RELATIVE_PATH: /
-      KC_HOSTNAME: http://localhost:8180
+      # Must match the published port below: Keycloak stamps this into the
+      # `iss` claim, and event-server rejects a token whose issuer does not
+      # equal OAUTH_ISSUER_BASE + "/realms/" + <realm> exactly.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8180}
       KC_HOSTNAME_STRICT: "false"
     ports:
-      - "8180:8080"
+      # 8180 by default, which every documented token recipe assumes. Override
+      # KEYCLOAK_PORT when docker/backends is also up, since it publishes a
+      # Keycloak on the same port for examples/agents. Postgres and Redis are
+      # already offset to 5433/6380 by the dev overlay for the same reason.
+      - "${KEYCLOAK_PORT:-8180}:8080"
     healthcheck:
       # Probes camelot, the last realm imported alphabetically, so a 200 here
       # means all three are live.
@@ -177,6 +185,11 @@ services:
       # to on the keycloak service in docker/backends. The BCL
       # receiver expects iss = OAUTH_ISSUER_BASE + "/realms/" + <realm>
       # exactly.
+      # Flat default on purpose. A nested ${...} inside a default value is
+      # fragile across Compose versions, so when KEYCLOAK_PORT moves this must
+      # move with it. The Makefile exports both together; a raw `docker compose`
+      # with a custom KEYCLOAK_PORT has to set OAUTH_ISSUER_BASE too, or tokens
+      # carry an `iss` the replicas will reject.
       OAUTH_ISSUER_BASE: ${OAUTH_ISSUER_BASE:-http://localhost:8180}
       # OTel telemetry. EXPORTER=auto means "best-effort OTLP with
       # silent Noop fallback" — works whether docker/observability is

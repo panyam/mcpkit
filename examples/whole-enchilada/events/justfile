@@ -5,7 +5,8 @@ EVENT := env('EVENT', 'chat.message')
 TEXT := env('TEXT', 'hello from `just inject`')
 USER := env('USER', '')
 PASSWORD := env('PASSWORD', '')
-KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:8180')
+KEYCLOAK_PORT := env('KEYCLOAK_PORT', '8180')
+KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:' + KEYCLOAK_PORT)
 ONEAUTH_VERSION := env('ONEAUTH_VERSION', 'v0.1.36')
 AUTH_INTROSPECTION_URLS := env('AUTH_INTROSPECTION_URLS', 'http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect')
 REGISTRY := env('REGISTRY', 'ghcr.io/panyam')
@@ -60,6 +61,7 @@ stack-up:
 
 # Same, plus Keycloak and the three demo realms, with the replicas ON token introspection.
 stack-up-auth:
+	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
 		{{COMPOSE_PUBLIC}} --profile auth up -d --wait --wait-timeout 300
 	@echo "standalone stack up WITH auth; Keycloak on http://localhost:8180"
@@ -116,6 +118,7 @@ obsdown:
 
 # Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
 up: gen-compose
+	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
 		{{COMPOSE}} --profile auth up -d --wait --wait-timeout 300
 	@echo "stack up{{if BUILD != '' { ' (rebuilt)' } else { '' }}}; nginx on http://localhost:9090 — see README for hostname routing"
@@ -294,6 +297,7 @@ restart-event-servers:
 	svcs=$(docker compose config --services | grep '^event-server-')
 	echo "[restart-event-servers] restarting: $svcs"
 	docker compose restart $svcs
+	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
 		{{COMPOSE}} --profile auth up -d --wait --wait-timeout 300
 
