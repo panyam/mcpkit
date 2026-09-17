@@ -9,6 +9,83 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-17
+
+A minor release consolidating 37 PRs since v0.5.2. Three tagged modules break
+API, so this is a minor rather than a patch. Full write-up:
+[`docs/releases/v0.6.0.md`](docs/releases/v0.6.0.md).
+
+**Breaking:** `ext/skills` deletes the `skill://index.json` surface in favour of
+`skills/list` and `skills/get`; `experimental/ext/events` renames two duration
+fields that were wrong against the spec; `experimental/ext/agents` moves its
+extension ID to a vendor namespace. Migration recipes for each are in the
+write-up.
+
+### Breaking
+- **`ext/skills`: `skill://index.json` and everything serving it is removed**,
+  per the 2026-08-21 SEP-2640 revision. Gone: `IndexURI`, `IndexPath`,
+  `IndexSchemaURI`, `IsIndexURI`, `IndexResourceDef`, `Index`, `IndexEntry`,
+  `NewIndex`, `SkillType`, `MetaKeyFileDigests`, `FileDigest`,
+  `Provider.Catalog`, `Client.ListSkills`, `Client.ReadSkillFileVerified`,
+  `WithoutIndex`. Enumerate with `skills/list`, fetch with `skills/get`. The
+  `_meta` version counter moved onto the `skills/list` result rather than being
+  dropped.
+- **`experimental/ext/events`: `nextPollSeconds` becomes `nextPollMs` (5 becomes
+  5000) and `maxAge` in seconds becomes `maxAgeMs` in milliseconds**, across
+  `events/poll`, `events/subscribe` and `events/stream`. In Go,
+  `MaxAgeSeconds` becomes `MaxAgeMs` on `RegisterParams`, `WebhookTarget` and
+  the GORM row. mcpkit had shipped the pre-rename names for four months against
+  a spec that renamed them in 2026-05.
+- **`experimental/ext/agents`: extension ID moves from
+  `io.modelcontextprotocol/agents` to `io.mcpkit/agents`**, since no SEP defines
+  the primitive and the working group has not chosen among three wire shapes.
+
+### Fixed
+- **Middleware bypass on the SEP-2575 stateless wire.** `resources/read` did not
+  run the middleware chain, so a rate limiter, audit hook or authorization gate
+  applied to `tools/call` and `prompts/get` and silently did not apply to
+  resource reads. Where the middleware is an authorization gate this is a bypass:
+  a caller refused a tool could ask for the resource instead. The session wire
+  was never affected. Also completes template matching on the stateless wire,
+  which previously returned `-32602 unknown resource`.
+- **Extension settings are inlined per SEP-2133**, which maps an extension
+  identifier straight to its settings object. mcpkit wrapped them in an
+  `{id, specVersion, stability, config}` envelope of its own, so a conformant
+  client reading `extensions[id].directoryRead` found nothing and
+  `resources/directory/read` was served but invisible.
+- **`ext/skills` accepts any URI scheme.** `ParseURI` required exactly `skill`,
+  refusing a conforming catalog served under a domain-native scheme, which
+  SEP-2640 explicitly permits.
+
+### Added
+- **SEP-2640 `skills/list` and `skills/get`**, server and client, with the
+  `SkillEntry` shape, frontmatter verification, size checks, server page-size
+  options and a cursor-following directory read.
+- **Nested skills are permitted**, per the 2026-08-21 SEP-2640 reversal.
+- **`skills/get` carries `ttlMs` and `cacheScope`**, now REQUIRED by the stable
+  spec page.
+- **Request-time scope challenges across all primitives.**
+  `core.ScopeChallengeFunc` decides per request and sees the request, so the
+  answer can depend on the arguments. Available on `ToolDef`, `ResourceDef`,
+  `ResourceTemplate` and `PromptDef`. `RequiredScopes` and `AcceptedScopes` are
+  deprecated but fully honoured, so nothing changes for an existing server.
+- **Events `list_changed` and termination on event-type removal.**
+- **The events stack ships as one self-contained compose.**
+
+### Changed
+- **The agent SDK left the repository**, extracted to
+  [chakra](https://github.com/panyam/chakra). Not a breaking change: those
+  modules were never in `SUB_MODS_TO_TAG` and were never tagged. Old
+  `agent/vX.Y.Z` tags stay resolvable.
+- **`testconf-tasks-v2` and `testconf-mrtr` now grade mcpkit.** Both reported
+  PASS for months while scoring upstream's own reference server. Suite runs also
+  report the upstream worktree SHA and warn when it is behind.
+- **New conformance coverage:** `testconf-events` (INFO), `testconf-skills`
+  retargeted to upstream `main` and gated, and the SEP-2350 scope-challenge
+  suite at 17/17. Server tier-check moves 30/30 to 31/31.
+- CI and build hygiene, a prose sweep across the docs corpus, and dependency
+  updates across the Go and npm module groups.
+
 ## [0.5.2] - 2026-08-21
 
 A patch release. `ctx` now reaches the wire, so an ordinary MCP call is
@@ -437,6 +514,9 @@ Full notes: [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md).
 - `step-up-keycloak` no longer forces stateless mode by default. (PR 821)
 - `CAPABILITIES.md` protocol-negotiation version list corrected.
 
+[0.6.0]: https://github.com/panyam/mcpkit/releases/tag/v0.6.0
+[0.5.2]: https://github.com/panyam/mcpkit/releases/tag/v0.5.2
+[0.5.1]: https://github.com/panyam/mcpkit/releases/tag/v0.5.1
 [0.5.0]: https://github.com/panyam/mcpkit/releases/tag/v0.5.0
 [0.4.0]: https://github.com/panyam/mcpkit/releases/tag/v0.4.0
 [0.3.0]: https://github.com/panyam/mcpkit/releases/tag/v0.3.0
