@@ -149,7 +149,8 @@ These span packages and will bite on a task that never opens a routed doc.
   only `~/.ssh/agent.sock`, which holds the right key. Use
   `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`; the `-i ~/.ssh/id_github` form fails with
   "Identity file not accessible" then "Permission denied (publickey)".
-  Release creation and editing have their own PAT gap. See `RELEASING.md`.
+  Releases are the same story: `env -u GH_TOKEN gh release create` publishes fine, while the
+  fine-grained PAT 403s on Contents: write. So does reading Dependabot alerts. See `RELEASING.md`.
 - **Stacked PRs get no CI** when the base is not `main`. Verify locally, then either retarget to
   main after the base merges or push an empty commit to fire checks. GitHub's `Closes #N` only
   fires on a merge to the **default** branch, so carry it on whichever PR actually reaches main.
