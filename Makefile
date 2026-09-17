@@ -472,6 +472,9 @@ check-ext-isolation: ## CI gate — fail if one extension module requires anothe
 check-stateless-middleware: ## CI gate — fail if a stateless handler skips the middleware chain (C7)
 	@./scripts/check-stateless-middleware.sh
 
+check-recipe-complexity: ## CI gate — fail if a Makefile/justfile recipe holds a shell script instead of calling one (C8)
+	@./scripts/check_recipe_complexity.py
+
 setup: setup-tools setup-hooks ## Full development setup
 
 help: ## Show this help

@@ -826,6 +826,34 @@ build:
 shortcuts — fine to add. Keep them grouped under section comment dividers
 (`# ── Tests ─────────…`) and add them to `.PHONY`.
 
+### Recipes dispatch; they do not script (C8)
+
+A recipe that needs control flow (`if` / `for` / `while` / `case` / `read`) or
+four or more statements goes in `scripts/<name>.sh` next to the example, and
+both runners call it. Pass any per-runner difference as an env var:
+
+```make
+clean-backends:
+	@RUNNER=make ./scripts/clean-backends.sh
+```
+
+```just
+clean-backends:
+	RUNNER=just ./scripts/clean-backends.sh
+```
+
+The reason is the rule directly above this one: the Makefile and the justfile
+must stay name-and-behavior identical, so inline logic is written twice in two
+escaping dialects and maintained in neither. `just clean-backends` in
+`whole-enchilada/events` drifted into a byte-identical copy of `just clean`,
+wiping the events volumes while its doc comment promised to wipe
+`docker/backends` (#1396).
+
+A single command continued across lines with `\` is one statement and stays
+inline; `echo` banners do not count. Gated by `make check-recipe-complexity`
+(project `CONSTRAINTS.md` C8), with the pre-existing offenders baselined in
+`scripts/recipe-complexity-allowed.txt`.
+
 ---
 
 ## 7. UI examples (MCP Apps) — addendum

@@ -14,6 +14,7 @@ Current state, worth knowing before trusting one:
 |---|---|
 | C4 | **CI gate** — `make check-ext-isolation`, run by `.github/workflows/test.yml` |
 | C7 | **CI gate** — `make check-stateless-middleware`, run by `.github/workflows/test.yml` |
+| C8 | **CI gate** — `make check-recipe-complexity`, run by `.github/workflows/test.yml` |
 | C1, C2, C3 | manual `grep` recipes; nothing runs them |
 | C5 | says so explicitly; no automated check exists |
 
@@ -150,3 +151,31 @@ and issue 1355 tracks it.
 each `handle*` in `server/stateless/handlers.go` and fails on any that neither calls
 `InvokeWithMiddleware` nor appears in `ALLOWED`. Confirmed to catch the real regression: removing
 the call from `handleResourcesRead` makes it exit 1 naming that handler.
+
+## C8: Makefiles and justfiles dispatch; they do not hold shell scripts
+
+A recipe with control flow, or with four or more statements, belongs in `scripts/`. The recipe
+calls it. This is not about taste in build files: nearly every directory here carries a `Makefile`
+and a `justfile` that `examples/CONVENTIONS.md` §6 requires to stay name-and-behavior identical, so
+inline logic gets written twice, in two escaping dialects, and maintained in neither.
+
+That is exactly how it fails. `just clean-backends` in `examples/whole-enchilada/events` ran
+`{{COMPOSE}} --profile auth down -v` — byte-identical to `just clean` — while its own doc comment
+promised to wipe `docker/backends`. Anyone reaching for it to reset backends without disturbing
+events got the opposite: events volumes dropped, backends untouched. The Makefile copy had been
+correct the whole time. Fixed in #1396 by extracting `scripts/clean-backends.sh` and having both
+runners call it with `RUNNER` naming the caller.
+
+A single command spanning several lines by backslash continuation is one statement and stays
+inline. `echo` banners do not count at all. A `just` shebang recipe is judged by its body, since
+the shebang is only how `just` runs more than one line of bash.
+
+**Known divergence today.** 66 recipes predate this rule and are listed in
+`scripts/recipe-complexity-allowed.txt`, concentrated in `examples/whole-enchilada/events`, the
+root `Makefile`/`justfile`, `tutorials/walkthrough` and `conformance/`. They are being extracted
+area by area; the baseline only shrinks, and the checker fails on an entry that no longer violates
+so it cannot rot the way a `--update-baseline` flag lets a baseline rot.
+
+**Verify:** `make check-recipe-complexity`, wired into `.github/workflows/test.yml`. Confirmed to
+catch a real regression in both directions: appending a `for` loop to a justfile recipe makes it
+exit 1 naming that recipe, and leaving a fixed recipe in the baseline also exits 1.
