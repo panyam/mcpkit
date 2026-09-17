@@ -48,20 +48,30 @@ BASELINE = os.path.join(REPO_ROOT, "scripts", "dep-baseline.json")
 INTERNAL_PREFIX = "github.com/panyam/mcpkit"
 
 REQUIRE_RE = re.compile(r"^\s+(\S+)\s+(v\S+)")
-SUB_MODS_RE = re.compile(r'SUB_MODS_TO_TAG := "([^"]+)"')
+# The Makefile's form is a backslash-continued list:
+#
+#   SUB_MODS_TO_TAG := \
+#           ext/auth ext/otel ... \
+#           tests/e2e tests/keycloak
+SUB_MODS_RE = re.compile(r'^SUB_MODS_TO_TAG\s*:?=((?:[^\n\\]*\\\n)*[^\n]*)', re.M)
 
 
 def published_modules() -> list[str]:
-    """Root plus every module in the justfile's SUB_MODS_TO_TAG.
+    """Root plus every module in the Makefile's SUB_MODS_TO_TAG.
 
-    Sourced from the justfile rather than duplicated here so the release tag set
-    and the consistency gate cannot drift apart.
+    Read from the root Makefile, which CLAUDE.md makes the authoritative list,
+    so the release tag set and this gate cannot drift apart.
+
+    This used to read the justfile, which carried a second copy of the same
+    list. That copy was deleted as unreferenced -- no recipe used it -- and this
+    gate broke, because a grep for recipe references does not find a Python
+    script parsing a variable out of a build file.
     """
-    with open(os.path.join(REPO_ROOT, "justfile")) as fh:
+    with open(os.path.join(REPO_ROOT, "Makefile")) as fh:
         match = SUB_MODS_RE.search(fh.read())
     if not match:
-        sys.exit("check_dep_consistency: SUB_MODS_TO_TAG not found in justfile")
-    mods = ["."] + match.group(1).split()
+        sys.exit("check_dep_consistency: SUB_MODS_TO_TAG not found in Makefile")
+    mods = ["."] + match.group(1).replace("\\", " ").split()
     return [m for m in mods if os.path.exists(os.path.join(REPO_ROOT, m, "go.mod"))]
 
 
