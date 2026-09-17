@@ -19,6 +19,10 @@
 CONFORMANCE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 REPO_ROOT       := $(abspath $(CONFORMANCE_DIR)/..)
 
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+export RUNNER := make
+export REPO_ROOT MCPCONFORMANCE_BASE_PATH
+
 # Per-suite MCPCONFORMANCE_*_PATH defaults are generated from
 # conformance/local-suites.yaml. After editing the YAML's source.default_path
 # for any suite, regenerate with:
@@ -93,14 +97,7 @@ testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + 
 	npx tsx --test elicitation/scenarios.test.ts
 
 refresh-conformance: ## Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Output: CONFORMANCE.md at repo root.
-	@if [ ! -d "$(MCPCONFORMANCE_BASE_PATH)" ]; then \
-		echo "MCPCONFORMANCE_BASE_PATH=$(MCPCONFORMANCE_BASE_PATH) does not exist."; \
-		echo "Clone https://github.com/modelcontextprotocol/conformance there:"; \
-		echo "  git clone https://github.com/modelcontextprotocol/conformance.git $(MCPCONFORMANCE_BASE_PATH)"; \
-		echo "Or set MCPCONFORMANCE_BASE_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/refresh-conformance.sh
+	@./scripts/with-upstream.sh scripts/refresh-conformance.sh
 
 sync-conformance: ## Fetch all conformance worktrees + validate (run before `make -C conformance test`). Catches stale Makefile paths, dirty trees, behind-origin branches.
 	cd $(REPO_ROOT) && uv run scripts/sync_conformance_worktrees.py --fetch
@@ -109,24 +106,10 @@ check-conformance-sync: ## Validate conformance worktrees without fetching (pref
 	cd $(REPO_ROOT) && uv run scripts/sync_conformance_worktrees.py
 
 check-conformance-stale: refresh-conformance ## CI gate — fail if CONFORMANCE.md is stale (issue 498). Compares working tree to HEAD so the gate is robust to staging order.
-	@cd $(REPO_ROOT) && git diff --exit-code HEAD -- CONFORMANCE.md docs/site/static/conformance/badge.json > /dev/null 2>&1 || { \
-		echo "CONFORMANCE.md (or its badge JSON) is stale relative to current testserver + upstream conformance."; \
-		echo "Run 'make refresh-conformance' locally and commit the regenerated files."; \
-		echo ""; \
-		git diff HEAD -- CONFORMANCE.md docs/site/static/conformance/badge.json | head -60; \
-		exit 1; \
-	}
-	@echo "CONFORMANCE.md is up to date."
+	@./scripts/check-stale.sh
 
 testconf-upstream-audit: ## Audit mcpkit against modelcontextprotocol/conformance@main (informational — exit 0 regardless of scenario pass/fail). Output: conformance/UPSTREAM_AUDIT.md.
-	@if [ ! -d "$(MCPCONFORMANCE_BASE_PATH)" ]; then \
-		echo "MCPCONFORMANCE_BASE_PATH=$(MCPCONFORMANCE_BASE_PATH) does not exist."; \
-		echo "Clone https://github.com/modelcontextprotocol/conformance there:"; \
-		echo "  git clone https://github.com/modelcontextprotocol/conformance.git $(MCPCONFORMANCE_BASE_PATH)"; \
-		echo "Or set MCPCONFORMANCE_BASE_PATH=<path-to-clone>."; \
-		exit 1; \
-	fi
-	cd $(REPO_ROOT) && MCPCONFORMANCE_BASE_PATH="$(MCPCONFORMANCE_BASE_PATH)" bash scripts/conformance-audit.sh
+	@./scripts/with-upstream.sh scripts/conformance-audit.sh
 
 # External, third-party CLIENT-side gauntlet. Hits a live val.town endpoint that
 # grades the mcpkit client against the integrated stateless draft wire
@@ -135,7 +118,7 @@ testconf-upstream-audit: ## Audit mcpkit against modelcontextprotocol/conformanc
 # is a point-in-time snapshot like UPSTREAM_AUDIT.md. Override the target with
 # EXTERNAL_CHECKER_URL=<url> when the dated endpoint rotates.
 testconf-external-checker: ## Grade the mcpkit CLIENT against the external stateless-draft checker (live network). Output: conformance/EXTERNAL_CHECKER.md.
-	cd $(REPO_ROOT) && go run ./cmd/external-checker $(if $(EXTERNAL_CHECKER_URL),-url $(EXTERNAL_CHECKER_URL),)
+	@./scripts/external-checker.sh
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}'

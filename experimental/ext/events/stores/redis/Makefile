@@ -17,6 +17,9 @@ REDIS_CONTAINER_NAME := mcpkit-events-redis-test
 REDIS_PORT           := 6389
 REDIS_IMAGE          := redis:7-alpine
 
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+export REDIS_CONTAINER_NAME REDIS_PORT REDIS_IMAGE
+
 .PHONY: test testredis updb downdb dblogs
 
 # Default: miniredis. No Docker required.
@@ -31,23 +34,7 @@ testredis: updb
 		go test -count=1 -timeout 90s -v ./...
 
 updb:
-	@if [ -z "$$(docker ps -q -f name=^$(REDIS_CONTAINER_NAME)$$)" ]; then \
-		if [ -n "$$(docker ps -aq -f name=^$(REDIS_CONTAINER_NAME)$$)" ]; then \
-			docker start $(REDIS_CONTAINER_NAME) > /dev/null; \
-		else \
-			docker run -d --name $(REDIS_CONTAINER_NAME) \
-				-p $(REDIS_PORT):6379 \
-				$(REDIS_IMAGE) > /dev/null; \
-		fi; \
-		echo "Waiting for Redis to be ready..."; \
-		for i in 1 2 3 4 5 6 7 8 9 10; do \
-			if docker exec $(REDIS_CONTAINER_NAME) redis-cli ping 2>/dev/null | grep -q PONG; then \
-				echo "Redis ready on localhost:$(REDIS_PORT)"; break; \
-			fi; sleep 0.5; \
-		done; \
-	else \
-		echo "Redis already running on localhost:$(REDIS_PORT)"; \
-	fi
+	@./scripts/redis-up.sh
 
 downdb:
 	@docker rm -f $(REDIS_CONTAINER_NAME) 2>/dev/null || true

@@ -18,6 +18,9 @@ PG_PASSWORD := "testpassword"
 PG_DB := "mcpkit_events_test"
 PG_IMAGE := "postgres:15-alpine"
 
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+set export := true
+
 # Default: sqlite + inmemory only. No Docker required, fast.
 test: testsqlite
 
@@ -27,48 +30,11 @@ testsqlite:
 
 # Run the full conformance matrix including the Postgres backend.
 testpg:
-    #!/usr/bin/env bash
-    set -e
-    if ! docker ps --format '{{"{{.Names}}"}}' | grep -q '^{{PG_CONTAINER_NAME}}$'; then
-        echo "Starting Postgres container {{PG_CONTAINER_NAME}} on port {{PG_PORT}}..."
-        docker run --rm -d \
-            --name {{PG_CONTAINER_NAME}} \
-            -e POSTGRES_USER={{PG_USER}} \
-            -e POSTGRES_PASSWORD={{PG_PASSWORD}} \
-            -e POSTGRES_DB={{PG_DB}} \
-            -p {{PG_PORT}}:5432 \
-            {{PG_IMAGE}} >/dev/null
-        echo "Waiting for Postgres to accept connections..."
-        for i in {1..10}; do
-            if docker exec {{PG_CONTAINER_NAME}} pg_isready -U {{PG_USER}} -d {{PG_DB}} >/dev/null 2>&1; then
-                break
-            fi
-            sleep 1
-        done
-    fi
-    MCPKIT_EVENTS_TEST_PGHOST=localhost \
-    MCPKIT_EVENTS_TEST_PGPORT={{PG_PORT}} \
-    MCPKIT_EVENTS_TEST_PGUSER={{PG_USER}} \
-    MCPKIT_EVENTS_TEST_PGPASSWORD={{PG_PASSWORD}} \
-    MCPKIT_EVENTS_TEST_PGDB={{PG_DB}} \
-    go test ./... -count=1 -timeout 120s
+    @./scripts/pg.sh test
 
 # Start a long-running Postgres container for ad-hoc test iteration. Keep until explicitly stopped via `just downdb`.
 updb:
-    #!/usr/bin/env bash
-    set -e
-    if docker ps --format '{{"{{.Names}}"}}' | grep -q '^{{PG_CONTAINER_NAME}}$'; then
-        echo "Postgres container {{PG_CONTAINER_NAME}} already running."
-    else
-        echo "Starting Postgres container {{PG_CONTAINER_NAME}} on port {{PG_PORT}}..."
-        docker run --rm -d \
-            --name {{PG_CONTAINER_NAME}} \
-            -e POSTGRES_USER={{PG_USER}} \
-            -e POSTGRES_PASSWORD={{PG_PASSWORD}} \
-            -e POSTGRES_DB={{PG_DB}} \
-            -p {{PG_PORT}}:5432 \
-            {{PG_IMAGE}}
-    fi
+    @./scripts/pg.sh up
 
 # Stop the Postgres container
 downdb:

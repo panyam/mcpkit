@@ -4,6 +4,9 @@ EVENT := telegram.message
 RESOURCE_URI := telegram://messages/recent
 EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
 
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+export TELEGRAM_BOT_TOKEN SERVE_ADDR
+
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                                — test mode (no Telegram)
 #        TELEGRAM_BOT_TOKEN=... make run   — with Telegram bot
@@ -17,13 +20,7 @@ note: ## Run the walkthrough in notebook mode (Bubble Tea cells). Server must be
 run: serve  ## Alias for serve
 
 serve: ## Start the telegram-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
-	@if [ -n "$(TELEGRAM_BOT_TOKEN)" ]; then \
-	  echo "Starting with Telegram bot..."; \
-	  go run . --serve -addr :8080 -token "$(TELEGRAM_BOT_TOKEN)"; \
-	else \
-	  echo "Starting in test mode (no Telegram token)..."; \
-	  go run . --serve -addr :8080; \
-	fi
+	@./scripts/serve.sh
 
 readme: ## Regenerate WALKTHROUGH.md from demo definitions
 	go run . --doc md > WALKTHROUGH.md

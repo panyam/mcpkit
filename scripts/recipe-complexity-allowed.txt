@@ -11,32 +11,7 @@
 # Format: <path from repo root>::<recipe>
 # Regenerate the raw list with: scripts/check_recipe_complexity.py --list
 
-conformance/Makefile::refresh-conformance
-conformance/Makefile::testconf-upstream-audit
-conformance/justfile::check-conformance-stale
-conformance/justfile::refresh-conformance
-conformance/justfile::testconf-external-checker
-conformance/justfile::testconf-upstream-audit
+# The web recipe points at agent/surfaces/web, a tree that left with the agent
+# SDK extraction to chakra. Extracting a dead recipe into a script is worse
+# than leaving it; it wants deleting or repointing. See the PR that added this.
 examples/agents/deep-agent-supervisor/justfile::web
-examples/events/discord/Makefile::serve
-examples/events/discord/justfile::serve
-examples/events/telegram/Makefile::serve
-examples/events/telegram/justfile::serve
-examples/host/Makefile::demo
-examples/host/Makefile::note
-examples/host/Makefile::readme
-examples/host/justfile::demo
-examples/host/justfile::note
-examples/host/justfile::readme
-experimental/ext/events/stores/gorm/Makefile::testpg
-experimental/ext/events/stores/gorm/Makefile::updb
-experimental/ext/events/stores/gorm/justfile::testpg
-experimental/ext/events/stores/gorm/justfile::updb
-experimental/ext/events/stores/redis/Makefile::updb
-experimental/ext/events/stores/redis/justfile::updb
-tutorials/walkthrough/Makefile::check
-tutorials/walkthrough/Makefile::missing
-tutorials/walkthrough/Makefile::stats
-tutorials/walkthrough/justfile::check
-tutorials/walkthrough/justfile::missing
-tutorials/walkthrough/justfile::stats
