@@ -53,6 +53,29 @@ CONTROL_RE = re.compile(
 # banner is still dispatch, and counting those lines made the gate fire on
 # docker/backends' `up`.
 ECHO_RE = re.compile(r'^@?\s*(echo|@echo)\b')
+
+# Make function calls and just interpolations are expansions, not shell. They
+# are masked before the control-flow scan because `$(if $(EVERY),--every
+# $(EVERY))` is one optional argument on one line, and reading its `if` as
+# control flow flagged `drive-chat` -- a single `go run` -- while leaving the
+# justfile's identical `{{if EVERY != '' { ... } }}` alone. Same recipe, same
+# semantics, flagged in one dialect only: the gate was wrong, not the recipe.
+# In a Makefile, `$(...)` is a Make expansion and `$$(...)` is shell command
+# substitution. In a justfile, `{{...}}` is the expansion and `$(...)` is shell.
+# The distinction decides what gets scanned: `@echo "... $(if $(BUILD), ...)"` in
+# a Makefile is a banner, while `echo "$(for f in $PAGES; do ...)"` in a
+# justfile is a loop wearing an echo.
+JUST_EXPANSION_RE = re.compile(r'\{\{.*?\}\}')
+MAKE_EXPANSION_RE = re.compile(r'\{\{.*?\}\}|(?<!\$)\$\((?:[^()]|\([^()]*\))*\)')
+
+
+def mask_expansions(stmt: str, is_make: bool) -> str:
+    """Blank out template expansions so only real shell is left to scan."""
+    pattern = MAKE_EXPANSION_RE if is_make else JUST_EXPANSION_RE
+    prev = None
+    while prev != stmt:
+        prev, stmt = stmt, pattern.sub(" ", stmt)
+    return stmt
 SHEBANG_RE = re.compile(r'^\s*#!')
 
 # Entries are "<path relative to repo root>::<recipe>", one per line.
@@ -100,7 +123,7 @@ def parse(path: str):
 BOILERPLATE = {"set -eu", "set -e", "set -euo pipefail", "set -o pipefail"}
 
 
-def assess(body: list[str]) -> tuple[bool, int, str]:
+def assess(body: list[str], is_make: bool = True) -> tuple[bool, int, str]:
     """Return (violates, statement_count, reason)."""
     statements, continued = 0, False
     for line in body:
@@ -110,7 +133,7 @@ def assess(body: list[str]) -> tuple[bool, int, str]:
         if stmt.startswith("#"):
             continue
         # Every physical line, continued or not: the logic is in there either way.
-        m = CONTROL_RE.search(stmt)
+        m = CONTROL_RE.search(mask_expansions(stmt, is_make))
         if m:
             return True, statements, f"control flow (`{m.group(1)}`)"
         if not continued and not ECHO_RE.match(stmt):
@@ -121,6 +144,10 @@ def assess(body: list[str]) -> tuple[bool, int, str]:
     return False, statements, ""
 
 
+def is_makefile(rel: str) -> bool:
+    return os.path.basename(rel) == "Makefile" or rel.endswith(".mk")
+
+
 def walk():
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
@@ -129,7 +156,48 @@ def walk():
                 yield os.path.join(dirpath, fn)
 
 
+# Cases that pinned down the rule, kept as a self-test because every one of them
+# was a bug in this checker first. A case naming a recipe that no longer exists
+# fails rather than being skipped: a verifier whose fixture moved reads as a
+# pass otherwise, which is how CONSTRAINTS.md A5 hid a real violation.
+SELFTEST = [
+    # (path, recipe, should_violate, why this case exists)
+    ("Makefile", "vulncheck", True,
+     "one backslash-continued shell program; scanning only statement heads missed it"),
+    ("examples/whole-enchilada/events/Makefile", "check-ports", True, "same shape"),
+    ("examples/whole-enchilada/events/Makefile", "clear_all_tokens", True, "bare `for`"),
+    ("tutorials/walkthrough/justfile", "stats", True,
+     "`for` inside an echo's $() -- shell in a justfile, not an expansion"),
+    ("examples/whole-enchilada/events/Makefile", "up", False,
+     "`$(if $(BUILD), (rebuilt))` in a banner is a Make function, not control flow"),
+    ("examples/whole-enchilada/events/Makefile", "drive-chat", False,
+     "one `go run` with an optional flag"),
+    ("docker/backends/Makefile", "up", False, "one command plus a six-line echo banner"),
+    ("conformance/Makefile", "testconf-external-checker", False, "one `cd && go run`"),
+]
+
+
+def selftest() -> int:
+    failures = 0
+    for rel, recipe, expect, why in SELFTEST:
+        path = os.path.join(ROOT, rel)
+        bodies = [b for n, b in parse(path) if n == recipe] if os.path.exists(path) else []
+        if not bodies:
+            print(f"selftest: {rel}::{recipe} no longer exists — update or drop the case")
+            failures += 1
+            continue
+        got, _, reason = assess(bodies[0], is_make=is_makefile(rel))
+        if got != expect:
+            print(f"selftest: {rel}::{recipe} expected violates={expect}, got {got} ({reason})")
+            print(f"  case exists because: {why}")
+            failures += 1
+    print(f"selftest: {len(SELFTEST) - failures}/{len(SELFTEST)} cases pass")
+    return 1 if failures else 0
+
+
 def main() -> int:
+    if "--selftest" in sys.argv:
+        return selftest()
     listing = "--list" in sys.argv
     allowed = load_allowed()
     found, violations = {}, []
@@ -137,7 +205,7 @@ def main() -> int:
     for path in walk():
         rel = os.path.relpath(path, ROOT)
         for recipe, body in parse(path):
-            violates, count, reason = assess(body)
+            violates, count, reason = assess(body, is_make=is_makefile(rel))
             if not violates:
                 continue
             key = f"{rel}::{recipe}"

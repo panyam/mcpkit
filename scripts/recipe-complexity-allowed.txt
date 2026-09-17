@@ -20,7 +20,6 @@ Makefile::test-experimental
 Makefile::tidy-all
 Makefile::vulncheck
 conformance/Makefile::refresh-conformance
-conformance/Makefile::testconf-external-checker
 conformance/Makefile::testconf-upstream-audit
 conformance/justfile::check-conformance-stale
 conformance/justfile::refresh-conformance
@@ -41,8 +40,6 @@ examples/whole-enchilada/events/Makefile::add-discord
 examples/whole-enchilada/events/Makefile::build
 examples/whole-enchilada/events/Makefile::check-ports
 examples/whole-enchilada/events/Makefile::clear_all_tokens
-examples/whole-enchilada/events/Makefile::drive-chat
-examples/whole-enchilada/events/Makefile::drive-presence
 examples/whole-enchilada/events/Makefile::hosts-install
 examples/whole-enchilada/events/Makefile::inject
 examples/whole-enchilada/events/Makefile::newtoken
@@ -50,7 +47,6 @@ examples/whole-enchilada/events/Makefile::newtoken-ci
 examples/whole-enchilada/events/Makefile::poller
 examples/whole-enchilada/events/Makefile::rm-source
 examples/whole-enchilada/events/Makefile::streamer
-examples/whole-enchilada/events/Makefile::up
 examples/whole-enchilada/events/Makefile::webhook
 examples/whole-enchilada/events/justfile::add-discord
 examples/whole-enchilada/events/justfile::build

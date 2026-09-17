@@ -473,6 +473,7 @@ check-stateless-middleware: ## CI gate — fail if a stateless handler skips the
 	@./scripts/check-stateless-middleware.sh
 
 check-recipe-complexity: ## CI gate — fail if a Makefile/justfile recipe holds a shell script instead of calling one (C8)
+	@./scripts/check_recipe_complexity.py --selftest
 	@./scripts/check_recipe_complexity.py
 
 setup: setup-tools setup-hooks ## Full development setup
