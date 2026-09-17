@@ -182,7 +182,7 @@ Bundle everything (CSS, JS, images) into a single HTML file. No external request
 **Practical size guidance:**
 - Under 1MB: works reliably across all hosts
 - 1-5MB: works on Claude and ChatGPT, may be slow
-- Over 5MB: risk of timeouts or host-imposed limits — use Option B
+- Over 5MB: risk of timeouts or host-imposed limits, so use Option B
 
 #### Option B: External assets via CSP declarations
 

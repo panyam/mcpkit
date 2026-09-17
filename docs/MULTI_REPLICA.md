@@ -154,7 +154,7 @@ classDiagram
 
 ## Per-component flows
 
-### `Server.Broadcast` — the dispatch fork
+### `Server.Broadcast`, the dispatch fork
 
 ```mermaid
 flowchart TB
@@ -174,7 +174,7 @@ flowchart TB
 
 `BroadcastToSessions` is the **local-only** path. The receive side of Pattern B calls this (NOT `Broadcast`) so a cross-replica relay receive doesn't re-publish through the relay and loop.
 
-### `NotificationRelay` — publish side
+### `NotificationRelay`, publish side
 
 ```mermaid
 sequenceDiagram
@@ -193,7 +193,7 @@ sequenceDiagram
 
 `NotificationRelay` is fire-and-forget, so errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.
 
-### `NotificationRelayReceiver` — receive side
+### `NotificationRelayReceiver`, receive side
 
 ```mermaid
 sequenceDiagram
@@ -208,7 +208,7 @@ sequenceDiagram
 
 The receiver is the **routing decision** for cross-replica notifications. The transport handles dedup; the receiver decides what to do with each message destined for this replica.
 
-### `NotificationRouter` — per-method dispatch
+### `NotificationRouter`, per-method dispatch
 
 ```mermaid
 flowchart TB
@@ -233,7 +233,7 @@ mux := server.NewNotificationRouter().
 bus, _ := redisstore.NewCapabilityBus(opts, mux)
 ```
 
-### `CapabilityBroadcastReceiver` — capability-shaped routing
+### `CapabilityBroadcastReceiver`, capability-shaped routing
 
 ```mermaid
 sequenceDiagram
@@ -248,7 +248,7 @@ sequenceDiagram
     Note over Recv,Srv: BroadcastToSessions, NOT Broadcast<br/>(would loop through the relay)
 ```
 
-### `ResourcesUpdatedReceiver` — subscription-shaped routing for URIs
+### `ResourcesUpdatedReceiver`, subscription-shaped routing for URIs
 
 ```mermaid
 sequenceDiagram
@@ -266,7 +266,7 @@ sequenceDiagram
     Note over Reg,Sub: notifyLocal does NOT re-publish<br/>via the relay (no loop)
 ```
 
-### `YieldingSource.Receive` — subscription-shaped routing for events
+### `YieldingSource.Receive`, subscription-shaped routing for events
 
 ```mermaid
 sequenceDiagram
@@ -289,7 +289,7 @@ sequenceDiagram
 
 `YieldingSource.Receive` is a thin adapter; `LocalDeliver` is the work, running the per-slot fanout loop without firing the configured `Emitter` (so no re-publish).
 
-### `redisstore.CapabilityBus` — capability-shaped Pattern B
+### `redisstore.CapabilityBus`, capability-shaped Pattern B
 
 ```mermaid
 flowchart LR
@@ -315,7 +315,7 @@ flowchart LR
 
 Wire format: per-method channel `<ChannelPrefix>.broadcast.<method>`. Payload is a JSON envelope `{"origin": "<uuid>", "params": <json>}`. Origin lives in the envelope, NOT in `params._meta`, because capability-shaped notifications often have `nil params` and the marker can't live there.
 
-### `redisstore.Bus` — events-typed Pattern B
+### `redisstore.Bus`, events-typed Pattern B
 
 ```mermaid
 flowchart LR
@@ -342,7 +342,7 @@ flowchart LR
 
 Wire format: per-event-name channel `<ChannelPrefix>.<event.Name>`. Payload is the `Codec`-encoded `events.Event` with the origin marker stamped on `event.Meta` (stripped before deliver so consumers never see it).
 
-### `memorystore.Bus` — in-process test transport
+### `memorystore.Bus`, in-process test transport
 
 ```mermaid
 flowchart LR
@@ -389,7 +389,7 @@ sequenceDiagram
     Srv->>Srv: BroadcastToSessions (K1 local clients hear)
 
     Redis->>Bus2: deliver message
-    Note over Bus2: origin == K2's marker? no — proceed
+    Note over Bus2: origin == K2's marker? no, proceed
     Bus2->>Mux: Receive(method, nil)
     Mux->>Cap: handlers["...list_changed"].Receive
     Cap->>Srv2: BroadcastToSessions(method, nil)
@@ -452,7 +452,7 @@ sequenceDiagram
     Bus->>Redis: PUBLISH (Meta-stamped with K1 origin)
 
     Redis->>Bus2: deliver message
-    Note over Bus2: origin == K2's marker? no — proceed<br/>strip origin marker from Meta
+    Note over Bus2: origin == K2's marker? no, proceed<br/>strip origin marker from Meta
     Bus2->>Src2: Receive("notifications/events/event", event)
     Src2->>Src2: LocalDeliver(ctx, event)
     loop for each K2 slot
@@ -467,7 +467,7 @@ sequenceDiagram
 
 Per-slot `Match` runs on every replica that holds a matching subscriber. The transport sprays to all replicas; each replica filters its own slots independently.
 
-## Life of a notification — function-by-function
+## Life of a notification, function-by-function
 
 The per-surface sequence diagrams above show the high-level flow. Below are the literal callstacks adopters and reviewers can correlate against the code. Read top-down; each indent level is one function call into a callee.
 
@@ -615,7 +615,7 @@ Setup: 3 replicas wired with a `redisstore.Bus` per replica (separate from the c
                  ↳ payload.tenant ("asgard") != ctx.Principal() ("babylon") → FALSE
             ── matched=false: drop (no delivery to bob's slot)
 
-[K2]  events/stream handler for bob: select sees no incoming on evCh — silent
+[K2]  events/stream handler for bob: select sees no incoming on evCh, silent
         ── bob NEVER hears the asgard event ─ tenant scoping holds
 ```
 
@@ -651,7 +651,7 @@ sequenceDiagram
     App->>Src: yield(payload)
     Src->>Slot: per-slot Match
     Slot->>Cli: deliver
-    Note over Src: cfg.Emitter not configured<br/>(no Bus) — no publish, no relay
+    Note over Src: cfg.Emitter not configured<br/>(no Bus), no publish, no relay
 ```
 
 At N=1, adopters don't need any Pattern B wiring. The yield → for-loop → local slot path is the entire story. Configure a Bus only when adding a second replica.
@@ -695,7 +695,7 @@ sequenceDiagram
     Src->>Bus: Emit (Meta-stamped with K1's origin)
     Bus->>Redis: PUBLISH
     Redis->>Bus: deliver back to K1
-    Note over Bus: origin == K1's own marker — DROP
+    Note over Bus: origin == K1's own marker, DROP
     Note over Bus: receiver NOT invoked → no double-fire
 ```
 
@@ -730,7 +730,7 @@ sequenceDiagram
     end
 ```
 
-### Slow subscriber — drop policy
+### Slow subscriber, drop policy
 
 When a Bus's incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry, so adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.
 
@@ -776,7 +776,7 @@ sequenceDiagram
     K2->>K2: Bus.Close()
     K2->>Redis: UNSUBSCRIBE
     K1->>Redis: PUBLISH event-C
-    Note over K2: no longer receives — Close detached the subscriber
+    Note over K2: no longer receives, Close detached the subscriber
     Note over K1: K1 continues normally
 ```
 
@@ -832,7 +832,7 @@ cfg.Emitter = eventsBus
 events.Register(cfg)
 ```
 
-### Mixed — all 5 surfaces
+### All 5 surfaces mixed
 
 When your server uses both catalog notifications AND `resources/updated` AND events. CapabilityBus (root `stores/redis/`) handles capability + subscription-shaped notifications via one `NotificationRouter`. Events get their own Bus (events SDK `experimental/ext/events/stores/redis/`) because the wire format is events-typed:
 

@@ -1,4 +1,4 @@
-# SEP-2577 — Deprecation of Roots, Sampling, and Logging
+# SEP-2577 deprecates Roots, Sampling and Logging
 
 [SEP-2577](https://github.com/modelcontextprotocol/specification/pull/2577) lands in the MCP 2026-07-28 RC (locked 2026-05-21). It puts three protocol features on a deprecation path: **Roots**, **Sampling**, and **Logging**. mcpkit is on the 12-month annotation-only path, and every existing call still works at runtime; godoc `// Deprecated:` blocks fire `staticcheck SA1019` (and any IDE that consumes it) at call sites so consumers see the warning the moment they upgrade.
 
@@ -22,9 +22,9 @@ The MCP working group's framing (paraphrased from SEP-2577 discussion): **Roots*
 |---|---|
 | 2026-05-21 | SEP-2577 trigger fired (MCP RC lock) |
 | 2026-05-31 | mcpkit annotation pass lands (this doc + `Deprecated:` blocks) |
-| 2026-07-28 | MCP 2026-07-28 GA — features remain in the spec but flagged deprecated |
+| 2026-07-28 | MCP 2026-07-28 GA - features remain in the spec but flagged deprecated |
 | 2027-05-21 | 12-month annotation window minimum closes |
-| a future major release (≥ 2027) | mcpkit removes the deprecated symbols — no earlier than the spec window above. Deferred out of 0.4 (issue 850). |
+| a future major release (≥ 2027) | mcpkit removes the deprecated symbols - no earlier than the spec window above. Deferred out of 0.4 (issue 850). |
 
 Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removing them earlier would break the annotation window above and drop mcpkit below Tier-1 while the features are still in the targeted spec version. If the spec window extends, mcpkit's removal follows it. The deprecation doc is the source of truth, not a calendar date.
 
@@ -36,12 +36,12 @@ Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removin
 |---|---|
 | `server.WithAllowedRoots(roots ...string)` | Application-level filesystem access control. mcpkit does not ship a drop-in. |
 | `server.WithRootsFetchTimeout(d time.Duration)` | No replacement (Roots-specific). |
-| `core.IsPathAllowed(ctx, path) bool` | Same — application-level check against your own allowlist. |
+| `core.IsPathAllowed(ctx, path) bool` | Same - application-level check against your own allowlist. |
 | `core.BaseContext.IsPathAllowed(path) bool` | Same. |
-| `core.RootsListResult` | No replacement — the `roots/list` server-to-client request is the thing being deprecated. |
+| `core.RootsListResult` | No replacement - the `roots/list` server-to-client request is the thing being deprecated. |
 | `core.DecodeListRootsInputResponse` | MRTR helper for the deprecated `roots/list` flow; remove when the MRTR composition no longer needs roots input. |
 | `client.RootsHandler`, `client.WithRootsHandler(h)` | Host wires filesystem permissions itself; mcpkit's client no longer needs to negotiate them after removal. |
-| `(*client.Client).NotifyRootsChanged()` | No replacement — `roots/list_changed` is part of the deprecated surface. |
+| `(*client.Client).NotifyRootsChanged()` | No replacement - `roots/list_changed` is part of the deprecated surface. |
 
 **Migration sketch:** Move from *"server asks client which paths are allowed"* (Roots) to *"application bakes in its own filesystem capability before construction."* For tools that legitimately need user-scoped file access, model that as a resource or as an explicit tool argument, not as a protocol-level negotiation.
 
@@ -50,11 +50,11 @@ Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removin
 | Symbol | Replacement |
 |---|---|
 | `core.Sample(ctx, req) (CreateMessageResult, error)` | Bring your own LLM client (`anthropic-sdk-go`, OpenAI SDK, etc.) and call it directly from the tool handler. |
-| `core.BaseContext.Sample(req) (CreateMessageResult, error)` | Same — receive a model client via dependency injection at server construction. |
-| `core.CreateMessageRequest`, `core.SamplingMessage`, `core.ModelPreferences`, `core.CreateMessageResult` | No replacement at the protocol surface — these wire types disappear. Application-level model abstractions replace them. |
+| `core.BaseContext.Sample(req) (CreateMessageResult, error)` | Same - receive a model client via dependency injection at server construction. |
+| `core.CreateMessageRequest`, `core.SamplingMessage`, `core.ModelPreferences`, `core.CreateMessageResult` | No replacement at the protocol surface - these wire types disappear. Application-level model abstractions replace them. |
 | `core.NewSamplingInputRequest(req)`, `core.DecodeSamplingInputResponse` | MRTR helpers for the deprecated sampling-in-MRTR flow. |
-| `(*server.TaskContext).TaskSample(req) (CreateMessageResult, error)` | Same as `Sample()` — task continuations should hold their own LLM client. |
-| `client.SamplingHandler`, `client.WithSamplingHandler(h)` | After removal, the host's LLM client and the MCP client are separately wired — no protocol negotiation. |
+| `(*server.TaskContext).TaskSample(req) (CreateMessageResult, error)` | Same as `Sample()` - task continuations should hold their own LLM client. |
+| `client.SamplingHandler`, `client.WithSamplingHandler(h)` | After removal, the host's LLM client and the MCP client are separately wired - no protocol negotiation. |
 
 **Migration sketch:** Most tools that previously did `ctx.Sample(...)` were really asking *"call the host's LLM with this prompt."* Pass that LLM client into the server constructor; tools call it directly. mcpkit's role narrows to tool dispatch + transport; sampling stops being a wire-level concept.
 
@@ -62,7 +62,7 @@ Removal was **deferred out of 0.4**: 0.4 keeps the surfaces working, and removin
 
 | Symbol | Replacement |
 |---|---|
-| `core.EmitLog(ctx, level, logger, data)` | Use `slog.InfoContext(ctx, ...)` (or equivalent) — write to your own log sink. |
+| `core.EmitLog(ctx, level, logger, data)` | Use `slog.InfoContext(ctx, ...)` (or equivalent) - write to your own log sink. |
 | `core.BaseContext.EmitLog(level, logger, data)` | Same. |
 | `core.LogLevel` and constants (`LogDebug`, `LogInfo`, `LogNotice`, `LogWarning`, `LogError`, `LogCritical`, `LogAlert`, `LogEmergency`) | `slog.Level` (or your library's equivalent). |
 | `core.LogMessage` | Wire-level type for the deprecated `notifications/message`; no replacement at this surface. |

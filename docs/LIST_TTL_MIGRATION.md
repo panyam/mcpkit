@@ -37,11 +37,11 @@ authors need to know about cache scope and authorization.
 
 ### `ttlMs` semantics
 
-- **absent** or **`0`** — the response is immediately stale; clients MAY
+- **absent** or **`0`** - the response is immediately stale; clients MAY
   re-fetch every time the result is needed. Per the merged spec an absent
   `ttlMs` is treated the same as `0`.
-- **`> 0`** — the response is fresh for that many milliseconds from receipt.
-- **negative** — clients ignore it and treat it as `0`.
+- **`> 0`** - the response is fresh for that many milliseconds from receipt.
+- **negative** - clients ignore it and treat it as `0`.
 
 mcpkit keeps `TTLMs` a `*int` even though absent and `0` are
 client-equivalent: the pointer lets a server emit an explicit `"ttlMs": 0`
@@ -52,12 +52,12 @@ distinct from omitting the field. `core.CacheScopePublic` and
 
 `cacheScope` mirrors HTTP `Cache-Control: public` vs `private`:
 
-- **`"public"`** — the response holds no caller-specific data; any client,
+- **`"public"`** - the response holds no caller-specific data; any client,
   shared gateway, or caching proxy MAY store it and serve it to any user.
-- **`"private"`** — the response holds caller-specific data; a cache MAY be
+- **`"private"`** - the response holds caller-specific data; a cache MAY be
   reused only within the same authorization context and MUST NOT be shared
   across access tokens.
-- **absent** — clients default to `"public"`.
+- **absent** - clients default to `"public"`.
 
 ## Server API
 

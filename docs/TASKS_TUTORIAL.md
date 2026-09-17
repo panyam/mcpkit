@@ -1,4 +1,4 @@
-# Tasks Tutorial — SEP-2663 server-directed async execution, end to end
+# Tasks Tutorial, SEP-2663 server-directed async execution, end to end
 
 Everything you need to know to write tools that run as long-lived background tasks, gather input mid-execution, surface progress, and compose cleanly with the MRTR (SEP-2322) sync round-trip pattern.
 
@@ -148,9 +148,9 @@ srv.RegisterTool(
 
 Three values:
 
-- **`TaskSupportForbidden`** (or absent `Execution`) — tool never runs as a task. Handler returns sync. Server ignores `core.GoAsyncResult` if the handler somehow returns it.
-- **`TaskSupportOptional`** — tool *may* run as a task, depending on what the handler does. If the client hasn't negotiated the tasks extension, the server falls back to sync.
-- **`TaskSupportRequired`** — tool *must* run as a task. If the client hasn't negotiated the tasks extension, the server returns `-32021` (Missing Required Client Capability) with a structured `requiredCapabilities` payload so the client knows what to add.
+- **`TaskSupportForbidden`** (or absent `Execution`) - tool never runs as a task. Handler returns sync. Server ignores `core.GoAsyncResult` if the handler somehow returns it.
+- **`TaskSupportOptional`** - tool *may* run as a task, depending on what the handler does. If the client hasn't negotiated the tasks extension, the server falls back to sync.
+- **`TaskSupportRequired`** - tool *must* run as a task. If the client hasn't negotiated the tasks extension, the server returns `-32021` (Missing Required Client Capability) with a structured `requiredCapabilities` payload so the client knows what to add.
 
 ### Client negotiation
 
@@ -159,7 +159,7 @@ The client must declare the extension. Two ways:
 - **Legacy wire, session-level:** `client.WithTasksExtension()` adds `capabilities.extensions["io.modelcontextprotocol/tasks"] = {}` to the `initialize` request.
 - **Stateless wire (or per-request override on legacy):** `_meta.io.modelcontextprotocol/clientCapabilities.extensions["io.modelcontextprotocol/tasks"]` on each request.
 
-The server's `taskV2Middleware` checks both via [`core.ClientSupportsExtensionForRequest`](../core/stateless.go). See [`docs/MRTR_TUTORIAL.md` §4](MRTR_TUTORIAL.md#4-where-the-client-publishes-its-capability-menu--and-how-that-changes-per-wire) for the full capability-publishing story across wires.
+The server's `taskV2Middleware` checks both via [`core.ClientSupportsExtensionForRequest`](../core/stateless.go). See [`docs/MRTR_TUTORIAL.md` §4](MRTR_TUTORIAL.md#4-where-the-client-publishes-its-capability-menu-and-how-that-changes-per-wire) for the full capability-publishing story across wires.
 
 ### Registering the extension on the server
 
@@ -195,7 +195,7 @@ The middleware runs the handler **synchronously first**, then dispatches on the 
 
 The flow:
 
-1. Middleware runs the handler **synchronously** via `next(ctx, req)`.
+1. Runs the handler **synchronously** via `next(ctx, req)`.
 2. Looks at what came back via a type switch on the concrete `ToolResponse` variant.
 3. Dispatches:
    - `core.InputRequiredResult` → pass through; no task created
@@ -248,7 +248,7 @@ The trade-off: the SEP-2663 G6 filter (no `notifications/progress` / `notificati
 
 ---
 
-## 5. `TaskContext` — the in-task API
+## 5. `TaskContext`, the in-task API
 
 When the handler is running inside the continuation goroutine, [`tasks.GetTaskContext(ctx)`](../ext/tasks/runtime.go) returns a non-nil `*TaskContext` that gives access to task-scoped operations:
 
@@ -269,7 +269,7 @@ func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMes
 
 Transitions the task's status and fires a `notifications/tasks` event. Use it to mark transitions other than the implicit `working → completed/failed` (e.g., when a long-running job hits an interesting milestone you want to surface). Status transitions enforce a state machine. See §6.
 
-### `TaskElicit` and `TaskSample` — the in-task input flow
+### `TaskElicit` and `TaskSample`, the in-task input flow
 
 These are the equivalents of MRTR's `elicitation/create` and `sampling/createMessage` requests, but they happen **inside** the goroutine instead of before it. The goroutine blocks on a waiter channel; the client wakes it by sending `tasks/update`. See §7 for the full mechanic.
 
@@ -279,7 +279,7 @@ Notably absent: any equivalent of v1's `ProgressToken` parameter on `SetStatus`,
 
 ---
 
-## 6. Task lifecycle — states + transitions
+## 6. Task lifecycle, states + transitions
 
 Tasks have five statuses and a strict transition graph:
 
@@ -325,7 +325,7 @@ This split matters for clients: `completed + isError:true` should be displayed t
 
 ---
 
-## 7. The in-task input flow — pause, surface, resume
+## 7. The in-task input flow, pause, surface, resume
 
 This is the symmetric counterpart of MRTR's `InputRequiredResult` round, scoped to *inside* a running task. **It's the answer to "what if I only discover I need more input *after* starting the work?"**
 
@@ -432,7 +432,7 @@ mcpkit picks readable keys (`elicit-1`, `sample-2`) for debuggability, but the k
 
 ---
 
-## 8. Notifications — `notifications/tasks` and the G6 filter
+## 8. Notifications, `notifications/tasks` and the G6 filter
 
 ### `notifications/tasks`
 
@@ -440,12 +440,12 @@ The lifecycle event stream. Server emits one whenever a task's status transition
 
 On the legacy wire, these fan out on the persistent GET SSE stream. On the stateless wire, they fan out on `subscriptions/listen` (when the client opted into a listener). Note that stateless support for `notifications/tasks` lands in follow-up work; today the stateless path silently drops the emission, matching the spec's "no server-initiated push" baseline.
 
-### The G6 filter — what gets dropped inside a task
+### The G6 filter, what gets dropped inside a task
 
 SEP-2663 G6: **a task's notification channel is reserved for `notifications/tasks`**. Two notifications that work fine on sync tools are forbidden inside tasks:
 
-- `notifications/progress` — was used for streaming progress %. Replacement: `tc.SetStatus(...)` + `statusMessage` on `TaskInfo`. Clients observe progress via `tasks/get` polling or the `notifications/tasks` stream.
-- `notifications/message` — was used for streaming server-side log emissions. Replacement: structured `result.content` when the task completes (final output), or out-of-band server-side logging for live observability (your own log infra, OpenTelemetry, etc.). The spec is "MCP isn't the transport for that; use real logging."
+- `notifications/progress` - was used for streaming progress %. Replacement: `tc.SetStatus(...)` + `statusMessage` on `TaskInfo`. Clients observe progress via `tasks/get` polling or the `notifications/tasks` stream.
+- `notifications/message` - was used for streaming server-side log emissions. Replacement: structured `result.content` when the task completes (final output), or out-of-band server-side logging for live observability (your own log infra, OpenTelemetry, etc.). The spec is "MCP isn't the transport for that; use real logging."
 
 mcpkit enforces this in [`ext/tasks/tasks.go`](../ext/tasks/tasks.go):
 
@@ -467,7 +467,7 @@ So a handler written for the pre-G6 world doesn't break. It just stops emitting 
 
 The filter is applied **only** to the continuation goroutine's `bgCtx`. A sync handler returning a `ToolResult` (or running an MRTR round) on a `TaskSupport=optional/required` tool runs on the **unfiltered** POST ctx, where `EmitProgress` and `EmitLog` work normally. This is a deliberate narrowing: sync handlers are responsible for not leaking notifications they shouldn't.
 
-For deeper coverage of how `progressToken` works across both paths, see [`docs/MRTR_TUTORIAL.md` §5](MRTR_TUTORIAL.md#5-progresstoken--who-mints-it-and-what-its-for).
+For deeper coverage of how `progressToken` works across both paths, see [`docs/MRTR_TUTORIAL.md` §5](MRTR_TUTORIAL.md#5-progresstoken-who-mints-it-and-what-its-for).
 
 ---
 
@@ -493,16 +493,16 @@ A particularly important case: a task parked in `input_required` (waiting on `Ta
 
 ---
 
-## 10. Tasks vs MRTR — when to use which, and how they compose
+## 10. Tasks vs MRTR, when to use which, and how they compose
 
-Two distinct mechanisms for "server-asks-client-for-something," scoped to two different phases of a tool's lifetime. See [`docs/MRTR_TUTORIAL.md` §7](MRTR_TUTORIAL.md#7-when-to-use-what--mrtr-vs-push-vs-task-input-flow) for the full comparison table and decision flow; the short version:
+Two distinct mechanisms for "server-asks-client-for-something," scoped to two different phases of a tool's lifetime. See [`docs/MRTR_TUTORIAL.md` §7](MRTR_TUTORIAL.md#7-choosing-between-mrtr-push-and-the-task-input-flow) for the full comparison table and decision flow; the short version:
 
 | Aspect | MRTR (`ctx.RequestInput`) | Task input flow (`tc.TaskElicit`) |
 |---|---|---|
 | **When** | Before task escalation, during sync preflight | After task escalation, inside the goroutine |
 | **Wire** | Client re-invokes the same `tools/call` | Client polls via `tasks/get`, delivers via `tasks/update` |
-| **Server state across rounds** | None — stateless continuation token | Lots — `activeTask` + `inputState` + parked goroutine |
-| **Restartable across replicas** | Yes — token carries everything | No — goroutine is pinned to one process |
+| **Server state across rounds** | None - stateless continuation token | Lots - `activeTask` + `inputState` + parked goroutine |
+| **Restartable across replicas** | Yes - token carries everything | No - goroutine is pinned to one process |
 | **Best for** | "I know I'll need input before I can decide what to do" | "I started the work and only discovered I need more input" |
 
 ### Composition: MRTR + GoAsync + in-task input
@@ -701,12 +701,12 @@ err := client.CancelTask(c, taskID)
 
 ## See also
 
-- [`docs/MRTR_TUTORIAL.md`](MRTR_TUTORIAL.md) — sibling tutorial for SEP-2322 MRTR (capabilities across wires, progressToken, push-vs-MRTR-vs-task-input decision flow).
-- [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) — v1 → v2 migration guide.
-- [`ext/tasks/README.md`](../ext/tasks/README.md) — task extension API reference.
-- [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) — conformance plan + status.
-- [`examples/tasks-v2/main.go`](../examples/tasks-v2/main.go) — six task fixtures (slow_compute, failing_job, confirm_delete, multi_input, protocol_error_job, external_job) all using the GoAsync pattern.
-- [`examples/mrtr/main.go`](../examples/mrtr/main.go) — eight MRTR fixtures including `test_tool_with_task` for the composition pattern (A8).
-- [panyam/mcpconformance](https://github.com/panyam/mcpconformance), branch `feat/tasks-mrtr-extension` — SEP-2663 + SEP-2322 conformance scenarios.
-- [Issue 452](https://github.com/panyam/mcpkit/issues/452) — stateless wire MRTR support follow-up.
-- [Issue 485](https://github.com/panyam/mcpkit/issues/485) — multi-tenant isolation for stateless task store follow-up.
+- [`docs/MRTR_TUTORIAL.md`](MRTR_TUTORIAL.md) - sibling tutorial for SEP-2322 MRTR (capabilities across wires, progressToken, push-vs-MRTR-vs-task-input decision flow).
+- [`docs/TASKS_V2_MIGRATION.md`](TASKS_V2_MIGRATION.md) - v1 → v2 migration guide.
+- [`ext/tasks/README.md`](../ext/tasks/README.md) - task extension API reference.
+- [`docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md) - conformance plan + status.
+- [`examples/tasks-v2/main.go`](../examples/tasks-v2/main.go) - six task fixtures (slow_compute, failing_job, confirm_delete, multi_input, protocol_error_job, external_job) all using the GoAsync pattern.
+- [`examples/mrtr/main.go`](../examples/mrtr/main.go) - eight MRTR fixtures including `test_tool_with_task` for the composition pattern (A8).
+- [panyam/mcpconformance](https://github.com/panyam/mcpconformance), branch `feat/tasks-mrtr-extension` - SEP-2663 + SEP-2322 conformance scenarios.
+- [Issue 452](https://github.com/panyam/mcpkit/issues/452) - stateless wire MRTR support follow-up.
+- [Issue 485](https://github.com/panyam/mcpkit/issues/485) - multi-tenant isolation for stateless task store follow-up.
