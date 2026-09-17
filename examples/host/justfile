@@ -3,31 +3,17 @@
 
 EXAMPLES := "01-apphost 02-multi-server"
 
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+set export := true
+
 # Regenerate all READMEs from code
 readme:
-    #!/usr/bin/env bash
-    set -eu
-    for ex in {{EXAMPLES}}; do
-        echo "=== Generating $ex/README.md ==="
-        go run -buildvcs=false ./$ex/ --readme > $ex/README.md
-    done
+    @./scripts/run-examples.sh readme
 
 # Run all examples non-interactively
 demo:
-    #!/usr/bin/env bash
-    set -eu
-    for ex in {{EXAMPLES}}; do
-        echo "=== Running $ex ==="
-        go run -buildvcs=false ./$ex/ --non-interactive
-        echo
-    done
+    @./scripts/run-examples.sh demo
 
 # Run each example in notebook mode (Bubble Tea cells), one at a time
 note:
-    #!/usr/bin/env bash
-    set -eu
-    for ex in {{EXAMPLES}}; do
-        echo "=== Running $ex (notebook) ==="
-        go run -buildvcs=false ./$ex/ --note
-        echo
-    done
+    @./scripts/run-examples.sh note

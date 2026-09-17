@@ -4,6 +4,9 @@ EVENT := 'telegram.message'
 RESOURCE_URI := 'telegram://messages/recent'
 EVENTS_CLIENT := 'python3 ../../../experimental/ext/events/clients/python/events_client.py --mcp ' + MCP + ' --event ' + EVENT + ' --resource-uri ' + RESOURCE_URI
 TELEGRAM_BOT_TOKEN := env('TELEGRAM_BOT_TOKEN', '')
+
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+set export := true
 HOOK_PORT := env('HOOK_PORT', '9999')
 INTERVAL := env('INTERVAL', '5')
 CHAT_ID := env('CHAT_ID', '100')
@@ -24,15 +27,7 @@ run: serve
 
 # Start the telegram-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
 serve:
-	#!/usr/bin/env bash
-	set -eu
-	if [ -n "{{TELEGRAM_BOT_TOKEN}}" ]; then
-	  echo "Starting with Telegram bot..."
-	  go run . --serve -addr :8080 -token "{{TELEGRAM_BOT_TOKEN}}"
-	else
-	  echo "Starting in test mode (no Telegram token)..."
-	  go run . --serve -addr :8080
-	fi
+	@./scripts/serve.sh
 
 # Regenerate WALKTHROUGH.md from demo definitions
 readme:

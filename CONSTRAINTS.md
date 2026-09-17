@@ -170,11 +170,14 @@ A single command spanning several lines by backslash continuation is one stateme
 inline. `echo` banners do not count at all. A `just` shebang recipe is judged by its body, since
 the shebang is only how `just` runs more than one line of bash.
 
-**Known divergence today.** 29 recipes predate this rule and are listed in
-`scripts/recipe-complexity-allowed.txt`, spread across `tutorials/walkthrough`, `examples/host`,
-`conformance/` and the two experimental store modules. The root `Makefile`/`justfile` and
-`examples/whole-enchilada/events` are done. They are being extracted area by area; the baseline only shrinks, and the checker fails on an entry that no
-longer violates so it cannot rot the way a `--update-baseline` flag lets a baseline rot.
+**Known divergence today.** One, in `scripts/recipe-complexity-allowed.txt`:
+`examples/agents/deep-agent-supervisor/justfile::web`. It stays because it is *dead* rather than
+merely inline — it runs `agent/surfaces/web`, a tree that left this repo with the agent SDK
+extraction to chakra. Extracting a broken recipe into a script preserves the break in a nicer
+shape; it wants deleting or repointing at chakra, which is a decision rather than a refactor.
+
+The baseline only shrinks, and the checker fails on an entry that no longer violates, so it cannot
+rot the way a `--update-baseline` flag lets a baseline rot.
 
 **Verify:** `make check-recipe-complexity`, wired into `.github/workflows/test.yml`. Confirmed to
 catch a real regression in both directions: appending a `for` loop to a justfile recipe makes it

@@ -4,6 +4,9 @@ EVENT := discord.message
 RESOURCE_URI := discord://messages/recent
 EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_client.py --mcp $(MCP) --event $(EVENT) --resource-uri $(RESOURCE_URI)
 
+# Reaches scripts/ through the environment (C8: recipes dispatch, scripts do the work).
+export DISCORD_BOT_TOKEN SERVE_ADDR
+
 # ── Build & Run ──────────────────────────────────────────────────────
 # Usage: make run                              — test mode (no Discord)
 #        DISCORD_BOT_TOKEN=... make run  — with Discord bot
@@ -11,13 +14,7 @@ EVENTS_CLIENT := python3 ../../../experimental/ext/events/clients/python/events_
 run: serve  ## Alias for serve
 
 serve: ## Start the discord-events server standalone (also works with MCPJam, VS Code, Claude Desktop)
-	@if [ -n "$(DISCORD_BOT_TOKEN)" ]; then \
-	  echo "Starting with Discord bot..."; \
-	  go run . --serve -addr :8080 -token "$(DISCORD_BOT_TOKEN)"; \
-	else \
-	  echo "Starting in test mode (no Discord token)..."; \
-	  go run . --serve -addr :8080; \
-	fi
+	@./scripts/serve.sh
 
 serve-fast-suspend: ## Start the server with -webhook-suspend-threshold 1 so the suspend-transition demo step fires after a single failed delivery cycle (~12s instead of ~42s with the default threshold of 5).
 	go run . --serve -addr :8080 -webhook-suspend-threshold 1
