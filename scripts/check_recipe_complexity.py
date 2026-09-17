@@ -156,40 +156,111 @@ def walk():
                 yield os.path.join(dirpath, fn)
 
 
-# Cases that pinned down the rule, kept as a self-test because every one of them
-# was a bug in this checker first. A case naming a recipe that no longer exists
-# fails rather than being skipped: a verifier whose fixture moved reads as a
-# pass otherwise, which is how CONSTRAINTS.md A5 hid a real violation.
+# Cases that pinned down the rule. Every one was a bug in this checker first,
+# in both directions, so they are kept as a test.
+#
+# The fixtures are inline rather than pointed at real recipes. The first version
+# named live ones, and the extraction sweep they exist to support promptly fixed
+# two of them, turning the self-test red for the best possible reason. A test
+# whose fixture is the thing being changed measures the change, not the rule.
+#
+# (label, is_make, body lines, should_violate)
 SELFTEST = [
-    # (path, recipe, should_violate, why this case exists)
-    ("Makefile", "vulncheck", True,
-     "one backslash-continued shell program; scanning only statement heads missed it"),
-    ("examples/whole-enchilada/events/Makefile", "check-ports", True, "same shape"),
-    ("examples/whole-enchilada/events/Makefile", "clear_all_tokens", True, "bare `for`"),
-    ("tutorials/walkthrough/justfile", "stats", True,
-     "`for` inside an echo's $() -- shell in a justfile, not an expansion"),
-    ("examples/whole-enchilada/events/Makefile", "up", False,
-     "`$(if $(BUILD), (rebuilt))` in a banner is a Make function, not control flow"),
-    ("examples/whole-enchilada/events/Makefile", "drive-chat", False,
-     "one `go run` with an optional flag"),
-    ("docker/backends/Makefile", "up", False, "one command plus a six-line echo banner"),
-    ("conformance/Makefile", "testconf-external-checker", False, "one `cd && go run`"),
+    (
+        'make: continued for/if loop (vulncheck shape)',
+        True,
+        [
+            '\tfailed=""; \\',
+            '\techo "==> govulncheck root"; \\',
+            '\tfor mod in $(SUB_MODS); do \\',
+            '\t\tif [ -f "$$mod/go.mod" ]; then \\',
+            '\t\t\techo "$$mod"; \\',
+            '\t\tfi; \\',
+            '\tdone',
+        ],
+        True,
+    ),
+    (
+        'make: bare for loop (clear_all_tokens shape)',
+        True,
+        [
+            '\t@for realm in asgard babylon camelot; do \\',
+            '\t\tkcadm create logout-all -r $$realm; \\',
+            '\tdone',
+        ],
+        True,
+    ),
+    (
+        "just: for inside an echo's $() is shell, not an expansion",
+        False,
+        [
+            '\tPAGES=$(ls *.md)',
+            '\techo "written: $(for f in $PAGES; do grep -L STUB "$f"; done | wc -l)"',
+        ],
+        True,
+    ),
+    (
+        'make: $(if ...) in a banner is a Make function',
+        True,
+        [
+            '\t$(COMPOSE) up -d --wait $(if $(BUILD),--build)',
+            '\t@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090"',
+            '\t@echo "verify with: make smoke"',
+        ],
+        False,
+    ),
+    (
+        'make: one go run with an optional flag (drive-chat shape)',
+        True,
+        [
+            '\tgo -C drivers/synth run . --event chat.message $(if $(EVERY),--every $(EVERY))',
+        ],
+        False,
+    ),
+    (
+        'make: one command plus an echo banner (docker/backends up shape)',
+        True,
+        [
+            '\t$(COMPOSE) up -d',
+            '\t@echo ""',
+            '\t@echo "  Keycloak UI: http://localhost:8180"',
+            '\t@echo "  Postgres:    postgres:5432"',
+            '\t@echo "  Redis:       redis:6379"',
+            '\t@echo ""',
+        ],
+        False,
+    ),
+    (
+        'just: a two-line shebang recipe is not a script',
+        False,
+        [
+            '\t#!/usr/bin/env bash',
+            '\tset -eu',
+            '\tdocker compose -f db.yaml down -v',
+        ],
+        False,
+    ),
+    (
+        'make: four plain statements crosses the line',
+        True,
+        [
+            '\tcd a && go build ./...',
+            '\tcd b && go build ./...',
+            '\tcd c && go build ./...',
+            '\tcd d && go build ./...',
+        ],
+        True,
+    ),
 ]
 
 
 def selftest() -> int:
     failures = 0
-    for rel, recipe, expect, why in SELFTEST:
-        path = os.path.join(ROOT, rel)
-        bodies = [b for n, b in parse(path) if n == recipe] if os.path.exists(path) else []
-        if not bodies:
-            print(f"selftest: {rel}::{recipe} no longer exists — update or drop the case")
-            failures += 1
-            continue
-        got, _, reason = assess(bodies[0], is_make=is_makefile(rel))
+    for label, is_make, body, expect in SELFTEST:
+        got, _, reason = assess(body, is_make=is_make)
         if got != expect:
-            print(f"selftest: {rel}::{recipe} expected violates={expect}, got {got} ({reason})")
-            print(f"  case exists because: {why}")
+            print(f"selftest: {label}")
+            print(f"  expected violates={expect}, got {got} ({reason or 'clean'})")
             failures += 1
     print(f"selftest: {len(SELFTEST) - failures}/{len(SELFTEST)} cases pass")
     return 1 if failures else 0

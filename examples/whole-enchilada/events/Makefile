@@ -70,12 +70,17 @@ COMPOSE_PUBLIC := docker compose -f $(STACK)
 # for examples/agents, which still shares it.
 OBSERVABILITY_COMPOSE := ../../../docker/observability/docker-compose.yml
 
-# tenant-realm maps a shorthand TENANT letter to the canonical realm
-# name. A → asgard, B → babylon, C → camelot. Pass a literal realm
-# name (or any custom realm) and it's preserved unchanged.
-tenant-realm = $(strip $(if $(filter A a,$(1)),asgard,$(if $(filter B b,$(1)),babylon,$(if $(filter C c,$(1)),camelot,$(1)))))
+# Operator knobs reach the recipe scripts through the environment, so a recipe
+# stays one dispatch line instead of re-listing ten VAR="$(VAR)" pairs. The
+# tenant letter -> realm mapping moved with them, into scripts/common.sh; it
+# used to exist twice, as this nested $(filter ...) chain and as the justfile's
+# regex chain.
+export RUNNER := make
+export TENANT TOKEN USERNAME PASSWORD USER EVENT TEXT START_CURSOR
+export TTL_MS REPLY_STATUS EXIT_AFTER CHANNELS REPLICAS NAME SOURCE TENANTS EVERY
+export KEYCLOAK_PORT KEYCLOAK_HOST DEMO_CLIENT_ID DEMO_CLIENT_SECRET ONEAUTH
+export HOSTS_NAMES STACK DEV_OVERLAY
 
-HOSTS_MARKER := # whole-enchilada hostnames — managed by make hosts-install
 HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada
 
@@ -92,14 +97,7 @@ gen-compose: ## Regenerate events-stack.yaml + compose.dev.yaml for N event-serv
 	go -C tools/gen-compose run . -n=$(N) -out=../.. -image=$(EVENT_SERVER_IMAGE) -keycloak-image=$(KEYCLOAK_IMAGE)
 
 build: ## Build all binaries locally (without Docker). push-server stays a reference for the production-shape HTTPSource pattern (run via `go -C push-server run .`).
-	go -C event-server build -o ../bin/event-server ./
-	go -C poller build -o ../bin/poller ./
-	go -C webhook build -o ../bin/webhook ./
-	go -C streamer build -o ../bin/streamer ./
-	go -C inject build -o ../bin/inject ./
-	go -C drivers/synth build -o ../../bin/synth ./
-	go -C evctl build -o ../bin/evctl ./
-	go -C walkthrough build -o ../bin/walkthrough ./
+	@./scripts/build.sh
 
 unittest: ## In-process Go tests (no Docker needed; covers tenant-isolation + protocol contracts).
 	go -C event-server test ./... -count=1 -timeout 60s
@@ -113,15 +111,7 @@ obsdown: ## Tear down the observability stack.
 # Fails fast with the fix rather than letting Docker report a bare
 # "port is already allocated" from whichever container got there first.
 check-ports:
-	@for p in 9090 $(KEYCLOAK_PORT); do \
-		if lsof -nP -iTCP:$$p -sTCP:LISTEN >/dev/null 2>&1; then \
-			echo "port $$p is already in use."; \
-			echo "  usually docker/backends (shared with examples/agents) or a stack you left up."; \
-			echo "  fixes: 'make stack-down', or 'cd ../../../docker/backends && make down',"; \
-			echo "         or run this stack beside it with 'make up KEYCLOAK_PORT=8181'."; \
-			exit 1; \
-		fi; \
-	done
+	@./scripts/check-ports.sh
 
 up: gen-compose check-ports ## Bring up the full dev stack (builds from your checkout, Keycloak + auth on). Pass BUILD=true to force a rebuild.
 	KEYCLOAK_PORT=$(KEYCLOAK_PORT) OAUTH_ISSUER_BASE="$(KEYCLOAK_HOST)" \
@@ -199,50 +189,19 @@ readme: ## Regenerate WALKTHROUGH.md from walkthrough/walkthrough.go.
 # -------------------------------------------------------------------
 
 newtoken: ## Acquire a bearer token via Keycloak browser auth. TENANT=A|B|C. Prints ONLY the access token so `$(make newtoken TENANT=A)` captures cleanly.
-	@if [ -z "$(TENANT)" ]; then echo "usage: make newtoken TENANT=A|B|C" >&2; exit 2; fi
-	@$(ONEAUTH) token browser $(KEYCLOAK_HOST)/realms/$(call tenant-realm,$(TENANT)) \
-		--client-id $(DEMO_CLIENT_ID) \
-		--client-secret $(DEMO_CLIENT_SECRET) \
-		--format=access-token-only
+	@./scripts/newtoken.sh browser
 
 newtoken-ci: ## Acquire a bearer token via ROPC (CI / scripting). TENANT=A|B|C USER=alice PASSWORD=alice.
-	@if [ -z "$(TENANT)" ] || [ -z "$(USER)" ] || [ -z "$(PASSWORD)" ]; then \
-		echo "usage: make newtoken-ci TENANT=A|B|C USER=<user> PASSWORD=<pw>" >&2; exit 2; fi
-	@$(ONEAUTH) token password $(KEYCLOAK_HOST)/realms/$(call tenant-realm,$(TENANT)) \
-		--client-id $(DEMO_CLIENT_ID) \
-		--client-secret $(DEMO_CLIENT_SECRET) \
-		--user $(USER) \
-		--password $(PASSWORD) \
-		--format=access-token-only
-	@echo
+	@./scripts/newtoken.sh password
 
 poller: ## Long-running poll subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Resume knob: START_CURSOR=<N> (default 0 = replay from buffer head).
-	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
-		echo "usage: make poller TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] [START_CURSOR=<N>]" >&2; exit 2; fi
-	go -C poller run . --tenant $(call tenant-realm,$(TENANT)) \
-		$(if $(TOKEN),--token $(TOKEN)) \
-		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
-		$(if $(START_CURSOR),--start-cursor $(START_CURSOR)) \
-		--event $(EVENT)
+	@./scripts/subscriber.sh poller
 
 webhook: ## Long-running webhook subscriber. TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME]. Demo knobs: TTL_MS=<int|null> REPLY_STATUS=<int> EXIT_AFTER=<int>.
-	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
-		echo "usage: make webhook TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]] [TTL_MS=<int|null>] [REPLY_STATUS=<int>] [EXIT_AFTER=<int>]" >&2; exit 2; fi
-	go -C webhook run . --tenant $(call tenant-realm,$(TENANT)) \
-		$(if $(TOKEN),--token $(TOKEN)) \
-		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
-		--event $(EVENT) \
-		$(if $(TTL_MS),--ttl-ms $(TTL_MS)) \
-		$(if $(REPLY_STATUS),--reply-status $(REPLY_STATUS)) \
-		$(if $(EXIT_AFTER),--exit-after $(EXIT_AFTER))
+	@./scripts/subscriber.sh webhook
 
 streamer: ## Long-running events/stream subscriber over the stateless wire (push delivery). TENANT=A|B|C plus either TOKEN=<bearer> or USERNAME=<u> [PASSWORD=<p>; defaults to USERNAME].
-	@if [ -z "$(TOKEN)" ] && [ -z "$(USERNAME)" ]; then \
-		echo "usage: make streamer TENANT=A|B|C [TOKEN=<bearer> | USERNAME=<u> [PASSWORD=<p>]]" >&2; exit 2; fi
-	go -C streamer run . --tenant $(call tenant-realm,$(TENANT)) \
-		$(if $(TOKEN),--token $(TOKEN)) \
-		$(if $(USERNAME),--username $(USERNAME) --password $(if $(PASSWORD),$(PASSWORD),$(USERNAME))) \
-		--event $(EVENT)
+	@./scripts/subscriber.sh streamer
 
 # Drivers — operator-runnable synthetic producers. Stack starts silent;
 # fire these in sibling terminals to start producing events. drive-chat
@@ -278,16 +237,10 @@ REPLICAS ?= 1
 NAME     ?= discord.message
 
 add-discord: ## Register a real Discord source on specified replicas. TOKEN=... CHANNELS=A,B REPLICAS=1,4 [TENANTS=a,c] [NAME=discord.message].
-	@if [ -z "$(TOKEN)" ] || [ -z "$(CHANNELS)" ] || [ -z "$(REPLICAS)" ]; then \
-		echo "usage: make add-discord TOKEN=<bot-token> CHANNELS=<id,id> REPLICAS=<idx,idx> [TENANTS=<a,c>] [NAME=<source>]" >&2; exit 2; fi
-	go -C evctl run . sources add discord \
-		--token=$(TOKEN) --channels=$(CHANNELS) --tenants=$(TENANTS) \
-		--replicas=$(REPLICAS) --name=$(NAME)
+	@./scripts/evctl-source.sh add-discord
 
 rm-source: ## Remove a runtime-added source. SOURCE=<name> REPLICAS=<idx,idx>.
-	@if [ -z "$(SOURCE)" ] || [ -z "$(REPLICAS)" ]; then \
-		echo "usage: make rm-source SOURCE=<name> REPLICAS=<idx,idx>" >&2; exit 2; fi
-	go -C evctl run . sources rm $(SOURCE) --replicas=$(REPLICAS)
+	@./scripts/evctl-source.sh rm
 
 list-sources: ## List sources known to a replica. REPLICAS=<idx>.
 	go -C evctl run . sources list --replicas=$(REPLICAS)
@@ -299,12 +252,7 @@ alllogs: ## macOS+iTerm2 only — open one iTerm window with 3 vertically-stacke
 	@bash ./iterm-logs.sh
 
 clear_all_tokens: ## Sign out every USER session in all 3 tenant realms (keeps mcp-event-server client creds intact).
-	@$(COMPOSE) exec -T keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-		--server http://keycloak:8080 --realm master --user admin --password admin >/dev/null
-	@for realm in asgard babylon camelot; do \
-		$(COMPOSE) exec -T keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $$realm >/dev/null && \
-		echo "[clear_all_tokens] $$realm: all user sessions signed out"; \
-	done
+	@./scripts/clear-all-tokens.sh
 
 clear-all: clear_all_tokens ## Quick clean slate without a full predemo: sign out Keycloak sessions + delete Redis quota keys + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear. Heavier hammer if needed: stop the stack and `make clean`.
 	@deleted=$$($(COMPOSE) exec -T redis sh -c 'redis-cli --scan --pattern "mcpkit.events.quota.*" | xargs -r redis-cli DEL' 2>/dev/null || echo 0); \
@@ -314,12 +262,7 @@ clear-all: clear_all_tokens ## Quick clean slate without a full predemo: sign ou
 		echo "[clear-all] webhooks table not present yet (no subs ever created) — skip"
 
 inject: ## Inject one event from the host. TENANT=A|B|C [EVENT=chat.message] [TEXT="..."].
-	@if [ -z "$(TENANT)" ]; then echo "usage: make inject TENANT=A|B|C [EVENT=<name>] [TEXT='...']"; exit 2; fi
-	go -C inject run . --tenant $(call tenant-realm,$(TENANT)) --event $(EVENT) --text $(call shellquote,$(TEXT))
-
-# shellquote wraps a string so the shell sees one argument, even
-# if it contains spaces. Used by `make inject TEXT="hello world"`.
-shellquote = '$(subst ','\'',$(1))'
+	@./scripts/inject.sh
 
 logs: ## Tail logs from all services.
 	$(COMPOSE) logs -f --tail=200
@@ -352,12 +295,7 @@ clean-backends: ## Wipe the SHARED docker/backends data. NOT needed for events a
 # Host /etc/hosts management — uses a marker comment so the edit is
 # idempotent and reversible. Requires sudo.
 hosts-install: ## Append *.whole-enchilada hostnames to /etc/hosts (idempotent).
-	@if grep -q "whole-enchilada hostnames" /etc/hosts; then \
-		echo "[hosts] already installed; run hosts-uninstall first to refresh"; \
-	else \
-		sudo sh -c 'printf "\n# whole-enchilada hostnames — managed by make hosts-install\n127.0.0.1 $(HOSTS_NAMES)\n" >> /etc/hosts'; \
-		echo "[hosts] installed: $(HOSTS_NAMES)"; \
-	fi
+	@./scripts/hosts-install.sh
 
 hosts-uninstall: ## Remove the whole-enchilada /etc/hosts entries.
 	@sudo sed -i.bak '/whole-enchilada hostnames/,+1 d' /etc/hosts && rm -f /etc/hosts.bak
