@@ -6,7 +6,8 @@
 #   EXPECT_AUTH=1 ./scripts/smoke-stack.sh [..]  # auth stack: assert refusal
 #
 # Used by .github/workflows/publish-images.yml after `docker compose up`, and
-# by hand via `make stack-smoke` / `make stack-smoke-auth`.
+# by hand via `make smoke` (dev stack, auth on), `make stack-smoke` (published
+# stack, anonymous) or `make stack-smoke-auth` (published stack, auth profile).
 #
 # Speaks the SEP-2575 STATELESS wire: every request carries a namespaced
 # params._meta envelope (protocolVersion plus the REQUIRED clientCapabilities)
@@ -90,18 +91,20 @@ if [ -n "$EXPECT_AUTH" ]; then
     echo "smoke-stack: PASS"
     exit 0
   fi
-  fail "the auth profile is up but an anonymous events/list was SERVED (HTTP ${STATUS}).
-  The replicas are still running with OAUTH_INTROSPECTION_URLS empty.
-  Compose reuses a container whose config has not changed, so starting
-  Keycloak alone does not switch them onto introspection. Try:
-    make stack-down && make stack-up-auth
+  fail "auth was expected but an anonymous events/list was SERVED (HTTP ${STATUS}).
+  The replicas are running with OAUTH_INTROSPECTION_URLS empty. Compose
+  reuses a container whose config has not changed, so starting Keycloak
+  alone does not switch them onto introspection. Try:
+    make down && make up                       (dev stack)
+    make stack-down && make stack-up-auth      (published stack)
   body: $(brief "$BODY")"
 fi
 
 if refused; then
-  fail "events/list was refused (HTTP ${STATUS}), so this stack requires auth.
-  Use 'make stack-smoke-auth' for an auth stack, or bring up the anonymous
-  one with 'make stack-down && make stack-up'.
+  fail "events/list was refused (HTTP ${STATUS}), so this stack has auth on.
+  That is what 'make up' brings up. Verify it with:   make smoke
+  For the published stack's auth profile:             make stack-smoke-auth
+  For an anonymous stack: make stack-down && make stack-up && make stack-smoke
   body: $(brief "$BODY")"
 fi
 [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ] \
