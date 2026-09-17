@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -43,17 +45,19 @@ func TestInlinedNginxConfEscapesComposeVars(t *testing.T) {
 	}
 }
 
-// TestNginxConfOnDiskKeepsSingleDollar is the counter-test. The dev overlay
-// bind-mounts nginx/nginx.conf directly, where nginx reads the file itself and
-// Compose never sees it. Escaping there would break the dev stack instead.
-func TestNginxConfOnDiskKeepsSingleDollar(t *testing.T) {
+// TestNginxTemplateKeepsSingleDollar is the counter-test. nginx.tmpl must stay
+// plain nginx syntax so it is readable and editable as nginx config, with
+// escapeComposeVars the single place that knows about Compose. Escaping in the
+// template would work today (the inlined copy is the only consumer) and would
+// silently break the moment anything renders it for nginx to read directly.
+func TestNginxTemplateKeepsSingleDollar(t *testing.T) {
 	ctx := tmplCtx{N: 3, EventServers: seq(3)}
 	conf, err := renderString(nginxTmpl, ctx)
 	if err != nil {
 		t.Fatalf("render nginx: %v", err)
 	}
 	if strings.Contains(conf, "$$") {
-		t.Error("nginx.conf rendered for disk must keep single $; escaping is for the inlined copy only")
+		t.Error("nginx.tmpl must keep single $; escaping belongs in escapeComposeVars, not the template")
 	}
 	if !strings.Contains(conf, "$host") {
 		t.Error("expected bare $host in the on-disk nginx.conf")
@@ -64,4 +68,199 @@ func excerpt(s string, at int) string {
 	lo := max(0, at-40)
 	hi := min(len(s), at+40)
 	return s[lo:hi]
+}
+
+// TestCanonicalStackIsSelfContained pins the property the whole merge exists
+// for: events-stack.yaml has to work when curl'd on its own, by someone with
+// no checkout. Anything that reaches back into the repo defeats that, and the
+// two ways to do it accidentally are a `build:` stanza and a relative bind
+// mount. Both are easy to reintroduce by copying a service definition out of
+// the dev overlay.
+func TestCanonicalStackIsSelfContained(t *testing.T) {
+	out := renderStack(t)
+
+	if strings.Contains(out, "build:") {
+		t.Error("events-stack.yaml must not build anything; the dev overlay owns build: stanzas")
+	}
+	// A bind mount is `- ./something:/container/path`. Named volumes have no
+	// leading dot, and the inlined nginx config is a `configs:` entry.
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ./") || strings.HasPrefix(trimmed, "- ../") {
+			t.Errorf("events-stack.yaml bind-mounts a repo path, which breaks a standalone curl: %q", trimmed)
+		}
+	}
+	if !strings.Contains(out, "image: ghcr.io/") {
+		t.Error("events-stack.yaml should pull published images")
+	}
+}
+
+// TestDevOverlayBuildsEveryPublishedImage is the general form of the failure
+// that broke the first `make up` after the compose merge. The canonical stack
+// references images we publish ourselves, and until #1391 runs, none of them
+// exist in any registry. Development therefore must not depend on pulling any
+// of them.
+//
+// The overlay covered event-server and not keycloak. The event-servers had a
+// build to fall back to and only warned; keycloak did not, and took the whole
+// stack down with `error from registry: denied`. Anything we publish needs a
+// build override here, so this asserts on the ghcr.io references rather than
+// on a list of service names that would go stale.
+func TestDevOverlayBuildsEveryPublishedImage(t *testing.T) {
+	stack := renderStack(t)
+	overlay := renderDev(t)
+
+	svc := regexp.MustCompile(`(?m)^  ([a-z0-9-]+):`)
+	var current string
+	var ours []string
+	for _, line := range strings.Split(stack, "\n") {
+		if m := svc.FindStringSubmatch(line); m != nil {
+			current = m[1]
+		}
+		if strings.Contains(line, "image:") && strings.Contains(line, "ghcr.io/") && current != "" {
+			ours = append(ours, current)
+		}
+	}
+	if len(ours) == 0 {
+		t.Fatal("expected the canonical stack to reference at least one image we publish")
+	}
+	for _, name := range ours {
+		if !strings.Contains(overlay, "  "+name+":") {
+			t.Errorf("%s pulls a ghcr.io image we have not published, and the dev overlay does not build it", name)
+		}
+	}
+}
+
+// TestDevOverlayBuildsSharedImageOnce pins the fix for a BuildKit race, and
+// replaces an earlier test that asserted the opposite.
+//
+// Every replica shares one image tag, so exactly one service may declare the
+// build. Three of them exporting the same tag concurrently fails with
+// `image "...": already exists`. The earlier version of this test required a
+// build stanza per replica, which is what the retired docker-compose.yaml did
+// safely, because that file had no image: and Compose auto-named each replica.
+// Once the services were named after the published tag, per-replica builds
+// became a collision rather than a convenience.
+func TestDevOverlayBuildsSharedImageOnce(t *testing.T) {
+	overlay := renderDev(t)
+
+	if got := strings.Count(overlay, "dockerfile:"); got != 1 {
+		t.Errorf("event-server must be built once for the shared tag, found %d build stanzas", got)
+	}
+	// The replicas that do not build must not fall back to a registry either:
+	// the tag is unpublished, so a pull produces a confusing denial instead of
+	// a plain missing-image error.
+	if got := strings.Count(overlay, "pull_policy: never"); got != 2 {
+		t.Errorf("expected replicas 2..N to be pinned to a local image, got %d", got)
+	}
+	// Every replica still has to appear, since each carries its own network
+	// aliases and the canonical stack routes to them by name.
+	for i := 1; i <= 3; i++ {
+		if !strings.Contains(overlay, fmt.Sprintf("event-server-%d:", i)) {
+			t.Errorf("dev overlay is missing event-server-%d", i)
+		}
+	}
+}
+
+func renderStack(t *testing.T) string {
+	t.Helper()
+	ctx := tmplCtx{
+		N: 3, EventServers: seq(3),
+		Image:         "ghcr.io/panyam/mcpkit-event-server:latest",
+		KeycloakImage: "ghcr.io/panyam/mcpkit-events-keycloak:latest",
+	}
+	conf, err := renderString(nginxTmpl, ctx)
+	if err != nil {
+		t.Fatalf("render nginx: %v", err)
+	}
+	ctx.NginxConf = indent(escapeComposeVars(conf), "      ")
+	out, err := renderString(stackTmpl, ctx)
+	if err != nil {
+		t.Fatalf("render stack: %v", err)
+	}
+	return out
+}
+
+// TestRenderedStackHasNoDuplicateKeys catches the failure that broke `make up`
+// on the first real run after the compose merge: the transformed template
+// carried an inherited `depends_on` and gained a consolidated one, so replicas
+// 2..N had the key twice and Compose refused the file with
+// `mapping key "depends_on" already defined`.
+//
+// Worth a test rather than care, because the obvious validation misses it.
+// PyYAML and most YAML libraries accept duplicate keys silently with last-one-
+// wins, so the file parsed clean in review and only Compose's stricter parser
+// objected. Anything that edits a template by substitution can reintroduce it.
+func TestRenderedStackHasNoDuplicateKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		out  string
+	}{
+		{"events-stack.yaml", renderStack(t)},
+		{"compose.dev.yaml", renderDev(t)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if dup := findDuplicateKey(tc.out); dup != "" {
+				t.Errorf("duplicate mapping key in %s: %s", tc.name, dup)
+			}
+		})
+	}
+}
+
+// findDuplicateKey reports the first key that appears twice in the same
+// mapping, or "" when there is none. Scopes are delimited by indentation: a
+// key at indent N closes every scope deeper than N, which is what makes
+// sibling blocks (event-server-1 then event-server-2) reuse the same key names
+// legitimately while a genuine repeat inside one block is caught.
+func findDuplicateKey(doc string) string {
+	keyLine := regexp.MustCompile(`^(\s*)([A-Za-z_][A-Za-z0-9_.\-/]*):`)
+	seen := map[int]map[string]bool{}
+
+	for i, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+
+		// A list item opens its own scope; drop anything deeper and move on
+		// rather than recording the item's own keys, which legitimately repeat
+		// across entries.
+		if strings.HasPrefix(trimmed, "- ") {
+			for d := range seen {
+				if d > indent {
+					delete(seen, d)
+				}
+			}
+			continue
+		}
+
+		m := keyLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		for d := range seen {
+			if d > indent {
+				delete(seen, d)
+			}
+		}
+		if seen[indent] == nil {
+			seen[indent] = map[string]bool{}
+		}
+		key := m[2]
+		if seen[indent][key] {
+			return fmt.Sprintf("%q reappears at line %d", key, i+1)
+		}
+		seen[indent][key] = true
+	}
+	return ""
+}
+
+func renderDev(t *testing.T) string {
+	t.Helper()
+	out, err := renderString(devTmpl, tmplCtx{N: 3, EventServers: seq(3)})
+	if err != nil {
+		t.Fatalf("render dev overlay: %v", err)
+	}
+	return out
 }

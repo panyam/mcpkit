@@ -5,7 +5,8 @@ EVENT := env('EVENT', 'chat.message')
 TEXT := env('TEXT', 'hello from `just inject`')
 USER := env('USER', '')
 PASSWORD := env('PASSWORD', '')
-KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:8180')
+KEYCLOAK_PORT := env('KEYCLOAK_PORT', '8180')
+KEYCLOAK_HOST := env('KEYCLOAK_HOST', 'http://localhost:' + KEYCLOAK_PORT)
 ONEAUTH_VERSION := env('ONEAUTH_VERSION', 'v0.1.36')
 AUTH_INTROSPECTION_URLS := env('AUTH_INTROSPECTION_URLS', 'http://keycloak:8080/realms/asgard/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/babylon/protocol/openid-connect/token/introspect,http://keycloak:8080/realms/camelot/protocol/openid-connect/token/introspect')
 REGISTRY := env('REGISTRY', 'ghcr.io/panyam')
@@ -15,6 +16,10 @@ KEYCLOAK_IMAGE := REGISTRY + '/mcpkit-events-keycloak:' + IMAGE_TAG
 ONEAUTH := 'oneauth'
 DEMO_CLIENT_ID := env('DEMO_CLIENT_ID', 'mcp-events-poller')
 DEMO_CLIENT_SECRET := env('DEMO_CLIENT_SECRET', 'mcpkit-demo-secret-DEMO-ONLY')
+STACK := 'events-stack.yaml'
+DEV_OVERLAY := 'compose.dev.yaml'
+COMPOSE := 'docker compose -f ' + STACK + ' -f ' + DEV_OVERLAY
+COMPOSE_PUBLIC := 'docker compose -f ' + STACK
 BACKENDS_COMPOSE := '../../../docker/backends/docker-compose.yml'
 OBSERVABILITY_COMPOSE := '../../../docker/observability/docker-compose.yml'
 HOSTS_MARKER := '# whole-enchilada hostnames — managed by make hosts-install'
@@ -51,13 +56,14 @@ gen-compose:
 
 # Bring up the standalone events-stack.yaml (pulls published images; anonymous auth).
 stack-up:
-	docker compose -f events-stack.yaml up -d --wait --wait-timeout 180
+	{{COMPOSE_PUBLIC}} up -d --wait --wait-timeout 180
 	@echo "standalone stack up; nginx on http://localhost:9090 — try: just stack-smoke"
 
 # Same, plus Keycloak and the three demo realms, with the replicas ON token introspection.
 stack-up-auth:
+	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
-		docker compose -f events-stack.yaml --profile auth up -d --wait --wait-timeout 300
+		{{COMPOSE_PUBLIC}} --profile auth up -d --wait --wait-timeout 300
 	@echo "standalone stack up WITH auth; Keycloak on http://localhost:8180"
 	@echo "verify the replicas actually reject anonymous callers: just stack-smoke-auth"
 
@@ -67,15 +73,19 @@ stack-smoke-auth:
 
 # Tear the standalone stack down, including its named volumes.
 stack-down:
-	docker compose -f events-stack.yaml --profile auth down -v
+	{{COMPOSE_PUBLIC}} --profile auth down -v
 
-# Drive a real MCP session against the standalone stack and assert the spec wire.
+# Verify the DEV stack (what `just up` brings up). Auth is on there, so this asserts anonymous callers are refused.
+smoke:
+	EXPECT_AUTH=1 ./scripts/smoke-stack.sh
+
+# Verify the PUBLISHED stack in its default anonymous posture (`just stack-up`). Not for `just up` — that stack has auth on.
 stack-smoke:
 	./scripts/smoke-stack.sh
 
 # Tail logs from the standalone stack.
 stack-logs:
-	docker compose -f events-stack.yaml logs -f --tail=100
+	{{COMPOSE}} logs -f --tail=100
 
 # Build the published images locally (does not push).
 images:
@@ -103,21 +113,23 @@ unittest:
 	go -C event-server test ./... -count=1 -timeout 60s
 
 # Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
-infraup:
-	docker compose -f {{BACKENDS_COMPOSE}} up -d --wait
+obsup:
+	docker compose -f {{OBSERVABILITY_COMPOSE}} up -d --wait
 
 # Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
-infradown:
-	docker compose -f {{BACKENDS_COMPOSE}} down
+obsdown:
+	docker compose -f {{OBSERVABILITY_COMPOSE}} down
 
 # Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
-up: gen-compose infraup
-	docker compose up -d {{if BUILD != '' { '--build' } else { '' }}}
+up: gen-compose
+	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
+	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
+		{{COMPOSE}} --profile auth up -d --wait --wait-timeout 300
 	@echo "stack up{{if BUILD != '' { ' (rebuilt)' } else { '' }}}; nginx on http://localhost:9090 — see README for hostname routing"
 
-# docker compose down — tears down the events services only. Backends keep running (shared infra). Use `just infradown` to stop them too.
+# Tear down the dev stack. Volumes are preserved — use `just clean` to drop them too.
 down:
-	docker compose down
+	{{COMPOSE}} --profile auth down
 
 # Run the walkthrough in non-interactive mode against the running docker stack.
 test:
@@ -125,7 +137,7 @@ test:
 
 # Clean slate (run ONCE before the demo): WIPE backend data, rebuild images, restart everything, open Keycloak + Grafana. Wiping the DB is deliberate — schema changes ship "fresh deploys only" (no migrations), so a stale volume can crash event-server on AutoMigrate.
 predemo: gen-compose
-	@BACKENDS_COMPOSE={{BACKENDS_COMPOSE}} OBSERVABILITY_COMPOSE={{OBSERVABILITY_COMPOSE}} bash predemo.sh
+	@COMPOSE="{{COMPOSE}}" OBSERVABILITY_COMPOSE={{OBSERVABILITY_COMPOSE}} AUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" bash predemo.sh
 
 # Run the walkthrough interactively against the running stack.
 demo:
@@ -244,20 +256,20 @@ alllogs:
 clear_all_tokens:
 	#!/usr/bin/env bash
 	set -eu
-	docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+	{{COMPOSE}} exec -T keycloak /opt/keycloak/bin/kcadm.sh config credentials \
 		--server http://keycloak:8080 --realm master --user admin --password admin >/dev/null
 	for realm in asgard babylon camelot; do
-		docker exec mcpkit-keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $realm >/dev/null && \
+		{{COMPOSE}} exec -T keycloak /opt/keycloak/bin/kcadm.sh create logout-all -r $realm >/dev/null && \
 		echo "[clear_all_tokens] $realm: all user sessions signed out"
 	done
 
-# Quick clean slate without a full predemo: sign out Keycloak sessions + delete Redis quota keys + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear. Heavier hammer if needed: stop the stack and `rm -rf ../../../docker/backends/data/redis`.
+# Quick clean slate without a full predemo: sign out Keycloak sessions + delete Redis quota keys + truncate webhooks. Survivors of Ctrl+C from prior demo runs (counters/subs that didn't release cleanly) get wiped so the cap=3 quota resets and stale callback URLs disappear. Heavier hammer if needed: `just clean`.
 clear-all: clear_all_tokens
 	#!/usr/bin/env bash
 	set -eu
-	deleted=$(docker exec mcpkit-redis sh -c 'redis-cli --scan --pattern "mcpkit.events.quota.*" | xargs -r redis-cli DEL' 2>/dev/null || echo 0)
+	deleted=$({{COMPOSE}} exec -T redis sh -c 'redis-cli --scan --pattern "mcpkit.events.quota.*" | xargs -r redis-cli DEL' 2>/dev/null || echo 0)
 	echo "[clear-all] redis quota keys deleted: $deleted"
-	docker exec mcpkit-postgres psql -U postgres -d events -c "TRUNCATE TABLE webhooks" >/dev/null 2>&1 && \
+	{{COMPOSE}} exec -T postgres psql -U postgres -d events -c "TRUNCATE TABLE webhooks" >/dev/null 2>&1 && \
 		echo "[clear-all] webhooks table truncated" || \
 		echo "[clear-all] webhooks table not present yet (no subs ever created) — skip"
 
@@ -272,13 +284,13 @@ inject:
 logs:
 	docker compose logs -f --tail=200
 
-# docker compose ps.
+# Show stack containers.
 ps:
-	docker compose ps
+	{{COMPOSE}} ps
 
 # Print the webhooks table from Postgres — used by the no-expiry restart-survival beat to confirm rows survive a `just restart-event-servers`.
 psql-webhooks:
-	docker compose -f {{BACKENDS_COMPOSE}} exec -T postgres \
+	{{COMPOSE}} exec -T postgres \
 		psql -U postgres -d events \
 		-c "SELECT id, principal, url, expires_at, status_failing_continuously_since FROM webhooks ORDER BY principal;"
 
@@ -289,17 +301,18 @@ restart-event-servers:
 	svcs=$(docker compose config --services | grep '^event-server-')
 	echo "[restart-event-servers] restarting: $svcs"
 	docker compose restart $svcs
-	docker compose up -d --wait $svcs
+	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
+	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
+		{{COMPOSE}} --profile auth up -d --wait --wait-timeout 300
 
-# docker compose down -v on the events stack + remove built binaries. Backends data is preserved — use `just clean-backends` for a full reset.
+# Tear down the dev stack AND drop its postgres/redis volumes + built binaries. This IS the full reset now.
 clean:
-	docker compose down -v 2>/dev/null || true
+	{{COMPOSE}} --profile auth down -v 2>/dev/null || true
 	rm -rf bin/
 
 # Tear down backends AND wipe their persisted data (postgres + redis bind mounts). Use after schema changes or when starting fresh.
 clean-backends:
-	docker compose -f {{BACKENDS_COMPOSE}} down -v 2>/dev/null || true
-	rm -rf ../../../docker/backends/data/
+	{{COMPOSE}} --profile auth down -v 2>/dev/null || true
 
 # Append *.whole-enchilada hostnames to /etc/hosts (idempotent).
 hosts-install:

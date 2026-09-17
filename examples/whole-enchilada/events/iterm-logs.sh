@@ -14,10 +14,9 @@ set -euo pipefail
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "iterm-logs.sh: requires macOS (iTerm2)." >&2
-  echo "  Linux fallback — run in three sibling terminals:" >&2
-  echo "    docker compose -f docker/backends/docker-compose.yml logs -f" >&2
+  echo "  Linux fallback — run in two sibling terminals:" >&2
+  echo "    cd examples/whole-enchilada/events && make stack-logs" >&2
   echo "    docker compose -f docker/observability/docker-compose.yml logs -f" >&2
-  echo "    cd examples/whole-enchilada/events && docker compose logs -f" >&2
   exit 1
 fi
 if ! command -v osascript >/dev/null 2>&1; then
@@ -30,15 +29,17 @@ if [ ! -d /Applications/iTerm.app ] && [ ! -d "$HOME/Applications/iTerm.app" ]; 
 fi
 
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKENDS_COMPOSE="$DEMO_DIR/../../../docker/backends/docker-compose.yml"
 OBS_COMPOSE="$DEMO_DIR/../../../docker/observability/docker-compose.yml"
+# The events stack owns postgres/redis/keycloak since the compose merge, so
+# their logs come from the events project rather than docker/backends.
+STACK_COMPOSE="docker compose -f events-stack.yaml -f compose.dev.yaml"
 
 # printf %q quotes the path so a directory with spaces still works
 # when the AppleScript pipes the string into the iTerm session as if
 # typed.
-CMD_BACKENDS=$(printf 'cd %q && docker compose -f %q logs -f' "$DEMO_DIR" "$BACKENDS_COMPOSE")
+CMD_BACKENDS=$(printf 'cd %q && %s logs -f postgres redis keycloak' "$DEMO_DIR" "$STACK_COMPOSE")
 CMD_OBS=$(printf      'cd %q && docker compose -f %q logs -f' "$DEMO_DIR" "$OBS_COMPOSE")
-CMD_EVENTS=$(printf   'cd %q && docker compose logs -f'       "$DEMO_DIR")
+CMD_EVENTS=$(printf   'cd %q && %s logs -f nginx event-server-1 event-server-2 event-server-3' "$DEMO_DIR" "$STACK_COMPOSE")
 
 # Split semantics in iTerm2 AppleScript:
 #   - "split horizontally" → horizontal divider, new pane BELOW

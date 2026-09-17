@@ -138,8 +138,8 @@ make drive-chat
 docker exec -it mcpkit-redis redis-cli MONITOR | grep mcpkit.events
 
 # Admin window — kill replica 1, watch subscribers keep delivering, then restore:
-docker compose kill event-server-1
-docker compose start event-server-1`).Default(),
+docker compose -f events-stack.yaml -f compose.dev.yaml kill event-server-1
+docker compose -f events-stack.yaml -f compose.dev.yaml start event-server-1`).Default(),
 		)
 
 	// -----------------------------------------------------------------
@@ -228,7 +228,7 @@ make poller TENANT=A USERNAME=alice START_CURSOR=<N>`).Default(),
 			demokit.MakeVariant("shell", "bash", `# Lower the cap to 3 for this beat, recreate the event-server tier
 # (no replica enumeration — compose recreates whichever event-servers
 # exist for the current N):
-EVENTS_QUOTA_CAPS=chat.message=3 docker compose up -d
+EVENTS_QUOTA_CAPS=chat.message=3 docker compose -f events-stack.yaml -f compose.dev.yaml up -d
 make clear-all   # clear stale aarti subs from any prior runs
 
 make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
@@ -237,7 +237,7 @@ make webhook TENANT=A USERNAME=aarti   # window 3 — succeeds (at cap)
 make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013
 
 # Restore the looser default afterwards:
-docker compose up -d`).Default(),
+docker compose -f events-stack.yaml -f compose.dev.yaml up -d`).Default(),
 		)
 
 	// -----------------------------------------------------------------
@@ -406,7 +406,7 @@ make list-sources REPLICAS=3   # includes discord.message`).Default(),
 # event-server.whole-enchilada round-robin alias, so the BCL lands on ANY
 # replica. Tail every service and let grep filter — only event-servers
 # emit BCL lines, so this stays correct for any N:
-docker compose logs -f | grep BCL`).Default(),
+docker compose -f events-stack.yaml -f compose.dev.yaml logs -f | grep BCL`).Default(),
 		)
 
 	demo.Section("That's the demo",
