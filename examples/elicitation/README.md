@@ -1,6 +1,6 @@
-# URL Elicitation — Consent Approval Flow (UC1)
+# URL elicitation and the consent approval flow (UC1)
 
-> ⚠ **Experimental** — Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.
+> ⚠ **Experimental** - Tracks [SEP-2643](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643) (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.
 
 A scripted MCP host walking through the **UC1 consent approval flow**: a tool call gets denied with a JSON-RPC `-32042` (URLElicitationRequired) carrying a consent URL; the host opens the URL in a browser; the user approves; the server pushes a `notifications/elicitation/complete` notification over SSE; the host auto-retries with the `authorizationContextId` and gets the result.
 
@@ -20,18 +20,18 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 
 ## What it demonstrates
 
-- The **`-32042` URLElicitationRequired** denial shape — `error.code` + `error.data.authorization.authorizationContextId` + `error.data.elicitations[].url`.
+- The **`-32042` URLElicitationRequired** denial shape: `error.code` + `error.data.authorization.authorizationContextId` + `error.data.elicitations[].url`.
 - The **GET SSE notification stream** carrying `notifications/elicitation/complete` from server to host while the user interacts with the consent URL out-of-band.
 - The **auto-retry pattern**: host parses the denial, opens the URL, waits for the SSE notification, then re-issues `tools/call` with `_meta.authorizationContextId` set to the captured value.
 - The **server-side consent middleware** that intercepts `tools/call` for protected tools, mints a context, denies with the URL, persists approval state, and lets the retry through once approved.
-- **CORS configuration** for browser-based MCP hosts (MCPJam) — `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, `DELETE` in allowed methods.
+- **CORS configuration** for browser-based MCP hosts (MCPJam) - `Mcp-Session-Id` in both Allow-Headers and Expose-Headers, `DELETE` in allowed methods.
 
 ## Where to look in the code
 
 - Walkthrough steps + denial parsing: [`main.go`](main.go) (the `runDemo` block)
 - Consent middleware + store + `/approve` handler: [`main.go`](main.go) (after `serve()`)
 - SEP-2643 wire constants: [`core.MetaKeyAuthorizationContextID`](../../core/authorization_denial_experimental.go) and the `-32042` URLElicitationRequired error code
-- Companion: [`examples/fine-grained-auth/`](../fine-grained-auth/) — UC2 (scope step-up) + UC3 (RAR per-payment credentials)
+- Companion: [`examples/fine-grained-auth/`](../fine-grained-auth/) - UC2 (scope step-up) + UC3 (RAR per-payment credentials)
 
 ## Notes
 
@@ -40,5 +40,5 @@ See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and step-by-s
 
 ## Next steps
 
-- [Fine-grained auth — UC2 + UC3 of the same SEP](../fine-grained-auth/)
-- [MRTR — the underlying input_required round-trip](../mrtr/)
+- [Fine-grained auth - UC2 + UC3 of the same SEP](../fine-grained-auth/)
+- [MRTR - the underlying input_required round-trip](../mrtr/)

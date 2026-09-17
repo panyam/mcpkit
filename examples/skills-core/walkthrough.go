@@ -29,9 +29,9 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("MCP Skills — Minimal Shape (SEP-2640, scoped down)").
+	demo := demokit.New("MCP Skills, the minimal shape (SEP-2640, scoped down)").
 		Dir("skills").
-		Description("The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP's Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify — those are the deferred / extended surface (see examples/skills for the full walkthrough).").
+		Description("The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP's Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify. Those are the deferred / extended surface (see examples/skills for the full walkthrough).").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (just serve)"),
@@ -101,7 +101,7 @@ if err := c.Connect(); err != nil { /* run: just serve */ }`).Default(),
 			return nil
 		})
 
-	demo.Step("resources/list — each skill file is a skill:// resource").
+	demo.Step("resources/list, where each skill file is a skill:// resource").
 		Arrow("Host", "Server", "resources/list").
 		DashedArrow("Server", "Host", "[ skill://index.json, skill://commit-helper/SKILL.md ]").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
@@ -120,10 +120,10 @@ if err := c.Connect(); err != nil { /* run: just serve */ }`).Default(),
 			return nil
 		})
 
-	demo.Step("Read skill://index.json — the discovery catalog").
+	demo.Step("Read skill://index.json, the discovery catalog").
 		Arrow("Host", "Server", "resources/read uri=skill://index.json").
 		DashedArrow("Server", "Host", "{ $schema, skills:[{name,url,digest}] }").
-		Note("mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.").
+		Note("mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.").
 		VerbatimVariants("Reproduce",
 			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource(skills.IndexURI)
 var idx skills.Index
@@ -159,10 +159,10 @@ for _, e := range entries {
 			return nil
 		})
 
-	demo.Step("Read the commit-helper SKILL.md — the skill file").
+	demo.Step("Read the commit-helper SKILL.md, the skill file").
 		Arrow("Host", "Server", "resources/read uri="+uriCommitHelper).
 		DashedArrow("Server", "Host", "frontmatter (name, description) + body").
-		Note("A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.").
+		Note("A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -182,10 +182,10 @@ for _, e := range entries {
 			return nil
 		})
 
-	demo.Step("Tool handling — call the tool the skill points at").
+	demo.Step("Tool handling, calling the tool the skill points at").
 		Arrow("Host", "Server", `tools/call name=format_commit {type:"feat", scope:"skills", summary:"..."}`).
 		DashedArrow("Server", "Host", "feat(skills): ...").
-		Note("This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.").
+		Note("This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.").
 		VerbatimVariants("Reproduce",
 			demokit.MakeVariant("go", "go", `out, _ := c.ToolCall("format_commit", map[string]any{
     "type": "feat", "scope": "skills", "summary": "add commit-helper skill",

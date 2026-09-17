@@ -81,9 +81,9 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3)").
+	demo := demokit.New("Fine-grained authorization: scope step-up (UC2) and ephemeral credentials (UC3)").
 		Dir("fine-grained-auth").
-		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.").
+		Description("**EXPERIMENTAL.** Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (just serve)"),
@@ -105,13 +105,13 @@ func runDemo() {
 		"```",
 	)
 
-	demo.Section("UC1 vs UC2/UC3 — When does the host react?",
+	demo.Section("UC1 vs UC2/UC3, and when the host reacts",
 		"UC1 (elicitation): the denial points to an out-of-band action (user clicks Approve).",
 		"The host can't proceed until it receives `notifications/elicitation/complete`.",
 		"",
-		"UC2/UC3: the denial is a transport-level signal — UC2 is HTTP 403 + WWW-Authenticate,",
+		"UC2/UC3: the denial is a transport-level signal. UC2 is HTTP 403 + WWW-Authenticate,",
 		"UC3 is a JSON-RPC error with an RFC 9396 remediationHint. The host parses it and reacts",
-		"immediately by re-authorizing — no user interaction in this demo (a real banking host",
+		"immediately by re-authorizing, with no user interaction in this demo (a real banking host",
 		"would prompt the user to confirm the payment first).",
 	)
 
@@ -173,7 +173,7 @@ json.NewDecoder(resp.Body).Decode(&bootstrap)
 
 	// --- Step 2: Get read-only token ---
 	demo.Step("Get a read-only token (scope: tools-read)").
-		Arrow("Host", "AS", "POST /token — grant_type=client_credentials, scope=tools-read").
+		Arrow("Host", "AS", "POST /token, grant_type=client_credentials, scope=tools-read").
 		DashedArrow("AS", "Host", "access_token (tools-read only)").
 		Note("Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS's JWKS endpoint.").
 		VerbatimVariants("Reproduce on the wire",
@@ -204,9 +204,9 @@ tokRead, err := requestToken(bootstrap, []string{scopeRead}, nil)
 
 	// --- Step 3: Connect with read-only token ---
 	demo.Step("Connect to MCP server with read-only token").
-		Arrow("Host", "Server", "POST /mcp — initialize + Authorization: Bearer <read-token>").
+		Arrow("Host", "Server", "POST /mcp, initialize + Authorization: Bearer <read-token>").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
-		Note("JWT validation against the AS's JWKS endpoint succeeds — token is valid, just limited in scope.").
+		Note("JWT validation against the AS's JWKS endpoint succeeds. The token is valid, just limited in scope.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Initialize an MCP session with the read-only token. The Mcp-Session-Id
 # returned in the response headers is what every subsequent call must echo.
@@ -253,7 +253,7 @@ tools, _ := readClient.ListTools(ctx.Ctx) // JWKS validation passed; scope just 
 		})
 
 	// --- Step 4: read_document succeeds ---
-	demo.Step("Call read_document — succeeds (tools-read is sufficient)").
+	demo.Step("Call read_document, which succeeds (tools-read is sufficient)").
 		Arrow("Host", "Server", "tools/call: read_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "Document content").
 		Note("The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.").
@@ -281,7 +281,7 @@ text, err := readClient.ToolCall("read_document",
 		})
 
 	// --- Step 5: update_document → HTTP 403 + WWW-Authenticate (UC2 spec-correct) ---
-	demo.Step("Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)").
+	demo.Step("Call update_document, DENIED (UC2: HTTP 403 + WWW-Authenticate)").
 		Arrow("Host", "Server", "tools/call: update_document {docId: \"doc-123\"}").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"tools-call\"").
 		Note("Per SEP-2643 (FineGrainedAuth UC2): the server's auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).").
@@ -303,7 +303,7 @@ _, err := readClient.ToolCallFull("update_document", map[string]any{
 })
 var authErr *client.ClientAuthError
 if errors.As(err, &authErr) {
-    requiredScopes := authErr.RequiredScopes // e.g. ["tools-call"] — drives step-up
+    requiredScopes := authErr.RequiredScopes // e.g. ["tools-call"]; drives step-up
     _ = requiredScopes
 }`),
 		).
@@ -332,7 +332,7 @@ if errors.As(err, &authErr) {
 
 	// --- Step 6: Auto-step-up using scopes from WWW-Authenticate ---
 	demo.Step("Auto-step-up: re-authorize with scopes from WWW-Authenticate").
-		Arrow("Host", "AS", "POST /token — scope=<from WWW-Authenticate>").
+		Arrow("Host", "AS", "POST /token, scope=<from WWW-Authenticate>").
 		DashedArrow("AS", "Host", "access_token with broader scopes").
 		Note("Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).").
 		VerbatimVariants("Reproduce on the wire",
@@ -366,8 +366,8 @@ tokReadCall, err := requestToken(bootstrap, scopes, nil)`),
 		})
 
 	// --- Step 7: Retry with broader token ---
-	demo.Step("Retry update_document with broader token — SUCCEEDS").
-		Arrow("Host", "Server", "POST /mcp — initialize + Bearer (broader token)").
+	demo.Step("Retry update_document with a broader token, which SUCCEEDS").
+		Arrow("Host", "Server", "POST /mcp, initialize + Bearer (broader token)").
 		DashedArrow("Server", "Host", "new session").
 		Arrow("Host", "Server", "tools/call: update_document").
 		DashedArrow("Server", "Host", "Document updated successfully").
@@ -432,7 +432,7 @@ text, err := callClient.ToolCall("update_document", map[string]any{
 	)
 
 	// --- Step 8: initiate_payment → DENIED with RAR remediation ---
-	demo.Step("Call initiate_payment — DENIED with RAR authorization_details (UC3)").
+	demo.Step("Call initiate_payment, DENIED with RAR authorization_details (UC3)").
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "JSON-RPC error + credentialDisposition: additional + payment_initiation RAR").
 		Note("The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.").
@@ -518,7 +518,7 @@ if errors.As(err, &rpcErr) {
 
 	// --- Step 9: Request RAR-bound token ---
 	demo.Step("Request an RAR-bound payment token from the AS").
-		Arrow("Host", "AS", "POST /token — authorization_details=[payment_initiation, ...]").
+		Arrow("Host", "AS", "POST /token, authorization_details=[payment_initiation, ...]").
 		DashedArrow("AS", "Host", "access_token with authorization_details claim").
 		Note("The host uses the authorization_details from the remediationHint *verbatim* in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.").
 		VerbatimVariants("Reproduce on the wire",
@@ -553,8 +553,8 @@ tokPayment, err := requestToken(bootstrap, nil, paymentAuthzDetails)`),
 		})
 
 	// --- Step 10: Retry with RAR-bound token — succeeds ---
-	demo.Step("Retry initiate_payment with RAR-bound token — SUCCEEDS").
-		Arrow("Host", "Server", "POST /mcp — initialize + Bearer (RAR token)").
+	demo.Step("Retry initiate_payment with a RAR-bound token, which SUCCEEDS").
+		Arrow("Host", "Server", "POST /mcp, initialize + Bearer (RAR token)").
 		DashedArrow("Server", "Host", "new session").
 		Arrow("Host", "Server", "tools/call: initiate_payment {amount: 150 EUR, payee: ACME}").
 		DashedArrow("Server", "Host", "Payment initiated").
@@ -589,7 +589,7 @@ text, err := payClient.ToolCall("initiate_payment", map[string]any{
     "amount": "150.00", "currency": "EUR", "payee": "ACME Corp",
 })`),
 		).
-		Note("The server's initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.").
+		Note("The server's initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does, because the host minted exactly the token the server asked for in the previous denial.").
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			payClient = client.NewClient(serverURL+"/mcp",
 				core.ClientInfo{Name: "demo-host", Version: "1.0"},
@@ -749,9 +749,9 @@ func serve() {
 	fmt.Printf("Demo secret:    %s\n", asInfo.ClientSecret)
 	fmt.Printf("Doc store:      %s (cleaned up on graceful shutdown)\n", docDir)
 	fmt.Printf("\nTools:\n")
-	fmt.Printf("  read_document      — reads from doc store; needs tools-read scope\n")
-	fmt.Printf("  update_document    — writes to doc store; needs tools-call scope\n")
-	fmt.Printf("  initiate_payment   — needs payment_initiation authorization_details\n")
+	fmt.Printf("  read_document      - reads from doc store; needs tools-read scope\n")
+	fmt.Printf("  update_document    - writes to doc store; needs tools-call scope\n")
+	fmt.Printf("  initiate_payment   - needs payment_initiation authorization_details\n")
 	fmt.Printf("\nSeed docs: doc-001, doc-123, doc-456\n")
 	fmt.Printf("Inspect:   ls %s/ ; cat %s/doc-123.txt\n", docDir, docDir)
 
@@ -935,9 +935,9 @@ func seedDocs() error {
 	}
 	docDir = dir
 	samples := map[string]string{
-		"doc-001": "Project kickoff notes — kickoff is on Monday at 10am. Bring the roadmap doc.",
-		"doc-123": "Q2 strategy memo — focus on three pillars: reliability, observability, and developer experience.",
-		"doc-456": "Architecture review — the new auth middleware was approved. Rollout planned for week 14.",
+		"doc-001": "Project kickoff notes. Kickoff is on Monday at 10am. Bring the roadmap doc.",
+		"doc-123": "Q2 strategy memo focused on three pillars: reliability, observability, and developer experience.",
+		"doc-456": "Architecture review: the new auth middleware was approved. Rollout planned for week 14.",
 	}
 	for id, content := range samples {
 		if err := os.WriteFile(docPath(id), []byte(content), 0o644); err != nil {

@@ -1,20 +1,20 @@
 # MCP Apps Examples
 
-> **Stable** — MCP Apps extension (`ext/ui`). Needs a host with Apps/iframe support (see below).
+> **Stable** - MCP Apps extension (`ext/ui`). Needs a host with Apps/iframe support (see below).
 
-Servers exposing **MCP Apps** — interactive HTML/JS UIs that an MCP host renders inside an iframe. The host and app communicate bidirectionally via the App Bridge (postMessage protocol).
+Servers exposing **MCP Apps**, the interactive HTML/JS UIs that an MCP host renders inside an iframe. The host and app communicate bidirectionally via the App Bridge (postMessage protocol).
 
-> ⚠ **MCP Apps require a host that supports the Apps extension.** [MCPJam](https://mcpjam.com) is the easiest way to test these locally — it's a browser-based MCP host with iframe support. Claude Desktop / VS Code do not yet render MCP Apps.
+> ⚠ **MCP Apps require a host that supports the Apps extension.** [MCPJam](https://mcpjam.com) is the easiest way to test these locally, being a browser-based MCP host with iframe support. Claude Desktop / VS Code do not yet render MCP Apps.
 
 ## Examples at a Glance
 
 | Example | What it shows |
 |---------|--------------|
-| [vanilla/](vanilla/) | Minimal MCP App — plain JS, no build step |
-| [todolist/](todolist/) | Server-rendered MCP App — bridge events, inline JS, elicitation + sampling |
-| [react/](react/) | React 19 MCP App — hooks, Vite, TypeScript |
-| [interactive/](interactive/) | Tic-tac-toe — bidirectional app-provided tools (model can call tools the app exposes) |
-| [dashboard/](dashboard/) | Dashboard — tool lifecycle (enable/disable/remove at runtime) |
+| [vanilla/](vanilla/) | Minimal MCP App - plain JS, no build step |
+| [todolist/](todolist/) | Server-rendered MCP App - bridge events, inline JS, elicitation + sampling |
+| [react/](react/) | React 19 MCP App - hooks, Vite, TypeScript |
+| [interactive/](interactive/) | Tic-tac-toe - bidirectional app-provided tools (model can call tools the app exposes) |
+| [dashboard/](dashboard/) | Dashboard - tool lifecycle (enable/disable/remove at runtime) |
 
 All apps run on port `:8080` with an MCP endpoint at `/mcp` (Streamable HTTP).
 
@@ -58,15 +58,15 @@ See [`docs/APPS_DESIGN.md`](../../docs/APPS_DESIGN.md) for the full architecture
 
 ## Troubleshooting
 
-- **React app shows blank page** — run `pnpm build` in `react/` before starting the Go server.
-- **Port already in use** — another example is still running. Kill it or pass a different `-addr`.
-- **App pane is empty in MCPJam** — check the MCPJam network tab; the app should fetch its HTML from the `ui://` resource the server registers. If `tools/list` shows tools but no `_meta.ui` is present on a tool, that tool won't render an app.
+- **React app shows blank page** - run `pnpm build` in `react/` before starting the Go server.
+- **Port already in use** - another example is still running. Kill it or pass a different `-addr`.
+- **App pane is empty in MCPJam** - check the MCPJam network tab; the app should fetch its HTML from the `ui://` resource the server registers. If `tools/list` shows tools but no `_meta.ui` is present on a tool, that tool won't render an app.
 
 ## Related
 
-- [App Bridge JS source](../../ext/ui/assets/) — the JS shipped to the app iframe
-- [`docs/APPS_HOST.md`](../../docs/APPS_HOST.md) — implementing your own MCP App host
-- [`examples/host/01-apphost`](../host/01-apphost/) — `AppHost` walkthrough (Go-side host implementation)
+- [App Bridge JS source](../../ext/ui/assets/) - the JS shipped to the app iframe
+- [`docs/APPS_HOST.md`](../../docs/APPS_HOST.md) - implementing your own MCP App host
+- [`examples/host/01-apphost`](../host/01-apphost/) - `AppHost` walkthrough (Go-side host implementation)
 
 ## Next steps
 

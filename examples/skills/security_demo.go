@@ -258,7 +258,7 @@ func (r *secReport) step(n int, title, anchor string) {
 		r.allOK = true
 		r.init = true
 	}
-	fmt.Fprintf(r.out, "\n=== Step %d — %s ===\n  anchor: %s\n", n, title, anchor)
+	fmt.Fprintf(r.out, "\n=== Step %d - %s ===\n  anchor: %s\n", n, title, anchor)
 }
 
 func (r *secReport) detail(format string, args ...any) {
@@ -274,20 +274,20 @@ func (r *secReport) pass(ok bool, msg string) {
 // the intended result; false means the guard did NOT fire and the run failed.
 func (r *secReport) reject(ok bool, got error, msg string) {
 	if ok {
-		fmt.Fprintf(r.out, "  ✓ REJECT — %s (%v)\n", msg, got)
+		fmt.Fprintf(r.out, "  ✓ REJECT - %s (%v)\n", msg, got)
 		return
 	}
 	r.allOK = false
-	fmt.Fprintf(r.out, "  ✗ FAIL — expected rejection: %s (got %v)\n", msg, got)
+	fmt.Fprintf(r.out, "  ✗ FAIL - expected rejection: %s (got %v)\n", msg, got)
 }
 
 func (r *secReport) record(ok bool, okLabel, failLabel, msg string) {
 	if ok {
-		fmt.Fprintf(r.out, "  ✓ %s — %s\n", okLabel, msg)
+		fmt.Fprintf(r.out, "  ✓ %s - %s\n", okLabel, msg)
 		return
 	}
 	r.allOK = false
-	fmt.Fprintf(r.out, "  ✗ %s — %s\n", failLabel, msg)
+	fmt.Fprintf(r.out, "  ✗ %s - %s\n", failLabel, msg)
 }
 
 func (r *secReport) summary() {

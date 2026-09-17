@@ -42,7 +42,7 @@ func main() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("AppHost — Host-Side App Management").
+	demo := demokit.New("AppHost and host-side app management").
 		Dir("01-apphost").
 		RunPrefix("examples/host").
 		Description("Demonstrates AppHost mediating between an MCP server and an app bridge with bidirectional tool calls.").
@@ -92,7 +92,7 @@ func main() {
 	demo.Step("Connect client to server via in-process transport").
 		Arrow("Client", "Srv", "initialize").
 		DashedArrow("Srv", "Client", "capabilities, serverInfo").
-		Note("The client connects without HTTP — using InProcessTransport for direct dispatch.").
+		Note("The client connects without HTTP, using InProcessTransport for direct dispatch.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			xport := server.NewInProcessTransport(srv)
 			c = client.NewClient("memory://", core.ClientInfo{Name: "demo-host", Version: "1.0"},
@@ -158,7 +158,7 @@ func main() {
 		Arrow("Host", "Bridge", "SetRequestHandler (app→host)").
 		Arrow("Host", "Bridge", "SetNotificationHandler (list_changed)").
 		Arrow("Host", "Bridge", "Start()").
-		Arrow("Host", "Bridge", "Send(tools/list) — initial fetch").
+		Arrow("Host", "Bridge", "Send(tools/list), initial fetch").
 		DashedArrow("Bridge", "Host", "{tools: [app_greet, app_counter]}").
 		Note("AppHost wires up bidirectional routing and fetches the initial app tool list.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
@@ -167,13 +167,13 @@ func main() {
 				fmt.Printf("  ERROR: %v\n", err)
 				return nil
 			}
-			fmt.Println("  AppHost started — bridge handlers wired, initial tool list fetched")
+			fmt.Println("  AppHost started: bridge handlers wired, initial tool list fetched")
 			return nil
 		})
 
 	// --- Step 5: List all tools ---
-	demo.Step("ListAllTools — aggregated server + app tools").
-		Arrow("Host", "Client", "ListTools() — server tools").
+	demo.Step("ListAllTools, the aggregated server + app tools").
+		Arrow("Host", "Client", "ListTools(), server tools").
 		DashedArrow("Client", "Host", "[server_echo, server_time]").
 		Arrow("Host", "Bridge", "cached app tools").
 		DashedArrow("Bridge", "Host", "[app_greet, app_counter]").
@@ -192,7 +192,7 @@ func main() {
 		})
 
 	// --- Step 6: Call app tool ---
-	demo.Step("CallAppTool — host invokes an app-provided tool").
+	demo.Step("CallAppTool, where the host invokes an app-provided tool").
 		Arrow("Host", "Bridge", "Send(tools/call, {name: \"app_greet\", args: {name: \"World\"}})").
 		DashedArrow("Bridge", "Host", "ToolResult {text: \"Hello, World!\"}").
 		Note("The host calls a tool registered by the app. The bridge dispatches to the Go handler.").
@@ -237,10 +237,10 @@ func main() {
 		})
 
 	// --- Step 8: Dynamic tool registration ---
-	demo.Step("Dynamic registration — app adds a tool at runtime").
+	demo.Step("Dynamic registration, where the app adds a tool at runtime").
 		Arrow("Bridge", "Bridge", "RegisterTool(\"app_dice\")").
 		Arrow("Bridge", "Host", "notifications/tools/list_changed").
-		Arrow("Host", "Bridge", "Send(tools/list) — refresh").
+		Arrow("Host", "Bridge", "Send(tools/list), refresh").
 		DashedArrow("Bridge", "Host", "{tools: [app_greet, app_counter, app_dice]}").
 		Note("The app registers a new tool after startup. AppHost detects the change and refreshes its cache.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {

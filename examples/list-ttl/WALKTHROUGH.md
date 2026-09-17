@@ -1,14 +1,14 @@
-# MCP List TTL (SEP-2549) — Cache Hints on List and Read Results
+# MCP List TTL (SEP-2549): cache hints on list and read results
 
-Walks through SEP-2549, which adds two cache hints — `ttlMs` (integer milliseconds) and `cacheScope` (`public`/`private`) — to every paginated list response (tools/list, prompts/list, resources/list, resources/templates/list) and to resources/read. Clients use them to cache the registered surface between `notifications/list_changed` instead of re-fetching on every poll.
+Walks through SEP-2549, which adds two cache hints, `ttlMs` (integer milliseconds) and `cacheScope` (`public`/`private`), to every paginated list response (tools/list, prompts/list, resources/list, resources/templates/list) and to resources/read. Clients use them to cache the registered surface between `notifications/list_changed` instead of re-fetching on every poll.
 
 ## What you'll learn
 
 - **Connect to the list-ttl server** — `client.NewClient(...)` + `Connect()`. SEP-2549 is purely a server-side concern; the client doesn't negotiate anything special.
-- **tools/list — cache hints surface on the list response** — `client.ListToolsPage("")` returns the full envelope including `TTLMs *int` and `CacheScope string`.
-- **prompts/list / resources/list / resources/templates/list** — SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
-- **resources/read — cache hints on a read response** — SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.
-- **Inspect the raw JSON-RPC envelope** — Bypass the typed helper and decode the raw response body to verify the wire shape — `"ttlMs": 60000` as a JSON number and `"cacheScope"` as a string, sitting alongside `"tools"` and (when paginated) `"nextCursor"`.
+- **tools/list, where cache hints surface on the list response** — `client.ListToolsPage("")` returns the full envelope including `TTLMs *int` and `CacheScope string`.
+- **prompts/list / resources/list / resources/templates/list** — SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly; there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
+- **resources/read, with cache hints on a read response** — SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.
+- **Inspect the raw JSON-RPC envelope** — Bypass the typed helper and decode the raw response body to verify the wire shape: `"ttlMs": 60000` as a JSON number and `"cacheScope"` as a string, sitting alongside `"tools"` and (when paginated) `"nextCursor"`.
 
 ## Flow
 
@@ -18,17 +18,17 @@ sequenceDiagram
     participant Server as MCP Server (just serve, WithListTTLMs(60000))
 
     Note over Host,Server: Step 1: Connect to the list-ttl server
-    Host->>Server: POST /mcp — initialize
+    Host->>Server: POST /mcp, initialize
     Server-->>Host: serverInfo + capabilities
 
-    Note over Host,Server: Step 2: tools/list — cache hints surface on the list response
+    Note over Host,Server: Step 2: tools/list, where cache hints surface on the list response
     Host->>Server: tools/list
     Server-->>Host: { tools: [...], ttlMs: 60000 }
 
     Note over Host,Server: Step 3: prompts/list / resources/list / resources/templates/list
     Host->>Server: (same cache-hint contract on all four list endpoints)
 
-    Note over Host,Server: Step 4: resources/read — cache hints on a read response
+    Note over Host,Server: Step 4: resources/read, with cache hints on a read response
     Host->>Server: resources/read file:///fixture
     Server-->>Host: { contents: [...], ttlMs: 60000 }
 
@@ -52,19 +52,19 @@ Terminal 2:  just demo          # this walkthrough (--tui for the interactive TU
 
 The `ttlMs` field is an integer-milliseconds freshness hint. Per the merged SEP-2549 spec it has two client-visible behaviors:
 
-- **absent or `"ttlMs": 0`** — the response is immediately stale; the client MAY re-fetch every time the list is needed. An absent field is the "older server / not configured" case; clients treat it the same as 0.
-- **`"ttlMs": <positive int>`** — fresh for N milliseconds from receipt; the client SHOULD NOT re-fetch before it expires unless it receives `list_changed`.
+- **absent or `"ttlMs": 0`** - the response is immediately stale; the client MAY re-fetch every time the list is needed. An absent field is the "older server / not configured" case; clients treat it the same as 0.
+- **`"ttlMs": <positive int>`** - fresh for N milliseconds from receipt; the client SHOULD NOT re-fetch before it expires unless it receives `list_changed`.
 
 Server-side, `mcpkit.WithListTTLMs(ms)` configures the value uniformly for all four list endpoints. Negative values are treated as "unset" so the wire field is omitted. mcpkit keeps `TTLMs` a `*int`: that lets a server emit an explicit `"ttlMs": 0` distinct from omitting the field, even though clients treat the two the same.
 
-Client-side, `mcpkit/client.ListToolsPage(cursor)` and its three siblings (`ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage`) return the typed result envelope so callers can read `TTLMs` and `CacheScope` alongside `NextCursor`. The pre-existing zero-arg `ListTools()` and the auto-paginating `Tools(ctx)` iterator drop the envelope — use the `*Page` helpers when the cache hints matter.
+Client-side, `mcpkit/client.ListToolsPage(cursor)` and its three siblings (`ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage`) return the typed result envelope so callers can read `TTLMs` and `CacheScope` alongside `NextCursor`. The pre-existing zero-arg `ListTools()` and the auto-paginating `Tools(ctx)` iterator drop the envelope, so use the `*Page` helpers when the cache hints matter.
 
 ### The cacheScope hint
 
 The `cacheScope` field controls who may serve a cached copy of a response, mirroring HTTP `Cache-Control: public` vs `private`:
 
-- **`"public"`** — no caller-specific data; any client, shared gateway, or caching proxy MAY store the response and serve it to any user.
-- **`"private"`** — caller-specific data; a cache MAY be reused only within the same authorization context and MUST NOT be shared across access tokens.
+- **`"public"`** - no caller-specific data; any client, shared gateway, or caching proxy MAY store the response and serve it to any user.
+- **`"private"`** - caller-specific data; a cache MAY be reused only within the same authorization context and MUST NOT be shared across access tokens.
 
 When `cacheScope` is absent clients default to `"public"`, so a server whose response varies per caller MUST set `private` explicitly. Set both hints in one call with `server.WithListCacheControl(ttlMs, scope)`.
 
@@ -76,7 +76,7 @@ When `cacheScope` is absent clients default to `"public"`, so a server whose res
 
 ```bash
 # Initialize a session and capture the session id. SEP-2549 negotiates
-# nothing special — a plain initialize is enough.
+# nothing special; a plain initialize is enough.
 SID=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{}}}' \
@@ -87,14 +87,14 @@ curl -s -X POST http://localhost:8080/mcp \
 echo "SID=$SID"
 ```
 
-### Step 2: tools/list — cache hints surface on the list response
+### Step 2: tools/list, where cache hints surface on the list response
 
 `client.ListToolsPage("")` returns the full envelope including `TTLMs *int` and `CacheScope string`.
 
 #### Reproduce on the wire
 
 ```bash
-# tools/list — the cache hints ride alongside "tools" in the result.
+# tools/list: the cache hints ride alongside "tools" in the result.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
@@ -103,7 +103,7 @@ curl -s -X POST http://localhost:8080/mcp \
 
 ### Step 3: prompts/list / resources/list / resources/templates/list
 
-SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly — there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
+SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly; there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
 
 #### Reproduce on the wire
 
@@ -117,7 +117,7 @@ for M in prompts/list resources/list resources/templates/list; do
 done
 ```
 
-### Step 4: resources/read — cache hints on a read response
+### Step 4: resources/read, with cache hints on a read response
 
 SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.
 
@@ -133,7 +133,7 @@ curl -s -X POST http://localhost:8080/mcp \
 
 ### Step 5: Inspect the raw JSON-RPC envelope
 
-Bypass the typed helper and decode the raw response body to verify the wire shape — `"ttlMs": 60000` as a JSON number and `"cacheScope"` as a string, sitting alongside `"tools"` and (when paginated) `"nextCursor"`.
+Bypass the typed helper and decode the raw response body to verify the wire shape: `"ttlMs": 60000` as a JSON number and `"cacheScope"` as a string, sitting alongside `"tools"` and (when paginated) `"nextCursor"`.
 
 ### Caching pattern
 
@@ -150,15 +150,15 @@ if page.TTLMs != nil && *page.TTLMs > 0 {
 // On notifications/list_changed, invalidate immediately regardless of TTL.
 ```
 
-An absent `TTLMs` and `*page.TTLMs == 0` both mean "immediately stale — do not rely on this response being fresh". A `private` cacheScope means the entry MUST NOT be reused across authorization contexts; key any shared cache by access token.
+An absent `TTLMs` and `*page.TTLMs == 0` both mean "immediately stale, do not rely on this response being fresh". A `private` cacheScope means the entry MUST NOT be reused across authorization contexts; key any shared cache by access token.
 
 ### Where to look in the code
 
-- Server options: `server.WithListTTLMs` / `WithListCacheControl` / `WithReadResourceCacheControl` — server/server.go
-- Wire types: `core.ToolsListResult` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult / ResourceResult — core/{tool,prompt,resource}.go; `core.CacheScopePublic` / `CacheScopePrivate` — core/cache.go
-- Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage / ReadResource — client/iterators.go
+- Server options: `server.WithListTTLMs` / `WithListCacheControl` / `WithReadResourceCacheControl` - server/server.go
+- Wire types: `core.ToolsListResult` / PromptsListResult / ResourcesListResult / ResourceTemplatesListResult / ResourceResult - core/{tool,prompt,resource}.go; `core.CacheScopePublic` / `CacheScopePrivate` - core/cache.go
+- Client typed helpers: `client.ListToolsPage` / ListPromptsPage / ListResourcesPage / ListResourceTemplatesPage / ReadResource - client/iterators.go
 - Migration guide: docs/LIST_TTL_MIGRATION.md
-- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) — originally driven by a dedicated `testconf-list-ttl` suite, now folded into `just testconf`
+- Conformance: SEP-2549 scenarios on panyam/mcpconformance `pending` (`src/scenarios/server/list-ttl/`) - originally driven by a dedicated `testconf-list-ttl` suite, now folded into `just testconf`
 - SEP-2549 spec: https://github.com/modelcontextprotocol/specification/pull/2549
 
 ## Run it

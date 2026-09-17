@@ -87,7 +87,7 @@ func main() {
 		Arrow("W", "W", "get_forecast, get_alerts, get_info").
 		Arrow("C", "C", "list_events, create_event, get_info").
 		Arrow("K", "K", "get_time").
-		Note("Weather and Calendar both have a 'get_info' tool — this will cause a collision in the registry.").
+		Note("Weather and Calendar both have a 'get_info' tool, which will cause a collision in the registry.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			weatherClient = newServer("weather", map[string]string{
 				"get_forecast": "Get weather forecast",
@@ -137,7 +137,7 @@ func main() {
 		})
 
 	// --- Step 3: Add servers ---
-	demo.Step("Add all 3 servers — collision detected").
+	demo.Step("Add all 3 servers, and a collision is detected").
 		Arrow("Reg", "W", "Add(\"weather\", weatherClient)").
 		Arrow("Reg", "C", "Add(\"calendar\", calendarClient)").
 		Arrow("Reg", "K", "Add(\"clock\", clockClient)").
@@ -154,7 +154,7 @@ func main() {
 		})
 
 	// --- Step 4: AllTools ---
-	demo.Step("AllTools — aggregated tool list with routing metadata").
+	demo.Step("AllTools, the aggregated tool list with routing metadata").
 		Arrow("Reg", "Reg", "AllTools()").
 		Note("Returns all tools from all servers. Each tool has clean name + ServerID metadata.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
@@ -167,10 +167,10 @@ func main() {
 		})
 
 	// --- Step 5: Unambiguous call ---
-	demo.Step("CallTool (unambiguous) — routes directly").
+	demo.Step("CallTool (unambiguous), which routes directly").
 		Arrow("Reg", "W", "CallTool(\"get_forecast\")").
 		DashedArrow("W", "Reg", "ToolResult").
-		Note("get_forecast exists only in weather — no resolver needed, routes directly.").
+		Note("get_forecast exists only in weather, so no resolver is needed and it routes directly.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
 			result, err := reg.CallTool(ctx, "get_forecast", nil)
 			if err != nil {
@@ -182,7 +182,7 @@ func main() {
 		})
 
 	// --- Step 6: Ambiguous call ---
-	demo.Step("CallTool (ambiguous) — resolver invoked").
+	demo.Step("CallTool (ambiguous), where the resolver is invoked").
 		Arrow("Reg", "Reg", "CallTool(\"get_info\", {source: \"calendar\"})").
 		Arrow("Reg", "Reg", "Resolver picks calendar").
 		Arrow("Reg", "C", "tools/call").
@@ -199,7 +199,7 @@ func main() {
 		})
 
 	// --- Step 7: Explicit routing ---
-	demo.Step("CallToolOn — explicit routing bypasses resolver").
+	demo.Step("CallToolOn, where explicit routing bypasses the resolver").
 		Arrow("Reg", "W", "CallToolOn(\"weather\", \"get_info\")").
 		DashedArrow("W", "Reg", "ToolResult").
 		Note("CallToolOn routes directly to the specified server. No resolver involved.").
@@ -214,7 +214,7 @@ func main() {
 		})
 
 	// --- Step 8: Remove server ---
-	demo.Step("Remove server — tools disappear from index").
+	demo.Step("Remove server, and its tools disappear from the index").
 		Arrow("Reg", "K", "Remove(\"clock\")").
 		Note("After removing clock, get_time is no longer available.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
@@ -229,7 +229,7 @@ func main() {
 		})
 
 	// --- Step 9: Add with app bridge ---
-	demo.Step("AddWithBridge — server with app-provided tools").
+	demo.Step("AddWithBridge, a server with app-provided tools").
 		Ref(refs.MCPAppsSpec).
 		Arrow("Reg", "K", "AddWithBridge(\"clock-v2\", client, bridge)").
 		Arrow("Br", "Br", "RegisterTool(\"app_stopwatch\")").

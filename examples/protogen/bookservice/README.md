@@ -1,6 +1,6 @@
-# BookService — protoc-gen-go-mcp Example
+# BookService, protoc-gen-go-mcp Example
 
-> ⚠ **Experimental** — build-time codegen (`experimental/ext/protogen`), not a wire protocol.
+> ⚠ **Experimental** - build-time codegen (`experimental/ext/protogen`), not a wire protocol.
 
 End-to-end example demonstrating all three MCP primitives generated from proto annotations.
 
@@ -9,7 +9,7 @@ End-to-end example demonstrating all three MCP primitives generated from proto a
 | Category | Feature |
 |----------|---------|
 | Core | `core.ToolContext`, `core.ResourceContext`, `core.PromptContext`, `core.CompletionRef` |
-| Experimental | `experimental/ext/protogen` — `protoc-gen-go-mcp` code generator |
+| Experimental | `experimental/ext/protogen` - `protoc-gen-go-mcp` code generator |
 | MCP primitives | Tools, Resources (templates), Prompts, Completions, Sampling, Elicitation |
 | Proto annotations | `mcp_tool`, `mcp_resource`, `mcp_prompt`, `mcp_service`, `mcp_sample`, `mcp_elicit` |
 
@@ -37,11 +37,11 @@ go test -v .    # Run e2e tests (tool calls, resource reads, prompt listing)
 
 ## Prompts to try
 
-- "Search for books about Go programming" — calls `books_search` tool
-- "Tell me about book 1" — reads `book://{book_id}` resource
-- "What books has author 1 written?" — reads `author://{author_id}/books` resource
-- "Summarize the book collection" — uses `books_summarize` prompt
-- "Recommend books for someone learning distributed systems" — uses `books_recommend_books` prompt
+- "Search for books about Go programming" calls the `books_search` tool
+- "Tell me about book 1" reads the `book://{book_id}` resource
+- "What books has author 1 written?" reads the `author://{author_id}/books` resource
+- "Summarize the book collection" uses the `books_summarize` prompt
+- "Recommend books for someone learning distributed systems" uses the `books_recommend_books` prompt
 
 ## Add to Claude Desktop
 

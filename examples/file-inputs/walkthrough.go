@@ -50,7 +50,7 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("MCP File Inputs (SEP-2356) — Data URI File Arguments").
+	demo := demokit.New("MCP File Inputs (SEP-2356): data URI file arguments").
 		Dir("file-inputs").
 		Description("Walks through SEP-2356, which lets servers declare file-input properties on tool inputSchemas via the `x-mcp-file` JSON Schema extension. Clients render a file picker for those fields and pass selected files as RFC 2397 base64 data URIs (`data:<mediatype>;name=<filename>;base64,<...>`). The server decodes the URI, validates size/MIME, and processes the bytes.").
 		Actors(
@@ -72,18 +72,18 @@ func runDemo() {
 	demo.Section("Wire format",
 		"SEP-2356 reuses two well-understood pieces:",
 		"",
-		"- **Schema marker** — a string property of `format: \"uri\"` carries an extra `x-mcp-file` keyword whose value is a `FileInputDescriptor` (`accept` MIME patterns / extensions, optional `maxSize` in decoded bytes). Server-side helpers: `core.FileInputProperty(desc)` and `core.FileInputArrayProperty(desc)`.",
-		"- **Wire encoding** — files travel as RFC 2397 base64 data URIs with an optional percent-encoded `name=` parameter: `data:image/png;name=photo.png;base64,iVBORw0…`. Helpers: `core.EncodeDataURI(data, mediaType, filename)` and `core.DecodeDataURI(uri)`.",
+		"- **Schema marker** - a string property of `format: \"uri\"` carries an extra `x-mcp-file` keyword whose value is a `FileInputDescriptor` (`accept` MIME patterns / extensions, optional `maxSize` in decoded bytes). Server-side helpers: `core.FileInputProperty(desc)` and `core.FileInputArrayProperty(desc)`.",
+		"- **Wire encoding** - files travel as RFC 2397 base64 data URIs with an optional percent-encoded `name=` parameter: `data:image/png;name=photo.png;base64,iVBORw0…`. Helpers: `core.EncodeDataURI(data, mediaType, filename)` and `core.DecodeDataURI(uri)`.",
 		"",
-		"Capability negotiation: the client advertises `\"fileInputs\": {}` inside `ClientCapabilities` during `initialize`. Servers MUST NOT include `x-mcp-file` in tool schemas if the client did not declare the capability — `core.HasFileInputs(ctx)` is the server-side check (gating ships in Phase 1.5 of the plan).",
+		"Capability negotiation: the client advertises `\"fileInputs\": {}` inside `ClientCapabilities` during `initialize`. Servers MUST NOT include `x-mcp-file` in tool schemas if the client did not declare the capability. `core.HasFileInputs(ctx)` is the server-side check (gating ships in Phase 1.5 of the plan).",
 	)
 
 	var c *client.Client
 
 	demo.Step("Connect to the file-inputs server").
-		Arrow("Host", "Server", "POST /mcp — initialize (capabilities.fileInputs={})").
+		Arrow("Host", "Server", "POST /mcp, initialize (capabilities.fileInputs={})").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.").
+		Note("`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire; without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			opts := []client.ClientOption{
 				client.WithFileInputs(),
@@ -104,7 +104,7 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Step("tools/list — extract file-input descriptors").
+	demo.Step("tools/list, extracting file-input descriptors").
 		Arrow("Host", "Server", "tools/list").
 		DashedArrow("Server", "Host", "tools[] with x-mcp-file marked properties").
 		Note("`client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`\"image\"`); array-of-files shapes land under `name[]` (`\"documents[]\"`) so callers can disambiguate without re-walking the schema.").
@@ -129,7 +129,7 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Step("upload_image — encode + call with a real PNG").
+	demo.Step("upload_image, encoding and calling with a real PNG").
 		Arrow("Host", "Server", "tools/call upload_image { image: data:image/png;name=…;base64,… }").
 		DashedArrow("Server", "Host", "text result with size + media type").
 		Note("Read `testdata/pixel.png` (a 24×24 RGB gradient, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.").
@@ -151,10 +151,10 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Step("analyze_documents — array-of-files input").
+	demo.Step("analyze_documents, an array-of-files input").
 		Arrow("Host", "Server", "tools/call analyze_documents { documents: [data:application/pdf;…, data:application/pdf;…] }").
 		DashedArrow("Server", "Host", "summary line per document").
-		Note("Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.").
+		Note("Demonstrates `core.FileInputArrayProperty`, where the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			previewFile("contract.pdf", "application/pdf", fixtureContractPDF)
 			previewFile("appendix.pdf", "application/pdf", fixtureAppendixPDF)
@@ -173,7 +173,7 @@ func runDemo() {
 			return nil
 		})
 
-	demo.Step("process_any_file — no accept/maxSize filter").
+	demo.Step("process_any_file, with no accept/maxSize filter").
 		Arrow("Host", "Server", "tools/call process_any_file { file: data:text/plain;name=README.txt;base64,… }").
 		DashedArrow("Server", "Host", "decoded media type + size").
 		Note("Empty `FileInputDescriptor{}` means \"any file, any size.\" Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.").
@@ -194,7 +194,7 @@ func runDemo() {
 	demo.Step("Optional: send a file from disk via client.PrepareFileArg").
 		Arrow("Host", "Server", "tools/call upload_image (from --file <path>)").
 		DashedArrow("Server", "Host", "decoded metadata of the on-disk file").
-		Note("Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)` — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.").
+		Note("Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)`, a single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			path := flagValue("--file")
 			if path == "" {
@@ -233,12 +233,12 @@ func runDemo() {
 
 	// -- SEP-2356 Phase 1.4 — server-side validation rejection demos --
 
-	demo.Section("Validation — server rejects non-conforming uploads (Phase 1.4)",
-		"The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload — that exact shape is the contract pinned by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).",
+	demo.Section("Validation, where the server rejects non-conforming uploads (Phase 1.4)",
+		"The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload, and that exact shape is the contract pinned by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).",
 		"",
 		"The next three steps exercise all three failure modes the validator covers. They drive the server through the Go MCP client (`*client.Client`); the `client.RPCError` returned on rejection carries the same structured `data` field the wire emits. Each step prints `error.code`, `error.message`, and `error.data` so the rejection contract is visible in the demo output.",
 		"",
-		"Each step also attaches a copy-pasteable verbatim block with two variants (rendered via demokit `VerbatimVariants`): a `curl` form (the default — for validating from a non-Go SDK or sanity-checking the JSON shape directly) and a `go` form showing the equivalent `*client.Client` call. Pass `--variant=go` to render only the Go form.",
+		"Each step also attaches a copy-pasteable verbatim block with two variants (rendered via demokit `VerbatimVariants`): a `curl` form (the default, for validating from a non-Go SDK or sanity-checking the JSON shape directly) and a `go` form showing the equivalent `*client.Client` call. Pass `--variant=go` to render only the Go form.",
 	)
 
 	demo.Step("upload_image rejects wrong MIME (text/plain into image/* slot)").
@@ -302,7 +302,7 @@ curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"upload_image\",\"arguments\":{\"image\":\"$BIG\"}}}"
 `).Default(),
-			demokit.MakeVariant("go", "go", `// 6 MiB of zeros — the descriptor caps image uploads at 5 MiB.
+			demokit.MakeVariant("go", "go", `// 6 MiB of zeros; the descriptor caps image uploads at 5 MiB.
 big := make([]byte, 6*1024*1024)
 uri := core.EncodeDataURI(big, "image/png", "big.png")
 _, err := c.Call("tools/call", map[string]any{
@@ -326,7 +326,7 @@ _, err := c.Call("tools/call", map[string]any{
 	demo.Step("analyze_documents rejects per-element with field path tracking").
 		Arrow("Host", "Server", "tools/call analyze_documents { documents: [valid pdf, text/plain] }").
 		DashedArrow("Server", "Host", "-32602 + data.field = \"documents[1]\"").
-		Note("Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == \"documents[1]\"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.").
+		Note("Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender, `data.field == \"documents[1]\"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Mint a session
 SID=$(curl -s -X POST http://localhost:8080/mcp \
@@ -337,7 +337,7 @@ curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" -H "Accept: application/json" -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
-# Send 2 documents — index 0 valid PDF, index 1 wrong MIME
+# Send 2 documents: index 0 valid PDF, index 1 wrong MIME
 GOOD='data:application/pdf;name=ok.pdf;base64,JVBERi0xLjQKJSVFT0YK'
 BAD='data:text/plain;name=bad.txt;base64,aGVsbG8='
 curl -s -X POST http://localhost:8080/mcp \
@@ -367,22 +367,22 @@ _, err := c.Call("tools/call", map[string]any{
 		})
 
 	demo.Section("MCP Apps mode (Phase 2.1)",
-		"This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers — the human-in-the-loop case file-uploads-wg flagged as a gap:",
+		"This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers, the human-in-the-loop case file-uploads-wg flagged as a gap:",
 		"",
-		"- `apps_upload_image` — `ui://file-inputs/upload-image` — single image picker (`mcp.selectFile`)",
-		"- `apps_analyze_documents` — `ui://file-inputs/analyze-documents` — multi PDF picker (`mcp.selectFiles`)",
+		"- `apps_upload_image` - `ui://file-inputs/upload-image` - single image picker (`mcp.selectFile`)",
+		"- `apps_analyze_documents` - `ui://file-inputs/analyze-documents` - multi PDF picker (`mcp.selectFiles`)",
 		"",
-		"To exercise these, point a host that supports the MCP Apps extension (e.g. MCPJam) at this server and invoke either tool — the host renders the embedded HTML + bridge, the user clicks the picker, and the bridge encodes the chosen file(s) as data URI(s) before calling the regular tool. The walkthrough above doesn't drive these because demokit can't synthesize iframe user-gestures.",
+		"To exercise these, point a host that supports the MCP Apps extension (e.g. MCPJam) at this server and invoke either tool. The host renders the embedded HTML + bridge, the user clicks the picker, and the bridge encodes the chosen file(s) as data URI(s) before calling the regular tool. The walkthrough above doesn't drive these because demokit can't synthesize iframe user-gestures.",
 	)
 
 	demo.Section("Where to look in the code",
-		"- Schema helpers: `core.FileInputProperty` / `core.FileInputArrayProperty` / `core.ExtractFileInputDescriptor` — core/file_input.go",
-		"- Wire encoding: `core.EncodeDataURI` / `core.DecodeDataURI` / `core.IsDataURI` — core/datauri.go",
-		"- Capability marker: `ClientCapabilities.FileInputs` + `core.HasFileInputs(ctx)` — core/protocol.go, core/file_input.go",
-		"- Server validation (Phase 1.4): `server.ValidateFileInput` — pending",
-		"- Capability gating (Phase 1.5): strip `x-mcp-file` from tools/list when client lacks the cap — pending",
-		"- Client helpers (Phase 1.6): `client.FileInputsFromTool` / `client.PrepareFileArg` — pending",
-		"- Bridge `selectFile` / `selectFiles` (Phase 2.1): `ext/ui/assets/file-picker.ts` — shipped",
+		"- Schema helpers: `core.FileInputProperty` / `core.FileInputArrayProperty` / `core.ExtractFileInputDescriptor` - core/file_input.go",
+		"- Wire encoding: `core.EncodeDataURI` / `core.DecodeDataURI` / `core.IsDataURI` - core/datauri.go",
+		"- Capability marker: `ClientCapabilities.FileInputs` + `core.HasFileInputs(ctx)` - core/protocol.go, core/file_input.go",
+		"- Server validation (Phase 1.4): `server.ValidateFileInput` - pending",
+		"- Capability gating (Phase 1.5): strip `x-mcp-file` from tools/list when client lacks the cap - pending",
+		"- Client helpers (Phase 1.6): `client.FileInputsFromTool` / `client.PrepareFileArg` - pending",
+		"- Bridge `selectFile` / `selectFiles` (Phase 2.1): `ext/ui/assets/file-picker.ts` - shipped",
 		"- Apps fixtures: `examples/file-inputs/apps/upload-image.html`, `analyze-documents.html`",
 		"- SEP-2356 spec: modelcontextprotocol/specification PR 2356",
 	)

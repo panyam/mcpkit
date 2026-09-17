@@ -1,16 +1,16 @@
 # Discord Events Example
 
-> ⚠ **Experimental** — MCP Events, a draft extension ([spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1)), built on [experimental/ext/events](../../../experimental/ext/events/). Wire format may change.
+> ⚠ **Experimental** - MCP Events, a draft extension ([spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1)), built on [experimental/ext/events](../../../experimental/ext/events/). Wire format may change.
 
 Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Discord as the event source. Built on the [`experimental/ext/events`](../../../experimental/ext/events/) library.
 
-Companion to the [Telegram example](../telegram/) — shows the events library handles structurally different payloads (Discord has nested author objects, embeds, threads, mentions vs Telegram's flat text model).
+Companion to the [Telegram example](../telegram/), showing that the events library handles structurally different payloads (Discord has nested author objects, embeds, threads, mentions vs Telegram's flat text model).
 
 ## Walkthrough
 
 The canonical demo for the events extension. Two ways to run it.
 
-### Option A — Test mode (no Discord token needed)
+### Option A, Test mode (no Discord token needed)
 
 All walkthrough steps run; the final live-interaction step skips with a "no token" message. Great for a quick read-through of the protocol features.
 
@@ -26,7 +26,7 @@ TEXT=... just inject TEXT="hello world"   # message event (cursored)
 TEXT=... just inject-typing               # typing indicator (cursorless)
 ```
 
-### Option B — Real bot mode (requires `DISCORD_BOT_TOKEN`)
+### Option B, Real bot mode (requires `DISCORD_BOT_TOKEN`)
 
 Same walkthrough plus the final live step captures real typing + message events from the Discord channel where you invited the bot.
 
@@ -36,7 +36,7 @@ just demo                                 # terminal 2 — walkthrough
 # When the live step starts, go type in your Discord channel.
 ```
 
-See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation. The walkthrough is generated from the demo step definitions in `walkthrough.go` — run `just readme` to regenerate.
+See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by-step explanation. The walkthrough is generated from the demo step definitions in `walkthrough.go`. Run `just readme` to regenerate.
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
@@ -44,16 +44,16 @@ See [`WALKTHROUGH.md`](WALKTHROUGH.md) for the full sequence diagram and step-by
 
 Each bullet maps to a step in the demokit walkthrough:
 
-- **events/list** — the source catalog, including the `cursorless` flag.
-- **Push** — long-lived `events/stream` SSE; `notifications/events/event` arrives in real time.
-- **Poll** — single-subscription `events/poll` (multi-sub batching is not supported).
-- **Cursorless source** — typing indicators wired as `cursor: null`; subscribers see live events but can't replay.
-- **Webhook + auto-refresh** — `events/subscribe` driven via the typed `Subscription` + `Receiver[Data]` from `clients/go`, including HMAC verification and 0.5×TTL re-subscribe.
-- **Source-side health signals** — `YieldError(err)` (transient → `notifications/events/error`) and `YieldTerminated(err)` (terminal → `notifications/events/terminated`).
-- **Spec validation** — empty / malformed `delivery.secret` rejected with `-32602`; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed in the response.
-- **Live Discord interaction** — real typing + message events from a Discord channel (when started with `DISCORD_BOT_TOKEN`).
+- **events/list** - the source catalog, including the `cursorless` flag.
+- **Push** - long-lived `events/stream` SSE; `notifications/events/event` arrives in real time.
+- **Poll** - single-subscription `events/poll` (multi-sub batching is not supported).
+- **Cursorless source** - typing indicators wired as `cursor: null`; subscribers see live events but can't replay.
+- **Webhook + auto-refresh** - `events/subscribe` driven via the typed `Subscription` + `Receiver[Data]` from `clients/go`, including HMAC verification and 0.5×TTL re-subscribe.
+- **Source-side health signals** - `YieldError(err)` (transient → `notifications/events/error`) and `YieldTerminated(err)` (terminal → `notifications/events/terminated`).
+- **Spec validation** - empty / malformed `delivery.secret` rejected with `-32602`; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed in the response.
+- **Live Discord interaction** - real typing + message events from a Discord channel (when started with `DISCORD_BOT_TOKEN`).
 
-## Setup — getting a Discord bot token (Option B only)
+## Setup, getting a Discord bot token (Option B only)
 
 Skip this section if you're running in test mode (Option A above).
 
@@ -68,7 +68,7 @@ Skip this section if you're running in test mode (Option A above).
    - Bot Permissions: `Send Messages`, `Read Message History`
 6. Copy the generated URL and open it to invite the bot to your server
 
-The typing-indicator step in the walkthrough additionally needs the `IntentsGuildMessageTyping` intent — the server requests it automatically when started with `-token`, no extra dev-portal toggle required (typing isn't classified as a privileged intent).
+The typing-indicator step in the walkthrough additionally needs the `IntentsGuildMessageTyping` intent, which the server requests automatically when started with `-token`, no extra dev-portal toggle required (typing isn't classified as a privileged intent).
 
 ## Architecture
 
@@ -94,11 +94,11 @@ Discord Bot (WebSocket)  ──or──  POST /inject
     source.ByCursor("42")     → (DiscordEventData, true)
 ```
 
-The discord callback writes one line — `yield(...)` — and the library handles cursor assignment, retention, push fanout, webhook fanout, and typed read access. The YieldingSource's internal buffer is the single source of truth, exposed as both an `EventSource` (for `events/poll`) and as typed accessors (for resource reads).
+The discord callback writes one line, `yield(...)`, and the library handles cursor assignment, retention, push fanout, webhook fanout, and typed read access. The YieldingSource's internal buffer is the single source of truth, exposed as both an `EventSource` (for `events/poll`) and as typed accessors (for resource reads).
 
 ## Event payload shape
 
-Discord events have a richer structure than Telegram — nested author, optional threads, embeds, and mentions. The `payloadSchema` in `events/list` is auto-derived from the Go struct:
+Discord events have a richer structure than Telegram: nested author, optional threads, embeds, and mentions. The `payloadSchema` in `events/list` is auto-derived from the Go struct:
 
 ```json
 {
@@ -157,40 +157,40 @@ Recognized env vars:
 | `OAUTH_JWKS_URL` | `<issuer>/protocol/openid-connect/certs` | Override for non-Keycloak providers. |
 | `OAUTH_AUDIENCE` | `mcp-events` | Tokens MUST have this audience claim. |
 
-The events package itself depends only on `core.Claims` (the abstract auth contract), not on any specific auth implementation — see [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) "Auth + extension composition" for the design rationale.
+The events package itself depends only on `core.Claims` (the abstract auth contract), not on any specific auth implementation. See [`experimental/ext/events/README.md`](../../../experimental/ext/events/README.md) "Auth + extension composition" for the design rationale.
 
 ## Where to look in the code
 
-- `examples/events/discord/main.go:serve` — server bootstrap (auth posture, source registration, `/inject` side endpoint via `server.WithMux`).
-- `examples/events/discord/walkthrough.go:runDemo` — demokit script driving every step in the bullet list above.
-- `examples/events/discord/events.go:newDiscordSource` — `events.YieldingSource[DiscordEventData]` construction (cursored).
-- `examples/events/discord/events.go:newDiscordTypingSource` — cursorless typing source via `events.WithoutCursors()`.
-- `examples/events/discord/handlers.go:registerResources` — typed resource handlers backed by the source's buffer.
-- `examples/events/discord/handlers.go:registerTools` — `discord.send_message` tool.
-- `experimental/ext/events/clients/go/subscription.go:Subscribe` — Go SDK subscribe + auto-refresh helper used in step 6.
-- `experimental/ext/events/clients/go/receiver.go:NewReceiver` — typed inbound webhook receiver with HMAC verification.
-- `experimental/ext/events/webhook.go:WebhookRegistry` — per-subscription delivery + signing + retry.
+- `examples/events/discord/main.go:serve` - server bootstrap (auth posture, source registration, `/inject` side endpoint via `server.WithMux`).
+- `examples/events/discord/walkthrough.go:runDemo` - demokit script driving every step in the bullet list above.
+- `examples/events/discord/events.go:newDiscordSource` - `events.YieldingSource[DiscordEventData]` construction (cursored).
+- `examples/events/discord/events.go:newDiscordTypingSource` - cursorless typing source via `events.WithoutCursors()`.
+- `examples/events/discord/handlers.go:registerResources` - typed resource handlers backed by the source's buffer.
+- `examples/events/discord/handlers.go:registerTools` - `discord.send_message` tool.
+- `experimental/ext/events/clients/go/subscription.go:Subscribe` - Go SDK subscribe + auto-refresh helper used in step 6.
+- `experimental/ext/events/clients/go/receiver.go:NewReceiver` - typed inbound webhook receiver with HMAC verification.
+- `experimental/ext/events/webhook.go:WebhookRegistry` - per-subscription delivery + signing + retry.
 
 ## Make targets
 
 | Target | Description |
 |--------|-------------|
 | `just serve` | Start the server (with bot if `DISCORD_BOT_TOKEN` set; test mode otherwise) |
-| `just demo` | Run the demokit walkthrough — `--tui` mode |
+| `just demo` | Run the demokit walkthrough - `--tui` mode |
 | `just readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
 | `just build` | Build the binary |
 | `just test` | Go tests |
-| `just test-ttl` | Drive the Python `WebhookSubscription` auto-refresh helper end-to-end (POSIX-only — see Makefile for Windows steps) |
+| `just test-ttl` | Drive the Python `WebhookSubscription` auto-refresh helper end-to-end (POSIX-only - see Makefile for Windows steps) |
 | `TEXT=... just inject TEXT="..."` | Inject a message event (optional: `SENDER=`, `CHANNEL=`, `GUILD=`) |
 | `TEXT=... just inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHANNEL=`, `GUILD=`) |
 | `make list` | Show server capabilities via Python client (tools, resources, events, sample poll) |
 | `make listen` | Python SSE push listener |
-| `just webhook` | Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
+| `just webhook` | Python webhook receiver - subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Python polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 The Python clients (`make list / listen / webhook / poll`) are convenient for ad-hoc poking. The walkthrough above (`just demo`) is the canonical tour. Both share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.
 
 ## Next steps
 
-- [Telegram events — same protocol, different source](../telegram/)
+- [Telegram events - same protocol, different source](../telegram/)
 - [Events library](../../../experimental/ext/events/)

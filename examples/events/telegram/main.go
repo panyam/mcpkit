@@ -83,7 +83,7 @@ func serve() {
 		}
 		log.Printf("[telegram] authorized as @%s", bot.Self.UserName)
 	} else {
-		log.Println("[telegram] no token provided — running in test mode")
+		log.Println("[telegram] no token provided - running in test mode")
 	}
 
 	// Auto-detect auth posture. Identical pattern to discord's
@@ -97,7 +97,7 @@ func serve() {
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
 	if validator := tryEnableAuth(); validator != nil {
 		srvOpts = append(srvOpts, server.WithAuth(validator))
-		authPosture = "real OIDC (" + os.Getenv("OAUTH_ISSUER") + ") — anonymous webhook subscribes rejected per spec"
+		authPosture = "real OIDC (" + os.Getenv("OAUTH_ISSUER") + "), anonymous webhook subscribes rejected per spec"
 	}
 
 	srv := server.NewServer(

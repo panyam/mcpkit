@@ -55,7 +55,7 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("MCP Skills Extension (SEP-2640) — Reference Walkthrough").
+	demo := demokit.New("MCP Skills extension (SEP-2640), the reference walkthrough").
 		Dir("skills").
 		Description("SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a skill directory is a `skill://` URI; `skill://index.json` enumerates them with SHA-256 digests.").
 		Actors(
@@ -88,7 +88,7 @@ func runDemo() {
 	)
 
 	demo.Section("Wire mode (SEP-2575 dual-wire)",
-		"mcpkit's server defaults to `ModeDual` — every URL serves both the legacy `initialize` handshake and the SEP-2575 `server/discover` probe. Pick which wire the client should use; the rest of the walkthrough works identically either way.",
+		"mcpkit's server defaults to `ModeDual`, so every URL serves both the legacy `initialize` handshake and the SEP-2575 `server/discover` probe. Pick which wire the client should use; the rest of the walkthrough works identically either way.",
 	)
 
 	demo.Step("Choose the client wire mode").
@@ -106,14 +106,14 @@ func runDemo() {
 			default:
 				wireMode = client.ClientModeAdaptive
 			}
-			fmt.Printf("    Selected: %s — client.WithClientMode(%s)\n", choice, wireMode)
+			fmt.Printf("    Selected: %s - client.WithClientMode(%s)\n", choice, wireMode)
 			return nil
 		})
 
 	demo.Step("Connect to the skills server").
-		Arrow("Host", "Server", "POST /mcp — server/discover (stateless) OR initialize (legacy)").
+		Arrow("Host", "Server", "POST /mcp, server/discover (stateless) OR initialize (legacy)").
 		DashedArrow("Server", "Host", "serverInfo + capabilities (with extensions.skills)").
-		Note("Construct the client with the chosen wire mode, then connect. After the call returns, inspect the new accessor to see which wire engaged. The curl chain below uses the legacy wire and mints a session id reused by every subsequent step; the stateless wire skips that — each call posts directly to /mcp with no Mcp-Session-Id header.").
+		Note("Construct the client with the chosen wire mode, then connect. After the call returns, inspect the new accessor to see which wire engaged. The curl chain below uses the legacy wire and mints a session id reused by every subsequent step; the stateless wire skips that, and each call posts directly to /mcp with no Mcp-Session-Id header.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Legacy wire: initialize handshake mints the session id for downstream steps.
 SID=$(curl -s -X POST http://localhost:8080/mcp \
@@ -126,7 +126,7 @@ curl -s -X POST http://localhost:8080/mcp \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 echo "SID=$SID"
 
-# Stateless wire alternative — no session id, just probe server/discover:
+# Stateless wire alternative: no session id, just probe server/discover:
 #   curl -s -X POST http://localhost:8080/mcp \
 #     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
 #     -d '{"jsonrpc":"2.0","id":"d","method":"server/discover","params":{}}' | jq '.result'`).Default(),
@@ -134,7 +134,7 @@ echo "SID=$SID"
     core.ClientInfo{Name: "skills-host", Version: "1.0"},
     client.WithClientMode(wireMode), // adaptive | stateless | legacy
 )
-if err := c.Connect(); err != nil { /* server not up — run: just serve */ }
+if err := c.Connect(); err != nil { /* server not up, run: just serve */ }
 stateless := c.UsingStatelessWire()
 supports  := c.ServerSupportsExtension(skills.ExtensionID)`),
 		).
@@ -201,7 +201,7 @@ for _, d := range defs {
 	demo.Step("Read skill://index.json").
 		Arrow("Host", "Server", "resources/read uri=skill://index.json").
 		DashedArrow("Server", "Host", "{ $schema, skills: [...] }").
-		Note("The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk — mcpkit generates it from the live provider catalog on each cache miss.").
+		Note("The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk; mcpkit generates it from the live provider catalog on each cache miss.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
@@ -233,13 +233,13 @@ for _, e := range idx.Skills {
 		})
 
 	demo.Section("Distribution mode",
-		"SEP-2640 lets a server publish each skill as either individual files (`type:skill-md`) or one packed archive per skill (`type:archive` with `.tar.gz` / `.zip` suffix). The shape is visible on the index entries — the walkthrough sniffs it once and threads the result through the rest of the steps so the file-mode and archive-mode narratives stay tidy.",
+		"SEP-2640 lets a server publish each skill as either individual files (`type:skill-md`) or one packed archive per skill (`type:archive` with `.tar.gz` / `.zip` suffix). The shape is visible on the index entries, so the walkthrough sniffs it once and threads the result through the rest of the steps so the file-mode and archive-mode narratives stay tidy.",
 	)
 
 	demo.Step("Detect server distribution mode from the index").
 		Note("In file mode every entry's type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry's type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("jq", "bash", `# Distinct types appearing in the index — "skill-md" or "archive".
+			demokit.MakeVariant("jq", "bash", `# Distinct types appearing in the index: "skill-md" or "archive".
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H "Mcp-Session-Id: $SID" \
@@ -269,10 +269,10 @@ for _, e := range idx.Skills {
 			detected = detectMode(defs)
 			if detected.archive {
 				fmt.Printf("    Detected mode: archive (%s)\n", detected.suffix)
-				fmt.Printf("    Each skill is one packed resource — see the Archive mode section below for read + verify + unpack.\n")
+				fmt.Printf("    Each skill is one packed resource - see the Archive mode section below for read + verify + unpack.\n")
 			} else {
 				fmt.Printf("    Detected mode: file\n")
-				fmt.Printf("    Each skill is a tree of individual resources — the per-file reads below exercise that path.\n")
+				fmt.Printf("    Each skill is a tree of individual resources - the per-file reads below exercise that path.\n")
 			}
 			return nil
 		})
@@ -284,9 +284,9 @@ for _, e := range idx.Skills {
 	demo.Step("Verify digest by re-fetching git-workflow's canonical artifact").
 		Arrow("Host", "Server", "resources/read uri=skill://git-workflow{/SKILL.md | .tar.gz | .zip}").
 		DashedArrow("Server", "Host", "text/markdown body (file mode) OR archive bytes (archive mode)").
-		Note("Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode — the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.").
+		Note("Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode, and the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `# File mode — re-read SKILL.md, recompute sha256, compare against the index entry's digest.
+			demokit.MakeVariant("curl", "bash", `# File mode: re-read SKILL.md, recompute sha256, compare against the index entry's digest.
 WANT=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
@@ -298,7 +298,7 @@ GOT="sha256:$(curl -s -X POST http://localhost:8080/mcp \
   | jq -r '.result.contents[0].text' | shasum -a 256 | awk '{print $1}')"
 [ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"
 
-# Archive mode — swap the URI; the body is base64-encoded under .contents[0].blob.
+# Archive mode: swap the URI; the body is base64-encoded under .contents[0].blob.
 #   uri=skill://git-workflow.tar.gz     # or skill://git-workflow.zip
 #   jq -r '.result.contents[0].blob' | base64 -d | shasum -a 256`).Default(),
 			demokit.MakeVariant("go", "go", `target := uriGitWorkflow                 // file mode default
@@ -349,9 +349,9 @@ got := "sha256:" + hex.EncodeToString(sum[:])
 			fmt.Printf("    want %s\n", want)
 			fmt.Printf("    got  %s\n", got)
 			if got == want {
-				fmt.Printf("    digest matches — content verified per SEP-2640 §Integrity\n")
+				fmt.Printf("    digest matches - content verified per SEP-2640 §Integrity\n")
 			} else {
-				fmt.Printf("    DIGEST MISMATCH — content MUST NOT be used per the SEP\n")
+				fmt.Printf("    DIGEST MISMATCH - content MUST NOT be used per the SEP\n")
 			}
 			return nil
 		})
@@ -378,7 +378,7 @@ fmt.Println(body)`),
 				return nil
 			}
 			if detected.archive {
-				fmt.Printf("    Detected archive mode — per-file SKILL.md reads are unavailable; see the Archive mode section below.\n")
+				fmt.Printf("    Detected archive mode - per-file SKILL.md reads are unavailable; see the Archive mode section below.\n")
 				return nil
 			}
 			body, err := c.ReadResource(ctx.Ctx, uriPDFManifest)
@@ -409,7 +409,7 @@ body, _ := c.ReadResource(target.String())`),
 				return nil
 			}
 			if detected.archive {
-				fmt.Printf("    Detected archive mode — supporting files surface only after unpack; see the Archive mode section below.\n")
+				fmt.Printf("    Detected archive mode - supporting files surface only after unpack; see the Archive mode section below.\n")
 				return nil
 			}
 			body, err := c.ReadResource(ctx.Ctx, uriPDFRef)
@@ -438,7 +438,7 @@ body, _ := c.ReadResource(target.String())`),
 				return nil
 			}
 			if detected.archive {
-				fmt.Printf("    Detected archive mode — nested-prefix skills become skill://acme/billing/refunds%s; see the Archive mode section below.\n", detected.suffix)
+				fmt.Printf("    Detected archive mode - nested-prefix skills become skill://acme/billing/refunds%s; see the Archive mode section below.\n", detected.suffix)
 				return nil
 			}
 			body, err := c.ReadResource(ctx.Ctx, uriRefundsManifest)
@@ -467,7 +467,7 @@ body, _ := c.ReadResource(target.String())`),
 				return nil
 			}
 			if detected.archive {
-				fmt.Printf("    Detected archive mode — supporting files surface only after unpack; see the Archive mode section below.\n")
+				fmt.Printf("    Detected archive mode - supporting files surface only after unpack; see the Archive mode section below.\n")
 				return nil
 			}
 			body, err := c.ReadResource(ctx.Ctx, uriRefundsEmail)
@@ -486,7 +486,7 @@ body, _ := c.ReadResource(target.String())`),
 	demo.Step("Read a skill via the archive sub-mount (proves auto-wrap end-to-end)").
 		Arrow("Host", "Server", "resources/read uri=skill://archived/git-workflow/SKILL.md").
 		DashedArrow("Server", "Host", "text/markdown body (same content as skill://git-workflow/SKILL.md)").
-		Note("`just serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy — same skill, different transport. Recompute the digest if you want to verify.").
+		Note("`just serve` packs the bundled `git-workflow` skill into a tempfile tar.gz and mounts it under the `archived/` sub-mount. `OpenArchive` auto-wraps the archive's root-level SKILL.md under `git-workflow/` (matching the frontmatter name), so the served URI is `skill://archived/git-workflow/SKILL.md`. Bytes match the local copy: same skill, different transport. Recompute the digest if you want to verify.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
@@ -514,7 +514,7 @@ fmt.Println(body)`),
 		Arrow("Host", "Server", "resources/list (filter for skill://github/...)").
 		Arrow("Host", "Server", "resources/read uri=<first github URI>").
 		DashedArrow("Server", "Host", "content fetched from anthropics/skills at server boot").
-		Note("Robust against changes in the upstream repo: instead of hardcoding a github URI, we enumerate `resources/list`, pick the first entry under the `github/` prefix, and read it. Proves the entire FetchGitHubArchive → MountFS sub-mount → resources/read chain — server reaches out to GitHub at boot, the bytes flow through the same MCP wire as everything else.").
+		Note("Robust against changes in the upstream repo: instead of hardcoding a github URI, we enumerate `resources/list`, pick the first entry under the `github/` prefix, and read it. Proves the entire FetchGitHubArchive → MountFS sub-mount → resources/read chain. The server reaches out to GitHub at boot, the bytes flow through the same MCP wire as everything else.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Find the first github URI in the catalog.
 GH=$(curl -s -X POST http://localhost:8080/mcp \
@@ -572,7 +572,7 @@ fmt.Println(body)`),
 		})
 
 	demo.Section("Push-based invalidation (issue #795)",
-		"`skill://index.json` carries `_meta.io.modelcontextprotocol.skills/version` — a monotonic counter the server bumps whenever skill content changes. Stateful clients also receive `notifications/resources/list_changed` when the bump happens. Stateless clients (no persistent push channel) detect the change by polling the index and observing the field. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable; this walkthrough uses a demo-only `_demo/refresh` tool that calls `Provider.Refresh()` directly.",
+		"`skill://index.json` carries `_meta.io.modelcontextprotocol.skills/version`, a monotonic counter the server bumps whenever skill content changes. Stateful clients also receive `notifications/resources/list_changed` when the bump happens. Stateless clients (no persistent push channel) detect the change by polling the index and observing the field. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable; this walkthrough uses a demo-only `_demo/refresh` tool that calls `Provider.Refresh()` directly.",
 	)
 
 	demo.Step("Read the version, refresh, observe it bump").
@@ -637,12 +637,12 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 				fmt.Printf("    ERROR calling _demo/refresh: %v\n", err)
 				return nil
 			}
-			fmt.Printf("    called _demo/refresh — server bumped Provider.Version()\n")
+			fmt.Printf("    called _demo/refresh - server bumped Provider.Version()\n")
 
 			after := readIndexVersion(c)
 			fmt.Printf("    after refresh:  version = %d\n", after)
 			if after > before {
-				fmt.Printf("    version bumped by %d — stateful subscribers also received notifications/resources/list_changed\n", after-before)
+				fmt.Printf("    version bumped by %d - stateful subscribers also received notifications/resources/list_changed\n", after-before)
 			} else {
 				fmt.Printf("    WARNING: version did not advance (%d → %d)\n", before, after)
 			}
@@ -650,14 +650,14 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 		})
 
 	demo.Section("fsnotify-driven invalidation (issue #800)",
-		"The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector — fsnotify, webhook, or admin endpoint — that observes file changes and calls into the Applier on its own. `just serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.",
+		"The previous step called `Provider.Refresh()` synchronously via the demo tool. Real deployments wire a Detector (fsnotify, webhook, or admin endpoint) that observes file changes and calls into the Applier on its own. `just serve` with `--watch` enables `skills.WithFSWatcher` + a 200ms coalesce window. Edit any file under `skills/` in another terminal and the server emits one `notifications/resources/list_changed` per logical change.",
 	)
 
 	demo.Step("Observe an fsnotify-driven broadcast").
 		Arrow("Detector", "Server", "fsnotify Write event on skills/git-workflow/SKILL.md").
 		Arrow("Server", "Server", "Provider.NotifyChangedEvents (mapped from fsnotify.Op)").
 		DashedArrow("Server", "Host", "notifications/resources/list_changed (after 200ms coalesce)").
-		Note("In `--non-interactive` mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal — the notification arrives as soon as your editor flushes the save.").
+		Note("In `--non-interactive` mode this step synthesizes the edit (writes the same SKILL.md back to itself) and restores the original content; the actual broadcast still fires. In interactive mode it prompts you to edit a SKILL.md in a side terminal, and the notification arrives as soon as your editor flushes the save.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("server", "bash", `# In one terminal:
 just serve  # opt-in fsnotify:
@@ -728,11 +728,11 @@ defer provider.Shutdown(context.Background()) // graceful drain on signal
 					return nil
 				}
 			}
-			fmt.Printf("    WARNING: no version bump observed within 10s — server may have been started without --watch\n")
+			fmt.Printf("    WARNING: no version bump observed within 10s - server may have been started without --watch\n")
 			return nil
 		})
 
-	demo.Section("SEP-2640 directoryRead — scoped subtree navigation",
+	demo.Section("SEP-2640 directoryRead and scoped subtree navigation",
 		"SEP commit `2e04c48d` (2026-06-09) added `resources/directory/read` for listing a directory's direct children without enumerating the server's entire resource space. Capability-gated via `io.modelcontextprotocol/skills.directoryRead`. mcpkit's Provider auto-supports it (#781).",
 	)
 
@@ -771,7 +771,7 @@ for _, r := range result.Resources {
 				return nil
 			}
 			if detected.archive {
-				fmt.Printf("    Detected archive mode — directoryRead lists per-file resources, which archive mode does not publish. The unpacked archive (see below) recovers the same shape.\n")
+				fmt.Printf("    Detected archive mode - directoryRead lists per-file resources, which archive mode does not publish. The unpacked archive (see below) recovers the same shape.\n")
 				return nil
 			}
 			sc := skills.NewClient(c, skills.WithTracerProvider(tp))
@@ -807,14 +807,14 @@ for _, r := range result.Resources {
 			return nil
 		})
 
-	demo.Section("SEP-414 P7 — Skills observability",
-		"Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attrs (#748). Client `ext/skills.Client` emits `skills.read*` spans + `Activate(ctx, uri)` for post-cache use the wire can't see (SDK-only — no spec change).",
+	demo.Section("SEP-414 P7 skills observability",
+		"Fetch ≠ activation. Server `resources/read` spans now carry `mcp.skill.*` attrs (#748). Client `ext/skills.Client` emits `skills.read*` spans + `Activate(ctx, uri)` for post-cache use the wire can't see (SDK-only, no spec change).",
 	)
 
 	demo.Step("Wrap reads in skills.NewClient(...) and call Client.Activate").
 		Arrow("Host", "Server", "resources/read via sc.ReadAndVerify (span: skills.read_and_verify)").
 		DashedArrow("Server", "Host", "bytes + digest match").
-		Note("Activate is intra-process — no wire traffic. Run with `just serve EXPORTER=stdout` + `just demo EXPORTER=stdout` to see spans.").
+		Note("Activate is intra-process, with no wire traffic. Run with `just serve EXPORTER=stdout` + `just demo EXPORTER=stdout` to see spans.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
@@ -844,14 +844,14 @@ for _, r := range result.Resources {
 			return nil
 		})
 
-	demo.Section("Archive mode — atomic delivery + in-process unpack",
-		"In archive mode every skill is delivered as a single `.tar.gz` or `.zip` resource. The host hashes the archive bytes against the index digest, then unpacks in-memory to recover the post-unpack virtual namespace — same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.",
+	demo.Section("Archive mode, atomic delivery plus in-process unpack",
+		"In archive mode every skill is delivered as a single `.tar.gz` or `.zip` resource. The host hashes the archive bytes against the index digest, then unpacks in-memory to recover the post-unpack virtual namespace, the same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.",
 	)
 
 	demo.Step("Read pdf-processing archive, verify digest, unpack, list recovered files").
 		Arrow("Host", "Server", "resources/read uri=skill://pdf-processing.tar.gz (or .zip)").
 		DashedArrow("Server", "Host", "application/gzip OR application/zip blob").
-		Note("Only meaningful in archive mode. In file mode the step prints the detected mode and exits — see the per-file read steps above for the equivalent file-mode story.").
+		Note("Only meaningful in archive mode. In file mode the step prints the detected mode and exits. See the per-file read steps above for the equivalent file-mode story.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Fetch the archive blob (base64-encoded under .contents[0].blob in archive mode).
 curl -s -X POST http://localhost:8080/mcp \
@@ -876,7 +876,7 @@ for _, f := range files {
 				return nil
 			}
 			if !detected.archive {
-				fmt.Printf("    Detected file mode — archive-mode flow is gated; see the per-file read steps above for the equivalent file-mode story.\n")
+				fmt.Printf("    Detected file mode - archive-mode flow is gated; see the per-file read steps above for the equivalent file-mode story.\n")
 				return nil
 			}
 			// Archives no longer appear as listing entries (deferred to an
@@ -900,10 +900,10 @@ for _, f := range files {
 			fmt.Printf("    want %s\n", want)
 			fmt.Printf("    got  %s\n", got)
 			if got != want {
-				fmt.Printf("    DIGEST MISMATCH — content MUST NOT be used per the SEP\n")
+				fmt.Printf("    DIGEST MISMATCH - content MUST NOT be used per the SEP\n")
 				return nil
 			}
-			fmt.Printf("    digest matches — unpacking via stdlib (%s)…\n", detected.format.String())
+			fmt.Printf("    digest matches - unpacking via stdlib (%s)…\n", detected.format.String())
 			files, err := unpackArchive(detected.format, raw)
 			if err != nil {
 				fmt.Printf("    ERROR: unpack failed: %v\n", err)
@@ -967,7 +967,7 @@ _, err := capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)   // -> ErrResourceTooL
 		})
 
 	demo.Step("Refuse an unpinned supporting file (threat model B1)").
-		Note("ReadFromEntry only reads files the entry's resources manifest lists. The manifest is complete, so a URI absent from it is a file the skill does not contain — an attacker's extra file, or a typo — and is refused with ErrURINotInResources rather than read unverified. Anchor: threat model B1 · issue 866.").
+		Note("ReadFromEntry only reads files the entry's resources manifest lists. The manifest is complete, so a URI absent from it is a file the skill does not contain, whether an attacker's extra file or a typo, and is refused with ErrURINotInResources rather than read unverified. Anchor: threat model B1 · issue 866.").
 		VerbatimVariants("Reproduce in Go",
 			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
 entries, _ := sc.ListSkillEntries(ctx.Ctx)
@@ -997,7 +997,7 @@ _, err := sc.ReadFromEntry(ctx.Ctx, e, "skill://acme/billing/refunds/templates/g
 
 	demo.Step("Reject a digest mismatch (threat model B1)").
 		Arrow("Host", "Server", "resources/read uri=skill://acme/billing/refunds/SKILL.md").
-		Note("If a server returns bytes that don't match the pinned digest — corruption or tampering — ReadAndVerify returns ErrDigestMismatch and the host MUST NOT use the content. Here the mismatch is forced by verifying against a deliberately wrong pin; `just security` proves the same rejection with a real post-listing on-disk swap. Anchor: threat model B1.").
+		Note("If a server returns bytes that don't match the pinned digest, through corruption or tampering, ReadAndVerify returns ErrDigestMismatch and the host MUST NOT use the content. Here the mismatch is forced by verifying against a deliberately wrong pin; `just security` proves the same rejection with a real post-listing on-disk swap. Anchor: threat model B1.").
 		VerbatimVariants("Reproduce in Go",
 			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
 _, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat("0", 64))   // -> ErrDigestMismatch`),
@@ -1014,7 +1014,7 @@ _, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat
 		})
 
 	demo.Step("Reject a cross-origin resource scheme (threat model T5)").
-		Note("Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI — the threat model's adv-file-url — is rejected by ParseURI with ErrInvalidScheme, so a skill can't redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).").
+		Note("Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI, the threat model's adv-file-url, is rejected by ParseURI with ErrInvalidScheme, so a skill can't redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).").
 		VerbatimVariants("Reproduce in Go",
 			demokit.MakeVariant("go", "go", `_, err := skills.ParseURI("file:///etc/passwd")   // -> ErrInvalidScheme`),
 		).
@@ -1026,7 +1026,7 @@ _, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat
 		})
 
 	demo.Section("Wrap-up",
-		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, scheme rejection). The same client code paths served both distribution modes — only the URI shape and the post-fetch unpack step differ.",
+		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, scheme rejection). The same client code paths served both distribution modes; only the URI shape and the post-fetch unpack step differ.",
 	)
 
 	_ = serverInfo
@@ -1050,10 +1050,10 @@ func findManifestEntry(entries []skills.SkillEntry, uri string) (skills.SkillEnt
 // which the walkthrough surfaces rather than passing over silently.
 func reportGuard(ok bool, got error, msg string) {
 	if ok {
-		fmt.Printf("    ✓ REJECT — %s (%v)\n", msg, got)
+		fmt.Printf("    ✓ REJECT - %s (%v)\n", msg, got)
 		return
 	}
-	fmt.Printf("    ✗ NOT REJECTED — expected a guard to fire: %s (got %v)\n", msg, got)
+	fmt.Printf("    ✗ NOT REJECTED - expected a guard to fire: %s (got %v)\n", msg, got)
 }
 
 // wireLabel returns a human-readable wire-mode name for the walkthrough

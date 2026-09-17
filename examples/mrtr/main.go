@@ -167,10 +167,10 @@ func registerMRTRTools(srv *server.Server) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "test_incomplete_result_elicitation",
-			Description: "A7: same as A1 but tolerant of wrong inputResponses keys — re-requests instead of erroring.",
+			Description: "A7: same as A1 but tolerant of wrong inputResponses keys, re-requesting instead of erroring.",
 			InputSchema: map[string]any{"type": "object"},
 		},
-		basicElicitationTool, // same handler — already re-requests on missing key
+		basicElicitationTool, // same handler; already re-requests on missing key
 	)
 
 	// A8: SEP-2322 + SEP-2663 composition. The handler runs through an MRTR

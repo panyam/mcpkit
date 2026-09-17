@@ -65,11 +65,11 @@ func serve() {
 	log.Printf("Connect MCPJam or VS Code: http://localhost%s/mcp", *addr)
 	log.Printf("")
 	log.Printf("Tools:")
-	log.Printf("  greet          — sync-only (no task support)")
-	log.Printf("  slow_compute   — optional task support (try with/without 'task' hint)")
-	log.Printf("  failing_job    — required task support (must include 'task' hint)")
-	log.Printf("  confirm_delete — required task + elicitation (asks user before deleting)")
-	log.Printf("  write_haiku    — required task + sampling (asks LLM to write a haiku)")
+	log.Printf("  greet          - sync-only (no task support)")
+	log.Printf("  slow_compute   - optional task support (try with/without 'task' hint)")
+	log.Printf("  failing_job    - required task support (must include 'task' hint)")
+	log.Printf("  confirm_delete - required task + elicitation (asks user before deleting)")
+	log.Printf("  write_haiku    - required task + sampling (asks LLM to write a haiku)")
 
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "tasks-demo",
@@ -158,7 +158,7 @@ func registerTasksDemoTools(srv *server.Server) {
 	// failing_job: required task support. Must be invoked as a task.
 	// Calling without a task hint returns an error. Always fails after a delay.
 	srv.Register(core.TypedTool[struct{}, core.ToolResponse]("failing_job",
-		"A job that always fails after 1 second. Requires task invocation — calling without 'task' hint returns an error.",
+		"A job that always fails after 1 second. Requires task invocation, so calling without a 'task' hint returns an error.",
 		func(ctx core.ToolContext, _ struct{}) (core.ToolResponse, error) {
 			log.Printf("[failing_job] starting (will fail in 1s)...")
 			time.Sleep(1 * time.Second)

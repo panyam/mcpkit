@@ -163,7 +163,7 @@ func TestE2EStreamDelivery(t *testing.T) {
 	case ev := <-got:
 		assert.Equal(t, "discord.message", ev.Name)
 		assert.NotEmpty(t, ev.EventID)
-		assert.NotNil(t, ev.Cursor, "discord.message is cursored — wire MUST carry a non-null cursor")
+		assert.NotNil(t, ev.Cursor, "discord.message is cursored, so the wire MUST carry a non-null cursor")
 	case <-time.After(2 * time.Second):
 		t.Fatal("OnEvent never fired within 2s of yield")
 	}

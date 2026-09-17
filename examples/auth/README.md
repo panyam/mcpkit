@@ -1,14 +1,14 @@
 # Auth Examples
 
-> **Stable** — MCP authorization (base spec): JWT/JWKS validation, Protected Resource Metadata, OAuth discovery, DCR.
+> **Stable** - MCP authorization (base spec): JWT/JWKS validation, Protected Resource Metadata, OAuth discovery, DCR.
 
-MCP servers demonstrating mcpkit's auth capabilities. No external dependencies — no Docker, no Keycloak. Each example spins up an in-process authorization server.
+MCP servers demonstrating mcpkit's auth capabilities. No external dependencies: no Docker, no Keycloak. Each example spins up an in-process authorization server.
 
-> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering public discovery, JWT/JWKS, scope step-up (403 + WWW-Authenticate), and session binding. Run it with `just serve` + `just demo`.
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** - 8-step demokit walkthrough with sequence diagram covering public discovery, JWT/JWKS, scope step-up (403 + WWW-Authenticate), and session binding. Run it with `just serve` + `just demo`.
 
 ## Quick Start
 
-Start with the [unified example](unified/) — one server, all four auth patterns layered together:
+Start with the [unified example](unified/), one server with all four auth patterns layered together:
 
 ```bash
 cd examples/auth
@@ -19,17 +19,17 @@ The server prints tokens and a step-by-step exercise walkthrough. Connect your M
 
 ## What it demonstrates
 
-- **Public discovery** — `tools/list` works without a token (per spec, capability discovery should be permitted pre-auth). Configured via `server.WithPublicMethods(...)`.
-- **JWT/JWKS validation** — protected methods require `Authorization: Bearer <RS256 JWT>`; the MCP server fetches the AS's JWKS and validates signatures via `auth.NewJWTValidator`.
-- **Per-tool scope enforcement** — `core.ToolDef.RequiredScopes` + `auth.NewToolScopeMiddleware` reject calls with insufficient scope. Spec-compliant `HTTP 403` + `WWW-Authenticate: Bearer error="insufficient_scope"` for client-driven step-up.
-- **Session binding** — once a session is established with one user's token, swapping tokens mid-session is rejected to prevent session hijacking. Subject captured at session creation; enforced in the streamable HTTP transport.
-- **Layered usage** — the unified example shows all four patterns running on a single server; the per-pattern sub-binaries (bearer/jwt/scopes/session-binding/public-discovery) are stripped-down fixtures for understanding each pattern in isolation.
+- **Public discovery** - `tools/list` works without a token (per spec, capability discovery should be permitted pre-auth). Configured via `server.WithPublicMethods(...)`.
+- **JWT/JWKS validation** - protected methods require `Authorization: Bearer <RS256 JWT>`; the MCP server fetches the AS's JWKS and validates signatures via `auth.NewJWTValidator`.
+- **Per-tool scope enforcement** - `core.ToolDef.RequiredScopes` + `auth.NewToolScopeMiddleware` reject calls with insufficient scope. Spec-compliant `HTTP 403` + `WWW-Authenticate: Bearer error="insufficient_scope"` for client-driven step-up.
+- **Session binding** - once a session is established with one user's token, swapping tokens mid-session is rejected to prevent session hijacking. Subject captured at session creation; enforced in the streamable HTTP transport.
+- **Layered usage** - the unified example shows all four patterns running on a single server; the per-pattern sub-binaries (bearer/jwt/scopes/session-binding/public-discovery) are stripped-down fixtures for understanding each pattern in isolation.
 
 ## Examples
 
 | Port | Example | Auth Pattern |
 |:----:|---------|-------------|
-| 8080 | [**unified/**](unified/) | **Start here** — JWT + public discovery + scopes + session binding |
+| 8080 | [**unified/**](unified/) | **Start here** - JWT + public discovery + scopes + session binding |
 | 8081 | [bearer/](bearer/) | Static bearer token (simplest possible) |
 | 8082 | [jwt/](jwt/) | RS256 JWT validation via JWKS |
 | 8083 | [scopes/](scopes/) | Scope-based access control |
@@ -66,9 +66,9 @@ See `mcp.json` for a ready-to-use multi-server configuration, or for the unified
 
 ## Related
 
-- `ext/auth/docs/DESIGN.md` — Auth architecture
-- `tests/e2e/` — E2E auth integration tests
-- `tests/keycloak/` — Keycloak interop tests (real OIDC)
+- `ext/auth/docs/DESIGN.md` - Auth architecture
+- `tests/e2e/` - E2E auth integration tests
+- `tests/keycloak/` - Keycloak interop tests (real OIDC)
 
 
 ## Next steps

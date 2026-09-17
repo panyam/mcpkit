@@ -32,7 +32,7 @@ func runDemo() {
 	mcpURL := serverURL + "/mcp"
 	injectURL := serverURL + "/inject"
 
-	demo := demokit.New("MCP Events Extension — Telegram reference walkthrough").
+	demo := demokit.New("MCP Events extension, the Telegram reference walkthrough").
 		Dir("events/telegram").
 		Description("A condensed walkthrough showing the same MCP Events extension wired against a Telegram-shaped event source. The protocol exposition lives in the discord walkthrough; this one focuses on the telegram-specific payload (chat_id, user, text) and the cursored vs cursorless distinction.").
 		Actors(
@@ -41,10 +41,10 @@ func runDemo() {
 			demokit.Actor("Receiver", "Local webhook receiver (this process)"),
 		)
 
-	demo.Section("Setup — two modes",
+	demo.Section("Setup in two modes",
 		"This walkthrough runs against either a test-mode server or a real Telegram bot.",
 		"",
-		"**Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.",
+		"**Option A, test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.",
 		"",
 		"```",
 		"Terminal 1:  just serve                                # server in test mode",
@@ -53,7 +53,7 @@ func runDemo() {
 		"             make inject-typing                        # typing event (cursorless, demo-only)",
 		"```",
 		"",
-		"**Option B — Real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only — see the live step's note for details.",
+		"**Option B, real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only. See the live step's note for details.",
 		"",
 		"```",
 		"Terminal 1:  TELEGRAM_BOT_TOKEN=... just serve         # server in bot mode",
@@ -72,9 +72,9 @@ func runDemo() {
 
 	// --- Step 1: Connect ---
 	demo.Step("Connect to the events server").
-		Arrow("Host", "Server", "POST /mcp — initialize").
+		Arrow("Host", "Server", "POST /mcp, initialize").
 		DashedArrow("Server", "Host", "serverInfo + capabilities").
-		Note("Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.").
+		Note("Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream, so no transport-level wiring is needed in the client.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# initialize: mint the session id, then ack with notifications/initialized
 SID=$(curl -s -X POST http://localhost:8080/mcp \
@@ -109,14 +109,14 @@ if err := c.Connect(); err != nil { /* handle */ }`),
 		DashedArrow("Server", "Host", "notifications/events/active { requestId, cursor }").
 		Arrow("Receiver", "Server", "POST /inject (simulated telegram message)").
 		DashedArrow("Server", "Host", "notifications/events/event { requestId, data: {chat_id, user, text, ...} }").
-		Note("events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.").
+		Note("events/stream is a long-lived per-subscription POST returning SSE. See the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# events/stream: long-lived POST returning SSE; notifications/events/event frames carry chat_id, user, text
-# (mint $SID via initialize first — see the connect step)
+# (mint $SID via initialize first, see the connect step)
 curl -sN -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":1,"method":"events/stream","params":{"name":"telegram.message"}}'`).Default(),
-			demokit.MakeVariant("go", "go", `// events/stream {name:"telegram.message"} — the Stream() helper issues this call.
+			demokit.MakeVariant("go", "go", `// events/stream {name:"telegram.message"}; the Stream() helper issues this call.
 stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
     EventName: "telegram.message",
     OnEvent:   func(ev events.Event) { gotEvent <- ev },
@@ -161,14 +161,14 @@ stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
 	demo.Step("Cursorless: open events/stream for telegram.typing, observe cursor:null").
 		Arrow("Host", "Server", "events/stream { name: telegram.typing }").
 		DashedArrow("Server", "Host", "notifications/events/event { cursor: null }").
-		Note("Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.").
+		Note("Telegram's typing chat-action is ephemeral: no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# events/stream for a cursorless source: notifications/events/event frames carry cursor:null
-# (mint $SID via initialize first — see the connect step)
+# (mint $SID via initialize first, see the connect step)
 curl -sN -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":2,"method":"events/stream","params":{"name":"telegram.typing"}}'`).Default(),
-			demokit.MakeVariant("go", "go", `// events/stream {name:"telegram.typing"} — cursorless source, frames wire as cursor:null.
+			demokit.MakeVariant("go", "go", `// events/stream {name:"telegram.typing"}; cursorless source, frames wire as cursor:null.
 stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
     EventName: "telegram.typing",
     OnEvent:   func(ev events.Event) { gotEvent <- ev },
@@ -221,14 +221,14 @@ stream, err := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{
 		Note(
 			"Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.",
 			"",
-			"- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData — consumer reads `ev.Data.Text`, no re-parsing JSON.",
+			"- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData - consumer reads `ev.Data.Text`, no re-parsing JSON.",
 			"- The only differences from discord: the type parameter and the payload field names.",
 			"- SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).",
 		).
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# events/subscribe in webhook mode; response carries id + refreshBefore but NOT the secret.
 # cursor:null = "from now"; maxAgeMs:300000 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})
-# (mint $SID via initialize first — see the connect step)
+# (mint $SID via initialize first, see the connect step)
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999/hook","secret":"whsec_<client-supplied>"},"cursor":null,"maxAgeMs":300000}}' | jq '.result'`).Default(),
@@ -320,7 +320,7 @@ sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 			"",
 			"Bot setup (BotFather token, chat link) is documented in this demo's README.md.",
 			"",
-			"- No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).",
+			"- No typing parallel here - Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).",
 			"- Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo.",
 			"- --non-interactive mode skips the wait so CI runs aren't slowed.",
 		).
@@ -329,11 +329,11 @@ sub, err := eventsclient.Subscribe(ctx, c, eventsclient.SubscribeOptions{
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Live capture: open events/stream and leave it running; each real Telegram message
 # arrives as a notifications/events/event frame on the SSE response.
-# (server must be in -token mode; mint $SID via initialize first — see the connect step)
+# (server must be in -token mode; mint $SID via initialize first, see the connect step)
 curl -sN -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":4,"method":"events/stream","params":{"name":"telegram.message"}}'`).Default(),
-			demokit.MakeVariant("go", "go", `// events/stream {name:"telegram.message"} — same call as the push step, left open
+			demokit.MakeVariant("go", "go", `// events/stream {name:"telegram.message"}; same call as the push step, left open
 // to capture real messages sent to the bot.
 stream, err := eventsclient.Stream(liveCtx, c, eventsclient.StreamOptions{
     EventName: "telegram.message",

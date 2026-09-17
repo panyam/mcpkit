@@ -1,16 +1,16 @@
 # Telegram Events Example
 
-> ⚠ **Experimental** — MCP Events, a draft extension ([spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1)), built on [experimental/ext/events](../../../experimental/ext/events/). Wire format may change.
+> ⚠ **Experimental** - MCP Events, a draft extension ([spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1)), built on [experimental/ext/events](../../../experimental/ext/events/). Wire format may change.
 
 Reference server demonstrating the [MCP Events spec](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/pull/1) with Telegram as the event source. Built on the [`experimental/ext/events`](../../../experimental/ext/events/) library.
 
-Companion to [Clare Liguori's TypeScript implementation](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/tree/main/telegram-reference-server). Also a lighter mirror of the [discord-events demo](../discord/) — same protocol, different bot SDK.
+Companion to [Clare Liguori's TypeScript implementation](https://github.com/modelcontextprotocol/experimental-ext-triggers-events/tree/main/telegram-reference-server). Also a lighter mirror of the [discord-events demo](../discord/): same protocol, different bot SDK.
 
 ## Walkthrough
 
 A condensed walkthrough focused on the telegram-specific payload shape and the typed Go SDK at [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/). Two ways to run it.
 
-### Option A — Test mode (no Telegram token needed)
+### Option A, Test mode (no Telegram token needed)
 
 All walkthrough steps run; the final live-interaction step skips with a "no token" message.
 
@@ -26,7 +26,7 @@ TEXT=... just inject TEXT="hello world"   # message event (cursored)
 TEXT=... just inject-typing               # typing indicator (cursorless, demo-only — see below)
 ```
 
-### Option B — Real bot mode (requires `TELEGRAM_BOT_TOKEN`)
+### Option B, Real bot mode (requires `TELEGRAM_BOT_TOKEN`)
 
 Same walkthrough plus the final live step captures real message events from a chat with the bot.
 
@@ -36,9 +36,9 @@ just demo                                  # terminal 2 — walkthrough
 # When the live step starts, send a message to your bot in Telegram.
 ```
 
-**Note on typing events**: Telegram's Bot API doesn't expose user typing events to bots — only the bot can send typing chat actions, not the other way around. So `TEXT=... just inject-typing` works as a demo of the cursorless wire shape, but Option B can't capture real typing events. Discord can; see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md) for the live-typing demo.
+**Note on typing events**: Telegram's Bot API doesn't expose user typing events to bots. Only the bot can send typing chat actions, not the other way around. So `TEXT=... just inject-typing` works as a demo of the cursorless wire shape, but Option B can't capture real typing events. Discord can; see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md) for the live-typing demo.
 
-Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `just readme`. For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
+Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md), regenerated via `just readme`. For the full protocol exposition (events/list, poll, secret modes, header modes, the spec's design rationale) see [`../discord/WALKTHROUGH.md`](../discord/WALKTHROUGH.md). This README intentionally skips repeating what's already in the walkthroughs.
 
 > **Going to production?** See [`experimental/ext/events/DEPLOYMENT.md`](../../../experimental/ext/events/DEPLOYMENT.md) for private-cloud / WAF guidance.
 
@@ -46,9 +46,9 @@ Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `
 
 - The same MCP Events extension wire protocol as discord, against a Telegram-shaped event source.
 - Push delivery via `events/stream` (long-lived per-subscription POST returning SSE) carrying the telegram-specific payload (`chat_id`, `user`, `text`).
-- Cursorless event sources (`telegram.typing`) — `cursor: null` on the wire, no replay buffer.
+- Cursorless event sources (`telegram.typing`), so `cursor: null` on the wire and no replay buffer.
 - The typed Go SDK at `experimental/ext/events/clients/go/` consuming the same `Stream()` / `Subscribe()` helpers as discord, just with a different `Data` shape.
-- A `/inject` POST endpoint (wired via `server.WithMux`) that synthesizes events for the test-mode walkthrough — same convention as discord-events.
+- A `/inject` POST endpoint (wired via `server.WithMux`) that synthesizes events for the test-mode walkthrough, the same convention as discord-events.
 
 ## Where to look in the code
 
@@ -59,11 +59,11 @@ Generated walkthrough in [`WALKTHROUGH.md`](WALKTHROUGH.md) — regenerate via `
 - Typed Go SDK: [`experimental/ext/events/clients/go/`](../../../experimental/ext/events/clients/go/)
 - Companion (full-protocol) walkthrough: [`examples/events/discord/`](../discord/)
 
-## Setup — getting a Telegram bot token (Option B only)
+## Setup, getting a Telegram bot token (Option B only)
 
 Skip this section if you're running in test mode (Option A above).
 
-Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`). That's it — no privileged-intent toggles like Discord has.
+Get a bot token from [@BotFather](https://t.me/BotFather) (`/newbot`). That's it. No privileged-intent toggles like Discord has.
 
 ## Architecture
 
@@ -102,7 +102,7 @@ Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + bas
 
 ## Auth posture
 
-Same auto-detect pattern as the discord demo — see [`../discord/README.md`](../discord/README.md#auth-posture-demo-escape-vs-real-oidc) for the full env-var contract. TL;DR:
+Same auto-detect pattern as the discord demo. See [`../discord/README.md`](../discord/README.md#auth-posture-demo-escape-vs-real-oidc) for the full env-var contract. TL;DR:
 
 ```bash
 just serve                                                      # demo posture (anonymous escape)
@@ -116,7 +116,7 @@ Server logs which posture is active at startup.
 | Target | Description |
 |--------|-------------|
 | `just serve` | Start the server (with bot if `TELEGRAM_BOT_TOKEN` set; test mode otherwise) |
-| `just demo` | Run the demokit walkthrough — `--tui` mode |
+| `just demo` | Run the demokit walkthrough - `--tui` mode |
 | `just readme` | Regenerate `WALKTHROUGH.md` from the demo step definitions |
 | `just build` | Build the binary |
 | `just test` | Go tests |
@@ -124,12 +124,12 @@ Server logs which posture is active at startup.
 | `TEXT=... just inject-typing` | Inject a cursorless typing event (optional: `USER_NAME=`, `CHAT_ID=`) |
 | `make list` | Show server capabilities via Python client |
 | `make listen` | Python SSE push listener |
-| `make webhook` | Python webhook receiver — subscribe + auto-refresh, receive HMAC-signed POSTs |
+| `make webhook` | Python webhook receiver - subscribe + auto-refresh, receive HMAC-signed POSTs |
 | `make poll` | Python polling loop (default 5s interval, override: `INTERVAL=10`) |
 
 All Python clients share the [`events_client.py`](../../../experimental/ext/events/clients/python/events_client.py) helper.
 
 ## Next steps
 
-- [Discord events — same protocol, different source](../discord/)
+- [Discord events - same protocol, different source](../discord/)
 - [Events library](../../../experimental/ext/events/)

@@ -87,7 +87,7 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("MCP Auth — Public Discovery + JWT + Scopes + Session Binding").
+	demo := demokit.New("MCP Auth: public discovery, JWT, scopes and session binding").
 		Dir("auth").
 		Description("Walks through auth patterns layered on a single mcpkit server: public method allowlist, JWT/JWKS validation, per-tool scope enforcement, and session hijacking prevention.").
 		Actors(
@@ -106,10 +106,10 @@ func runDemo() {
 	)
 
 	demo.Section("Auth patterns covered",
-		"1. **Public discovery** — `tools/list` works *without* a token (per spec, capability discovery should be permitted pre-auth).",
-		"2. **JWT authentication** — protected methods require `Authorization: Bearer <RS256 JWT>`. The MCP server fetches the AS's JWKS and validates signatures.",
-		"3. **Scope enforcement** — `write-tool` requires `write` scope; `admin-tool` requires `admin`. Missing scopes → HTTP 403 + `WWW-Authenticate: Bearer error=\"insufficient_scope\"`.",
-		"4. **Session binding** — once a session is established with one user's token, requests on that session must come from the same subject. Swapping tokens mid-session is rejected to prevent session hijacking.",
+		"1. **Public discovery** - `tools/list` works *without* a token (per spec, capability discovery should be permitted pre-auth).",
+		"2. **JWT authentication** - protected methods require `Authorization: Bearer <RS256 JWT>`. The MCP server fetches the AS's JWKS and validates signatures.",
+		"3. **Scope enforcement** - `write-tool` requires `write` scope; `admin-tool` requires `admin`. Missing scopes → HTTP 403 + `WWW-Authenticate: Bearer error=\"insufficient_scope\"`.",
+		"4. **Session binding** - once a session is established with one user's token, requests on that session must come from the same subject. Swapping tokens mid-session is rejected to prevent session hijacking.",
 	)
 
 	var (
@@ -132,7 +132,7 @@ TOK_READ=$(echo "$BOOT" | jq -r .tok_read)
 TOK_RW=$(echo "$BOOT" | jq -r .tok_read_write)
 TOK_BOB=$(echo "$BOOT" | jq -r .tok_bob)
 echo "MCP=$MCP"`).Default(),
-			demokit.MakeVariant("go", "go", `// Demo shortcut — production hosts would run OAuth instead.
+			demokit.MakeVariant("go", "go", `// Demo shortcut; production hosts would run OAuth instead.
 resp, _ := http.Get(serverURL + "/demo/bootstrap")
 defer resp.Body.Close()
 var boot bootstrapInfo
@@ -160,11 +160,11 @@ json.NewDecoder(resp.Body).Decode(&boot)
 
 	// --- Step 2: Public Discovery ---
 	demo.Step("Public discovery: tools/list without a token").
-		Arrow("Host", "Server", "POST /mcp — initialize + tools/list (no Authorization header)").
+		Arrow("Host", "Server", "POST /mcp, initialize + tools/list (no Authorization header)").
 		DashedArrow("Server", "Host", "tool list (3 tools, even without auth)").
 		Note("The server is configured with WithPublicMethods(\"initialize\", \"notifications/initialized\", \"tools/list\", \"prompts/list\", \"ping\"). These bypass the auth check so an unauthenticated client can discover what's available before requesting a token.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `# Mint a session (no Authorization header — initialize is public) and capture
+			demokit.MakeVariant("curl", "bash", `# Mint a session (no Authorization header, initialize is public) and capture
 # the session id, then call the public tools/list.
 SID=$(curl -s -X POST "$MCP" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
@@ -176,7 +176,7 @@ curl -s -X POST "$MCP" \
 curl -s -X POST "$MCP" \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | jq '.result.tools | length'`).Default(),
-			demokit.MakeVariant("go", "go", `// No bearer token — tools/list is in the server's WithPublicMethods set.
+			demokit.MakeVariant("go", "go", `// No bearer token; tools/list is in the server's WithPublicMethods set.
 c := client.NewClient(boot.MCPURL,
     core.ClientInfo{Name: "demo-host-anon", Version: "1.0"},
 )
@@ -295,7 +295,7 @@ text, _ := readClient.ToolCall("echo", map[string]any{"message": "hello"})`),
 	demo.Step("Call write-tool with read-only token → 403 + insufficient_scope").
 		Arrow("Host", "Server", "tools/call: write-tool + Bearer alice/[read]").
 		DashedArrow("Server", "Host", "HTTP 403 + WWW-Authenticate: Bearer error=\"insufficient_scope\", scope=\"write\"").
-		Note("write-tool declares RequiredScopes: [\"write\"] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header — the client's RFC 6750 parser auto-populates RequiredScopes.").
+		Note("write-tool declares RequiredScopes: [\"write\"] on its ToolDef. The auth.NewToolScopeMiddleware short-circuits the request with HTTP 403 + WWW-Authenticate before the handler runs (per SEP-2643 UC2 + RFC 6750). Scope info is in the header, and the client's RFC 6750 parser auto-populates RequiredScopes.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Same read-token session ($SID). write-tool needs the "write" scope the token
 # lacks → 403 + WWW-Authenticate: Bearer error="insufficient_scope", scope="write".
@@ -325,11 +325,11 @@ if errors.As(err, &authErr) {
 
 	// --- Step 6: Step up to read+write → write-tool succeeds ---
 	demo.Step("Reconnect with read+write token → write-tool succeeds").
-		Arrow("Host", "Server", "POST /mcp — initialize + Bearer alice/[read write]").
+		Arrow("Host", "Server", "POST /mcp, initialize + Bearer alice/[read write]").
 		DashedArrow("Server", "Host", "new session").
 		Arrow("Host", "Server", "tools/call: write-tool").
 		DashedArrow("Server", "Host", "ok").
-		Note("New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step — see examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.").
+		Note("New session with the broader token. write-tool runs because the token includes write. Scope step-up in real systems is driven by the WWW-Authenticate response from the previous step. See examples/fine-grained-auth/ for the full SEP-2643 UC2 flow.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# New session with the read+write token; now write-tool succeeds.
 SID_RW=$(curl -s -X POST "$MCP" \
@@ -342,7 +342,7 @@ curl -s -X POST "$MCP" \
 curl -s -X POST "$MCP" \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID_RW" -H "Authorization: Bearer $TOK_RW" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write-tool","arguments":{"data":"hello write"}}}' | jq '.result'`).Default(),
-			demokit.MakeVariant("go", "go", `// A second client with the broader token — the read token's session is untouched.
+			demokit.MakeVariant("go", "go", `// A second client with the broader token; the read token's session is untouched.
 readWriteClient = client.NewClient(boot.MCPURL,
     core.ClientInfo{Name: "demo-host-alice-rw", Version: "1.0"},
     client.WithClientBearerToken(boot.TokReadWrite),
@@ -404,7 +404,7 @@ if errors.As(err, &authErr) {
 	demo.Step("Session binding: bob's token on alice's session → rejected").
 		Arrow("Host", "Server", "tools/call: echo + Mcp-Session-Id=<alice's> + Bearer bob/[all]").
 		DashedArrow("Server", "Host", "HTTP 403 (subject mismatch)").
-		Note("mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob's token is independently valid (correct signature, fresh, has all scopes), it doesn't match alice's bound session — so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.").
+		Note("mcpkit binds the principal (Claims.Subject) to the session at creation time. Subsequent requests on the same session must come from the same subject. Even though bob's token is independently valid (correct signature, fresh, has all scopes), it doesn't match alice's bound session, so the request is rejected. This prevents an attacker who steals a session ID from using their own valid token to take over.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Replay alice's session id ($SID) but with bob's (independently valid) token.
 # The session is bound to alice's subject, so the swap is rejected with 403.
@@ -442,8 +442,8 @@ resp, _ := http.DefaultClient.Do(req) // resp.StatusCode == 403`),
 
 	demo.Section("Where each pattern lives in the code",
 		"- Public methods: `server.WithPublicMethods(...)`",
-		"- JWT/JWKS validation: `auth.NewJWTValidator(JWTConfig{JWKSURL: ...})` — `ext/auth/jwt_validator.go`",
-		"- Per-tool scopes: `core.ToolDef.RequiredScopes` + `auth.NewToolScopeMiddleware(reg)` — `ext/auth/scope_middleware.go`",
+		"- JWT/JWKS validation: `auth.NewJWTValidator(JWTConfig{JWKSURL: ...})` - `ext/auth/jwt_validator.go`",
+		"- Per-tool scopes: `core.ToolDef.RequiredScopes` + `auth.NewToolScopeMiddleware(reg)` - `ext/auth/scope_middleware.go`",
 		"- Session binding: enforced in `server/streamable_transport.go` (verifyPrincipal); subject is captured at session creation",
 	)
 

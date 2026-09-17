@@ -1,20 +1,20 @@
-# Examples — Conventions
+# Example conventions
 
 Single source of truth for how an mcpkit example is laid out. Read this before
 adding a new example, auditing an existing one, or upgrading an older one to
 the current standard.
 
-The three skills that operate on examples — `/example-new`, `/example-audit`,
-`/example-upgrade` — all enforce this document. If you change something here,
+The three skills that operate on examples, `/example-new`, `/example-audit`
+and `/example-upgrade`, all enforce this document. If you change something here,
 re-run `/example-audit` across `examples/` to find drift.
 
 Reference examples (the canon):
 
-- `examples/file-inputs/` — non-UI, scripted walkthrough, static fixtures.
-- `examples/events/discord/` — non-UI, scripted walkthrough, live event injection.
-- `examples/apps/vanilla/` — UI / MCP Apps (host-driven, no scripted walkthrough).
+- `examples/file-inputs/` - non-UI, scripted walkthrough, static fixtures.
+- `examples/events/discord/` - non-UI, scripted walkthrough, live event injection.
+- `examples/apps/vanilla/` - UI / MCP Apps (host-driven, no scripted walkthrough).
 
-**Documented exception — `examples/getting-started/`.** This is the minimal
+**Documented exception, `examples/getting-started/`.** This is the minimal
 quickstart the docs-site Get Started guide extracts snippets from. It is
 deliberately **not** a demokit walkthrough and does **not** use
 `examples/common`: it is a plain `server/` + `client/` pair whose only
@@ -38,7 +38,7 @@ examples/<name>/
 ├── README.md             # hand-curated narrative
 ├── Makefile              # demo / serve / readme / build (+ example-specific extras)
 ├── go.mod / go.sum       # local replaces for mcpkit / demokit
-└── testdata/             # optional — only if the walkthrough needs static fixtures
+└── testdata/             # optional, only if the walkthrough needs static fixtures
 ```
 
 ### UI examples (MCP Apps)
@@ -46,14 +46,14 @@ examples/<name>/
 ```
 examples/<name>/
 ├── main.go               # single-mode: just runs the server (no scripted walkthrough)
-├── <app>.html            # the iframe payload — uses {{ template "mcpkit-bridge" .Bridge }}
+├── <app>.html            # the iframe payload, uses {{ template "mcpkit-bridge" .Bridge }}
 ├── README.md             # carries setup + sequence diagrams + screenshots in lieu of WALKTHROUGH.md
 ├── Makefile              # at minimum a `run` (or `serve`) target
 ├── go.mod / go.sum
-└── screenshots/          # optional — visual proof of the rendered UI
+└── screenshots/          # optional, visual proof of the rendered UI
 ```
 
-UI examples **do not** have `walkthrough.go` or `WALKTHROUGH.md` — the host
+UI examples **do not** have `walkthrough.go` or `WALKTHROUGH.md`, because the host
 (MCPJam, Claude Desktop) drives interaction, not demokit. See §7 for the full
 UI addendum.
 
@@ -97,7 +97,7 @@ func main() {
   `--serve`, `--input-timeout`); pass extra `demokit.BoolFlag(...)` /
   `demokit.ValueFlag(...)` for the example's own flags. **Note:** demokit
   declares `--serve` as a value flag (its live-demo web mode), but examples use
-  bare `--serve` as a dual-mode dispatch trigger — pass `demokit.BoolFlag("--serve")`
+  bare `--serve` as a dual-mode dispatch trigger, so pass `demokit.BoolFlag("--serve")`
   to override the built-in. Canonical shape:
   ```go
   flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
@@ -106,7 +106,7 @@ func main() {
       // ... example-specific extras
   ))
   ```
-  Renderer / mode predicates use `demokit.IsTUI()` and `demokit.IsNonInteractive()` —
+  Renderer / mode predicates use `demokit.IsTUI()` and `demokit.IsNonInteractive()`,
   no hand-rolled `os.Args` scans.
 - The full bootstrap-and-serve loop comes from `common.RunServer`. Construct
   the canonical baseline (listen + logger + middleware), register tools, log
@@ -136,13 +136,13 @@ func main() {
   - `Register` runs after `NewServer` so it has the `*server.Server` for
     `RegisterTool` / `UseMiddleware` / extension registration.
   - `TransportOptions` appends `server.TransportOption`s after
-    `WithStreamableHTTP(true)` at `ListenAndServe` time — use for
+    `WithStreamableHTTP(true)` at `ListenAndServe` time, used for
     `WithStatelessMode`, `WithMux`, `WithHandlerWrap`, `WithSSE`, etc.
-  - `Logger` (optional `*log.Logger`) — when set, RunServer skips
+  - `Logger` (optional `*log.Logger`) - when set, RunServer skips
     `MCPServerOptions` and uses `WithMCPLogging(Logger)` instead, so
     callers that need custom color rules (`NewMCPLogger(prefix, extras...)`)
     keep their handle.
-  - `TracerProvider` (optional `core.TracerProvider`) — when non-nil,
+  - `TracerProvider` (optional `core.TracerProvider`) - when non-nil,
     wires `server.WithTracerProvider(cfg.TracerProvider)` into the
     baseline. Pass the result of `commonotel.SetupTelemetry` directly
     (it returns the mcpotel-wrapped provider). See §Telemetry wiring
@@ -152,7 +152,7 @@ func main() {
   webhook listeners, multiple servers in one process), fall back to
   manual `common.MCPServerOptions(*addr, "[mcp] ")` + `server.NewServer`
   + `srv.ListenAndServe(...)`. The canonical exception today is
-  `examples/events/discord/` — see its `main.go` for why.
+  `examples/events/discord/`; see its `main.go` for why.
 
 ### Telemetry wiring
 
@@ -160,19 +160,19 @@ Every example exposes the same `--exporter` / `--otlp-endpoint` flag
 pair via `common.RegisterTelemetryFlags(flag.CommandLine)`, then
 calls `commonotel.SetupTelemetry(ctx, ...)` and threads the result
 into `common.ServerConfig.TracerProvider`. Default `--exporter=""`
-returns `core.NoopTracerProvider{}` (zero overhead, no spans) — an
+returns `core.NoopTracerProvider{}` (zero overhead, no spans), an
 operator opts in per invocation. No example dumps spans to stdout
 unless explicitly asked.
 
 `--exporter` accepts four values:
 
-- `""` (default) — `core.NoopTracerProvider{}`. Zero overhead.
-- `stdout` — `stdouttrace` exporter writing to `os.Stdout`. Teaching
+- `""` (default) - `core.NoopTracerProvider{}`. Zero overhead.
+- `stdout` - `stdouttrace` exporter writing to `os.Stdout`. Teaching
   / demo mode.
-- `otlp` — `otlptracegrpc` exporter to `--otlp-endpoint` (default
+- `otlp` - `otlptracegrpc` exporter to `--otlp-endpoint` (default
   `localhost:4317`). If the endpoint is unreachable, falls back to
   Noop with a log warning.
-- `auto` — probe the OTLP endpoint; if reachable, behave like
+- `auto` - probe the OTLP endpoint; if reachable, behave like
   `otlp`; if not, fall back to Noop **silently** (no warning). Right
   pick for examples that may or may not have the local
   `docker/observability/` stack running.
@@ -222,11 +222,11 @@ func serve() {
 
 The `--exporter` / `--otlp-endpoint` flags pass through
 `demokit.FilterArgs` unstripped (they're not in demokit's default
-strip set), so they reach the stdlib `flag.Parse` naturally — no
+strip set), so they reach the stdlib `flag.Parse` naturally, with no
 `demokit.ValueFlag(...)` registration needed.
 
 When `--exporter=otlp` is selected and the endpoint is unreachable,
-SetupTelemetry logs a warning and falls back to Noop — a dead
+SetupTelemetry logs a warning and falls back to Noop, so a dead
 `docker/observability/` stack never breaks `just demo`. Bring the
 stack up with `cd docker/observability && just up` before the OTLP
 path lights up in Grafana.
@@ -247,12 +247,12 @@ doesn't call `flag.Parse` uses `common.WireFromArgs()` (mirrors
 `--wire` drives BOTH halves of a demo binary so the server and the
 walkthrough client agree on one knob:
 
-- `--wire=legacy` — server `ModeLegacyOnly` + client `ClientModeLegacyOnly`
-- `--wire=dual` — server `ModeDual` + client `ClientModeAdaptive` (dual is
+- `--wire=legacy` - server `ModeLegacyOnly` + client `ClientModeLegacyOnly`
+- `--wire=dual` - server `ModeDual` + client `ClientModeAdaptive` (dual is
   the only asymmetric mapping: a Dual server speaks both wires, so the
   client probes then falls back)
-- `--wire=stateless` — server `ModeStateless` + client `ClientModeStateless`
-- `--wire=""` (default) — make no selection; each side falls through to
+- `--wire=stateless` - server `ModeStateless` + client `ClientModeStateless`
+- `--wire=""` (default) - make no selection; each side falls through to
   `MCPKIT_STATELESS_MODE` / `MCPKIT_CLIENT_MODE` env or its package default
   (server `ModeDual`, client `ClientModeLegacyOnly`)
 
@@ -298,8 +298,8 @@ not the `ModeDual` fall-through `--wire=""` would give.
 
 ### Dual-mode posture (SEP-2575)
 
-Every new non-UI example MUST work on both wires — the legacy session wire
-and the SEP-2575 stateless wire — because servers default to `ModeDual`.
+Every new non-UI example MUST work on both wires, the legacy session wire
+and the SEP-2575 stateless wire, because servers default to `ModeDual`.
 `just verify-dual` enforces this for the auto-drivable examples;
 `examples/DUAL_MODE_AUDIT.md` records the per-example verdict.
 
@@ -329,7 +329,7 @@ stateless path that can't exist.
 
 #### Client-side wiring (walkthrough.go)
 
-Walkthroughs (runDemo) typically don't call `flag.Parse` — they rely
+Walkthroughs (runDemo) typically don't call `flag.Parse`; they rely
 on `common.ServerURL`'s ad-hoc `os.Args` scan for `--url`. The
 symmetric helper for telemetry is `common.ExporterFromArgs()`, which
 scans `os.Args` for `--exporter` / `--otlp-endpoint` and returns the
@@ -376,7 +376,7 @@ each stitched trace.
 
 For walkthroughs that DO call `flag.Parse` (e.g. when they need
 example-specific flags), use `common.RegisterTelemetryFlags(flag.CommandLine)`
-instead of `ExporterFromArgs` — both populate the same struct shape.
+instead of `ExporterFromArgs`; both populate the same struct shape.
 
 #### Metrics wiring (issue 668)
 
@@ -387,11 +387,11 @@ emits the four canonical MCP server instruments through the issue 7
 `mcp.tool.duration` (ms), `mcp.sessions.active`. Modes mirror
 `SetupTelemetry`:
 
-- `""` (default) — `core.NoopMeterProvider{}`. Zero overhead.
-- `stdout` — `stdoutmetric` exporter wrapped in a 5s periodic reader.
-- `otlp` — `otlpmetricgrpc` exporter to `--otlp-endpoint`. Dial-failure
+- `""` (default) - `core.NoopMeterProvider{}`. Zero overhead.
+- `stdout` - `stdoutmetric` exporter wrapped in a 5s periodic reader.
+- `otlp` - `otlpmetricgrpc` exporter to `--otlp-endpoint`. Dial-failure
   falls back to Noop with a warning.
-- `auto` — same as `otlp` but silent on dial-failure.
+- `auto` - same as `otlp` but silent on dial-failure.
 
 Canonical wiring inside `serve()` (extends the trace + logs setup):
 
@@ -418,9 +418,9 @@ pivot to the matching trace in Tempo.
 
 #### Grafana dashboards (issue 668)
 
-**Canonical first.** The bundled [`mcpkit — overview`](http://localhost:3000/d/mcpkit-overview)
+**Canonical first.** The bundled [`mcpkit overview`](http://localhost:3000/d/mcpkit-overview)
 dashboard (stable permalink `/d/mcpkit-overview`) works for ANY example
-that emits the four canonical instruments — pick the example from the
+that emits the four canonical instruments, so pick the example from the
 `$service` dropdown, the rest of the panels rescope automatically.
 The four canonical instruments + the `tool` / `code` attributes are
 the shared contract, so no per-example wiring is needed to see
@@ -428,7 +428,7 @@ metrics on day one.
 
 **Per-example dashboards are an escape hatch**, NOT the default.
 Reach for one only when an example surfaces metrics the canonical
-dashboard can't express — e.g., `ext/tasks` task-lifecycle panels,
+dashboard can't express, e.g. `ext/tasks` task-lifecycle panels,
 `events` replica fanout, `apps` iframe-bridge latency. Most examples
 will never need one.
 
@@ -444,7 +444,7 @@ When an example DOES need its own dashboard, the convention is:
   server (`<example>`) plus the walkthrough host (`<example>-host`).
 
 A scaling story (Make-driven template + manifest generator) is
-tracked on issue 737 — fires when more than one example needs a
+tracked on issue 737, which fires when more than one example needs a
 specialized dashboard. Today, per-example dashboards are
 hand-checked-in copies (fine for 0-3 of them).
 
@@ -456,15 +456,15 @@ the LGTM stack the dashboards consume.
 The same `--exporter` / `--otlp-endpoint` flag pair drives an optional
 `commonotel.SetupLogs(...)` call. When set, log records emitted via
 `slog.*Context(ctx, ...)` ship to the configured OTLP endpoint and
-carry `trace_id` / `span_id` stamped by the otelslog bridge — the
+carry `trace_id` / `span_id` stamped by the otelslog bridge, so the
 Loki↔Tempo pivot in Grafana. Modes mirror `SetupTelemetry`:
 
-- `""` (default) — `slog.Default()`. No OTLP side, no SDK pulled.
-- `stdout` — `stdoutlog` exporter → otelslog bridge. JSON records on
+- `""` (default) - `slog.Default()`. No OTLP side, no SDK pulled.
+- `stdout` - `stdoutlog` exporter → otelslog bridge. JSON records on
   the configured writer (default `os.Stdout`).
-- `otlp` — `otlploggrpc` exporter → otelslog bridge. Dial-failure
+- `otlp` - `otlploggrpc` exporter → otelslog bridge. Dial-failure
   falls back to `slog.Default()` with a warning.
-- `auto` — same as `otlp` but silent on dial-failure.
+- `auto` - same as `otlp` but silent on dial-failure.
 
 Canonical wiring inside `serve()` (extends the trace setup above):
 
@@ -480,7 +480,7 @@ slog.SetDefault(logsLogger)
 ```
 
 Tool handlers then log via `slog.InfoContext(ctx, "msg", "k", "v")`
-— **always pass ctx**, otherwise the bridge can't read the active
+so **always pass ctx**, otherwise the bridge can't read the active
 span and Grafana shows the log line without a trace pivot.
 
 `commonotel.SetupClientLogs(...)` is the walkthrough-side sibling
@@ -494,7 +494,7 @@ span and Grafana shows the log line without a trace pivot.
 
 - Side endpoints (e.g. `/inject` for synthetic events) go through
   `server.WithMux(func(mux *http.ServeMux) { ... })` (in `TransportOptions`)
-  — not a hand-rolled `http.Server{}`. Graceful shutdown is built into
+  and not a hand-rolled `http.Server{}`. Graceful shutdown is built into
   `srv.ListenAndServe` via `gohttp.ListenAndServeGraceful`; **never** call
   `http.ListenAndServe` directly.
 
@@ -503,7 +503,7 @@ span and Grafana shows the log line without a trace pivot.
 The five-rule set lives in `examples/common/logger.go` (see
 `common.NewMCPLogger`). Examples consume it through the helper rather than
 inlining the rule list. If a future change adjusts the rules, every example
-picks it up via `examples/common` — that's the single point of update.
+picks it up via `examples/common`, the single point of update.
 
 Tint additional example-specific lines via the variadic extras:
 
@@ -518,26 +518,26 @@ logger := common.NewMCPLogger("[mcp] ",
 Prefer typed registration for tools with real inputs: define an input struct
 and register via `srv.Register(core.TextTool[In](...))` or
 `core.TypedTool[In, Out](...)`. mcpkit derives the JSON Schema from the struct
-tags and hands the handler a decoded, validated value — no hand-written
+tags and hands the handler a decoded, validated value, with no hand-written
 `map[string]any` schema, no `req.Bind` / `json.Unmarshal(req.Arguments)`. Pick
 `Out` by what the handler returns: `string` (→ `TextTool`), `core.ToolResult`
 (sync with `IsError` / structured content), or `core.ToolResponse` (MRTR / task
 variants). `examples/getting-started` is the reference shape.
 
-Raw `srv.RegisterTool(core.ToolDef{...}, handler)` is still correct — do **not**
-force a conversion — in these cases:
+Raw `srv.RegisterTool(core.ToolDef{...}, handler)` is still correct, and you should **not**
+force a conversion, in these cases:
 
 - **The handler needs the raw `core.ToolRequest`.** MRTR / task-composition
   handlers (`examples/mrtr`, `examples/tasks-v2`'s `test_tool_with_task`) drive
   `ctx.RequestInput` / `ctx.InputResponse` and return `core.ToolResponse`; a
   typed input struct adds nothing.
-- **The schema needs JSON Schema features struct tags can't express** —
+- **The schema needs JSON Schema features struct tags can't express**,
   conditional `if/then/else`, `allOf`/`anyOf`, `$anchor`/`$ref`, or the
   SEP-2356 `x-mcp-file` marker (`examples/file-inputs`). Use
   `core.WithInputSchemaOverride(...)` with a typed handler, or stay raw.
 - **The tool is a conformance fixture whose wire schema is asserted.** Convert
   to a typed handler but pin the exact schema with
-  `core.WithInputSchemaOverride(...)` — `TypedTool`'s reflected schema adds
+  `core.WithInputSchemaOverride(...)`, since `TypedTool`'s reflected schema adds
   `$schema` + `properties:{}`, which can drift an asserted `tools/list` shape.
   `examples/stateless` does this; verify with the relevant `just testconf-*`.
 
@@ -613,7 +613,7 @@ demo.Step("<Title>").
     })
 ```
 
-A `nil` return means "step succeeded with no message" — the canonical
+A `nil` return means "step succeeded with no message", the canonical
 shape across examples. Examples that want to surface a custom status or
 jump to a specific next step return a non-nil `*demokit.StepResult` (see
 `demokit/result.go`).
@@ -622,7 +622,7 @@ jump to a specific next step return a non-nil `*demokit.StepResult` (see
 
 `Note(...)` is the step's prose explanation, rendered as wrapped
 paragraphs in the TUI box and the plain renderer. Inline backticks render
-as literal backticks inside the bordered box — they do not become syntax
+as literal backticks inside the bordered box; they do not become syntax
 highlighting. When the audience needs to see an actual call shape, a
 multi-line snippet, or a shell command, attach a `Verbatim(label,
 content)` (or `VerbatimLang` / `Shell` / `VerbatimVariants`) block. The
@@ -634,13 +634,13 @@ mentioned in passing (e.g., "the Provider", "Connect") reads fine
 without backticks. The thing to lift is anything that resembles code you
 could copy and run.
 
-Bad — call shape rendered as backtick-bracketed prose:
+Bad, with the call shape rendered as backtick-bracketed prose:
 
 ```go
 .Note("`client.NewClient(..., client.WithClientMode(mode))` then `Connect()`. Inspect `c.UsingStatelessWire()` after the call.").
 ```
 
-Good — prose explains intent, Verbatim carries the shape:
+Good, where prose explains intent and Verbatim carries the shape:
 
 ```go
 .Note("Construct the client with the chosen wire mode, then connect. Inspect the new accessor after the call to see which wire engaged.").
@@ -651,22 +651,22 @@ c.Connect()
 wire := c.UsingStatelessWire()`).
 ```
 
-Shell commands take the same shape via the `Shell(content)` shorthand —
+Shell commands take the same shape via the `Shell(content)` shorthand,
 `Shell` is `VerbatimLang("", "bash", content)` and is the right pick for
 copy-pasteable `make` / `curl` / `bash` invocations. The
 `VerbatimVariants("Reproduce on the wire", ...)` block below is a
 specialized form for steps that issue an MCP call.
 
-### Verbatim variants — "Reproduce on the wire"
+### Verbatim variants and "Reproduce on the wire"
 
 Every step that makes an MCP call attaches a `VerbatimVariants("Reproduce on
 the wire", ...)` block, chained between `.Note(...)` and `.Run(...)`. Two
 variants per call step:
 
-- `curl` (marked `.Default()`) — raw JSON-RPC over HTTP, copy-pasteable.
+- `curl` (marked `.Default()`) - raw JSON-RPC over HTTP, copy-pasteable.
   Shows the wire format directly so readers can validate behaviour from a
   non-Go SDK or sanity-check the JSON shape.
-- `go` — the equivalent `*client.Client` form, mirroring what the step's
+- `go` - the equivalent `*client.Client` form, mirroring what the step's
   `Run` closure actually does.
 
 ```go
@@ -682,13 +682,13 @@ Run(func(ctx demokit.StepContext) ...
 ```
 
 The curl variants chain shell vars (`$SID`, `$TOK_*`, etc.) set up by an
-earlier step — the first call-making step mints the session id via the
+earlier step, since the first call-making step mints the session id via the
 standard initialize + `notifications/initialized` ack pattern. See
 `examples/elicitation/main.go` and `examples/fine-grained-auth/main.go`
 for canonical chains.
 
 Default markdown output (the form written to `WALKTHROUGH.md`) shows only
-the curl variant — `walkthrough-md-fresh` runs `go run . --doc md` with no
+the curl variant; `walkthrough-md-fresh` runs `go run . --doc md` with no
 `--variant` flag and asserts that. Pass `--variant=go` or `--variant=all`
 at the CLI to render the Go form; TUI / notebook renderers surface both
 with copyable variant labels regardless.
@@ -700,7 +700,7 @@ comment.
 
 If your `Run` body needs to call something that takes a
 `context.Context` (e.g. `client.CallToolWithInputs`), do **not** name a
-local variable `ctx` — the parameter is already named `ctx` and shadows
+local variable `ctx`, because the parameter is already named `ctx` and shadows
 won't compile via `:=`. Use `bgCtx := context.Background()` or pull from
 the demokit-provided `ctx.Ctx` (which honors `Timeout` / `Cancellable`).
 
@@ -709,12 +709,12 @@ the demokit-provided `ctx.Ctx` (which honors `Timeout` / `Cancellable`).
 - Connect once per walkthrough; close at the end (`defer c.Close()` or
   explicit `if c != nil { c.Close() }` after `demo.Execute()`).
 - Use `*client.Client` from `github.com/panyam/mcpkit/client`, not raw HTTP.
-- Pretty-print the **raw** JSON (`res.Raw`) — never the typed struct. The
+- Pretty-print the **raw** JSON (`res.Raw`), never the typed struct. The
   point is to show the wire format.
 - For error paths: render the JSON-RPC error via `common.PrintRPCError(err,
   wantReason)`. Pass `wantReason=""` for plain rendering; pass a non-empty
   string when the demo wants to assert that `err.Data["reason"]` matches a
-  spec-defined value (a WARN line is printed on mismatch — useful for
+  spec-defined value (a WARN line is printed on mismatch, useful for
   spec-validation demos where wire-shape regressions should surface in
   stdout, not just in the conformance suite).
 
@@ -726,7 +726,7 @@ the demokit-provided `ctx.Ctx` (which honors `Timeout` / `Cancellable`).
   `/inject` POST endpoint via `server.WithMux` and have the walkthrough
   `POST` to it.
 
-Pick whichever the example actually needs — both are first-class.
+Pick whichever the example actually needs; both are first-class.
 
 ---
 
@@ -748,31 +748,31 @@ examples/tutorials track (issue 508), so they should read as tutorials, not
 just reference. Required sections (in order):
 
 1. **Title + one-paragraph what-this-is**
-2. **Status line** — a one-line blockquote directly under the title stating
+2. **Status line** - a one-line blockquote directly under the title stating
    maturity and the spec it tracks, so a reader sees at a glance whether the
    feature is stable or experimental (mcpkit ships several draft SEPs ahead of
-   the spec — say so). Format:
-   - Stable, merged SEP: `> **Stable** — implements [SEP-N](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/N) (<Name>), merged into the MCP spec.`
-   - Experimental / draft SEP: `> ⚠ **Experimental** — tracks [SEP-N](.../pull/N) (<Name>), a draft SEP. Wire format may change.`
-   - Core / no numbered SEP: `> **Stable** — MCP base protocol (<area>).`
+   the spec, say so). Format:
+   - Stable, merged SEP: `> **Stable** - implements [SEP-N](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/N) (<Name>), merged into the MCP spec.`
+   - Experimental / draft SEP: `> ⚠ **Experimental** - tracks [SEP-N](.../pull/N) (<Name>), a draft SEP. Wire format may change.`
+   - Core / no numbered SEP: `> **Stable** - MCP base protocol (<area>).`
 
    The SEP PR is the canonical spec-and-discussion venue (don't invent a Discord
    invite; the repo has none). Use `modelcontextprotocol/modelcontextprotocol/pull/N`,
    not the old `.../specification/...` path.
-3. **Quick Start** — the exact two commands a reader runs (typically
+3. **Quick Start** - the exact two commands a reader runs (typically
    `just serve` in one terminal, `just demo` in another).
-4. **What it demonstrates** — bullet list mapping to the demokit steps.
-5. **Architecture** — Mermaid block-or-sequence diagram if the example has
+4. **What it demonstrates** - bullet list mapping to the demokit steps.
+5. **Architecture** - Mermaid block-or-sequence diagram if the example has
    non-trivial topology (separate processes, webhook callbacks, MCP Apps
    bridge).
-6. **Where to look in the code** — bullet list of `path/file.go:symbol`
+6. **Where to look in the code** - bullet list of `path/file.go:symbol`
    pointers, mirroring the closing `Section()` in `walkthrough.go`.
-7. **Next steps** — 1-3 links pointing the reader onward: the most related
+7. **Next steps** - 1-3 links pointing the reader onward: the most related
    example(s) and the canonical design/migration doc. Use repo-relative links
    (`../other-example/`) so they resolve both on GitHub and on the rendered
    site.
 
-Optional: "What's still pending" (phase tracker), "Setup — getting an API
+Optional: "What's still pending" (phase tracker), "Setup, getting an API
 token", "Recipes" (only if the justfile has more than the baseline four).
 
 ---
@@ -806,7 +806,7 @@ build:
     go build -o <name>-demo .
 ```
 
-- Doc comment on the line above each recipe — discoverable via `just --list`.
+- Doc comment on the line above each recipe, discoverable via `just --list`.
 - `default: demo` so a bare `just` runs the walkthrough.
 - Each directory also keeps its original `Makefile` during the make→just
   transition; targets and recipes must stay name-and-behavior identical.
@@ -815,7 +815,7 @@ build:
   convention is the spaced form for readability.
 - `just note` shells out to `--note`, which `demokit.Mode()` resolves to
   `"notebook"`. `common.SetupRenderer` routes that to
-  `notebookbridge.New()` — wired once centrally, so every walkthrough
+  `notebookbridge.New()`, wired once centrally, so every walkthrough
   inherits notebook mode without per-example renderer glue. Notebook
   output cells render with horizontal-only borders (no vertical bars),
   which keeps streamed output clean to mouse-select and copy.
@@ -823,7 +823,7 @@ build:
 ### Extras (allowed, example-specific)
 
 `test`, `test-race`, integration harnesses, client-tool wrappers, `inject`
-shortcuts — fine to add. Keep them grouped under section comment dividers
+shortcuts, fine to add. Keep them grouped under section comment dividers
 (`# ── Tests ─────────…`) and add them to `.PHONY`.
 
 ### Recipes dispatch; they do not script (C8)
@@ -856,7 +856,7 @@ inline; `echo` banners do not count. Gated by `make check-recipe-complexity`
 
 ---
 
-## 7. UI examples (MCP Apps) — addendum
+## 7. UI examples (MCP Apps): an addendum
 
 UI examples diverge from the non-UI shape because the host (MCPJam, Claude
 Desktop) drives interaction, not demokit. They follow these rules instead:
@@ -868,19 +868,19 @@ Desktop) drives interaction, not demokit. They follow these rules instead:
   you need explicit shutdown control.
 - **`server.WithExtension(&ui.UIExtension{})`** is required.
 - **HTML asset** (`<app>.html`) embedded via `//go:embed` and rendered with
-  `html/template` — `{{ template "mcpkit-bridge" .Bridge }}` injects the
+  `html/template`, where `{{ template "mcpkit-bridge" .Bridge }}` injects the
   bridge JS.
 - **Tool registration** uses `ui.RegisterTypedAppTool(...)` (not plain
   `RegisterTool`) so the host knows the tool ships an app.
 - **README.md replaces WALKTHROUGH.md** for procedural docs:
   - Sequence diagrams (LLM → server, iframe → server, app-provided tools)
     in lieu of demokit-generated ones.
-  - "Try it — Step by Step" with LLM prompts + UI clicks.
+  - "Try it, step by step" with LLM prompts + UI clicks.
   - `screenshots/` directory referenced inline.
 - **Makefile** can be minimal (a single `run: ; go run .` target). If you
   add `serve`, alias it to `run`.
 
-**UI examples must use the same logger as non-UI** —
+**UI examples must use the same logger as non-UI**,
 `demokit.NewColorLogger` with the canonical 5-rule set from §2,
 `server.WithRequestLogging(logger)`, and
 `server.WithMiddleware(server.LoggingMiddleware(logger))`. Even minimal UI
@@ -894,127 +894,127 @@ the code" pointer list.
 ## 8. Audit checklist (for `/example-audit`)
 
 Each check has a **stable ID** in `code-style`. `/example-audit` and
-`/example-upgrade` use these IDs as a contract — renaming one is a breaking
+`/example-upgrade` use these IDs as a contract, so renaming one is a breaking
 change. Items not applicable to a given example are omitted from the audit
 output rather than emitted as N/A.
 
 ### Precondition (both UI and non-UI)
 
-- [ ] `build-broken` — `cd <dir> && go build ./...` succeeds. If this fails,
+- [ ] `build-broken` - `cd <dir> && go build ./...` succeeds. If this fails,
   most other checks (especially `walkthrough-md-fresh`) cannot run; the audit
   emits this finding alone and stops further checks that depend on a working
   build.
 
 ### Non-UI examples
 
-- [ ] `dispatch-loop` — `main.go` has the `--serve` dispatch loop and falls
+- [ ] `dispatch-loop` - `main.go` has the `--serve` dispatch loop and falls
   through to `runDemo()` otherwise.
-- [ ] `logger-colorlogger` — `serve()` uses `demokit.NewColorLogger` (not
+- [ ] `logger-colorlogger` - `serve()` uses `demokit.NewColorLogger` (not
   `log.Default()`, not stdlib `log` only).
-- [ ] `serve-srv-listenandserve` — `serve()` uses `common.RunServer(...)` or
+- [ ] `serve-srv-listenandserve` - `serve()` uses `common.RunServer(...)` or
   `srv.ListenAndServe(...)` (never `http.ListenAndServe(...)`). Prefer
   `common.RunServer` for the canonical bootstrap-and-serve loop; fall back
   to manual `ListenAndServe` only when the example has a documented
   divergence (e.g. `examples/events/discord/`).
-- [ ] `mux-withmux` — side-endpoint registration uses `server.WithMux(...)`,
+- [ ] `mux-withmux` - side-endpoint registration uses `server.WithMux(...)`,
   not a hand-rolled `http.Server{}`. (Skip if the example has no side
   endpoints.)
-- [ ] `filterargs-promoted` — call site uses `demokit.FilterArgs(args, extras...)`
+- [ ] `filterargs-promoted` - call site uses `demokit.FilterArgs(args, extras...)`
   with `BoolFlag("--serve")` to override demokit's value-form `--serve`. No
   inline `filterFlags()` definition remains.
-- [ ] `tui-helper` — `walkthrough.go` uses `common.SetupRenderer(demo)`
+- [ ] `tui-helper` - `walkthrough.go` uses `common.SetupRenderer(demo)`
   before `demo.Execute()` (no inline `os.Args` scan, no hand-rolled
   `if demokit.IsTUI() { demo.WithRenderer(tui.New()) }` block).
-- [ ] `url-helper` — `runDemo()` reads the server URL via
+- [ ] `url-helper` - `runDemo()` reads the server URL via
   `common.ServerURL()` (no inline `for _, arg := range os.Args[1:]`
   scan, no per-example hardcoded `"http://localhost:8080"` default).
-- [ ] `mode-helpers` — mode predicates use `demokit.IsTUI()` /
+- [ ] `mode-helpers` - mode predicates use `demokit.IsTUI()` /
   `demokit.IsNonInteractive()`; no local `tuiMode()` / `nonInteractive()`
   helpers. (Skip `IsNonInteractive` check if the example doesn't reference
   non-interactive mode.)
-- [ ] `client-close` — walkthrough closes the client (`c.Close()` deferred or
+- [ ] `client-close` - walkthrough closes the client (`c.Close()` deferred or
   after `Execute`).
-- [ ] `pretty-print-raw` — **success-path** MCP-call step `Run()` blocks
+- [ ] `pretty-print-raw` - **success-path** MCP-call step `Run()` blocks
   `json.Unmarshal(res.Raw, &v)` and pretty-print, not the typed struct.
   Skip for steps that don't make an MCP call (e.g. a step that calls a
   bootstrap HTTP endpoint to mint demo tokens has no `res.Raw`).
-- [ ] `error-path-helper` — error-path step `Run()` blocks render the
+- [ ] `error-path-helper` - error-path step `Run()` blocks render the
   JSON-RPC error via `common.PrintRPCError(err, wantReason)` (see §3
   "Client logging convention"), not ad-hoc inline `json.MarshalIndent`
   blocks or a per-example `printRPCError` copy. Skip if the example has
   no error-path steps.
-- [ ] `walkthrough-md-fresh` — committed `WALKTHROUGH.md` matches
+- [ ] `walkthrough-md-fresh` - committed `WALKTHROUGH.md` matches
   `go run . --doc md` output (no drift). Note the canonical form takes no
   `--variant` flag, so the committed markdown shows only the curl
   (`.Default()`) variant of each `VerbatimVariants` block.
-- [ ] `makefile-baseline` — Makefile has the five baseline targets (`demo` /
+- [ ] `makefile-baseline` - Makefile has the five baseline targets (`demo` /
   `note` / `serve` / `readme` / `build`) with `## help-text` comments.
-- [ ] `wire-verbatim-variants` — every demo step that makes an MCP call
+- [ ] `wire-verbatim-variants` - every demo step that makes an MCP call
   attaches a `VerbatimVariants("Reproduce on the wire", curl(Default), go)`
   block between `.Note(...)` and `.Run(...)` (see §3 "Verbatim variants").
   Skip steps that don't make a call (bootstrap HTTP, narrative-only).
-- [ ] `makefile-default-goal` — Makefile sets `.DEFAULT_GOAL := demo`.
-- [ ] `readme-quickstart` — README has a Quick Start block with `just serve`
+- [ ] `makefile-default-goal` - Makefile sets `.DEFAULT_GOAL := demo`.
+- [ ] `readme-quickstart` - README has a Quick Start block with `just serve`
   + `just demo`.
-- [ ] `readme-what-it-demonstrates` — README has a "What it demonstrates"
+- [ ] `readme-what-it-demonstrates` - README has a "What it demonstrates"
   bullet list mapping to the walkthrough steps.
-- [ ] `readme-where-to-look` — README has a "Where to look in the code"
+- [ ] `readme-where-to-look` - README has a "Where to look in the code"
   section with `path/file.go:symbol` pointers.
 
 ### UI examples
 
-- [ ] `ui-extension` — `main.go` registers
+- [ ] `ui-extension` - `main.go` registers
   `server.WithExtension(&ui.UIExtension{...})`.
-- [ ] `ui-bridge-template` — HTML asset includes
+- [ ] `ui-bridge-template` - HTML asset includes
   `{{ template "mcpkit-bridge" .Bridge }}`.
-- [ ] `ui-typed-app-tool` — UI tools registered via
+- [ ] `ui-typed-app-tool` - UI tools registered via
   `ui.RegisterTypedAppTool(...)`, not plain `RegisterTool`.
-- [ ] `ui-no-walkthrough` — no `walkthrough.go` / `WALKTHROUGH.md` exist.
-- [ ] `ui-readme-diagrams` — README contains sequence diagrams and references
+- [ ] `ui-no-walkthrough` - no `walkthrough.go` / `WALKTHROUGH.md` exist.
+- [ ] `ui-readme-diagrams` - README contains sequence diagrams and references
   to the `screenshots/` directory.
-- [ ] `logger-colorlogger` — same as non-UI; required even for minimal UI
+- [ ] `logger-colorlogger` - same as non-UI; required even for minimal UI
   examples per §7.
-- [ ] `mux-withmux` — same as non-UI (skip if no side endpoints).
+- [ ] `mux-withmux` - same as non-UI (skip if no side endpoints).
 
 ### Host-side examples
 
 Host-side examples (`host/01-apphost`, `host/02-multi-server`) are
-in-process by construction — see §9. Apply the non-UI walkthrough rules
+in-process by construction; see §9. Apply the non-UI walkthrough rules
 (`tui-helper`, `mode-helpers`, `client-close`, `pretty-print-raw`,
 `error-path-helper`) and the README rules (`readme-quickstart`,
 `readme-what-it-demonstrates`, `readme-where-to-look`). The following
 non-UI checks **do not apply** and must be omitted from the audit output
 (not emitted as `[FAIL]`):
 
-- `dispatch-loop` — host examples are single-mode (no `--serve` branch).
-- `logger-colorlogger` — no HTTP middleware in an in-process demo.
-- `serve-srv-listenandserve` — no HTTP server.
-- `mux-withmux` — no side endpoints.
-- `filterargs-promoted` — only relevant if the example runs its own
+- `dispatch-loop` - host examples are single-mode (no `--serve` branch).
+- `logger-colorlogger` - no HTTP middleware in an in-process demo.
+- `serve-srv-listenandserve` - no HTTP server.
+- `mux-withmux` - no side endpoints.
+- `filterargs-promoted` - only relevant if the example runs its own
   `flag.Parse` for server-side flags.
 
 Plus a host-specific Makefile rule:
 
-- [ ] `host-makefile-baseline` — Makefile has `demo`, `note`, and `readme`
-  targets only (no `serve`, no `build` — there's nothing to start
+- [ ] `host-makefile-baseline` - Makefile has `demo`, `note`, and `readme`
+  targets only (no `serve`, no `build`, since there's nothing to start
   standalone and no binary to ship). `.DEFAULT_GOAL := demo` still
   applies.
 
 ---
 
-## 9. Host-side examples — addendum
+## 9. Host-side examples: an addendum
 
 Host-side examples demonstrate mcpkit's **host-side Go APIs** (`AppHost`,
-`ServerRegistry`, `InProcessAppBridge`, etc.) — i.e. the code an MCP host
+`ServerRegistry`, `InProcessAppBridge`, etc.), i.e. the code an MCP host
 author writes to consume servers and bridge to apps. They follow most of
 the non-UI conventions but with a different process shape:
 
 - **Single-process by construction.** A host example brings up server +
   client + AppHost + (in-process) AppBridge inside one `go run .`
-  invocation. `InProcessAppBridge` is part of what's being demonstrated —
+  invocation. `InProcessAppBridge` is part of what's being demonstrated,
   "you can exercise host code without spinning up an iframe app." There is
   no separate-process server to start, so `just serve` doesn't apply.
-- **`main.go` is single-mode.** No `--serve` flag, no `runDemo()` —
+- **`main.go` is single-mode.** No `--serve` flag, no `runDemo()`,
   `main()` directly constructs the demo and calls `demo.Execute()`.
 - **No HTTP middleware.** All transports are in-process, so
   `WithRequestLogging` / `WithMiddleware(LoggingMiddleware)` aren't wired.
@@ -1023,7 +1023,7 @@ the non-UI conventions but with a different process shape:
   `Srv` / `Client` / `Host` / `Bridge`) instead of the non-UI two-actor
   shape, because the demo's narrative arc traverses both client→server
   and host→bridge legs.
-- **Makefile reduced.** Only `demo`, `note`, and `readme` targets — no
+- **Makefile reduced.** Only `demo`, `note`, and `readme` targets - no
   `serve`, no `build`. `.DEFAULT_GOAL := demo` still applies. `note` loops
   through each contained example with `--note`, mirroring how `demo` loops
   with `--non-interactive` (see `examples/host/Makefile`).
@@ -1034,7 +1034,7 @@ What host examples still share with non-UI:
   JSON pretty-print on success, `printRPCError` helper on errors, client
   closes after `Execute`).
 - `WALKTHROUGH.md` auto-generated via `just readme` → `go run . --doc md`.
-- README sections: Quick Start (single-terminal — just `just demo`), What
+- README sections: Quick Start (single-terminal, just `just demo`), What
   it demonstrates, Where to look in the code.
 - `demokit.IsTUI()` / `demokit.IsNonInteractive()` for renderer + mode
   selection.
@@ -1042,5 +1042,5 @@ What host examples still share with non-UI:
 **If a host example later needs to expose its server over HTTP** (so an
 external host like MCPJam could connect), promote it to a non-UI example
 shape and drop this addendum's relaxations. That's a per-example decision,
-not a global policy — see the rationale conversation in PR/commit history
+not a global policy; see the rationale conversation in PR/commit history
 if relitigating.

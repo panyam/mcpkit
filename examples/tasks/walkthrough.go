@@ -29,7 +29,7 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("MCP Tasks — Async Tool Execution Lifecycle").
+	demo := demokit.New("MCP Tasks and the async tool execution lifecycle").
 		Dir("tasks").
 		Description("Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.").
 		Actors(
@@ -64,7 +64,7 @@ func runDemo() {
 
 	// --- Step 1: Connect ---
 	demo.Step("Connect to the MCP server").
-		Arrow("Host", "Server", "POST /mcp — initialize").
+		Arrow("Host", "Server", "POST /mcp, initialize").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id + tasks capability").
 		Note("The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.").
 		VerbatimVariants("Reproduce on the wire",
@@ -130,7 +130,7 @@ tools, _ := c.ListTools(ctx.Ctx) // each tool carries Execution.TaskSupport meta
 	demo.Step("Sync call: greet (taskSupport=forbidden)").
 		Arrow("Host", "Server", "tools/call: greet {name: \"world\"}  (no task hint)").
 		DashedArrow("Server", "Host", "ToolResult immediately").
-		Note("greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.").
+		Note("greet is sync-only. The result returns directly in the tools/call response, with no task created. This is the path most existing tools use today; tasks are opt-in per tool.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# tools/call with no task hint: result returns inline under .result
 curl -s -X POST http://localhost:8080/mcp \
@@ -194,7 +194,7 @@ _ = slowTaskID`),
 		})
 
 	// --- Step 4: Poll + receive progress notifications ---
-	demo.Step("Poll tasks/get until terminal — receive notifications/progress").
+	demo.Step("Poll tasks/get until terminal, receiving notifications/progress").
 		Arrow("Host", "Server", "tasks/get {taskId}  (polled every pollInterval)").
 		DashedArrow("Server", "Host", "notifications/progress (1/3, 2/3, 3/3) via SSE").
 		DashedArrow("Server", "Host", "{status: completed} on terminal poll").
@@ -259,7 +259,7 @@ _ = tr.Content // tr.Content[0].Text holds the computed result`),
 		})
 
 	// --- Step 6: Required task — failing_job ---
-	demo.Step("Required task: failing_job — sync call returns an error").
+	demo.Step("Required task: failing_job, where a sync call returns an error").
 		Arrow("Host", "Server", "tools/call: failing_job  (no task hint)").
 		DashedArrow("Server", "Host", "JSON-RPC error (taskSupport=required)").
 		Note("failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.").
@@ -293,7 +293,7 @@ _ = err`),
 		DashedArrow("Server", "Host", "{taskId, status: working}").
 		Arrow("Host", "Server", "tasks/get (polled)").
 		DashedArrow("Server", "Host", "{status: failed, error: \"simulated failure\"}").
-		Note("Errors from required-task tools surface as a terminal status of `failed`. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.").
+		Note("Errors from required-task tools surface as a terminal status of `failed`. The host gets the taskId immediately, polls, and learns the task failed via the status field, with no exception thrown on the polling call.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# create the task (task hint sibling under params), capture taskId
 R=$(curl -s -X POST http://localhost:8080/mcp \
@@ -411,8 +411,8 @@ _ = err`),
 
 	demo.Section("Where each piece lives in mcpkit",
 		"- Tasks server library: `server/task_*.go`, `server/tasks_experimental.go`",
-		"- TaskContext (used by required-task tools): `core.TaskContext` — `core/task.go`",
-		"- Client helpers: `client/tasks.go` — `ToolCallAsTask`, `WaitForTask`, `GetTask`, `GetTaskPayload`, `CancelTask`",
+		"- TaskContext (used by required-task tools): `core.TaskContext` - `core/task.go`",
+		"- Client helpers: `client/tasks.go` - `ToolCallAsTask`, `WaitForTask`, `GetTask`, `GetTaskPayload`, `CancelTask`",
 		"- Tool declares task support via `core.ToolDef.Execution.TaskSupport` (`forbidden` | `optional` | `required`)",
 		"",
 		"For elicitation/sampling from inside a task (the `confirm_delete` and `write_haiku` tools also registered on this server), see `examples/tasks/run-exercises.sh`.",
