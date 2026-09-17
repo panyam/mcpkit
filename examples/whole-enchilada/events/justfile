@@ -112,15 +112,15 @@ build:
 unittest:
 	go -C event-server test ./... -count=1 -timeout 60s
 
-# Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
+# Bring up the observability stack (grafana/loki/tempo/mimir/otel-collector). Optional.
 obsup:
 	docker compose -f {{OBSERVABILITY_COMPOSE}} up -d --wait
 
-# Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
+# Tear down the observability stack.
 obsdown:
 	docker compose -f {{OBSERVABILITY_COMPOSE}} down
 
-# Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
+# Bring up the full dev stack (builds from your checkout, Keycloak + auth on). Pass BUILD=true to force a rebuild.
 up: gen-compose
 	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
@@ -310,9 +310,17 @@ clean:
 	{{COMPOSE}} --profile auth down -v 2>/dev/null || true
 	rm -rf bin/
 
-# Tear down backends AND wipe their persisted data (postgres + redis bind mounts). Use after schema changes or when starting fresh.
+# Wipe the SHARED docker/backends data. NOT needed for events any more — this only affects examples/agents.
 clean-backends:
-	{{COMPOSE}} --profile auth down -v 2>/dev/null || true
+	#!/usr/bin/env bash
+	set -eu
+	echo "[clean-backends] events owns its own postgres/redis volumes since the compose merge."
+	echo "[clean-backends] this wipes docker/backends, which examples/agents shares. Use 'just clean' for events."
+	printf 'proceed? [y/N] '
+	read -r ans
+	[ "$ans" = "y" ] || exit 1
+	docker compose -f {{BACKENDS_COMPOSE}} down -v 2>/dev/null || true
+	rm -rf ../../../docker/backends/data/
 
 # Append *.whole-enchilada hostnames to /etc/hosts (idempotent).
 hosts-install:
