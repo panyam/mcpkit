@@ -20,7 +20,6 @@ STACK := 'events-stack.yaml'
 DEV_OVERLAY := 'compose.dev.yaml'
 COMPOSE := 'docker compose -f ' + STACK + ' -f ' + DEV_OVERLAY
 COMPOSE_PUBLIC := 'docker compose -f ' + STACK
-BACKENDS_COMPOSE := '../../../docker/backends/docker-compose.yml'
 OBSERVABILITY_COMPOSE := '../../../docker/observability/docker-compose.yml'
 HOSTS_MARKER := '# whole-enchilada hostnames — managed by make hosts-install'
 HOSTS_NAMES := 'nginx.whole-enchilada event-server.whole-enchilada event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada'
@@ -112,15 +111,15 @@ build:
 unittest:
 	go -C event-server test ./... -count=1 -timeout 60s
 
-# Bring up shared backends (keycloak + postgres + redis). Waits for healthchecks.
+# Bring up the observability stack (grafana/loki/tempo/mimir/otel-collector). Optional.
 obsup:
 	docker compose -f {{OBSERVABILITY_COMPOSE}} up -d --wait
 
-# Tear down shared backends. WARNING: other examples sharing this infra will lose connectivity.
+# Tear down the observability stack.
 obsdown:
 	docker compose -f {{OBSERVABILITY_COMPOSE}} down
 
-# Bring up backends then events. Reuses cached images. Pass BUILD=true to force a rebuild after code changes.
+# Bring up the full dev stack (builds from your checkout, Keycloak + auth on). Pass BUILD=true to force a rebuild.
 up: gen-compose
 	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
@@ -310,9 +309,9 @@ clean:
 	{{COMPOSE}} --profile auth down -v 2>/dev/null || true
 	rm -rf bin/
 
-# Tear down backends AND wipe their persisted data (postgres + redis bind mounts). Use after schema changes or when starting fresh.
+# Wipe the SHARED docker/backends data. NOT needed for events any more — this only affects examples/agents.
 clean-backends:
-	{{COMPOSE}} --profile auth down -v 2>/dev/null || true
+	RUNNER=just ./scripts/clean-backends.sh
 
 # Append *.whole-enchilada hostnames to /etc/hosts (idempotent).
 hosts-install:
