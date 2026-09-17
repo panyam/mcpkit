@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -131,6 +132,90 @@ func renderStack(t *testing.T) string {
 	out, err := renderString(stackTmpl, ctx)
 	if err != nil {
 		t.Fatalf("render stack: %v", err)
+	}
+	return out
+}
+
+// TestRenderedStackHasNoDuplicateKeys catches the failure that broke `make up`
+// on the first real run after the compose merge: the transformed template
+// carried an inherited `depends_on` and gained a consolidated one, so replicas
+// 2..N had the key twice and Compose refused the file with
+// `mapping key "depends_on" already defined`.
+//
+// Worth a test rather than care, because the obvious validation misses it.
+// PyYAML and most YAML libraries accept duplicate keys silently with last-one-
+// wins, so the file parsed clean in review and only Compose's stricter parser
+// objected. Anything that edits a template by substitution can reintroduce it.
+func TestRenderedStackHasNoDuplicateKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		out  string
+	}{
+		{"events-stack.yaml", renderStack(t)},
+		{"compose.dev.yaml", renderDev(t)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if dup := findDuplicateKey(tc.out); dup != "" {
+				t.Errorf("duplicate mapping key in %s: %s", tc.name, dup)
+			}
+		})
+	}
+}
+
+// findDuplicateKey reports the first key that appears twice in the same
+// mapping, or "" when there is none. Scopes are delimited by indentation: a
+// key at indent N closes every scope deeper than N, which is what makes
+// sibling blocks (event-server-1 then event-server-2) reuse the same key names
+// legitimately while a genuine repeat inside one block is caught.
+func findDuplicateKey(doc string) string {
+	keyLine := regexp.MustCompile(`^(\s*)([A-Za-z_][A-Za-z0-9_.\-/]*):`)
+	seen := map[int]map[string]bool{}
+
+	for i, line := range strings.Split(doc, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+
+		// A list item opens its own scope; drop anything deeper and move on
+		// rather than recording the item's own keys, which legitimately repeat
+		// across entries.
+		if strings.HasPrefix(trimmed, "- ") {
+			for d := range seen {
+				if d > indent {
+					delete(seen, d)
+				}
+			}
+			continue
+		}
+
+		m := keyLine.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		for d := range seen {
+			if d > indent {
+				delete(seen, d)
+			}
+		}
+		if seen[indent] == nil {
+			seen[indent] = map[string]bool{}
+		}
+		key := m[2]
+		if seen[indent][key] {
+			return fmt.Sprintf("%q reappears at line %d", key, i+1)
+		}
+		seen[indent][key] = true
+	}
+	return ""
+}
+
+func renderDev(t *testing.T) string {
+	t.Helper()
+	out, err := renderString(devTmpl, tmplCtx{N: 3, EventServers: seq(3)})
+	if err != nil {
+		t.Fatalf("render dev overlay: %v", err)
 	}
 	return out
 }
