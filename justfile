@@ -9,14 +9,12 @@
 # downstream can `go get <module>@vX.Y.Z` — `replace` directives are ignored
 # by non-main modules. ext/tasks, ext/skills, stores/redis, and the
 # experimental events modules were added once they shipped their own go.mod.
-SUB_MODS_TO_TAG := "ext/auth ext/otel ext/ui ext/tasks ext/skills stores/redis experimental/ext/agents experimental/ext/agents/clients/go experimental/ext/events experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis experimental/ext/events/clients/go cmd/testclient cmd/common cmd/mcpskills examples/mcpskills-walkthrough tests/e2e tests/keycloak"
 
 REPORT_DIR := "tests/reports"
 
 # Discovers every sub-module go.mod (root excluded). Kept as a command string
 # (not a backtick expression) so `find` only runs when a consuming recipe
 # executes, not on every just invocation. Consumers: tidy-all, bump-root.
-SUB_MODS_FIND := "find . -name go.mod -not -path '*/node_modules/*' -not -path '*/.claude/*' -not -path './go.mod' | sed 's|^\\./||;s|/go.mod$||' | sort"
 
 # Keycloak (for interop tests)
 KC_IMAGE := "quay.io/keycloak/keycloak:26.0"
@@ -73,20 +71,7 @@ cover-func:
 
 # Run coverage across root + all sub-modules, generate per-module HTML reports
 cover-all:
-    #!/usr/bin/env bash
-    set -eu
-    mkdir -p {{REPORT_DIR}}
-    echo "==> coverage: root module"
-    go test -coverprofile={{REPORT_DIR}}/coverage-root.out ./... -count=1 -timeout 30s
-    go tool cover -html={{REPORT_DIR}}/coverage-root.out -o {{REPORT_DIR}}/coverage-root.html
-    for mod in ext/auth ext/ui; do
-        echo "==> coverage: $mod"
-        (cd $mod && go test -coverprofile=../../{{REPORT_DIR}}/coverage-$(echo $mod | tr / -).out ./... -count=1 -timeout 30s) || true
-        go tool cover -html={{REPORT_DIR}}/coverage-$(echo $mod | tr / -).out -o {{REPORT_DIR}}/coverage-$(echo $mod | tr / -).html 2>/dev/null || true
-    done
-    echo ""
-    echo "Coverage reports:"
-    ls -1 {{REPORT_DIR}}/coverage-*.html 2>/dev/null
+    @REPORT_DIR={{REPORT_DIR}} ./scripts/cover-all.sh
 
 # Run smoke tests (starts test servers, tests both transports via curl)
 smoke:
@@ -200,10 +185,5 @@ refresh-apps-compat-report:
 
 # Fail if conformance/apps/COMPAT.md is stale relative to umbrella #533 (CI gate)
 check-apps-compat-stale: refresh-apps-compat-report
-    #!/usr/bin/env bash
-    if ! git diff --exit-code conformance/apps/COMPAT.md; then
-        echo "::error::conformance/apps/COMPAT.md is stale."
-        echo "::error::Run 'just refresh-apps-compat-report' locally and commit the diff."
-        exit 1
-    fi
+    @RUNNER=just ./scripts/check-apps-compat-stale.sh
 

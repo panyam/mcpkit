@@ -8,6 +8,12 @@
 #
 # The agent SDK is not here and not in this repo: it was extracted to
 # github.com/panyam/chakra. See VERSIONING.md.
+# These lists and REPORT_DIR reach the recipe scripts through the environment.
+# SUB_MODS_TO_TAG here is the authoritative one, as CLAUDE.md says; no script
+# may grow a second copy.
+export RUNNER := make
+export SUB_MODS_TO_TAG SUB_MODS_ALL REPORT_DIR
+
 SUB_MODS_TO_TAG := \
 	ext/auth ext/otel ext/ui ext/tasks ext/skills \
 	stores/redis \
@@ -55,18 +61,7 @@ cover-func: ## Show per-function coverage sorted by lowest (root module only)
 	go tool cover -func=$(REPORT_DIR)/coverage.out | sort -k3 -n | head -30
 
 cover-all: ## Run coverage across root + all sub-modules, generate per-module HTML reports
-	@mkdir -p $(REPORT_DIR)
-	@echo "==> coverage: root module"
-	@go test -coverprofile=$(REPORT_DIR)/coverage-root.out ./... -count=1 -timeout 30s
-	@go tool cover -html=$(REPORT_DIR)/coverage-root.out -o $(REPORT_DIR)/coverage-root.html
-	@for mod in ext/auth ext/ui; do \
-		echo "==> coverage: $$mod"; \
-		(cd $$mod && go test -coverprofile=../../$(REPORT_DIR)/coverage-$$(echo $$mod | tr / -).out ./... -count=1 -timeout 30s) || true; \
-		go tool cover -html=$(REPORT_DIR)/coverage-$$(echo $$mod | tr / -).out -o $(REPORT_DIR)/coverage-$$(echo $$mod | tr / -).html 2>/dev/null || true; \
-	done
-	@echo ""
-	@echo "Coverage reports:"
-	@ls -1 $(REPORT_DIR)/coverage-*.html 2>/dev/null
+	@./scripts/cover-all.sh
 
 smoke: ## Run smoke tests (starts test servers, tests both transports via curl)
 	bash scripts/smoke-test.sh
@@ -158,11 +153,7 @@ refresh-apps-compat-report: ## Regenerate conformance/apps/COMPAT.md from umbrel
 	./scripts/refresh-apps-compat-report.sh
 
 check-apps-compat-stale: refresh-apps-compat-report ## Fail if conformance/apps/COMPAT.md is stale relative to umbrella #533 (CI gate)
-	@git diff --exit-code conformance/apps/COMPAT.md || ( \
-		echo "::error::conformance/apps/COMPAT.md is stale."; \
-		echo "::error::Run 'make refresh-apps-compat-report' locally and commit the diff."; \
-		exit 1 \
-	)
+	@./scripts/check-apps-compat-stale.sh
 
 
 
@@ -202,13 +193,7 @@ test-e2e: ## Run all E2E tests (auth, apps — no Docker)
 	@bash scripts/test-e2e.sh
 
 test-experimental: ## Run all experimental POC tests
-	@bash experimental/scripts/test-agents.sh
-	@bash experimental/scripts/test-agents-clients-go.sh
-	@bash experimental/scripts/test-events.sh
-	@bash experimental/scripts/test-events-clients-go.sh
-	@bash experimental/scripts/test-events-stores-gorm.sh
-	@bash experimental/scripts/test-events-discord.sh
-	@bash experimental/scripts/test-events-telegram.sh
+	@./scripts/test-experimental.sh
 
 test-examples: ## Run every infra-free example test (delegates to examples/Makefile)
 	$(MAKE) -C examples test
@@ -308,22 +293,7 @@ lint: ## Run staticcheck (install: go install honnef.co/go/tools/cmd/staticcheck
 # so the root scan alone left every published sub-module unscanned. Mirrors the
 # `just vulncheck` recipe; examples stay out of scope.
 vulncheck: ## Check dependencies for known vulnerabilities (root + published sub-modules)
-	@failed=""; \
-	echo "==> govulncheck root"; \
-	govulncheck ./... || failed="$$failed root"; \
-	for mod in $(SUB_MODS_TO_TAG); do \
-		if [ -f "$$mod/go.mod" ]; then \
-			echo ""; \
-			echo "==> govulncheck $$mod"; \
-			(cd $$mod && govulncheck ./...) || failed="$$failed $$mod"; \
-		fi; \
-	done; \
-	echo ""; \
-	if [ -n "$$failed" ]; then \
-		echo "=== govulncheck FAILED in:$$failed ==="; \
-		exit 1; \
-	fi; \
-	echo "=== govulncheck clean: root + published sub-modules ==="
+	@./scripts/vulncheck-all.sh
 
 seccheck: ## Run gosec security scanner (install: go install github.com/securego/gosec/v2/cmd/gosec@latest)
 	gosec -quiet -severity=medium ./...
@@ -381,29 +351,10 @@ tidy: ## Run go mod tidy on root module only
 SUB_MODS_ALL := $(shell find . -name go.mod -not -path '*/node_modules/*' -not -path './go.mod' | sed 's|^\./||;s|/go.mod$$||' | sort)
 
 tidy-all: ## Run go mod tidy across root + every sub-module
-	@echo "==> tidy root"
-	@go mod tidy
-	@for mod in $(SUB_MODS_ALL); do \
-		if [ -f "$$mod/go.mod" ]; then \
-			echo "==> tidy $$mod"; \
-			(cd $$mod && go mod tidy) || exit 1; \
-		fi; \
-	done
+	@./scripts/tidy-all.sh
 
 bump-root: ## Update sub-modules to require a specific root version (usage: make bump-root V=v0.1.22)
-	@if [ -z "$(V)" ]; then echo "Usage: make bump-root V=v0.1.22"; exit 1; fi
-	@# Only touches the root self-reference (github.com/panyam/mcpkit). Sub-module
-	@# cross-references (github.com/panyam/mcpkit/ext/auth, /ext/ui) have their
-	@# own independent tag timelines and must be bumped manually to a real ext/*
-	@# tag — or left alone when a `replace` directive is in play.
-	@for mod in $(SUB_MODS_ALL); do \
-		if [ ! -f "$$mod/go.mod" ]; then continue; fi; \
-		if ! grep -q "github.com/panyam/mcpkit v" "$$mod/go.mod"; then continue; fi; \
-		echo "==> $$mod/go.mod: require github.com/panyam/mcpkit $(V)"; \
-		(cd $$mod && go mod edit -require=github.com/panyam/mcpkit@$(V)) || exit 1; \
-	done
-	@$(MAKE) -s tidy-all
-	@$(MAKE) -s verify-submodule-deps
+	@V="$(V)" MAKE="$(MAKE)" ./scripts/bump-root.sh
 
 # =============================================================================
 # Docs site (issue 508 — GitHub Pages)
@@ -426,16 +377,7 @@ ghdeploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-
 # =============================================================================
 
 tag: ## Tag root + all sub-modules (usage: make tag V=v0.0.11)
-	@if [ -z "$(V)" ]; then echo "Usage: make tag V=v0.0.11"; exit 1; fi
-	@echo "Tagging $(V) across all modules..."
-	git tag -a $(V) -m "$(V)"
-	@for mod in $(SUB_MODS_TO_TAG); do \
-		echo "  $$mod/$(V)"; \
-		git tag -a $$mod/$(V) -m "$$mod/$(V)"; \
-	done
-	@echo ""
-	@echo "Tags created locally. Push with:"
-	@echo "  git push origin $(V) $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')"
+	@V="$(V)" ./scripts/tag-all.sh
 
 tag-push: ## Tag and push in one step (usage: make tag-push V=v0.0.11)
 	@$(MAKE) tag V=$(V)
@@ -450,18 +392,10 @@ tag-push: ## Tag and push in one step (usage: make tag-push V=v0.0.11)
 # =============================================================================
 
 setup-tools: ## Install development tools
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install github.com/securego/gosec/v2/cmd/gosec@latest
-	go install honnef.co/go/tools/cmd/staticcheck@latest
-	go install github.com/gitleaks/gitleaks/v8@latest
+	@./scripts/setup-tools.sh
 
 setup-hooks: ## Install git hooks (pre-push runs tests; pre-commit rejects compiled binaries)
-	@cp scripts/pre-push-hook.sh .git/hooks/pre-push
-	@chmod +x .git/hooks/pre-push
-	@echo "Installed .git/hooks/pre-push -> scripts/pre-push-hook.sh"
-	@cp scripts/pre-commit-hook.sh .git/hooks/pre-commit
-	@chmod +x .git/hooks/pre-commit
-	@echo "Installed .git/hooks/pre-commit -> scripts/pre-commit-hook.sh"
+	@./scripts/setup-hooks.sh
 
 check-no-binaries: ## CI gate — fail if any tracked file is a compiled executable
 	@./scripts/check-no-binaries.sh

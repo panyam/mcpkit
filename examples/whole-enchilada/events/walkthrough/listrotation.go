@@ -185,9 +185,9 @@ func runListRotation(serverURL string) func(demokit.StepContext) *demokit.StepRe
 }
 
 // tenantRealm maps the demo's TENANT shorthand to a Keycloak realm
-// name. Mirrors the Makefile's tenant-realm function; rewritten as a
-// trivial switch instead of arithmetic on the ASCII code, since the
-// realm set is small and explicit reads better.
+// name. Mirrors scripts/common.sh's tenant_realm, which both runners
+// call; rewritten as a trivial switch instead of arithmetic on the
+// ASCII code, since the realm set is small and explicit reads better.
 func tenantRealm(t string) string {
 	switch strings.ToUpper(t) {
 	case "A":
