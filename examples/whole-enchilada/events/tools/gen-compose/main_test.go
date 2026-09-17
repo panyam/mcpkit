@@ -131,25 +131,34 @@ func TestDevOverlayBuildsEveryPublishedImage(t *testing.T) {
 	}
 }
 
-// TestDevOverlayBuildsEveryReplica catches the overlay going stale against N.
-// The canonical stack renders N replicas from EventServers; an overlay that
-// builds only some of them leaves the rest silently pulling a published image
-// while you think you are testing your checkout.
-func TestDevOverlayBuildsEveryReplica(t *testing.T) {
-	const n = 3
-	ctx := tmplCtx{N: n, EventServers: seq(n)}
-	out, err := renderString(devTmpl, ctx)
-	if err != nil {
-		t.Fatalf("render dev overlay: %v", err)
+// TestDevOverlayBuildsSharedImageOnce pins the fix for a BuildKit race, and
+// replaces an earlier test that asserted the opposite.
+//
+// Every replica shares one image tag, so exactly one service may declare the
+// build. Three of them exporting the same tag concurrently fails with
+// `image "...": already exists`. The earlier version of this test required a
+// build stanza per replica, which is what the retired docker-compose.yaml did
+// safely, because that file had no image: and Compose auto-named each replica.
+// Once the services were named after the published tag, per-replica builds
+// became a collision rather than a convenience.
+func TestDevOverlayBuildsSharedImageOnce(t *testing.T) {
+	overlay := renderDev(t)
+
+	if got := strings.Count(overlay, "dockerfile:"); got != 1 {
+		t.Errorf("event-server must be built once for the shared tag, found %d build stanzas", got)
 	}
-	for i := 1; i <= n; i++ {
-		want := fmt.Sprintf("event-server-%d:", i)
-		if !strings.Contains(out, want) {
-			t.Errorf("dev overlay does not override %s, so it would pull instead of build", want)
+	// The replicas that do not build must not fall back to a registry either:
+	// the tag is unpublished, so a pull produces a confusing denial instead of
+	// a plain missing-image error.
+	if got := strings.Count(overlay, "pull_policy: never"); got != 2 {
+		t.Errorf("expected replicas 2..N to be pinned to a local image, got %d", got)
+	}
+	// Every replica still has to appear, since each carries its own network
+	// aliases and the canonical stack routes to them by name.
+	for i := 1; i <= 3; i++ {
+		if !strings.Contains(overlay, fmt.Sprintf("event-server-%d:", i)) {
+			t.Errorf("dev overlay is missing event-server-%d", i)
 		}
-	}
-	if strings.Count(out, "dockerfile:") != n {
-		t.Errorf("expected %d build stanzas, got %d", n, strings.Count(out, "dockerfile:"))
 	}
 }
 

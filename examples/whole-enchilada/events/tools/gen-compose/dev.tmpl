@@ -11,6 +11,7 @@
 # and nothing else:
 #
 #   1. builds BOTH our images from your checkout instead of pulling them
+#      (event-server once, shared by every replica)
 #   2. publishes the database ports so you can psql / redis-cli from the host
 #   3. joins the shared `mcpkit` network so docker/observability is reachable
 #
@@ -48,11 +49,24 @@ services:
     pull_policy: build
 
 {{range .EventServers}}  event-server-{{.}}:
+{{if eq . 1}}    # Only replica 1 declares the build. All N services share one image tag, and
+    # three of them exporting it concurrently makes BuildKit fail with
+    # `image "...": already exists`. Compose finishes the build phase before
+    # starting anything, so 2..N find the freshly built image locally.
+    #
+    # The retired docker-compose.yaml gave each replica a build and no image:,
+    # so Compose auto-named them event-server-1, -2, -3 and there was nothing
+    # to collide over. Naming them all after the published tag is what
+    # introduced the race.
     build:
       context: ../../..
       dockerfile: examples/whole-enchilada/events/event-server/Dockerfile
     pull_policy: build
-    networks:
+{{else}}    # No build, and never reach for a registry: this tag is not published yet,
+    # so a pull here would fail confusingly. If replica 1's build did not
+    # happen, fail saying the image is missing instead.
+    pull_policy: never
+{{end}}    networks:
       whole-enchilada:
         aliases:
           - event-server.whole-enchilada
