@@ -1,0 +1,79 @@
+# C8 baseline — recipes that predate the "Makefiles and justfiles dispatch"
+# rule and are still waiting to be extracted into scripts/.
+#
+# This list only shrinks. When you extract a recipe, delete its line here; the
+# checker fails on an entry that no longer violates, so a stale baseline cannot
+# quietly accumulate the way an --update-baseline flag lets one.
+#
+# Adding a line means a new inline script landed. That needs a reason in the PR,
+# not a silent append.
+#
+# Format: <path from repo root>::<recipe>
+# Regenerate the raw list with: scripts/check_recipe_complexity.py --list
+
+Makefile::bump-root
+Makefile::cover-all
+Makefile::setup-hooks
+Makefile::setup-tools
+Makefile::tag
+Makefile::test-experimental
+Makefile::tidy-all
+Makefile::vulncheck
+conformance/Makefile::refresh-conformance
+conformance/Makefile::testconf-external-checker
+conformance/Makefile::testconf-upstream-audit
+conformance/justfile::check-conformance-stale
+conformance/justfile::refresh-conformance
+conformance/justfile::testconf-external-checker
+conformance/justfile::testconf-upstream-audit
+examples/agents/deep-agent-supervisor/justfile::web
+examples/events/discord/Makefile::serve
+examples/events/discord/justfile::serve
+examples/events/telegram/Makefile::serve
+examples/events/telegram/justfile::serve
+examples/host/Makefile::demo
+examples/host/Makefile::note
+examples/host/Makefile::readme
+examples/host/justfile::demo
+examples/host/justfile::note
+examples/host/justfile::readme
+examples/whole-enchilada/events/Makefile::add-discord
+examples/whole-enchilada/events/Makefile::build
+examples/whole-enchilada/events/Makefile::check-ports
+examples/whole-enchilada/events/Makefile::clear_all_tokens
+examples/whole-enchilada/events/Makefile::drive-chat
+examples/whole-enchilada/events/Makefile::drive-presence
+examples/whole-enchilada/events/Makefile::hosts-install
+examples/whole-enchilada/events/Makefile::inject
+examples/whole-enchilada/events/Makefile::newtoken
+examples/whole-enchilada/events/Makefile::newtoken-ci
+examples/whole-enchilada/events/Makefile::poller
+examples/whole-enchilada/events/Makefile::rm-source
+examples/whole-enchilada/events/Makefile::streamer
+examples/whole-enchilada/events/Makefile::up
+examples/whole-enchilada/events/Makefile::webhook
+examples/whole-enchilada/events/justfile::add-discord
+examples/whole-enchilada/events/justfile::build
+examples/whole-enchilada/events/justfile::clear_all_tokens
+examples/whole-enchilada/events/justfile::hosts-install
+examples/whole-enchilada/events/justfile::inject
+examples/whole-enchilada/events/justfile::newtoken
+examples/whole-enchilada/events/justfile::newtoken-ci
+examples/whole-enchilada/events/justfile::poller
+examples/whole-enchilada/events/justfile::rm-source
+examples/whole-enchilada/events/justfile::streamer
+examples/whole-enchilada/events/justfile::webhook
+experimental/ext/events/stores/gorm/Makefile::testpg
+experimental/ext/events/stores/gorm/Makefile::updb
+experimental/ext/events/stores/gorm/justfile::testpg
+experimental/ext/events/stores/gorm/justfile::updb
+experimental/ext/events/stores/redis/Makefile::updb
+experimental/ext/events/stores/redis/justfile::updb
+justfile::check-apps-compat-stale
+justfile::cover-all
+tutorials/walkthrough/Makefile::check
+tutorials/walkthrough/Makefile::missing
+tutorials/walkthrough/Makefile::stats
+tutorials/walkthrough/justfile::check
+tutorials/walkthrough/justfile::missing
+tutorials/walkthrough/justfile::stats
