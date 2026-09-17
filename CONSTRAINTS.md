@@ -170,7 +170,7 @@ A single command spanning several lines by backslash continuation is one stateme
 inline. `echo` banners do not count at all. A `just` shebang recipe is judged by its body, since
 the shebang is only how `just` runs more than one line of bash.
 
-**Known divergence today.** 66 recipes predate this rule and are listed in
+**Known divergence today.** 62 recipes predate this rule and are listed in
 `scripts/recipe-complexity-allowed.txt`, concentrated in `examples/whole-enchilada/events`, the
 root `Makefile`/`justfile`, `tutorials/walkthrough` and `conformance/`. They are being extracted
 area by area; the baseline only shrinks, and the checker fails on an entry that no longer violates
@@ -179,3 +179,13 @@ so it cannot rot the way a `--update-baseline` flag lets a baseline rot.
 **Verify:** `make check-recipe-complexity`, wired into `.github/workflows/test.yml`. Confirmed to
 catch a real regression in both directions: appending a `for` loop to a justfile recipe makes it
 exit 1 naming that recipe, and leaving a fixed recipe in the baseline also exits 1.
+
+The same target runs `--selftest`, eight cases that pin the boundary between a script and a
+dispatch line. Every one of them was a bug in the checker first, in both directions: it missed
+`vulncheck` and `check-ports` outright, because a Make recipe is routinely one backslash-continued
+shell program and only statement-initial lines were being scanned; and it flagged `drive-chat`, a
+single `go run`, because `$(if $(EVERY),--every $(EVERY))` is a Make *function* rather than shell
+control flow. The asymmetry gave that one away — the justfile's identical `{{if ...}}` was never
+flagged. In a Makefile `$(...)` is an expansion and `$$(...)` is shell; in a justfile `{{...}}` is
+the expansion and `$(...)` is shell. A case whose recipe no longer exists fails rather than being
+skipped, for the reason the section on `Verify` lines gives.

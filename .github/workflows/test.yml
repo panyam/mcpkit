@@ -46,7 +46,7 @@ jobs:
       # to wipe docker/backends (#1396). Baseline lives in
       # scripts/recipe-complexity-allowed.txt and only shrinks.
       - name: Recipes dispatch, not script
-        run: ./scripts/check_recipe_complexity.py
+        run: make check-recipe-complexity
 
       # examples/ holds 58 modules but `make test-examples` only runs the ~10
       # that have tests, so nothing compiled the rest. apps/react/server was
