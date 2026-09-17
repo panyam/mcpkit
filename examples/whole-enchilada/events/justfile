@@ -282,7 +282,7 @@ inject:
 
 # Tail logs from all services.
 logs:
-	docker compose logs -f --tail=200
+	{{COMPOSE}} logs -f --tail=200
 
 # Show stack containers.
 ps:
@@ -298,9 +298,9 @@ psql-webhooks:
 restart-event-servers:
 	#!/usr/bin/env bash
 	set -eu
-	svcs=$(docker compose config --services | grep '^event-server-')
+	svcs=$({{COMPOSE}} config --services | grep '^event-server-')
 	echo "[restart-event-servers] restarting: $svcs"
-	docker compose restart $svcs
+	{{COMPOSE}} restart $svcs
 	KEYCLOAK_PORT={{KEYCLOAK_PORT}} OAUTH_ISSUER_BASE="{{KEYCLOAK_HOST}}" \
 	OAUTH_INTROSPECTION_URLS="{{AUTH_INTROSPECTION_URLS}}" \
 		{{COMPOSE}} --profile auth up -d --wait --wait-timeout 300
