@@ -75,7 +75,11 @@ stack-smoke-auth:
 stack-down:
 	{{COMPOSE_PUBLIC}} --profile auth down -v
 
-# Drive a real MCP session against the standalone stack and assert the spec wire.
+# Verify the DEV stack (what `just up` brings up). Auth is on there, so this asserts anonymous callers are refused.
+smoke:
+	EXPECT_AUTH=1 ./scripts/smoke-stack.sh
+
+# Verify the PUBLISHED stack in its default anonymous posture (`just stack-up`). Not for `just up` — that stack has auth on.
 stack-smoke:
 	./scripts/smoke-stack.sh
 

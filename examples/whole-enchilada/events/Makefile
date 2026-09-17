@@ -81,7 +81,7 @@ HOSTS_NAMES  := nginx.whole-enchilada event-server.whole-enchilada \
                 event-server-1.whole-enchilada event-server-2.whole-enchilada event-server-3.whole-enchilada
 
 .PHONY: help gen-compose build unittest up down obsup obsdown test demo readme predemo \
-        check-ports stack-up stack-up-auth stack-down stack-smoke stack-smoke-auth stack-logs images images-push \
+        check-ports smoke stack-up stack-up-auth stack-down stack-smoke stack-smoke-auth stack-logs images images-push \
         newtoken newtoken-ci poller streamer webhook inject drive-chat drive-presence \
         add-discord rm-source list-sources alllogs \
         hosts-install hosts-uninstall logs ps clean clean-backends clear_all_tokens clear-all
@@ -130,6 +130,7 @@ up: gen-compose check-ports ## Bring up the full dev stack (builds from your che
 		$(COMPOSE) --profile auth up -d --wait --wait-timeout 300 $(if $(BUILD),--build)
 	@echo "stack up$(if $(BUILD), (rebuilt)); nginx on http://localhost:9090, Keycloak on $(KEYCLOAK_HOST)"
 	@echo "postgres on 127.0.0.1:5433, redis on 127.0.0.1:6380 (offset so docker/backends can coexist)"
+	@echo "verify with: make smoke"
 
 down: ## Tear down the dev stack. Volumes are preserved — use `make clean` to drop them too.
 	$(COMPOSE) --profile auth down
@@ -158,7 +159,10 @@ stack-smoke-auth: ## Assert the auth stack REJECTS an anonymous subscriber (the 
 stack-down: ## Tear the standalone stack down, including its named volumes.
 	$(COMPOSE_PUBLIC) --profile auth down -v
 
-stack-smoke: ## Drive a real MCP session against the standalone stack and assert the spec wire.
+smoke: ## Verify the DEV stack (what `make up` brings up). Auth is on there, so this asserts anonymous callers are refused.
+	EXPECT_AUTH=1 ./scripts/smoke-stack.sh
+
+stack-smoke: ## Verify the PUBLISHED stack in its default anonymous posture (`make stack-up`). Not for `make up` — that stack has auth on.
 	./scripts/smoke-stack.sh
 
 stack-logs: ## Tail logs from the stack (works for both the dev and published flows).
