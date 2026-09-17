@@ -5,20 +5,20 @@ MCP server implementation: Dispatcher, transports, middleware, subscriptions.
 ## What belongs here
 
 - `Server` struct and options (`NewServer`, `WithBearerToken`, `WithToolTimeout`, etc.)
-- `Dispatcher` — JSON-RPC routing, method handlers, session state
+- `Dispatcher` - JSON-RPC routing, method handlers, session state
 - Transports: SSE (`transport.go`), Streamable HTTP (`streamable_transport.go`)
-- `InProcessTransport` — `core.Transport` implementation for testing/embedding
+- `InProcessTransport` - `core.Transport` implementation for testing/embedding
 - Middleware chain (`WithMiddleware`, `LoggingMiddleware`)
 - Server-to-client request infrastructure (`sendServerRequest`, `routeServerResponse`)
 - Resource subscriptions (`WithSubscriptions`, `NotifyResourceUpdated`)
-- Broadcast notifications (`Broadcast`) — fan out to all connected sessions
-- Extension registration (`WithExtension`) — extensions declare capabilities in initialize response
-- Startup validation (`validateExtensionRefs`) — calls `RefValidator` on registered extensions to warn about unresolvable resource references
+- Broadcast notifications (`Broadcast`) - fan out to all connected sessions
+- Extension registration (`WithExtension`) - extensions declare capabilities in the initialize response
+- Startup validation (`validateExtensionRefs`) - calls `RefValidator` on registered extensions to warn about unresolvable resource references
 
 ## Dependencies
 
-- `core/` — protocol types (Request, Response, ToolDef, etc.)
-- `servicekit` — SSE hub, graceful shutdown
+- `core/` - protocol types (Request, Response, ToolDef, etc.)
+- `servicekit` - SSE hub, graceful shutdown
 - Does NOT import `client/`
 
 ## In-process transport

@@ -1,4 +1,4 @@
-# ext/tasks — SEP-2663 Tasks Extension
+# ext/tasks, SEP-2663 Tasks Extension
 
 Go module for the v2 task surface defined by [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (merged Final 2026-05-15). Provides server-directed async task execution registered as a protocol extension under `capabilities.extensions["io.modelcontextprotocol/tasks"]`.
 
@@ -49,7 +49,7 @@ mcpkit's v2 middleware runs the handler **synchronously first** and then dispatc
 
 | Handler returns | Middleware does | When to use |
 |---|---|---|
-| `core.InputRequiredResult` via `ctx.RequestInput(...)` | Passes through unchanged; no task created | SEP-2322 MRTR round — gather input before deciding whether to escalate |
+| `core.InputRequiredResult` via `ctx.RequestInput(...)` | Passes through unchanged; no task created | SEP-2322 MRTR round - gather input before deciding whether to escalate |
 | `core.GoAsyncResult{}` | Mints a task, spawns continuation goroutine that re-invokes the handler with `TaskContext` attached, returns `CreateTaskResult` | Slow / blocking work, `TaskElicit` / `TaskSample` calls, progress emission that should be filtered |
 | `core.ToolResult{...}` (a regular sync result) | Wraps as a born-terminal task (`status: completed`, result stored, one `notifications/tasks` event fired), returns `CreateTaskResult` | Sync work that finishes immediately on a `TaskSupport=optional/required` tool |
 
@@ -90,7 +90,7 @@ The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact p
 | `tasks.TaskContext` | Typed-context for tool handlers running as v2 tasks. Exposes `TaskID()`, `ProgressToken()`, `SetStatus(status)`, `TaskElicit(req)`, `TaskSample(req)`. |
 | `tasks.WithTaskContext` / `tasks.GetTaskContext` | Context wiring (mirrors core's typed-context pattern). |
 
-## Tracing (SEP-414 P6 — issue 659)
+## Tracing (SEP-414 P6, issue 659)
 
 Optional. Set `Config.TracerProvider` to opt the runtime into span-link instrumentation of the async task lifecycle:
 
@@ -103,8 +103,8 @@ tasks.Register(tasks.Config{
 
 What gets emitted:
 
-- **`task.execute` span on the GoAsync path** — a NEW root trace (not a child of the create span, since the work outlives the `tools/call` dispatch span) carrying a `Link` back to the originating `tools/call` create span. Attributes: `mcp.task.id` (at start), `mcp.task.status` (stamped at End from the final stored status, one of `completed` / `failed` / `cancelled` / `input_required`). `RecordError` fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to `completed` with `IsError=true` per SEP-2663 semantics.
-- **`AddLink` on each `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span** — points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.
+- **`task.execute` span on the GoAsync path** - a NEW root trace (not a child of the create span, since the work outlives the `tools/call` dispatch span) carrying a `Link` back to the originating `tools/call` create span. Attributes: `mcp.task.id` (at start), `mcp.task.status` (stamped at End from the final stored status, one of `completed` / `failed` / `cancelled` / `input_required`). `RecordError` fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to `completed` with `IsError=true` per SEP-2663 semantics.
+- **`AddLink` on each `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span** - points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.
 
 Nil or `core.NoopTracerProvider{}` (the default) skips the install, with zero overhead and zero allocation. ext/tasks depends on `core` only; no compile-time dep on ext/otel. The contract details (`core.WithNewRootSpan`, `core.LinkedTracerProvider`, `core.Link`) live in `docs/SEP_414_OTEL.md` § Span links and § New-root-span marker.
 

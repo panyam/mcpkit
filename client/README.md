@@ -6,7 +6,7 @@ MCP client implementation: HTTP transports, auth retry, reconnection, logging.
 
 - `Client` struct and options (`NewClient`, `WithSSEClient`, `WithTransport`, etc.)
 - HTTP transports: Streamable HTTP (`streamableClientTransport`), SSE (`sseClientTransport`)
-- Auth retry (`DoWithAuthRetry`) — 401 token refresh, 403 scope step-up
+- Auth retry (`DoWithAuthRetry`) - 401 token refresh, 403 scope step-up
 - Reconnection (`WithMaxRetries`, `WithReconnectBackoff`)
 - Transport logging (`WithClientLogging`)
 - Server-to-client request handling (`HandleServerRequest`, `WithSamplingHandler`, `WithElicitationHandler`)
@@ -14,7 +14,7 @@ MCP client implementation: HTTP transports, auth retry, reconnection, logging.
 
 ## Dependencies
 
-- `core/` — protocol types (Request, Response, ToolDef, etc.)
+- `core/` - protocol types (Request, Response, ToolDef, etc.)
 - Does NOT import `server/`
 
 ## Usage
@@ -46,10 +46,10 @@ if c.ServerSupportsUI() { /* server can serve app UIs */ }
 modelTools, _ := c.ListToolsForModel() // excludes app-only tools
 ```
 
-- `WithExtension(id, cap)` — general extension advertisement
-- `WithUIExtension()` — convenience for MCP Apps
-- `ServerSupportsExtension(id)` / `ServerSupportsUI()` — detect server support
-- `ListToolsForModel()` — filters out tools with visibility `["app"]` only
+- `WithExtension(id, cap)` - general extension advertisement
+- `WithUIExtension()` - convenience for MCP Apps
+- `ServerSupportsExtension(id)` / `ServerSupportsUI()` - detect server support
+- `ListToolsForModel()` - filters out tools with visibility `["app"]` only
 
 ## Transport interface
 
