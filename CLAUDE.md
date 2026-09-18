@@ -120,8 +120,8 @@ These span packages and will bite on a task that never opens a routed doc.
   written twice in two escaping dialects and maintained in neither. `just clean-backends` became a
   byte-identical copy of `just clean`, wiping the events volumes while promising to wipe
   `docker/backends` (#1396). Constraint C8, gated by `make check-recipe-complexity`. The
-  sweep is done: one baselined recipe remains in `scripts/recipe-complexity-allowed.txt`, and it is
-  dead rather than inline. The gate's own precision is self-tested: `$(if ...)` in a Makefile is a
+  sweep is done and `scripts/recipe-complexity-allowed.txt` is empty, so any entry appearing there
+  is a new decision. The gate's own precision is self-tested: `$(if ...)` in a Makefile is a
   function, not a script.
 - **`conformance/path-defaults.{mk,sh,just}` are generated, not hand-edited.** They come from
   `conformance/local-suites.yaml` via `uv run scripts/gen_conf_paths.py --write`. Editing two of

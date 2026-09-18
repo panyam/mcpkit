@@ -1,17 +1,13 @@
-# C8 baseline — recipes that predate the "Makefiles and justfiles dispatch"
-# rule and are still waiting to be extracted into scripts/.
+# C8 baseline — recipes allowed to hold a shell script instead of calling one.
 #
-# This list only shrinks. When you extract a recipe, delete its line here; the
-# checker fails on an entry that no longer violates, so a stale baseline cannot
-# quietly accumulate the way an --update-baseline flag lets one.
+# It is EMPTY, and that is the goal state. The sweep that introduced C8 took it
+# from 66 entries to none.
 #
-# Adding a line means a new inline script landed. That needs a reason in the PR,
-# not a silent append.
+# Adding a line means a new inline script landed and someone decided to keep it.
+# That needs a reason in the PR, not a silent append. The checker also fails on
+# an entry that no longer violates, so the list cannot rot in the other
+# direction the way an --update-baseline flag lets a baseline rot.
 #
 # Format: <path from repo root>::<recipe>
-# Regenerate the raw list with: scripts/check_recipe_complexity.py --list
-
-# The web recipe points at agent/surfaces/web, a tree that left with the agent
-# SDK extraction to chakra. Extracting a dead recipe into a script is worse
-# than leaving it; it wants deleting or repointing. See the PR that added this.
-examples/agents/deep-agent-supervisor/justfile::web
+# Current offenders, if you are repopulating after a regression:
+#   scripts/check_recipe_complexity.py --list

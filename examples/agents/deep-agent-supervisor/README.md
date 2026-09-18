@@ -49,8 +49,7 @@ Two terminals:
 # Terminal 1 — the roster server on :8795
 just serve
 
-# Terminal 2 — the supervisor host (CLI). `just web` serves the browser
-# surface (agentweb) off the same config instead.
+# Terminal 2 — the supervisor host (CLI)
 just demo
 ```
 
