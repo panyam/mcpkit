@@ -237,9 +237,9 @@
 
     <div class="content-body">
         
-<h1 id="bookservice--protoc-gen-go-mcp-example">BookService — protoc-gen-go-mcp Example <a class="anchor" href="#bookservice--protoc-gen-go-mcp-example">¶</a></h1>
+<h1 id="bookservice-protoc-gen-go-mcp-example">BookService, protoc-gen-go-mcp Example <a class="anchor" href="#bookservice-protoc-gen-go-mcp-example">¶</a></h1>
 <blockquote>
-<p>⚠ <strong>Experimental</strong> — build-time codegen (<code>experimental/ext/protogen</code>), not a wire protocol.</p>
+<p>⚠ <strong>Experimental</strong> - build-time codegen (<code>experimental/ext/protogen</code>), not a wire protocol.</p>
 </blockquote>
 <p>End-to-end example demonstrating all three MCP primitives generated from proto annotations.</p>
 <h2 id="mcpkit-features-used">MCPKit Features Used <a class="anchor" href="#mcpkit-features-used">¶</a></h2>
@@ -257,7 +257,7 @@
 </tr>
 <tr>
 <td>Experimental</td>
-<td><code>experimental/ext/protogen</code> — <code>protoc-gen-go-mcp</code> code generator</td>
+<td><code>experimental/ext/protogen</code> - <code>protoc-gen-go-mcp</code> code generator</td>
 </tr>
 <tr>
 <td>MCP primitives</td>
@@ -308,11 +308,11 @@
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go <span style="color:#0086b3">test</span> -v .    <span style="color:#998;font-style:italic"># Run e2e tests (tool calls, resource reads, prompt listing)</span>
 </span></span></code></pre><h2 id="prompts-to-try">Prompts to try <a class="anchor" href="#prompts-to-try">¶</a></h2>
 <ul>
-<li>&ldquo;Search for books about Go programming&rdquo; — calls <code>books_search</code> tool</li>
-<li>&ldquo;Tell me about book 1&rdquo; — reads <code>book://{book_id}</code> resource</li>
-<li>&ldquo;What books has author 1 written?&rdquo; — reads <code>author://{author_id}/books</code> resource</li>
-<li>&ldquo;Summarize the book collection&rdquo; — uses <code>books_summarize</code> prompt</li>
-<li>&ldquo;Recommend books for someone learning distributed systems&rdquo; — uses <code>books_recommend_books</code> prompt</li>
+<li>&ldquo;Search for books about Go programming&rdquo; calls the <code>books_search</code> tool</li>
+<li>&ldquo;Tell me about book 1&rdquo; reads the <code>book://{book_id}</code> resource</li>
+<li>&ldquo;What books has author 1 written?&rdquo; reads the <code>author://{author_id}/books</code> resource</li>
+<li>&ldquo;Summarize the book collection&rdquo; uses the <code>books_summarize</code> prompt</li>
+<li>&ldquo;Recommend books for someone learning distributed systems&rdquo; uses the <code>books_recommend_books</code> prompt</li>
 </ul>
 <h2 id="add-to-claude-desktop">Add to Claude Desktop <a class="anchor" href="#add-to-claude-desktop">¶</a></h2>
 <p>Add this to your <code>claude_desktop_config.json</code> (or VS Code MCP settings):</p>

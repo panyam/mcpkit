@@ -242,20 +242,20 @@
 <h2 id="what-belongs-here">What belongs here <a class="anchor" href="#what-belongs-here">¶</a></h2>
 <ul>
 <li><code>Server</code> struct and options (<code>NewServer</code>, <code>WithBearerToken</code>, <code>WithToolTimeout</code>, etc.)</li>
-<li><code>Dispatcher</code> — JSON-RPC routing, method handlers, session state</li>
+<li><code>Dispatcher</code> - JSON-RPC routing, method handlers, session state</li>
 <li>Transports: SSE (<code>transport.go</code>), Streamable HTTP (<code>streamable_transport.go</code>)</li>
-<li><code>InProcessTransport</code> — <code>core.Transport</code> implementation for testing/embedding</li>
+<li><code>InProcessTransport</code> - <code>core.Transport</code> implementation for testing/embedding</li>
 <li>Middleware chain (<code>WithMiddleware</code>, <code>LoggingMiddleware</code>)</li>
 <li>Server-to-client request infrastructure (<code>sendServerRequest</code>, <code>routeServerResponse</code>)</li>
 <li>Resource subscriptions (<code>WithSubscriptions</code>, <code>NotifyResourceUpdated</code>)</li>
-<li>Broadcast notifications (<code>Broadcast</code>) — fan out to all connected sessions</li>
-<li>Extension registration (<code>WithExtension</code>) — extensions declare capabilities in initialize response</li>
-<li>Startup validation (<code>validateExtensionRefs</code>) — calls <code>RefValidator</code> on registered extensions to warn about unresolvable resource references</li>
+<li>Broadcast notifications (<code>Broadcast</code>) - fan out to all connected sessions</li>
+<li>Extension registration (<code>WithExtension</code>) - extensions declare capabilities in the initialize response</li>
+<li>Startup validation (<code>validateExtensionRefs</code>) - calls <code>RefValidator</code> on registered extensions to warn about unresolvable resource references</li>
 </ul>
 <h2 id="dependencies">Dependencies <a class="anchor" href="#dependencies">¶</a></h2>
 <ul>
-<li><code>core/</code> — protocol types (Request, Response, ToolDef, etc.)</li>
-<li><code>servicekit</code> — SSE hub, graceful shutdown</li>
+<li><code>core/</code> - protocol types (Request, Response, ToolDef, etc.)</li>
+<li><code>servicekit</code> - SSE hub, graceful shutdown</li>
 <li>Does NOT import <code>client/</code></li>
 </ul>
 <h2 id="in-process-transport">In-process transport <a class="anchor" href="#in-process-transport">¶</a></h2>

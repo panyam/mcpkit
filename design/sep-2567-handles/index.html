@@ -237,7 +237,7 @@
 
     <div class="content-body">
         
-<h1 id="sep-2567--explicit-state-handles-in-mcpkit">SEP-2567 — Explicit State Handles in mcpkit <a class="anchor" href="#sep-2567--explicit-state-handles-in-mcpkit">¶</a></h1>
+<h1 id="sep-2567-explicit-state-handles-in-mcpkit">SEP-2567 explicit state handles in mcpkit <a class="anchor" href="#sep-2567-explicit-state-handles-in-mcpkit">¶</a></h1>
 <p><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567">SEP-2567</a> (&ldquo;Sessionless MCP via Explicit State Handles&rdquo;) is the SEP-2575 stateless wire&rsquo;s <em>application-layer</em> counterpart: the wire removes session machinery; SEP-2567 explains how to model stateful flows <em>without</em> sessions, using explicit server-minted handles threaded through tool parameters.</p>
 <p><strong>SEP-2567 is design guidance, with no wire contract and no upstream conformance suite.</strong> Any storage you can hand a tool handler satisfies it: Redis, SQL, an in-memory <code>sync.Map</code>, a custom RPC backend, whatever. The SEP cares about <em>behavior</em> (server-minted opaque ids, threaded through tool args, no implicit session state), not about any specific Go API.</p>
 <p>mcpkit ships <code>server.HandleStore[T]</code> as <strong>opt-in scaffolding</strong> for the common case where you don&rsquo;t already have a store wired up. It handles opaque-id minting (collision-resistant base32), TTL/GC, and typed get/put/delete behind a small interface. Use it, replace it with your own store, or skip it entirely, and all three are equally SEP-2567-compliant. The worked example in <code>examples/stateless/</code>&rsquo;s cart story uses <code>HandleStore</code> for the on-ramp; a production deployment would as likely call Redis directly.</p>
@@ -318,9 +318,9 @@
 </table>
 <p>TTL nuances:</p>
 <ul>
-<li><code>ttl &gt; 0</code> — per-handle TTL override.</li>
-<li><code>ttl == 0</code> — fall back to the store&rsquo;s <code>WithHandleDefaultTTL</code>.</li>
-<li><code>ttl &lt; 0</code> — force &ldquo;never expires&rdquo; even when a non-zero default is set.</li>
+<li><code>ttl &gt; 0</code> - per-handle TTL override.</li>
+<li><code>ttl == 0</code> - fall back to the store&rsquo;s <code>WithHandleDefaultTTL</code>.</li>
+<li><code>ttl &lt; 0</code> - force &ldquo;never expires&rdquo; even when a non-zero default is set.</li>
 </ul>
 <p>IDs are 128-bit crypto-random base32 (26 chars), prefixed if configured. Collision-resistant for any sane store size.</p>
 <h2 id="how-this-composes-with-sep-2575-stateless-wire">How this composes with SEP-2575 stateless wire <a class="anchor" href="#how-this-composes-with-sep-2575-stateless-wire">¶</a></h2>
@@ -336,7 +336,7 @@
 <tr>
 <td>Per-request <code>_meta</code> envelope</td>
 <td>mandatory</td>
-<td>irrelevant — handles ride in tool args</td>
+<td>irrelevant - handles ride in tool args</td>
 </tr>
 <tr>
 <td>Sessions / <code>Mcp-Session-Id</code></td>
@@ -346,7 +346,7 @@
 <tr>
 <td><code>tools/list</code> / <code>prompts/list</code></td>
 <td>MUST NOT depend on session state</td>
-<td>trivially satisfied — handles aren&rsquo;t in those endpoints</td>
+<td>trivially satisfied - handles aren&rsquo;t in those endpoints</td>
 </tr>
 <tr>
 <td>Cross-call state</td>
@@ -355,8 +355,8 @@
 </tr>
 <tr>
 <td>Compose with SEP-2549 list TTLs</td>
-<td>yes — <code>_meta</code> envelope is per-request, lists cacheable at <code>(deployment, auth)</code> granularity</td>
-<td>yes — handle stores stay out of list endpoints, so lists remain cacheable</td>
+<td>yes - <code>_meta</code> envelope is per-request, lists cacheable at <code>(deployment, auth)</code> granularity</td>
+<td>yes - handle stores stay out of list endpoints, so lists remain cacheable</td>
 </tr>
 </tbody>
 </table>

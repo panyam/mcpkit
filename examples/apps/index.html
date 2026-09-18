@@ -239,11 +239,11 @@
         
 <h1 id="mcp-apps-examples">MCP Apps Examples <a class="anchor" href="#mcp-apps-examples">¶</a></h1>
 <blockquote>
-<p><strong>Stable</strong> — MCP Apps extension (<code>ext/ui</code>). Needs a host with Apps/iframe support (see below).</p>
+<p><strong>Stable</strong> - MCP Apps extension (<code>ext/ui</code>). Needs a host with Apps/iframe support (see below).</p>
 </blockquote>
-<p>Servers exposing <strong>MCP Apps</strong> — interactive HTML/JS UIs that an MCP host renders inside an iframe. The host and app communicate bidirectionally via the App Bridge (postMessage protocol).</p>
+<p>Servers exposing <strong>MCP Apps</strong>, the interactive HTML/JS UIs that an MCP host renders inside an iframe. The host and app communicate bidirectionally via the App Bridge (postMessage protocol).</p>
 <blockquote>
-<p>⚠ <strong>MCP Apps require a host that supports the Apps extension.</strong> <a href="https://mcpjam.com">MCPJam</a> is the easiest way to test these locally — it&rsquo;s a browser-based MCP host with iframe support. Claude Desktop / VS Code do not yet render MCP Apps.</p>
+<p>⚠ <strong>MCP Apps require a host that supports the Apps extension.</strong> <a href="https://mcpjam.com">MCPJam</a> is the easiest way to test these locally, being a browser-based MCP host with iframe support. Claude Desktop / VS Code do not yet render MCP Apps.</p>
 </blockquote>
 <h2 id="examples-at-a-glance">Examples at a Glance <a class="anchor" href="#examples-at-a-glance">¶</a></h2>
 <table>
@@ -256,23 +256,23 @@
 <tbody>
 <tr>
 <td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/vanilla">vanilla/</a></td>
-<td>Minimal MCP App — plain JS, no build step</td>
+<td>Minimal MCP App - plain JS, no build step</td>
 </tr>
 <tr>
 <td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/todolist">todolist/</a></td>
-<td>Server-rendered MCP App — bridge events, inline JS, elicitation + sampling</td>
+<td>Server-rendered MCP App - bridge events, inline JS, elicitation + sampling</td>
 </tr>
 <tr>
 <td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/react">react/</a></td>
-<td>React 19 MCP App — hooks, Vite, TypeScript</td>
+<td>React 19 MCP App - hooks, Vite, TypeScript</td>
 </tr>
 <tr>
 <td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/interactive">interactive/</a></td>
-<td>Tic-tac-toe — bidirectional app-provided tools (model can call tools the app exposes)</td>
+<td>Tic-tac-toe - bidirectional app-provided tools (model can call tools the app exposes)</td>
 </tr>
 <tr>
 <td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/dashboard">dashboard/</a></td>
-<td>Dashboard — tool lifecycle (enable/disable/remove at runtime)</td>
+<td>Dashboard - tool lifecycle (enable/disable/remove at runtime)</td>
 </tr>
 </tbody>
 </table>
@@ -312,15 +312,15 @@
 <p>See <a href="/mcpkit/packages/ext-ui/"><code>docs/APPS_DESIGN.md</code></a> for the full architecture.</p>
 <h2 id="troubleshooting">Troubleshooting <a class="anchor" href="#troubleshooting">¶</a></h2>
 <ul>
-<li><strong>React app shows blank page</strong> — run <code>pnpm build</code> in <code>react/</code> before starting the Go server.</li>
-<li><strong>Port already in use</strong> — another example is still running. Kill it or pass a different <code>-addr</code>.</li>
-<li><strong>App pane is empty in MCPJam</strong> — check the MCPJam network tab; the app should fetch its HTML from the <code>ui://</code> resource the server registers. If <code>tools/list</code> shows tools but no <code>_meta.ui</code> is present on a tool, that tool won&rsquo;t render an app.</li>
+<li><strong>React app shows blank page</strong> - run <code>pnpm build</code> in <code>react/</code> before starting the Go server.</li>
+<li><strong>Port already in use</strong> - another example is still running. Kill it or pass a different <code>-addr</code>.</li>
+<li><strong>App pane is empty in MCPJam</strong> - check the MCPJam network tab; the app should fetch its HTML from the <code>ui://</code> resource the server registers. If <code>tools/list</code> shows tools but no <code>_meta.ui</code> is present on a tool, that tool won&rsquo;t render an app.</li>
 </ul>
 <h2 id="related">Related <a class="anchor" href="#related">¶</a></h2>
 <ul>
-<li><a href="https://github.com/panyam/mcpkit/tree/main/ext/ui/assets">App Bridge JS source</a> — the JS shipped to the app iframe</li>
-<li><a href="/mcpkit/design/apps-host/"><code>docs/APPS_HOST.md</code></a> — implementing your own MCP App host</li>
-<li><a href="/mcpkit/examples/host/01-apphost/"><code>examples/host/01-apphost</code></a> — <code>AppHost</code> walkthrough (Go-side host implementation)</li>
+<li><a href="https://github.com/panyam/mcpkit/tree/main/ext/ui/assets">App Bridge JS source</a> - the JS shipped to the app iframe</li>
+<li><a href="/mcpkit/design/apps-host/"><code>docs/APPS_HOST.md</code></a> - implementing your own MCP App host</li>
+<li><a href="/mcpkit/examples/host/01-apphost/"><code>examples/host/01-apphost</code></a> - <code>AppHost</code> walkthrough (Go-side host implementation)</li>
 </ul>
 <h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
 <ul>

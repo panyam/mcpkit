@@ -237,7 +237,7 @@
 
     <div class="content-body">
         
-<h1 id="mcp-auth--experimental-features--design">MCP Auth + Experimental Features — Design <a class="anchor" href="#mcp-auth--experimental-features--design">¶</a></h1>
+<h1 id="mcp-auth--experimental-features-design">MCP Auth + Experimental Features, Design <a class="anchor" href="#mcp-auth--experimental-features-design">¶</a></h1>
 <h2 id="overview">Overview <a class="anchor" href="#overview">¶</a></h2>
 <p>MCPKit implements the MCP Authorization specification (draft, based on OAuth 2.1 + RFC 9728) for enterprise deployment. This document covers the architecture, protocol flows, and extension/experimental marking system.</p>
 <h2 id="supported-spec-versions">Supported spec versions <a class="anchor" href="#supported-spec-versions">¶</a></h2>
@@ -248,14 +248,14 @@
 <li>PRM well-known probes: path-based, then root (<code>/.well-known/oauth-protected-resource{path}</code>, then bare).</li>
 <li><strong>Legacy (2025-03-26) fallback</strong>, reached only when both PRM probes return a definitive <strong>404</strong>: fetch AS metadata at the origin&rsquo;s <code>/.well-known/oauth-authorization-server</code>; if that too is 404, synthesize the legacy default endpoints (<code>/authorize</code>, <code>/token</code>, <code>/register</code> at the origin, with S256 stamped so the PKCE gate passes on our own synthesized document). The result carries <code>MCPAuthInfo.LegacyDiscovery = true</code> and a nil <code>PRM</code>.</li>
 </ol>
-<p>The no-downgrade rule is load-bearing: any non-404 PRM outcome (5xx, network error) aborts discovery instead of falling back, and a header-advertised <code>resource_metadata</code> URL never falls back at all. A modern server&rsquo;s auth flow cannot be walked down to endpoint-guessing by inducing a transient PRM failure. <code>TestDiscoverMCPAuth_NoLegacyFallbackOnPRMServerError</code> and <code>TestDiscoverMCPAuth_NoLegacyFallbackWhenHeaderAdvertisesPRM</code> pin this.</p>
-<p>Note: this is distinct from MCP <strong>protocol version</strong> negotiation. mcpkit&rsquo;s <code>server.supportedProtocolVersions</code> includes <code>2024-11-05</code>, <code>2025-03-26</code>, <code>2025-11-25</code>, and <code>2026-07-28</code> — the protocol version field and the auth-flow shape are independent axes. The server side serves PRM only; the legacy shapes are client-side fallback, not something mcpkit servers emit.</p>
+<p>The no-downgrade rule is not a nicety: any non-404 PRM outcome (5xx, network error) aborts discovery instead of falling back, and a header-advertised <code>resource_metadata</code> URL never falls back at all. A modern server&rsquo;s auth flow cannot be walked down to endpoint-guessing by inducing a transient PRM failure. <code>TestDiscoverMCPAuth_NoLegacyFallbackOnPRMServerError</code> and <code>TestDiscoverMCPAuth_NoLegacyFallbackWhenHeaderAdvertisesPRM</code> pin this.</p>
+<p>Note: this is distinct from MCP <strong>protocol version</strong> negotiation. mcpkit&rsquo;s <code>server.supportedProtocolVersions</code> includes <code>2024-11-05</code>, <code>2025-03-26</code>, <code>2025-11-25</code>, and <code>2026-07-28</code>. The protocol version field and the auth-flow shape are independent axes. The server side serves PRM only; the legacy shapes are client-side fallback, not something mcpkit servers emit.</p>
 <h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
 <ol>
-<li><strong>Core module stays zero-auth-deps</strong> — static bearer token validation works out of the box. JWT/OIDC/OAuth lives in <code>mcpkit/auth</code>, a separate Go sub-module that imports oneauth.</li>
-<li><strong>Additive extensions</strong> — auth is opt-in. Servers without auth config work exactly as before.</li>
-<li><strong>Interface in core, implementation in sub-module</strong> — the core defines contracts (<code>AuthValidator</code>, <code>ClaimsProvider</code>, <code>TokenSource</code>, <code>ExtensionProvider</code>); the auth sub-module provides concrete implementations.</li>
-<li><strong>Thin adapter over oneauth</strong> — <code>mcpkit/auth</code> wraps oneauth&rsquo;s generic OAuth/JWT/OIDC primitives rather than reimplementing them. Only MCP-specific protocol logic (WWW-Authenticate format, PRM orchestration) is implemented from scratch.</li>
+<li><strong>Core module stays zero-auth-deps</strong> - static bearer token validation works out of the box. JWT/OIDC/OAuth lives in <code>mcpkit/auth</code>, a separate Go sub-module that imports oneauth.</li>
+<li><strong>Additive extensions</strong> - auth is opt-in. Servers without auth config work exactly as before.</li>
+<li><strong>Interface in core, implementation in sub-module</strong> - the core defines contracts (<code>AuthValidator</code>, <code>ClaimsProvider</code>, <code>TokenSource</code>, <code>ExtensionProvider</code>); the auth sub-module provides concrete implementations.</li>
+<li><strong>Thin adapter over oneauth</strong> - <code>mcpkit/auth</code> wraps oneauth&rsquo;s generic OAuth/JWT/OIDC primitives rather than reimplementing them. Only MCP-specific protocol logic (WWW-Authenticate format, PRM orchestration) is implemented from scratch.</li>
 </ol>
 <h2 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h2>
 <pre><code>┌─────────────────────────────────────────────────────────────────┐
@@ -302,10 +302,10 @@
 <p>They&rsquo;re the contract between the transport layer and tool handlers. oneauth has its own scattered identity model (<code>userID</code>, <code>scopes</code>, <code>customClaims</code> in separate context keys). <code>mcpkit.Claims</code> is a unified struct that adapters map into. If it lived in oneauth, mcpkit core would depend on oneauth, violating the zero-deps principle.</p>
 <h3 id="authorization-vs-www-authenticate">Authorization vs WWW-Authenticate <a class="anchor" href="#authorization-vs-www-authenticate">¶</a></h3>
 <ul>
-<li><code>Authorization: Bearer &lt;token&gt;</code> — <strong>client → server</strong> header: &ldquo;here&rsquo;s my credential&rdquo;</li>
-<li><code>WWW-Authenticate: Bearer resource_metadata=&quot;...&quot;, scope=&quot;...&quot;</code> — <strong>server → client</strong> header on 401/403: &ldquo;you need auth, here&rsquo;s how to get it&rdquo;</li>
+<li><code>Authorization: Bearer &lt;token&gt;</code> - <strong>client → server</strong> header: &ldquo;here&rsquo;s my credential&rdquo;</li>
+<li><code>WWW-Authenticate: Bearer resource_metadata=&quot;...&quot;, scope=&quot;...&quot;</code> - <strong>server → client</strong> header on 401/403: &ldquo;you need auth, here&rsquo;s how to get it&rdquo;</li>
 </ul>
-<p>Standard <code>WWW-Authenticate: Bearer</code> is defined in RFC 6750. MCP adds a non-standard <code>resource_metadata=</code> parameter pointing to the Protected Resource Metadata endpoint — this is MCP protocol vocabulary. The builders in <code>mcpkit/auth</code> emit this MCP-specific format; the parser is also MCP-specific (extracts <code>resource_metadata</code>).</p>
+<p>Standard <code>WWW-Authenticate: Bearer</code> is defined in RFC 6750. MCP adds a non-standard <code>resource_metadata=</code> parameter pointing to the Protected Resource Metadata endpoint, which is MCP protocol vocabulary. The builders in <code>mcpkit/auth</code> emit this MCP-specific format; the parser is also MCP-specific (extracts <code>resource_metadata</code>).</p>
 <h2 id="protocol-flows">Protocol Flows <a class="anchor" href="#protocol-flows">¶</a></h2>
 <h3 id="flow-a-server-side-jwt-validation-every-authenticated-request">Flow A: Server-side JWT validation (every authenticated request) <a class="anchor" href="#flow-a-server-side-jwt-validation-every-authenticated-request">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -351,7 +351,7 @@
     participant AS as External AS
 
     MC-&gt;&gt;OTS: Token()
-    Note right of OTS: no cached token; acquisition is LAZY —&lt;br/&gt;Token() returns core.ErrNoTokenYet until a&lt;br/&gt;401/403 challenge arms it via TokenForScopes&lt;br/&gt;(issue 818). The steps below run on the&lt;br/&gt;armed call, so the challenge scope wins.
+    Note right of OTS: no cached token; acquisition is LAZY,&lt;br/&gt;Token() returns core.ErrNoTokenYet until a&lt;br/&gt;401/403 challenge arms it via TokenForScopes&lt;br/&gt;(issue 818). The steps below run on the&lt;br/&gt;armed call, so the challenge scope wins.
 
     rect rgb(240, 240, 255)
         Note over OTS: DiscoverMCPAuth(serverURL)
@@ -508,7 +508,7 @@
 <tr>
 <td><code>AuthExtension</code></td>
 <td><code>ExtensionProvider</code></td>
-<td>(none — declares MCP auth extension metadata)</td>
+<td>(none - declares MCP auth extension metadata)</td>
 </tr>
 </tbody>
 </table>
@@ -572,17 +572,17 @@
 <p>Every ext/auth site that implements a spec-mandated clause carries an inline<br />
 comment citing the clause, in one of three forms:</p>
 <ul>
-<li><code>// RFC NNNN §X.Y — …</code> for a consumed RFC (7591 DCR, 8414 AS metadata,<br />
+<li><code>// RFC NNNN §X.Y - …</code> for a consumed RFC (7591 DCR, 8414 AS metadata,<br />
 8707 resource indicators, 9068 JWT access tokens, 9207 iss, 9728 PRM, …)</li>
-<li><code>// MCP-Auth §X.Y — …</code> for the MCP authorization spec (§C6-style checklist<br />
+<li><code>// MCP-Auth §X.Y - …</code> for the MCP authorization spec (§C6-style checklist<br />
 letters allowed)</li>
-<li><code>// SEP-NNNN — …</code> for an MCP SEP</li>
+<li><code>// SEP-NNNN - …</code> for an MCP SEP</li>
 </ul>
 <p>The markers travel with the code, so <code>grep -rE &quot;// (RFC|MCP-Auth|SEP-) [0-9]&quot; ext/auth/</code> reconstructs the clause→site mapping that<br />
 <a href="https://github.com/panyam/mcpkit/blob/main/conformance/AUTH_SPEC_COVERAGE.md"><code>conformance/AUTH_SPEC_COVERAGE.md</code></a><br />
 records by <code>file:line</code> (which drifts). <code>just check-auth-markers</code> asserts that<br />
-every matrix row citing an ext/auth site has its inline marker — so the matrix<br />
-stays honest as the code moves. When you add a matrix row, add the marker;<br />
+every matrix row citing an ext/auth site has its inline marker, so the matrix<br />
+stays accurate as the code moves. When you add a matrix row, add the marker;<br />
 when you touch a spec-mandated site, cite the clause inline.</p>
 <h3 id="server-side-mcp-server-as-oauth-resource-server">Server-side (MCP server as OAuth resource server) <a class="anchor" href="#server-side-mcp-server-as-oauth-resource-server">¶</a></h3>
 <table>
@@ -690,7 +690,7 @@ when you touch a spec-mandated site, cite the clause inline.</p>
 <td>C1</td>
 <td>MUST support PRM discovery via both WWW-Authenticate header and well-known URI</td>
 <td>Done</td>
-<td><code>DiscoverMCPAuth</code> — probes server, parses header, falls back to well-known</td>
+<td><code>DiscoverMCPAuth</code> - probes server, parses header, falls back to well-known</td>
 </tr>
 <tr>
 <td>C2</td>
@@ -702,7 +702,7 @@ when you touch a spec-mandated site, cite the clause inline.</p>
 <td>C3</td>
 <td>Well-known fallback: try path-based first, then root</td>
 <td>Done</td>
-<td><code>DiscoverMCPAuth</code> — <code>/.well-known/oauth-protected-resource/&lt;path&gt;</code> then root</td>
+<td><code>DiscoverMCPAuth</code> - <code>/.well-known/oauth-protected-resource/&lt;path&gt;</code> then root</td>
 </tr>
 <tr>
 <td>C4</td>
@@ -967,22 +967,22 @@ when you touch a spec-mandated site, cite the clause inline.</p>
 <h2 id="testing">Testing <a class="anchor" href="#testing">¶</a></h2>
 <p>Auth is tested at three levels:</p>
 <ol>
-<li><strong>Unit tests</strong> (<code>auth_test.go</code>, <code>auth/www_authenticate_test.go</code>) — mock validators, claims propagation, header format</li>
-<li><strong>E2E tests</strong> (<code>tests/e2e/</code>) — real oneauth AS (in-process via <code>testutil.TestAuthServer</code>) + real mcpkit MCP server with JWTValidator. RS256 JWTs validated through JWKS. 22 tests covering JWT validation, transport auth, scopes, PRM, WWW-Authenticate.</li>
-<li><strong>Keycloak interop</strong> (<code>tests/keycloak/</code>) — real Keycloak instance (Docker) issuing tokens validated by mcpkit. 7 tests. Skips gracefully without Docker.</li>
+<li><strong>Unit tests</strong> (<code>auth_test.go</code>, <code>auth/www_authenticate_test.go</code>) - mock validators, claims propagation, header format.</li>
+<li><strong>E2E tests</strong> (<code>tests/e2e/</code>) - real oneauth AS (in-process via <code>testutil.TestAuthServer</code>) + real mcpkit MCP server with JWTValidator. RS256 JWTs validated through JWKS. 22 tests covering JWT validation, transport auth, scopes, PRM, WWW-Authenticate.</li>
+<li><strong>Keycloak interop</strong> (<code>tests/keycloak/</code>) - real Keycloak instance (Docker) issuing tokens validated by mcpkit. 7 tests. Skips gracefully without Docker.</li>
 </ol>
 <h3 id="scope-format-compatibility">Scope format compatibility <a class="anchor" href="#scope-format-compatibility">¶</a></h3>
 <p>JWTValidator reads scopes from both formats:</p>
 <ul>
-<li><code>&quot;scopes&quot;: [&quot;read&quot;, &quot;write&quot;]</code> — oneauth array format</li>
-<li><code>&quot;scope&quot;: &quot;read write&quot;</code> — Keycloak/RFC 6749 space-delimited string</li>
+<li><code>&quot;scopes&quot;: [&quot;read&quot;, &quot;write&quot;]</code> - oneauth array format</li>
+<li><code>&quot;scope&quot;: &quot;read write&quot;</code> - Keycloak/RFC 6749 space-delimited string</li>
 </ul>
 <p>This was discovered during Keycloak interop testing (oneauth#68).</p>
 <h3 id="jwt-algorithm-performance">JWT algorithm performance <a class="anchor" href="#jwt-algorithm-performance">¶</a></h3>
 <p>MCPKit&rsquo;s JWTValidator supports any algorithm the JWKS key store provides (RS256, ES256, EdDSA, etc.). For new deployments, <strong>ES256 (ECDSA P-256) is recommended</strong> over RS256 (RSA-2048) for three reasons:</p>
 <ol>
 <li>
-<p><strong>Verification speed</strong>: ES256 verification is roughly 10x faster than RS256 on modern hardware (~0.01ms vs ~0.1ms per verify). In MCP agent loops with rapid sequential tool calls, this compounds — at 1000 RPS with 10 tool calls per agent turn, RS256 burns ~100ms/s of CPU on signature verification vs ~10ms/s for ES256.</p>
+<p><strong>Verification speed</strong>: ES256 verification is roughly 10x faster than RS256 on modern hardware (~0.01ms vs ~0.1ms per verify). In MCP agent loops with rapid sequential tool calls, this compounds - at 1000 RPS with 10 tool calls per agent turn, RS256 burns ~100ms/s of CPU on signature verification vs ~10ms/s for ES256.</p>
 </li>
 <li>
 <p><strong>Key size</strong>: ES256 public keys are 64 bytes vs 256 bytes for RSA-2048. Smaller JWKS responses, faster key rotation.</p>
@@ -994,26 +994,26 @@ when you touch a spec-mandated site, cite the clause inline.</p>
 <p>The validated-token cache (<code>JWTValidator.CacheTTL</code>) mitigates verification cost for repeated tokens in steady-state. But cold starts, cache misses, and high-cardinality token scenarios (many distinct users) still hit the verification path, where ES256 has a clear advantage.</p>
 <p><strong>Caveat</strong>: RS256 remains the default signing algorithm in most identity providers (including Keycloak, as configured in our test realm). Switching to ES256 requires explicit authorization server configuration. Consult your IdP documentation for key generation and algorithm settings.</p>
 <h2 id="tracing-sep-414-p6-issue-658">Tracing (SEP-414 P6, issue 658) <a class="anchor" href="#tracing-sep-414-p6-issue-658">¶</a></h2>
-<p><code>JWTConfig.TracerProvider</code> opts the validator into SEP-414 instrumentation. Nil (or <code>core.NoopTracerProvider{}</code>, the default) means zero spans, zero attributes, zero allocation added — and zero compile-time dependency on <code>ext/otel</code>; the validator codes against <code>core.TracerProvider</code> only.</p>
+<p><code>JWTConfig.TracerProvider</code> opts the validator into SEP-414 instrumentation. Nil (or <code>core.NoopTracerProvider{}</code>, the default) means zero spans, zero attributes, zero allocation added, and zero compile-time dependency on <code>ext/otel</code>; the validator codes against <code>core.TracerProvider</code> only.</p>
 <p>What&rsquo;s emitted when a <code>TracerProvider</code> is wired:</p>
 <ul>
 <li>
-<p><strong><code>auth.jwks_lookup</code> sub-span</strong> — wraps each <code>JWKSKeyStore.GetKeyByKid</code> call from <code>jwksKeyFuncCtx</code>. Carries the <code>mcp.auth.jwks.kid</code> attribute. Surfaces both cache-hit and cache-miss latency through the OTel adapter — oneauth&rsquo;s <code>JWKSKeyStore</code> owns the internal HTTP fetch decision, so we measure the call to the store (where <code>ext/auth</code>&rsquo;s responsibility ends), not the fetch itself.</p>
+<p><strong><code>auth.jwks_lookup</code> sub-span</strong> - wraps each <code>JWKSKeyStore.GetKeyByKid</code> call from <code>jwksKeyFuncCtx</code>. Carries the <code>mcp.auth.jwks.kid</code> attribute. Surfaces both cache-hit and cache-miss latency through the OTel adapter. oneauth&rsquo;s <code>JWKSKeyStore</code> owns the internal HTTP fetch decision, so we measure the call to the store (where <code>ext/auth</code>&rsquo;s responsibility ends), not the fetch itself.</p>
 </li>
 <li>
 <p><strong><code>mcp.auth.*</code> attributes on the active dispatch span</strong> (the outer span the SEP-414 P2 trace middleware started; reached via <code>core.SpanFromContext(r.Context())</code>):</p>
 <ul>
-<li><code>mcp.auth.method = &quot;jwt&quot;</code> — set unconditionally at the top of <code>Validate</code>, even on failure paths, so a failed auth still shows up as &ldquo;we attempted JWT validation here&rdquo;.</li>
-<li><code>mcp.auth.subject</code> — the <code>sub</code> claim of the validated JWT.</li>
-<li><code>mcp.auth.issuer</code> — the <code>iss</code> claim.</li>
-<li><code>mcp.auth.scopes</code> — comma-joined granted scopes (one searchable attribute in Tempo&rsquo;s TraceQL; per-element indexing reserved for if/when consumers ask).</li>
-<li><code>mcp.auth.cache_hit</code> — <code>&quot;true&quot;</code> on token-cache fast-path hits, <code>&quot;false&quot;</code> after a full validation. Both branches emit so cache effectiveness is visible without a separate metric.</li>
+<li><code>mcp.auth.method = &quot;jwt&quot;</code> - set unconditionally at the top of <code>Validate</code>, even on failure paths, so a failed auth still shows up as &ldquo;we attempted JWT validation here&rdquo;.</li>
+<li><code>mcp.auth.subject</code> - the <code>sub</code> claim of the validated JWT.</li>
+<li><code>mcp.auth.issuer</code> - the <code>iss</code> claim.</li>
+<li><code>mcp.auth.scopes</code> - comma-joined granted scopes (one searchable attribute in Tempo&rsquo;s TraceQL; per-element indexing reserved for if/when consumers ask).</li>
+<li><code>mcp.auth.cache_hit</code> - <code>&quot;true&quot;</code> on token-cache fast-path hits, <code>&quot;false&quot;</code> after a full validation. Both branches emit so cache effectiveness is visible without a separate metric.</li>
 </ul>
 </li>
 </ul>
-<p>When no active dispatch span is present (auth running outside a traced path), <code>core.SpanFromContext</code> returns a no-op span and every <code>SetAttribute</code> is a no-op — no nil-checking required at the call site.</p>
+<p>When no active dispatch span is present (auth running outside a traced path), <code>core.SpanFromContext</code> returns a no-op span and every <code>SetAttribute</code> is a no-op, so no nil-checking is required at the call site.</p>
 <h3 id="oneauth-side-tracing-v0114">oneauth-side tracing (v0.1.14+) <a class="anchor" href="#oneauth-side-tracing-v0114">¶</a></h3>
-<p><code>JWTConfig.OneauthTracerProvider</code> opts oneauth&rsquo;s own internal work (JWKS HTTP fetch, refresh, key parsing, signature verify) into emitting spans via the OTel SDK <code>TracerProvider</code> you supply. Threads through <code>keys.WithTracerProvider</code> on the <code>JWKSKeyStore</code> constructor (oneauth v0.1.14 added the option). Nil keeps oneauth&rsquo;s internal work opaque — <code>ext/auth</code> still emits its own <code>auth.jwks_lookup</code> span, just without child spans showing what oneauth was doing inside.</p>
+<p><code>JWTConfig.OneauthTracerProvider</code> opts oneauth&rsquo;s own internal work (JWKS HTTP fetch, refresh, key parsing, signature verify) into emitting spans via the OTel SDK <code>TracerProvider</code> you supply. Threads through <code>keys.WithTracerProvider</code> on the <code>JWKSKeyStore</code> constructor (oneauth v0.1.14 added the option). Nil keeps oneauth&rsquo;s internal work opaque. <code>ext/auth</code> still emits its own <code>auth.jwks_lookup</code> span, just without child spans showing what oneauth was doing inside.</p>
 <p>Typical wiring against the standard examples telemetry helper:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tp, shutdown, err <span style="color:#000;font-weight:bold">:=</span> commonotel.<span style="color:#900;font-weight:bold">SetupTelemetry</span>(ctx, <span style="color:#000;font-weight:bold">...</span>)
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> <span style="color:#900;font-weight:bold">shutdown</span>(ctx)
@@ -1024,7 +1024,7 @@ when you touch a spec-mandated site, cite the clause inline.</p>
 </span></span><span style="display:flex;"><span>    TracerProvider:        tp,                                  <span style="color:#998;font-style:italic">// ext/auth&#39;s own spans
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    OneauthTracerProvider: commonotel.<span style="color:#900;font-weight:bold">UnderlyingOTelTP</span>(tp),     <span style="color:#998;font-style:italic">// oneauth&#39;s spans, same OTel pipeline
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
-</span></span></code></pre><p><code>commonotel.UnderlyingOTelTP</code> extracts the OTel <code>TracerProvider</code> that <code>SetupTelemetry</code> constructed internally — needed because oneauth&rsquo;s API takes the OTel SDK type directly, not mcpkit&rsquo;s <code>core.TracerProvider</code> abstraction. When <code>tp</code> is the Noop provider (EXPORTER=&quot;&quot;), <code>UnderlyingOTelTP</code> returns nil and oneauth&rsquo;s options no-op cleanly.</p>
+</span></span></code></pre><p><code>commonotel.UnderlyingOTelTP</code> extracts the OTel <code>TracerProvider</code> that <code>SetupTelemetry</code> constructed internally, needed because oneauth&rsquo;s API takes the OTel SDK type directly, not mcpkit&rsquo;s <code>core.TracerProvider</code> abstraction. When <code>tp</code> is the Noop provider (EXPORTER=&quot;&quot;), <code>UnderlyingOTelTP</code> returns nil and oneauth&rsquo;s options no-op cleanly.</p>
 <p>End-to-end trace shape with both wired:</p>
 <pre><code>client.tools/call          (mcpkit/client)
 └─ server.tools/call       (mcpkit/server, parent via _meta.traceparent)
@@ -1035,13 +1035,13 @@ when you touch a spec-mandated site, cite the clause inline.</p>
 </code></pre>
 <p>Tracked in panyam/oneauth#254 (closed by oneauth PR 256, released as v0.1.14).</p>
 <h3 id="documented-limitation-transport-level-401-is-not-traced">Documented limitation: transport-level 401 is not traced <a class="anchor" href="#documented-limitation-transport-level-401-is-not-traced">¶</a></h3>
-<p>If the streamable transport rejects a request before the dispatch span starts (e.g., a malformed <code>Authorization</code> header caught at transport setup), the rejection happens <strong>before</strong> the SEP-414 P2 trace middleware runs, so there&rsquo;s no active span to decorate and no parent for an <code>auth.*</code> sub-span. That 401 is invisible in trace data today. Adding a transport-level span purely for rejected auth would change the spine semantics of &ldquo;one inbound span per JSON-RPC dispatch&rdquo; — deferred until a real adopter reports it as a missing signal.</p>
+<p>If the streamable transport rejects a request before the dispatch span starts (e.g., a malformed <code>Authorization</code> header caught at transport setup), the rejection happens <strong>before</strong> the SEP-414 P2 trace middleware runs, so there&rsquo;s no active span to decorate and no parent for an <code>auth.*</code> sub-span. That 401 is invisible in trace data today. Adding a transport-level span purely for rejected auth would change the spine semantics of &ldquo;one inbound span per JSON-RPC dispatch&rdquo;, so it is deferred until a real adopter reports it as a missing signal.</p>
 <h3 id="whats-deliberately-deferred">What&rsquo;s deliberately deferred <a class="anchor" href="#whats-deliberately-deferred">¶</a></h3>
 <ul>
-<li><strong><code>auth.introspect</code> sub-span (RFC 7662 token introspection)</strong> — no introspection validator exists in <code>ext/auth</code> today. Will land when that surface does.</li>
-<li><strong><code>auth.oauth_exchange</code> sub-span</strong> — outbound OAuth token-exchange flow (<code>client_credentials.go</code> / <code>enterprise_managed.go</code>) is a client-side <code>TokenSource</code> path with its own instrumentation arc.</li>
-<li><strong>Outbound <code>traceparent</code> HTTP header on the JWKS fetch</strong> — <code>keys.JWKSKeyStore</code> (in oneauth) owns the HTTP call, so ext/auth can&rsquo;t inject <code>traceparent</code> without an oneauth-side option. Tracked as a separate oneauth ticket; once landed, oneauth-internal work appears as a child of the <code>auth.jwks_lookup</code> span we already emit.</li>
-<li><strong><code>scope_middleware.go</code> (<code>auth.NewToolScopeMiddleware</code>)</strong> — scope enforcement is a separate concern from token validation; a follow-up ticket can decorate its decision points with <code>mcp.auth.scope.required</code> / <code>mcp.auth.scope.granted</code> attributes.</li>
+<li><strong><code>auth.introspect</code> sub-span (RFC 7662 token introspection)</strong> - no introspection validator exists in <code>ext/auth</code> today. Will land when that surface does.</li>
+<li><strong><code>auth.oauth_exchange</code> sub-span</strong> - outbound OAuth token-exchange flow (<code>client_credentials.go</code> / <code>enterprise_managed.go</code>) is a client-side <code>TokenSource</code> path with its own instrumentation arc.</li>
+<li><strong>Outbound <code>traceparent</code> HTTP header on the JWKS fetch</strong> - <code>keys.JWKSKeyStore</code> (in oneauth) owns the HTTP call, so ext/auth can&rsquo;t inject <code>traceparent</code> without an oneauth-side option. Tracked as a separate oneauth ticket; once landed, oneauth-internal work appears as a child of the <code>auth.jwks_lookup</code> span we already emit.</li>
+<li><strong><code>scope_middleware.go</code> (<code>auth.NewToolScopeMiddleware</code>)</strong> - scope enforcement is a separate concern from token validation; a follow-up ticket can decorate its decision points with <code>mcp.auth.scope.required</code> / <code>mcp.auth.scope.granted</code> attributes.</li>
 </ul>
 
 

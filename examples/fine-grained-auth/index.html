@@ -237,14 +237,14 @@
 
     <div class="content-body">
         
-<h1 id="fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3) <a class="anchor" href="#fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">¶</a></h1>
+<h1 id="fine-grained-authorization-scope-step-up-uc2-and-ephemeral-credentials-uc3">Fine-grained authorization: scope step-up (UC2) and ephemeral credentials (UC3) <a class="anchor" href="#fine-grained-authorization-scope-step-up-uc2-and-ephemeral-credentials-uc3">¶</a></h1>
 <blockquote>
-<p>⚠ <strong>Experimental</strong> — Tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643">SEP-2643</a> (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end. Wire format may change as the SEP evolves.</p>
+<p>⚠ <strong>Experimental</strong> - Tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643">SEP-2643</a> (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end. Wire format may change as the SEP evolves.</p>
 </blockquote>
 <p>A scripted MCP host walking through two of the SEP-2643 use cases:</p>
 <ul>
-<li><strong>UC2 — Scope step-up</strong> — server returns <code>HTTP 403 + WWW-Authenticate: Bearer scope=&quot;...&quot;</code> when a tool requires a scope the bearer token lacks; the host parses the required scopes per RFC 6750 and re-authorizes with the union.</li>
-<li><strong>UC3 — Ephemeral credentials (RFC 9396 RAR)</strong> — server returns a JSON-RPC error carrying a <code>remediationHint</code> of type <code>oauth_authorization_details</code>; the host uses those details <em>verbatim</em> in a token request to mint a transaction-bound credential.</li>
+<li><strong>UC2, scope step-up.</strong> The server returns <code>HTTP 403 + WWW-Authenticate: Bearer scope=&quot;...&quot;</code> when a tool requires a scope the bearer token lacks; the host parses the required scopes per RFC 6750 and re-authorizes with the union.</li>
+<li><strong>UC3, ephemeral credentials (RFC 9396 RAR).</strong> The server returns a JSON-RPC error carrying a <code>remediationHint</code> of type <code>oauth_authorization_details</code>; the host uses those details <em>verbatim</em> in a token request to mint a transaction-bound credential.</li>
 </ul>
 <p>The MCP server runs an in-process <a href="https://github.com/panyam/oneauth">oneauth</a> Authorization Server in a goroutine because Keycloak does not yet support RFC 9396 RAR. Tokens are RS256-signed; the MCP server validates them via the AS&rsquo;s JWKS endpoint.</p>
 <h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
@@ -258,11 +258,11 @@
 <ul>
 <li><strong>HTTP 403 + WWW-Authenticate per RFC 6750</strong> for scope-step-up denials. <code>auth.NewToolScopeMiddleware</code> rejects pre-handler when <code>core.ToolDef.RequiredScopes</code> aren&rsquo;t satisfied; the mcpkit client surfaces it as <code>*client.ClientAuthError</code> with parsed <code>RequiredScopes</code>.</li>
 <li><strong>OAuth 2.0 client_credentials</strong> grant against the in-process AS to mint scoped access tokens (RS256, validated by the MCP server via JWKS).</li>
-<li><strong>Auto-step-up flow</strong>: the host parses the WWW-Authenticate scopes verbatim and requests a broader token containing the union (read + write), then retries — the smart-host pattern the spec encodes.</li>
-<li><strong>JSON-RPC <code>remediationHint</code> envelope</strong> for UC3 — <code>error.data.authorization.remediationHints[].type = &quot;oauth_authorization_details&quot;</code> with RFC 9396 detail object describing the required authorization (<code>{type: &quot;payment_initiation&quot;, amount, currency, payee, ...}</code>).</li>
-<li><strong>RFC 9396 Rich Authorization Requests</strong> — host echoes the detail object back to the AS at <code>POST /token</code>; the AS embeds the resulting <code>authorization_details</code> claim in the issued JWT.</li>
-<li><strong>Server-side enforcement</strong> of <code>authorization_details</code> via <code>paymentAuthorizationMiddleware</code> — reads the claim from the JWT and validates that a <code>payment_initiation</code> entry matches the request before letting <code>initiate_payment</code> execute.</li>
-<li><strong>CORS configuration</strong> for browser-based MCP hosts (MCPJam) — <code>Mcp-Session-Id</code> in both Allow-Headers and Expose-Headers; <code>DELETE</code> in allowed methods.</li>
+<li><strong>Auto-step-up flow</strong>: the host parses the WWW-Authenticate scopes verbatim and requests a broader token containing the union (read + write), then retries - the smart-host pattern the spec encodes.</li>
+<li><strong>JSON-RPC <code>remediationHint</code> envelope</strong> for UC3 - <code>error.data.authorization.remediationHints[].type = &quot;oauth_authorization_details&quot;</code> with RFC 9396 detail object describing the required authorization (<code>{type: &quot;payment_initiation&quot;, amount, currency, payee, ...}</code>).</li>
+<li><strong>RFC 9396 Rich Authorization Requests</strong> - host echoes the detail object back to the AS at <code>POST /token</code>; the AS embeds the resulting <code>authorization_details</code> claim in the issued JWT.</li>
+<li><strong>Server-side enforcement</strong> of <code>authorization_details</code> via <code>paymentAuthorizationMiddleware</code> - reads the claim from the JWT and validates that a <code>payment_initiation</code> entry matches the request before letting <code>initiate_payment</code> execute.</li>
+<li><strong>CORS configuration</strong> for browser-based MCP hosts (MCPJam) - <code>Mcp-Session-Id</code> in both Allow-Headers and Expose-Headers; <code>DELETE</code> in allowed methods.</li>
 </ul>
 <h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
 <ul>
@@ -271,17 +271,17 @@
 <li>Tool registration + <code>paymentAuthorizationMiddleware</code>: <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/main.go"><code>main.go</code></a> (<code>registerTools</code>, <code>paymentAuthorizationMiddleware</code>)</li>
 <li>Scope-step-up middleware: <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/scope_middleware.go"><code>ext/auth/scope_middleware.go</code></a> (<code>auth.NewToolScopeMiddleware</code>)</li>
 <li>JWT validator: <a href="https://github.com/panyam/mcpkit/blob/main/ext/auth/jwt_validator.go"><code>ext/auth/jwt_validator.go</code></a></li>
-<li>Companion: <a href="/mcpkit/examples/elicitation/"><code>examples/elicitation/</code></a> — UC1 (URL elicitation / consent approval flow)</li>
+<li>Companion: <a href="/mcpkit/examples/elicitation/"><code>examples/elicitation/</code></a> - UC1 (URL elicitation / consent approval flow)</li>
 </ul>
 <h2 id="notes">Notes <a class="anchor" href="#notes">¶</a></h2>
 <ul>
 <li>CORS for browser-based MCP hosts is applied via <code>server.WithHandlerWrap(cors)</code> so it covers <code>/mcp</code> plus the <code>auth.MountAuth</code> routes plus <code>/demo/bootstrap</code> uniformly. Same pattern as <code>examples/elicitation/</code>.</li>
 <li>The walkthrough&rsquo;s &ldquo;no user interaction&rdquo; assumption is <strong>demo only</strong>. A real banking host would prompt the user to confirm the payment amount/payee before requesting the RAR-bound token.</li>
-<li>The custom <code>isError=true</code> and <code>tool=</code> color rules on the demo server logger are passed as variadic extras to <code>common.NewMCPLogger</code> — they layer on top of the canonical 5-rule set without re-declaring it.</li>
+<li>The custom <code>isError=true</code> and <code>tool=</code> color rules on the demo server logger are passed as variadic extras to <code>common.NewMCPLogger</code>, so they layer on top of the canonical 5-rule set without re-declaring it.</li>
 </ul>
 <h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
 <ul>
-<li><a href="/mcpkit/examples/elicitation/">Elicitation — UC1 of the same SEP</a></li>
+<li><a href="/mcpkit/examples/elicitation/">Elicitation - UC1 of the same SEP</a></li>
 <li><a href="/mcpkit/examples/auth/">Auth basics</a></li>
 </ul>
 
@@ -291,20 +291,20 @@
 <h2 id="walkthrough">Walkthrough</h2>
 <p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/fine-grained-auth/WALKTHROUGH.md"><code>examples/fine-grained-auth/WALKTHROUGH.md</code></a></p>
 
-<h1 id="fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">Fine-Grained Authorization — Scope Step-Up (UC2) + Ephemeral Credentials (UC3) <a class="anchor" href="#fine-grained-authorization--scope-step-up-uc2--ephemeral-credentials-uc3">¶</a></h1>
-<p><strong>EXPERIMENTAL</strong> — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.</p>
+<h1 id="fine-grained-authorization-scope-step-up-uc2-and-ephemeral-credentials-uc3">Fine-grained authorization: scope step-up (UC2) and ephemeral credentials (UC3) <a class="anchor" href="#fine-grained-authorization-scope-step-up-uc2-and-ephemeral-credentials-uc3">¶</a></h1>
+<p><strong>EXPERIMENTAL.</strong> Tracks SEP-2643 (Structured Authorization Denials), currently a draft. UC2 + UC3 demonstrated end-to-end against an in-process oneauth AS.</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
-<li><strong>Discover the in-process AS bootstrap from the MCP server</strong> — The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.</li>
-<li><strong>Get a read-only token (scope: tools-read)</strong> — Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS&rsquo;s JWKS endpoint.</li>
-<li><strong>Connect to MCP server with read-only token</strong> — JWT validation against the AS&rsquo;s JWKS endpoint succeeds — token is valid, just limited in scope.</li>
-<li><strong>Call read_document — succeeds (tools-read is sufficient)</strong> — The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.</li>
-<li><strong>Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)</strong> — Per SEP-2643 (FineGrainedAuth UC2): the server&rsquo;s auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).</li>
-<li><strong>Auto-step-up: re-authorize with scopes from WWW-Authenticate</strong> — Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).</li>
-<li><strong>Retry update_document with broader token — SUCCEEDS</strong> — New session with the broader token. update_document succeeds because the token includes tools-call.</li>
-<li><strong>Call initiate_payment — DENIED with RAR authorization_details (UC3)</strong> — The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.</li>
-<li><strong>Request an RAR-bound payment token from the AS</strong> — The host uses the authorization_details from the remediationHint <em>verbatim</em> in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.</li>
-<li><strong>Retry initiate_payment with RAR-bound token — SUCCEEDS</strong> — The server&rsquo;s initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.</li>
+<li><strong>Discover the in-process AS bootstrap from the MCP server</strong> - The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.</li>
+<li><strong>Get a read-only token (scope: tools-read)</strong> - Standard OAuth 2.0 client_credentials grant. The token is RS256-signed by the AS and can be validated against the AS&rsquo;s JWKS endpoint.</li>
+<li><strong>Connect to MCP server with read-only token</strong> - JWT validation against the AS&rsquo;s JWKS endpoint succeeds. The token is valid, just limited in scope.</li>
+<li><strong>Call read_document, which succeeds (tools-read is sufficient)</strong> - The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.</li>
+<li><strong>Call update_document, DENIED (UC2: HTTP 403 + WWW-Authenticate)</strong> - Per SEP-2643 (FineGrainedAuth UC2): the server&rsquo;s auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).</li>
+<li><strong>Auto-step-up: re-authorize with scopes from WWW-Authenticate</strong> - Spec-driven smart-host behavior: the WWW-Authenticate header named the required scopes; the host complies. We also re-include tools-read so the broader token works for both reads and writes (typical OAuth step-up: ask for the union, not a replacement).</li>
+<li><strong>Retry update_document with a broader token, which SUCCEEDS</strong> - New session with the broader token. update_document succeeds because the token includes tools-call.</li>
+<li><strong>Call initiate_payment, DENIED with RAR authorization_details (UC3)</strong> - The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.</li>
+<li><strong>Request an RAR-bound payment token from the AS</strong> - The host uses the authorization_details from the remediationHint <em>verbatim</em> in the OAuth token request (RFC 9396). The AS validates and embeds the authorization_details into the JWT as a claim. The host now holds two tokens: the original tools-read+tools-call token (for everything else) and this short-lived payment-bound token.</li>
+<li><strong>Retry initiate_payment with a RAR-bound token, which SUCCEEDS</strong> - The server&rsquo;s initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does, because the host minted exactly the token the server asked for in the previous denial.</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -317,41 +317,41 @@
     Server--&gt;&gt;Host: {as_url, client_id, client_secret}
 
     Note over Host,AS: Step 2: Get a read-only token (scope: tools-read)
-    Host-&gt;&gt;AS: POST /token — grant_type=client_credentials, scope=tools-read
+    Host-&gt;&gt;AS: POST /token, grant_type=client_credentials, scope=tools-read
     AS--&gt;&gt;Host: access_token (tools-read only)
 
     Note over Host,AS: Step 3: Connect to MCP server with read-only token
-    Host-&gt;&gt;Server: POST /mcp — initialize + Authorization: Bearer &lt;read-token&gt;
+    Host-&gt;&gt;Server: POST /mcp, initialize + Authorization: Bearer &lt;read-token&gt;
     Server--&gt;&gt;Host: serverInfo + Mcp-Session-Id
 
-    Note over Host,AS: Step 4: Call read_document — succeeds (tools-read is sufficient)
+    Note over Host,AS: Step 4: Call read_document, which succeeds (tools-read is sufficient)
     Host-&gt;&gt;Server: tools/call: read_document {docId: &quot;doc-123&quot;}
     Server--&gt;&gt;Host: Document content
 
-    Note over Host,AS: Step 5: Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate)
+    Note over Host,AS: Step 5: Call update_document, DENIED (UC2: HTTP 403 + WWW-Authenticate)
     Host-&gt;&gt;Server: tools/call: update_document {docId: &quot;doc-123&quot;}
     Server--&gt;&gt;Host: HTTP 403 + WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;tools-call&quot;
 
     Note over Host,AS: Step 6: Auto-step-up: re-authorize with scopes from WWW-Authenticate
-    Host-&gt;&gt;AS: POST /token — scope=&lt;from WWW-Authenticate&gt;
+    Host-&gt;&gt;AS: POST /token, scope=&lt;from WWW-Authenticate&gt;
     AS--&gt;&gt;Host: access_token with broader scopes
 
-    Note over Host,AS: Step 7: Retry update_document with broader token — SUCCEEDS
-    Host-&gt;&gt;Server: POST /mcp — initialize + Bearer (broader token)
+    Note over Host,AS: Step 7: Retry update_document with a broader token, which SUCCEEDS
+    Host-&gt;&gt;Server: POST /mcp, initialize + Bearer (broader token)
     Server--&gt;&gt;Host: new session
     Host-&gt;&gt;Server: tools/call: update_document
     Server--&gt;&gt;Host: Document updated successfully
 
-    Note over Host,AS: Step 8: Call initiate_payment — DENIED with RAR authorization_details (UC3)
+    Note over Host,AS: Step 8: Call initiate_payment, DENIED with RAR authorization_details (UC3)
     Host-&gt;&gt;Server: tools/call: initiate_payment {amount: 150 EUR, payee: ACME}
     Server--&gt;&gt;Host: JSON-RPC error + credentialDisposition: additional + payment_initiation RAR
 
     Note over Host,AS: Step 9: Request an RAR-bound payment token from the AS
-    Host-&gt;&gt;AS: POST /token — authorization_details=[payment_initiation, ...]
+    Host-&gt;&gt;AS: POST /token, authorization_details=[payment_initiation, ...]
     AS--&gt;&gt;Host: access_token with authorization_details claim
 
-    Note over Host,AS: Step 10: Retry initiate_payment with RAR-bound token — SUCCEEDS
-    Host-&gt;&gt;Server: POST /mcp — initialize + Bearer (RAR token)
+    Note over Host,AS: Step 10: Retry initiate_payment with a RAR-bound token, which SUCCEEDS
+    Host-&gt;&gt;Server: POST /mcp, initialize + Bearer (RAR token)
     Server--&gt;&gt;Host: new session
     Host-&gt;&gt;Server: tools/call: initiate_payment {amount: 150 EUR, payee: ACME}
     Server--&gt;&gt;Host: Payment initiated
@@ -367,12 +367,12 @@ host to discover.</p>
 <pre><code>Terminal 1:  just serve        # MCP server + in-process AS on :8080
 Terminal 2:  just run          # this demo
 </code></pre>
-<h3 id="uc1-vs-uc2uc3--when-does-the-host-react">UC1 vs UC2/UC3 — When does the host react? <a class="anchor" href="#uc1-vs-uc2uc3--when-does-the-host-react">¶</a></h3>
+<h3 id="uc1-vs-uc2uc3-and-when-the-host-reacts">UC1 vs UC2/UC3, and when the host reacts <a class="anchor" href="#uc1-vs-uc2uc3-and-when-the-host-reacts">¶</a></h3>
 <p>UC1 (elicitation): the denial points to an out-of-band action (user clicks Approve).<br />
 The host can&rsquo;t proceed until it receives <code>notifications/elicitation/complete</code>.</p>
-<p>UC2/UC3: the denial is a transport-level signal — UC2 is HTTP 403 + WWW-Authenticate,<br />
+<p>UC2/UC3: the denial is a transport-level signal. UC2 is HTTP 403 + WWW-Authenticate,<br />
 UC3 is a JSON-RPC error with an RFC 9396 remediationHint. The host parses it and reacts<br />
-immediately by re-authorizing — no user interaction in this demo (a real banking host<br />
+immediately by re-authorizing, with no user interaction in this demo (a real banking host<br />
 would prompt the user to confirm the payment first).</p>
 <h3 id="step-1-discover-the-in-process-as-bootstrap-from-the-mcp-server">Step 1: Discover the in-process AS bootstrap from the MCP server <a class="anchor" href="#step-1-discover-the-in-process-as-bootstrap-from-the-mcp-server">¶</a></h3>
 <p>The MCP server exposes a non-standard bootstrap endpoint that hands the host the in-process AS URL and a pre-registered client credential. In production, the host would do OAuth Dynamic Client Registration; this shortcut keeps the demo focused on SEP-2643.</p>
@@ -396,7 +396,7 @@ would prompt the user to confirm the payment first).</p>
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r .access_token<span style="color:#000;font-weight:bold">)</span>
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TOK_READ=</span><span style="color:#d14">${</span><span style="color:#008080">TOK_READ</span>:<span style="color:#008080">0</span>:<span style="color:#008080">30</span><span style="color:#d14">}</span><span style="color:#d14">...&#34;</span>
 </span></span></code></pre><h3 id="step-3-connect-to-mcp-server-with-read-only-token">Step 3: Connect to MCP server with read-only token <a class="anchor" href="#step-3-connect-to-mcp-server-with-read-only-token">¶</a></h3>
-<p>JWT validation against the AS&rsquo;s JWKS endpoint succeeds — token is valid, just limited in scope.</p>
+<p>JWT validation against the AS&rsquo;s JWKS endpoint succeeds. The token is valid, just limited in scope.</p>
 <h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Initialize an MCP session with the read-only token. The Mcp-Session-Id</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># returned in the response headers is what every subsequent call must echo.</span>
@@ -411,7 +411,7 @@ would prompt the user to confirm the payment first).</p>
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
-</span></span></code></pre><h3 id="step-4-call-read-document--succeeds-tools-read-is-sufficient">Step 4: Call read_document — succeeds (tools-read is sufficient) <a class="anchor" href="#step-4-call-read-document--succeeds-tools-read-is-sufficient">¶</a></h3>
+</span></span></code></pre><h3 id="step-4-call-read-document-which-succeeds-tools-read-is-sufficient">Step 4: Call read_document, which succeeds (tools-read is sufficient) <a class="anchor" href="#step-4-call-read-document-which-succeeds-tools-read-is-sufficient">¶</a></h3>
 <p>The read_document tool only requires tools-read scope. Our token has it, so the call succeeds.</p>
 <h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Read a document. Succeeds because tools-read is enough.</span>
@@ -421,7 +421,7 @@ would prompt the user to confirm the payment first).</p>
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;r&#34;,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;read_document&#34;,&#34;arguments&#34;:{&#34;docId&#34;:&#34;doc-123&#34;}}}&#39;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq .
-</span></span></code></pre><h3 id="step-5-call-update-document--denied-uc2-http-403--www-authenticate">Step 5: Call update_document — DENIED (UC2: HTTP 403 + WWW-Authenticate) <a class="anchor" href="#step-5-call-update-document--denied-uc2-http-403--www-authenticate">¶</a></h3>
+</span></span></code></pre><h3 id="step-5-call-update-document-denied-uc2-http-403--www-authenticate">Step 5: Call update_document, DENIED (UC2: HTTP 403 + WWW-Authenticate) <a class="anchor" href="#step-5-call-update-document-denied-uc2-http-403--www-authenticate">¶</a></h3>
 <p>Per SEP-2643 (FineGrainedAuth UC2): the server&rsquo;s auth.NewToolScopeMiddleware returns HTTP 403 with WWW-Authenticate before the handler runs. The mcpkit client surfaces this as *client.ClientAuthError with the required scopes already parsed from the header (RFC 6750).</p>
 <h4 id="reproduce-on-the-wire-4">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-4">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Try update_document with the read-only token. -i shows response headers</span>
@@ -443,7 +443,7 @@ would prompt the user to confirm the payment first).</p>
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;grant_type\&#34;:\&#34;client_credentials\&#34;,\&#34;client_id\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_ID</span><span style="color:#d14">\&#34;,\&#34;client_secret\&#34;:\&#34;</span><span style="color:#008080">$CLIENT_SECRET</span><span style="color:#d14">\&#34;,\&#34;scope\&#34;:\&#34;tools-read tools-call\&#34;}&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq -r .access_token<span style="color:#000;font-weight:bold">)</span>
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;TOK_CALL=</span><span style="color:#d14">${</span><span style="color:#008080">TOK_CALL</span>:<span style="color:#008080">0</span>:<span style="color:#008080">30</span><span style="color:#d14">}</span><span style="color:#d14">...&#34;</span>
-</span></span></code></pre><h3 id="step-7-retry-update-document-with-broader-token--succeeds">Step 7: Retry update_document with broader token — SUCCEEDS <a class="anchor" href="#step-7-retry-update-document-with-broader-token--succeeds">¶</a></h3>
+</span></span></code></pre><h3 id="step-7-retry-update-document-with-a-broader-token-which-succeeds">Step 7: Retry update_document with a broader token, which SUCCEEDS <a class="anchor" href="#step-7-retry-update-document-with-a-broader-token-which-succeeds">¶</a></h3>
 <p>New session with the broader token. update_document succeeds because the token includes tools-call.</p>
 <h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># New session with the broader token, then repeat update_document.</span>
@@ -468,7 +468,7 @@ would prompt the user to confirm the payment first).</p>
 specific operation (payment), while keeping the original token for other<br />
 operations. The denial carries credentialDisposition: &ldquo;additional&rdquo; and<br />
 RFC 9396 authorization_details bound to the specific transaction.</p>
-<h3 id="step-8-call-initiate-payment--denied-with-rar-authorization-details-uc3">Step 8: Call initiate_payment — DENIED with RAR authorization_details (UC3) <a class="anchor" href="#step-8-call-initiate-payment--denied-with-rar-authorization-details-uc3">¶</a></h3>
+<h3 id="step-8-call-initiate-payment-denied-with-rar-authorization-details-uc3">Step 8: Call initiate_payment, DENIED with RAR authorization_details (UC3) <a class="anchor" href="#step-8-call-initiate-payment-denied-with-rar-authorization-details-uc3">¶</a></h3>
 <p>The payment tool requires a transaction-specific ephemeral credential. Our broader token has tools-call but no authorization_details bound to this payment, so the server returns the SEP-2643 envelope with an oauth_authorization_details remediationHint describing the exact authorization the host must request.</p>
 <h4 id="reproduce-on-the-wire-7">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-7">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Try initiate_payment with the broader token. The token has tools-call scope</span>
@@ -497,8 +497,8 @@ RFC 9396 authorization_details bound to the specific transaction.</p>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Decode the JWT payload. The authorization_details claim is embedded directly,</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># which is what makes the token &#34;self-describing&#34; for the RS to validate.</span>
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$TOK_PAY</span><span style="color:#d14">&#34;</span> | cut -d. -f2 | base64 -d 2&gt;/dev/null | jq
-</span></span></code></pre><h3 id="step-10-retry-initiate-payment-with-rar-bound-token--succeeds">Step 10: Retry initiate_payment with RAR-bound token — SUCCEEDS <a class="anchor" href="#step-10-retry-initiate-payment-with-rar-bound-token--succeeds">¶</a></h3>
-<p>The server&rsquo;s initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does — the host minted exactly the token the server asked for in the previous denial.</p>
+</span></span></code></pre><h3 id="step-10-retry-initiate-payment-with-a-rar-bound-token-which-succeeds">Step 10: Retry initiate_payment with a RAR-bound token, which SUCCEEDS <a class="anchor" href="#step-10-retry-initiate-payment-with-a-rar-bound-token-which-succeeds">¶</a></h3>
+<p>The server&rsquo;s initiate_payment handler reads authorization_details from the JWT claims and validates that a payment_initiation entry matches the request (amount, currency, payee). It does, because the host minted exactly the token the server asked for in the previous denial.</p>
 <h4 id="reproduce-on-the-wire-9">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-9">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># New session with the RAR-bound token, then retry initiate_payment.</span>
 </span></span><span style="display:flex;"><span><span style="color:#008080">SID3</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\

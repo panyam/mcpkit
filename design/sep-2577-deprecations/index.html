@@ -237,7 +237,7 @@
 
     <div class="content-body">
         
-<h1 id="sep-2577--deprecation-of-roots-sampling-and-logging">SEP-2577 — Deprecation of Roots, Sampling, and Logging <a class="anchor" href="#sep-2577--deprecation-of-roots-sampling-and-logging">¶</a></h1>
+<h1 id="sep-2577-deprecates-roots-sampling-and-logging">SEP-2577 deprecates Roots, Sampling and Logging <a class="anchor" href="#sep-2577-deprecates-roots-sampling-and-logging">¶</a></h1>
 <p><a href="https://github.com/modelcontextprotocol/specification/pull/2577">SEP-2577</a> lands in the MCP 2026-07-28 RC (locked 2026-05-21). It puts three protocol features on a deprecation path: <strong>Roots</strong>, <strong>Sampling</strong>, and <strong>Logging</strong>. mcpkit is on the 12-month annotation-only path, and every existing call still works at runtime; godoc <code>// Deprecated:</code> blocks fire <code>staticcheck SA1019</code> (and any IDE that consumes it) at call sites so consumers see the warning the moment they upgrade.</p>
 <p><strong>Removal target:</strong> a future major release, no earlier than the spec window below (~2027). Removal was <strong>deferred out of 0.4</strong> (tracked in issue 850): 0.4 keeps the surfaces fully functional alongside the deprecation comments, so <em>no behavior changes</em> at the 0.4 cut. Removing them at 0.4 would break mcpkit&rsquo;s own 12-month annotation window (closes ~2027-05-21) and drop it below 100% conformance / Tier-1 while the features remain in the targeted spec version.</p>
 <h2 id="tldr">TL;DR <a class="anchor" href="#tldr">¶</a></h2>
@@ -292,7 +292,7 @@
 </tr>
 <tr>
 <td>2026-07-28</td>
-<td>MCP 2026-07-28 GA — features remain in the spec but flagged deprecated</td>
+<td>MCP 2026-07-28 GA - features remain in the spec but flagged deprecated</td>
 </tr>
 <tr>
 <td>2027-05-21</td>
@@ -300,7 +300,7 @@
 </tr>
 <tr>
 <td>a future major release (≥ 2027)</td>
-<td>mcpkit removes the deprecated symbols — no earlier than the spec window above. Deferred out of 0.4 (issue 850).</td>
+<td>mcpkit removes the deprecated symbols - no earlier than the spec window above. Deferred out of 0.4 (issue 850).</td>
 </tr>
 </tbody>
 </table>
@@ -325,7 +325,7 @@
 </tr>
 <tr>
 <td><code>core.IsPathAllowed(ctx, path) bool</code></td>
-<td>Same — application-level check against your own allowlist.</td>
+<td>Same - application-level check against your own allowlist.</td>
 </tr>
 <tr>
 <td><code>core.BaseContext.IsPathAllowed(path) bool</code></td>
@@ -333,7 +333,7 @@
 </tr>
 <tr>
 <td><code>core.RootsListResult</code></td>
-<td>No replacement — the <code>roots/list</code> server-to-client request is the thing being deprecated.</td>
+<td>No replacement - the <code>roots/list</code> server-to-client request is the thing being deprecated.</td>
 </tr>
 <tr>
 <td><code>core.DecodeListRootsInputResponse</code></td>
@@ -345,7 +345,7 @@
 </tr>
 <tr>
 <td><code>(*client.Client).NotifyRootsChanged()</code></td>
-<td>No replacement — <code>roots/list_changed</code> is part of the deprecated surface.</td>
+<td>No replacement - <code>roots/list_changed</code> is part of the deprecated surface.</td>
 </tr>
 </tbody>
 </table>
@@ -365,11 +365,11 @@
 </tr>
 <tr>
 <td><code>core.BaseContext.Sample(req) (CreateMessageResult, error)</code></td>
-<td>Same — receive a model client via dependency injection at server construction.</td>
+<td>Same - receive a model client via dependency injection at server construction.</td>
 </tr>
 <tr>
 <td><code>core.CreateMessageRequest</code>, <code>core.SamplingMessage</code>, <code>core.ModelPreferences</code>, <code>core.CreateMessageResult</code></td>
-<td>No replacement at the protocol surface — these wire types disappear. Application-level model abstractions replace them.</td>
+<td>No replacement at the protocol surface - these wire types disappear. Application-level model abstractions replace them.</td>
 </tr>
 <tr>
 <td><code>core.NewSamplingInputRequest(req)</code>, <code>core.DecodeSamplingInputResponse</code></td>
@@ -377,11 +377,11 @@
 </tr>
 <tr>
 <td><code>(*server.TaskContext).TaskSample(req) (CreateMessageResult, error)</code></td>
-<td>Same as <code>Sample()</code> — task continuations should hold their own LLM client.</td>
+<td>Same as <code>Sample()</code> - task continuations should hold their own LLM client.</td>
 </tr>
 <tr>
 <td><code>client.SamplingHandler</code>, <code>client.WithSamplingHandler(h)</code></td>
-<td>After removal, the host&rsquo;s LLM client and the MCP client are separately wired — no protocol negotiation.</td>
+<td>After removal, the host&rsquo;s LLM client and the MCP client are separately wired - no protocol negotiation.</td>
 </tr>
 </tbody>
 </table>
@@ -397,7 +397,7 @@
 <tbody>
 <tr>
 <td><code>core.EmitLog(ctx, level, logger, data)</code></td>
-<td>Use <code>slog.InfoContext(ctx, ...)</code> (or equivalent) — write to your own log sink.</td>
+<td>Use <code>slog.InfoContext(ctx, ...)</code> (or equivalent) - write to your own log sink.</td>
 </tr>
 <tr>
 <td><code>core.BaseContext.EmitLog(level, logger, data)</code></td>

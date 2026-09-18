@@ -237,10 +237,10 @@
 
     <div class="content-body">
         
-<h1 id="mcp-apps--host-implementation-guide">MCP Apps — Host Implementation Guide <a class="anchor" href="#mcp-apps--host-implementation-guide">¶</a></h1>
+<h1 id="mcp-apps-host-implementation-guide">MCP Apps host implementation guide <a class="anchor" href="#mcp-apps-host-implementation-guide">¶</a></h1>
 <p>Building custom MCP hosts (agent harnesses, desktop apps, custom UIs) using AppHost and ServerRegistry.</p>
 <p>See <a href="/mcpkit/packages/ext-ui/">APPS_DESIGN.md</a> for the core protocol design and <a href="/mcpkit/design/apps-onboarding/">APPS_ONBOARDING.md</a> for shipping your app.</p>
-<h2 id="apphost--host-side-app-management">AppHost — Host-Side App Management <a class="anchor" href="#apphost--host-side-app-management">¶</a></h2>
+<h2 id="apphost-and-host-side-app-management">AppHost and host-side app management <a class="anchor" href="#apphost-and-host-side-app-management">¶</a></h2>
 <h3 id="overview">Overview <a class="anchor" href="#overview">¶</a></h3>
 <p><code>AppHost</code> (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/app_host.go"><code>ext/ui/app_host.go</code></a>) wraps an MCP <code>Client</code> and an <code>AppBridge</code> to mediate between an MCP App (running in a browser iframe or in-process) and an MCP server. It enables custom host implementations (agent harnesses, desktop apps, or custom UIs) to manage app-provided tools.</p>
 <h3 id="architecture">Architecture <a class="anchor" href="#architecture">¶</a></h3>
@@ -322,9 +322,9 @@
 </span></span><span style="display:flex;"><span>}
 </span></span></code></pre><p>Implementations:</p>
 <ul>
-<li><strong><code>InProcessAppBridge</code></strong> — for testing. Registers Go handlers that simulate app-side tools.</li>
-<li><strong>WebSocket bridge</strong> (future) — for Go hosts serving browser iframes over WebSocket.</li>
-<li><strong>Native bridge</strong> (future) — for desktop apps using webview/wails JS↔Go bindings.</li>
+<li><strong><code>InProcessAppBridge</code></strong> - for testing. Registers Go handlers that simulate app-side tools.</li>
+<li><strong>WebSocket bridge</strong> (future) - for Go hosts serving browser iframes over WebSocket.</li>
+<li><strong>Native bridge</strong> (future) - for desktop apps using webview/wails JS↔Go bindings.</li>
 </ul>
 <h3 id="usage-with-oauth-authentication">Usage with OAuth Authentication <a class="anchor" href="#usage-with-oauth-authentication">¶</a></h3>
 <p>AppHost does not own auth. The caller wires <code>ext/auth.OAuthTokenSource</code> into the Client. Auth retry (401/403) happens transparently at the Client&rsquo;s transport layer.</p>
@@ -356,13 +356,13 @@
 </span></span></code></pre><h3 id="lifecycle">Lifecycle <a class="anchor" href="#lifecycle">¶</a></h3>
 <ol>
 <li>Create <code>Client</code> with desired auth and extensions</li>
-<li><code>Client.Connect()</code> — MCP handshake with server</li>
-<li><code>NewAppHost(client, bridge)</code> + <code>host.Start(ctx)</code> — wires bridge handlers, fetches initial tool list</li>
+<li><code>Client.Connect()</code> - MCP handshake with server</li>
+<li><code>NewAppHost(client, bridge)</code> + <code>host.Start(ctx)</code> - wires bridge handlers, fetches initial tool list</li>
 <li>Use <code>ListAllTools</code>, <code>CallAppTool</code>, etc.</li>
-<li><code>host.Close()</code> — closes bridge</li>
-<li><code>client.Close()</code> — closes MCP session and auth token source</li>
+<li><code>host.Close()</code> - closes bridge</li>
+<li><code>client.Close()</code> - closes MCP session and auth token source</li>
 </ol>
-<h2 id="serverregistry--multi-server-aggregation">ServerRegistry — Multi-Server Aggregation <a class="anchor" href="#serverregistry--multi-server-aggregation">¶</a></h2>
+<h2 id="serverregistry-and-multi-server-aggregation">ServerRegistry and multi-server aggregation <a class="anchor" href="#serverregistry-and-multi-server-aggregation">¶</a></h2>
 <h3 id="overview-1">Overview <a class="anchor" href="#overview-1">¶</a></h3>
 <p><code>ServerRegistry</code> (<a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/server_registry.go"><code>ext/ui/server_registry.go</code></a>) manages connections to multiple MCP servers simultaneously. It aggregates tool lists across servers, routes tool calls to the correct server, and provides pluggable collision resolution for ambiguous tool names.</p>
 <h3 id="architecture-1">Architecture <a class="anchor" href="#architecture-1">¶</a></h3>
@@ -394,7 +394,7 @@
 └──────────────────────────────────────────────────────────┘
 </code></pre>
 <h3 id="request-flows-1">Request Flows <a class="anchor" href="#request-flows-1">¶</a></h3>
-<h4 id="unambiguous-tool-call--direct-routing">Unambiguous tool call — direct routing <a class="anchor" href="#unambiguous-tool-call--direct-routing">¶</a></h4>
+<h4 id="unambiguous-tool-call-direct-routing">Unambiguous tool call, direct routing <a class="anchor" href="#unambiguous-tool-call-direct-routing">¶</a></h4>
 <pre><code class="language-mermaid">sequenceDiagram
     participant Agent as LLM / Agent
     participant Reg as ServerRegistry
@@ -408,7 +408,7 @@
     Weather--&gt;&gt;Reg: ToolResult
     Reg--&gt;&gt;Agent: ToolResult {text: &quot;Sunny, 72°F&quot;}
 </code></pre>
-<h4 id="ambiguous-tool-call--resolver-invoked">Ambiguous tool call — resolver invoked <a class="anchor" href="#ambiguous-tool-call--resolver-invoked">¶</a></h4>
+<h4 id="ambiguous-tool-call-resolver-invoked">Ambiguous tool call, resolver invoked <a class="anchor" href="#ambiguous-tool-call-resolver-invoked">¶</a></h4>
 <pre><code class="language-mermaid">sequenceDiagram
     participant Agent as LLM / Agent
     participant Reg as ServerRegistry

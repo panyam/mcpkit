@@ -237,122 +237,128 @@
 
     <div class="content-body">
         
-<h1 id="multi-server-registry">Multi-Server Registry <a class="anchor" href="#multi-server-registry">¶</a></h1>
-<blockquote>
-<p><strong>Stable</strong> — MCP Apps host-side APIs (<code>ext/ui</code>: ServerRegistry).</p>
-</blockquote>
-<p>Demonstrates ServerRegistry managing 3 MCP servers with tool aggregation, collision resolution, and app bridge integration.</p>
-<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
-<ul>
-<li><strong>Create 3 MCP servers with overlapping tools</strong> — Weather and Calendar both have a &lsquo;get_info&rsquo; tool — this will cause a collision in the registry.</li>
-<li><strong>Create ServerRegistry with ToolResolver and CollisionHandler</strong> — The resolver picks a server based on args. The collision handler logs when ambiguity is detected.</li>
-<li><strong>Add all 3 servers — collision detected</strong> — When calendar is added, the registry detects that &lsquo;get_info&rsquo; now exists in both weather and calendar.</li>
-<li><strong>AllTools — aggregated tool list with routing metadata</strong> — Returns all tools from all servers. Each tool has clean name + ServerID metadata.</li>
-<li><strong>CallTool (unambiguous) — routes directly</strong> — get_forecast exists only in weather — no resolver needed, routes directly.</li>
-<li><strong>CallTool (ambiguous) — resolver invoked</strong> — get_info is ambiguous (weather + calendar). The resolver sees {source: &ldquo;calendar&rdquo;} and picks calendar.</li>
-<li><strong>CallToolOn — explicit routing bypasses resolver</strong> — CallToolOn routes directly to the specified server. No resolver involved.</li>
-<li><strong>Remove server — tools disappear from index</strong> — After removing clock, get_time is no longer available.</li>
-<li><strong>AddWithBridge — server with app-provided tools</strong> — Re-adds clock with an app bridge that provides an extra tool. Both server and app tools appear in AllTools.</li>
-</ul>
-<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
-<pre><code class="language-mermaid">sequenceDiagram
-    participant Reg as ServerRegistry
-    participant W as Weather Server
-    participant C as Calendar Server
-    participant K as Clock Server
-    participant Br as App Bridge
+<h1 id="9-steps">========================================================================<br />
+Multi-Server Registry<br />
+Demonstrates ServerRegistry managing 3 MCP servers with tool aggregation, collision resolution, and app bridge integration.<br />
+9 steps <a class="anchor" href="#9-steps">¶</a></h1>
+<h2 id="step-1-create-3-mcp-servers-with-overlapping-tools">Step 1: Create 3 MCP servers with overlapping tools <a class="anchor" href="#step-1-create-3-mcp-servers-with-overlapping-tools">¶</a></h2>
+<pre><code>Refs: MCP Specification
+W -&gt;&gt; W: get_forecast, get_alerts, get_info
+C -&gt;&gt; C: list_events, create_event, get_info
+K -&gt;&gt; K: get_time
 
-    Note over Reg,Br: Step 1: Create 3 MCP servers with overlapping tools
-    W-&gt;&gt;W: get_forecast, get_alerts, get_info
-    C-&gt;&gt;C: list_events, create_event, get_info
-    K-&gt;&gt;K: get_time
+Weather and Calendar both have a 'get_info' tool, which will cause a
+collision in the registry.
 
-    Note over Reg,Br: Step 2: Create ServerRegistry with ToolResolver and CollisionHandler
-    Reg-&gt;&gt;Reg: WithToolResolver(arg-based routing)
-    Reg-&gt;&gt;Reg: WithCollisionHandler(log collisions)
-
-    Note over Reg,Br: Step 3: Add all 3 servers — collision detected
-    Reg-&gt;&gt;W: Add(&quot;weather&quot;, weatherClient)
-    Reg-&gt;&gt;C: Add(&quot;calendar&quot;, calendarClient)
-    Reg-&gt;&gt;K: Add(&quot;clock&quot;, clockClient)
-
-    Note over Reg,Br: Step 4: AllTools — aggregated tool list with routing metadata
-    Reg-&gt;&gt;Reg: AllTools()
-
-    Note over Reg,Br: Step 5: CallTool (unambiguous) — routes directly
-    Reg-&gt;&gt;W: CallTool(&quot;get_forecast&quot;)
-    W--&gt;&gt;Reg: ToolResult
-
-    Note over Reg,Br: Step 6: CallTool (ambiguous) — resolver invoked
-    Reg-&gt;&gt;Reg: CallTool(&quot;get_info&quot;, {source: &quot;calendar&quot;})
-    Reg-&gt;&gt;Reg: Resolver picks calendar
-    Reg-&gt;&gt;C: tools/call
-    C--&gt;&gt;Reg: ToolResult
-
-    Note over Reg,Br: Step 7: CallToolOn — explicit routing bypasses resolver
-    Reg-&gt;&gt;W: CallToolOn(&quot;weather&quot;, &quot;get_info&quot;)
-    W--&gt;&gt;Reg: ToolResult
-
-    Note over Reg,Br: Step 8: Remove server — tools disappear from index
-    Reg-&gt;&gt;K: Remove(&quot;clock&quot;)
-
-    Note over Reg,Br: Step 9: AddWithBridge — server with app-provided tools
-    Reg-&gt;&gt;K: AddWithBridge(&quot;clock-v2&quot;, client, bridge)
-    Br-&gt;&gt;Br: RegisterTool(&quot;app_stopwatch&quot;)
+Press Enter to run this step...
 </code></pre>
-<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
-<h3 id="step-1-create-3-mcp-servers-with-overlapping-tools">Step 1: Create 3 MCP servers with overlapping tools <a class="anchor" href="#step-1-create-3-mcp-servers-with-overlapping-tools">¶</a></h3>
-<blockquote>
-<p><strong>References:</strong> <a href="https://spec.modelcontextprotocol.io">MCP Specification</a></p>
-</blockquote>
-<p>Weather and Calendar both have a &lsquo;get_info&rsquo; tool — this will cause a collision in the registry.</p>
-<h3 id="step-2-create-serverregistry-with-toolresolver-and-collisionhandler">Step 2: Create ServerRegistry with ToolResolver and CollisionHandler <a class="anchor" href="#step-2-create-serverregistry-with-toolresolver-and-collisionhandler">¶</a></h3>
-<blockquote>
-<p><strong>References:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_HOST.md">mcpkit APPS_HOST.md</a></p>
-</blockquote>
-<p>The resolver picks a server based on args. The collision handler logs when ambiguity is detected.</p>
-<h3 id="step-3-add-all-3-servers--collision-detected">Step 3: Add all 3 servers — collision detected <a class="anchor" href="#step-3-add-all-3-servers--collision-detected">¶</a></h3>
-<p>When calendar is added, the registry detects that &lsquo;get_info&rsquo; now exists in both weather and calendar.</p>
-<h3 id="step-4-alltools--aggregated-tool-list-with-routing-metadata">Step 4: AllTools — aggregated tool list with routing metadata <a class="anchor" href="#step-4-alltools--aggregated-tool-list-with-routing-metadata">¶</a></h3>
-<p>Returns all tools from all servers. Each tool has clean name + ServerID metadata.</p>
-<h3 id="step-5-calltool-unambiguous--routes-directly">Step 5: CallTool (unambiguous) — routes directly <a class="anchor" href="#step-5-calltool-unambiguous--routes-directly">¶</a></h3>
-<p>get_forecast exists only in weather — no resolver needed, routes directly.</p>
-<h3 id="step-6-calltool-ambiguous--resolver-invoked">Step 6: CallTool (ambiguous) — resolver invoked <a class="anchor" href="#step-6-calltool-ambiguous--resolver-invoked">¶</a></h3>
-<p>get_info is ambiguous (weather + calendar). The resolver sees {source: &ldquo;calendar&rdquo;} and picks calendar.</p>
-<h3 id="step-7-calltoolon--explicit-routing-bypasses-resolver">Step 7: CallToolOn — explicit routing bypasses resolver <a class="anchor" href="#step-7-calltoolon--explicit-routing-bypasses-resolver">¶</a></h3>
-<p>CallToolOn routes directly to the specified server. No resolver involved.</p>
-<h3 id="step-8-remove-server--tools-disappear-from-index">Step 8: Remove server — tools disappear from index <a class="anchor" href="#step-8-remove-server--tools-disappear-from-index">¶</a></h3>
-<p>After removing clock, get_time is no longer available.</p>
-<h3 id="step-9-addwithbridge--server-with-app-provided-tools">Step 9: AddWithBridge — server with app-provided tools <a class="anchor" href="#step-9-addwithbridge--server-with-app-provided-tools">¶</a></h3>
-<blockquote>
-<p><strong>References:</strong> <a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps Extension</a></p>
-</blockquote>
-<p>Re-adds clock with an app bridge that provides an extra tool. Both server and app tools appear in AllTools.</p>
-<h2 id="references">References <a class="anchor" href="#references">¶</a></h2>
-<ul>
-<li><a href="https://spec.modelcontextprotocol.io">MCP Specification</a></li>
-<li><a href="https://github.com/panyam/mcpkit/blob/main/docs/APPS_HOST.md">mcpkit APPS_HOST.md</a></li>
-<li><a href="https://modelcontextprotocol.io/extensions/apps/overview">MCP Apps Extension</a></li>
-</ul>
-<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
-<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/host/02-multi-server/
-</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
-<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/host/02-multi-server/ --non-interactive
-</span></span></code></pre><h2 id="what-to-verify">What to verify <a class="anchor" href="#what-to-verify">¶</a></h2>
-<ul>
-<li><strong>Step 3</strong>: Collision handler prints <code>⚠ Collision detected: 'get_info' in servers [weather, calendar]</code></li>
-<li><strong>Step 4</strong>: AllTools lists 7 tools with ServerID metadata (get_info appears twice)</li>
-<li><strong>Step 5</strong>: Unambiguous call result includes <code>[weather]</code> prefix</li>
-<li><strong>Step 6</strong>: Ambiguous call with <code>{source: &quot;calendar&quot;}</code> routes to calendar (resolver works)</li>
-<li><strong>Step 7</strong>: CallToolOn routes to weather regardless of resolver</li>
-<li><strong>Step 8</strong>: After removing clock, <code>get_time</code> returns &ldquo;unknown tool&rdquo; error</li>
-<li><strong>Step 9</strong>: After AddWithBridge, 8 tools listed including <code>app_stopwatch</code> (source=app)</li>
-</ul>
-<h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
-<ul>
-<li><a href="/mcpkit/examples/host/01-apphost/">AppHost basics</a></li>
-<li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
-</ul>
+<p>Created 3 servers: weather (3 tools), calendar (3 tools), clock (1 tool)<br />
+Note: &lsquo;get_info&rsquo; exists in both weather and calendar</p>
+<h2 id="step-2-create-serverregistry-with-toolresolver-and-collisionhandler">Step 2: Create ServerRegistry with ToolResolver and CollisionHandler <a class="anchor" href="#step-2-create-serverregistry-with-toolresolver-and-collisionhandler">¶</a></h2>
+<pre><code>Refs: mcpkit APPS_HOST.md
+Reg -&gt;&gt; Reg: WithToolResolver(arg-based routing)
+Reg -&gt;&gt; Reg: WithCollisionHandler(log collisions)
+
+The resolver picks a server based on args. The collision handler
+logs when ambiguity is detected.
+
+Press Enter to run this step...
+</code></pre>
+<p>Registry created with arg-based resolver and collision logger</p>
+<h2 id="step-3-add-all-3-servers-and-a-collision-is-detected">Step 3: Add all 3 servers, and a collision is detected <a class="anchor" href="#step-3-add-all-3-servers-and-a-collision-is-detected">¶</a></h2>
+<pre><code>Reg -&gt;&gt; W: Add(&quot;weather&quot;, weatherClient)
+Reg -&gt;&gt; C: Add(&quot;calendar&quot;, calendarClient)
+Reg -&gt;&gt; K: Add(&quot;clock&quot;, clockClient)
+
+When calendar is added, the registry detects that 'get_info' now
+exists in both weather and calendar.
+
+Press Enter to run this step...
+</code></pre>
+<p>Added weather<br />
+⚠ Collision detected: &lsquo;get_info&rsquo; in servers [weather, calendar]<br />
+Added calendar<br />
+Added clock<br />
+Servers: [calendar clock weather]</p>
+<h2 id="step-4-alltools-the-aggregated-tool-list-with-routing-metadata">Step 4: AllTools, the aggregated tool list with routing metadata <a class="anchor" href="#step-4-alltools-the-aggregated-tool-list-with-routing-metadata">¶</a></h2>
+<pre><code>Reg -&gt;&gt; Reg: AllTools()
+
+Returns all tools from all servers. Each tool has clean name +
+ServerID metadata.
+
+Press Enter to run this step...
+</code></pre>
+<p>7 tools across 3 servers:<br />
+create_event     server=calendar    Create a calendar event<br />
+get_info         server=calendar    Get calendar service info<br />
+list_events      server=calendar    List calendar events<br />
+get_time         server=clock       Get current time<br />
+get_alerts       server=weather     Get weather alerts<br />
+get_forecast     server=weather     Get weather forecast<br />
+get_info         server=weather     Get weather service info</p>
+<h2 id="step-5-calltool-unambiguous-which-routes-directly">Step 5: CallTool (unambiguous), which routes directly <a class="anchor" href="#step-5-calltool-unambiguous-which-routes-directly">¶</a></h2>
+<pre><code>Reg -&gt;&gt; W: CallTool(&quot;get_forecast&quot;)
+W --&gt;&gt; Reg: ToolResult
+
+get_forecast exists only in weather, so no resolver is needed and it
+routes directly.
+
+Press Enter to run this step...
+</code></pre>
+<p>Result: [weather] get_forecast: ok</p>
+<h2 id="step-6-calltool-ambiguous-where-the-resolver-is-invoked">Step 6: CallTool (ambiguous), where the resolver is invoked <a class="anchor" href="#step-6-calltool-ambiguous-where-the-resolver-is-invoked">¶</a></h2>
+<pre><code>Reg -&gt;&gt; Reg: CallTool(&quot;get_info&quot;, {source: &quot;calendar&quot;})
+Reg -&gt;&gt; Reg: Resolver picks calendar
+Reg -&gt;&gt; C: tools/call
+C --&gt;&gt; Reg: ToolResult
+
+get_info is ambiguous (weather + calendar). The resolver sees
+{source: &quot;calendar&quot;} and picks calendar.
+
+Press Enter to run this step...
+</code></pre>
+<p>Result: [calendar] get_info: ok</p>
+<h2 id="step-7-calltoolon-where-explicit-routing-bypasses-the-resolver">Step 7: CallToolOn, where explicit routing bypasses the resolver <a class="anchor" href="#step-7-calltoolon-where-explicit-routing-bypasses-the-resolver">¶</a></h2>
+<pre><code>Reg -&gt;&gt; W: CallToolOn(&quot;weather&quot;, &quot;get_info&quot;)
+W --&gt;&gt; Reg: ToolResult
+
+CallToolOn routes directly to the specified server. No resolver
+involved.
+
+Press Enter to run this step...
+</code></pre>
+<p>Result: [weather] get_info: ok</p>
+<h2 id="step-8-remove-server-and-its-tools-disappear-from-the-index">Step 8: Remove server, and its tools disappear from the index <a class="anchor" href="#step-8-remove-server-and-its-tools-disappear-from-the-index">¶</a></h2>
+<pre><code>Reg -&gt;&gt; K: Remove(&quot;clock&quot;)
+
+After removing clock, get_time is no longer available.
+
+Press Enter to run this step...
+</code></pre>
+<p>Remaining servers: [calendar weather]<br />
+CallTool(&ldquo;get_time&rdquo;): unknown tool &ldquo;get_time&rdquo; ✓</p>
+<h2 id="step-9-addwithbridge-a-server-with-app-provided-tools">Step 9: AddWithBridge, a server with app-provided tools <a class="anchor" href="#step-9-addwithbridge-a-server-with-app-provided-tools">¶</a></h2>
+<pre><code>Refs: MCP Apps Extension
+Reg -&gt;&gt; K: AddWithBridge(&quot;clock-v2&quot;, client, bridge)
+Br -&gt;&gt; Br: RegisterTool(&quot;app_stopwatch&quot;)
+
+Re-adds clock with an app bridge that provides an extra tool. Both
+server and app tools appear in AllTools.
+
+Press Enter to run this step...
+</code></pre>
+<p>Servers: [calendar clock-v2 weather]<br />
+All tools (8):<br />
+create_event     server=calendar    source=server  Create a calendar event<br />
+get_info         server=calendar    source=server  Get calendar service info<br />
+list_events      server=calendar    source=server  List calendar events<br />
+app_stopwatch    server=clock-v2    source=app     Start/stop a stopwatch<br />
+get_time         server=clock-v2    source=server  Get current time (v2)<br />
+get_alerts       server=weather     source=server  Get weather alerts<br />
+get_forecast     server=weather     source=server  Get weather forecast<br />
+get_info         server=weather     source=server  Get weather service info<br />
+Called app_stopwatch → stopwatch: 00:00:05</p>
+<p>=== Done ===</p>
 
 
     </div>

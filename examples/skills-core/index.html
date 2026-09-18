@@ -239,22 +239,22 @@
         
 <h1 id="examplesskills-core">examples/skills-core <a class="anchor" href="#examplesskills-core">¶</a></h1>
 <blockquote>
-<p>⚠ <strong>Experimental</strong> — the minimal <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640</a> (Skills) shape, a draft SEP. Wire format may change.</p>
+<p>⚠ <strong>Experimental</strong> - the minimal <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640</a> (Skills) shape, a draft SEP. Wire format may change.</p>
 </blockquote>
 <p>The <strong>minimal</strong> SEP-2640 shape: a skills file served over MCP&rsquo;s Resources<br />
 primitive, plus tool handling, consumed load-on-demand. This is the<br />
 scoped-down core the Skills Over MCP Working Group blessed at its<br />
 2026-06-30 meeting (<a href="https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/2994">discussion 2994</a>).</p>
-<p>If you want the full surface — archives (<code>.tar.gz</code> / <code>.zip</code>), remote source<br />
+<p>If you want the full surface, meaning archives (<code>.tar.gz</code> / <code>.zip</code>), remote source<br />
 adapters (GitHub, archive directories, multi-source mounts), and<br />
-fsnotify-driven index invalidation — see <a href="/mcpkit/examples/skills/"><code>examples/skills</code></a>. Those<br />
+fsnotify-driven index invalidation, see <a href="/mcpkit/examples/skills/"><code>examples/skills</code></a>. Those<br />
 are the deferred / extended features and are deliberately left out here.</p>
 <h2 id="what-this-shows">What this shows <a class="anchor" href="#what-this-shows">¶</a></h2>
 <ol>
-<li><code>resources/list</code> — every file under a skill directory is a <code>skill://</code> resource.</li>
-<li><code>skill://index.json</code> — the discovery catalog, generated from the live provider (never on disk), each entry carrying a SHA-256 digest.</li>
-<li>Read a <code>SKILL.md</code> — a skill is data: YAML frontmatter (<code>name</code>, <code>description</code>) plus a markdown body of instructions. mcpkit delivers it over <code>resources/read</code>; it is never staged to disk and never executed.</li>
-<li><strong>Tool handling</strong> — the bundled <code>commit-helper</code> skill instructs the host to call the <code>format_commit</code> tool. The walkthrough reads the skill, then calls the tool. Skills make ordinary tools easier to use well.</li>
+<li><code>resources/list</code> - every file under a skill directory is a <code>skill://</code> resource.</li>
+<li><code>skill://index.json</code> - the discovery catalog, generated from the live provider (never on disk), each entry carrying a SHA-256 digest.</li>
+<li>Read a <code>SKILL.md</code>. A skill is data: YAML frontmatter (<code>name</code>, <code>description</code>) plus a markdown body of instructions. mcpkit delivers it over <code>resources/read</code>; it is never staged to disk and never executed.</li>
+<li><strong>Tool handling</strong> - the bundled <code>commit-helper</code> skill instructs the host to call the <code>format_commit</code> tool. The walkthrough reads the skill, then calls the tool. Skills make ordinary tools easier to use well.</li>
 </ol>
 <h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
 <pre><code>Terminal 1:  just serve   # skills-core server, file mode, :8080
@@ -276,7 +276,7 @@ tool:</p>
 </span></span><span style="display:flex;"><span>---
 </span></span><span style="display:flex;"><span>...call the <span style="color:#d14">`format_commit`</span> tool with type / scope / summary...
 </span></span></code></pre><p>The server registers <code>format_commit</code> alongside the skill provider<br />
-(<code>main.go</code>). That pairing — a skills file plus the tool it references — is the<br />
+(<code>main.go</code>). That pairing of a skills file plus the tool it references is the<br />
 minimal shape in one example.</p>
 <h2 id="safety-posture">Safety posture <a class="anchor" href="#safety-posture">¶</a></h2>
 <p><code>ext/skills</code> treats a skill as data delivered over resource primitives, never<br />
@@ -287,7 +287,7 @@ disk. That invariant is enforced by <code>TestNoCodeExecutionSurface</code> in t
 <code>just readme</code> to regenerate).</p>
 <h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
 <ul>
-<li><a href="/mcpkit/examples/skills/">Skills — the full surface (archives, remote, fsnotify)</a></li>
+<li><a href="/mcpkit/examples/skills/">Skills - the full surface (archives, remote, fsnotify)</a></li>
 </ul>
 
 
@@ -296,14 +296,14 @@ disk. That invariant is enforced by <code>TestNoCodeExecutionSurface</code> in t
 <h2 id="walkthrough">Walkthrough</h2>
 <p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/skills-core/WALKTHROUGH.md"><code>examples/skills-core/WALKTHROUGH.md</code></a></p>
 
-<h1 id="mcp-skills--minimal-shape-sep-2640-scoped-down">MCP Skills — Minimal Shape (SEP-2640, scoped down) <a class="anchor" href="#mcp-skills--minimal-shape-sep-2640-scoped-down">¶</a></h1>
-<p>The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP&rsquo;s Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify — those are the deferred / extended surface (see examples/skills for the full walkthrough).</p>
+<h1 id="mcp-skills-the-minimal-shape-sep-2640-scoped-down">MCP Skills, the minimal shape (SEP-2640, scoped down) <a class="anchor" href="#mcp-skills-the-minimal-shape-sep-2640-scoped-down">¶</a></h1>
+<p>The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP&rsquo;s Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify. Those are the deferred / extended surface (see examples/skills for the full walkthrough).</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
-<li><strong>Choose the client wire mode</strong> — mcpkit&rsquo;s server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.</li>
-<li><strong>Read skill://index.json — the discovery catalog</strong> — mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill&rsquo;s SKILL.md.</li>
-<li><strong>Read the commit-helper SKILL.md — the skill file</strong> — A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.</li>
-<li><strong>Tool handling — call the tool the skill points at</strong> — This is the &rsquo;tool handling&rsquo; half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.</li>
+<li><strong>Choose the client wire mode</strong> - mcpkit&rsquo;s server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.</li>
+<li><strong>Read skill://index.json, the discovery catalog</strong> - mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill&rsquo;s SKILL.md.</li>
+<li><strong>Read the commit-helper SKILL.md, the skill file</strong> - A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.</li>
+<li><strong>Tool handling, calling the tool the skill points at</strong> - This is the &rsquo;tool handling&rsquo; half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -316,19 +316,19 @@ disk. That invariant is enforced by <code>TestNoCodeExecutionSurface</code> in t
     Host-&gt;&gt;Server: server/discover (stateless) OR initialize (legacy)
     Server--&gt;&gt;Host: serverInfo + capabilities.extensions.skills
 
-    Note over Host,Server: Step 3: resources/list — each skill file is a skill:// resource
+    Note over Host,Server: Step 3: resources/list, where each skill file is a skill:// resource
     Host-&gt;&gt;Server: resources/list
     Server--&gt;&gt;Host: [ skill://index.json, skill://commit-helper/SKILL.md ]
 
-    Note over Host,Server: Step 4: Read skill://index.json — the discovery catalog
+    Note over Host,Server: Step 4: Read skill://index.json, the discovery catalog
     Host-&gt;&gt;Server: resources/read uri=skill://index.json
     Server--&gt;&gt;Host: { $schema, skills:[{name,url,digest}] }
 
-    Note over Host,Server: Step 5: Read the commit-helper SKILL.md — the skill file
+    Note over Host,Server: Step 5: Read the commit-helper SKILL.md, the skill file
     Host-&gt;&gt;Server: resources/read uri=skill://commit-helper/SKILL.md
     Server--&gt;&gt;Host: frontmatter (name, description) + body
 
-    Note over Host,Server: Step 6: Tool handling — call the tool the skill points at
+    Note over Host,Server: Step 6: Tool handling, calling the tool the skill points at
     Host-&gt;&gt;Server: tools/call name=format_commit {type:&quot;feat&quot;, scope:&quot;skills&quot;, summary:&quot;...&quot;}
     Server--&gt;&gt;Host: feat(skills): ...
 </code></pre>
@@ -348,20 +348,21 @@ Terminal 2:  just demo    # this walkthrough (--tui interactive)
 </span></span><span style="display:flex;"><span>    client.<span style="color:#900;font-weight:bold">WithClientMode</span>(wireMode),
 </span></span><span style="display:flex;"><span>)
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">Connect</span>(); err <span style="color:#000;font-weight:bold">!=</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#998;font-style:italic">/* run: just serve */</span> }
-</span></span></code></pre><h3 id="step-3-resourceslist--each-skill-file-is-a-skill-resource">Step 3: resources/list — each skill file is a skill:// resource <a class="anchor" href="#step-3-resourceslist--each-skill-file-is-a-skill-resource">¶</a></h3>
-<h3 id="step-4-read-skillindexjson--the-discovery-catalog">Step 4: Read skill://index.json — the discovery catalog <a class="anchor" href="#step-4-read-skillindexjson--the-discovery-catalog">¶</a></h3>
-<p>mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill&rsquo;s SKILL.md.</p>
+</span></span></code></pre><h3 id="step-3-resourceslist-where-each-skill-file-is-a-skill-resource">Step 3: resources/list, where each skill file is a skill:// resource <a class="anchor" href="#step-3-resourceslist-where-each-skill-file-is-a-skill-resource">¶</a></h3>
+<h3 id="step-4-read-skillindexjson-the-discovery-catalog">Step 4: Read skill://index.json, the discovery catalog <a class="anchor" href="#step-4-read-skillindexjson-the-discovery-catalog">¶</a></h3>
+<p>mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill&rsquo;s SKILL.md.</p>
 <h4 id="reproduce-1">Reproduce <a class="anchor" href="#reproduce-1">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>body, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ReadResource</span>(skills.IndexURI)
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">var</span> idx skills.Index
 </span></span><span style="display:flex;"><span>json.<span style="color:#900;font-weight:bold">Unmarshal</span>([]<span style="color:#0086b3">byte</span>(body), <span style="color:#000;font-weight:bold">&amp;</span>idx)
-</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">for</span> _, e <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">range</span> idx.Skills {
-</span></span><span style="display:flex;"><span>    fmt.<span style="color:#900;font-weight:bold">Printf</span>(<span style="color:#d14">&#34;%s digest=%s\n&#34;</span>, e.Name, e.Digest)
+</span></span><span style="display:flex;"><span>entries, _ <span style="color:#000;font-weight:bold">:=</span> sc.<span style="color:#900;font-weight:bold">ListSkillEntries</span>(ctx)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">for</span> _, e <span style="color:#000;font-weight:bold">:=</span> <span style="color:#000;font-weight:bold">range</span> entries {
+</span></span><span style="display:flex;"><span>    fmt.<span style="color:#900;font-weight:bold">Printf</span>(<span style="color:#d14">&#34;%s files=%d\n&#34;</span>, e.<span style="color:#900;font-weight:bold">Name</span>(), <span style="color:#0086b3">len</span>(e.Resources.Files))
 </span></span><span style="display:flex;"><span>}
-</span></span></code></pre><h3 id="step-5-read-the-commit-helper-skillmd--the-skill-file">Step 5: Read the commit-helper SKILL.md — the skill file <a class="anchor" href="#step-5-read-the-commit-helper-skillmd--the-skill-file">¶</a></h3>
-<p>A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.</p>
-<h3 id="step-6-tool-handling--call-the-tool-the-skill-points-at">Step 6: Tool handling — call the tool the skill points at <a class="anchor" href="#step-6-tool-handling--call-the-tool-the-skill-points-at">¶</a></h3>
-<p>This is the &rsquo;tool handling&rsquo; half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.</p>
+</span></span></code></pre><h3 id="step-5-read-the-commit-helper-skillmd-the-skill-file">Step 5: Read the commit-helper SKILL.md, the skill file <a class="anchor" href="#step-5-read-the-commit-helper-skillmd-the-skill-file">¶</a></h3>
+<p>A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.</p>
+<h3 id="step-6-tool-handling-calling-the-tool-the-skill-points-at">Step 6: Tool handling, calling the tool the skill points at <a class="anchor" href="#step-6-tool-handling-calling-the-tool-the-skill-points-at">¶</a></h3>
+<p>This is the &rsquo;tool handling&rsquo; half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.</p>
 <h4 id="reproduce-2">Reproduce <a class="anchor" href="#reproduce-2">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>out, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ToolCall</span>(<span style="color:#d14">&#34;format_commit&#34;</span>, <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]any{
 </span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;type&#34;</span>: <span style="color:#d14">&#34;feat&#34;</span>, <span style="color:#d14">&#34;scope&#34;</span>: <span style="color:#d14">&#34;skills&#34;</span>, <span style="color:#d14">&#34;summary&#34;</span>: <span style="color:#d14">&#34;add commit-helper skill&#34;</span>,

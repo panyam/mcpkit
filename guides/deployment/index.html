@@ -386,7 +386,7 @@
 </tbody>
 </table>
 <h2 id="component-overview">Component overview <a class="anchor" href="#component-overview">¶</a></h2>
-<h3 id="server-level-seams">Server-level seams <a class="anchor" href="#server-level-seams">¶</a></h3>
+<h3 id="server-level-extension-points">Server-level extension points <a class="anchor" href="#server-level-extension-points">¶</a></h3>
 <pre><code class="language-mermaid">classDiagram
     class NotificationRelay {
         &lt;&lt;interface&gt;&gt;
@@ -444,7 +444,7 @@
     note for MemoryBus &quot;memorystore.Bus&lt;br/&gt;chan-based, test-only&quot;
 </code></pre>
 <h2 id="per-component-flows">Per-component flows <a class="anchor" href="#per-component-flows">¶</a></h2>
-<h3 id="serverbroadcast--the-dispatch-fork"><code>Server.Broadcast</code> — the dispatch fork <a class="anchor" href="#serverbroadcast--the-dispatch-fork">¶</a></h3>
+<h3 id="serverbroadcast-the-dispatch-fork"><code>Server.Broadcast</code>, the dispatch fork <a class="anchor" href="#serverbroadcast-the-dispatch-fork">¶</a></h3>
 <pre><code class="language-mermaid">flowchart TB
     Broadcast[&quot;Server.Broadcast(ctx, method, params)&quot;]
     HasRelay{Has&lt;br/&gt;NotificationRelay?}
@@ -459,7 +459,7 @@
 </code></pre>
 <p><code>Broadcast</code> always fires <code>BroadcastToSessions</code>. The relay&rsquo;s <code>Publish</code> runs ALSO when a relay is installed. There&rsquo;s no else branch, so local fan-out is universal.</p>
 <p><code>BroadcastToSessions</code> is the <strong>local-only</strong> path. The receive side of Pattern B calls this (NOT <code>Broadcast</code>) so a cross-replica relay receive doesn&rsquo;t re-publish through the relay and loop.</p>
-<h3 id="notificationrelay--publish-side"><code>NotificationRelay</code> — publish side <a class="anchor" href="#notificationrelay--publish-side">¶</a></h3>
+<h3 id="notificationrelay-publish-side"><code>NotificationRelay</code>, publish side <a class="anchor" href="#notificationrelay-publish-side">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant H as Handler
     participant S as Server
@@ -474,7 +474,7 @@
     Note right of S: local delivery happens regardless&lt;br/&gt;of relay errors (fire-and-forget)
 </code></pre>
 <p><code>NotificationRelay</code> is fire-and-forget, so errors are not surfaced. Transports log internally if a publish fails; local fan-out still runs.</p>
-<h3 id="notificationrelayreceiver--receive-side"><code>NotificationRelayReceiver</code> — receive side <a class="anchor" href="#notificationrelayreceiver--receive-side">¶</a></h3>
+<h3 id="notificationrelayreceiver-receive-side"><code>NotificationRelayReceiver</code>, receive side <a class="anchor" href="#notificationrelayreceiver-receive-side">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant T as Transport subscriber
     participant Recv as NotificationRelayReceiver
@@ -485,7 +485,7 @@
     Recv-&gt;&gt;Local: domain-specific routing&lt;br/&gt;(BroadcastToSessions / notifyLocal / LocalDeliver)
 </code></pre>
 <p>The receiver is the <strong>routing decision</strong> for cross-replica notifications. The transport handles dedup; the receiver decides what to do with each message destined for this replica.</p>
-<h3 id="notificationrouter--per-method-dispatch"><code>NotificationRouter</code> — per-method dispatch <a class="anchor" href="#notificationrouter--per-method-dispatch">¶</a></h3>
+<h3 id="notificationrouter-per-method-dispatch"><code>NotificationRouter</code>, per-method dispatch <a class="anchor" href="#notificationrouter-per-method-dispatch">¶</a></h3>
 <pre><code class="language-mermaid">flowchart TB
     Receive[&quot;Receive(ctx, method, params)&quot;]
     Lookup{handlers&lt;br/&gt;contains&lt;br/&gt;method?}
@@ -503,7 +503,7 @@
 </span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/prompts/list_changed&#34;</span>,      server.<span style="color:#900;font-weight:bold">NewCapabilityBroadcastReceiver</span>(srv)).
 </span></span><span style="display:flex;"><span>    <span style="color:#900;font-weight:bold">Handle</span>(<span style="color:#d14">&#34;notifications/resources/updated&#34;</span>,         server.<span style="color:#900;font-weight:bold">NewResourcesUpdatedReceiver</span>(srv))
 </span></span><span style="display:flex;"><span>bus, _ <span style="color:#000;font-weight:bold">:=</span> redisstore.<span style="color:#900;font-weight:bold">NewCapabilityBus</span>(opts, mux)
-</span></span></code></pre><h3 id="capabilitybroadcastreceiver--capability-shaped-routing"><code>CapabilityBroadcastReceiver</code> — capability-shaped routing <a class="anchor" href="#capabilitybroadcastreceiver--capability-shaped-routing">¶</a></h3>
+</span></span></code></pre><h3 id="capabilitybroadcastreceiver-capability-shaped-routing"><code>CapabilityBroadcastReceiver</code>, capability-shaped routing <a class="anchor" href="#capabilitybroadcastreceiver-capability-shaped-routing">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant Bus as Bus subscriber
     participant Recv as CapabilityBroadcastReceiver
@@ -515,7 +515,7 @@
     Srv-&gt;&gt;Sess: notify(method, params)
     Note over Recv,Srv: BroadcastToSessions, NOT Broadcast&lt;br/&gt;(would loop through the relay)
 </code></pre>
-<h3 id="resourcesupdatedreceiver--subscription-shaped-routing-for-uris"><code>ResourcesUpdatedReceiver</code> — subscription-shaped routing for URIs <a class="anchor" href="#resourcesupdatedreceiver--subscription-shaped-routing-for-uris">¶</a></h3>
+<h3 id="resourcesupdatedreceiver-subscription-shaped-routing-for-uris"><code>ResourcesUpdatedReceiver</code>, subscription-shaped routing for URIs <a class="anchor" href="#resourcesupdatedreceiver-subscription-shaped-routing-for-uris">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant Bus as Bus subscriber
     participant Recv as ResourcesUpdatedReceiver
@@ -530,7 +530,7 @@
     Reg-&gt;&gt;Sub: fire each subscriber whose&lt;br/&gt;resources/subscribe matches uri
     Note over Reg,Sub: notifyLocal does NOT re-publish&lt;br/&gt;via the relay (no loop)
 </code></pre>
-<h3 id="yieldingsourcereceive--subscription-shaped-routing-for-events"><code>YieldingSource.Receive</code> — subscription-shaped routing for events <a class="anchor" href="#yieldingsourcereceive--subscription-shaped-routing-for-events">¶</a></h3>
+<h3 id="yieldingsourcereceive-subscription-shaped-routing-for-events"><code>YieldingSource.Receive</code>, subscription-shaped routing for events <a class="anchor" href="#yieldingsourcereceive-subscription-shaped-routing-for-events">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant Bus as Bus subscriber
     participant Src as YieldingSource
@@ -549,7 +549,7 @@
     end
 </code></pre>
 <p><code>YieldingSource.Receive</code> is a thin adapter; <code>LocalDeliver</code> is the work, running the per-slot fanout loop without firing the configured <code>Emitter</code> (so no re-publish).</p>
-<h3 id="redisstorecapabilitybus--capability-shaped-pattern-b"><code>redisstore.CapabilityBus</code> — capability-shaped Pattern B <a class="anchor" href="#redisstorecapabilitybus--capability-shaped-pattern-b">¶</a></h3>
+<h3 id="redisstorecapabilitybus-capability-shaped-pattern-b"><code>redisstore.CapabilityBus</code>, capability-shaped Pattern B <a class="anchor" href="#redisstorecapabilitybus-capability-shaped-pattern-b">¶</a></h3>
 <pre><code class="language-mermaid">flowchart LR
     subgraph &quot;Publish (origin)&quot;
         P1[method + params]
@@ -571,7 +571,7 @@
     end
 </code></pre>
 <p>Wire format: per-method channel <code>&lt;ChannelPrefix&gt;.broadcast.&lt;method&gt;</code>. Payload is a JSON envelope <code>{&quot;origin&quot;: &quot;&lt;uuid&gt;&quot;, &quot;params&quot;: &lt;json&gt;}</code>. Origin lives in the envelope, NOT in <code>params._meta</code>, because capability-shaped notifications often have <code>nil params</code> and the marker can&rsquo;t live there.</p>
-<h3 id="redisstorebus--events-typed-pattern-b"><code>redisstore.Bus</code> — events-typed Pattern B <a class="anchor" href="#redisstorebus--events-typed-pattern-b">¶</a></h3>
+<h3 id="redisstorebus-events-typed-pattern-b"><code>redisstore.Bus</code>, events-typed Pattern B <a class="anchor" href="#redisstorebus-events-typed-pattern-b">¶</a></h3>
 <pre><code class="language-mermaid">flowchart LR
     subgraph &quot;Emit (origin)&quot;
         P1[&quot;events.Event&quot;]
@@ -594,7 +594,7 @@
     end
 </code></pre>
 <p>Wire format: per-event-name channel <code>&lt;ChannelPrefix&gt;.&lt;event.Name&gt;</code>. Payload is the <code>Codec</code>-encoded <code>events.Event</code> with the origin marker stamped on <code>event.Meta</code> (stripped before deliver so consumers never see it).</p>
-<h3 id="memorystorebus--in-process-test-transport"><code>memorystore.Bus</code> — in-process test transport <a class="anchor" href="#memorystorebus--in-process-test-transport">¶</a></h3>
+<h3 id="memorystorebus-in-process-test-transport"><code>memorystore.Bus</code>, in-process test transport <a class="anchor" href="#memorystorebus-in-process-test-transport">¶</a></h3>
 <pre><code class="language-mermaid">flowchart LR
     subgraph Bus_A
         Emit_A[Emit] --&gt; Pub_A[hub.publish]
@@ -634,7 +634,7 @@
     Srv-&gt;&gt;Srv: BroadcastToSessions (K1 local clients hear)
 
     Redis-&gt;&gt;Bus2: deliver message
-    Note over Bus2: origin == K2's marker? no — proceed
+    Note over Bus2: origin == K2's marker? no, proceed
     Bus2-&gt;&gt;Mux: Receive(method, nil)
     Mux-&gt;&gt;Cap: handlers[&quot;...list_changed&quot;].Receive
     Cap-&gt;&gt;Srv2: BroadcastToSessions(method, nil)
@@ -690,7 +690,7 @@
     Bus-&gt;&gt;Redis: PUBLISH (Meta-stamped with K1 origin)
 
     Redis-&gt;&gt;Bus2: deliver message
-    Note over Bus2: origin == K2's marker? no — proceed&lt;br/&gt;strip origin marker from Meta
+    Note over Bus2: origin == K2's marker? no, proceed&lt;br/&gt;strip origin marker from Meta
     Bus2-&gt;&gt;Src2: Receive(&quot;notifications/events/event&quot;, event)
     Src2-&gt;&gt;Src2: LocalDeliver(ctx, event)
     loop for each K2 slot
@@ -703,7 +703,7 @@
     end
 </code></pre>
 <p>Per-slot <code>Match</code> runs on every replica that holds a matching subscriber. The transport sprays to all replicas; each replica filters its own slots independently.</p>
-<h2 id="life-of-a-notification--function-by-function">Life of a notification — function-by-function <a class="anchor" href="#life-of-a-notification--function-by-function">¶</a></h2>
+<h2 id="life-of-a-notification-function-by-function">Life of a notification, function-by-function <a class="anchor" href="#life-of-a-notification-function-by-function">¶</a></h2>
 <p>The per-surface sequence diagrams above show the high-level flow. Below are the literal callstacks adopters and reviewers can correlate against the code. Read top-down; each indent level is one function call into a callee.</p>
 <h3 id="life-of-notificationstoolslist-changed-capability-shaped-n3">Life of <code>notifications/tools/list_changed</code> (capability-shaped, N=3) <a class="anchor" href="#life-of-notificationstoolslist-changed-capability-shaped-n3">¶</a></h3>
 <p>Setup: replica K1 has <code>WithNotificationRelay(busK1)</code> installed; replica K2 has <code>WithNotificationRelay(busK2)</code>. Both Buses subscribed to <code>notifications/tools/list_changed</code>. A client <code>cliK2</code> is connected to K2 via Streamable HTTP. App code on K1 calls <code>srv.RegisterTool</code>.</p>
@@ -873,7 +873,7 @@
                  ↳ payload.tenant (&quot;asgard&quot;) != ctx.Principal() (&quot;babylon&quot;) → FALSE
             ── matched=false: drop (no delivery to bob's slot)
 
-[K2]  events/stream handler for bob: select sees no incoming on evCh — silent
+[K2]  events/stream handler for bob: select sees no incoming on evCh, silent
         ── bob NEVER hears the asgard event ─ tenant scoping holds
 </code></pre>
 <p>Key landmarks:</p>
@@ -951,7 +951,7 @@
     App-&gt;&gt;Src: yield(payload)
     Src-&gt;&gt;Slot: per-slot Match
     Slot-&gt;&gt;Cli: deliver
-    Note over Src: cfg.Emitter not configured&lt;br/&gt;(no Bus) — no publish, no relay
+    Note over Src: cfg.Emitter not configured&lt;br/&gt;(no Bus), no publish, no relay
 </code></pre>
 <p>At N=1, adopters don&rsquo;t need any Pattern B wiring. The yield → for-loop → local slot path is the entire story. Configure a Bus only when adding a second replica.</p>
 <h3 id="cross-replica-yield-n3-with-relay">Cross-replica yield (N=3, with relay) <a class="anchor" href="#cross-replica-yield-n3-with-relay">¶</a></h3>
@@ -986,7 +986,7 @@
     Src-&gt;&gt;Bus: Emit (Meta-stamped with K1's origin)
     Bus-&gt;&gt;Redis: PUBLISH
     Redis-&gt;&gt;Bus: deliver back to K1
-    Note over Bus: origin == K1's own marker — DROP
+    Note over Bus: origin == K1's own marker, DROP
     Note over Bus: receiver NOT invoked → no double-fire
 </code></pre>
 <h3 id="tenant-scoping-cross-replica">Tenant scoping cross-replica <a class="anchor" href="#tenant-scoping-cross-replica">¶</a></h3>
@@ -1016,7 +1016,7 @@
         Note over SrcB: per-slot Match: principal=&quot;babylon&quot;&lt;br/&gt;vs payload.tenant=&quot;asgard&quot; → DROP
     end
 </code></pre>
-<h3 id="slow-subscriber--drop-policy">Slow subscriber — drop policy <a class="anchor" href="#slow-subscriber--drop-policy">¶</a></h3>
+<h3 id="slow-subscriber-drop-policy">Slow subscriber, drop policy <a class="anchor" href="#slow-subscriber-drop-policy">¶</a></h3>
 <p>When a Bus&rsquo;s incoming queue fills (slow receiver), the Hub / Subscriber drops new messages rather than blocking the publisher. This is fail-fast, not retry, so adopters depending on at-least-once delivery should run their transport with persistence enabled (Redis Streams, Kafka with consumer groups) instead of pubsub.</p>
 <p>In Pattern B with Redis pubsub specifically:</p>
 <table>
@@ -1071,7 +1071,7 @@
     K2-&gt;&gt;K2: Bus.Close()
     K2-&gt;&gt;Redis: UNSUBSCRIBE
     K1-&gt;&gt;Redis: PUBLISH event-C
-    Note over K2: no longer receives — Close detached the subscriber
+    Note over K2: no longer receives, Close detached the subscriber
     Note over K1: K1 continues normally
 </code></pre>
 <h2 id="configuration-recipes">Configuration recipes <a class="anchor" href="#configuration-recipes">¶</a></h2>
@@ -1115,7 +1115,7 @@
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>cfg.Emitter = eventsBus
 </span></span><span style="display:flex;"><span>events.<span style="color:#900;font-weight:bold">Register</span>(cfg)
-</span></span></code></pre><h3 id="mixed--all-5-surfaces">Mixed — all 5 surfaces <a class="anchor" href="#mixed--all-5-surfaces">¶</a></h3>
+</span></span></code></pre><h3 id="all-5-surfaces-mixed">All 5 surfaces mixed <a class="anchor" href="#all-5-surfaces-mixed">¶</a></h3>
 <p>When your server uses both catalog notifications AND <code>resources/updated</code> AND events. CapabilityBus (root <code>stores/redis/</code>) handles capability + subscription-shaped notifications via one <code>NotificationRouter</code>. Events get their own Bus (events SDK <code>experimental/ext/events/stores/redis/</code>) because the wire format is events-typed:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
 </span></span><span style="display:flex;"><span>    <span style="color:#d14">&#34;github.com/panyam/mcpkit/server&#34;</span>

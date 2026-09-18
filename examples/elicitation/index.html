@@ -237,9 +237,9 @@
 
     <div class="content-body">
         
-<h1 id="url-elicitation--consent-approval-flow-uc1">URL Elicitation — Consent Approval Flow (UC1) <a class="anchor" href="#url-elicitation--consent-approval-flow-uc1">¶</a></h1>
+<h1 id="url-elicitation-and-the-consent-approval-flow-uc1">URL elicitation and the consent approval flow (UC1) <a class="anchor" href="#url-elicitation-and-the-consent-approval-flow-uc1">¶</a></h1>
 <blockquote>
-<p>⚠ <strong>Experimental</strong> — Tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643">SEP-2643</a> (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.</p>
+<p>⚠ <strong>Experimental</strong> - Tracks <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2643">SEP-2643</a> (Structured Authorization Denials), currently a draft. Wire format may change as the SEP evolves.</p>
 </blockquote>
 <p>A scripted MCP host walking through the <strong>UC1 consent approval flow</strong>: a tool call gets denied with a JSON-RPC <code>-32042</code> (URLElicitationRequired) carrying a consent URL; the host opens the URL in a browser; the user approves; the server pushes a <code>notifications/elicitation/complete</code> notification over SSE; the host auto-retries with the <code>authorizationContextId</code> and gets the result.</p>
 <h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
@@ -252,18 +252,18 @@
 <p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/WALKTHROUGH.md">WALKTHROUGH.md</a> for the full sequence diagram and step-by-step description (regenerate via <code>just readme</code>).</p>
 <h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
 <ul>
-<li>The <strong><code>-32042</code> URLElicitationRequired</strong> denial shape — <code>error.code</code> + <code>error.data.authorization.authorizationContextId</code> + <code>error.data.elicitations[].url</code>.</li>
+<li>The <strong><code>-32042</code> URLElicitationRequired</strong> denial shape: <code>error.code</code> + <code>error.data.authorization.authorizationContextId</code> + <code>error.data.elicitations[].url</code>.</li>
 <li>The <strong>GET SSE notification stream</strong> carrying <code>notifications/elicitation/complete</code> from server to host while the user interacts with the consent URL out-of-band.</li>
 <li>The <strong>auto-retry pattern</strong>: host parses the denial, opens the URL, waits for the SSE notification, then re-issues <code>tools/call</code> with <code>_meta.authorizationContextId</code> set to the captured value.</li>
 <li>The <strong>server-side consent middleware</strong> that intercepts <code>tools/call</code> for protected tools, mints a context, denies with the URL, persists approval state, and lets the retry through once approved.</li>
-<li><strong>CORS configuration</strong> for browser-based MCP hosts (MCPJam) — <code>Mcp-Session-Id</code> in both Allow-Headers and Expose-Headers, <code>DELETE</code> in allowed methods.</li>
+<li><strong>CORS configuration</strong> for browser-based MCP hosts (MCPJam) - <code>Mcp-Session-Id</code> in both Allow-Headers and Expose-Headers, <code>DELETE</code> in allowed methods.</li>
 </ul>
 <h2 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h2>
 <ul>
 <li>Walkthrough steps + denial parsing: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/main.go"><code>main.go</code></a> (the <code>runDemo</code> block)</li>
 <li>Consent middleware + store + <code>/approve</code> handler: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/main.go"><code>main.go</code></a> (after <code>serve()</code>)</li>
 <li>SEP-2643 wire constants: <a href="https://github.com/panyam/mcpkit/blob/main/core/authorization_denial_experimental.go"><code>core.MetaKeyAuthorizationContextID</code></a> and the <code>-32042</code> URLElicitationRequired error code</li>
-<li>Companion: <a href="/mcpkit/examples/fine-grained-auth/"><code>examples/fine-grained-auth/</code></a> — UC2 (scope step-up) + UC3 (RAR per-payment credentials)</li>
+<li>Companion: <a href="/mcpkit/examples/fine-grained-auth/"><code>examples/fine-grained-auth/</code></a> - UC2 (scope step-up) + UC3 (RAR per-payment credentials)</li>
 </ul>
 <h2 id="notes">Notes <a class="anchor" href="#notes">¶</a></h2>
 <ul>
@@ -272,8 +272,8 @@
 </ul>
 <h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
 <ul>
-<li><a href="/mcpkit/examples/fine-grained-auth/">Fine-grained auth — UC2 + UC3 of the same SEP</a></li>
-<li><a href="/mcpkit/examples/mrtr/">MRTR — the underlying input_required round-trip</a></li>
+<li><a href="/mcpkit/examples/fine-grained-auth/">Fine-grained auth - UC2 + UC3 of the same SEP</a></li>
+<li><a href="/mcpkit/examples/mrtr/">MRTR - the underlying input_required round-trip</a></li>
 </ul>
 
 
@@ -282,13 +282,13 @@
 <h2 id="walkthrough">Walkthrough</h2>
 <p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/elicitation/WALKTHROUGH.md"><code>examples/elicitation/WALKTHROUGH.md</code></a></p>
 
-<h1 id="url-elicitation--consent-approval-flow-uc1">URL Elicitation — Consent Approval Flow (UC1) <a class="anchor" href="#url-elicitation--consent-approval-flow-uc1">¶</a></h1>
-<p><strong>EXPERIMENTAL</strong> — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.</p>
+<h1 id="url-elicitation-and-the-consent-approval-flow-uc1">URL elicitation and the consent approval flow (UC1) <a class="anchor" href="#url-elicitation-and-the-consent-approval-flow-uc1">¶</a></h1>
+<p><strong>EXPERIMENTAL.</strong> Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
-<li><strong>Connect to the MCP server and initialize session</strong> — Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.</li>
-<li><strong>Call access_protected_resource — denied with consent URL</strong> — The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.</li>
-<li><strong>Open consent URL → wait for approval notification → auto-retry</strong> — The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.</li>
+<li><strong>Connect to the MCP server and initialize session</strong> - Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.</li>
+<li><strong>Call access_protected_resource, denied with consent URL</strong> - The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.</li>
+<li><strong>Open consent URL → wait for approval notification → auto-retry</strong> - The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -297,11 +297,11 @@
     participant Browser as User Browser
 
     Note over Host,Browser: Step 1: Connect to the MCP server and initialize session
-    Host-&gt;&gt;Server: POST /mcp — initialize
+    Host-&gt;&gt;Server: POST /mcp, initialize
     Server--&gt;&gt;Host: serverInfo + Mcp-Session-Id
-    Host-&gt;&gt;Server: GET /mcp — open SSE stream for notifications
+    Host-&gt;&gt;Server: GET /mcp, open SSE stream for notifications
 
-    Note over Host,Browser: Step 2: Call access_protected_resource — denied with consent URL
+    Note over Host,Browser: Step 2: Call access_protected_resource, denied with consent URL
     Host-&gt;&gt;Server: tools/call: access_protected_resource
     Server--&gt;&gt;Host: error -32042 + consent URL + authzContextId
 
@@ -341,7 +341,7 @@ Terminal 2:  just run          # run this demo
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">#</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Keep that terminal open. The notification will appear there once the user</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># clicks Approve in step 3.</span>
-</span></span></code></pre><h3 id="step-2-call-access-protected-resource--denied-with-consent-url">Step 2: Call access_protected_resource — denied with consent URL <a class="anchor" href="#step-2-call-access-protected-resource--denied-with-consent-url">¶</a></h3>
+</span></span></code></pre><h3 id="step-2-call-access-protected-resource-denied-with-consent-url">Step 2: Call access_protected_resource, denied with consent URL <a class="anchor" href="#step-2-call-access-protected-resource-denied-with-consent-url">¶</a></h3>
 <p>The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.</p>
 <h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Call the protected tool. Response is JSON-RPC error -32042 carrying the</span>

@@ -238,31 +238,31 @@
     <div class="content-body">
         
 <h1 id="tracing">Tracing <a class="anchor" href="#tracing">¶</a></h1>
-<p>How one logical operation that crosses the client→server boundary (and back) stitches into a single distributed trace — OpenTelemetry trace-context propagation as a first-class MCP extension.</p>
+<p>How one logical operation that crosses the client→server boundary (and back) stitches into a single distributed trace. OpenTelemetry trace-context propagation as a first-class MCP extension.</p>
 <blockquote>
 <p><strong>Kind:</strong> root <em>(FAQ-style)</em> · <strong>Prerequisites:</strong> <a href="/mcpkit/concepts/request-anatomy/">request-anatomy</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a>, <a href="/mcpkit/concepts/reverse-call/">reverse-call</a><br />
 <strong>Reachable from:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/tutorials/walkthrough/README.md">README</a>, <a href="/mcpkit/concepts/extension-mechanisms/">extension-mechanisms</a> Next-to-read (the <code>_meta</code>-field extension surface, worked out)<br />
-<strong>Branches into:</strong> — <em>(cross-replica events <code>EventBus</code> tracing is a forward pointer in Next-to-read, not yet its own page)</em><br />
+<strong>Branches into:</strong> <em>(cross-replica events <code>EventBus</code> tracing is a forward pointer in Next-to-read, not yet its own page)</em><br />
 <strong>Spec:</strong> SEP-414 (OpenTelemetry trace context propagation) + SEP-2028 (HTTP-header → <code>_meta</code> bridge), wire format is <a href="https://www.w3.org/TR/trace-context/">W3C Trace Context</a>; mcpkit-side rollout in <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md"><code>docs/SEP_414_OTEL.md</code></a> · <strong>Code:</strong> <a href="https://github.com/panyam/mcpkit/blob/main/core/trace.go"><code>core/trace.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/server/trace_middleware.go"><code>server/trace_middleware.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/client/trace_middleware.go"><code>client/trace_middleware.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/provider.go"><code>ext/otel/provider.go</code></a> · <a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/propagation.go"><code>ext/otel/propagation.go</code></a></p>
 </blockquote>
 <h2 id="prerequisites">Prerequisites <a class="anchor" href="#prerequisites">¶</a></h2>
 <ul>
-<li>The request journey — the four middleware stacks (client × {send, recv}, server × {send, recv}), the handler context, and the <code>_meta</code> passthrough. Tracing is a middleware + <code>_meta</code> mechanism; this page assumes you know where both live. → If not, read <a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a>.</li>
-<li>Extension-surface vocabulary — what a <code>_meta</code> field is as an extension knob, and the <code>core/</code> → <code>ext/</code> → <code>experimental/ext/</code> tiering (the OTel SDK adapter lives in its own <code>ext/otel/</code> go.mod). → If not, read <a href="/mcpkit/concepts/extension-mechanisms/">extension mechanisms</a>.</li>
-<li>Reverse calls — server→client requests (<code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>). Outbound propagation is what keeps a trace connected when the <em>server</em> dials the client mid-handler. → If not, read <a href="/mcpkit/concepts/reverse-call/">reverse-call mechanics</a>.</li>
+<li>The request journey, meaning the four middleware stacks (client × {send, recv}, server × {send, recv}), the handler context, and the <code>_meta</code> passthrough. Tracing is a middleware + <code>_meta</code> mechanism; this page assumes you know where both live. → If not, read <a href="/mcpkit/concepts/request-anatomy/">per-request anatomy</a>.</li>
+<li>Extension-surface vocabulary: what a <code>_meta</code> field is as an extension knob, and the <code>core/</code> → <code>ext/</code> → <code>experimental/ext/</code> tiering (the OTel SDK adapter lives in its own <code>ext/otel/</code> go.mod). → If not, read <a href="/mcpkit/concepts/extension-mechanisms/">extension mechanisms</a>.</li>
+<li>Reverse calls, meaning server→client requests (<code>sampling/createMessage</code>, <code>elicitation/create</code>, <code>roots/list</code>). Outbound propagation is what keeps a trace connected when the <em>server</em> dials the client mid-handler. → If not, read <a href="/mcpkit/concepts/reverse-call/">reverse-call mechanics</a>.</li>
 </ul>
 <blockquote>
 <p>[!NOTE]<br />
-You&rsquo;ll also meet the HTTP <code>traceparent</code> header → <code>_meta</code> bridge (SEP-2028). If you want the HTTP/SSE wire under it, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a> has it — but it isn&rsquo;t required to follow this page.</p>
+You&rsquo;ll also meet the HTTP <code>traceparent</code> header → <code>_meta</code> bridge (SEP-2028). If you want the HTTP/SSE wire under it, <a href="/mcpkit/concepts/transport-mechanics/">transport-mechanics</a> has it, but it isn&rsquo;t required to follow this page.</p>
 </blockquote>
 <h2 id="context">Context <a class="anchor" href="#context">¶</a></h2>
 <p><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a> listed <code>_meta</code> fields as one of the four extension knobs and called list-TTL &ldquo;the canonical <code>_meta</code>-only extension.&rdquo; Tracing is the canonical <strong><code>_meta</code>-field-plus-middleware</strong> extension: the wire surface is two <code>_meta</code> keys (<code>traceparent</code> / <code>tracestate</code>), and the behavior is a span started in middleware around every dispatch. There is no new method, no new capability flag, no new notification.</p>
 <p>The interesting questions: when does tracing actually run, and what does it cost when off (Q1)? why does cross-process tracing need a <em>standard</em> wire format, and why does it ride <code>_meta</code> (Q2)? how do you wire it, and what is the TracerProvider-vs-Tracer thing (Q3)? what happens to one request on the server (Q4)? how does a single trace stay connected as it crosses the wire and comes back (Q5)? and what&rsquo;s symmetric vs. not on the client side (Q6)?</p>
 <blockquote>
 <p>[!NOTE]<br />
-SEP-414 shipped in five phases (P1 core contract, P2 server spans, P3 client spans, P4 the <code>ext/otel</code> adapter, P5 example). This page teaches the end state, not the rollout — for phase status see <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md"><code>docs/SEP_414_OTEL.md</code></a>.</p>
+SEP-414 shipped in five phases (P1 core contract, P2 server spans, P3 client spans, P4 the <code>ext/otel</code> adapter, P5 example). This page teaches the end state, not the rollout. For phase status see <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md"><code>docs/SEP_414_OTEL.md</code></a>.</p>
 </blockquote>
-<h2 id="q1--when-does-tracing-kick-in-and-what-does-it-cost-when-off">Q1 — When does tracing &ldquo;kick in&rdquo;, and what does it cost when off? <a class="anchor" href="#q1--when-does-tracing-kick-in-and-what-does-it-cost-when-off">¶</a></h2>
+<h2 id="q1-when-does-tracing-kick-in-and-what-does-it-cost-when-off">Q1. When does tracing &ldquo;kick in&rdquo;, and what does it cost when off? <a class="anchor" href="#q1-when-does-tracing-kick-in-and-what-does-it-cost-when-off">¶</a></h2>
 <p>Three layers, and the OpenTelemetry SDK only enters at the third:</p>
 <table>
 <thead>
@@ -275,45 +275,45 @@ SEP-414 shipped in five phases (P1 core contract, P2 server spans, P3 client spa
 </thead>
 <tbody>
 <tr>
-<td><strong>Contract</strong> — <code>TracerProvider</code>, <code>Span</code>, <code>TraceContext</code>, W3C extract/inject</td>
+<td><strong>Contract</strong> - <code>TracerProvider</code>, <code>Span</code>, <code>TraceContext</code>, W3C extract/inject</td>
 <td><a href="https://github.com/panyam/mcpkit/blob/main/core/trace.go"><code>core/trace.go</code></a></td>
 <td>no</td>
 <td>always (dependency-free)</td>
 </tr>
 <tr>
-<td><strong>Wiring</strong> — start spans, inject/extract <code>_meta.traceparent</code></td>
+<td><strong>Wiring</strong> - start spans, inject/extract <code>_meta.traceparent</code></td>
 <td><a href="https://github.com/panyam/mcpkit/blob/main/server/trace_middleware.go"><code>server/trace_middleware.go</code></a>, <a href="https://github.com/panyam/mcpkit/blob/main/client/trace_middleware.go"><code>client/trace_middleware.go</code></a></td>
 <td>no</td>
 <td>installed <strong>only</strong> when a non-Noop provider is configured</td>
 </tr>
 <tr>
-<td><strong>Adapter</strong> — bridge to <code>go.opentelemetry.io/otel</code> + an exporter</td>
+<td><strong>Adapter</strong> - bridge to <code>go.opentelemetry.io/otel</code> + an exporter</td>
 <td><a href="https://github.com/panyam/mcpkit/blob/main/ext/otel/provider.go"><code>ext/otel/</code></a> (own <code>go.mod</code>)</td>
 <td><strong>yes</strong></td>
 <td>only if you import it</td>
 </tr>
 </tbody>
 </table>
-<p>Tracing is <strong>off by default</strong>. The default provider is <code>core.NoopTracerProvider{}</code> — <code>StartSpan</code> returns the input context unchanged plus a span whose methods do nothing, with zero allocation on the hot path. The trace middleware isn&rsquo;t even added to the chain unless you wire a real provider: the install is gated by a check that treats both <code>nil</code> and <code>NoopTracerProvider</code> as &ldquo;disabled.&rdquo;</p>
+<p>Tracing is <strong>off by default</strong>. The default provider is <code>core.NoopTracerProvider{}</code>, whose <code>StartSpan</code> returns the input context unchanged plus a span whose methods do nothing, with zero allocation on the hot path. The trace middleware isn&rsquo;t even added to the chain unless you wire a real provider: the install is gated by a check that treats both <code>nil</code> and <code>NoopTracerProvider</code> as &ldquo;disabled.&rdquo;</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// client/trace_middleware.go — the gate, mirrored on the server
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">tracingEnabled</span>(tp core.TracerProvider) <span style="color:#458;font-weight:bold">bool</span> {
 </span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> tp <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#000;font-weight:bold">return</span> <span style="color:#000;font-weight:bold">false</span> }
 </span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> _, isNoop <span style="color:#000;font-weight:bold">:=</span> tp.(core.NoopTracerProvider); isNoop { <span style="color:#000;font-weight:bold">return</span> <span style="color:#000;font-weight:bold">false</span> }
 </span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#000;font-weight:bold">true</span>
 </span></span><span style="display:flex;"><span>}
-</span></span></code></pre><p>So &ldquo;tracing kicks in&rdquo; the moment you pass a non-Noop provider to <code>server.WithTracerProvider(...)</code> / <code>client.WithTracerProvider(...)</code> — and not one instruction before. A server that never wires it pays nothing and never imports OpenTelemetry.</p>
+</span></span></code></pre><p>So &ldquo;tracing kicks in&rdquo; the moment you pass a non-Noop provider to <code>server.WithTracerProvider(...)</code> / <code>client.WithTracerProvider(...)</code>, and not one instruction before. A server that never wires it pays nothing and never imports OpenTelemetry.</p>
 <blockquote>
 <p>[!IMPORTANT]<br />
-The base <code>mcpkit</code> module has <strong>no dependency on the OpenTelemetry SDK</strong>. The SDK only arrives through <code>ext/otel/</code>, a separate <code>go.mod</code> — same dependency-isolation pattern as <code>ext/auth</code> / <code>ext/tasks</code> / <code>ext/ui</code>. Servers that don&rsquo;t trace don&rsquo;t pull ~10 transitive OTel deps.</p>
+The base <code>mcpkit</code> module has <strong>no dependency on the OpenTelemetry SDK</strong>. The SDK only arrives through <code>ext/otel/</code>, a separate <code>go.mod</code>, the same dependency-isolation pattern as <code>ext/auth</code> / <code>ext/tasks</code> / <code>ext/ui</code>. Servers that don&rsquo;t trace don&rsquo;t pull ~10 transitive OTel deps.</p>
 </blockquote>
-<h2 id="q2--why-a-wire-standard-for-tracing-and-why-does-it-ride--meta">Q2 — Why a wire <em>standard</em> for tracing, and why does it ride <code>_meta</code>? <a class="anchor" href="#q2--why-a-wire-standard-for-tracing-and-why-does-it-ride--meta">¶</a></h2>
+<h2 id="q2-why-a-wire-standard-for-tracing-and-why-does-it-ride--meta">Q2. Why a wire <em>standard</em> for tracing, and why does it ride <code>_meta</code>? <a class="anchor" href="#q2-why-a-wire-standard-for-tracing-and-why-does-it-ride--meta">¶</a></h2>
 <p>A trace spans <strong>multiple processes</strong>. For a span created in the server to attach <em>under</em> a span created in the client, the server needs the client span&rsquo;s identity (<code>trace-id</code> + <code>span-id</code>) handed across the process boundary in a format both sides agree on. That cross-process identity is exactly what <a href="https://www.w3.org/TR/trace-context/">W3C Trace Context</a> standardizes:</p>
 <pre><code>traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
              └┬┘ └──────────────┬───────────────┘ └──────┬───────┘ └┬┘
            version          trace-id (32 hex)      parent span-id   flags
 </code></pre>
-<p>Why a <em>standard</em> rather than something ad-hoc: <strong>interoperability</strong>. Before W3C Trace Context, every vendor had its own header (Zipkin B3, Jaeger <code>uber-trace-id</code>, Datadog). A request crossing two differently-instrumented systems lost its trace at the seam. W3C Trace Context is a W3C Recommendation — the lingua franca so a Go server, a Python client, and a Datadog-instrumented proxy all parse the same <code>traceparent</code>. <strong>MCP is precisely this situation</strong>: client and server are routinely different SDKs and languages, so SEP-414 adopts W3C Trace Context rather than inventing an MCP-specific format.</p>
-<p>The MCP-specific twist is <strong>where</strong> the value rides. MCP isn&rsquo;t always HTTP (stdio, SSE, streamable HTTP), so there&rsquo;s no header on every message. SEP-414 carries the W3C value <strong>inside the JSON-RPC <code>_meta</code> envelope</strong> that every method already has — byte-identical to the HTTP header value, just relocated:</p>
+<p>Why a <em>standard</em> rather than something ad-hoc: <strong>interoperability</strong>. Before W3C Trace Context, every vendor had its own header (Zipkin B3, Jaeger <code>uber-trace-id</code>, Datadog). A request crossing two differently-instrumented systems lost its trace at the seam. W3C Trace Context is a W3C Recommendation, the lingua franca that lets a Go server, a Python client, and a Datadog-instrumented proxy all parse the same <code>traceparent</code>. <strong>MCP is precisely this situation</strong>: client and server are routinely different SDKs and languages, so SEP-414 adopts W3C Trace Context rather than inventing an MCP-specific format.</p>
+<p>The MCP-specific twist is <strong>where</strong> the value rides. MCP isn&rsquo;t always HTTP (stdio, SSE, streamable HTTP), so there&rsquo;s no header on every message. SEP-414 carries the W3C value <strong>inside the JSON-RPC <code>_meta</code> envelope</strong> that every method already has, byte-identical to the HTTP header value and just relocated:</p>
 <pre><code class="language-jsonc">{&quot;method&quot;: &quot;tools/call&quot;, &quot;params&quot;: {
   &quot;name&quot;: &quot;echo&quot;,
   &quot;arguments&quot;: {&quot;text&quot;: &quot;hi&quot;},
@@ -326,14 +326,14 @@ The base <code>mcpkit</code> module has <strong>no dependency on the OpenTelemet
 <p><a href="https://github.com/panyam/mcpkit/blob/main/server/trace_middleware.go">SEP-2028</a> then <em>additionally</em> bridges the real HTTP <code>traceparent</code> header → <code>_meta</code> for the streamable transport, so a trace originating in an HTTP-layer proxy still lands on the span. In-band <code>_meta</code> always wins over the out-of-band HTTP header.</p>
 <p>Two details in <a href="https://github.com/panyam/mcpkit/blob/main/core/trace.go"><code>core/trace.go</code></a> are worth a teaching beat:</p>
 <ul>
-<li><strong>The keys are un-namespaced</strong> — <code>traceparent</code>, not <code>io.modelcontextprotocol/traceparent</code>. The <code>io.modelcontextprotocol/</code> prefix is reserved for MCP-<em>defined</em> fields; <code>traceparent</code> / <code>tracestate</code> are W3C-defined, so they keep their standard names.</li>
-<li><strong>mcpkit validates structure but treats IDs as opaque.</strong> <code>ExtractTraceContext</code> enforces the version-00 form (length, lowercase hex, non-zero trace-id/span-id) but never parses the IDs — the adapter feeds the raw strings to OTel&rsquo;s propagator.</li>
+<li><strong>The keys are un-namespaced</strong> - <code>traceparent</code>, not <code>io.modelcontextprotocol/traceparent</code>. The <code>io.modelcontextprotocol/</code> prefix is reserved for MCP-<em>defined</em> fields; <code>traceparent</code> / <code>tracestate</code> are W3C-defined, so they keep their standard names.</li>
+<li><strong>mcpkit validates structure but treats IDs as opaque.</strong> <code>ExtractTraceContext</code> enforces the version-00 form (length, lowercase hex, non-zero trace-id/span-id) but never parses the IDs - the adapter feeds the raw strings to OTel&rsquo;s propagator.</li>
 </ul>
 <blockquote>
 <p>[!IMPORTANT]<br />
-<strong>W3C &ldquo;MUST NOT forward a <code>tracestate</code> you can&rsquo;t associate with a valid <code>traceparent</code>.&rdquo;</strong> mcpkit honors this literally: a malformed <code>traceparent</code> yields a <em>zero</em> <code>TraceContext</code> — both fields empty — so a bad <code>traceparent</code> also drops the <code>tracestate</code>. See <code>ExtractTraceContext</code> / <code>isValidTraceparent</code>.</p>
+<strong>W3C &ldquo;MUST NOT forward a <code>tracestate</code> you can&rsquo;t associate with a valid <code>traceparent</code>.&rdquo;</strong> mcpkit honors this literally: a malformed <code>traceparent</code> yields a <em>zero</em> <code>TraceContext</code> with both fields empty, so a bad <code>traceparent</code> also drops the <code>tracestate</code>. See <code>ExtractTraceContext</code> / <code>isValidTraceparent</code>.</p>
 </blockquote>
-<h2 id="q3--how-do-you-wire-it-and-what-is-tracerprovider-vs-tracer">Q3 — How do you wire it, and what is TracerProvider vs Tracer? <a class="anchor" href="#q3--how-do-you-wire-it-and-what-is-tracerprovider-vs-tracer">¶</a></h2>
+<h2 id="q3-how-do-you-wire-it-and-what-is-tracerprovider-vs-tracer">Q3. How do you wire it, and what is TracerProvider vs Tracer? <a class="anchor" href="#q3-how-do-you-wire-it-and-what-is-tracerprovider-vs-tracer">¶</a></h2>
 <p>Three steps in your <code>main.go</code>, all in the adapter&rsquo;s quickstart:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">import</span> (
 </span></span><span style="display:flex;"><span>    sdktrace <span style="color:#d14">&#34;go.opentelemetry.io/otel/sdk/trace&#34;</span>
@@ -349,22 +349,22 @@ The base <code>mcpkit</code> module has <strong>no dependency on the OpenTelemet
 </span></span><span style="display:flex;"><span>srv <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewServer</span>(info, server.<span style="color:#900;font-weight:bold">WithTracerProvider</span>(mcpotel.<span style="color:#900;font-weight:bold">NewProvider</span>(otelTP)))  <span style="color:#998;font-style:italic">// 3. wrap + wire
 </span></span></span></code></pre><p>The <strong>TracerProvider vs Tracer</strong> confusion is a vanilla OpenTelemetry distinction the adapter hides:</p>
 <ul>
-<li>A <strong><code>TracerProvider</code></strong> is the heavyweight, one-per-process object. It owns the exporter pipeline, the batch/span processors, and resource attributes. You configure it and you <strong>must <code>Shutdown()</code> it</strong> — that flush is what actually pushes batched spans to the exporter.</li>
+<li>A <strong><code>TracerProvider</code></strong> is the heavyweight, one-per-process object. It owns the exporter pipeline, the batch/span processors, and resource attributes. You configure it and you <strong>must <code>Shutdown()</code> it</strong>. That flush is what actually pushes batched spans to the exporter.</li>
 <li>A <strong><code>Tracer</code></strong> is a lightweight handle obtained via <code>provider.Tracer(&quot;name&quot;)</code>. The <code>Tracer</code> is what calls <code>.Start()</code> to create spans; its name is the &ldquo;instrumentation library&rdquo; label backends use to group spans.</li>
 </ul>
-<p>mcpkit&rsquo;s own <code>core.TracerProvider</code> is deliberately <em>not</em> OTel&rsquo;s — it is a one-method interface (<code>StartSpan</code>). The <code>ext/otel</code> adapter bridges them: at construction it grabs <strong>one</strong> <code>Tracer</code> from your OTel TracerProvider and caches it, so <code>StartSpan</code> is a single <code>tracer.Start(...)</code> call with no per-request lookup.</p>
+<p>mcpkit&rsquo;s own <code>core.TracerProvider</code> is deliberately <em>not</em> OTel&rsquo;s. It is a one-method interface (<code>StartSpan</code>). The <code>ext/otel</code> adapter bridges them: at construction it grabs <strong>one</strong> <code>Tracer</code> from your OTel TracerProvider and caches it, so <code>StartSpan</code> is a single <code>tracer.Start(...)</code> call with no per-request lookup.</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ext/otel/provider.go
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">NewProvider</span>(otelTP oteltrace.TracerProvider, opts <span style="color:#000;font-weight:bold">...</span>Option) <span style="color:#000;font-weight:bold">*</span>Provider {
 </span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">if</span> otelTP <span style="color:#000;font-weight:bold">==</span> <span style="color:#000;font-weight:bold">nil</span> { <span style="color:#0086b3">panic</span>(<span style="color:#d14">&#34;ext/otel: NewProvider called with nil TracerProvider&#34;</span>) }
 </span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ...
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    <span style="color:#000;font-weight:bold">return</span> <span style="color:#000;font-weight:bold">&amp;</span>Provider{tracer: otelTP.<span style="color:#900;font-weight:bold">Tracer</span>(cfg.instrumentationName)} <span style="color:#998;font-style:italic">// one Tracer, cached
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
-</span></span></code></pre><p>So the rule to teach: <strong>you wire the OTel <em>TracerProvider</em> and own its lifecycle (<code>Shutdown</code>); the adapter manages the <em>Tracer</em> internally — you never touch a Tracer directly.</strong></p>
+</span></span></code></pre><p>So the rule to teach: <strong>you wire the OTel <em>TracerProvider</em> and own its lifecycle (<code>Shutdown</code>); the adapter manages the <em>Tracer</em> internally, so you never touch a Tracer directly.</strong></p>
 <blockquote>
 <p>[!TIP]<br />
-Forgetting <code>defer otelTP.Shutdown(ctx)</code> is the #1 &ldquo;my spans never appear&rdquo; bug. Spans are <em>batched</em>; without the shutdown flush they&rsquo;re still in the buffer when the process exits. This is OTel-SDK behavior, not an mcpkit quirk — but it bites everyone once.</p>
+Forgetting <code>defer otelTP.Shutdown(ctx)</code> is the #1 &ldquo;my spans never appear&rdquo; bug. Spans are <em>batched</em>; without the shutdown flush they&rsquo;re still in the buffer when the process exits. This is OTel-SDK behavior, not an mcpkit quirk, but it bites everyone once.</p>
 </blockquote>
-<h2 id="q4--what-happens-to-one-request-on-the-server">Q4 — What happens to one request on the server? <a class="anchor" href="#q4--what-happens-to-one-request-on-the-server">¶</a></h2>
+<h2 id="q4-what-happens-to-one-request-on-the-server">Q4. What happens to one request on the server? <a class="anchor" href="#q4-what-happens-to-one-request-on-the-server">¶</a></h2>
 <p>When tracing is enabled, <code>traceMiddleware</code> wraps every JSON-RPC dispatch. The sequence:</p>
 <ol>
 <li><strong>Resolve the inbound trace context.</strong> Prefer <code>params._meta.traceparent</code> (in-band); fall back to whatever the transport attached to <code>ctx</code> (the SEP-2028 HTTP-header bridge). In-band wins. Attach the result via <code>core.WithTraceContext(ctx, tc)</code> so handlers can read it through <code>ctx.TraceContext()</code>.</li>
@@ -409,16 +409,16 @@ Forgetting <code>defer otelTP.Shutdown(ctx)</code> is the #1 &ldquo;my spans nev
 </tr>
 </tbody>
 </table>
-<p>The <strong>inner-vs-outer</strong> question is really about <em>two boundaries</em>, and the answer is &ldquo;outermost&rdquo; for both — for opposite-sounding but consistent reasons:</p>
+<p>The <strong>inner-vs-outer</strong> question is really about <em>two boundaries</em>, and the answer is &ldquo;outermost&rdquo; for both, for opposite-sounding but consistent reasons:</p>
 <ul>
 <li><strong>The inbound span is OUTERMOST in the user middleware chain.</strong> Your rate-limit / auth / audit middleware runs <em>inside</em> the span, so their latency is part of the recorded span. Innermost would time only the handler and miss everything wrapping it.</li>
-<li><strong>The outbound <code>_meta</code> injection sits OUTSIDE any user <code>NotifyInterceptor</code> / <code>RequestInterceptor</code>.</strong> Here the goal is that user interceptors observe the <em>same wire form the client will receive</em> — <code>traceparent</code> already stamped — which is what an audit log wants.</li>
+<li><strong>The outbound <code>_meta</code> injection sits OUTSIDE any user <code>NotifyInterceptor</code> / <code>RequestInterceptor</code>.</strong> Here the goal is that user interceptors observe the <em>same wire form the client will receive</em> - <code>traceparent</code> already stamped, which is what an audit log wants.</li>
 </ul>
 <blockquote>
 <p>[!NOTE]<br />
 Mental model: the trace layer is the <strong>outermost skin on both paths</strong>. Inbound, &ldquo;outermost&rdquo; means &ldquo;wraps the most&rdquo; → captures everyone&rsquo;s time. Outbound, &ldquo;outermost&rdquo; means &ldquo;stamps last&rdquo; → everyone downstream sees the final bytes.</p>
 </blockquote>
-<h2 id="q5--how-does-one-trace-stay-connected-across-the-wire">Q5 — How does one trace stay connected across the wire? <a class="anchor" href="#q5--how-does-one-trace-stay-connected-across-the-wire">¶</a></h2>
+<h2 id="q5-how-does-one-trace-stay-connected-across-the-wire">Q5. How does one trace stay connected across the wire? <a class="anchor" href="#q5-how-does-one-trace-stay-connected-across-the-wire">¶</a></h2>
 <p>This is the payoff. A <code>tools/call</code> whose handler calls <code>ctx.Sample()</code> (a <a href="/mcpkit/concepts/reverse-call/">reverse call</a>) produces a single trace threaded through four spans across two processes:</p>
 <pre><code>client.Call(&quot;tools/call&quot;)               → span A   ; injects _meta.traceparent = A
    └─ server traceMiddleware             → extracts A as parent, starts span B (child of A)
@@ -426,7 +426,7 @@ Mental model: the trace layer is the <strong>outermost skin on both paths</stron
            outbound sampling/createMessage request
              └─ client inbound wrap      → extracts B as parent, starts span C (child of B)
 </code></pre>
-<p>The subtlety that explains the most code — and deserves a sidebar — is <strong>whose</strong> traceparent gets injected outbound. After <code>StartSpan</code>, the <code>ext/otel</code> adapter rewrites <code>ctx</code>&rsquo;s <code>TraceContext</code> to the <strong>new child span&rsquo;s</strong> id, so the next outbound hop links to the child, not the original parent:</p>
+<p><strong>Whose</strong> traceparent gets injected outbound explains the most code here, and deserves a sidebar. After <code>StartSpan</code>, the <code>ext/otel</code> adapter rewrites <code>ctx</code>&rsquo;s <code>TraceContext</code> to the <strong>new child span&rsquo;s</strong> id, so the next outbound hop links to the child, not the original parent:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// ext/otel/provider.go — tail of StartSpan
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>ctx, otelSpan <span style="color:#000;font-weight:bold">:=</span> p.tracer.<span style="color:#900;font-weight:bold">Start</span>(ctx, name, startOpts<span style="color:#000;font-weight:bold">...</span>)
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> childTC <span style="color:#000;font-weight:bold">:=</span> <span style="color:#900;font-weight:bold">spanContextToTraceContext</span>(otelSpan.<span style="color:#900;font-weight:bold">SpanContext</span>()); !childTC.<span style="color:#900;font-weight:bold">IsZero</span>() {
@@ -441,16 +441,16 @@ Mental model: the trace layer is the <strong>outermost skin on both paths</stron
 </span></span><span style="display:flex;"><span>    ctx = core.<span style="color:#900;font-weight:bold">WrapSessionNotifyFunc</span>(ctx, <span style="color:#900;font-weight:bold">traceInjectNotifyWrap</span>(outbound))
 </span></span><span style="display:flex;"><span>    ctx = core.<span style="color:#900;font-weight:bold">WrapSessionRequestFunc</span>(ctx, <span style="color:#900;font-weight:bold">traceInjectRequestWrap</span>(outbound))
 </span></span><span style="display:flex;"><span>}
-</span></span></code></pre><p>So <strong>parent-child precision lives in the adapter, not the middleware.</strong> Under the <code>Noop</code> default the context is unchanged, so outbound <code>_meta</code> carries the <em>inbound</em> traceparent verbatim — still correlates into the same trace, just without the finer parent-child link at the next hop. Wire a real adapter and the links tighten for free.</p>
+</span></span></code></pre><p>So <strong>parent-child precision lives in the adapter, not the middleware.</strong> Under the <code>Noop</code> default the context is unchanged, so outbound <code>_meta</code> carries the <em>inbound</em> traceparent verbatim. It still correlates into the same trace, just without the finer parent-child link at the next hop. Wire a real adapter and the links tighten for free.</p>
 <blockquote>
 <p>[!IMPORTANT]<br />
-Injection <strong>never clobbers</strong> a caller-set <code>_meta.traceparent</code>. <code>InjectTraceContextIntoParams</code> only writes the key when it&rsquo;s absent — an explicit value a handler set wins. This is why both the server and client outbound wraps share the same <code>core</code> helper.</p>
+Injection <strong>never clobbers</strong> a caller-set <code>_meta.traceparent</code>. <code>InjectTraceContextIntoParams</code> only writes the key when it&rsquo;s absent, so an explicit value a handler set wins. This is why both the server and client outbound wraps share the same <code>core</code> helper.</p>
 </blockquote>
 <blockquote>
 <p>[!WARNING]<br />
-<strong>Target-shape gap.</strong> Notice the tree has a span on the <em>client</em> (C) for the inbound reverse call but <strong>no dedicated span on the <em>server</em></strong> for the outbound leg — the server only <em>injects</em> <code>traceparent</code> onto <code>ctx.Sample</code>/<code>Elicit</code>/roots, it doesn&rsquo;t <code>StartSpan</code> around the outbound call. So the time the handler spends <strong>blocked waiting on the client</strong> shows up as opaque duration <em>inside</em> span B, not as its own segment (an HTTP client library would span that wait as a <code>CLIENT</code>-kind span). Adding the server-outbound span + a <code>core.Span</code> SpanKind surface is tracked in <a href="https://github.com/panyam/mcpkit/issues/664">#664</a>. The detached/background variant (a reverse call made after the forward request returned, injecting a now-closed span&rsquo;s context) resolves the same way as async tasks — a fresh linked span; see Q7.</p>
+<strong>Target-shape gap.</strong> Notice the tree has a span on the <em>client</em> (C) for the inbound reverse call but <strong>no dedicated span on the <em>server</em></strong> for the outbound leg. The server only <em>injects</em> <code>traceparent</code> onto <code>ctx.Sample</code>/<code>Elicit</code>/roots, it doesn&rsquo;t <code>StartSpan</code> around the outbound call. So the time the handler spends <strong>blocked waiting on the client</strong> shows up as opaque duration <em>inside</em> span B, not as its own segment (an HTTP client library would span that wait as a <code>CLIENT</code>-kind span). Adding the server-outbound span + a <code>core.Span</code> SpanKind surface is tracked in <a href="https://github.com/panyam/mcpkit/issues/664">#664</a>. The detached/background variant (a reverse call made after the forward request returned, injecting a now-closed span&rsquo;s context) resolves the same way as async tasks, with a fresh linked span; see Q7.</p>
 </blockquote>
-<h2 id="q6--client-side-whats-symmetric-whats-not">Q6 — Client side: what&rsquo;s symmetric, what&rsquo;s not? <a class="anchor" href="#q6--client-side-whats-symmetric-whats-not">¶</a></h2>
+<h2 id="q6-client-side-whats-symmetric-whats-not">Q6. Client side: what&rsquo;s symmetric, what&rsquo;s not? <a class="anchor" href="#q6-client-side-whats-symmetric-whats-not">¶</a></h2>
 <p>The design is mirror-image. Same primitives, opposite direction:</p>
 <table>
 <thead>
@@ -501,11 +501,11 @@ Injection <strong>never clobbers</strong> a caller-set <code>_meta.traceparent</
 <p>Client-side span attributes mirror the server&rsquo;s, with <code>mcp.client.session.id</code> in place of <code>mcp.session.id</code>.</p>
 <p>Two documented <strong>asymmetries</strong> (deliberate scope cuts, not bugs):</p>
 <ul>
-<li><strong>No SEP-2028 HTTP header on outbound client calls</strong> — the client stamps <code>_meta</code>, not the HTTP <code>traceparent</code> header. Additive; deferred until HTTP-layer infra observability needs it.</li>
-<li><strong>No SpanKind</strong> — <code>core.Span</code> has no <code>Client</code>/<code>Server</code> kind surface, so the OTel SDK records every mcpkit span as <code>Internal</code> in both directions. A typed attribute / kind surface may land when a real adapter needs it.</li>
+<li><strong>No SEP-2028 HTTP header on outbound client calls</strong> - the client stamps <code>_meta</code>, not the HTTP <code>traceparent</code> header. Additive; deferred until HTTP-layer infra observability needs it.</li>
+<li><strong>No SpanKind</strong> - <code>core.Span</code> has no <code>Client</code>/<code>Server</code> kind surface, so the OTel SDK records every mcpkit span as <code>Internal</code> in both directions. A typed attribute / kind surface may land when a real adapter needs it.</li>
 </ul>
-<h2 id="q7--where-does-tracing-not-reach-yet-and-is-that-a-sep-414-gap">Q7 — Where does tracing <em>not</em> reach yet, and is that a SEP-414 gap? <a class="anchor" href="#q7--where-does-tracing-not-reach-yet-and-is-that-a-sep-414-gap">¶</a></h2>
-<p>The five phases instrumented the <strong>dispatch spine</strong> — so every method, including tasks / apps / auth-gated calls, already gets one inbound span and wire propagation for free. What they did <em>not</em> do is instrument the work each surface does that <strong>escapes</strong> or <strong>hides inside</strong> that single span. Before treating that as a spec hole, separate three layers:</p>
+<h2 id="q7-where-does-tracing-not-reach-yet-and-is-that-a-sep-414-gap">Q7. Where does tracing <em>not</em> reach yet, and is that a SEP-414 gap? <a class="anchor" href="#q7-where-does-tracing-not-reach-yet-and-is-that-a-sep-414-gap">¶</a></h2>
+<p>The five phases instrumented the <strong>dispatch spine</strong>, so every method, including tasks / apps / auth-gated calls, already gets one inbound span and wire propagation for free. What they did <em>not</em> do is instrument the work each surface does that <strong>escapes</strong> or <strong>hides inside</strong> that single span. Before treating that as a spec hole, separate three layers:</p>
 <table>
 <thead>
 <tr>
@@ -516,32 +516,32 @@ Injection <strong>never clobbers</strong> a caller-set <code>_meta.traceparent</
 </thead>
 <tbody>
 <tr>
-<td><strong>Wire contract</strong> — the <code>_meta</code> keys, format, precedence, SEP-2028 bridge</td>
-<td>SEP-414 (normative — cross-SDK interop)</td>
+<td><strong>Wire contract</strong> - the <code>_meta</code> keys, format, precedence, SEP-2028 bridge</td>
+<td>SEP-414 (normative - cross-SDK interop)</td>
 <td><strong>complete</strong></td>
 </tr>
 <tr>
-<td><strong>Local span richness</strong> — span count, names, attributes, links</td>
+<td><strong>Local span richness</strong> - span count, names, attributes, links</td>
 <td>the SDK (latitude; invisible to the peer)</td>
 <td>mcpkit-completeness work</td>
 </tr>
 <tr>
-<td><strong>Adjacent-transport hops</strong> — events bus, apps Bridge</td>
+<td><strong>Adjacent-transport hops</strong> - events bus, apps Bridge</td>
 <td>mostly the SDK; the Apps Bridge <em>may</em> belong in the Apps spec</td>
 <td>open</td>
 </tr>
 </tbody>
 </table>
-<p>So <strong>SEP-414 is not incomplete.</strong> Span richness can&rsquo;t be specified because it never crosses the wire — it&rsquo;s quality-of-implementation. The gaps are mcpkit&rsquo;s to close, surface by surface (tracked in the <a href="https://github.com/panyam/mcpkit/issues/663">SEP-414 P6 umbrella</a>):</p>
+<p>So <strong>SEP-414 is not incomplete.</strong> Span richness can&rsquo;t be specified because it never crosses the wire. It&rsquo;s quality-of-implementation. The gaps are mcpkit&rsquo;s to close, surface by surface (tracked in the <a href="https://github.com/panyam/mcpkit/issues/663">SEP-414 P6 umbrella</a>):</p>
 <ul>
-<li><strong>Auth</strong> <em>(inside the span)</em> — JWKS / introspection / OAuth I/O wants sub-spans, and the resolved principal wants to be an attribute. Blocked on a <code>core</code> addition: there&rsquo;s no <code>SpanFromContext</code>, so inner code can&rsquo;t enrich the <em>active</em> span — only start a child or reach past the abstraction.</li>
-<li><strong>Tasks</strong> <em>(escapes the span)</em> — task work runs after the create span ends; polls are separate traces. The fit is <strong>span links</strong>, not parentage — a second <code>core</code> contract gap (<code>StartSpan</code> is parent-from-ctx only).</li>
-<li><strong>Apps</strong> <em>(boundary)</em> — a browser-originated trace connects to the backend only if the Bridge <code>postMessage</code> envelope relays <code>traceparent</code>. Same mechanism as the events bus, across JS↔Go. No new <code>core</code> API — <code>Inject</code>/<code>Extract</code> already work on any map.</li>
+<li><strong>Auth</strong> <em>(inside the span)</em> - JWKS / introspection / OAuth I/O wants sub-spans, and the resolved principal wants to be an attribute. Blocked on a <code>core</code> addition: there&rsquo;s no <code>SpanFromContext</code>, so inner code can&rsquo;t enrich the <em>active</em> span, only start a child or reach past the abstraction.</li>
+<li><strong>Tasks</strong> <em>(escapes the span)</em> - task work runs after the create span ends; polls are separate traces. The fit is <strong>span links</strong>, not parentage, a second <code>core</code> contract gap (<code>StartSpan</code> is parent-from-ctx only).</li>
+<li><strong>Apps</strong> <em>(boundary)</em> - a browser-originated trace connects to the backend only if the Bridge <code>postMessage</code> envelope relays <code>traceparent</code>. Same mechanism as the events bus, across JS↔Go. No new <code>core</code> API: <code>Inject</code>/<code>Extract</code> already work on any map.</li>
 </ul>
 <p>Two observations are the through-line of the whole &ldquo;across surfaces&rdquo; story:</p>
 <ul>
-<li>The <strong>two new propagation surfaces</strong> (apps Bridge, events bus) need <strong>no new contract</strong> — <code>core.ExtractTraceContext</code> / <code>InjectTraceContext</code> operate on any <code>map[string]any</code>, transport-agnostic by design.</li>
-<li>The <strong>two enrichment surfaces</strong> (auth, tasks) reveal the only real P1 gaps — <code>SpanFromContext</code> and span links — neither of which the spine needed, which is exactly why P1 omitted them.</li>
+<li>The <strong>two new propagation surfaces</strong> (apps Bridge, events bus) need <strong>no new contract</strong>, since <code>core.ExtractTraceContext</code> / <code>InjectTraceContext</code> operate on any <code>map[string]any</code>, transport-agnostic by design.</li>
+<li>The <strong>two enrichment surfaces</strong> (auth, tasks) reveal the only real P1 gaps, <code>SpanFromContext</code> and span links, neither of which the spine needed, which is exactly why P1 omitted them.</li>
 </ul>
 <blockquote>
 <p>[!NOTE]<br />
@@ -560,14 +560,14 @@ Injection <strong>never clobbers</strong> a caller-set <code>_meta.traceparent</
 </ul>
 <h2 id="next-to-read">Next to read <a class="anchor" href="#next-to-read">¶</a></h2>
 <ul>
-<li><strong><a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a></strong> — the server→client requests (sampling / elicit / roots) that make outbound propagation matter; Q5&rsquo;s chained trace passes straight through this machinery.</li>
-<li><strong><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></strong> — revisit the <code>_meta</code>-field knob now that you&rsquo;ve seen the canonical <code>_meta</code>-field-plus-middleware extension worked end to end.</li>
-<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/</code></a></strong> <em>(branch, target-shape)</em> — the cross-replica events <code>EventBus</code> is a <strong>third</strong> trace-propagation surface SEP-414&rsquo;s two hops don&rsquo;t cover: events cross replicas over Redis/Kafka, <em>not</em> the MCP wire, so the bus envelope must carry <code>traceparent</code> / <code>tracestate</code> to keep a trace connected from ingest-replica to egress-replica.</li>
-<li><strong><a href="https://github.com/panyam/mcpkit/issues/663">SEP-414 P6 umbrella</a></strong> <em>(tracking issue)</em> — tracing across the auth / tasks / apps surfaces + the two <code>core</code> contract gaps (<code>SpanFromContext</code>, span links); see Q7.</li>
+<li><strong><a href="/mcpkit/concepts/reverse-call/">Reverse-call mechanics</a></strong> - the server→client requests (sampling / elicit / roots) that make outbound propagation matter; Q5&rsquo;s chained trace passes straight through this machinery.</li>
+<li><strong><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></strong> - revisit the <code>_meta</code>-field knob now that you&rsquo;ve seen the canonical <code>_meta</code>-field-plus-middleware extension worked end to end.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/</code></a></strong> <em>(branch, target-shape)</em> - the cross-replica events <code>EventBus</code> is a <strong>third</strong> trace-propagation surface SEP-414&rsquo;s two hops don&rsquo;t cover: events cross replicas over Redis/Kafka, <em>not</em> the MCP wire, so the bus envelope must carry <code>traceparent</code> / <code>tracestate</code> to keep a trace connected from ingest-replica to egress-replica.</li>
+<li><strong><a href="https://github.com/panyam/mcpkit/issues/663">SEP-414 P6 umbrella</a></strong> <em>(tracking issue)</em> - tracing across the auth / tasks / apps surfaces + the two <code>core</code> contract gaps (<code>SpanFromContext</code>, span links); see Q7.</li>
 </ul>
 <blockquote>
 <p>[!WARNING]<br />
-<strong>Target-shape gap (extension).</strong> SEP-414 propagates trace context over the MCP wire only (in-band <code>_meta</code>, plus the SEP-2028 HTTP-header bridge). Tracing the work each surface does beyond the dispatch span — auth sub-spans, async task links, the apps Bridge hop, the cross-replica events bus — is additive mcpkit-completeness work tracked in the <a href="https://github.com/panyam/mcpkit/issues/663">SEP-414 P6 umbrella</a> (and #642 / #629 for events), not yet shipped. It reconciles by addition; the <code>core.TracerProvider</code> contract on this page is the foundation, with two small <code>core</code> additions (<code>SpanFromContext</code>, span links) called out in Q7.</p>
+<strong>Target-shape gap (extension).</strong> SEP-414 propagates trace context over the MCP wire only (in-band <code>_meta</code>, plus the SEP-2028 HTTP-header bridge). Tracing the work each surface does beyond the dispatch span (auth sub-spans, async task links, the apps Bridge hop, the cross-replica events bus) is additive mcpkit-completeness work tracked in the <a href="https://github.com/panyam/mcpkit/issues/663">SEP-414 P6 umbrella</a> (and #642 / #629 for events), not yet shipped. It reconciles by addition; the <code>core.TracerProvider</code> contract on this page is the foundation, with two small <code>core</code> additions (<code>SpanFromContext</code>, span links) called out in Q7.</p>
 </blockquote>
 <!-- ─────────────────────────────────────────────────────────────────────────
      Spec citation links.

@@ -237,9 +237,9 @@
 
     <div class="content-body">
         
-<h1 id="sep-2322-mrtr--ephemeral-inputrequiredresult-round-trips">SEP-2322 MRTR — Ephemeral InputRequiredResult Round-Trips <a class="anchor" href="#sep-2322-mrtr--ephemeral-inputrequiredresult-round-trips">¶</a></h1>
+<h1 id="sep-2322-mrtr-ephemeral-inputrequiredresult-round-trips">SEP-2322 MRTR, Ephemeral InputRequiredResult Round-Trips <a class="anchor" href="#sep-2322-mrtr-ephemeral-inputrequiredresult-round-trips">¶</a></h1>
 <blockquote>
-<p><strong>Stable</strong> — implements <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322">SEP-2322</a> (MRTR), merged into the MCP spec.</p>
+<p><strong>Stable</strong> - implements <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322">SEP-2322</a> (MRTR), merged into the MCP spec.</p>
 </blockquote>
 <p>Demonstrates the SEP-2322 ephemeral Multi Round-Trip Requests pattern:<br />
 the server returns <code>InputRequiredResult{inputRequests, requestState}</code><br />
@@ -278,7 +278,7 @@ are also &ldquo;incomplete&rdquo; in some sense).</p>
 </tr>
 </tbody>
 </table>
-<p>The discriminator is <code>resultType</code> — camelCase like every other MCP wire<br />
+<p>The discriminator is <code>resultType</code>, camelCase like every other MCP wire<br />
 field (<code>inputRequests</code>, <code>inputResponses</code>, <code>requestState</code>, <code>taskId</code>, …).</p>
 <h2 id="quick-start">Quick Start <a class="anchor" href="#quick-start">¶</a></h2>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Terminal 1 — start the MCP server</span>
@@ -297,9 +297,9 @@ prompt the user, hit an LLM, or read filesystem roots.</p>
 step-by-step description.</p>
 <h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
 <ul>
-<li>The full InputRequiredResult round-trip — server returns <code>inputRequests + requestState</code>; client resolves each request locally and retries the same <code>tools/call</code> with <code>inputResponses</code> + the echoed state.</li>
+<li>The full InputRequiredResult round-trip: the server returns <code>inputRequests + requestState</code>; client resolves each request locally and retries the same <code>tools/call</code> with <code>inputResponses</code> + the echoed state.</li>
 <li>All three input methods inline-able inside the round: elicitation (<code>elicitation/create</code>), sampling (<code>sampling/createMessage</code>), and root listing (<code>roots/list</code>).</li>
-<li>Multi-round accumulation across rounds via signed <code>requestState</code> — handlers stay stateless; dispatch merges accumulated answers.</li>
+<li>Multi-round accumulation across rounds via signed <code>requestState</code>, so handlers stay stateless; dispatch merges accumulated answers.</li>
 <li>The unified client dispatch path (<code>HandleServerRequestWithContext</code>) handling MRTR-synthesized requests identically to real server-initiated requests.</li>
 <li>The <code>client.CallToolWithInputs</code> + <code>DefaultInputHandler</code> auto-loop that collapses the whole flow into a single call.</li>
 </ul>
@@ -367,11 +367,11 @@ step-by-step description.</p>
 <tbody>
 <tr>
 <td>Server dispatch</td>
-<td><a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a> — handleToolsCall reshapes InputRequired; merges accumulated answers from <code>requestState</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a> - handleToolsCall reshapes InputRequired; merges accumulated answers from <code>requestState</code></td>
 </tr>
 <tr>
 <td>Server runtime</td>
-<td><a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> — <code>mrtrRuntime</code>, sign / verify / mint requestState tokens</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> - <code>mrtrRuntime</code>, sign / verify / mint requestState tokens</td>
 </tr>
 <tr>
 <td>Wire types</td>
@@ -379,19 +379,19 @@ step-by-step description.</p>
 </tr>
 <tr>
 <td>Tool handler API</td>
-<td><a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> — <code>ctx.RequestInput</code> sentinel + <code>InputResponse(key)</code> / <code>HasInputResponses()</code> / <code>RequestState()</code> accessors</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/core/handler_context.go"><code>core/handler_context.go</code></a> - <code>ctx.RequestInput</code> sentinel + <code>InputResponse(key)</code> / <code>HasInputResponses()</code> / <code>RequestState()</code> accessors</td>
 </tr>
 <tr>
 <td>Client auto-loop</td>
-<td><a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a> — <code>CallToolWithInputs</code> + <code>DefaultInputHandler</code></td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/client/mrtr.go"><code>client/mrtr.go</code></a> - <code>CallToolWithInputs</code> + <code>DefaultInputHandler</code></td>
 </tr>
 <tr>
 <td>Single dispatcher</td>
-<td><a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client.HandleServerRequestWithContext</code></a> — same switch handles real server-initiated requests AND MRTR-synthesized ones</td>
+<td><a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client.HandleServerRequestWithContext</code></a> - same switch handles real server-initiated requests AND MRTR-synthesized ones</td>
 </tr>
 <tr>
 <td>Conformance</td>
-<td><a href="https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/mrtr">panyam/mcpconformance — <code>src/scenarios/server/mrtr/</code></a> (upstream Draft PR modelcontextprotocol/conformance#262); local sentinel: <a href="https://github.com/panyam/mcpkit/tree/main/conformance/mrtr"><code>conformance/mrtr/</code></a></td>
+<td><a href="https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/mrtr">panyam/mcpconformance - <code>src/scenarios/server/mrtr/</code></a> (upstream Draft PR modelcontextprotocol/conformance#262); local sentinel: <a href="https://github.com/panyam/mcpkit/tree/main/conformance/mrtr"><code>conformance/mrtr/</code></a></td>
 </tr>
 <tr>
 <td>SEP</td>
@@ -401,7 +401,7 @@ step-by-step description.</p>
 </table>
 <h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
 <ul>
-<li><a href="/mcpkit/examples/tasks-v2/">Tasks v2 — reuses the same input_required envelope</a></li>
+<li><a href="/mcpkit/examples/tasks-v2/">Tasks v2 - reuses the same input_required envelope</a></li>
 <li><a href="/mcpkit/guides/mrtr/">MRTR tutorial</a></li>
 </ul>
 
@@ -411,15 +411,15 @@ step-by-step description.</p>
 <h2 id="walkthrough">Walkthrough</h2>
 <p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/mrtr/WALKTHROUGH.md"><code>examples/mrtr/WALKTHROUGH.md</code></a></p>
 
-<h1 id="mcp-mrtr-sep-2322--ephemeral-inputrequiredresult-round-trips">MCP MRTR (SEP-2322) — Ephemeral InputRequiredResult Round-Trips <a class="anchor" href="#mcp-mrtr-sep-2322--ephemeral-inputrequiredresult-round-trips">¶</a></h1>
-<p>Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server returns <code>InputRequiredResult{inputRequests, requestState}</code> when it needs more input from the client; the client resolves each <code>inputRequest</code> (elicitation, sampling, roots) locally and retries the SAME <code>tools/call</code> with <code>inputResponses</code> + the echoed <code>requestState</code>. Stateless on the server side — accumulated answers live inside <code>requestState</code> across rounds. Renamed from <code>IncompleteResult</code> in SEP-2322 commit de6d76fb (merged 2026-05-06).</p>
+<h1 id="mcp-mrtr-sep-2322-ephemeral-inputrequiredresult-round-trips">MCP MRTR (SEP-2322): ephemeral InputRequiredResult round-trips <a class="anchor" href="#mcp-mrtr-sep-2322-ephemeral-inputrequiredresult-round-trips">¶</a></h1>
+<p>Walks through the SEP-2322 ephemeral Multi Round-Trip Requests flow. The server returns <code>InputRequiredResult{inputRequests, requestState}</code> when it needs more input from the client; the client resolves each <code>inputRequest</code> (elicitation, sampling, roots) locally and retries the SAME <code>tools/call</code> with <code>inputResponses</code> + the echoed <code>requestState</code>. Stateless on the server side, since accumulated answers live inside <code>requestState</code> across rounds. Renamed from <code>IncompleteResult</code> in SEP-2322 commit de6d76fb (merged 2026-05-06).</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
-<li><strong>Connect to the MRTR server with capability handlers</strong> — <code>client.WithElicitationHandler</code> / <code>WithSamplingHandler</code> / <code>WithRootsHandler</code> register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.</li>
-<li><strong>Round 1 (raw): tools/call → InputRequiredResult</strong> — Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is <code>resultType</code> — camelCase like every other MCP wire field. <code>inputRequests</code> is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / <code>&quot;incomplete&quot;</code>.</li>
-<li><strong>Auto-loop: CallToolWithInputs runs the round-trip</strong> — <code>client.CallToolWithInputs(ctx, c, name, args, handler)</code> collapses the whole loop. <code>DefaultInputHandler</code> synthesizes a server-to-client request for each <code>inputRequest</code> and routes it through <code>client.HandleServerRequestWithContext</code> — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.</li>
-<li><strong>Multi-round: server accumulates answers across rounds via requestState</strong> — The wire only ships the LATEST round&rsquo;s <code>inputResponses</code>. Dispatch decodes prior answers from <code>requestState</code> (a signed <code>MRTRRoundState</code> containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same <code>name: Alice</code> for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.</li>
-<li><strong>Tracing: rounds 2+ link back to round 1 (SEP-414 P6)</strong> — Without this PR the same operation produced N unrelated traces — operators looking at round N had no way to navigate to round 1. The vendor-namespaced <code>_meta.io.modelcontextprotocol/tracelink</code> field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.</li>
+<li><strong>Connect to the MRTR server with capability handlers</strong> - <code>client.WithElicitationHandler</code> / <code>WithSamplingHandler</code> / <code>WithRootsHandler</code> register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.</li>
+<li><strong>Round 1 (raw): tools/call → InputRequiredResult</strong> - Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is <code>resultType</code>, camelCase like every other MCP wire field. <code>inputRequests</code> is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / <code>&quot;incomplete&quot;</code>.</li>
+<li><strong>Auto-loop: CallToolWithInputs runs the round-trip</strong> - <code>client.CallToolWithInputs(ctx, c, name, args, handler)</code> collapses the whole loop. <code>DefaultInputHandler</code> synthesizes a server-to-client request for each <code>inputRequest</code> and routes it through <code>client.HandleServerRequestWithContext</code>, the single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.</li>
+<li><strong>Multi-round: server accumulates answers across rounds via requestState</strong> - The wire only ships the LATEST round&rsquo;s <code>inputResponses</code>. Dispatch decodes prior answers from <code>requestState</code> (a signed <code>MRTRRoundState</code> containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same <code>name: Alice</code> for both prompts in this demo, hence the funny output; a real handler would branch on the elicitation message.</li>
+<li><strong>Tracing: rounds 2+ link back to round 1 (SEP-414 P6)</strong> - Without this PR the same operation produced N unrelated traces, so operators looking at round N had no way to navigate to round 1. The vendor-namespaced <code>_meta.io.modelcontextprotocol/tracelink</code> field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -427,7 +427,7 @@ step-by-step description.</p>
     participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the MRTR server with capability handlers
-    Host-&gt;&gt;Server: POST /mcp — initialize (capabilities: elicitation, sampling, roots)
+    Host-&gt;&gt;Server: POST /mcp, initialize (capabilities: elicitation, sampling, roots)
     Server--&gt;&gt;Host: serverInfo + capabilities
 
     Note over Host,Server: Step 2: Round 1 (raw): tools/call → InputRequiredResult
@@ -445,8 +445,8 @@ step-by-step description.</p>
     Host-&gt;&gt;Server: tools/call: test_incomplete_result_multi_round
     Server--&gt;&gt;Host: Round 1 InputRequiredResult: ask step1 (name)
     Host-&gt;&gt;Server: retry with inputResponses{step1}
-    Server--&gt;&gt;Host: Round 2 InputRequiredResult: ask step2 (color) — requestState now carries step1's answer
-    Host-&gt;&gt;Server: retry with inputResponses{step2} (NOT step1 — that's already in requestState)
+    Server--&gt;&gt;Host: Round 2 InputRequiredResult: ask step2 (color), requestState now carries step1's answer
+    Host-&gt;&gt;Server: retry with inputResponses{step2} (NOT step1, which is already in requestState)
     Server--&gt;&gt;Host: Round 3 ToolResult: &quot;Hi Alice, your favorite color is Alice.&quot;
 
     Note over Host,Server: Step 5: Tracing: rounds 2+ link back to round 1 (SEP-414 P6)
@@ -458,13 +458,13 @@ step-by-step description.</p>
 Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
 </code></pre>
 <h3 id="what-mrtr-adds-to-toolscall">What MRTR adds to tools/call <a class="anchor" href="#what-mrtr-adds-to-toolscall">¶</a></h3>
-<p>v1 <code>tools/call</code> had two terminal shapes — a sync <code>ToolResult</code> or (with SEP-2663 Tasks) a <code>CreateTaskResult</code>. SEP-2322 adds a third <strong>transient</strong> shape:</p>
+<p>v1 <code>tools/call</code> had two terminal shapes: a sync <code>ToolResult</code> or (with SEP-2663 Tasks) a <code>CreateTaskResult</code>. SEP-2322 adds a third <strong>transient</strong> shape:</p>
 <ul>
-<li><strong><code>resultType: &quot;complete&quot;</code></strong> (or absent) — sync ToolResult, the call is done.</li>
-<li><strong><code>resultType: &quot;task&quot;</code></strong> — server elected to spin off a task; client polls via <code>tasks/get</code> (SEP-2663).</li>
-<li><strong><code>resultType: &quot;input_required&quot;</code></strong> — server needs more input. The response carries <code>inputRequests</code> (a map of opaque keys → <code>{method, params}</code>) and an opaque <code>requestState</code>. The client resolves each input request locally, then RETRIES the same <code>tools/call</code> with the original arguments PLUS <code>inputResponses</code> (keyed by the same opaque ids) AND the echoed <code>requestState</code>. Renamed from <code>&quot;incomplete&quot;</code> in SEP-2322 commit de6d76fb (merged 2026-05-06).</li>
+<li><strong><code>resultType: &quot;complete&quot;</code></strong> (or absent) - sync ToolResult, the call is done.</li>
+<li><strong><code>resultType: &quot;task&quot;</code></strong> - server elected to spin off a task; client polls via <code>tasks/get</code> (SEP-2663).</li>
+<li><strong><code>resultType: &quot;input_required&quot;</code></strong> - server needs more input. The response carries <code>inputRequests</code> (a map of opaque keys → <code>{method, params}</code>) and an opaque <code>requestState</code>. The client resolves each input request locally, then RETRIES the same <code>tools/call</code> with the original arguments PLUS <code>inputResponses</code> (keyed by the same opaque ids) AND the echoed <code>requestState</code>. Renamed from <code>&quot;incomplete&quot;</code> in SEP-2322 commit de6d76fb (merged 2026-05-06).</li>
 </ul>
-<p>The <code>inputRequests</code> methods are real MCP method names (<code>elicitation/create</code>, <code>sampling/createMessage</code>, <code>roots/list</code>). The client routes each through the same dispatcher it uses for real server-initiated requests — <code>client.HandleServerRequestWithContext</code> — so your existing <code>WithElicitationHandler</code> / <code>WithSamplingHandler</code> / <code>WithRootsHandler</code> callbacks just work.</p>
+<p>The <code>inputRequests</code> methods are real MCP method names (<code>elicitation/create</code>, <code>sampling/createMessage</code>, <code>roots/list</code>). The client routes each through the same dispatcher it uses for real server-initiated requests, <code>client.HandleServerRequestWithContext</code>, so your existing <code>WithElicitationHandler</code> / <code>WithSamplingHandler</code> / <code>WithRootsHandler</code> callbacks just work.</p>
 <p><code>client.CallToolWithInputs(ctx, c, name, args, handler)</code> runs the loop automatically; <code>client.DefaultInputHandler(c)</code> is the standard handler that delegates to the client&rsquo;s capability callbacks.</p>
 <h3 id="step-1-connect-to-the-mrtr-server-with-capability-handlers">Step 1: Connect to the MRTR server with capability handlers <a class="anchor" href="#step-1-connect-to-the-mrtr-server-with-capability-handlers">¶</a></h3>
 <p><code>client.WithElicitationHandler</code> / <code>WithSamplingHandler</code> / <code>WithRootsHandler</code> register the client-side callbacks. The walkthrough returns canned answers so the loop runs end-to-end without user interaction; in production these would prompt the user, hit an LLM, or read filesystem roots.</p>
@@ -480,7 +480,7 @@ Terminal 2:  just demo          # this walkthrough (--tui for the interactive TU
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
 </span></span></code></pre><h3 id="step-2-round-1-raw-toolscall--inputrequiredresult">Step 2: Round 1 (raw): tools/call → InputRequiredResult <a class="anchor" href="#step-2-round-1-raw-toolscall--inputrequiredresult">¶</a></h3>
-<p>Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is <code>resultType</code> — camelCase like every other MCP wire field. <code>inputRequests</code> is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / <code>&quot;incomplete&quot;</code>.</p>
+<p>Bypass the auto-loop helper to see the raw InputRequiredResult shape. The discriminator is <code>resultType</code>, camelCase like every other MCP wire field. <code>inputRequests</code> is keyed by server-chosen opaque ids the client must echo verbatim. SEP-2322 commit de6d76fb (merged 2026-05-06) renamed this variant from IncompleteResult / <code>&quot;incomplete&quot;</code>.</p>
 <h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># A bare tools/call. The server needs input, so result comes back with</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># resultType:&#34;input_required&#34;, an inputRequests map (opaque key -&gt; {method,</span>
@@ -490,7 +490,7 @@ Terminal 2:  just demo          # this walkthrough (--tui for the interactive TU
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;test_tool_with_elicitation&#34;,&#34;arguments&#34;:{}}}&#39;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
 </span></span></code></pre><h3 id="step-3-auto-loop-calltoolwithinputs-runs-the-round-trip">Step 3: Auto-loop: CallToolWithInputs runs the round-trip <a class="anchor" href="#step-3-auto-loop-calltoolwithinputs-runs-the-round-trip">¶</a></h3>
-<p><code>client.CallToolWithInputs(ctx, c, name, args, handler)</code> collapses the whole loop. <code>DefaultInputHandler</code> synthesizes a server-to-client request for each <code>inputRequest</code> and routes it through <code>client.HandleServerRequestWithContext</code> — single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.</p>
+<p><code>client.CallToolWithInputs(ctx, c, name, args, handler)</code> collapses the whole loop. <code>DefaultInputHandler</code> synthesizes a server-to-client request for each <code>inputRequest</code> and routes it through <code>client.HandleServerRequestWithContext</code>, the single source of truth for how the client responds to MCP method requests, whether they arrived over the back-channel or inlined inside an InputRequiredResult.</p>
 <h4 id="reproduce-on-the-wire-2">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-2">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Round 1: tools/call returns input_required + requestState.</span>
 </span></span><span style="display:flex;"><span><span style="color:#008080">R1</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
@@ -506,7 +506,7 @@ Terminal 2:  just demo          # this walkthrough (--tui for the interactive TU
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:2,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;test_tool_with_elicitation\&#34;,\&#34;arguments\&#34;:{},\&#34;inputResponses\&#34;:{\&#34;user_name\&#34;:{\&#34;action\&#34;:\&#34;accept\&#34;,\&#34;content\&#34;:{\&#34;name\&#34;:\&#34;Alice\&#34;}}},\&#34;requestState\&#34;:\&#34;</span><span style="color:#008080">$STATE</span><span style="color:#d14">\&#34;}}&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
 </span></span></code></pre><h3 id="step-4-multi-round-server-accumulates-answers-across-rounds-via-requeststate">Step 4: Multi-round: server accumulates answers across rounds via requestState <a class="anchor" href="#step-4-multi-round-server-accumulates-answers-across-rounds-via-requeststate">¶</a></h3>
-<p>The wire only ships the LATEST round&rsquo;s <code>inputResponses</code>. Dispatch decodes prior answers from <code>requestState</code> (a signed <code>MRTRRoundState</code> containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same <code>name: Alice</code> for both prompts in this demo, hence the funny output — a real handler would branch on the elicitation message.</p>
+<p>The wire only ships the LATEST round&rsquo;s <code>inputResponses</code>. Dispatch decodes prior answers from <code>requestState</code> (a signed <code>MRTRRoundState</code> containing the accumulated answers map), merges with the current round, and surfaces a unified map to the handler. Handlers stay stateless across rounds. The canned elicitation handler returns the same <code>name: Alice</code> for both prompts in this demo, hence the funny output; a real handler would branch on the elicitation message.</p>
 <h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Round 1: server asks step1 (name).</span>
 </span></span><span style="display:flex;"><span><span style="color:#008080">R1</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
@@ -521,21 +521,21 @@ Terminal 2:  just demo          # this walkthrough (--tui for the interactive TU
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:2,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;test_incomplete_result_multi_round\&#34;,\&#34;arguments\&#34;:{},\&#34;inputResponses\&#34;:{\&#34;step1\&#34;:{\&#34;action\&#34;:\&#34;accept\&#34;,\&#34;content\&#34;:{\&#34;name\&#34;:\&#34;Alice\&#34;}}},\&#34;requestState\&#34;:\&#34;</span><span style="color:#008080">$S1</span><span style="color:#d14">\&#34;}}&#34;</span><span style="color:#000;font-weight:bold">)</span>
 </span></span><span style="display:flex;"><span><span style="color:#008080">S2</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R2</span><span style="color:#d14">&#34;</span> | jq -r <span style="color:#d14">&#39;.result.requestState&#39;</span><span style="color:#000;font-weight:bold">)</span>
 </span></span><span style="display:flex;"><span>
-</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Round 3: retry with ONLY step2 — step1 already rides inside requestState.</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Round 3: retry with ONLY step2; step1 already rides inside requestState.</span>
 </span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: text/event-stream, application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:3,\&#34;method\&#34;:\&#34;tools/call\&#34;,\&#34;params\&#34;:{\&#34;name\&#34;:\&#34;test_incomplete_result_multi_round\&#34;,\&#34;arguments\&#34;:{},\&#34;inputResponses\&#34;:{\&#34;step2\&#34;:{\&#34;action\&#34;:\&#34;accept\&#34;,\&#34;content\&#34;:{\&#34;color\&#34;:\&#34;Alice\&#34;}}},\&#34;requestState\&#34;:\&#34;</span><span style="color:#008080">$S2</span><span style="color:#d14">\&#34;}}&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
 </span></span></code></pre><h3 id="step-5-tracing-rounds-2-link-back-to-round-1-sep-414-p6">Step 5: Tracing: rounds 2+ link back to round 1 (SEP-414 P6) <a class="anchor" href="#step-5-tracing-rounds-2-link-back-to-round-1-sep-414-p6">¶</a></h3>
-<p>Without this PR the same operation produced N unrelated traces — operators looking at round N had no way to navigate to round 1. The vendor-namespaced <code>_meta.io.modelcontextprotocol/tracelink</code> field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.</p>
+<p>Without this PR the same operation produced N unrelated traces, so operators looking at round N had no way to navigate to round 1. The vendor-namespaced <code>_meta.io.modelcontextprotocol/tracelink</code> field is mcpkit-specific today; upstream WG standardization of a bare cross-SDK name is a future-discussion item.</p>
 <h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
 <ul>
 <li>Server dispatch: <a href="https://github.com/panyam/mcpkit/blob/main/server/dispatch.go"><code>server/dispatch.go</code></a> (handleToolsCall reshapes InputRequired into the wire envelope; merges accumulated answers from <code>requestState</code>)</li>
-<li>Server runtime: <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> (<code>mrtrRuntime</code> — sign / verify / mint requestState tokens; <code>WithRequestStateSigning(key, ttl)</code> shared with SEP-2663 Tasks)</li>
-<li>Wire types: <code>core.InputRequiredResult</code> / <code>MRTRRoundState</code> / <code>Sign|VerifyMRTRState</code> — core/task_v2.go</li>
-<li>Tool handler API: <code>ctx.RequestInput(reqs)</code> sentinel + <code>ctx.InputResponse(key)</code> / <code>HasInputResponses()</code> / <code>RequestState()</code> accessors — core/handler_context.go</li>
-<li>Client auto-loop: <code>client.CallToolWithInputs</code> + <code>DefaultInputHandler</code> — client/mrtr.go</li>
-<li>Client dispatch unification: <code>client.HandleServerRequestWithContext</code> — single switch for both real server-initiated requests AND MRTR-synthesized ones — client/client.go</li>
+<li>Server runtime: <a href="https://github.com/panyam/mcpkit/blob/main/server/mrtr.go"><code>server/mrtr.go</code></a> (<code>mrtrRuntime</code> - sign / verify / mint requestState tokens; <code>WithRequestStateSigning(key, ttl)</code> shared with SEP-2663 Tasks)</li>
+<li>Wire types: <code>core.InputRequiredResult</code> / <code>MRTRRoundState</code> / <code>Sign|VerifyMRTRState</code> - core/task_v2.go</li>
+<li>Tool handler API: <code>ctx.RequestInput(reqs)</code> sentinel + <code>ctx.InputResponse(key)</code> / <code>HasInputResponses()</code> / <code>RequestState()</code> accessors - core/handler_context.go</li>
+<li>Client auto-loop: <code>client.CallToolWithInputs</code> + <code>DefaultInputHandler</code> - client/mrtr.go</li>
+<li>Client dispatch unification: <code>client.HandleServerRequestWithContext</code> - single switch for both real server-initiated requests AND MRTR-synthesized ones - client/client.go</li>
 <li>Conformance: panyam/mcpconformance fork (<code>src/scenarios/server/mrtr/</code>, 7 checks + 1 SKIPPED composition; upstream Draft PR modelcontextprotocol/conformance#262; <code>just testconf-mrtr</code> runs it)</li>
 <li>SEP-2322 spec: <a href="https://github.com/modelcontextprotocol/specification/pull/2322">https://github.com/modelcontextprotocol/specification/pull/2322</a></li>
 </ul>

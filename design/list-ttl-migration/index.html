@@ -313,11 +313,11 @@ its three siblings, plus <code>client.ReadResourceFull</code>.</li>
 </table>
 <h3 id="ttlms-semantics"><code>ttlMs</code> semantics <a class="anchor" href="#ttlms-semantics">¶</a></h3>
 <ul>
-<li><strong>absent</strong> or <strong><code>0</code></strong> — the response is immediately stale; clients MAY<br />
+<li><strong>absent</strong> or <strong><code>0</code></strong> - the response is immediately stale; clients MAY<br />
 re-fetch every time the result is needed. Per the merged spec an absent<br />
 <code>ttlMs</code> is treated the same as <code>0</code>.</li>
-<li><strong><code>&gt; 0</code></strong> — the response is fresh for that many milliseconds from receipt.</li>
-<li><strong>negative</strong> — clients ignore it and treat it as <code>0</code>.</li>
+<li><strong><code>&gt; 0</code></strong> - the response is fresh for that many milliseconds from receipt.</li>
+<li><strong>negative</strong> - clients ignore it and treat it as <code>0</code>.</li>
 </ul>
 <p>mcpkit keeps <code>TTLMs</code> a <code>*int</code> even though absent and <code>0</code> are<br />
 client-equivalent: the pointer lets a server emit an explicit <code>&quot;ttlMs&quot;: 0</code><br />
@@ -326,12 +326,12 @@ distinct from omitting the field. <code>core.CacheScopePublic</code> and<br />
 <h3 id="cachescope-semantics"><code>cacheScope</code> semantics <a class="anchor" href="#cachescope-semantics">¶</a></h3>
 <p><code>cacheScope</code> mirrors HTTP <code>Cache-Control: public</code> vs <code>private</code>:</p>
 <ul>
-<li><strong><code>&quot;public&quot;</code></strong> — the response holds no caller-specific data; any client,<br />
+<li><strong><code>&quot;public&quot;</code></strong> - the response holds no caller-specific data; any client,<br />
 shared gateway, or caching proxy MAY store it and serve it to any user.</li>
-<li><strong><code>&quot;private&quot;</code></strong> — the response holds caller-specific data; a cache MAY be<br />
+<li><strong><code>&quot;private&quot;</code></strong> - the response holds caller-specific data; a cache MAY be<br />
 reused only within the same authorization context and MUST NOT be shared<br />
 across access tokens.</li>
-<li><strong>absent</strong> — clients default to <code>&quot;public&quot;</code>.</li>
+<li><strong>absent</strong> - clients default to <code>&quot;public&quot;</code>.</li>
 </ul>
 <h2 id="server-api">Server API <a class="anchor" href="#server-api">¶</a></h2>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// All four list endpoints, ttlMs only:

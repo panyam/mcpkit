@@ -237,17 +237,17 @@
 
     <div class="content-body">
         
-<h1 id="mcp-apps-extension--design">MCP Apps Extension — Design <a class="anchor" href="#mcp-apps-extension--design">¶</a></h1>
+<h1 id="mcp-apps-extension-design">MCP Apps extension design <a class="anchor" href="#mcp-apps-extension-design">¶</a></h1>
 <h2 id="overview">Overview <a class="anchor" href="#overview">¶</a></h2>
 <p>MCPKit adds support for the MCP Apps extension (<code>io.modelcontextprotocol/ui</code>), enabling servers to return interactive HTML user interfaces that render inline in host conversations (Claude, ChatGPT, VS Code Copilot, Goose, etc.). This document covers the architecture, protocol surface, edge cases, conformance strategy, and the slyds reference integration.</p>
 <p>MCP Apps combines two existing MCP primitives. Tools declare a UI resource via <code>_meta.ui.resourceUri</code>, and resources serve the HTML content with MIME type <code>text/html;profile=mcp-app</code>. The interactive iframe↔host protocol (JSON-RPC over <code>postMessage</code>) is the host&rsquo;s responsibility; mcpkit&rsquo;s scope is the server-side metadata, resource serving, capability negotiation, and client-side detection.</p>
 <h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
 <ol>
-<li><strong>Core module stays zero-deps</strong> — UI metadata types live in mcpkit core. No HTML processing, no JS bundling, no browser dependencies.</li>
-<li><strong>Additive extension</strong> — servers without UI config work exactly as before. Existing tools, resources, and transports are unaffected.</li>
-<li><strong>Interface in core, implementation in sub-module</strong> — core defines the <code>UIMetadata</code> struct and <code>_meta</code> plumbing. A future <code>mcpkit/ui</code> sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.</li>
-<li><strong>Follow the auth pattern</strong> — <code>UIExtension</code> implements <code>ExtensionProvider</code>, registered via <code>WithExtension(ui.UIExtension{})</code>. Capability negotiation mirrors auth exactly.</li>
-<li><strong>Slyds as the reference app</strong> — design decisions are validated against a real use case: an HTML slide deck editor served as an MCP App.</li>
+<li><strong>Core module stays zero-deps</strong> - UI metadata types live in mcpkit core. No HTML processing, no JS bundling, no browser dependencies.</li>
+<li><strong>Additive extension</strong> - servers without UI config work exactly as before. Existing tools, resources, and transports are unaffected.</li>
+<li><strong>Interface in core, implementation in sub-module</strong> - core defines the <code>UIMetadata</code> struct and <code>_meta</code> plumbing. A future <code>mcpkit/ui</code> sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.</li>
+<li><strong>Follow the auth pattern</strong> - <code>UIExtension</code> implements <code>ExtensionProvider</code>, registered via <code>WithExtension(ui.UIExtension{})</code>. Capability negotiation mirrors auth exactly.</li>
+<li><strong>Slyds as the reference app</strong> - we validate every design decision against a real HTML slide deck editor served as an MCP App.</li>
 </ol>
 <h2 id="spec-reference">Spec Reference <a class="anchor" href="#spec-reference">¶</a></h2>
 <ul>
@@ -323,19 +323,19 @@
 </code></pre>
 <p><strong>mcpkit is responsible for:</strong></p>
 <ul>
-<li>Capability negotiation (server advertises, client detects)</li>
-<li><code>_meta.ui</code> metadata on tools and resources</li>
-<li>Serving <code>ui://</code> resources with correct MIME type</li>
-<li>Tool visibility filtering</li>
-<li>Text-only fallback when client doesn&rsquo;t support UI</li>
+<li>Negotiating the capability (server advertises, client detects)</li>
+<li>Attaching <code>_meta.ui</code> metadata to tools and resources</li>
+<li>Serving <code>ui://</code> resources with the correct MIME type</li>
+<li>Filtering tool visibility</li>
+<li>Falling back to text when the client doesn&rsquo;t support UI</li>
 </ul>
 <p><strong>The host is responsible for:</strong></p>
 <ul>
 <li>Fetching <code>ui://</code> resources via <code>resources/read</code></li>
-<li>Rendering HTML in sandboxed iframe</li>
-<li>The <code>postMessage</code> ↔ JSON-RPC bridge (<code>ui/initialize</code>, <code>ui/notifications/*</code>, etc.)</li>
-<li>CSP enforcement, permission policy, double-iframe sandbox proxy</li>
-<li>Teardown lifecycle</li>
+<li>Rendering HTML in a sandboxed iframe</li>
+<li>Bridging <code>postMessage</code> ↔ JSON-RPC (<code>ui/initialize</code>, <code>ui/notifications/*</code>, etc.)</li>
+<li>Enforcing CSP, permission policy and the double-iframe sandbox proxy</li>
+<li>Tearing down the lifecycle</li>
 </ul>
 <h2 id="core-types">Core Types <a class="anchor" href="#core-types">¶</a></h2>
 <h3 id="uimetadata-new-in-mcpkit-core">UIMetadata (new, in mcpkit core) <a class="anchor" href="#uimetadata-new-in-mcpkit-core">¶</a></h3>
@@ -465,7 +465,7 @@
     S--&gt;&gt;C: initialize result with UI extension
     Note over S: io.modelcontextprotocol/ui&lt;br/&gt;empty settings object
 </code></pre>
-<h3 id="flow-b-tool-with-ui--full-lifecycle-host-perspective">Flow B: Tool with UI — full lifecycle (host perspective) <a class="anchor" href="#flow-b-tool-with-ui--full-lifecycle-host-perspective">¶</a></h3>
+<h3 id="flow-b-tool-with-ui-full-lifecycle-host-perspective">Flow B: Tool with UI, full lifecycle (host perspective) <a class="anchor" href="#flow-b-tool-with-ui-full-lifecycle-host-perspective">¶</a></h3>
 <pre><code class="language-mermaid">sequenceDiagram
     participant User
     participant Host as Host/LLM
@@ -653,9 +653,9 @@ tool results flow through <code>postMessage</code> instead.</p>
 <p><strong>Problem:</strong> The spec says hosts &ldquo;MUST NOT include tools in the agent&rsquo;s tool list when visibility does not include &lsquo;model&rsquo;&rdquo;. This is host-side filtering. But what about servers?</p>
 <p><strong>Decision:</strong></p>
 <ul>
-<li>mcpkit <code>tools/list</code> returns ALL tools, including app-only ones (visibility metadata included)</li>
-<li>Hosts filter before presenting to the LLM</li>
-<li>mcpkit&rsquo;s Go client adds a <code>ListToolsForModel()</code> helper that filters locally (useful for testing)</li>
+<li>mcpkit <code>tools/list</code> returns ALL tools, including app-only ones (visibility metadata included).</li>
+<li>Hosts filter before presenting to the LLM.</li>
+<li>mcpkit&rsquo;s Go client adds a <code>ListToolsForModel()</code> helper that filters locally (useful for testing).</li>
 <li>Server-side <code>tools/call</code> does NOT enforce visibility. Any authenticated caller can invoke any tool. Visibility is a presentation concern, not an access control mechanism.</li>
 </ul>
 <p><strong>Rationale:</strong> The spec places enforcement responsibility on the host. Server-side enforcement would break legitimate use cases (automated testing, admin tools calling app-only tools directly).</p>
@@ -698,7 +698,7 @@ tool results flow through <code>postMessage</code> instead.</p>
 <p><strong>Problem:</strong> If the server requires auth (mcpkit/auth), the host must include Bearer tokens in <code>resources/read</code> requests for <code>ui://</code> resources, same as any other MCP request.</p>
 <p><strong>Mitigation:</strong></p>
 <ul>
-<li>Already handled — <code>CheckAuth</code> runs on ALL requests including <code>resources/read</code></li>
+<li>Already handled. <code>CheckAuth</code> runs on ALL requests including <code>resources/read</code></li>
 <li>No special auth bypass for <code>ui://</code> resources</li>
 <li>Document that auth tokens are required for UI resource fetches</li>
 </ul>
@@ -706,7 +706,7 @@ tool results flow through <code>postMessage</code> instead.</p>
 <p><strong>Problem:</strong> A server may expose multiple tools, each with a different UI. Each tool&rsquo;s <code>_meta.ui.resourceUri</code> points to a different <code>ui://</code> resource.</p>
 <p><strong>Mitigation:</strong></p>
 <ul>
-<li>Already supported — each tool has its own <code>_meta.ui.resourceUri</code></li>
+<li>Already supported. Each tool has its own <code>_meta.ui.resourceUri</code></li>
 <li>Resource templates handle parameterized UIs (e.g., <code>ui://decks/{name}/view</code>)</li>
 <li>Each UI resource can have different CSP, permissions, and domain settings</li>
 </ul>
@@ -901,11 +901,11 @@ tool results flow through <code>postMessage</code> instead.</p>
 </tr>
 <tr>
 <td><a href="/mcpkit/design/apps-host/">APPS_HOST.md</a></td>
-<td>AppHost, AppBridge, ServerRegistry — building custom hosts</td>
+<td>AppHost, AppBridge, ServerRegistry - building custom hosts</td>
 </tr>
 <tr>
 <td><a href="/mcpkit/guides/observability/">SEP_414_OTEL.md</a></td>
-<td>Trace context propagation across mcpkit — context for the bridge relay above</td>
+<td>Trace context propagation across mcpkit - context for the bridge relay above</td>
 </tr>
 <tr>
 <td><code>ext/ui/</code> README</td>

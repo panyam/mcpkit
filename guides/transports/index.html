@@ -271,19 +271,19 @@
 <h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
 <ol>
 <li>
-<p><strong>Transport is not protocol</strong> — HTTP+SSE and Streamable HTTP are transports. JSON-RPC dispatch is shared. Adding a transport means adding a handler, not changing dispatch.</p>
+<p><strong>Transport is not protocol</strong> - HTTP+SSE and Streamable HTTP are transports. JSON-RPC dispatch is shared. Adding a transport means adding a handler, not changing dispatch.</p>
 </li>
 <li>
-<p><strong>Generic infrastructure from servicekit, MCP-specific here</strong> — SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting come from servicekit. mcpkit only implements MCP-specific logic: tool timeout, allowed-roots, tool authz.</p>
+<p><strong>Generic infrastructure from servicekit, MCP-specific here</strong> - SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting come from servicekit. mcpkit only implements MCP-specific logic: tool timeout, allowed-roots, tool authz.</p>
 </li>
 <li>
-<p><strong>Sub-module for heavy auth</strong> — The core module ships <code>BearerTokenValidator</code> (constant-time compare, zero deps). JWT/OIDC lives in <code>mcpkit/auth</code>, a separate Go module that imports oneauth.</p>
+<p><strong>Sub-module for heavy auth</strong> - The core module ships <code>BearerTokenValidator</code> (constant-time compare, zero deps). JWT/OIDC lives in <code>mcpkit/auth</code>, a separate Go module that imports oneauth.</p>
 </li>
 <li>
-<p><strong>Tools are the app&rsquo;s job</strong> — MCPKit handles transport, security, and operations. The application registers tool handlers.</p>
+<p><strong>Tools are the app&rsquo;s job</strong> - MCPKit handles transport, security, and operations. The application registers tool handlers.</p>
 </li>
 <li>
-<p><strong>Safe defaults</strong> — Constant-time token comparison, initialization gating, SSE keepalive are on by default.</p>
+<p><strong>Safe defaults</strong> - Constant-time token comparison, initialization gating, SSE keepalive are on by default.</p>
 </li>
 </ol>
 <h2 id="actual-package-structure">Actual Package Structure <a class="anchor" href="#actual-package-structure">¶</a></h2>
@@ -346,7 +346,7 @@
     └── (7 tests: Keycloak JWT → mcpkit JWTValidator)
 </code></pre>
 <h2 id="two-transports">Two Transports <a class="anchor" href="#two-transports">¶</a></h2>
-<h3 id="sse-transport-mcp-2024-11-05--transportgo">SSE Transport (MCP 2024-11-05) — <code>transport.go</code> <a class="anchor" href="#sse-transport-mcp-2024-11-05--transportgo">¶</a></h3>
+<h3 id="sse-transport-mcp-2024-11-05-transportgo">SSE Transport (MCP 2024-11-05), <code>transport.go</code> <a class="anchor" href="#sse-transport-mcp-2024-11-05-transportgo">¶</a></h3>
 <ul>
 <li><code>GET /mcp/sse</code> → long-lived SSE stream, sends <code>endpoint</code> event with POST URL</li>
 <li><code>POST /mcp/message?sessionId=&lt;id&gt;</code> → JSON-RPC dispatch, response pushed on SSE</li>
@@ -354,12 +354,12 @@
 <li>Uses servicekit <code>BaseSSEConn[SSEData]</code> + <code>SSEHub[SSEData]</code></li>
 <li><code>SSEData</code> union type: <code>SSEText(url)</code> for raw text, <code>SSEJSON(bytes)</code> for JSON-RPC</li>
 </ul>
-<h3 id="streamable-http-mcp-2025-03-26--streamable-transportgo">Streamable HTTP (MCP 2025-03-26) — <code>streamable_transport.go</code> <a class="anchor" href="#streamable-http-mcp-2025-03-26--streamable-transportgo">¶</a></h3>
+<h3 id="streamable-http-mcp-2025-03-26-streamable-transportgo">Streamable HTTP (MCP 2025-03-26), <code>streamable_transport.go</code> <a class="anchor" href="#streamable-http-mcp-2025-03-26-streamable-transportgo">¶</a></h3>
 <ul>
 <li><code>POST /mcp</code> → JSON-RPC dispatch, response in HTTP body (synchronous)</li>
 <li><code>DELETE /mcp</code> → terminate session</li>
 <li>Session tracked via <code>Mcp-Session-Id</code> header (created on initialize)</li>
-<li>No long-lived connections — each request is independent HTTP</li>
+<li>No long-lived connections; each request is independent HTTP</li>
 <li><code>MCP-Protocol-Version</code> header validated if present</li>
 </ul>
 <h3 id="dual-transport-mode">Dual Transport Mode <a class="anchor" href="#dual-transport-mode">¶</a></h3>
@@ -509,13 +509,13 @@ UnmarshalJSON call site, and the helper semantics do not change.</p>
 <p>Clients can subscribe to resource URIs and receive <code>notifications/resources/updated</code> when the resource changes. Requires <code>WithSubscriptions()</code> server option.</p>
 <p><strong>Architecture:</strong></p>
 <ul>
-<li><code>subscriptionRegistry</code> on <code>Server</code> maps URI → sessionID → <code>*Dispatcher</code></li>
-<li>Per-session <code>Dispatcher</code> holds <code>sessionID</code> and <code>subManager</code> (pointer to Server&rsquo;s registry)</li>
-<li><code>resources/subscribe</code> handler registers the session&rsquo;s Dispatcher under the URI</li>
-<li><code>resources/unsubscribe</code> handler removes it</li>
-<li><code>Server.NotifyResourceUpdated(uri)</code> iterates subscribers under read lock, copies dispatcher list, then calls each <code>d.getNotifyFunc()</code> outside the lock</li>
+<li><code>subscriptionRegistry</code> on <code>Server</code> maps URI → sessionID → <code>*Dispatcher</code>.</li>
+<li>Per-session <code>Dispatcher</code> holds <code>sessionID</code> and <code>subManager</code> (pointer to Server&rsquo;s registry).</li>
+<li><code>resources/subscribe</code> handler registers the session&rsquo;s Dispatcher under the URI.</li>
+<li><code>resources/unsubscribe</code> handler removes it.</li>
+<li><code>Server.NotifyResourceUpdated(uri)</code> iterates subscribers under read lock, copies dispatcher list, then calls each <code>d.getNotifyFunc()</code> outside the lock.</li>
 <li><code>Server.Broadcast(method, params)</code> fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses <code>sessionBroadcasters</code>, where each transport registers a closure that iterates its session map. Pattern mirrors <code>CloseAllSessions</code>.</li>
-<li>Transport <code>OnClose</code> / <code>closeSession</code> calls <code>subManager.unsubscribeAll(sessionID)</code> to clean up</li>
+<li>Transport <code>OnClose</code> / <code>closeSession</code> calls <code>subManager.unsubscribeAll(sessionID)</code> to clean up.</li>
 </ul>
 <p><strong>Why store <code>*Dispatcher</code> not <code>NotifyFunc</code>:</strong> The <code>notifyFunc</code> on a Dispatcher can change, since Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading <code>d.getNotifyFunc()</code> at notification time handles this correctly. Access to <code>notifyFunc</code> is protected by <code>notifyMu</code> (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.</p>
 <p><strong>Session cleanup:</strong> All per-session teardown is centralized in <code>Dispatcher.Close()</code>. Transports call it in their disconnect path (SSE <code>OnClose</code>, Streamable <code>handleDelete</code>/<code>closeSession</code>, memory <code>close</code>). New per-session state should add its cleanup to <code>Close()</code>, not to each transport individually.</p>
@@ -550,7 +550,7 @@ UnmarshalJSON call site, and the helper semantics do not change.</p>
 </tr>
 <tr>
 <td><strong>In-memory</strong></td>
-<td>Fully synchronous — notifications are delivered inline during <code>call()</code>, before the response is returned.</td>
+<td>Fully synchronous - notifications are delivered inline during <code>call()</code>, before the response is returned.</td>
 <td><code>dispatchWithNotifyAndRequest</code> calls <code>notifyFunc</code> synchronously within the tool handler.</td>
 </tr>
 </tbody>
@@ -575,9 +575,9 @@ UnmarshalJSON call site, and the helper semantics do not change.</p>
 <p><strong>mcpkit&rsquo;s scope:</strong> capability negotiation, <code>_meta.ui</code> metadata on tools/resources, <code>ui://</code> resource serving, visibility filtering, text-only fallback. The iframe rendering and <code>postMessage</code> bridge are the host&rsquo;s responsibility.</p>
 <p><strong>Package split:</strong></p>
 <ul>
-<li><a href="https://github.com/panyam/mcpkit/blob/main/core/ui.go"><code>core/ui.go</code></a> — Protocol types (<code>UIMetadata</code>, <code>UICSPConfig</code>, <code>UIVisibility</code>, <code>AppMIMEType</code>, <code>ToolMeta</code>, <code>ResourceContentMeta</code>) and context helpers (<code>ClientSupportsUI</code>, <code>NotifyResourcesChanged</code>)</li>
-<li><code>ext/ui/</code> — Extension implementation (<code>UIExtension</code>, <code>RegisterAppTool</code>, <code>RefValidator</code>)</li>
-<li><a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client/client.go</code></a> — <code>WithExtension</code>, <code>WithUIExtension</code>, <code>ServerSupportsUI</code>, <code>ListToolsForModel</code></li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/core/ui.go"><code>core/ui.go</code></a> - Protocol types (<code>UIMetadata</code>, <code>UICSPConfig</code>, <code>UIVisibility</code>, <code>AppMIMEType</code>, <code>ToolMeta</code>, <code>ResourceContentMeta</code>) and context helpers (<code>ClientSupportsUI</code>, <code>NotifyResourcesChanged</code>)</li>
+<li><code>ext/ui/</code> - Extension implementation (<code>UIExtension</code>, <code>RegisterAppTool</code>, <code>RefValidator</code>)</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/client/client.go"><code>client/client.go</code></a> - <code>WithExtension</code>, <code>WithUIExtension</code>, <code>ServerSupportsUI</code>, <code>ListToolsForModel</code></li>
 </ul>
 <p>See <a href="/mcpkit/packages/ext-ui/">docs/APPS_DESIGN.md</a> for the full design: protocol flows, edge cases, conformance strategy, and slyds reference integration.</p>
 <h2 id="mcp-tasks-experimental">MCP Tasks (Experimental) <a class="anchor" href="#mcp-tasks-experimental">¶</a></h2>

@@ -239,25 +239,25 @@
         
 <h1 id="tasks-example-server">Tasks Example Server <a class="anchor" href="#tasks-example-server">¶</a></h1>
 <blockquote>
-<p><strong>Stable (frozen)</strong> — MCP Tasks v1 (spec 2025-11-25). Superseded by <a href="/mcpkit/examples/tasks-v2/">tasks-v2</a> (<a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663">SEP-2663</a>) for new work.</p>
+<p><strong>Stable (frozen)</strong> - MCP Tasks v1 (spec 2025-11-25). Superseded by <a href="/mcpkit/examples/tasks-v2/">tasks-v2</a> (<a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663">SEP-2663</a>) for new work.</p>
 </blockquote>
 <blockquote>
 <p><strong>SEP-2577 deprecation note</strong>: this example demonstrates <code>TaskContext.TaskSample(...)</code>, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See <a href="/mcpkit/design/sep-2577-deprecations/"><code>docs/SEP_2577_DEPRECATIONS.md</code></a> for the migration story.</p>
 </blockquote>
-<p>Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.</p>
+<p>Demonstrates MCP Tasks (spec 2025-11-25): async tool execution with lifecycle tracking.</p>
 <blockquote>
-<p><strong>🚀 <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/WALKTHROUGH.md">Skip to the guided walkthrough →</a></strong> — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with <code>just serve</code> + <code>just demo</code>.</p>
+<p><strong>🚀 <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/WALKTHROUGH.md">Skip to the guided walkthrough →</a></strong> - 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with <code>just serve</code> + <code>just demo</code>.</p>
 </blockquote>
 <h2 id="what-it-demonstrates">What it demonstrates <a class="anchor" href="#what-it-demonstrates">¶</a></h2>
 <ul>
 <li>The three task-support modes on <code>core.ToolDef.Execution</code>: sync-only (no Execution), optional (client picks sync vs async), required (must be async).</li>
 <li>Task lifecycle states (<code>queued</code> → <code>running</code> → <code>completed</code> / <code>failed</code> / <code>cancelled</code>) and the polling pattern via <code>tasks/get</code>.</li>
 <li>Progress notifications streamed over the GET SSE channel while a task runs.</li>
-<li>Elicitation from a background task (<code>TaskContext.TaskElicit</code>) — pausing a task to ask the user a question.</li>
-<li>Sampling from a background task (<code>TaskContext.TaskSample</code>) — pausing a task to query an LLM.</li>
+<li>Elicitation from a background task (<code>TaskContext.TaskElicit</code>), pausing a task to ask the user a question.</li>
+<li>Sampling from a background task (<code>TaskContext.TaskSample</code>), pausing a task to query an LLM.</li>
 <li>Cancellation propagation via <code>tasks/cancel</code>, including verifying the work actually stops.</li>
 <li>TTL enforcement (tasks expire) and session isolation (cross-session task access denied).</li>
-<li>The external-proxy pattern via <code>server.TaskCallbacks</code> — per-tool <code>GetTask</code> / <code>GetResult</code> overrides for tasks living in an external system (Step Functions, etc.).</li>
+<li>The external-proxy pattern via <code>server.TaskCallbacks</code>, giving per-tool <code>GetTask</code> / <code>GetResult</code> overrides for tasks living in an external system (Step Functions, etc.).</li>
 </ul>
 <h2 id="mcpkit-features-used">MCPKit Features Used <a class="anchor" href="#mcpkit-features-used">¶</a></h2>
 <table>
@@ -347,7 +347,7 @@
 </tbody>
 </table>
 <h2 id="important-host-support-required">Important: Host Support Required <a class="anchor" href="#important-host-support-required">¶</a></h2>
-<p>MCP Tasks is an experimental protocol extension (spec 2025-11-25). <strong>Most MCP hosts don&rsquo;t support it yet</strong> — they will call tools synchronously and ignore the task hints.</p>
+<p>MCP Tasks is an experimental protocol extension (spec 2025-11-25). <strong>Most MCP hosts don&rsquo;t support it yet.</strong> They will call tools synchronously and ignore the task hints.</p>
 <p>Until your host supports tasks, use the curl commands in each exercise below, or run the automated walkthrough:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Start a server (Go or TS)</span>
 </span></span><span style="display:flex;"><span>go run . -addr :8080 &amp;
@@ -369,7 +369,7 @@
 </span></span><span style="display:flex;"><span>  <span style="color:#000;font-weight:bold">if</span> <span style="color:#000;font-weight:bold">[</span> -z <span style="color:#d14">&#34;</span><span style="color:#008080">$json</span><span style="color:#d14">&#34;</span> <span style="color:#000;font-weight:bold">]</span>; <span style="color:#000;font-weight:bold">then</span> <span style="color:#008080">json</span><span style="color:#000;font-weight:bold">=</span><span style="color:#d14">&#34;</span><span style="color:#008080">$raw</span><span style="color:#d14">&#34;</span>; <span style="color:#000;font-weight:bold">fi</span>
 </span></span><span style="display:flex;"><span>  <span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$json</span><span style="color:#d14">&#34;</span> | tee /tmp/mcp-body.json | jq .
 </span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">}</span>
-</span></span></code></pre><p><strong>Note:</strong> <code>confirm_delete</code> and <code>write_haiku</code> cannot be fully tested with curl because they use the side-channel pattern — the server sends elicitation/sampling requests back to the client during <code>tasks/result</code>, which requires a client that can handle server-initiated requests. Use the Go test suite (<code>go test ./...</code>) for those.</p>
+</span></span></code></pre><p><strong>Note:</strong> <code>confirm_delete</code> and <code>write_haiku</code> cannot be tested with curl because they use the side-channel pattern: the server sends elicitation/sampling requests back to the client during <code>tasks/result</code>, which requires a client that can handle server-initiated requests. Use the Go test suite (<code>go test ./...</code>) for those.</p>
 <p>Initialize a session before running any curl exercises:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Step 1: Initialize — prints response and captures SESSION_ID</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Note: Go server returns plain JSON, TS server returns SSE. This handles both.</span>
@@ -458,7 +458,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:4,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
-</span></span></code></pre><p>The host polls <code>tasks/get</code> — status transitions from <code>working</code> to <code>completed</code>.</p>
+</span></span></code></pre><p>The host polls <code>tasks/get</code>, and status transitions from <code>working</code> to <code>completed</code>.</p>
 <h3 id="4-failing-job">4. Failing job <a class="anchor" href="#4-failing-job">¶</a></h3>
 <table>
 <thead>
@@ -490,7 +490,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:6,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
-</span></span></code></pre><p>This tool <em>requires</em> task invocation. The job starts, then fails after 1 second — status transitions to <code>failed</code>.</p>
+</span></span></code></pre><p>This tool <em>requires</em> task invocation. The job starts, then fails after 1 second, and status transitions to <code>failed</code>.</p>
 <h3 id="5-elicitation-from-a-task-confirm-delete">5. Elicitation from a task (confirm_delete) <a class="anchor" href="#5-elicitation-from-a-task-confirm-delete">¶</a></h3>
 <table>
 <thead>
@@ -502,7 +502,7 @@
 <tbody>
 <tr>
 <td><code>Delete the file important.txt</code></td>
-<td>See below (partial — curl can&rsquo;t respond to elicitation)</td>
+<td>See below (partial - curl can&rsquo;t respond to elicitation)</td>
 </tr>
 </tbody>
 </table>
@@ -523,7 +523,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:11,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
-</span></span></code></pre><p>The task transitions to <code>input_required</code> while waiting for the elicitation response. With curl, the task stays stuck here — the server sent an elicitation request via SSE but curl can&rsquo;t respond to it.</p>
+</span></span></code></pre><p>The task transitions to <code>input_required</code> while waiting for the elicitation response. With curl, the task stays stuck here, because the server sent an elicitation request via SSE but curl can&rsquo;t respond to it.</p>
 <p><strong>To complete the flow</strong>, use the Go test suite which has a mock elicitation handler:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> server <span style="color:#000;font-weight:bold">&amp;&amp;</span> go <span style="color:#0086b3">test</span> -run TestTaskElicitE2E -v
 </span></span></code></pre><h3 id="6-sampling-from-a-task-write-haiku">6. Sampling from a task (write_haiku) <a class="anchor" href="#6-sampling-from-a-task-write-haiku">¶</a></h3>
@@ -537,7 +537,7 @@
 <tbody>
 <tr>
 <td><code>Write a haiku about the ocean</code></td>
-<td>See below (partial — curl can&rsquo;t respond to sampling)</td>
+<td>See below (partial - curl can&rsquo;t respond to sampling)</td>
 </tr>
 </tbody>
 </table>
@@ -558,7 +558,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:13,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
-</span></span></code></pre><p>Same as confirm_delete — the task transitions to <code>input_required</code> while the server waits for a sampling response. Curl can&rsquo;t provide one.</p>
+</span></span></code></pre><p>Same as confirm_delete: the task transitions to <code>input_required</code> while the server waits for a sampling response. Curl can&rsquo;t provide one.</p>
 <p><strong>To complete the flow:</strong></p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#0086b3">cd</span> server <span style="color:#000;font-weight:bold">&amp;&amp;</span> go <span style="color:#0086b3">test</span> -run TestTaskSampleE2E -v
 </span></span></code></pre><h3 id="7-cancel-a-running-task">7. Cancel a running task <a class="anchor" href="#7-cancel-a-running-task">¶</a></h3>
@@ -629,7 +629,7 @@
 </thead>
 <tbody>
 <tr>
-<td><em>(curl-only — needs custom TTL param)</em></td>
+<td><em>(curl-only - needs custom TTL param)</em></td>
 <td>See below</td>
 </tr>
 </tbody>
@@ -653,7 +653,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:11,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
-</span></span></code></pre><p><strong>Expected:</strong> Task not found — it was cleaned up after TTL expired.<br />
+</span></span></code></pre><p><strong>Expected:</strong> Task not found, cleaned up after TTL expired.<br />
 <strong>Behavior:</strong> Timer resets on result storage and cancellation, so the TTL window starts fresh from the last state change.</p>
 <hr />
 <h2 id="phase-3-session-isolation-">Phase 3: Session Isolation ✅ <a class="anchor" href="#phase-3-session-isolation-">¶</a></h2>
@@ -670,7 +670,7 @@
 </thead>
 <tbody>
 <tr>
-<td><em>(curl-only — needs two sessions)</em></td>
+<td><em>(curl-only - needs two sessions)</em></td>
 <td>See below</td>
 </tr>
 </tbody>
@@ -723,7 +723,7 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Content-Type: application/json&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Accept: application/json, text/event-stream&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#34;{\&#34;jsonrpc\&#34;:\&#34;2.0\&#34;,\&#34;id\&#34;:3,\&#34;method\&#34;:\&#34;tasks/get\&#34;,\&#34;params\&#34;:{\&#34;taskId\&#34;:\&#34;</span><span style="color:#008080">$TASK_ID</span><span style="color:#d14">\&#34;}}&#34;</span>
-</span></span></code></pre><p><strong>Expected:</strong> Task not found — session B can&rsquo;t see session A&rsquo;s tasks.<br />
+</span></span></code></pre><p><strong>Expected:</strong> Task not found, since session B can&rsquo;t see session A&rsquo;s tasks.<br />
 <strong>Behavior:</strong> Empty sessionID (backward compat) allows access to all tasks.</p>
 <hr />
 <h2 id="phase-4-store-api-alignment-">Phase 4: Store API Alignment ✅ <a class="anchor" href="#phase-4-store-api-alignment-">¶</a></h2>
@@ -731,8 +731,8 @@
 <p><strong>Status</strong>: Implemented. Atomic <code>StoreTerminalResult</code> with terminal guard.</p>
 </blockquote>
 <h3 id="11-double-complete-is-rejected">11. Double-complete is rejected <a class="anchor" href="#11-double-complete-is-rejected">¶</a></h3>
-<p>Complete a task, then try to store another result (internal API — no curl equivalent).</p>
-<p><strong>Expected:</strong> Error — can&rsquo;t store result for terminal task. Second <code>StoreTerminalResult</code> is rejected.<br />
+<p>Complete a task, then try to store another result (internal API, no curl equivalent).</p>
+<p><strong>Expected:</strong> Error, since you can&rsquo;t store a result for a terminal task. Second <code>StoreTerminalResult</code> is rejected.<br />
 <strong>Behavior:</strong> Terminal guard prevents cancel→completed race and double-completion.</p>
 <hr />
 <h2 id="phase-5-cancellation-propagation-">Phase 5: Cancellation Propagation ✅ <a class="anchor" href="#phase-5-cancellation-propagation-">¶</a></h2>
@@ -854,12 +854,12 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Expected (after Phase 8):</strong> Cancelling the parent task cascades to all children — build and test are also cancelled.<br />
+<p><strong>Expected (after Phase 8):</strong> Cancelling the parent task cascades to all children, so build and test are also cancelled.<br />
 <strong>Today:</strong> No cascade. Only the parent task is cancelled.</p>
 <h2 id="screenshots">Screenshots <a class="anchor" href="#screenshots">¶</a></h2>
 <h3 id="async-tool-returns-a-task-id-immediately">Async tool returns a task ID immediately <a class="anchor" href="#async-tool-returns-a-task-id-immediately">¶</a></h3>
-<h3 id="polling-tasksget--status-transitions-to-completed">Polling tasks/get — status transitions to completed <a class="anchor" href="#polling-tasksget--status-transitions-to-completed">¶</a></h3>
-<h3 id="failing-job--task-transitions-to-failed-after-1-second">failing_job — task transitions to failed after 1 second <a class="anchor" href="#failing-job--task-transitions-to-failed-after-1-second">¶</a></h3>
+<h3 id="polling-tasksget-status-transitions-to-completed">Polling tasks/get, status transitions to completed <a class="anchor" href="#polling-tasksget-status-transitions-to-completed">¶</a></h3>
+<h3 id="failing-job-task-transitions-to-failed-after-1-second">failing_job, task transitions to failed after 1 second <a class="anchor" href="#failing-job-task-transitions-to-failed-after-1-second">¶</a></h3>
 <h2 id="key-files">Key Files <a class="anchor" href="#key-files">¶</a></h2>
 <table>
 <thead>
@@ -917,7 +917,7 @@
 </table>
 <h2 id="next-steps">Next steps <a class="anchor" href="#next-steps">¶</a></h2>
 <ul>
-<li><a href="/mcpkit/examples/tasks-v2/">Tasks v2 — the canonical async model</a></li>
+<li><a href="/mcpkit/examples/tasks-v2/">Tasks v2 - the canonical async model</a></li>
 <li><a href="/mcpkit/design/tasks-v2-migration/">v1 → v2 migration</a></li>
 </ul>
 
@@ -927,18 +927,18 @@
 <h2 id="walkthrough">Walkthrough</h2>
 <p class="source-link">Generated from the scripted demo — run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/WALKTHROUGH.md"><code>examples/tasks/WALKTHROUGH.md</code></a></p>
 
-<h1 id="mcp-tasks--async-tool-execution-lifecycle">MCP Tasks — Async Tool Execution Lifecycle <a class="anchor" href="#mcp-tasks--async-tool-execution-lifecycle">¶</a></h1>
+<h1 id="mcp-tasks-and-the-async-tool-execution-lifecycle">MCP Tasks and the async tool execution lifecycle <a class="anchor" href="#mcp-tasks-and-the-async-tool-execution-lifecycle">¶</a></h1>
 <p>Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support, polling, progress notifications, and cancellation.</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
-<li><strong>Connect to the MCP server</strong> — The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.</li>
-<li><strong>Sync call: greet (taskSupport=forbidden)</strong> — greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.</li>
-<li><strong>Optional task: slow_compute as task → CreateTaskResult</strong> — slow_compute has taskSupport=optional. Sending the <code>task</code> hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.</li>
-<li><strong>Poll tasks/get until terminal — receive notifications/progress</strong> — The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches <code>completed</code>, the polling stops.</li>
-<li><strong>Fetch the result payload via tasks/result</strong> — tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.</li>
-<li><strong>Required task: failing_job — sync call returns an error</strong> — failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.</li>
-<li><strong>Invoke failing_job as task → terminal status: failed</strong> — Errors from required-task tools surface as a terminal status of <code>failed</code>. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.</li>
-<li><strong>Cancel a long-running task mid-flight</strong> — Tasks support cooperative cancellation. The server cancels the goroutine&rsquo;s context; tools that select on ctx.Done() exit cleanly. Status transitions to <code>cancelled</code>. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn&rsquo;t overwrite the cancelled status.</li>
+<li><strong>Connect to the MCP server</strong> - The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.</li>
+<li><strong>Sync call: greet (taskSupport=forbidden)</strong> - greet is sync-only. The result returns directly in the tools/call response, with no task created. This is the path most existing tools use today; tasks are opt-in per tool.</li>
+<li><strong>Optional task: slow_compute as task → CreateTaskResult</strong> - slow_compute has taskSupport=optional. Sending the <code>task</code> hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.</li>
+<li><strong>Poll tasks/get until terminal, receiving notifications/progress</strong> - The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches <code>completed</code>, the polling stops.</li>
+<li><strong>Fetch the result payload via tasks/result</strong> - tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.</li>
+<li><strong>Required task: failing_job, where a sync call returns an error</strong> - failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.</li>
+<li><strong>Invoke failing_job as task → terminal status: failed</strong> - Errors from required-task tools surface as a terminal status of <code>failed</code>. The host gets the taskId immediately, polls, and learns the task failed via the status field, with no exception thrown on the polling call.</li>
+<li><strong>Cancel a long-running task mid-flight</strong> - Tasks support cooperative cancellation. The server cancels the goroutine&rsquo;s context; tools that select on ctx.Done() exit cleanly. Status transitions to <code>cancelled</code>. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn&rsquo;t overwrite the cancelled status.</li>
 </ul>
 <h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
 <pre><code class="language-mermaid">sequenceDiagram
@@ -946,7 +946,7 @@
     participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the MCP server
-    Host-&gt;&gt;Server: POST /mcp — initialize
+    Host-&gt;&gt;Server: POST /mcp, initialize
     Server--&gt;&gt;Host: serverInfo + Mcp-Session-Id + tasks capability
 
     Note over Host,Server: Step 2: Sync call: greet (taskSupport=forbidden)
@@ -957,7 +957,7 @@
     Host-&gt;&gt;Server: tools/call: slow_compute {seconds:3} + task: {ttl: 60s}
     Server--&gt;&gt;Host: {taskId, status: working, ttl, pollInterval}
 
-    Note over Host,Server: Step 4: Poll tasks/get until terminal — receive notifications/progress
+    Note over Host,Server: Step 4: Poll tasks/get until terminal, receiving notifications/progress
     Host-&gt;&gt;Server: tasks/get {taskId}  (polled every pollInterval)
     Server--&gt;&gt;Host: notifications/progress (1/3, 2/3, 3/3) via SSE
     Server--&gt;&gt;Host: {status: completed} on terminal poll
@@ -966,7 +966,7 @@
     Host-&gt;&gt;Server: tasks/result {taskId}
     Server--&gt;&gt;Host: ToolResult
 
-    Note over Host,Server: Step 6: Required task: failing_job — sync call returns an error
+    Note over Host,Server: Step 6: Required task: failing_job, where a sync call returns an error
     Host-&gt;&gt;Server: tools/call: failing_job  (no task hint)
     Server--&gt;&gt;Host: JSON-RPC error (taskSupport=required)
 
@@ -1012,7 +1012,7 @@ Terminal 2:  just run          # this demo
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
 </span></span></code></pre><h3 id="step-2-sync-call-greet-tasksupportforbidden">Step 2: Sync call: greet (taskSupport=forbidden) <a class="anchor" href="#step-2-sync-call-greet-tasksupportforbidden">¶</a></h3>
-<p>greet is sync-only. The result returns directly in the tools/call response — no task created. This is the path most existing tools use today; tasks are opt-in per tool.</p>
+<p>greet is sync-only. The result returns directly in the tools/call response, with no task created. This is the path most existing tools use today; tasks are opt-in per tool.</p>
 <h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tools/call with no task hint: result returns inline under .result</span>
 </span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
@@ -1034,7 +1034,7 @@ Terminal 2:  just run          # this demo
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:2,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;slow_compute&#34;,&#34;arguments&#34;:{&#34;seconds&#34;:3,&#34;label&#34;:&#34;demo&#34;},&#34;task&#34;:{&#34;ttl&#34;:60000}}}&#39;</span><span style="color:#000;font-weight:bold">)</span>
 </span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R</span><span style="color:#d14">&#34;</span> | jq <span style="color:#d14">&#39;.result&#39;</span>
 </span></span><span style="display:flex;"><span><span style="color:#008080">TID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;</span><span style="color:#008080">$R</span><span style="color:#d14">&#34;</span> | jq -r <span style="color:#d14">&#39;.result.taskId&#39;</span><span style="color:#000;font-weight:bold">)</span>
-</span></span></code></pre><h3 id="step-4-poll-tasksget-until-terminal--receive-notificationsprogress">Step 4: Poll tasks/get until terminal — receive notifications/progress <a class="anchor" href="#step-4-poll-tasksget-until-terminal--receive-notificationsprogress">¶</a></h3>
+</span></span></code></pre><h3 id="step-4-poll-tasksget-until-terminal-receiving-notificationsprogress">Step 4: Poll tasks/get until terminal, receiving notifications/progress <a class="anchor" href="#step-4-poll-tasksget-until-terminal-receiving-notificationsprogress">¶</a></h3>
 <p>The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches <code>completed</code>, the polling stops.</p>
 <h4 id="reproduce-on-the-wire-3">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-3">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tasks/get returns task status only; poll it every pollInterval until terminal.</span>
@@ -1055,7 +1055,7 @@ Terminal 2:  just run          # this demo
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:4,&#34;method&#34;:&#34;tasks/result&#34;,&#34;params&#34;:{&#34;taskId&#34;:&#34;&#39;</span><span style="color:#d14">&#34;</span><span style="color:#008080">$TID</span><span style="color:#d14">&#34;</span><span style="color:#d14">&#39;&#34;}}&#39;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result&#39;</span>
-</span></span></code></pre><h3 id="step-6-required-task-failing-job--sync-call-returns-an-error">Step 6: Required task: failing_job — sync call returns an error <a class="anchor" href="#step-6-required-task-failing-job--sync-call-returns-an-error">¶</a></h3>
+</span></span></code></pre><h3 id="step-6-required-task-failing-job-where-a-sync-call-returns-an-error">Step 6: Required task: failing_job, where a sync call returns an error <a class="anchor" href="#step-6-required-task-failing-job-where-a-sync-call-returns-an-error">¶</a></h3>
 <p>failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.</p>
 <h4 id="reproduce-on-the-wire-5">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-5">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># tools/call with no task hint on a required-task tool: response carries a</span>
@@ -1067,7 +1067,7 @@ Terminal 2:  just run          # this demo
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:5,&#34;method&#34;:&#34;tools/call&#34;,&#34;params&#34;:{&#34;name&#34;:&#34;failing_job&#34;,&#34;arguments&#34;:{}}}&#39;</span> <span style="color:#d14">\
 </span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.error&#39;</span>
 </span></span></code></pre><h3 id="step-7-invoke-failing-job-as-task--terminal-status-failed">Step 7: Invoke failing_job as task → terminal status: failed <a class="anchor" href="#step-7-invoke-failing-job-as-task--terminal-status-failed">¶</a></h3>
-<p>Errors from required-task tools surface as a terminal status of <code>failed</code>. The host gets the taskId immediately, polls, and learns the task failed via the status field — no exception thrown on the polling call.</p>
+<p>Errors from required-task tools surface as a terminal status of <code>failed</code>. The host gets the taskId immediately, polls, and learns the task failed via the status field, with no exception thrown on the polling call.</p>
 <h4 id="reproduce-on-the-wire-6">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-6">¶</a></h4>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># create the task (task hint sibling under params), capture taskId</span>
 </span></span><span style="display:flex;"><span><span style="color:#008080">R</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
@@ -1110,8 +1110,8 @@ Terminal 2:  just run          # this demo
 </span></span></code></pre><h3 id="where-each-piece-lives-in-mcpkit">Where each piece lives in mcpkit <a class="anchor" href="#where-each-piece-lives-in-mcpkit">¶</a></h3>
 <ul>
 <li>Tasks server library: <code>server/task_*.go</code>, <code>server/tasks_experimental.go</code></li>
-<li>TaskContext (used by required-task tools): <code>core.TaskContext</code> — <a href="https://github.com/panyam/mcpkit/blob/main/core/task.go"><code>core/task.go</code></a></li>
-<li>Client helpers: <a href="https://github.com/panyam/mcpkit/blob/main/client/tasks.go"><code>client/tasks.go</code></a> — <code>ToolCallAsTask</code>, <code>WaitForTask</code>, <code>GetTask</code>, <code>GetTaskPayload</code>, <code>CancelTask</code></li>
+<li>TaskContext (used by required-task tools): <code>core.TaskContext</code> - <a href="https://github.com/panyam/mcpkit/blob/main/core/task.go"><code>core/task.go</code></a></li>
+<li>Client helpers: <a href="https://github.com/panyam/mcpkit/blob/main/client/tasks.go"><code>client/tasks.go</code></a> - <code>ToolCallAsTask</code>, <code>WaitForTask</code>, <code>GetTask</code>, <code>GetTaskPayload</code>, <code>CancelTask</code></li>
 <li>Tool declares task support via <code>core.ToolDef.Execution.TaskSupport</code> (<code>forbidden</code> | <code>optional</code> | <code>required</code>)</li>
 </ul>
 <p>For elicitation/sampling from inside a task (the <code>confirm_delete</code> and <code>write_haiku</code> tools also registered on this server), see <a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks/run-exercises.sh"><code>examples/tasks/run-exercises.sh</code></a>.</p>

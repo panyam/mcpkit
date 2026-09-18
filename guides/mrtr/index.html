@@ -237,7 +237,7 @@
 
     <div class="content-body">
         
-<h1 id="mrtr-tutorial--multi-round-trip-requests-end-to-end">MRTR Tutorial — Multi Round-Trip Requests, end to end <a class="anchor" href="#mrtr-tutorial--multi-round-trip-requests-end-to-end">¶</a></h1>
+<h1 id="multi-round-trip-requests-mrtr-end-to-end">Multi Round-Trip Requests (MRTR), end to end <a class="anchor" href="#multi-round-trip-requests-mrtr-end-to-end">¶</a></h1>
 <p>Everything you need to know to write tools that gather input from the client cleanly across both the legacy and stateless MCP wires, plus a clear picture of where the older &ldquo;server pushes a request to the client&rdquo; mechanisms fit in (and where they&rsquo;re going).</p>
 <blockquote>
 <p><strong>Status.</strong> Reflects the spec as of SEP-2322 (merged 2026-05-06), SEP-2575 (stateless wire), and SEP-2663 (tasks v2). mcpkit&rsquo;s reference fixtures live under <a href="/mcpkit/examples/mrtr/"><code>examples/mrtr</code></a> and <a href="/mcpkit/examples/tasks-v2/"><code>examples/tasks-v2</code></a>; the conformance suite is in <a href="https://github.com/panyam/mcpconformance">panyam/mcpconformance</a>.</p>
@@ -368,7 +368,7 @@
 </span></span><span style="display:flex;"><span>})
 </span></span></code></pre><p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/mrtr/main.go"><code>basicListRootsTool</code></a> (the A3 fixture).</p>
 <hr />
-<h2 id="4-where-the-client-publishes-its-capability-menu--and-how-that-changes-per-wire">4. Where the client publishes its capability menu — and how that changes per wire <a class="anchor" href="#4-where-the-client-publishes-its-capability-menu--and-how-that-changes-per-wire">¶</a></h2>
+<h2 id="4-where-the-client-publishes-its-capability-menu-and-how-that-changes-per-wire">4. Where the client publishes its capability menu, and how that changes per wire <a class="anchor" href="#4-where-the-client-publishes-its-capability-menu-and-how-that-changes-per-wire">¶</a></h2>
 <p>The rule the spec enforces is universal:</p>
 <blockquote>
 <p>The server picks <code>InputRequest.method</code> from the menu of methods the client declared support for. If the client didn&rsquo;t declare <code>sampling</code>, the server can&rsquo;t legally ask for <code>sampling/createMessage</code>.</p>
@@ -387,13 +387,13 @@
 <tr>
 <td><strong>Legacy</strong></td>
 <td><code>initialize</code> response</td>
-<td>Session — cached server-side until session ends</td>
-<td>Yes — <code>_meta.clientCapabilities</code> on a request overrides / augments the session cache (SEP-2575 also targets legacy)</td>
+<td>Session - cached server-side until session ends</td>
+<td>Yes - <code>_meta.clientCapabilities</code> on a request overrides / augments the session cache (SEP-2575 also targets legacy)</td>
 </tr>
 <tr>
 <td><strong>Stateless</strong></td>
 <td><code>_meta.clientCapabilities</code> on <strong>every</strong> request</td>
-<td>Request — declared fresh each time, no server-side cache</td>
+<td>Request - declared fresh each time, no server-side cache</td>
 <td>Same field is the only source</td>
 </tr>
 </tbody>
@@ -418,7 +418,7 @@
 <h3 id="the-mcpkit-helper">The mcpkit helper <a class="anchor" href="#the-mcpkit-helper">¶</a></h3>
 <p><a href="https://github.com/panyam/mcpkit/blob/main/core/stateless.go"><code>core.ClientSupportsExtensionForRequest(ctx, key, perRequestCapsRaw)</code></a> transparently merges the session-cached caps (if any) with the per-request <code>_meta</code> override and gives you a single yes/no. Your handler or middleware doesn&rsquo;t need to special-case the wire. <code>taskV2Middleware</code> uses exactly this helper to gate the tasks extension; a future &ldquo;MRTR capability gate&rdquo; for elicitation/sampling/roots would use the same shape.</p>
 <hr />
-<h2 id="5-progresstoken--who-mints-it-and-what-its-for">5. <code>progressToken</code> — who mints it and what it&rsquo;s for <a class="anchor" href="#5-progresstoken--who-mints-it-and-what-its-for">¶</a></h2>
+<h2 id="5-progresstoken-who-mints-it-and-what-its-for">5. <code>progressToken</code>, who mints it and what it&rsquo;s for <a class="anchor" href="#5-progresstoken-who-mints-it-and-what-its-for">¶</a></h2>
 <p><strong>The client mints it.</strong> It&rsquo;s a single-source-of-truth correlation tag: the client picks an opaque value (any JSON scalar, including string, number, and null), attaches it to the outgoing request under <code>_meta.progressToken</code>, and uses that same value to match incoming <code>notifications/progress</code> events back to the request that asked for them.</p>
 <pre><code class="language-jsonc">// client → server
 {
@@ -457,17 +457,17 @@
 </span></span><span style="display:flex;"><span>}
 </span></span></code></pre><p>That&rsquo;s the app synthesizing a token because the client didn&rsquo;t, <em>as a convenience</em>. The protocol doesn&rsquo;t define this fallback; it&rsquo;s app-level behavior.</p>
 <hr />
-<h2 id="6-what-notificationsprogress-and-notificationsmessage-were-for--and-what-replaces-them-inside-a-task">6. What <code>notifications/progress</code> and <code>notifications/message</code> were for — and what replaces them inside a task <a class="anchor" href="#6-what-notificationsprogress-and-notificationsmessage-were-for--and-what-replaces-them-inside-a-task">¶</a></h2>
+<h2 id="6-what-notificationsprogress-and-notificationsmessage-were-for-and-what-replaces-them-inside-a-task">6. What <code>notifications/progress</code> and <code>notifications/message</code> were for, and what replaces them inside a task <a class="anchor" href="#6-what-notificationsprogress-and-notificationsmessage-were-for-and-what-replaces-them-inside-a-task">¶</a></h2>
 <p>Both are <strong>server-to-client streaming notifications</strong> on the persistent push channel:</p>
 <ul>
-<li><strong><code>notifications/progress</code></strong> — progress updates for a single in-flight request the client opted into tracking. Use case: a 30-second compute job that wants to update an IDE progress bar.</li>
-<li><strong><code>notifications/message</code></strong> — server-side log emission scoped by <code>logging/setLevel</code>. Use case: live operator logging, devtools output, audit trail.</li>
+<li><strong><code>notifications/progress</code></strong> - progress updates for a single in-flight request the client opted into tracking. Use case: a 30-second compute job that wants to update an IDE progress bar.</li>
+<li><strong><code>notifications/message</code></strong> - server-side log emission scoped by <code>logging/setLevel</code>. Use case: live operator logging, devtools output, audit trail.</li>
 </ul>
 <p>SEP-2663&rsquo;s <strong>G6 rule</strong> says: <strong>a task&rsquo;s notification channel is reserved for <code>notifications/tasks</code> (the lifecycle event stream) and MUST NOT carry <code>notifications/progress</code> or <code>notifications/message</code>.</strong></p>
 <p>Three reasons the spec went this way:</p>
 <ol>
 <li><strong>Wire homogeneity.</strong> A task is observed via <code>tasks/get</code> polling or <code>notifications/tasks</code> SSE. Mixing in progress/message events on the same stream would force every task-aware client to disambiguate between &ldquo;task lifecycle event&rdquo; and &ldquo;tool-internal status&rdquo;, and they&rsquo;d need to do that in a way that&rsquo;s consistent across servers. Cleaner: tasks emit task events, full stop.</li>
-<li><strong>Stateless-wire feasibility.</strong> Progress/message both assume a long-lived push channel. On the SEP-2575 stateless wire there isn&rsquo;t one. Tasks are how stateless servers expose long-running work; saying &ldquo;tasks don&rsquo;t speak progress/message&rdquo; lets stateless servers be fully spec-compliant for tasks without implementing a streaming back-channel they fundamentally can&rsquo;t have.</li>
+<li><strong>Stateless-wire feasibility.</strong> Progress/message both assume a long-lived push channel. On the SEP-2575 stateless wire there isn&rsquo;t one. Tasks are how stateless servers expose long-running work; saying &ldquo;tasks don&rsquo;t speak progress/message&rdquo; lets stateless servers be spec-compliant for tasks without implementing a streaming back-channel they fundamentally can&rsquo;t have.</li>
 <li><strong>No silent loss.</strong> A handler emitting progress on legacy lands on the GET SSE stream; the same handler under stateless silently fails to deliver. Forbidding them everywhere makes the contract uniform.</li>
 </ol>
 <h3 id="what-replaces-them">What replaces them <a class="anchor" href="#what-replaces-them">¶</a></h3>
@@ -488,11 +488,11 @@
 <tr>
 <td><code>notifications/message</code></td>
 <td>Structured <code>result.content</code> when the task completes; for live observability, out-of-band server-side logging (your own log infra, OpenTelemetry, &hellip;)</td>
-<td>The task&rsquo;s <code>result</code> is where structured output goes. For live ops visibility, the spec is &ldquo;use real logging&rdquo; — MCP isn&rsquo;t the transport for that.</td>
+<td>The task&rsquo;s <code>result</code> is where structured output goes. For live ops visibility, the spec is &ldquo;use real logging&rdquo; - MCP isn&rsquo;t the transport for that.</td>
 </tr>
 <tr>
 <td>Either, during sync handler phase</td>
-<td><strong>Still works.</strong> The G6 filter is goroutine-scoped only — a sync handler returning a <code>core.ToolResult</code> (or running an MRTR round) can still call <code>EmitProgress</code> / <code>EmitLog</code> on the request ctx</td>
+<td><strong>Still works.</strong> The G6 filter is goroutine-scoped only - a sync handler returning a <code>core.ToolResult</code> (or running an MRTR round) can still call <code>EmitProgress</code> / <code>EmitLog</code> on the request ctx</td>
 <td>Use this for short tool calls that don&rsquo;t need to be tasks</td>
 </tr>
 </tbody>
@@ -506,7 +506,7 @@
 </span></span></code></pre><p>So a handler written for the pre-G6 world doesn&rsquo;t <em>break</em> when run as a task. It just stops emitting those notifications. They no-op silently. That&rsquo;s what made the migration to GoAsync mechanical instead of a behavioral change.</p>
 <p>The filter is <strong>goroutine-scoped only</strong>. A handler that returns sync (no GoAsync, no MRTR round) runs on the unfiltered POST ctx and can still emit. That&rsquo;s a deliberate narrowing, since sync handlers on <code>TaskSupport=optional/required</code> tools are responsible for not leaking notifications they shouldn&rsquo;t.</p>
 <hr />
-<h2 id="7-when-to-use-what--mrtr-vs-push-vs-task-input-flow">7. When to use what — MRTR vs push vs task input flow <a class="anchor" href="#7-when-to-use-what--mrtr-vs-push-vs-task-input-flow">¶</a></h2>
+<h2 id="7-choosing-between-mrtr-push-and-the-task-input-flow">7. Choosing between MRTR, push and the task input flow <a class="anchor" href="#7-choosing-between-mrtr-push-and-the-task-input-flow">¶</a></h2>
 <p>Three mechanisms for &ldquo;server asks the client for something.&rdquo; Picking the right one matters.</p>
 <table>
 <thead>
@@ -519,20 +519,20 @@
 </thead>
 <tbody>
 <tr>
-<td><strong>MRTR</strong> (SEP-2322) — <code>InputRequiredResult</code></td>
+<td><strong>MRTR</strong> (SEP-2322) - <code>InputRequiredResult</code></td>
 <td>Both legacy and stateless</td>
 <td>During a single <code>tools/call</code> execution</td>
 <td>One-shot prompts during a tool: confirm-then-do, gather an API key before running, etc. Each round is one HTTP cycle.</td>
 </tr>
 <tr>
-<td><strong>Push</strong> — server-initiated <code>sampling/createMessage</code> / <code>elicitation/create</code> / <code>roots/list</code> requests on the SSE push channel</td>
+<td><strong>Push</strong> - server-initiated <code>sampling/createMessage</code> / <code>elicitation/create</code> / <code>roots/list</code> requests on the SSE push channel</td>
 <td><strong>Legacy only</strong></td>
-<td>Anytime — during a tool call, or out of band</td>
-<td>Real-time interactions on the legacy wire. <strong>On the stateless wire <code>ctx.Sample</code> / <code>ctx.Elicit</code> return <code>ErrNoRequestFunc</code> by construction</strong> — there&rsquo;s no persistent push channel.</td>
+<td>Anytime - during a tool call, or out of band</td>
+<td>Real-time interactions on the legacy wire. <strong>On the stateless wire <code>ctx.Sample</code> / <code>ctx.Elicit</code> return <code>ErrNoRequestFunc</code> by construction</strong> - there&rsquo;s no persistent push channel.</td>
 </tr>
 <tr>
-<td><strong>Tasks input flow</strong> (SEP-2663) — <code>tc.TaskElicit(...)</code> / <code>tc.TaskSample(...)</code></td>
-<td>Both wires (once stateless MRTR lands — see issue 452)</td>
+<td><strong>Tasks input flow</strong> (SEP-2663) - <code>tc.TaskElicit(...)</code> / <code>tc.TaskSample(...)</code></td>
+<td>Both wires (once stateless MRTR lands - see issue 452)</td>
 <td>Inside a running task</td>
 <td>Long-running tasks that need input mid-execution. The task parks in <code>input_required</code>; the client observes via <code>tasks/get</code> and resumes via <code>tasks/update</code>. State is scoped to the task lifetime, not to one MRTR round.</td>
 </tr>
@@ -540,7 +540,7 @@
 </table>
 <h3 id="decision-flow">Decision flow <a class="anchor" href="#decision-flow">¶</a></h3>
 <pre><code>Is the server-to-client request happening inside a tool call?
-├── No → push (legacy only — not supported on stateless)
+├── No → push (legacy only, not supported on stateless)
 └── Yes:
     ├── Is the tool registered with TaskSupport=optional/required AND running as a task?
     │   ├── Yes → tc.TaskElicit / tc.TaskSample (parks the task, resumes via tasks/update)
@@ -555,8 +555,8 @@
 <li><strong>Eventually.</strong> When tools&rsquo; <code>requiredCapabilities</code> can opt into &ldquo;MRTR-aware client only&rdquo;, the push path becomes dead code for sampling/elicitation/roots/list. <strong>Notifications remain</strong> on the push channel (lifecycle events, list-changed events), and those don&rsquo;t have an MRTR shape.</li>
 </ol>
 <hr />
-<h2 id="8-two-mechanisms-two-phases--mrtr-vs-in-task-input-flow">8. Two mechanisms, two phases — MRTR vs in-task input flow <a class="anchor" href="#8-two-mechanisms-two-phases--mrtr-vs-in-task-input-flow">¶</a></h2>
-<p>The pattern the previous section&rsquo;s table hints at deserves a closer look because it&rsquo;s the conceptual symmetry at the heart of SEP-2322 + SEP-2663. The spec gives you <strong>two different mechanisms for &ldquo;the server asks the client for something,&rdquo;</strong> scoped to two different phases of a tool&rsquo;s lifetime. They look superficially similar but have completely different mechanics, and they&rsquo;re different on purpose, because the phases have different constraints.</p>
+<h2 id="8-mrtr-vs-in-task-input-flow-two-mechanisms-in-two-phases">8. MRTR vs in-task input flow, two mechanisms in two phases <a class="anchor" href="#8-mrtr-vs-in-task-input-flow-two-mechanisms-in-two-phases">¶</a></h2>
+<p>The pattern the previous section&rsquo;s table hints at deserves a closer look because it&rsquo;s the conceptual symmetry at the heart of SEP-2322 + SEP-2663. The spec gives you <strong>two different mechanisms for &ldquo;the server asks the client for something,&rdquo;</strong> scoped to two different phases of a tool&rsquo;s lifetime. They look superficially similar but the mechanics diverge, and that is on purpose, because the two phases work under different constraints.</p>
 <h3 id="the-two-phases">The two phases <a class="anchor" href="#the-two-phases">¶</a></h3>
 <pre><code>┌─────────────────────────────────────────────────────────────────┐
 │                                                                 │
@@ -612,11 +612,11 @@
 <tr>
 <td><strong>Handler does what</strong></td>
 <td><code>return ctx.RequestInput(InputRequests{...})</code></td>
-<td><code>result, err := tc.TaskElicit(req)</code> — a blocking call</td>
+<td><code>result, err := tc.TaskElicit(req)</code> - a blocking call</td>
 </tr>
 <tr>
 <td><strong>What the goroutine does</strong></td>
-<td>No goroutine — the handler returned</td>
+<td>No goroutine - the handler returned</td>
 <td>Parks on a per-key waiter channel; <code>&lt;-waiter</code> blocks</td>
 </tr>
 <tr>
@@ -631,23 +631,23 @@
 </tr>
 <tr>
 <td><strong>Server-side state across rounds</strong></td>
-<td>None — the <code>requestState</code> token carries everything</td>
-<td>Lots — <code>activeTask</code> + <code>inputState</code> + parked goroutine all live in server memory until resumed or cancelled</td>
+<td>None - the <code>requestState</code> token carries everything</td>
+<td>Lots - <code>activeTask</code> + <code>inputState</code> + parked goroutine all live in server memory until resumed or cancelled</td>
 </tr>
 <tr>
 <td><strong>Restartable across server replicas</strong></td>
-<td>Yes — the token is the entire conversation handle</td>
-<td>No — the goroutine is pinned to one process; if the replica dies the task dies with it</td>
+<td>Yes - the token is the entire conversation handle</td>
+<td>No - the goroutine is pinned to one process; if the replica dies the task dies with it</td>
 </tr>
 <tr>
 <td><strong>Multiple input requests in one round</strong></td>
-<td>Yes — <code>inputRequests</code> is a map; one round can carry N keys, all resolved on one client re-invocation</td>
-<td>Yes — concurrent <code>TaskElicit</code> calls fan out; task surfaces all pending keys; <code>tasks/update</code> can deliver them partially or in any order</td>
+<td>Yes - <code>inputRequests</code> is a map; one round can carry N keys, all resolved on one client re-invocation</td>
+<td>Yes - concurrent <code>TaskElicit</code> calls fan out; task surfaces all pending keys; <code>tasks/update</code> can deliver them partially or in any order</td>
 </tr>
 <tr>
 <td><strong>Map keys</strong></td>
 <td>Opaque, server-chosen, scoped to the MRTR round</td>
-<td>Opaque, server-chosen, scoped to the task lifetime — distinct namespace from MRTR keys</td>
+<td>Opaque, server-chosen, scoped to the task lifetime - distinct namespace from MRTR keys</td>
 </tr>
 <tr>
 <td><strong>Cancellation</strong></td>
@@ -661,13 +661,13 @@
 </tr>
 </tbody>
 </table>
-<h3 id="the-pause-and-resume-intuition--when-it-actually-applies">The &ldquo;pause and resume&rdquo; intuition — when it actually applies <a class="anchor" href="#the-pause-and-resume-intuition--when-it-actually-applies">¶</a></h3>
+<h3 id="the-pause-and-resume-intuition-when-it-actually-applies">The &ldquo;pause and resume&rdquo; intuition, when it actually applies <a class="anchor" href="#the-pause-and-resume-intuition-when-it-actually-applies">¶</a></h3>
 <p>A natural first-pass intuition for either mechanism is <em>&ldquo;the server pauses the handler and resumes it when the client replies.&rdquo;</em> This intuition is <strong>wrong for MRTR but right for the task input flow</strong>, and recognizing the difference makes the mental model click:</p>
 <ul>
 <li><strong>MRTR is not pause and resume.</strong> The handler <strong>returns</strong> on every round. State is serialized into the <code>requestState</code> token. The server is stateless across rounds, with the same handler, the same registration, and just different <code>inputResponses</code> in the <code>ToolRequest</code>. It&rsquo;s a state machine that <em>replays</em> with accumulated state, not a coroutine that&rsquo;s paused.</li>
 <li><strong>The task input flow <em>is</em> pause and resume.</strong> The goroutine literally blocks on a <code>&lt;-waiter</code> channel call. State lives in the in-process <code>activeTask</code> + <code>inputState</code>. The server is stateful across the suspended call. The client&rsquo;s <code>tasks/update</code> is the resume signal.</li>
 </ul>
-<p>Both look identical from the handler author&rsquo;s perspective (you write what looks like a synchronous &ldquo;ask for X, get answer Y&rdquo;), but the <em>mechanics</em> are completely different. The asymmetry is the whole reason the spec defines both.</p>
+<p>Both look identical from the handler author&rsquo;s perspective (you write what looks like a synchronous &ldquo;ask for X, get answer Y&rdquo;), but the <em>mechanics</em> diverge. The asymmetry is the whole reason the spec defines both.</p>
 <h3 id="why-two-mechanisms-instead-of-one">Why two mechanisms instead of one <a class="anchor" href="#why-two-mechanisms-instead-of-one">¶</a></h3>
 <p>You might ask: <em>why not just use the task input flow for everything?</em> Or: <em>why not just use MRTR for everything?</em> The spec keeps both because each has a constraint the other doesn&rsquo;t satisfy:</p>
 <ul>
@@ -687,7 +687,7 @@
 <p>This is the property that makes the MRTR-then-GoAsync-then-TaskElicit composition (see §10) <em>actually work</em>: a single tool can use all three mechanisms without their state spaces colliding.</p>
 <p>For the full tasks-side picture (task lifecycle, the <code>tc.TaskElicit</code> / <code>tc.TaskSample</code> API, wire choreography for <code>tasks/update</code>, parallel fan-out, cancellation), see <a href="/mcpkit/guides/tasks/"><code>docs/TASKS_TUTORIAL.md</code></a>, in particular §7 (in-task input flow).</p>
 <hr />
-<h2 id="9-writing-handlers--the-canonical-state-machine-pattern">9. Writing handlers — the canonical state machine pattern <a class="anchor" href="#9-writing-handlers--the-canonical-state-machine-pattern">¶</a></h2>
+<h2 id="9-writing-handlers-the-canonical-state-machine-pattern">9. Writing handlers, the canonical state machine pattern <a class="anchor" href="#9-writing-handlers-the-canonical-state-machine-pattern">¶</a></h2>
 <p>MRTR handlers are state machines on <code>InputResponses</code>. The same handler runs on every round; it branches on what&rsquo;s been answered so far.</p>
 <h3 id="one-round-example-basic-elicitation">One-round example (basic elicitation) <a class="anchor" href="#one-round-example-basic-elicitation">¶</a></h3>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">basicElicitationTool</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
@@ -731,7 +731,7 @@
 <h3 id="wrong-key-tolerance">Wrong-key tolerance <a class="anchor" href="#wrong-key-tolerance">¶</a></h3>
 <p>If the client sends an <code>inputResponses</code> key the server didn&rsquo;t emit, the handler&rsquo;s <code>InputResponse(&quot;user_name&quot;)</code> check returns <code>nil</code> and the handler re-requests. The conformance suite asserts this is the right behavior (vs erroring), since clients can race against state and re-requesting is more user-friendly.</p>
 <hr />
-<h2 id="10-composing-mrtr-with-tasks--the-goasync-pattern-sep-2663">10. Composing MRTR with tasks — the GoAsync pattern (SEP-2663) <a class="anchor" href="#10-composing-mrtr-with-tasks--the-goasync-pattern-sep-2663">¶</a></h2>
+<h2 id="10-composing-mrtr-with-tasks-the-goasync-pattern-sep-2663">10. Composing MRTR with tasks, the GoAsync pattern (SEP-2663) <a class="anchor" href="#10-composing-mrtr-with-tasks-the-goasync-pattern-sep-2663">¶</a></h2>
 <p>The killer composition: a single tool can run an MRTR round-trip to gather input <em>first</em>, then escalate to a background task for the slow work.</p>
 <p>The pattern:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#000;font-weight:bold">func</span> <span style="color:#900;font-weight:bold">mrtrTaskCompositionTool</span>(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, <span style="color:#458;font-weight:bold">error</span>) {
@@ -859,15 +859,15 @@
 <hr />
 <h2 id="see-also">See also <a class="anchor" href="#see-also">¶</a></h2>
 <ul>
-<li><a href="/mcpkit/guides/tasks/"><code>docs/TASKS_TUTORIAL.md</code></a> — sibling tutorial for SEP-2663 tasks (server-directed async, the <code>GoAsyncResult</code> return, task lifecycle, in-task input flow, cancellation). Read alongside this one when working with tools that compose MRTR with task escalation.</li>
-<li><a href="/mcpkit/design/tasks-v2-migration/"><code>docs/TASKS_V2_MIGRATION.md</code></a> — v1 → v2 task migration guide.</li>
-<li><a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md"><code>docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md</code></a> — task conformance status.</li>
-<li><a href="/mcpkit/packages/ext-tasks/"><code>ext/tasks/README.md</code></a> — task extension API reference.</li>
-<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/mrtr/main.go"><code>examples/mrtr/main.go</code></a> — eight canonical MRTR fixtures including the composition pattern (A8 / <code>test_tool_with_task</code>).</li>
-<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks-v2/main.go"><code>examples/tasks-v2/main.go</code></a> — task fixtures (slow_compute, confirm_delete, multi_input, etc.) all using the GoAsync pattern.</li>
-<li><a href="https://github.com/panyam/mcpconformance">panyam/mcpconformance</a>, branch <code>feat/tasks-mrtr-extension</code> — SEP-2322 + SEP-2663 conformance scenarios.</li>
-<li><a href="https://github.com/panyam/mcpkit/issues/452">Issue 452</a> — stateless wire MRTR support follow-up.</li>
-<li><a href="https://github.com/panyam/mcpkit/issues/485">Issue 485</a> — multi-tenant isolation for stateless task store follow-up.</li>
+<li><a href="/mcpkit/guides/tasks/"><code>docs/TASKS_TUTORIAL.md</code></a> - sibling tutorial for SEP-2663 tasks (server-directed async, the <code>GoAsyncResult</code> return, task lifecycle, in-task input flow, cancellation). Read alongside this one when working with tools that compose MRTR with task escalation.</li>
+<li><a href="/mcpkit/design/tasks-v2-migration/"><code>docs/TASKS_V2_MIGRATION.md</code></a> - v1 → v2 task migration guide.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md"><code>docs/SEP_2663_TASKS_CONFORMANCE_PLAN.md</code></a> - task conformance status.</li>
+<li><a href="/mcpkit/packages/ext-tasks/"><code>ext/tasks/README.md</code></a> - task extension API reference.</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/mrtr/main.go"><code>examples/mrtr/main.go</code></a> - eight canonical MRTR fixtures including the composition pattern (A8 / <code>test_tool_with_task</code>).</li>
+<li><a href="https://github.com/panyam/mcpkit/blob/main/examples/tasks-v2/main.go"><code>examples/tasks-v2/main.go</code></a> - task fixtures (slow_compute, confirm_delete, multi_input, etc.) all using the GoAsync pattern.</li>
+<li><a href="https://github.com/panyam/mcpconformance">panyam/mcpconformance</a>, branch <code>feat/tasks-mrtr-extension</code> - SEP-2322 + SEP-2663 conformance scenarios.</li>
+<li><a href="https://github.com/panyam/mcpkit/issues/452">Issue 452</a> - stateless wire MRTR support follow-up.</li>
+<li><a href="https://github.com/panyam/mcpkit/issues/485">Issue 485</a> - multi-tenant isolation for stateless task store follow-up.</li>
 </ul>
 <h2 id="tracing-across-mrtr-rounds">Tracing across MRTR rounds <a class="anchor" href="#tracing-across-mrtr-rounds">¶</a></h2>
 <p><code>CallToolWithInputs</code> automatically stitches multi-round traces when the client has a <code>TracerProvider</code> configured. Round 1&rsquo;s outbound traceparent is captured and stamped onto rounds 2+ as <code>_meta.io.modelcontextprotocol/tracelink</code>; the server&rsquo;s trace middleware reads the link and calls <code>AddLink</code> on the round-N dispatch span. The star semantic means every round 2+ links to round 1, not the previous round.</p>

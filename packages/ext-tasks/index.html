@@ -237,7 +237,7 @@
 
     <div class="content-body">
         
-<h1 id="exttasks--sep-2663-tasks-extension">ext/tasks — SEP-2663 Tasks Extension <a class="anchor" href="#exttasks--sep-2663-tasks-extension">¶</a></h1>
+<h1 id="exttasks-sep-2663-tasks-extension">ext/tasks, SEP-2663 Tasks Extension <a class="anchor" href="#exttasks-sep-2663-tasks-extension">¶</a></h1>
 <p>Go module for the v2 task surface defined by <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663">SEP-2663</a> (merged Final 2026-05-15). Provides server-directed async task execution registered as a protocol extension under <code>capabilities.extensions[&quot;io.modelcontextprotocol/tasks&quot;]</code>.</p>
 <blockquote>
 <p><strong>Looking for a guided walk-through?</strong> Read <a href="/mcpkit/guides/tasks/"><code>docs/TASKS_TUTORIAL.md</code></a>, which covers when to use tasks vs sync vs MRTR, the GoAsync sentinel + middleware peek, lifecycle, the in-task input flow (<code>TaskElicit</code> / <code>TaskSample</code>), notifications + the G6 filter, cancellation semantics, and the multi-tenancy caveat on stateless. For the sibling MRTR surface (SEP-2322 multi-round-trip requests), see <a href="/mcpkit/guides/mrtr/"><code>docs/MRTR_TUTORIAL.md</code></a>. This README is the API reference; the tutorials are the conceptual walk-throughs.</p>
@@ -287,7 +287,7 @@
 <tr>
 <td><code>core.InputRequiredResult</code> via <code>ctx.RequestInput(...)</code></td>
 <td>Passes through unchanged; no task created</td>
-<td>SEP-2322 MRTR round — gather input before deciding whether to escalate</td>
+<td>SEP-2322 MRTR round - gather input before deciding whether to escalate</td>
 </tr>
 <tr>
 <td><code>core.GoAsyncResult{}</code></td>
@@ -350,7 +350,7 @@
 </tr>
 </tbody>
 </table>
-<h2 id="tracing-sep-414-p6--issue-659">Tracing (SEP-414 P6 — issue 659) <a class="anchor" href="#tracing-sep-414-p6--issue-659">¶</a></h2>
+<h2 id="tracing-sep-414-p6-issue-659">Tracing (SEP-414 P6, issue 659) <a class="anchor" href="#tracing-sep-414-p6-issue-659">¶</a></h2>
 <p>Optional. Set <code>Config.TracerProvider</code> to opt the runtime into span-link instrumentation of the async task lifecycle:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>tasks.<span style="color:#900;font-weight:bold">Register</span>(tasks.Config{
 </span></span><span style="display:flex;"><span>    Server:         srv,
@@ -358,8 +358,8 @@
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
 </span></span></code></pre><p>What gets emitted:</p>
 <ul>
-<li><strong><code>task.execute</code> span on the GoAsync path</strong> — a NEW root trace (not a child of the create span, since the work outlives the <code>tools/call</code> dispatch span) carrying a <code>Link</code> back to the originating <code>tools/call</code> create span. Attributes: <code>mcp.task.id</code> (at start), <code>mcp.task.status</code> (stamped at End from the final stored status, one of <code>completed</code> / <code>failed</code> / <code>cancelled</code> / <code>input_required</code>). <code>RecordError</code> fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to <code>completed</code> with <code>IsError=true</code> per SEP-2663 semantics.</li>
-<li><strong><code>AddLink</code> on each <code>tasks/get</code> / <code>tasks/update</code> / <code>tasks/cancel</code> dispatch span</strong> — points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.</li>
+<li><strong><code>task.execute</code> span on the GoAsync path</strong> - a NEW root trace (not a child of the create span, since the work outlives the <code>tools/call</code> dispatch span) carrying a <code>Link</code> back to the originating <code>tools/call</code> create span. Attributes: <code>mcp.task.id</code> (at start), <code>mcp.task.status</code> (stamped at End from the final stored status, one of <code>completed</code> / <code>failed</code> / <code>cancelled</code> / <code>input_required</code>). <code>RecordError</code> fires on protocol-level failures (mwErr, resp.Error, unexpected result shape, panic recover); handler-returned errors map to <code>completed</code> with <code>IsError=true</code> per SEP-2663 semantics.</li>
+<li><strong><code>AddLink</code> on each <code>tasks/get</code> / <code>tasks/update</code> / <code>tasks/cancel</code> dispatch span</strong> - points back to the originating create span so a backend can pivot from any poll into the whole lifecycle.</li>
 </ul>
 <p>Nil or <code>core.NoopTracerProvider{}</code> (the default) skips the install, with zero overhead and zero allocation. ext/tasks depends on <code>core</code> only; no compile-time dep on ext/otel. The contract details (<code>core.WithNewRootSpan</code>, <code>core.LinkedTracerProvider</code>, <code>core.Link</code>) live in <a href="https://github.com/panyam/mcpkit/blob/main/docs/SEP_414_OTEL.md"><code>docs/SEP_414_OTEL.md</code></a> § Span links and § New-root-span marker.</p>
 <p>The wire types (<code>CreateTaskResult</code>, <code>DetailedTask</code>, <code>UpdateTaskRequest</code>, <code>TaskInfoV2</code>, etc.) live in <a href="https://github.com/panyam/mcpkit/blob/main/core/task_v2.go"><code>core/task_v2.go</code></a> since they&rsquo;re consumed by both server and client.</p>

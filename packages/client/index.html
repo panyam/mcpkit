@@ -243,7 +243,7 @@
 <ul>
 <li><code>Client</code> struct and options (<code>NewClient</code>, <code>WithSSEClient</code>, <code>WithTransport</code>, etc.)</li>
 <li>HTTP transports: Streamable HTTP (<code>streamableClientTransport</code>), SSE (<code>sseClientTransport</code>)</li>
-<li>Auth retry (<code>DoWithAuthRetry</code>) — 401 token refresh, 403 scope step-up</li>
+<li>Auth retry (<code>DoWithAuthRetry</code>) - 401 token refresh, 403 scope step-up</li>
 <li>Reconnection (<code>WithMaxRetries</code>, <code>WithReconnectBackoff</code>)</li>
 <li>Transport logging (<code>WithClientLogging</code>)</li>
 <li>Server-to-client request handling (<code>HandleServerRequest</code>, <code>WithSamplingHandler</code>, <code>WithElicitationHandler</code>)</li>
@@ -251,7 +251,7 @@
 </ul>
 <h2 id="dependencies">Dependencies <a class="anchor" href="#dependencies">¶</a></h2>
 <ul>
-<li><code>core/</code> — protocol types (Request, Response, ToolDef, etc.)</li>
+<li><code>core/</code> - protocol types (Request, Response, ToolDef, etc.)</li>
 <li>Does NOT import <code>server/</code></li>
 </ul>
 <h2 id="usage">Usage <a class="anchor" href="#usage">¶</a></h2>
@@ -276,10 +276,10 @@
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span>modelTools, _ <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ListToolsForModel</span>() <span style="color:#998;font-style:italic">// excludes app-only tools
 </span></span></span></code></pre><ul>
-<li><code>WithExtension(id, cap)</code> — general extension advertisement</li>
-<li><code>WithUIExtension()</code> — convenience for MCP Apps</li>
-<li><code>ServerSupportsExtension(id)</code> / <code>ServerSupportsUI()</code> — detect server support</li>
-<li><code>ListToolsForModel()</code> — filters out tools with visibility <code>[&quot;app&quot;]</code> only</li>
+<li><code>WithExtension(id, cap)</code> - general extension advertisement</li>
+<li><code>WithUIExtension()</code> - convenience for MCP Apps</li>
+<li><code>ServerSupportsExtension(id)</code> / <code>ServerSupportsUI()</code> - detect server support</li>
+<li><code>ListToolsForModel()</code> - filters out tools with visibility <code>[&quot;app&quot;]</code> only</li>
 </ul>
 <h2 id="transport-interface">Transport interface <a class="anchor" href="#transport-interface">¶</a></h2>
 <p>The client accepts any <code>core.Transport</code> via <code>WithTransport()</code>. This enables:</p>
