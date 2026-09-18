@@ -110,9 +110,9 @@
 
     Press Enter to run this step...
   App tools after dynamic registration (3):
-    - app_greet
     - app_counter
     - app_dice
+    - app_greet
   Called app_dice → rolled: 4
 
   --- Cleanup ---

@@ -112,6 +112,46 @@ func TestBridge_Send_ToolsList(t *testing.T) {
 	}
 }
 
+// TestBridge_Send_ToolsList_Deterministic pins the tools/list order. The
+// bridge stores tools in a map, so before the sort in handleToolsList this
+// flapped between runs, and examples/host/01-apphost regenerated its README
+// with the app tools in whichever order the map happened to yield.
+func TestBridge_Send_ToolsList_Deterministic(t *testing.T) {
+	b := NewInProcessAppBridge()
+	// Registered in an order that is neither sorted nor reverse-sorted, so a
+	// pass-through implementation cannot coincidentally satisfy this.
+	for _, name := range []string{"app_greet", "app_counter", "app_zebra", "app_alpha"} {
+		b.RegisterTool(name, core.ToolDef{}, func(args map[string]any) (any, error) {
+			return nil, nil
+		})
+	}
+
+	want := []string{"app_alpha", "app_counter", "app_greet", "app_zebra"}
+	for i := 0; i < 10; i++ {
+		resp, err := b.Send(context.Background(), &core.Request{
+			Method: "tools/list",
+			ID:     json.RawMessage(`1`),
+		})
+		if err != nil {
+			t.Fatalf("iter %d: %v", i, err)
+		}
+		var result struct {
+			Tools []core.ToolDef `json:"tools"`
+		}
+		if err := json.Unmarshal(resultBytes(t, resp), &result); err != nil {
+			t.Fatalf("iter %d: %v", i, err)
+		}
+		if len(result.Tools) != len(want) {
+			t.Fatalf("iter %d: expected %d tools, got %d", i, len(want), len(result.Tools))
+		}
+		for j, name := range want {
+			if result.Tools[j].Name != name {
+				t.Fatalf("iter %d: tool %d = %q, want %q", i, j, result.Tools[j].Name, name)
+			}
+		}
+	}
+}
+
 // TestBridge_Send_ToolsCall verifies that tools/call dispatches to the correct handler.
 func TestBridge_Send_ToolsCall(t *testing.T) {
 	b := NewInProcessAppBridge()

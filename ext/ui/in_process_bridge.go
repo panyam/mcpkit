@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/panyam/mcpkit/core"
@@ -99,6 +100,11 @@ func (b *InProcessAppBridge) handleToolsList(req *core.Request) (*core.Response,
 	for _, t := range b.tools {
 		tools = append(tools, t.def)
 	}
+	// Sort by name for deterministic output: b.tools is a map, so the
+	// range order varies per run and callers that render this list (the
+	// host examples regenerate their README from it) would otherwise
+	// diff against themselves. Matches ServerRegistry.AllTools.
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 
 	result, err := json.Marshal(map[string]any{"tools": tools})
 	if err != nil {
