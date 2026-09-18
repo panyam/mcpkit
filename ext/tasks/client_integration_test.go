@@ -3,6 +3,7 @@ package tasks_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -330,8 +331,11 @@ func TestWaitForTask_AbortOnCancel(t *testing.T) {
 	if err == nil {
 		t.Fatalf("WaitForTask returned (dt=%+v, nil) — expected context.Canceled", dt)
 	}
-	if err != context.Canceled {
-		t.Fatalf("WaitForTask err = %v, want context.Canceled", err)
+	// errors.Is, not ==: cancellation landing while a POST is in flight comes
+	// back as a *url.Error wrapping context.Canceled, not the sentinel itself.
+	// The same identity comparison in server/tasks_v1_test.go flaked in CI.
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("WaitForTask err = %v, want it to wrap context.Canceled", err)
 	}
 	// The task is still "working" on the server (slow-task never released).
 	// The point: we did NOT wait for it to flip to "cancelled".
