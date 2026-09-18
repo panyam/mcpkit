@@ -170,14 +170,13 @@ A single command spanning several lines by backslash continuation is one stateme
 inline. `echo` banners do not count at all. A `just` shebang recipe is judged by its body, since
 the shebang is only how `just` runs more than one line of bash.
 
-**Known divergence today.** One, in `scripts/recipe-complexity-allowed.txt`:
-`examples/agents/deep-agent-supervisor/justfile::web`. It stays because it is *dead* rather than
-merely inline — it runs `agent/surfaces/web`, a tree that left this repo with the agent SDK
-extraction to chakra. Extracting a broken recipe into a script preserves the break in a nicer
-shape; it wants deleting or repointing at chakra, which is a decision rather than a refactor.
+**No known divergence.** `scripts/recipe-complexity-allowed.txt` is empty. The sweep took it from
+66 entries to none; the last one, `deep-agent-supervisor`'s `web`, was deleted rather than extracted
+because it ran `agent/surfaces/web`, a tree that left with the agent SDK extraction to chakra.
 
 The baseline only shrinks, and the checker fails on an entry that no longer violates, so it cannot
-rot the way a `--update-baseline` flag lets a baseline rot.
+rot the way a `--update-baseline` flag lets a baseline rot. An addition means someone decided to
+keep an inline script, and wants a reason in the PR.
 
 **Verify:** `make check-recipe-complexity`, wired into `.github/workflows/test.yml`. Confirmed to
 catch a real regression in both directions: appending a `for` loop to a justfile recipe makes it
