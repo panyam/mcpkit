@@ -89,7 +89,7 @@ Surfaces and their per-replica filters:
 
 ## Component overview
 
-### Server-level seams
+### Server-level extension points
 
 ```mermaid
 classDiagram

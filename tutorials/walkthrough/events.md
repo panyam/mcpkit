@@ -88,7 +88,7 @@ where `principal` is the authenticated subject (`claims.Subject`), `delivery.url
 id = "sub_" + base64(SHA256(canonical)[:16])     // experimental/ext/events/identity.go
 ```
 
-…and surfaces it on every delivery POST as `X-MCP-Subscription-Id`. The id is **non-load-bearing for security**, because knowing another tenant's id grants no operations, because every call resolves on the canonical tuple, not on the id.
+…and surfaces it on every delivery POST as `X-MCP-Subscription-Id`. The id **carries no security weight**: knowing another tenant's id grants no operations, because every call resolves on the canonical tuple rather than on the id.
 
 > [!IMPORTANT]
 > **Four rules fall out of the tuple immediately.** Each is enforced in `experimental/ext/events/events.go`:
@@ -364,7 +364,7 @@ Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → c
 
 ### The hardened delivery loop
 
-`webhook.go` `deliver()` is short but each guard is load-bearing:
+`webhook.go` `deliver()` is short, and not one of its guards is spare:
 
 | Guard | What | Why | Code |
 |-------|------|-----|------|
@@ -377,7 +377,7 @@ Receiver verifies signature → looks up secret by `X-MCP-Subscription-Id` → c
 | **Auto-PostTerminated on suspend transition** | On the `true → false` transition, automatically POST a `{type:terminated}` control envelope (Q8 below) so the receiver learns the subscription died courtesy-style | Receiver may otherwise discover via a polled refresh - auto-post is a hint that the next refresh is needed. | `recordDeliveryFailure` (auto-PostTerminated block) |
 
 > [!IMPORTANT]
-> **The dial-time SSRF guard runs on every connect, including retries and redirect-target dials.** A subscribe-time URL check (`ValidateWebhookURL`) catches obvious mistakes such as a bad scheme or a literal `localhost`, but is not the load-bearing protection. Only the dialer's `Control` callback is TOCTOU-safe under DNS rebinding. The `WithWebhookAllowPrivateNetworks(true)` option bypasses both for demos against local httptest servers; **never enable it in production**.
+> **The dial-time SSRF guard runs on every connect, including retries and redirect-target dials.** A subscribe-time URL check (`ValidateWebhookURL`) catches obvious mistakes such as a bad scheme or a literal `localhost`, but is not the protection that actually holds. Only the dialer's `Control` callback is TOCTOU-safe under DNS rebinding. The `WithWebhookAllowPrivateNetworks(true)` option bypasses both for demos against local httptest servers; **never enable it in production**.
 
 > [!NOTE]
 > **Branch →** [events SSRF deep dive](./events-ssrf.md) *(stub, leaf)* - full IP blocklist matrix with worked CIDR examples, the dial-time vs subscribe-time decomposition argument, and a DNS-rebinding attack walkthrough showing why the subscribe-time check alone fails.
@@ -584,7 +584,7 @@ After reading this page, downstream pages can assume:
 - **Events dial all four extension knobs.** Method namespace (`events/*`), capability (`experimental.events`), notifications (5 push frames + 2 control envelopes), and `_meta` (on `Event` and `EventDef`).
 - **Events ≠ notifications.** Events are domain-defined and replayable; notifications are session-state-change and idempotent-on-refetch. Events ride the notifications surface but are a domain abstraction layered on top.
 - **Three delivery modes** - poll, push and webhook, all method-namespace extensions, picked by topology and statefulness, NOT mutually exclusive per source. Webhook is the only mode where the server dials the client.
-- **Subscription identity is the canonical tuple** `(principal, delivery.url, name, params)`. The id is server-derived (`sub_<base64>`), non-load-bearing for security; idempotent refresh on the same tuple, distinct subscriptions on any tuple difference, cross-tenant isolation by construction.
+- **Subscription identity is the canonical tuple** `(principal, delivery.url, name, params)`. The id is server-derived (`sub_<base64>`) and carries no security weight; idempotent refresh on the same tuple, distinct subscriptions on any tuple difference, cross-tenant isolation by construction.
 - **Three rules from the tuple:** no client-supplied id; auth required on subscribe/unsubscribe; client-supplied required `whsec_` secret.
 - **`YieldingSource` is the default abstraction** (library owns the buffer; one `yield()` reaches push + webhook + future poll). `TypedSource` is for caller-owned stores. Cursored vs cursorless is a per-source choice advertised on `events/list`.
 - **Push delivery** is a long-lived `events/stream` POST returning SSE with five distinct notifications (`active`/`event`/`heartbeat`/`error`/`terminated`) plus a typed empty `StreamEventsResult` on close. `requestId` echoes on every notification for stdio demux.

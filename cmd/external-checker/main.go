@@ -107,7 +107,7 @@ func run(url string) (checks []check, serverInfo core.ServerInfo, fatal error) {
 	capPass := names["mrtr_confirm"] && !names["elicitation_missing"]
 	capDetail := fmt.Sprintf("tools/list returned %s", strings.Join(keys(names), ", "))
 	if !capPass {
-		capDetail += " — elicitation capability not observed by server"
+		capDetail += ", elicitation capability not observed by server"
 	}
 	checks = append(checks, check{"clientCapabilities in _meta", "SEP-2575", capPass, capDetail})
 
@@ -132,7 +132,7 @@ func run(url string) (checks []check, serverInfo core.ServerInfo, fatal error) {
 	// for the report.
 	routingPass := allPassed(checks)
 	checks = append(checks, check{"Routing headers (Mcp-Method/Mcp-Name)", "SEP-2243", routingPass,
-		"every graded request was accepted — a missing routing header is rejected before tool dispatch"})
+		"every graded request was accepted; a missing routing header is rejected before tool dispatch"})
 
 	return checks, serverInfo, nil
 }
@@ -198,7 +198,7 @@ func render(url string, info core.ServerInfo, checks []check) string {
 
 	b.WriteString("# External Stateless-Draft Conformance\n\n")
 	b.WriteString("Snapshot of the mcpkit **client** graded by the third-party stateless-draft gauntlet at\n")
-	b.WriteString(fmt.Sprintf("[`%s`](%s) — an MCP server that judges every request its *client* sends.\n\n", url, url))
+	b.WriteString(fmt.Sprintf("[`%s`](%s), an MCP server that judges every request its *client* sends.\n\n", url, url))
 	b.WriteString(fmt.Sprintf("**Protocol version:** `%s` / `DRAFT-2026-v1` (this checker grades that version only)  \n", protoVer))
 	b.WriteString("**Surface under test:** the mcpkit **client** (`client.NewClient(..., WithClientMode(ClientModeStateless))`)  \n")
 	b.WriteString("**Driver:** `cmd/external-checker`  \n")
@@ -207,10 +207,10 @@ func render(url string, info core.ServerInfo, checks []check) string {
 	} else {
 		b.WriteString("\n")
 	}
-	b.WriteString(fmt.Sprintf("**Verdict:** **%s** — %d / %d checks passed.\n\n", verdictWord, pass, total))
+	b.WriteString(fmt.Sprintf("**Verdict:** **%s**, %d / %d checks passed.\n\n", verdictWord, pass, total))
 
-	b.WriteString("Unlike every `testconf-*` suite — which grades an mcpkit *server* with the upstream\n")
-	b.WriteString("runner acting as the client — this report inverts the roles: a real mcpkit client is\n")
+	b.WriteString("Unlike every `testconf-*` suite, which grades an mcpkit *server* with the upstream\n")
+	b.WriteString("runner acting as the client, this report inverts the roles: a real mcpkit client is\n")
 	b.WriteString("the thing under test and the remote endpoint is the grader. It is the only check that\n")
 	b.WriteString("exercises the **integrated** stateless draft wire (SEP-2575 + 2243 + 2106 + 2322 enforced\n")
 	b.WriteString("simultaneously, by an independent third party) from the client side.\n\n")
@@ -233,14 +233,14 @@ func render(url string, info core.ServerInfo, checks []check) string {
 	b.WriteString("- **SEP-2575 (stateless wire):** `MCP-Protocol-Version` header on every POST; `_meta` carries\n")
 	b.WriteString("  `io.modelcontextprotocol/protocolVersion`, `clientInfo`, and `clientCapabilities`; no `initialize` handshake.\n")
 	b.WriteString("- **SEP-2243 (routing headers):** `Mcp-Method` mirrors the JSON-RPC method on every POST; `Mcp-Name` on tool calls.\n")
-	b.WriteString("- **SEP-2106 ($ref arguments):** arguments honor the `inputSchema` — real JSON numbers (not stringified) and\n")
+	b.WriteString("- **SEP-2106 ($ref arguments):** arguments honor the `inputSchema`, so real JSON numbers (not stringified) and\n")
 	b.WriteString("  same-document `$ref` payloads resolved by the caller.\n")
 	b.WriteString("- **SEP-2322 (MRTR):** handle a `resultType: input_required` result, answer the elicitation with `{action, content}`,\n")
 	b.WriteString("  and re-call echoing `requestState` back unchanged.\n\n")
 
 	b.WriteString("## Known caveat\n\n")
 	b.WriteString("`ClientModeStateless`'s `Connect()` treats `server/discover` as **mandatory** and fails fatally if the\n")
-	b.WriteString("server omits it (`client/client.go`). This gauntlet implements `server/discover`, so the check passes — but\n")
+	b.WriteString("server omits it (`client/client.go`). This gauntlet implements `server/discover`, so the check passes, but\n")
 	b.WriteString("the draft states a client may \"start with `server/discover` *or any request directly*.\" Against a conformant\n")
 	b.WriteString("draft server that omits discover, mcpkit's stateless client cannot currently connect. Tracked as\n")
 	b.WriteString("issue 829; it does not affect the grade above.\n")

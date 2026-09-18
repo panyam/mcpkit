@@ -4,10 +4,10 @@ The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served ov
 
 ## What you'll learn
 
-- **Choose the client wire mode** — mcpkit's server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.
-- **Read skill://index.json, the discovery catalog** — mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.
-- **Read the commit-helper SKILL.md, the skill file** — A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.
-- **Tool handling, calling the tool the skill points at** — This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.
+- **Choose the client wire mode** - mcpkit's server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.
+- **Read skill://index.json, the discovery catalog** - mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.
+- **Read the commit-helper SKILL.md, the skill file** - A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.
+- **Tool handling, calling the tool the skill points at** - This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.
 
 ## Flow
 

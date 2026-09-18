@@ -14,7 +14,7 @@ The discovery ladder in `ext/auth/discovery.go`:
 2. PRM well-known probes: path-based, then root (`/.well-known/oauth-protected-resource{path}`, then bare).
 3. **Legacy (2025-03-26) fallback**, reached only when both PRM probes return a definitive **404**: fetch AS metadata at the origin's `/.well-known/oauth-authorization-server`; if that too is 404, synthesize the legacy default endpoints (`/authorize`, `/token`, `/register` at the origin, with S256 stamped so the PKCE gate passes on our own synthesized document). The result carries `MCPAuthInfo.LegacyDiscovery = true` and a nil `PRM`.
 
-The no-downgrade rule is load-bearing: any non-404 PRM outcome (5xx, network error) aborts discovery instead of falling back, and a header-advertised `resource_metadata` URL never falls back at all. A modern server's auth flow cannot be walked down to endpoint-guessing by inducing a transient PRM failure. `TestDiscoverMCPAuth_NoLegacyFallbackOnPRMServerError` and `TestDiscoverMCPAuth_NoLegacyFallbackWhenHeaderAdvertisesPRM` pin this.
+The no-downgrade rule is not a nicety: any non-404 PRM outcome (5xx, network error) aborts discovery instead of falling back, and a header-advertised `resource_metadata` URL never falls back at all. A modern server's auth flow cannot be walked down to endpoint-guessing by inducing a transient PRM failure. `TestDiscoverMCPAuth_NoLegacyFallbackOnPRMServerError` and `TestDiscoverMCPAuth_NoLegacyFallbackWhenHeaderAdvertisesPRM` pin this.
 
 Note: this is distinct from MCP **protocol version** negotiation. mcpkit's `server.supportedProtocolVersions` includes `2024-11-05`, `2025-03-26`, `2025-11-25`, and `2026-07-28`. The protocol version field and the auth-flow shape are independent axes. The server side serves PRM only; the legacy shapes are client-side fallback, not something mcpkit servers emit.
 
@@ -388,7 +388,7 @@ ext/auth/` reconstructs the clause→site mapping that
 [`conformance/AUTH_SPEC_COVERAGE.md`](../../../conformance/AUTH_SPEC_COVERAGE.md)
 records by `file:line` (which drifts). `just check-auth-markers` asserts that
 every matrix row citing an ext/auth site has its inline marker, so the matrix
-stays honest as the code moves. When you add a matrix row, add the marker;
+stays accurate as the code moves. When you add a matrix row, add the marker;
 when you touch a spec-mandated site, cite the clause inline.
 
 ### Server-side (MCP server as OAuth resource server)

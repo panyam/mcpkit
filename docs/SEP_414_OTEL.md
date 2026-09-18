@@ -13,7 +13,7 @@ real `TracerProvider`, and where the remaining work lives on
 Phase 1 lands the dependency-free contract surface in `core/`:
 
 - `core.TracerProvider`, `core.Span`, `core.Attribute` - the minimal
-  tracing seam mcpkit components consume. The default,
+  tracing interface mcpkit components consume. The default,
   `core.NoopTracerProvider`, performs no allocation and emits no spans.
 - `core.TraceContext` - the W3C `traceparent` / `tracestate` pair as
   propagated on the MCP wire.
@@ -211,11 +211,11 @@ adds a configurable `headerGroups` API on top of this same
 foundation). Tracking the upstream spec on issue 739; the W3C
 standards themselves are stable and ship today.
 
-## Adjacent: metrics seam (issue 7)
+## Adjacent: the metrics interface (issue 7)
 
-The `core.MeterProvider` seam mirrors the SEP-414 `core.TracerProvider`
+The `core.MeterProvider` interface mirrors the SEP-414 `core.TracerProvider`
 shape for metrics. Metrics don't cross the wire, so no SEP, but the
-library still needs a dependency-free seam so the base module can emit
+library still needs a dependency-free interface so the base module can emit
 measurements without dragging the OTel metrics SDK in. Wire it via
 `server.WithMeterProvider`; the OTel adapter lives at
 `mcpotel.NewMeterProvider(otelMP)`. Canonical instruments emitted from
@@ -228,7 +228,7 @@ See `ext/otel/README.md` § Metrics for the wiring snippet and
 
 ### Agent Runner metrics, landed (issue 1023)
 
-The `agent.Runner` emits through the same `core.MeterProvider` seam, the
+The `agent.Runner` emits through the same `core.MeterProvider`, the
 metrics sibling of its SEP-414 spans. `RunnerConfig.MeterProvider` opts
 it in; nil or `core.NoopMeterProvider` is zero overhead. Instruments are
 built once in `NewRunner` (`metrics.go`) and recorded at the same points the
@@ -481,7 +481,7 @@ The `EXPORTER` selector is four-valued:
 | `"otlp"` | TCP-probe the endpoint; on success, `otlptracegrpc` exporter. On failure: Noop **with warning log**. |
 | `"auto"` | TCP-probe the endpoint; on success, `otlptracegrpc` exporter. On failure: Noop **silently** (operator opted into maybe-on-maybe-off semantics). |
 
-Three load-bearing details:
+Three details that carry the design:
 
 - **TCP probe gates OTLP.** `otlptracegrpc.New` is lazy and returns a
   non-nil exporter even when the endpoint refuses; without the
@@ -601,7 +601,7 @@ W3C Trace Context propagates across every gate in the events lifecycle so a yiel
 
 **`events.webhook.deliver` span (PR 714).** `WebhookRegistry.WithWebhookTracerProvider(tp)` opts the registry into emitting a span around each retry loop. Attributes: `webhook.target.id`, `webhook.url`, `mcp.event.name`, `http.method`, `http.response.status_code`, `webhook.retry.attempts`. `RecordError` fires on retries-exhausted with the categorical bucket. Nil = Noop, zero overhead. **Live-verified** against the LGTM stack: span landed with all attributes set, 4 attempts counted, `STATUS_CODE_ERROR` on the failure path, duration matched the 0.5s + 1s + 2s backoff schedule exactly.
 
-**`Server.Broadcast(ctx, ...)` (PR 714 signature; PR 722 body).** PR 714 widened the signature; PR 722 (issue 715) made the body actually consume ctx. When ctx carries a non-zero `core.TraceContext`, the inbound traceparent / tracestate are injected into notification params under `_meta` (via `core.InjectTraceContextIntoParams`) before fan-out. Existing caller-set `_meta.traceparent` wins. Per-transport broadcast callbacks gained ctx as a forward-compat seam, unused inside today because the per-request `trace_middleware.go` wrap (`core.WrapSessionNotifyFunc`) targets `sc.notify` (the handler-facing notify on a per-request `SessionCtx`), not the transport-level base notifyFunc dispatchers expose to broadcasts. Injecting once at the Server level keeps tracing concerns out of the transport-level loops while still stitching SSE-pushed notifications into the originating trace.
+**`Server.Broadcast(ctx, ...)` (PR 714 signature; PR 722 body).** PR 714 widened the signature; PR 722 (issue 715) made the body actually consume ctx. When ctx carries a non-zero `core.TraceContext`, the inbound traceparent / tracestate are injected into notification params under `_meta` (via `core.InjectTraceContextIntoParams`) before fan-out. Existing caller-set `_meta.traceparent` wins. Per-transport broadcast callbacks gained ctx as a forward-compatible hook, unused inside today because the per-request `trace_middleware.go` wrap (`core.WrapSessionNotifyFunc`) targets `sc.notify` (the handler-facing notify on a per-request `SessionCtx`), not the transport-level base notifyFunc dispatchers expose to broadcasts. Injecting once at the Server level keeps tracing concerns out of the transport-level loops while still stitching SSE-pushed notifications into the originating trace.
 
 End-to-end trace shape (multi-replica with webhook fanout):
 
@@ -641,9 +641,9 @@ events.Register(events.Config{
 | `events.subscribers.dropped_by_match` | count where Match returned false |
 | `events.transforms.applied` | count where Transform actually modified the event |
 
-**Design call locked in**: one span per yield, NOT per subscriber. Option (a) from the original issue body (`events.match` / `events.transform` per Match/Transform invocation) was deliberately NOT shipped, since it would scale linearly with subs × events and need sampling design. The aggregate counts are the diagnosable shape; operators see "this yield went to 10 subs, 7 dropped by Match" without span-volume risk. If per-subscriber detail ever becomes load-bearing, option (a) can land as a separate opt-in on the same TracerProvider seam.
+**Design call locked in**: one span per yield, NOT per subscriber. Option (a) from the original issue body (`events.match` / `events.transform` per Match/Transform invocation) was deliberately NOT shipped, since it would scale linearly with subs × events and need sampling design. The aggregate counts are the diagnosable shape; operators see "this yield went to 10 subs, 7 dropped by Match" without span-volume risk. If per-subscriber detail ever becomes necessary, option (a) can land as a separate opt-in on the same TracerProvider interface.
 
-**Two load-bearing optimizations** on the hot path:
+**Two optimizations that earn their place** on the hot path:
 
 - **Zero-subscriber guard.** `len(subs) == 0` skips span emission entirely. Idle sources (feeders with no subscribers registered yet) are dominant, and emitting empty fanout spans every feeder tick would flood Tempo with noise.
 - **Noop short-circuit.** `tp.(core.NoopTracerProvider)` type-assertion avoids the StartSpan call entirely on the unconfigured path. Per-yield cost on the unconfigured path is one type-assertion.
@@ -776,7 +776,7 @@ Stitching is automatic: the client read span runs inside ctx that already carrie
 
 - **Wire-level `notifications/...skills/activated`** - a cross-process notification carrying `{uri, digest, reason, _meta.traceparent}` so the server can record activation events from connected clients. Tractable but cross-cuts SEP-2640 spec territory and requires WG engagement before minting the method name. Tracked as issue 749, a separable opt-in extension on `ext/skills` that can ride atop `Client.Activate` without breaking callers when (if) the upstream method name lands.
 - **Provider-side activation telemetry** - N/A. The provider handles resource reads; activation is a client/host concept.
-- **Activation counter on the issue 735 MeterProvider seam** - useful follow-up. The TracerProvider half ships in 748; counter wiring can land cleanly in a small follow-up PR.
+- **Activation counter on the issue 735 MeterProvider interface** - useful follow-up. The TracerProvider half ships in 748; counter wiring can land cleanly in a small follow-up PR.
 
 Coverage:
 
@@ -813,11 +813,11 @@ Coverage: `experimental/ext/agents/tracing_test.go` pins the discovery spans (li
   EventBus envelope will carry `traceparent` / `tracestate` using the
   `core.MetaKey*` constants, so a trace started on replica A and
   delivered from replica B stitches together once an OTel adapter is
-  wired. The seam consumes `core.TracerProvider` directly, with no
+  wired. The bus consumes `core.TracerProvider` directly, with no
   `ext/otel` import in the base events module, mirroring how events
   already consumes `core.Claims` without depending on `ext/auth`.
 - **`server/` topology preflight (issue #642).** The capability
-  contract declares whether a configured seam supports trace
+  contract declares whether a configured transport supports trace
   propagation; the declaration uses the `core.TracerProvider`
   interface to keep the contract dep-free.
 

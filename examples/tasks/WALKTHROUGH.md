@@ -4,14 +4,14 @@ Walks through the MCP Tasks (SEP-1036) lifecycle: optional/required task support
 
 ## What you'll learn
 
-- **Connect to the MCP server** — The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.
-- **Sync call: greet (taskSupport=forbidden)** — greet is sync-only. The result returns directly in the tools/call response, with no task created. This is the path most existing tools use today; tasks are opt-in per tool.
-- **Optional task: slow_compute as task → CreateTaskResult** — slow_compute has taskSupport=optional. Sending the `task` hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.
-- **Poll tasks/get until terminal, receiving notifications/progress** — The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches `completed`, the polling stops.
-- **Fetch the result payload via tasks/result** — tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.
-- **Required task: failing_job, where a sync call returns an error** — failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.
-- **Invoke failing_job as task → terminal status: failed** — Errors from required-task tools surface as a terminal status of `failed`. The host gets the taskId immediately, polls, and learns the task failed via the status field, with no exception thrown on the polling call.
-- **Cancel a long-running task mid-flight** — Tasks support cooperative cancellation. The server cancels the goroutine's context; tools that select on ctx.Done() exit cleanly. Status transitions to `cancelled`. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn't overwrite the cancelled status.
+- **Connect to the MCP server** - The server advertises tasks capability in initialize. The mcpkit client opens a GET SSE stream so server-pushed notifications (progress, status changes) reach us during polling.
+- **Sync call: greet (taskSupport=forbidden)** - greet is sync-only. The result returns directly in the tools/call response, with no task created. This is the path most existing tools use today; tasks are opt-in per tool.
+- **Optional task: slow_compute as task → CreateTaskResult** - slow_compute has taskSupport=optional. Sending the `task` hint tells the server to run it asynchronously. We get a taskId back immediately while the work runs in a background goroutine.
+- **Poll tasks/get until terminal, receiving notifications/progress** - The server streams progress notifications over the GET SSE channel while the task runs. Our notification callback (set up in Step 1) prints them inline. Once status reaches `completed`, the polling stops.
+- **Fetch the result payload via tasks/result** - tasks/get returns task status only. To get the actual tool result (content blocks, isError flag, structured content), the host calls tasks/result with the same taskId.
+- **Required task: failing_job, where a sync call returns an error** - failing_job declares Execution.TaskSupport=required. Sync invocation returns an error telling the host to retry with a task hint. This guards expensive/long tools from blocking the request thread.
+- **Invoke failing_job as task → terminal status: failed** - Errors from required-task tools surface as a terminal status of `failed`. The host gets the taskId immediately, polls, and learns the task failed via the status field, with no exception thrown on the polling call.
+- **Cancel a long-running task mid-flight** - Tasks support cooperative cancellation. The server cancels the goroutine's context; tools that select on ctx.Done() exit cleanly. Status transitions to `cancelled`. mcpkit guards against terminal-to-terminal transitions so a tool finishing normally after cancel doesn't overwrite the cancelled status.
 
 ## Flow
 

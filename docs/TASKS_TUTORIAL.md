@@ -592,7 +592,7 @@ What this means in practice:
 
 Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. Multi-tenant deployments have a real isolation hole today: `tasks/get`, `tasks/cancel`, and `tasks/update` look up by `(taskID, sessionID)`, and with `sessionID=""` across users they can read / cancel / update each other's tasks.
 
-The fix is tracked in [issue 485](https://github.com/panyam/mcpkit/issues/485), a `TaskBucketKeyer` seam that lets deployers derive the bucket key from an auth subject (or any other request attribute) without `ext/tasks` taking a hard dependency on `ext/auth`. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.
+The fix is tracked in [issue 485](https://github.com/panyam/mcpkit/issues/485), a `TaskBucketKeyer` hook that lets deployers derive the bucket key from an auth subject (or any other request attribute) without `ext/tasks` taking a hard dependency on `ext/auth`. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.
 
 ---
 

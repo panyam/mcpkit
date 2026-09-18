@@ -4,9 +4,9 @@
 
 ## What you'll learn
 
-- **Connect to the MCP server and initialize session** — Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.
-- **Call access_protected_resource, denied with consent URL** — The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
-- **Open consent URL → wait for approval notification → auto-retry** — The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.
+- **Connect to the MCP server and initialize session** - Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.
+- **Call access_protected_resource, denied with consent URL** - The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.
+- **Open consent URL → wait for approval notification → auto-retry** - The host opens the consent URL and waits for the server to send a notifications/elicitation/complete notification via the SSE stream. When it arrives, the host automatically retries with the authorizationContextId.
 
 ## Flow
 

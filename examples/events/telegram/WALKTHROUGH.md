@@ -4,11 +4,11 @@ A condensed walkthrough showing the same MCP Events extension wired against a Te
 
 ## What you'll learn
 
-- **Connect to the events server** — Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream, so no transport-level wiring is needed in the client.
-- **Push: open events/stream, inject a telegram message, observe per-call notifications** — events/stream is a long-lived per-subscription POST returning SSE. See the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
-- **Cursorless: open events/stream for telegram.typing, observe cursor:null** — Telegram's typing chat-action is ephemeral: no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
-- **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** — Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
-- **Live Telegram interaction (real message from a Telegram chat)** — Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
+- **Connect to the events server** - Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream, so no transport-level wiring is needed in the client.
+- **Push: open events/stream, inject a telegram message, observe per-call notifications** - events/stream is a long-lived per-subscription POST returning SSE. See the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
+- **Cursorless: open events/stream for telegram.typing, observe cursor:null** - Telegram's typing chat-action is ephemeral: no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
+- **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** - Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
+- **Live Telegram interaction (real message from a Telegram chat)** - Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
 
 ## Flow
 

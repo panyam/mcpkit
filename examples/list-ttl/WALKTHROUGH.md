@@ -4,11 +4,11 @@ Walks through SEP-2549, which adds two cache hints, `ttlMs` (integer millisecond
 
 ## What you'll learn
 
-- **Connect to the list-ttl server** — `client.NewClient(...)` + `Connect()`. SEP-2549 is purely a server-side concern; the client doesn't negotiate anything special.
-- **tools/list, where cache hints surface on the list response** — `client.ListToolsPage("")` returns the full envelope including `TTLMs *int` and `CacheScope string`.
-- **prompts/list / resources/list / resources/templates/list** — SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly; there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
-- **resources/read, with cache hints on a read response** — SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.
-- **Inspect the raw JSON-RPC envelope** — Bypass the typed helper and decode the raw response body to verify the wire shape: `"ttlMs": 60000` as a JSON number and `"cacheScope"` as a string, sitting alongside `"tools"` and (when paginated) `"nextCursor"`.
+- **Connect to the list-ttl server** - `client.NewClient(...)` + `Connect()`. SEP-2549 is purely a server-side concern; the client doesn't negotiate anything special.
+- **tools/list, where cache hints surface on the list response** - `client.ListToolsPage("")` returns the full envelope including `TTLMs *int` and `CacheScope string`.
+- **prompts/list / resources/list / resources/templates/list** - SEP-2549 applies to every paginated list response. `WithListTTLMs` / `WithListCacheControl` configure the values uniformly; there's no per-endpoint override. Hit each endpoint and confirm they all return the configured hints.
+- **resources/read, with cache hints on a read response** - SEP-2549 added resources/read to the cacheable coverage mid-cycle. `client.ReadResourceFull` returns `core.ResourceResult`, which carries the same `TTLMs` / `CacheScope` fields. A read handler MAY override either per-read; otherwise the `WithReadResourceCacheControl` server default applies.
+- **Inspect the raw JSON-RPC envelope** - Bypass the typed helper and decode the raw response body to verify the wire shape: `"ttlMs": 60000` as a JSON number and `"cacheScope"` as a string, sitting alongside `"tools"` and (when paginated) `"nextCursor"`.
 
 ## Flow
 

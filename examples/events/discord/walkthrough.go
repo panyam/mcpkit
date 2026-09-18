@@ -988,7 +988,7 @@ rpcErr := err.(*client.RPCError) // code == -32602, client-supplied id is not ac
 		Note(
 			"Subscribe succeeds. The response carries the server-derived `id` (`sub_<base64>` per spec §\"Subscription Identity\" → \"Derived id\" L367), plus `cursor` and `refreshBefore`. Notably absent is the `secret`. The client supplied it, so the server doesn't echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.",
 			"",
-			"- The id is non-load-bearing for security; it's surfaced as `X-MCP-Subscription-Id` on delivery POSTs but knowing the value grants no operations on the subscription.",
+			"- The id carries no security weight; it's surfaced as `X-MCP-Subscription-Id` on delivery POSTs, but knowing the value grants no operations on the subscription.",
 		).
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# A valid whsec_ secret succeeds: response carries the server-derived id, cursor,
