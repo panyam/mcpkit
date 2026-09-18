@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"sync/atomic"
@@ -1721,8 +1722,13 @@ func TestWaitForTaskTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
-	if err != context.DeadlineExceeded {
-		t.Errorf("err = %v, want context.DeadlineExceeded", err)
+	// errors.Is, not ==: which error you get is a race. WaitForTaskV1 polls
+	// every 50ms against a 200ms deadline, so the deadline can expire either
+	// between polls, returning ctx.Err() bare, or while a POST is in flight,
+	// where http.Client hands back a *url.Error wrapping it. Identity
+	// comparison passed only in the first case, and CI hit the second.
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v, want it to wrap context.DeadlineExceeded", err)
 	}
 }
 
