@@ -36,15 +36,15 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 
 ## Design Principles
 
-1. **Transport is not protocol** — HTTP+SSE and Streamable HTTP are transports. JSON-RPC dispatch is shared. Adding a transport means adding a handler, not changing dispatch.
+1. **Transport is not protocol** - HTTP+SSE and Streamable HTTP are transports. JSON-RPC dispatch is shared. Adding a transport means adding a handler, not changing dispatch.
 
-2. **Generic infrastructure from servicekit, MCP-specific here** — SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting come from servicekit. mcpkit only implements MCP-specific logic: tool timeout, allowed-roots, tool authz.
+2. **Generic infrastructure from servicekit, MCP-specific here** - SSEConn/SSEHub, graceful shutdown, Streamable HTTP, CORS, rate limiting come from servicekit. mcpkit only implements MCP-specific logic: tool timeout, allowed-roots, tool authz.
 
-3. **Sub-module for heavy auth** — The core module ships `BearerTokenValidator` (constant-time compare, zero deps). JWT/OIDC lives in `mcpkit/auth`, a separate Go module that imports oneauth.
+3. **Sub-module for heavy auth** - The core module ships `BearerTokenValidator` (constant-time compare, zero deps). JWT/OIDC lives in `mcpkit/auth`, a separate Go module that imports oneauth.
 
-4. **Tools are the app's job** — MCPKit handles transport, security, and operations. The application registers tool handlers.
+4. **Tools are the app's job** - MCPKit handles transport, security, and operations. The application registers tool handlers.
 
-5. **Safe defaults** — Constant-time token comparison, initialization gating, SSE keepalive are on by default.
+5. **Safe defaults** - Constant-time token comparison, initialization gating, SSE keepalive are on by default.
 
 ## Actual Package Structure
 
@@ -110,7 +110,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 
 ## Two Transports
 
-### SSE Transport (MCP 2024-11-05) — `transport.go`
+### SSE Transport (MCP 2024-11-05), `transport.go`
 
 - `GET /mcp/sse` → long-lived SSE stream, sends `endpoint` event with POST URL
 - `POST /mcp/message?sessionId=<id>` → JSON-RPC dispatch, response pushed on SSE
@@ -118,12 +118,12 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 - Uses servicekit `BaseSSEConn[SSEData]` + `SSEHub[SSEData]`
 - `SSEData` union type: `SSEText(url)` for raw text, `SSEJSON(bytes)` for JSON-RPC
 
-### Streamable HTTP (MCP 2025-03-26) — `streamable_transport.go`
+### Streamable HTTP (MCP 2025-03-26), `streamable_transport.go`
 
 - `POST /mcp` → JSON-RPC dispatch, response in HTTP body (synchronous)
 - `DELETE /mcp` → terminate session
 - Session tracked via `Mcp-Session-Id` header (created on initialize)
-- No long-lived connections — each request is independent HTTP
+- No long-lived connections; each request is independent HTTP
 - `MCP-Protocol-Version` header validated if present
 
 ### Dual Transport Mode
@@ -254,13 +254,13 @@ MCPKit supports server-initiated notifications via `NotifyFunc`, a generic `func
 Clients can subscribe to resource URIs and receive `notifications/resources/updated` when the resource changes. Requires `WithSubscriptions()` server option.
 
 **Architecture:**
-- `subscriptionRegistry` on `Server` maps URI → sessionID → `*Dispatcher`
-- Per-session `Dispatcher` holds `sessionID` and `subManager` (pointer to Server's registry)
-- `resources/subscribe` handler registers the session's Dispatcher under the URI
-- `resources/unsubscribe` handler removes it
-- `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.getNotifyFunc()` outside the lock
+- `subscriptionRegistry` on `Server` maps URI → sessionID → `*Dispatcher`.
+- Per-session `Dispatcher` holds `sessionID` and `subManager` (pointer to Server's registry).
+- `resources/subscribe` handler registers the session's Dispatcher under the URI.
+- `resources/unsubscribe` handler removes it.
+- `Server.NotifyResourceUpdated(uri)` iterates subscribers under read lock, copies dispatcher list, then calls each `d.getNotifyFunc()` outside the lock.
 - `Server.Broadcast(method, params)` fans out to ALL connected sessions across all transports, unconditionally (no subscription required). Uses `sessionBroadcasters`, where each transport registers a closure that iterates its session map. Pattern mirrors `CloseAllSessions`.
-- Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up
+- Transport `OnClose` / `closeSession` calls `subManager.unsubscribeAll(sessionID)` to clean up.
 
 **Why store `*Dispatcher` not `NotifyFunc`:** The `notifyFunc` on a Dispatcher can change, since Streamable HTTP wires it when a GET SSE stream opens. Storing the Dispatcher pointer and reading `d.getNotifyFunc()` at notification time handles this correctly. Access to `notifyFunc` is protected by `notifyMu` (RWMutex) to handle concurrent GET SSE stream setup and subscription notifications.
 
@@ -281,7 +281,7 @@ Notifications emitted during a tool call (logging, progress) are delivered to th
 | **Streamable HTTP POST** (SSE streaming) | Notifications arrive on the **same POST response stream** as the tool result, in emission order, before the result. | `handlePostSSE` creates a request-scoped `requestNotify` closure. Notifications and the final response share a mutex-protected `writeSSE` function. The response is written last. |
 | **Streamable HTTP GET** (opt-in) | Server-initiated notifications arrive on the background GET SSE stream. Ordering relative to POST responses is not guaranteed. | Client opens `GET /mcp` via `WithGetSSEStream()`. Server wires `dispatcher.notifyFunc` to SSEHub. `backgroundGetReader` dispatches events to `notifyHandler`. |
 | **SSE** | Notifications arrive on the shared SSE stream in emission order. The background reader delivers them to `notifyHandler` before routing the response to the pending call channel. | Single `backgroundReader` goroutine processes events sequentially: notification delivery completes before the response is sent to the blocked `call()`. |
-| **In-memory** | Fully synchronous — notifications are delivered inline during `call()`, before the response is returned. | `dispatchWithNotifyAndRequest` calls `notifyFunc` synchronously within the tool handler. |
+| **In-memory** | Fully synchronous - notifications are delivered inline during `call()`, before the response is returned. | `dispatchWithNotifyAndRequest` calls `notifyFunc` synchronously within the tool handler. |
 
 **Cross-request isolation (Streamable HTTP):** Each POST gets its own `requestNotify` closure. Notifications from concurrent tool calls never leak to other requests' response streams.
 
@@ -307,9 +307,9 @@ MCPKit supports the [MCP Apps extension](https://modelcontextprotocol.io/extensi
 **mcpkit's scope:** capability negotiation, `_meta.ui` metadata on tools/resources, `ui://` resource serving, visibility filtering, text-only fallback. The iframe rendering and `postMessage` bridge are the host's responsibility.
 
 **Package split:**
-- `core/ui.go` — Protocol types (`UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType`, `ToolMeta`, `ResourceContentMeta`) and context helpers (`ClientSupportsUI`, `NotifyResourcesChanged`)
-- `ext/ui/` — Extension implementation (`UIExtension`, `RegisterAppTool`, `RefValidator`)
-- `client/client.go` — `WithExtension`, `WithUIExtension`, `ServerSupportsUI`, `ListToolsForModel`
+- `core/ui.go` - Protocol types (`UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType`, `ToolMeta`, `ResourceContentMeta`) and context helpers (`ClientSupportsUI`, `NotifyResourcesChanged`)
+- `ext/ui/` - Extension implementation (`UIExtension`, `RegisterAppTool`, `RefValidator`)
+- `client/client.go` - `WithExtension`, `WithUIExtension`, `ServerSupportsUI`, `ListToolsForModel`
 
 See [docs/APPS_DESIGN.md](APPS_DESIGN.md) for the full design: protocol flows, edge cases, conformance strategy, and slyds reference integration.
 

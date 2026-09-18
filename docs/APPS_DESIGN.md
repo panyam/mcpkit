@@ -1,4 +1,4 @@
-# MCP Apps Extension — Design
+# MCP Apps extension design
 
 ## Overview
 
@@ -8,11 +8,11 @@ MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `
 
 ## Design Principles
 
-1. **Core module stays zero-deps** — UI metadata types live in mcpkit core. No HTML processing, no JS bundling, no browser dependencies.
-2. **Additive extension** — servers without UI config work exactly as before. Existing tools, resources, and transports are unaffected.
-3. **Interface in core, implementation in sub-module** — core defines the `UIMetadata` struct and `_meta` plumbing. A future `mcpkit/ui` sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.
-4. **Follow the auth pattern** — `UIExtension` implements `ExtensionProvider`, registered via `WithExtension(ui.UIExtension{})`. Capability negotiation mirrors auth exactly.
-5. **Slyds as the reference app** — design decisions are validated against a real use case: an HTML slide deck editor served as an MCP App.
+1. **Core module stays zero-deps** - UI metadata types live in mcpkit core. No HTML processing, no JS bundling, no browser dependencies.
+2. **Additive extension** - servers without UI config work exactly as before. Existing tools, resources, and transports are unaffected.
+3. **Interface in core, implementation in sub-module** - core defines the `UIMetadata` struct and `_meta` plumbing. A future `mcpkit/ui` sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.
+4. **Follow the auth pattern** - `UIExtension` implements `ExtensionProvider`, registered via `WithExtension(ui.UIExtension{})`. Capability negotiation mirrors auth exactly.
+5. **Slyds as the reference app** - we validate every design decision against a real HTML slide deck editor served as an MCP App.
 
 ## Spec Reference
 
@@ -93,18 +93,18 @@ MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `
 ```
 
 **mcpkit is responsible for:**
-- Capability negotiation (server advertises, client detects)
-- `_meta.ui` metadata on tools and resources
-- Serving `ui://` resources with correct MIME type
-- Tool visibility filtering
-- Text-only fallback when client doesn't support UI
+- Negotiating the capability (server advertises, client detects)
+- Attaching `_meta.ui` metadata to tools and resources
+- Serving `ui://` resources with the correct MIME type
+- Filtering tool visibility
+- Falling back to text when the client doesn't support UI
 
 **The host is responsible for:**
 - Fetching `ui://` resources via `resources/read`
-- Rendering HTML in sandboxed iframe
-- The `postMessage` ↔ JSON-RPC bridge (`ui/initialize`, `ui/notifications/*`, etc.)
-- CSP enforcement, permission policy, double-iframe sandbox proxy
-- Teardown lifecycle
+- Rendering HTML in a sandboxed iframe
+- Bridging `postMessage` ↔ JSON-RPC (`ui/initialize`, `ui/notifications/*`, etc.)
+- Enforcing CSP, permission policy and the double-iframe sandbox proxy
+- Tearing down the lifecycle
 
 ## Core Types
 
@@ -259,7 +259,7 @@ sequenceDiagram
     Note over S: io.modelcontextprotocol/ui<br/>empty settings object
 ```
 
-### Flow B: Tool with UI — full lifecycle (host perspective)
+### Flow B: Tool with UI, full lifecycle (host perspective)
 
 ```mermaid
 sequenceDiagram
@@ -472,9 +472,9 @@ These observations have been filed as feedback to the ext-apps spec:
 **Problem:** The spec says hosts "MUST NOT include tools in the agent's tool list when visibility does not include 'model'". This is host-side filtering. But what about servers?
 
 **Decision:**
-- mcpkit `tools/list` returns ALL tools, including app-only ones (visibility metadata included)
-- Hosts filter before presenting to the LLM
-- mcpkit's Go client adds a `ListToolsForModel()` helper that filters locally (useful for testing)
+- mcpkit `tools/list` returns ALL tools, including app-only ones (visibility metadata included).
+- Hosts filter before presenting to the LLM.
+- mcpkit's Go client adds a `ListToolsForModel()` helper that filters locally (useful for testing).
 - Server-side `tools/call` does NOT enforce visibility. Any authenticated caller can invoke any tool. Visibility is a presentation concern, not an access control mechanism.
 
 **Rationale:** The spec places enforcement responsibility on the host. Server-side enforcement would break legitimate use cases (automated testing, admin tools calling app-only tools directly).
@@ -526,7 +526,7 @@ These observations have been filed as feedback to the ext-apps spec:
 **Problem:** If the server requires auth (mcpkit/auth), the host must include Bearer tokens in `resources/read` requests for `ui://` resources, same as any other MCP request.
 
 **Mitigation:**
-- Already handled — `CheckAuth` runs on ALL requests including `resources/read`
+- Already handled. `CheckAuth` runs on ALL requests including `resources/read`
 - No special auth bypass for `ui://` resources
 - Document that auth tokens are required for UI resource fetches
 
@@ -535,7 +535,7 @@ These observations have been filed as feedback to the ext-apps spec:
 **Problem:** A server may expose multiple tools, each with a different UI. Each tool's `_meta.ui.resourceUri` points to a different `ui://` resource.
 
 **Mitigation:**
-- Already supported — each tool has its own `_meta.ui.resourceUri`
+- Already supported. Each tool has its own `_meta.ui.resourceUri`
 - Resource templates handle parameterized UIs (e.g., `ui://decks/{name}/view`)
 - Each UI resource can have different CSP, permissions, and domain settings
 
@@ -733,8 +733,8 @@ The Apps Bridge is a non-MCP transport. SEP-414 governs only the MCP wire. **Whe
 | Doc | What |
 |-----|------|
 | [APPS_ONBOARDING.md](APPS_ONBOARDING.md) | Step-by-step guide to ship your app as an MCP App |
-| [APPS_HOST.md](APPS_HOST.md) | AppHost, AppBridge, ServerRegistry — building custom hosts |
-| [SEP_414_OTEL.md](SEP_414_OTEL.md) | Trace context propagation across mcpkit — context for the bridge relay above |
+| [APPS_HOST.md](APPS_HOST.md) | AppHost, AppBridge, ServerRegistry - building custom hosts |
+| [SEP_414_OTEL.md](SEP_414_OTEL.md) | Trace context propagation across mcpkit - context for the bridge relay above |
 | `ext/ui/` README | Bridge JS API, typed app tools, embedding |
 | `examples/apps/` | Working examples: vanilla, todolist, react |
 | `tests/e2e/apps/` README | Conformance test matrix with sequence diagrams |

@@ -1,23 +1,23 @@
 # Tasks Example Server
 
-> **Stable (frozen)** — MCP Tasks v1 (spec 2025-11-25). Superseded by [tasks-v2](../tasks-v2/) ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) for new work.
+> **Stable (frozen)** - MCP Tasks v1 (spec 2025-11-25). Superseded by [tasks-v2](../tasks-v2/) ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663)) for new work.
 
 > **SEP-2577 deprecation note**: this example demonstrates `TaskContext.TaskSample(...)`, which is deprecated per SEP-2577 (scheduled for removal in mcpkit v0.4). The code still works on v0.3.x. See [`docs/SEP_2577_DEPRECATIONS.md`](../../docs/SEP_2577_DEPRECATIONS.md) for the migration story.
 
-Demonstrates MCP Tasks (spec 2025-11-25) — async tool execution with lifecycle tracking.
+Demonstrates MCP Tasks (spec 2025-11-25): async tool execution with lifecycle tracking.
 
-> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `just serve` + `just demo`.
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** - 8-step demokit walkthrough with sequence diagram covering sync calls, optional async tasks, polling, progress notifications via SSE, required-task tools, and cancellation. Run it with `just serve` + `just demo`.
 
 ## What it demonstrates
 
 - The three task-support modes on `core.ToolDef.Execution`: sync-only (no Execution), optional (client picks sync vs async), required (must be async).
 - Task lifecycle states (`queued` → `running` → `completed` / `failed` / `cancelled`) and the polling pattern via `tasks/get`.
 - Progress notifications streamed over the GET SSE channel while a task runs.
-- Elicitation from a background task (`TaskContext.TaskElicit`) — pausing a task to ask the user a question.
-- Sampling from a background task (`TaskContext.TaskSample`) — pausing a task to query an LLM.
+- Elicitation from a background task (`TaskContext.TaskElicit`), pausing a task to ask the user a question.
+- Sampling from a background task (`TaskContext.TaskSample`), pausing a task to query an LLM.
 - Cancellation propagation via `tasks/cancel`, including verifying the work actually stops.
 - TTL enforcement (tasks expire) and session isolation (cross-session task access denied).
-- The external-proxy pattern via `server.TaskCallbacks` — per-tool `GetTask` / `GetResult` overrides for tasks living in an external system (Step Functions, etc.).
+- The external-proxy pattern via `server.TaskCallbacks`, giving per-tool `GetTask` / `GetResult` overrides for tasks living in an external system (Step Functions, etc.).
 
 ## MCPKit Features Used
 
@@ -69,7 +69,7 @@ MCPJam, VS Code, or any MCP client: `http://localhost:$PORT/mcp`
 
 ## Important: Host Support Required
 
-MCP Tasks is an experimental protocol extension (spec 2025-11-25). **Most MCP hosts don't support it yet** — they will call tools synchronously and ignore the task hints.
+MCP Tasks is an experimental protocol extension (spec 2025-11-25). **Most MCP hosts don't support it yet.** They will call tools synchronously and ignore the task hints.
 
 Until your host supports tasks, use the curl commands in each exercise below, or run the automated walkthrough:
 
@@ -104,7 +104,7 @@ mcp() {
 }
 ```
 
-**Note:** `confirm_delete` and `write_haiku` cannot be fully tested with curl because they use the side-channel pattern — the server sends elicitation/sampling requests back to the client during `tasks/result`, which requires a client that can handle server-initiated requests. Use the Go test suite (`go test ./...`) for those.
+**Note:** `confirm_delete` and `write_haiku` cannot be tested with curl because they use the side-channel pattern: the server sends elicitation/sampling requests back to the client during `tasks/result`, which requires a client that can handle server-initiated requests. Use the Go test suite (`go test ./...`) for those.
 
 Initialize a session before running any curl exercises:
 
@@ -185,7 +185,7 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-The host polls `tasks/get` — status transitions from `working` to `completed`.
+The host polls `tasks/get`, and status transitions from `working` to `completed`.
 
 ### 4. Failing job
 
@@ -212,13 +212,13 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-This tool *requires* task invocation. The job starts, then fails after 1 second — status transitions to `failed`.
+This tool *requires* task invocation. The job starts, then fails after 1 second, and status transitions to `failed`.
 
 ### 5. Elicitation from a task (confirm_delete)
 
 | Prompt | Curl |
 |--------|------|
-| `Delete the file important.txt` | See below (partial — curl can't respond to elicitation) |
+| `Delete the file important.txt` | See below (partial - curl can't respond to elicitation) |
 
 ```bash
 # Create the task
@@ -240,7 +240,7 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-The task transitions to `input_required` while waiting for the elicitation response. With curl, the task stays stuck here — the server sent an elicitation request via SSE but curl can't respond to it.
+The task transitions to `input_required` while waiting for the elicitation response. With curl, the task stays stuck here, because the server sent an elicitation request via SSE but curl can't respond to it.
 
 **To complete the flow**, use the Go test suite which has a mock elicitation handler:
 ```bash
@@ -251,7 +251,7 @@ cd server && go test -run TestTaskElicitE2E -v
 
 | Prompt | Curl |
 |--------|------|
-| `Write a haiku about the ocean` | See below (partial — curl can't respond to sampling) |
+| `Write a haiku about the ocean` | See below (partial - curl can't respond to sampling) |
 
 ```bash
 # Create the task
@@ -273,7 +273,7 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-Same as confirm_delete — the task transitions to `input_required` while the server waits for a sampling response. Curl can't provide one.
+Same as confirm_delete: the task transitions to `input_required` while the server waits for a sampling response. Curl can't provide one.
 
 **To complete the flow:**
 ```bash
@@ -333,7 +333,7 @@ Shows all tasks with their current status.
 
 | Prompt | Curl |
 |--------|------|
-| *(curl-only — needs custom TTL param)* | See below |
+| *(curl-only - needs custom TTL param)* | See below |
 
 ```bash
 # Create a task with short TTL (5 seconds)
@@ -357,7 +357,7 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-**Expected:** Task not found — it was cleaned up after TTL expired.
+**Expected:** Task not found, cleaned up after TTL expired.
 **Behavior:** Timer resets on result storage and cancellation, so the TTL window starts fresh from the last state change.
 
 ---
@@ -370,7 +370,7 @@ mcp http://localhost:$PORT/mcp \
 
 | Prompt | Curl |
 |--------|------|
-| *(curl-only — needs two sessions)* | See below |
+| *(curl-only - needs two sessions)* | See below |
 
 ```bash
 # Initialize session A
@@ -423,7 +423,7 @@ mcp http://localhost:$PORT/mcp \
   -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tasks/get\",\"params\":{\"taskId\":\"$TASK_ID\"}}"
 ```
 
-**Expected:** Task not found — session B can't see session A's tasks.
+**Expected:** Task not found, since session B can't see session A's tasks.
 **Behavior:** Empty sessionID (backward compat) allows access to all tasks.
 
 ---
@@ -434,9 +434,9 @@ mcp http://localhost:$PORT/mcp \
 
 ### 11. Double-complete is rejected
 
-Complete a task, then try to store another result (internal API — no curl equivalent).
+Complete a task, then try to store another result (internal API, no curl equivalent).
 
-**Expected:** Error — can't store result for terminal task. Second `StoreTerminalResult` is rejected.
+**Expected:** Error, since you can't store a result for a terminal task. Second `StoreTerminalResult` is rejected.
 **Behavior:** Terminal guard prevents cancel→completed race and double-completion.
 
 ---
@@ -538,7 +538,7 @@ Create a task and send progress notifications from the tool handler.
 |--------|------|
 | `Deploy the app, then cancel the deployment` | *(not yet implemented)* |
 
-**Expected (after Phase 8):** Cancelling the parent task cascades to all children — build and test are also cancelled.
+**Expected (after Phase 8):** Cancelling the parent task cascades to all children, so build and test are also cancelled.
 **Today:** No cascade. Only the parent task is cancelled.
 
 ## Screenshots
@@ -546,10 +546,10 @@ Create a task and send progress notifications from the tool handler.
 ### Async tool returns a task ID immediately
 
 
-### Polling tasks/get — status transitions to completed
+### Polling tasks/get, status transitions to completed
 
 
-### failing_job — task transitions to failed after 1 second
+### failing_job, task transitions to failed after 1 second
 
 
 ## Key Files
@@ -571,5 +571,5 @@ Create a task and send progress notifications from the tool handler.
 
 ## Next steps
 
-- [Tasks v2 — the canonical async model](../tasks-v2/)
+- [Tasks v2 - the canonical async model](../tasks-v2/)
 - [v1 → v2 migration](../../docs/TASKS_V2_MIGRATION.md)

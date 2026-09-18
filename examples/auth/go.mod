@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/panyam/demokit v0.0.31
+	github.com/panyam/demokit v0.0.32
 	github.com/panyam/mcpkit v0.6.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
@@ -41,7 +41,6 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect

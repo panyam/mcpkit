@@ -9,7 +9,7 @@ This guide explains how to move an mcpkit server or client from the v1 task surf
 | You are | You want | Do |
 |---|---|---|
 | Building a new server today | v2 only | `tasks.Register(tasks.Config{Server: srv})` (import `github.com/panyam/mcpkit/ext/tasks`) |
-| Maintaining an existing v1 server | Keep working v1 clients alive | `server.RegisterTasksV1(server.TasksConfigV1{Server: srv})` (no change — `RegisterTasks` was renamed) |
+| Maintaining an existing v1 server | Keep working v1 clients alive | `server.RegisterTasksV1(server.TasksConfigV1{Server: srv})` (no change - `RegisterTasks` was renamed) |
 | Migrating a v1 server to v2 | Both clients on one endpoint | Register both independently: `server.RegisterTasksV1(...)` + `tasks.Register(...)`. The previous `RegisterTasksHybrid` was removed when v2 moved to `ext/tasks/`. Last-write-wins on `tasks/get` / `tasks/cancel` registration. |
 | Building a new v2 client | – | `client.WithTasksExtension()` + `client.ToolCall` / `GetTask` / `UpdateTask` / `WaitForTask` / `CancelTask` |
 | Maintaining a v1 client | – | `client.ToolCallAsTaskV1` / `GetTaskV1` / etc. (renamed; behavior unchanged) |
@@ -253,4 +253,4 @@ SEP-2322's `core.InputRequiredResult.RequestState` (the MRTR multi-round-trip su
 - SEP-2243 (Mcp-Name HTTP header): adopted from spec discussion
 - Implementation plan + open questions: [`SEP_2663_TASKS_CONFORMANCE_PLAN.md`](SEP_2663_TASKS_CONFORMANCE_PLAN.md)
 - v2 example walkthrough: [`examples/tasks-v2/WALKTHROUGH.md`](../examples/tasks-v2/WALKTHROUGH.md)
-- v2 conformance suite: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) (8 ClientScenario classes / ~33 internal checks; upstream Draft PR modelcontextprotocol/conformance#262). Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../conformance/tasks-v2/).
+- v2 conformance suite: [panyam/mcpconformance, `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks) (8 ClientScenario classes / ~33 internal checks; upstream Draft PR modelcontextprotocol/conformance#262). Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../conformance/tasks-v2/).

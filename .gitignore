@@ -126,3 +126,6 @@ examples/otel/stdout/stdout
 cmd/agentchat/agentchat
 cmd/agentchat/bin/
 examples/agent-async/agent-async
+
+# Local agent settings
+.claude/

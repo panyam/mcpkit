@@ -153,7 +153,7 @@ func registerTools(srv *server.Server, uploadDir string) {
 	srv.RegisterTool(
 		core.ToolDef{
 			Name:        "process_any_file",
-			Description: "Accepts any file with no MIME or size filter — useful for ad-hoc inspection.",
+			Description: "Accepts any file with no MIME or size filter, useful for ad-hoc inspection.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -220,7 +220,7 @@ func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest, uploadD
 	for i, item := range rawList {
 		uri, ok := item.(string)
 		if !ok {
-			fmt.Fprintf(&b, "  [%d] not a string — skipped\n", i)
+			fmt.Fprintf(&b, "  [%d] not a string, skipped\n", i)
 			continue
 		}
 		data, mediaType, filename, err := core.DecodeDataURI(uri)
@@ -233,10 +233,10 @@ func analyzeDocumentsHandler(ctx core.ToolContext, req core.ToolRequest, uploadD
 		previewFile(displayName(filename), mediaType, data)
 		saved, saveErr := saveUpload(uploadDir, filename, mediaType, data)
 		if saveErr != nil {
-			fmt.Fprintf(&b, "  [%d] %s — %s, %d bytes (save error: %v)\n",
+			fmt.Fprintf(&b, "  [%d] %s - %s, %d bytes (save error: %v)\n",
 				i, displayName(filename), mediaType, len(data), saveErr)
 		} else {
-			fmt.Fprintf(&b, "  [%d] %s — %s, %d bytes → %s\n",
+			fmt.Fprintf(&b, "  [%d] %s - %s, %d bytes → %s\n",
 				i, displayName(filename), mediaType, len(data), saved)
 		}
 	}

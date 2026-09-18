@@ -1,10 +1,10 @@
-# MCP Apps — Host Implementation Guide
+# MCP Apps host implementation guide
 
 Building custom MCP hosts (agent harnesses, desktop apps, custom UIs) using AppHost and ServerRegistry.
 
 See [APPS_DESIGN.md](APPS_DESIGN.md) for the core protocol design and [APPS_ONBOARDING.md](APPS_ONBOARDING.md) for shipping your app.
 
-## AppHost — Host-Side App Management
+## AppHost and host-side app management
 
 ### Overview
 
@@ -109,9 +109,9 @@ type AppBridge interface {
 ```
 
 Implementations:
-- **`InProcessAppBridge`** — for testing. Registers Go handlers that simulate app-side tools.
-- **WebSocket bridge** (future) — for Go hosts serving browser iframes over WebSocket.
-- **Native bridge** (future) — for desktop apps using webview/wails JS↔Go bindings.
+- **`InProcessAppBridge`** - for testing. Registers Go handlers that simulate app-side tools.
+- **WebSocket bridge** (future) - for Go hosts serving browser iframes over WebSocket.
+- **Native bridge** (future) - for desktop apps using webview/wails JS↔Go bindings.
 
 ### Usage with OAuth Authentication
 
@@ -148,13 +148,13 @@ result, _ := host.CallAppTool(ctx, "app_greet", map[string]any{"name": "world"})
 ### Lifecycle
 
 1. Create `Client` with desired auth and extensions
-2. `Client.Connect()` — MCP handshake with server
-3. `NewAppHost(client, bridge)` + `host.Start(ctx)` — wires bridge handlers, fetches initial tool list
+2. `Client.Connect()` - MCP handshake with server
+3. `NewAppHost(client, bridge)` + `host.Start(ctx)` - wires bridge handlers, fetches initial tool list
 4. Use `ListAllTools`, `CallAppTool`, etc.
-5. `host.Close()` — closes bridge
-6. `client.Close()` — closes MCP session and auth token source
+5. `host.Close()` - closes bridge
+6. `client.Close()` - closes MCP session and auth token source
 
-## ServerRegistry — Multi-Server Aggregation
+## ServerRegistry and multi-server aggregation
 
 ### Overview
 
@@ -193,7 +193,7 @@ result, _ := host.CallAppTool(ctx, "app_greet", map[string]any{"name": "world"})
 
 ### Request Flows
 
-#### Unambiguous tool call — direct routing
+#### Unambiguous tool call, direct routing
 
 ```mermaid
 sequenceDiagram
@@ -210,7 +210,7 @@ sequenceDiagram
     Reg-->>Agent: ToolResult {text: "Sunny, 72°F"}
 ```
 
-#### Ambiguous tool call — resolver invoked
+#### Ambiguous tool call, resolver invoked
 
 ```mermaid
 sequenceDiagram

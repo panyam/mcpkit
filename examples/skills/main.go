@@ -181,7 +181,7 @@ func registerRefreshTool(srv *server.Server, provider *skills.Provider) {
 			if err := provider.Refresh(); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("refreshed — provider version now %d", provider.Version()), nil
+			return fmt.Sprintf("refreshed; provider version now %d", provider.Version()), nil
 		},
 	)
 	srv.RegisterTool(tool.ToolDef, tool.Handler)

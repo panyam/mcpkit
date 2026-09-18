@@ -139,7 +139,7 @@ func serve() {
 		defer dg.Close()
 		log.Printf("[discord] connected as %s", dg.State.User.Username)
 	} else {
-		log.Println("[discord] no token provided — running in test mode")
+		log.Println("[discord] no token provided - running in test mode")
 	}
 
 	// Auto-detect auth posture.
@@ -154,7 +154,7 @@ func serve() {
 	authPosture := "demo (anonymous → UnsafeAnonymousPrincipal)"
 	if validator := tryEnableAuth(); validator != nil {
 		srvOpts = append(srvOpts, server.WithAuth(validator))
-		authPosture = "real OIDC (" + os.Getenv("OAUTH_ISSUER") + ") — anonymous webhook subscribes rejected per spec"
+		authPosture = "real OIDC (" + os.Getenv("OAUTH_ISSUER") + "), anonymous webhook subscribes rejected per spec"
 	}
 
 	srv := server.NewServer(

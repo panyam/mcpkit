@@ -1,9 +1,9 @@
-# SEP-2549 List TTL — Cache Hints on List and Read Results
+# SEP-2549 List TTL, Cache Hints on List and Read Results
 
-> **Stable** — implements [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) (List TTL), merged into the MCP spec.
+> **Stable** - implements [SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) (List TTL), merged into the MCP spec.
 
-Demonstrates the SEP-2549 cache hints — `ttlMs` (integer milliseconds) and
-`cacheScope` (`public`/`private`) — that an MCP server attaches to every
+Demonstrates the SEP-2549 cache hints, `ttlMs` (integer milliseconds) and
+`cacheScope` (`public`/`private`), that an MCP server attaches to every
 paginated list response (`tools/list`, `prompts/list`, `resources/list`,
 `resources/templates/list`) and to `resources/read`. Clients use them to
 cache the registered surface between `notifications/list_changed` instead
@@ -21,7 +21,7 @@ Migration notes: [docs/LIST_TTL_MIGRATION.md](../../docs/LIST_TTL_MIGRATION.md).
 
 The merged spec treats an absent `ttlMs` the same as `0`. mcpkit still
 encodes the field as `*int` + `omitempty` so a server can emit an explicit
-`"ttlMs": 0` distinct from omitting it — clients behave identically either
+`"ttlMs": 0` distinct from omitting it, since clients behave identically either
 way, but the explicit form states the intent on the wire.
 
 ## cacheScope contract
@@ -32,7 +32,7 @@ way, but the explicit form states the intent on the wire.
 | **Private** | `"cacheScope": "private"` | cache only within one authorization context; never share across access tokens |
 | **Absent** | field omitted | clients default to `public` |
 
-A server whose response varies per caller MUST set `private` explicitly —
+A server whose response varies per caller MUST set `private` explicitly,
 see the security note in the migration guide.
 
 ## Quick Start
@@ -52,8 +52,8 @@ go run . --tui
 
 - The `ttlMs` and `cacheScope` fields surfacing on every paginated list response and on `resources/read`.
 - The `ttlMs` contract on the wire: absent / `"ttlMs": 0` (both immediately stale) and `"ttlMs": <positive>` (fresh for N ms).
-- Server-side configuration via `server.WithListCacheControl(ttlMs, scope)` and `server.WithReadResourceCacheControl(ttlMs, scope)` — uniform across endpoints, with negative `ttlMs` omitting the field.
-- Client-side typed helpers — `client.ListToolsPage`, `ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage`, `ReadResourceFull` — that return the result envelope so callers can read `TTLMs` and `CacheScope`.
+- Server-side configuration via `server.WithListCacheControl(ttlMs, scope)` and `server.WithReadResourceCacheControl(ttlMs, scope)`, uniform across endpoints, with negative `ttlMs` omitting the field.
+- Client-side typed helpers (`client.ListToolsPage`, `ListPromptsPage`, `ListResourcesPage`, `ListResourceTemplatesPage`, `ReadResourceFull`) that return the result envelope so callers can read `TTLMs` and `CacheScope`.
 - Direct raw-JSON inspection to confirm the wire shape (`ttlMs` is a JSON number, `cacheScope` a string).
 
 See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram and
@@ -66,13 +66,13 @@ state). To exercise the other modes:
 
 | Command | Mode |
 |---------|------|
-| `go run . --serve --ttl-ms=0` | immediately stale — emits `"ttlMs": 0` |
-| `go run . --serve --ttl-ms=-1` | unset — `ttlMs` field omitted entirely |
+| `go run . --serve --ttl-ms=0` | immediately stale - emits `"ttlMs": 0` |
+| `go run . --serve --ttl-ms=-1` | unset - `ttlMs` field omitted entirely |
 | `go run . --serve` *(no `--ttl-ms`)* | unset (same as `--ttl-ms=-1`) |
 | `go run . --serve --ttl-ms=60000 --cache-scope=private` | fresh for 60s, `cacheScope: private` |
 
 The `=` form is required because Go's `flag` package treats `--ttl-ms -1`
-as `--ttl-ms` followed by an unknown flag `-1` — Makefile recipes spawning
+as `--ttl-ms` followed by an unknown flag `-1`, so Makefile recipes spawning
 this fixture should always use `--ttl-ms=N` (or omit the flag entirely for
 the unset default).
 
@@ -83,7 +83,7 @@ suite on the [panyam/mcpconformance `pending` branch](https://github.com/panyam/
 The runner spawns three independent processes (one per `ttlMs` state) in
 parallel so all the wire shapes flow through a real dispatcher in a single
 test run. The dedicated `testconf-list-ttl` target was retired when SEP-2549
-coverage moved to upstream's `CachingScenario` — it now runs as part of the
+coverage moved to upstream's `CachingScenario`, which now runs as part of the
 default `just testconf` suite.
 
 ## Where to look in the code
@@ -94,7 +94,7 @@ default `just testconf` suite.
 | Wire types | [`core.ToolsListResult`](../../core/tool.go), `PromptsListResult` ([`core/prompt.go`](../../core/prompt.go)), `ResourcesListResult` / `ResourceTemplatesListResult` / `ResourceResult` ([`core/resource.go`](../../core/resource.go)), `CacheScope*` constants ([`core/cache.go`](../../core/cache.go)) |
 | Client helpers | [`client.ListToolsPage`](../../client/iterators.go) and siblings, [`client.ReadResourceFull`](../../client/client.go) |
 | Migration guide | [`docs/LIST_TTL_MIGRATION.md`](../../docs/LIST_TTL_MIGRATION.md) |
-| Conformance | [SEP-2549 scenarios on panyam/mcpconformance `pending`](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl) — superseded by upstream's `CachingScenario`, covered by `just testconf` |
+| Conformance | [SEP-2549 scenarios on panyam/mcpconformance `pending`](https://github.com/panyam/mcpconformance/tree/pending/src/scenarios/server/list-ttl) - superseded by upstream's `CachingScenario`, covered by `just testconf` |
 | SEP | [SEP-2549 spec PR](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549) |
 
 ## Next steps

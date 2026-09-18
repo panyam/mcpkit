@@ -1,14 +1,14 @@
-# MCP Events Extension — Telegram reference walkthrough
+# MCP Events extension, the Telegram reference walkthrough
 
 A condensed walkthrough showing the same MCP Events extension wired against a Telegram-shaped event source. The protocol exposition lives in the discord walkthrough; this one focuses on the telegram-specific payload (chat_id, user, text) and the cursored vs cursorless distinction.
 
 ## What you'll learn
 
-- **Connect to the events server** — Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
-- **Push: open events/stream, inject a telegram message, observe per-call notifications** — events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
-- **Cursorless: open events/stream for telegram.typing, observe cursor:null** — Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
-- **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** — Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
-- **Live Telegram interaction (real message from a Telegram chat)** — Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
+- **Connect to the events server** - Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream, so no transport-level wiring is needed in the client.
+- **Push: open events/stream, inject a telegram message, observe per-call notifications** - events/stream is a long-lived per-subscription POST returning SSE. See the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
+- **Cursorless: open events/stream for telegram.typing, observe cursor:null** - Telegram's typing chat-action is ephemeral: no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
+- **Webhook: subscribe via the typed Go SDK, receive a TelegramEventData** - Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
+- **Live Telegram interaction (real message from a Telegram chat)** - Setup: start the server with a Telegram bot token and open a chat with the bot in the Telegram app.
 
 ## Flow
 
@@ -19,7 +19,7 @@ sequenceDiagram
     participant Receiver as Local webhook receiver (this process)
 
     Note over Host,Receiver: Step 1: Connect to the events server
-    Host->>Server: POST /mcp — initialize
+    Host->>Server: POST /mcp, initialize
     Server-->>Host: serverInfo + capabilities
 
     Note over Host,Receiver: Step 2: Push: open events/stream, inject a telegram message, observe per-call notifications
@@ -46,11 +46,11 @@ sequenceDiagram
 
 ## Steps
 
-### Setup — two modes
+### Setup in two modes
 
 This walkthrough runs against either a test-mode server or a real Telegram bot.
 
-**Option A — Test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.
+**Option A, test mode** (no bot token needed). All steps run; the final live-interaction step skips with a 'no token' message. Drive synthetic events from a third terminal via `make inject` / `make inject-typing`.
 
 ```
 Terminal 1:  just serve                                # server in test mode
@@ -59,7 +59,7 @@ Terminal 3:  just inject TEXT='hello'                  # message event
              make inject-typing                        # typing event (cursorless, demo-only)
 ```
 
-**Option B — Real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only — see the live step's note for details.
+**Option B, real bot mode** (requires `TELEGRAM_BOT_TOKEN`). Same walkthrough plus the live step captures real message events from a chat with the bot. Telegram's Bot API doesn't expose user typing events to bots, so the live step is message-only. See the live step's note for details.
 
 ```
 Terminal 1:  TELEGRAM_BOT_TOKEN=... just serve         # server in bot mode
@@ -75,7 +75,7 @@ For the full protocol exposition (events/list, poll, header modes, the spec's de
 
 ### Step 1: Connect to the events server
 
-Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream — no transport-level wiring needed in the client.
+Plain MCP initialize over Streamable HTTP. Push delivery uses events/stream (a long-lived per-subscription POST that returns SSE), not the session GET stream, so no transport-level wiring is needed in the client.
 
 #### Reproduce on the wire
 
@@ -93,13 +93,13 @@ echo "SID=$SID"
 
 ### Step 2: Push: open events/stream, inject a telegram message, observe per-call notifications
 
-events/stream is a long-lived per-subscription POST returning SSE — see the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
+events/stream is a long-lived per-subscription POST returning SSE. See the discord walkthrough for the full protocol exposition. Telegram's flat payload (chat_id, user, text) wires through the same Stream() helper as discord's nested one; only the Data shape changes.
 
 #### Reproduce on the wire
 
 ```bash
 # events/stream: long-lived POST returning SSE; notifications/events/event frames carry chat_id, user, text
-# (mint $SID via initialize first — see the connect step)
+# (mint $SID via initialize first, see the connect step)
 curl -sN -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":1,"method":"events/stream","params":{"name":"telegram.message"}}'
@@ -107,13 +107,13 @@ curl -sN -X POST http://localhost:8080/mcp \
 
 ### Step 3: Cursorless: open events/stream for telegram.typing, observe cursor:null
 
-Telegram's typing chat-action is ephemeral — no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
+Telegram's typing chat-action is ephemeral: no replay value, no buffer. Same WithoutCursors() story as discord.typing. Wire-shape contract per spec L294: cursorless emits cursor:null, never an empty string or absent key.
 
 #### Reproduce on the wire
 
 ```bash
 # events/stream for a cursorless source: notifications/events/event frames carry cursor:null
-# (mint $SID via initialize first — see the connect step)
+# (mint $SID via initialize first, see the connect step)
 curl -sN -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":2,"method":"events/stream","params":{"name":"telegram.typing"}}'
@@ -123,7 +123,7 @@ curl -sN -X POST http://localhost:8080/mcp \
 
 Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
 
-- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData — consumer reads `ev.Data.Text`, no re-parsing JSON.
+- Receiver[TelegramEventData] decodes the wire envelope's Data field directly into TelegramEventData - consumer reads `ev.Data.Text`, no re-parsing JSON.
 - The only differences from discord: the type parameter and the payload field names.
 - SDK auto-generates a whsec_ secret when SubscribeOptions.Secret is empty (events.GenerateSecret).
 
@@ -132,7 +132,7 @@ Same `Subscription` + `Receiver[Data]` pair as the discord webhook step.
 ```bash
 # events/subscribe in webhook mode; response carries id + refreshBefore but NOT the secret.
 # cursor:null = "from now"; maxAgeMs:300000 bounds replay to 5 min. (follow-up: events/unsubscribe by {name,delivery.url})
-# (mint $SID via initialize first — see the connect step)
+# (mint $SID via initialize first, see the connect step)
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":3,"method":"events/subscribe","params":{"name":"telegram.message","delivery":{"mode":"webhook","url":"http://localhost:9999/hook","secret":"whsec_<client-supplied>"},"cursor":null,"maxAgeMs":300000}}' | jq '.result'
@@ -148,7 +148,7 @@ TELEGRAM_BOT_TOKEN=<your-token> just serve
 
 Bot setup (BotFather token, chat link) is documented in this demo's README.md.
 
-- No typing parallel here — Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).
+- No typing parallel here - Telegram's Bot API doesn't expose user typing events to bots (only the bot can send typing chat actions, not the other way).
 - Discord does have user-typing events; see ../discord/WALKTHROUGH.md for the live-typing demo.
 - --non-interactive mode skips the wait so CI runs aren't slowed.
 
@@ -157,7 +157,7 @@ Bot setup (BotFather token, chat link) is documented in this demo's README.md.
 ```bash
 # Live capture: open events/stream and leave it running; each real Telegram message
 # arrives as a notifications/events/event frame on the SSE response.
-# (server must be in -token mode; mint $SID via initialize first — see the connect step)
+# (server must be in -token mode; mint $SID via initialize first, see the connect step)
 curl -sN -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":4,"method":"events/stream","params":{"name":"telegram.message"}}'

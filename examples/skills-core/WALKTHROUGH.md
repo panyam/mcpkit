@@ -1,13 +1,13 @@
-# MCP Skills — Minimal Shape (SEP-2640, scoped down)
+# MCP Skills, the minimal shape (SEP-2640, scoped down)
 
-The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP's Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify — those are the deferred / extended surface (see examples/skills for the full walkthrough).
+The minimal SEP-2640 shape the WG blessed on 2026-06-30: a skills file served over MCP's Resources primitive plus tool handling, consumed load-on-demand. No archives, no remote sources, no fsnotify. Those are the deferred / extended surface (see examples/skills for the full walkthrough).
 
 ## What you'll learn
 
-- **Choose the client wire mode** — mcpkit's server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.
-- **Read skill://index.json — the discovery catalog** — mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.
-- **Read the commit-helper SKILL.md — the skill file** — A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.
-- **Tool handling — call the tool the skill points at** — This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.
+- **Choose the client wire mode** - mcpkit's server defaults to dual-wire (SEP-2575): one URL answers both the legacy initialize handshake and the server/discover probe. The rest of the walkthrough is identical either way.
+- **Read skill://index.json, the discovery catalog** - mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.
+- **Read the commit-helper SKILL.md, the skill file** - A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.
+- **Tool handling, calling the tool the skill points at** - This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.
 
 ## Flow
 
@@ -22,19 +22,19 @@ sequenceDiagram
     Host->>Server: server/discover (stateless) OR initialize (legacy)
     Server-->>Host: serverInfo + capabilities.extensions.skills
 
-    Note over Host,Server: Step 3: resources/list — each skill file is a skill:// resource
+    Note over Host,Server: Step 3: resources/list, where each skill file is a skill:// resource
     Host->>Server: resources/list
     Server-->>Host: [ skill://index.json, skill://commit-helper/SKILL.md ]
 
-    Note over Host,Server: Step 4: Read skill://index.json — the discovery catalog
+    Note over Host,Server: Step 4: Read skill://index.json, the discovery catalog
     Host->>Server: resources/read uri=skill://index.json
     Server-->>Host: { $schema, skills:[{name,url,digest}] }
 
-    Note over Host,Server: Step 5: Read the commit-helper SKILL.md — the skill file
+    Note over Host,Server: Step 5: Read the commit-helper SKILL.md, the skill file
     Host->>Server: resources/read uri=skill://commit-helper/SKILL.md
     Server-->>Host: frontmatter (name, description) + body
 
-    Note over Host,Server: Step 6: Tool handling — call the tool the skill points at
+    Note over Host,Server: Step 6: Tool handling, calling the tool the skill points at
     Host->>Server: tools/call name=format_commit {type:"feat", scope:"skills", summary:"..."}
     Server-->>Host: feat(skills): ...
 ```
@@ -68,11 +68,11 @@ c := client.NewClient(serverURL+"/mcp",
 if err := c.Connect(); err != nil { /* run: just serve */ }
 ```
 
-### Step 3: resources/list — each skill file is a skill:// resource
+### Step 3: resources/list, where each skill file is a skill:// resource
 
-### Step 4: Read skill://index.json — the discovery catalog
+### Step 4: Read skill://index.json, the discovery catalog
 
-mcpkit generates index.json from the live provider catalog on each cache miss — it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.
+mcpkit generates index.json from the live provider catalog on each cache miss, so it is not a file on disk. Each entry carries a SHA-256 digest over the skill's SKILL.md.
 
 #### Reproduce
 
@@ -80,18 +80,19 @@ mcpkit generates index.json from the live provider catalog on each cache miss �
 body, _ := c.ReadResource(skills.IndexURI)
 var idx skills.Index
 json.Unmarshal([]byte(body), &idx)
-for _, e := range idx.Skills {
-    fmt.Printf("%s digest=%s\n", e.Name, e.Digest)
+entries, _ := sc.ListSkillEntries(ctx)
+for _, e := range entries {
+    fmt.Printf("%s files=%d\n", e.Name(), len(e.Resources.Files))
 }
 ```
 
-### Step 5: Read the commit-helper SKILL.md — the skill file
+### Step 5: Read the commit-helper SKILL.md, the skill file
 
-A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read — never staged to disk, never executed.
+A skill is data: markdown with YAML frontmatter. Its body tells the host which tool to call and how. mcpkit delivers it over resources/read, never staged to disk and never executed.
 
-### Step 6: Tool handling — call the tool the skill points at
+### Step 6: Tool handling, calling the tool the skill points at
 
-This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well — the pattern Paul Withers raised in-channel on 2026-07-01.
+This is the 'tool handling' half of the minimal shape. The skill guided the host to format_commit; the host calls it and returns the result. Skills make ordinary tools easier to use well, the pattern Paul Withers raised in-channel on 2026-07-01.
 
 #### Reproduce
 

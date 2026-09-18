@@ -66,13 +66,13 @@ func serve() {
 	log.Printf("Connect: http://localhost%s/mcp", *addr)
 	log.Printf("")
 	log.Printf("Tools:")
-	log.Printf("  greet              — sync-only")
-	log.Printf("  slow_compute       — optional task (server-directed)")
-	log.Printf("  failing_job        — required task (tool error → completed + isError)")
-	log.Printf("  confirm_delete     — required task (input_required → tasks/update → completed)")
-	log.Printf("  multi_input        — required task (two simultaneous inputRequests for partial fulfillment)")
-	log.Printf("  protocol_error_job — required task (protocol error → failed + error)")
-	log.Printf("  external_job       — required task (TaskCallbacks proxy)")
+	log.Printf("  greet              - sync-only")
+	log.Printf("  slow_compute       - optional task (server-directed)")
+	log.Printf("  failing_job        - required task (tool error → completed + isError)")
+	log.Printf("  confirm_delete     - required task (input_required → tasks/update → completed)")
+	log.Printf("  multi_input        - required task (two simultaneous inputRequests for partial fulfillment)")
+	log.Printf("  protocol_error_job - required task (protocol error → failed + error)")
+	log.Printf("  external_job       - required task (TaskCallbacks proxy)")
 
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "tasks-v2-demo",

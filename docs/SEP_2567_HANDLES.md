@@ -1,4 +1,4 @@
-# SEP-2567 — Explicit State Handles in mcpkit
+# SEP-2567 explicit state handles in mcpkit
 
 [SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567) ("Sessionless MCP via Explicit State Handles") is the SEP-2575 stateless wire's *application-layer* counterpart: the wire removes session machinery; SEP-2567 explains how to model stateful flows *without* sessions, using explicit server-minted handles threaded through tool parameters.
 
@@ -71,9 +71,9 @@ func NewHandleStore[T any](opts ...HandleStoreOption) HandleStore[T]  // default
 | `WithHandleGCInterval(d)` | `0` | Background sweep of expired entries; `0` = lazy-only |
 
 TTL nuances:
-- `ttl > 0` — per-handle TTL override.
-- `ttl == 0` — fall back to the store's `WithHandleDefaultTTL`.
-- `ttl < 0` — force "never expires" even when a non-zero default is set.
+- `ttl > 0` - per-handle TTL override.
+- `ttl == 0` - fall back to the store's `WithHandleDefaultTTL`.
+- `ttl < 0` - force "never expires" even when a non-zero default is set.
 
 IDs are 128-bit crypto-random base32 (26 chars), prefixed if configured. Collision-resistant for any sane store size.
 
@@ -81,11 +81,11 @@ IDs are 128-bit crypto-random base32 (26 chars), prefixed if configured. Collisi
 
 | Concern | SEP-2575 (wire) | SEP-2567 (application) |
 |---|---|---|
-| Per-request `_meta` envelope | mandatory | irrelevant — handles ride in tool args |
+| Per-request `_meta` envelope | mandatory | irrelevant - handles ride in tool args |
 | Sessions / `Mcp-Session-Id` | gone | gone (handles replace) |
-| `tools/list` / `prompts/list` | MUST NOT depend on session state | trivially satisfied — handles aren't in those endpoints |
+| `tools/list` / `prompts/list` | MUST NOT depend on session state | trivially satisfied - handles aren't in those endpoints |
 | Cross-call state | not handled (lost) | use a handle |
-| Compose with SEP-2549 list TTLs | yes — `_meta` envelope is per-request, lists cacheable at `(deployment, auth)` granularity | yes — handle stores stay out of list endpoints, so lists remain cacheable |
+| Compose with SEP-2549 list TTLs | yes - `_meta` envelope is per-request, lists cacheable at `(deployment, auth)` granularity | yes - handle stores stay out of list endpoints, so lists remain cacheable |
 
 A stateless mcpkit server using `HandleStore[T]` for cart-style tools is the canonical post-SEP-2575 server: zero session storage in the process, every tool call is independent, but tools that need cross-call state thread an opaque handle through arguments, and the wire shape stays cacheable.
 

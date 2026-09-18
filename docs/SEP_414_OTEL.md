@@ -12,17 +12,17 @@ real `TracerProvider`, and where the remaining work lives on
 
 Phase 1 lands the dependency-free contract surface in `core/`:
 
-- `core.TracerProvider`, `core.Span`, `core.Attribute` — the minimal
-  tracing seam mcpkit components consume. The default,
+- `core.TracerProvider`, `core.Span`, `core.Attribute` - the minimal
+  tracing interface mcpkit components consume. The default,
   `core.NoopTracerProvider`, performs no allocation and emits no spans.
-- `core.TraceContext` — the W3C `traceparent` / `tracestate` pair as
+- `core.TraceContext` - the W3C `traceparent` / `tracestate` pair as
   propagated on the MCP wire.
-- `core.ExtractTraceContext` / `core.InjectTraceContext` — read/write
+- `core.ExtractTraceContext` / `core.InjectTraceContext` - read/write
   W3C Trace Context from/to an MCP `_meta` map, with strict
   W3C-version-00 validation on extract.
-- `core.WithTraceContext` / `core.TraceContextFromContext` —
+- `core.WithTraceContext` / `core.TraceContextFromContext`:
   `context.Context` plumbing.
-- `core.BaseContext.TraceContext()` — accessor exposed on every typed
+- `core.BaseContext.TraceContext()` - accessor exposed on every typed
   handler context (`ToolContext`, `PromptContext`, `ResourceContext`,
   `MethodContext`) so handlers can read the active trace context
   without import gymnastics.
@@ -41,7 +41,7 @@ written and reviewed against a stable contract.
 
 Phase 2 wires the server-side propagation surface:
 
-- `server.WithTracerProvider(tp core.TracerProvider) Option` — install a
+- `server.WithTracerProvider(tp core.TracerProvider) Option` - install a
   tracer. Default and `core.NoopTracerProvider{}` both skip the trace
   middleware entirely so the zero-overhead path stays untouched.
 - An internal `traceMiddleware` wraps every JSON-RPC dispatch in an
@@ -123,11 +123,11 @@ Behavior:
 
 Verification:
 
-- `just test-otel` — adapter unit tests run against the real OTel SDK
+- `just test-otel` - adapter unit tests run against the real OTel SDK
   in-memory exporter; reads back `sdktrace.ReadOnlySpan` shapes.
-- `just test-otel-example` — smoke test for `examples/otel/stdout/`
+- `just test-otel-example` - smoke test for `examples/otel/stdout/`
   asserting the exporter actually prints the expected span set.
-- `go run examples/otel/stdout/...` — runnable demo, prints spans as
+- `go run examples/otel/stdout/...` - runnable demo, prints spans as
   JSON on stdout. No collector required.
 
 See [`ext/otel/README.md`](../ext/otel/README.md) for the API reference
@@ -138,7 +138,7 @@ for the walkthrough.
 
 Phase 3 lands the symmetric client-side surface:
 
-- `client.WithTracerProvider(tp core.TracerProvider)` — install a
+- `client.WithTracerProvider(tp core.TracerProvider)` - install a
   tracer. Default and `core.NoopTracerProvider{}` both skip the install
   (zero overhead on the unconfigured path).
 - Outbound `Client.Call` is wrapped in a span via a `ClientMiddleware`
@@ -181,12 +181,12 @@ adapter (PR 652) is the in-tree implementation.
 
 Tracked phases on [issue 312][issue]:
 
-- **P5 — polished examples.** `examples/otel/jaeger/` +
+- **P5 - polished examples.** `examples/otel/jaeger/` +
   `examples/otel/otlp/` end-to-end walkthroughs with collector and UI
   screenshots. The minimal `examples/otel/stdout/` already covers
   smoke-verification.
-- **Conformance suite `testconf-otel`** — issue 429.
-- **P6 — tracing across surfaces.** Umbrella [issue 663][p6]. See below.
+- **Conformance suite `testconf-otel`** - issue 429.
+- **P6 - tracing across surfaces.** Umbrella [issue 663][p6]. See below.
 
 ## Adjacent: W3C Baggage propagation + HTTP forward helper (issue 739)
 
@@ -211,11 +211,11 @@ adds a configurable `headerGroups` API on top of this same
 foundation). Tracking the upstream spec on issue 739; the W3C
 standards themselves are stable and ship today.
 
-## Adjacent: metrics seam (issue 7)
+## Adjacent: the metrics interface (issue 7)
 
-The `core.MeterProvider` seam mirrors the SEP-414 `core.TracerProvider`
+The `core.MeterProvider` interface mirrors the SEP-414 `core.TracerProvider`
 shape for metrics. Metrics don't cross the wire, so no SEP, but the
-library still needs a dependency-free seam so the base module can emit
+library still needs a dependency-free interface so the base module can emit
 measurements without dragging the OTel metrics SDK in. Wire it via
 `server.WithMeterProvider`; the OTel adapter lives at
 `mcpotel.NewMeterProvider(otelMP)`. Canonical instruments emitted from
@@ -226,9 +226,9 @@ Grafana's metric → trace pivot works without per-call configuration.
 See `ext/otel/README.md` § Metrics for the wiring snippet and
 `server/metrics_middleware.go` for the dispatch-side instrumentation.
 
-### Agent Runner metrics — landed (issue 1023)
+### Agent Runner metrics, landed (issue 1023)
 
-The `agent.Runner` emits through the same `core.MeterProvider` seam, the
+The `agent.Runner` emits through the same `core.MeterProvider`, the
 metrics sibling of its SEP-414 spans. `RunnerConfig.MeterProvider` opts
 it in; nil or `core.NoopMeterProvider` is zero overhead. Instruments are
 built once in `NewRunner` (`metrics.go`) and recorded at the same points the
@@ -238,8 +238,8 @@ spans are (`runner.go`): turn end and each tool call. Those files live in
 | Instrument | Kind | Attributes | Recorded |
 |---|---|---|---|
 | `agent.turns` | counter | `agent.finish_reason` | one per completed turn |
-| `agent.turn.duration` | histogram (`s`) | — | turn wall-clock |
-| `agent.steps` | counter | — | model round-trips, at turn end |
+| `agent.turn.duration` | histogram (`s`) | - | turn wall-clock |
+| `agent.steps` | counter | - | model round-trips, at turn end |
 | `agent.tokens` | counter | `direction` (`input`/`output`) | tokens per turn |
 | `agent.tool.calls` | counter | `tool`, `status` | one per tool call |
 | `agent.tool.duration` | histogram (`s`) | `tool` | tool-call wall-clock |
@@ -255,14 +255,14 @@ main Runner and every sub-agent persona; agentchat builds it from the
 same `--exporter`/`--otlp-endpoint` decision as the tracer and logger
 (chakra's `surfaces/chat/telemetry_setup_meter.go`, the meter sibling of
 `SetupTelemetry`/`SetupLogs`). The OTLP path lands in Mimir; the
-`mcpkit — agent` Grafana dashboard
+`mcpkit agent` Grafana dashboard
 (`docker/observability/grafana/provisioning/dashboards/files/mcpkit-agent.json`)
 charts turn rate, latency, token throughput, and tool failure ratio out
 of the box. Prometheus renames apply the usual OTel conventions: dots to
 underscores, a `_total` suffix on counters, and the unit suffix on
 histograms (`agent_turn_duration_seconds_bucket`).
 
-## P6 — tracing across surfaces (auth / tasks / apps)
+## P6 tracing across surfaces (auth / tasks / apps)
 
 P1–P5 instrumented the **dispatch spine**: every JSON-RPC method gets one
 inbound span plus W3C wire propagation, for free. P6 extends tracing into
@@ -272,8 +272,8 @@ the work each surface does that the single dispatch span doesn't cover.
 
 | Layer | Owner | Status |
 |---|---|---|
-| Wire contract (the `_meta` keys, format, precedence, SEP-2028 bridge) | SEP-414 — normative, for cross-SDK interop | complete |
-| Local span richness (count, names, attributes, links) | the SDK — latitude; invisible to the peer | mcpkit-completeness work (P6) |
+| Wire contract (the `_meta` keys, format, precedence, SEP-2028 bridge) | SEP-414 - normative, for cross-SDK interop | complete |
+| Local span richness (count, names, attributes, links) | the SDK - latitude; invisible to the peer | mcpkit-completeness work (P6) |
 | Adjacent-transport hops (events bus, apps Bridge) | mostly the SDK; the Apps Bridge *may* belong in the Apps spec | open |
 
 Span richness never crosses the wire, so a SEP can't (and shouldn't)
@@ -284,15 +284,15 @@ spec**, not SEP-414.
 
 Two categories of "work the spine misses":
 
-- **(a) escapes the span** — async / out-of-band on a non-MCP transport:
+- **(a) escapes the span** - async / out-of-band on a non-MCP transport:
   tasks background execution ([#659][p6-tasks]), events cross-replica bus
   ([#642][caps] / [#629][bus]).
-- **(b) inside the span, not broken out / enriched** — auth validation
+- **(b) inside the span, not broken out / enriched** - auth validation
   sub-spans + principal attributes ([#658][p6-auth]).
 
 The two categories map cleanly onto the contract:
 
-- **New propagation surfaces need no new contract** — `core.ExtractTraceContext`
+- **New propagation surfaces need no new contract** - `core.ExtractTraceContext`
   / `InjectTraceContext` already operate on any `map[string]any`, so the
   apps Bridge ([#660][p6-apps]) and the events bus reuse them verbatim.
 - **Enrichment surfaces reveal the only two P1 gaps**, neither of which the
@@ -300,7 +300,7 @@ The two categories map cleanly onto the contract:
   unblocks auth attributes) and **span links** on `core.Span` ([#662][p6-links];
   unblocks task lifecycle).
 
-### Active-span accessor — landed (issue 661)
+### Active-span accessor, landed (issue 661)
 
 The first contract gap is closed: `core.SpanFromContext(ctx) core.Span`
 returns the currently-active mcpkit Span (or a no-op Span when none is
@@ -333,7 +333,7 @@ correctly whether or not a TracerProvider is configured. Issue 658
 (`ext/auth` attributes) and any future "enrich the active span" use case
 consume this surface without crossing the `core/`-only boundary.
 
-### Span links — landed (issue 662)
+### Span links, landed (issue 662)
 
 The second contract gap is closed: span links are now expressible
 dep-free, with the OTel-aligned shape that includes per-link
@@ -381,7 +381,7 @@ Unblocks issue 659 (`ext/tasks` task lifecycle linking, landed in
 PR 719) and the detached edge of issue 664 (server outbound
 reverse-call spans linked to the originating client request).
 
-### New-root-span marker — landed (issue 659; PR 719)
+### New-root-span marker, landed (issue 659; PR 719)
 
 Third small contract helper, added alongside the `ext/tasks` consumer
 work: `core.WithNewRootSpan(ctx) Context` and
@@ -414,7 +414,7 @@ The spawned span starts under whatever parent ctx happened to carry,
 which degrades to the same trace tree the unmarked path would
 produce. Best-effort by design.
 
-### `mcpotel.NewTracerProvider` helper — landed (issue 674)
+### `mcpotel.NewTracerProvider` helper, landed (issue 674)
 
 Examples and surface integrations no longer have to import
 `go.opentelemetry.io/otel/sdk/resource` + `.../semconv` just to set a
@@ -431,11 +431,11 @@ mcpotel.NewProvider(otelTP)
 
 Options today:
 
-- `mcpotel.WithServiceName(name)` — bakes the value into an OTel
+- `mcpotel.WithServiceName(name)` - bakes the value into an OTel
   `Resource` with `semconv.ServiceName(...)`. Empty name is a no-op
   so defensive callers can pass through config values without
   branching.
-- `mcpotel.WithSyncer()` — switches the default Batcher to a sync
+- `mcpotel.WithSyncer()` - switches the default Batcher to a sync
   span processor. Right for teaching demos and tests; production
   servers should stay on the batched default and handle SIGTERM with
   explicit `ForceFlush` + `Shutdown`.
@@ -456,7 +456,7 @@ accepts a `core.TracerProvider` and instruments its own work, depending on
 the **`core` abstraction only**, never `ext/otel`. Same composition shape
 `ext/events` uses for `core.Claims`. `Noop` / nil = zero overhead.
 
-### `examples/common/otel.SetupTelemetry` — landed (issue 666; PR 684 + PR 689)
+### `examples/common/otel.SetupTelemetry`, landed (issue 666; PR 684 + PR 689)
 
 The example layer now ships a uniform, env-gated observability
 surface so every example presents the same `--exporter` / `--otlp-endpoint`
@@ -481,7 +481,7 @@ The `EXPORTER` selector is four-valued:
 | `"otlp"` | TCP-probe the endpoint; on success, `otlptracegrpc` exporter. On failure: Noop **with warning log**. |
 | `"auto"` | TCP-probe the endpoint; on success, `otlptracegrpc` exporter. On failure: Noop **silently** (operator opted into maybe-on-maybe-off semantics). |
 
-Three load-bearing details:
+Three details that carry the design:
 
 - **TCP probe gates OTLP.** `otlptracegrpc.New` is lazy and returns a
   non-nil exporter even when the endpoint refuses; without the
@@ -518,7 +518,7 @@ tasks, tasks-v2); PR 689 followed with the same uniform wiring across
 9 walkthroughs. Pattern documented in `examples/CONVENTIONS.md`
 §Telemetry wiring.
 
-### `ext/auth` JWT validator instrumentation — landed (issue 658; PR 694)
+### `ext/auth` JWT validator instrumentation, landed (issue 658; PR 694)
 
 First P6 surface child to land on the spine. `JWTConfig.TracerProvider core.TracerProvider` opts the validator into instrumentation:
 
@@ -527,13 +527,13 @@ First P6 surface child to land on the spine. `JWTConfig.TracerProvider core.Trac
 
 ext/auth depends on `core.TracerProvider` only for its own spans, with no compile-time dependency on `ext/otel`. Nil and `core.NoopTracerProvider{}` both produce zero spans, zero attributes, zero allocation. Documented in `ext/auth/docs/DESIGN.md` § Tracing.
 
-### `oneauth` v0.1.17 wiring — landed (PR 699)
+### `oneauth` v0.1.17 wiring, landed (PR 699)
 
 Threads oneauth's own internal spans through ext/auth so an end-to-end auth trace shows the inside of the JWKS call too. Three layered helpers enable this without abstraction leakage:
 
-- `ext/otel.Provider.OTelTracerProvider() trace.TracerProvider` — Provider stashes the underlying OTel TP and exposes it. Use when a downstream library needs the OTel SDK type directly.
-- `examples/common/otel.UnderlyingOTelTP(tp core.TracerProvider) trace.TracerProvider` — type-asserts to `*mcpotel.Provider`; returns nil for Noop or non-mcpotel providers (oneauth's options no-op cleanly on nil).
-- `ext/auth.JWTConfig.OneauthTracerProvider trace.TracerProvider` — when set, threaded via `keys.WithTracerProvider` on the JWKSKeyStore so oneauth's internal HTTP / parsing / signature-verify work emits spans on the same OTel pipeline.
+- `ext/otel.Provider.OTelTracerProvider() trace.TracerProvider` - Provider stashes the underlying OTel TP and exposes it. Use when a downstream library needs the OTel SDK type directly.
+- `examples/common/otel.UnderlyingOTelTP(tp core.TracerProvider) trace.TracerProvider` - type-asserts to `*mcpotel.Provider`; returns nil for Noop or non-mcpotel providers (oneauth's options no-op cleanly on nil).
+- `ext/auth.JWTConfig.OneauthTracerProvider trace.TracerProvider` - when set, threaded via `keys.WithTracerProvider` on the JWKSKeyStore so oneauth's internal HTTP / parsing / signature-verify work emits spans on the same OTel pipeline.
 
 End-to-end trace shape (when both `TracerProvider` AND `OneauthTracerProvider` are wired):
 
@@ -548,7 +548,7 @@ client.tools/call          (mcpkit/client)
 
 Tracked in panyam/oneauth#254 (closed in oneauth v0.1.14; mcpkit ext/auth on v0.1.17 after a CI fix that swept all 8 oneauth-using modules in lock-step). Adopter pattern shipped in `examples/auth/common/setup.go` via `WithMCPTracerProvider` / `WithOneauthTracerProvider` variadic options on `Env.NewValidator`. Demo wires both in `examples/auth/main.go`.
 
-### Apps Bridge trace context relay — landed (issue 660; PR 702)
+### Apps Bridge trace context relay, landed (issue 660; PR 702)
 
 Bidirectional W3C trace context propagation across the iframe ↔ host postMessage boundary so a browser-side trace (browser OTel SDK / RUM / hard-coded demo traceparent) stitches with the backend tool-call span. Off by default on both sides; adopters opt in independently per side.
 
@@ -584,7 +584,7 @@ Demo wiring in `examples/apps/vanilla/dice.html` (per-page-load random tracepare
 
 **Open spec question:** the Apps Bridge is a non-MCP transport; whether the relay belongs in the Apps spec for cross-SDK interop is open. mcpkit ships the relay; upstream note filed only if working-group interest surfaces.
 
-### Events bus trace context relay — landed (issue 683; PR 712 + PR 714)
+### Events bus trace context relay, landed (issue 683; PR 712 + PR 714)
 
 W3C Trace Context propagates across every gate in the events lifecycle so a yield on replica A and a downstream webhook delivery (or a poll-side replay on replica B) appear in Tempo as one stitched trace. Sister to the Apps Bridge relay, the same "non-MCP propagation hop" pattern across a different boundary topology.
 
@@ -595,13 +595,13 @@ W3C Trace Context propagates across every gate in the events lifecycle so a yiel
 | 1. `yield(ctx, data)` | `event.Meta.traceparent` (persistent) + `ctx` (in-process) | `YieldingSource.yield` stamps `Meta` from `ctx`; emit hook receives the same `ctx` |
 | 2. emit hook → `Emitter.Emit(ctx, event)` | `ctx` | `Register` passes the hook's `ctx` straight to the configured Emitter |
 | 3. `WebhookRegistry.Deliver(ctx, event)` → outbound HTTP | HTTP `traceparent` header | `deliver()` extracts from `ctx` (preferred) or `event.Meta` (fallback for replayed events), stamps the header before `client.Do` |
-| 4. `HTTPSource.serveInject` (receiving replica) | inbound HTTP header → `ctx` → `event.Meta` | Handler reads the `traceparent` header, builds `core.TraceContext`, attaches via `core.WithTraceContext`, calls `s.yield(ctx, data)` — closes the round-trip |
+| 4. `HTTPSource.serveInject` (receiving replica) | inbound HTTP header → `ctx` → `event.Meta` | Handler reads the `traceparent` header, builds `core.TraceContext`, attaches via `core.WithTraceContext`, calls `s.yield(ctx, data)` - closes the round-trip |
 
 **Caller-preserves rule.** If `SetMetaFunc` pre-stamps `event.Meta.traceparent`, the yield-time auto-injection is skipped, uniform with `core.InjectTraceContextIntoParams` and the TS-side Apps Bridge relay.
 
 **`events.webhook.deliver` span (PR 714).** `WebhookRegistry.WithWebhookTracerProvider(tp)` opts the registry into emitting a span around each retry loop. Attributes: `webhook.target.id`, `webhook.url`, `mcp.event.name`, `http.method`, `http.response.status_code`, `webhook.retry.attempts`. `RecordError` fires on retries-exhausted with the categorical bucket. Nil = Noop, zero overhead. **Live-verified** against the LGTM stack: span landed with all attributes set, 4 attempts counted, `STATUS_CODE_ERROR` on the failure path, duration matched the 0.5s + 1s + 2s backoff schedule exactly.
 
-**`Server.Broadcast(ctx, ...)` (PR 714 signature; PR 722 body).** PR 714 widened the signature; PR 722 (issue 715) made the body actually consume ctx. When ctx carries a non-zero `core.TraceContext`, the inbound traceparent / tracestate are injected into notification params under `_meta` (via `core.InjectTraceContextIntoParams`) before fan-out. Existing caller-set `_meta.traceparent` wins. Per-transport broadcast callbacks gained ctx as a forward-compat seam, unused inside today because the per-request `trace_middleware.go` wrap (`core.WrapSessionNotifyFunc`) targets `sc.notify` (the handler-facing notify on a per-request `SessionCtx`), not the transport-level base notifyFunc dispatchers expose to broadcasts. Injecting once at the Server level keeps tracing concerns out of the transport-level loops while still stitching SSE-pushed notifications into the originating trace.
+**`Server.Broadcast(ctx, ...)` (PR 714 signature; PR 722 body).** PR 714 widened the signature; PR 722 (issue 715) made the body actually consume ctx. When ctx carries a non-zero `core.TraceContext`, the inbound traceparent / tracestate are injected into notification params under `_meta` (via `core.InjectTraceContextIntoParams`) before fan-out. Existing caller-set `_meta.traceparent` wins. Per-transport broadcast callbacks gained ctx as a forward-compatible hook, unused inside today because the per-request `trace_middleware.go` wrap (`core.WrapSessionNotifyFunc`) targets `sc.notify` (the handler-facing notify on a per-request `SessionCtx`), not the transport-level base notifyFunc dispatchers expose to broadcasts. Injecting once at the Server level keeps tracing concerns out of the transport-level loops while still stitching SSE-pushed notifications into the originating trace.
 
 End-to-end trace shape (multi-replica with webhook fanout):
 
@@ -617,7 +617,7 @@ yield(ctx, data) on replica A
 
 Demo wiring lives in `examples/whole-enchilada/events/event-server/main.go` (`events.WithWebhookTracerProvider(tp)` threaded against the existing `commonotel.SetupTelemetry` TP). Adopter sweep (PR 714) updated `examples/events/discord` and `examples/events/telegram` to the new `yield(ctx, ...)` / `SetMetaFunc(ctx, ...)` signatures. Cross-replica peer-fanout Emitter (Redis pubsub) tracked on panyam/mcpkit#634 + panyam/mcpkit#639 with concrete design comments added.
 
-### Events fanout span emission — landed (issue 724; PR 730)
+### Events fanout span emission, landed (issue 724; PR 730)
 
 Companion to the bus-relay work above. While 683/712/714 handled *propagation* (trace context flowing across the lifecycle gates), 724 handles *emission* on the per-yield fanout itself. Adopters opt in via `events.Config.TracerProvider core.TracerProvider`. Register threads it onto every Source implementing the new `TracerProviderInstaller` interface (`YieldingSource` does; TypedSource authors can implement it identically).
 
@@ -641,9 +641,9 @@ events.Register(events.Config{
 | `events.subscribers.dropped_by_match` | count where Match returned false |
 | `events.transforms.applied` | count where Transform actually modified the event |
 
-**Design call locked in**: one span per yield, NOT per subscriber. Option (a) from the original issue body (`events.match` / `events.transform` per Match/Transform invocation) was deliberately NOT shipped, since it would scale linearly with subs × events and need sampling design. The aggregate counts are the diagnosable shape; operators see "this yield went to 10 subs, 7 dropped by Match" without span-volume risk. If per-subscriber detail ever becomes load-bearing, option (a) can land as a separate opt-in on the same TracerProvider seam.
+**Design call locked in**: one span per yield, NOT per subscriber. Option (a) from the original issue body (`events.match` / `events.transform` per Match/Transform invocation) was deliberately NOT shipped, since it would scale linearly with subs × events and need sampling design. The aggregate counts are the diagnosable shape; operators see "this yield went to 10 subs, 7 dropped by Match" without span-volume risk. If per-subscriber detail ever becomes necessary, option (a) can land as a separate opt-in on the same TracerProvider interface.
 
-**Two load-bearing optimizations** on the hot path:
+**Two optimizations that earn their place** on the hot path:
 
 - **Zero-subscriber guard.** `len(subs) == 0` skips span emission entirely. Idle sources (feeders with no subscribers registered yet) are dominant, and emitting empty fanout spans every feeder tick would flood Tempo with noise.
 - **Noop short-circuit.** `tp.(core.NoopTracerProvider)` type-assertion avoids the StartSpan call entirely on the unconfigured path. Per-yield cost on the unconfigured path is one type-assertion.
@@ -656,17 +656,17 @@ End-to-end trace shape:
 
 ```
 tools/call (dispatch, SEP-414 P2)
-└─ events.fanout (PR 730 — one span per yield, parented here)
+└─ events.fanout (PR 730, one span per yield, parented here)
    ├─ events.subscribers.total = 10
    ├─ events.subscribers.delivered = 3
    ├─ events.subscribers.dropped_by_match = 7
    └─ events.transforms.applied = 3
-   └─ events.webhook.deliver (PR 714 — per webhook target, sibling span via existing seam)
+   └─ events.webhook.deliver (PR 714, per webhook target, sibling span via existing seam)
 ```
 
 Doc: `experimental/ext/events/README.md` § Tracing across the events bus + `examples/events/kitchen-sink/README.md` § Tracing.
 
-### `ext/tasks` task lifecycle spans — landed (issue 659; PR 719)
+### `ext/tasks` task lifecycle spans, landed (issue 659; PR 719)
 
 Final P6 surface child. A `tools/call` that creates a task spawns a background goroutine whose work outlives the create span. Parent-child doesn't fit, so the tasks runtime uses **span links** instead. The dispatch span for the `tools/call` ends in a few ms; `task.execute` runs as a NEW root trace (potentially for hours) with a Link back to the create span. Every later `tasks/get` / `tasks/update` / `tasks/cancel` dispatch span gets an `AddLink` back to the same create span so a backend can pivot from any poll into the whole lifecycle.
 
@@ -683,7 +683,7 @@ tasks.Register(tasks.Config{
 
 | Span | Lifecycle | Parent | Links | Attributes |
 |---|---|---|---|---|
-| `tools/call` (dispatch) | request scope | inbound `_meta.traceparent` | — | SEP-414 P2 dispatch attrs |
+| `tools/call` (dispatch) | request scope | inbound `_meta.traceparent` | - | SEP-414 P2 dispatch attrs |
 | `task.execute` | goroutine lifetime | **none** (new root via `WithNewRootSpan`) | → `tools/call` create span | `mcp.task.id`, `mcp.task.status` (stamped at End) |
 | `tasks/get` / `tasks/update` / `tasks/cancel` | request scope | inbound `_meta.traceparent` | → `tools/call` create span (AddLink) | SEP-414 P2 dispatch attrs |
 
@@ -707,7 +707,7 @@ tasks/cancel (dispatch, link → original tools/call create span)
 
 End-to-end materialization is proven by `ext/otel/provider_test.go`'s coverage of the `WithNewRootSpan` scrub + `StartSpanLinked` + `AddLink` paths against a real OTel SDK exporter. `ext/tasks/trace_test.go` uses a recording fake `core.TracerProvider` + `core.LinkedTracerProvider` to prove ext/tasks calls the contract correctly without dragging ext/otel into its module graph.
 
-### MRTR multi-round trace stitching — landed (issue 682; PR forthcoming)
+### MRTR multi-round trace stitching, landed (issue 682; PR forthcoming)
 
 SEP-2322 MRTR splits one logical operation across N JSON-RPC dispatches (round 1: server returns `InputRequiredResult` → client gathers input → round 2: client retries with `inputResponses`). Each round's `tools/call` mints its own span on each side, so without intervention an MRTR operation produces N unrelated traces, so an operator looking at the final ToolResult's trace cannot navigate to the input-gathering work that produced it.
 
@@ -736,24 +736,24 @@ The **star semantic** means rounds 2, 3, 4… all link back to round 1, NOT the 
 
 **Considered alternatives**:
 
-- **Embed traceparent in `requestState`** — works, but `requestState` was designed as opaque from the client's perspective. Baking tracing semantics into it muddies the contract.
-- **Continue an outer span across rounds on the client side** — simpler (no wire change), but the outer span's duration would include user-paced gather-input time, which can be minutes. Distorts span duration semantics. Rejected.
+- **Embed traceparent in `requestState`** - works, but `requestState` was designed as opaque from the client's perspective. Baking tracing semantics into it muddies the contract.
+- **Continue an outer span across rounds on the client side** - simpler (no wire change), but the outer span's duration would include user-paced gather-input time, which can be minutes. Distorts span duration semantics. Rejected.
 
 **Spec engagement TBD**: this lands as mcpkit-internal first; the field name + semantic could be a candidate for upstream MCP WG standardization for cross-SDK interop. See the PR description for the working-group post draft.
 
 End-to-end correctness proof: `ext/otel/mrtr_tracelink_e2e_test.go` drives a real `CallToolWithInputs` against a real OTel-SDK-backed server + client, then asserts the recorded round-2 server span has an OTel Link whose TraceID matches round-1's.
 
-### Skills observability — landed (issue 748; PR forthcoming)
+### Skills observability, landed (issue 748; PR forthcoming)
 
 Tool calls have natural telemetry: every `tools/call` is one wire event → one server-side dispatch span. Skills (SEP-2640) don't. The host fetches a manifest once via `resources/read`, caches it client-side, then **activates** it N times invisibly. Without intervention, post-cache activation is unobservable to either side.
 
 Issue 748 closes the gap in two layers.
 
-**Layer 1 — server dispatch span enrichment.** `server/trace_middleware.go` now stamps the `resources/read` span with `mcp.resource.uri` (always, for any URI) plus `mcp.skill.uri` / `mcp.skill.path` / `mcp.skill.file` when the URI uses the `skill://` scheme. Mirrors the existing `tools/call → mcp.tool.name` pattern. Server-side dashboards can now chart fetch volume + error rate per skill.
+**Layer 1, server dispatch span enrichment.** `server/trace_middleware.go` now stamps the `resources/read` span with `mcp.resource.uri` (always, for any URI) plus `mcp.skill.uri` / `mcp.skill.path` / `mcp.skill.file` when the URI uses the `skill://` scheme. Mirrors the existing `tools/call → mcp.tool.name` pattern. Server-side dashboards can now chart fetch volume + error rate per skill.
 
 `mcp.skill.path` and `mcp.skill.file` only populate for SEP-2640 **manifest URIs** (terminal `/SKILL.md`) where the path/file boundary is unambiguous from the URI alone. Non-manifest URIs (e.g. `skill://pdf-processing/references/FORMS.md`) surface as `mcp.skill.uri` only. SEP-2640 documents that the boundary in those cases requires external knowledge from the discovery index or a prior manifest read.
 
-**Layer 2 — client-side `ext/skills.Client` instrumentation.** `NewClient(mcp, opts...)` is variadic; new `WithTracerProvider(tp)` option wraps the read-path methods in spans:
+**Layer 2, client-side `ext/skills.Client` instrumentation.** `NewClient(mcp, opts...)` is variadic; new `WithTracerProvider(tp)` option wraps the read-path methods in spans:
 
 | Method | Span name | Attributes |
 |---|---|---|
@@ -764,7 +764,7 @@ Issue 748 closes the gap in two layers.
 
 Stitching is automatic: the client read span runs inside ctx that already carries `_meta.traceparent` from the existing W3C trace context propagation (PR 644 / PR 649 / PR 652), so the server-side dispatch span (now enriched per Layer 1) lands as a child of the client wrapping span in the same trace.
 
-**The activation hook — purely SDK-side, no wire change.** `Client.Activate(ctx, uri, opts...) ActivationEvent` is the answer to the "skill used" telemetry the wire can't capture. Hosts call it at the point in the agent loop where the skill enters model context. Side effects:
+**The activation hook is purely SDK-side, with no wire change.** `Client.Activate(ctx, uri, opts...) ActivationEvent` is the answer to the "skill used" telemetry the wire can't capture. Hosts call it at the point in the agent loop where the skill enters model context. Side effects:
 
 - Emits an instant `skills.activate` span (Start + End back-to-back, since activation is point-in-time rather than a duration) carrying `mcp.skill.uri`, `mcp.skill.path` (when the URI parses as a manifest URI), and `mcp.skill.activation.reason` when `WithReason(...)` is supplied.
 - Invokes the optional `WithActivationHook(fn)` callback synchronously, so non-OTel hosts can feed their own telemetry pipeline (structured logging, internal counters, alternate tracing) without configuring a TracerProvider.
@@ -774,25 +774,25 @@ Stitching is automatic: the client read span runs inside ctx that already carrie
 
 **Considered alternatives**:
 
-- **Wire-level `notifications/...skills/activated`** — a cross-process notification carrying `{uri, digest, reason, _meta.traceparent}` so the server can record activation events from connected clients. Tractable but cross-cuts SEP-2640 spec territory and requires WG engagement before minting the method name. Tracked as issue 749, a separable opt-in extension on `ext/skills` that can ride atop `Client.Activate` without breaking callers when (if) the upstream method name lands.
-- **Provider-side activation telemetry** — N/A. The provider handles resource reads; activation is a client/host concept.
-- **Activation counter on the issue 735 MeterProvider seam** — useful follow-up. The TracerProvider half ships in 748; counter wiring can land cleanly in a small follow-up PR.
+- **Wire-level `notifications/...skills/activated`** - a cross-process notification carrying `{uri, digest, reason, _meta.traceparent}` so the server can record activation events from connected clients. Tractable but cross-cuts SEP-2640 spec territory and requires WG engagement before minting the method name. Tracked as issue 749, a separable opt-in extension on `ext/skills` that can ride atop `Client.Activate` without breaking callers when (if) the upstream method name lands.
+- **Provider-side activation telemetry** - N/A. The provider handles resource reads; activation is a client/host concept.
+- **Activation counter on the issue 735 MeterProvider interface** - useful follow-up. The TracerProvider half ships in 748; counter wiring can land cleanly in a small follow-up PR.
 
 Coverage:
 
-- `server/trace_middleware_test.go` — three tests pin Layer 1: skill manifest URI emits all four attrs; non-skill URI emits `mcp.resource.uri` only; non-manifest skill URI emits `mcp.skill.uri` only.
-- `ext/skills/client_trace_test.go` — eight tests pin Layer 2: each wrapped method emits the right span + attrs; `Activate` fires hook + span; `Activate` omits the reason attr when not supplied; hook fires independently of tracer install; zero-overhead path (no `WithTracerProvider`) emits no observable spans.
+- `server/trace_middleware_test.go` - three tests pin Layer 1: skill manifest URI emits all four attrs; non-skill URI emits `mcp.resource.uri` only; non-manifest skill URI emits `mcp.skill.uri` only.
+- `ext/skills/client_trace_test.go` - eight tests pin Layer 2: each wrapped method emits the right span + attrs; `Activate` fires hook + span; `Activate` omits the reason attr when not supplied; hook fires independently of tracer install; zero-overhead path (no `WithTracerProvider`) emits no observable spans.
 - End-to-end trace context propagation across `resources/read` is the same code path the MRTR e2e already exercises for `tools/call` (`_meta.traceparent` injection in dispatch is method-agnostic). A skills-specific real-SDK e2e is deliberately omitted, since it would require either inverting the `ext/otel`-doesn't-import-`ext/skills` layering or adding the real OTel SDK as a test-only dep on `ext/skills`.
 
 **Runnable demo**: `examples/skills/walkthrough.go` exercises the wrap span + Activate path with the `--exporter=stdout` (or `--exporter=otlp`) flag pair. Run with `EXPORTER=stdout just serve` + `EXPORTER=stdout just demo`.
 
-### `experimental/ext/agents` discovery spans — landed (issue 1145)
+### `experimental/ext/agents` discovery spans, landed (issue 1145)
 
 The server-declared agents primitive (`experimental/ext/agents`, epic 1142) advertises a roster via `agents/list` and resolves a specialist's instructions plus scoped tools via `agents/get`. The WG frames MCP's subagent gap versus ACP as an observability gap, so tracing the discovery + delegation lifecycle is part of the primitive's value, not a parity afterthought.
 
 The pass follows the established opt-in contract. `agents.Config.TracerProvider core.TracerProvider` defaults to `core.NoopTracerProvider{}` (zero allocation, no spans), and the extension depends only on the core tracing abstraction, never on `ext/otel`.
 
-**Server side — discovery spans** (`experimental/ext/agents/registry.go`):
+**Server side, discovery spans** (`experimental/ext/agents/registry.go`):
 
 | Handler | Span name | Attributes |
 |---|---|---|
@@ -801,7 +801,7 @@ The pass follows the established opt-in contract. `agents.Config.TracerProvider 
 
 `agents.found` is set on every path (including empty / unknown `agentId`), so a failed lookup is visible in the trace rather than silent.
 
-**Host side — delegation edge** (chakra's `host/server_agents.go`). The host's lazy `serverAgentSource.resolve` wraps the first-use `agents/get` + child build in an `agents.resolve` span carrying `mcp.agent.id`. Cache hits are not spanned. This ties the three pieces a delegation trace should show: `supervisor turn -> agents.resolve(agent.id) -> agents.get -> child turn`.
+**Host side, delegation edge** (chakra's `host/server_agents.go`). The host's lazy `serverAgentSource.resolve` wraps the first-use `agents/get` + child build in an `agents.resolve` span carrying `mcp.agent.id`. Cache hits are not spanned. This ties the three pieces a delegation trace should show: `supervisor turn -> agents.resolve(agent.id) -> agents.get -> child turn`.
 
 **Sub-agent execution reuses the Runner's own spans.** A resolved specialist is a normal `agent.AgentSource` over a child `Runner`, so its work already emits `agent.turn` / `agent.step` / `agent.tool` spans (the same instrumentation any Runner gets). The host threads its `TracerProvider` through the bridge (`ServerAgentConfig.TracerProvider`), so no separate execution-span machinery is needed. The in-process delegation runs synchronously inside the supervisor's tool-call span, so those child spans nest naturally under it. A new-root-span + link shape (like `task.execute`) would only be warranted for an async delegation form (`AsyncAgentSource`) whose run outlives the dispatch; that is deferred until a demo needs it.
 
@@ -813,11 +813,11 @@ Coverage: `experimental/ext/agents/tracing_test.go` pins the discovery spans (li
   EventBus envelope will carry `traceparent` / `tracestate` using the
   `core.MetaKey*` constants, so a trace started on replica A and
   delivered from replica B stitches together once an OTel adapter is
-  wired. The seam consumes `core.TracerProvider` directly, with no
+  wired. The bus consumes `core.TracerProvider` directly, with no
   `ext/otel` import in the base events module, mirroring how events
   already consumes `core.Claims` without depending on `ext/auth`.
 - **`server/` topology preflight (issue #642).** The capability
-  contract declares whether a configured seam supports trace
+  contract declares whether a configured transport supports trace
   propagation; the declaration uses the `core.TracerProvider`
   interface to keep the contract dep-free.
 

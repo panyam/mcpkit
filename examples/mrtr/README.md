@@ -1,6 +1,6 @@
-# SEP-2322 MRTR — Ephemeral InputRequiredResult Round-Trips
+# SEP-2322 MRTR, Ephemeral InputRequiredResult Round-Trips
 
-> **Stable** — implements [SEP-2322](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322) (MRTR), merged into the MCP spec.
+> **Stable** - implements [SEP-2322](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322) (MRTR), merged into the MCP spec.
 
 Demonstrates the SEP-2322 ephemeral Multi Round-Trip Requests pattern:
 the server returns `InputRequiredResult{inputRequests, requestState}`
@@ -23,7 +23,7 @@ Spec: [SEP-2322](https://github.com/modelcontextprotocol/specification/pull/2322
 | `"task"` | `CreateTaskResult` (SEP-2663) | poll `tasks/get` |
 | `"input_required"` | `InputRequiredResult{inputRequests, requestState}` | resolve inputs, retry the same call |
 
-The discriminator is `resultType` — camelCase like every other MCP wire
+The discriminator is `resultType`, camelCase like every other MCP wire
 field (`inputRequests`, `inputResponses`, `requestState`, `taskId`, …).
 
 ## Quick Start
@@ -49,9 +49,9 @@ step-by-step description.
 
 ## What it demonstrates
 
-- The full InputRequiredResult round-trip — server returns `inputRequests + requestState`; client resolves each request locally and retries the same `tools/call` with `inputResponses` + the echoed state.
+- The full InputRequiredResult round-trip: the server returns `inputRequests + requestState`; client resolves each request locally and retries the same `tools/call` with `inputResponses` + the echoed state.
 - All three input methods inline-able inside the round: elicitation (`elicitation/create`), sampling (`sampling/createMessage`), and root listing (`roots/list`).
-- Multi-round accumulation across rounds via signed `requestState` — handlers stay stateless; dispatch merges accumulated answers.
+- Multi-round accumulation across rounds via signed `requestState`, so handlers stay stateless; dispatch merges accumulated answers.
 - The unified client dispatch path (`HandleServerRequestWithContext`) handling MRTR-synthesized requests identically to real server-initiated requests.
 - The `client.CallToolWithInputs` + `DefaultInputHandler` auto-loop that collapses the whole flow into a single call.
 
@@ -78,16 +78,16 @@ testconf-mrtr` from the repo root.
 
 | What | Where |
 |------|-------|
-| Server dispatch | [`server/dispatch.go`](../../server/dispatch.go) — handleToolsCall reshapes InputRequired; merges accumulated answers from `requestState` |
-| Server runtime | [`server/mrtr.go`](../../server/mrtr.go) — `mrtrRuntime`, sign / verify / mint requestState tokens |
+| Server dispatch | [`server/dispatch.go`](../../server/dispatch.go) - handleToolsCall reshapes InputRequired; merges accumulated answers from `requestState` |
+| Server runtime | [`server/mrtr.go`](../../server/mrtr.go) - `mrtrRuntime`, sign / verify / mint requestState tokens |
 | Wire types | [`core.InputRequiredResult`](../../core/task_v2.go), `MRTRRoundState`, `Sign|VerifyMRTRState` |
-| Tool handler API | [`core/handler_context.go`](../../core/handler_context.go) — `ctx.RequestInput` sentinel + `InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors |
-| Client auto-loop | [`client/mrtr.go`](../../client/mrtr.go) — `CallToolWithInputs` + `DefaultInputHandler` |
-| Single dispatcher | [`client.HandleServerRequestWithContext`](../../client/client.go) — same switch handles real server-initiated requests AND MRTR-synthesized ones |
-| Conformance | [panyam/mcpconformance — `src/scenarios/server/mrtr/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/mrtr) (upstream Draft PR modelcontextprotocol/conformance#262); local sentinel: [`conformance/mrtr/`](../../conformance/mrtr/) |
+| Tool handler API | [`core/handler_context.go`](../../core/handler_context.go) - `ctx.RequestInput` sentinel + `InputResponse(key)` / `HasInputResponses()` / `RequestState()` accessors |
+| Client auto-loop | [`client/mrtr.go`](../../client/mrtr.go) - `CallToolWithInputs` + `DefaultInputHandler` |
+| Single dispatcher | [`client.HandleServerRequestWithContext`](../../client/client.go) - same switch handles real server-initiated requests AND MRTR-synthesized ones |
+| Conformance | [panyam/mcpconformance - `src/scenarios/server/mrtr/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/mrtr) (upstream Draft PR modelcontextprotocol/conformance#262); local sentinel: [`conformance/mrtr/`](../../conformance/mrtr/) |
 | SEP | [SEP-2322 spec PR](https://github.com/modelcontextprotocol/specification/pull/2322) |
 
 ## Next steps
 
-- [Tasks v2 — reuses the same input_required envelope](../tasks-v2/)
+- [Tasks v2 - reuses the same input_required envelope](../tasks-v2/)
 - [MRTR tutorial](../../docs/MRTR_TUTORIAL.md)

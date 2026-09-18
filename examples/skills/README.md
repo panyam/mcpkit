@@ -1,12 +1,12 @@
 # examples/skills
 
-> ⚠ **Experimental** — tracks [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) (Skills), a draft SEP. Wire format may change.
+> ⚠ **Experimental** - tracks [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) (Skills), a draft SEP. Wire format may change.
 
 End-to-end example for SEP-2640 (Skills extension): a mcpkit server that
 exposes Agent Skills under the `skill://` URI scheme, plus a demokit
 walkthrough that drives a host against it.
 
-> **Looking for the minimal shape?** This example is the **full** surface —
+> **Looking for the minimal shape?** This example is the **full** surface,
 > archives (`.tar.gz` / `.zip`), remote source adapters (GitHub, archive
 > directories, multi-source mounts), and fsnotify-driven invalidation. For the
 > scoped-down core the WG blessed on 2026-06-30 (a skills file + tool handling,
@@ -86,7 +86,7 @@ just serve-zip       # publishes each skill as one .zip resource
 
 In archive mode `resources/list` returns one URI per skill (e.g.
 `skill://pdf-processing.tar.gz`) instead of N URIs per file. The
-post-unpack virtual namespace hosts see is identical either way — that's
+post-unpack virtual namespace hosts see is identical either way, and that's
 SEP-2640's whole-skill atomic-delivery story.
 
 ### Custom port or skills directory
@@ -134,7 +134,7 @@ as `scripts/apps-playwright-test.sh`.
 - `skill://index.json` round-trips and parses against the
   `https://schemas.agentskills.io/discovery/0.2.0/schema.json` shape.
 - Every `skill-md` index entry's `digest` is `sha256:[a-f0-9]{64}` and
-  matches `sha256.Sum256` of the served bytes — satisfies the SEP-2640
+  matches `sha256.Sum256` of the served bytes, satisfying the SEP-2640
   MUST that hosts verify retrieved content against the digest.
 - Resources/read works for both single-segment skills (`git-workflow`)
   and nested-prefix skills (`acme/billing/refunds`), confirming the
@@ -165,4 +165,4 @@ classes are tracked under mcpkit#567.
 
 ## Next steps
 
-- [Skills — the minimal core shape](../skills-core/)
+- [Skills - the minimal core shape](../skills-core/)

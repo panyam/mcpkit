@@ -1,18 +1,18 @@
-# MCP File Inputs (SEP-2356) — Data URI File Arguments
+# MCP File Inputs (SEP-2356): data URI file arguments
 
 Walks through SEP-2356, which lets servers declare file-input properties on tool inputSchemas via the `x-mcp-file` JSON Schema extension. Clients render a file picker for those fields and pass selected files as RFC 2397 base64 data URIs (`data:<mediatype>;name=<filename>;base64,<...>`). The server decodes the URI, validates size/MIME, and processes the bytes.
 
 ## What you'll learn
 
-- **Connect to the file-inputs server** — `client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.
-- **tools/list — extract file-input descriptors** — `client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`"image"`); array-of-files shapes land under `name[]` (`"documents[]"`) so callers can disambiguate without re-walking the schema.
-- **upload_image — encode + call with a real PNG** — Read `testdata/pixel.png` (a 24×24 RGB gradient, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.
-- **analyze_documents — array-of-files input** — Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.
-- **process_any_file — no accept/maxSize filter** — Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.
-- **Optional: send a file from disk via client.PrepareFileArg** — Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)` — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.
-- **upload_image rejects wrong MIME (text/plain into image/* slot)** — The descriptor declares `accept: ["image/*"]`. Sending a text/plain data URI hits the dispatcher's accept-pattern matcher (`core.FileMatchesAccept`), which fails before the handler runs. The error data carries `mediaType` (what we sent) and `accept` (what the server requires) so a client can render a useful message.
-- **upload_image rejects oversized payload (6 MiB into 5 MiB cap)** — Same descriptor declares `maxSize: 5_242_880` (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as `image/png`, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.
-- **analyze_documents rejects per-element with field path tracking** — Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
+- **Connect to the file-inputs server** - `client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire; without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.
+- **tools/list, extracting file-input descriptors** - `client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`"image"`); array-of-files shapes land under `name[]` (`"documents[]"`) so callers can disambiguate without re-walking the schema.
+- **upload_image, encoding and calling with a real PNG** - Read `testdata/pixel.png` (a 24×24 RGB gradient, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.
+- **analyze_documents, an array-of-files input** - Demonstrates `core.FileInputArrayProperty`, where the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.
+- **process_any_file, with no accept/maxSize filter** - Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.
+- **Optional: send a file from disk via client.PrepareFileArg** - Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)`, a single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.
+- **upload_image rejects wrong MIME (text/plain into image/* slot)** - The descriptor declares `accept: ["image/*"]`. Sending a text/plain data URI hits the dispatcher's accept-pattern matcher (`core.FileMatchesAccept`), which fails before the handler runs. The error data carries `mediaType` (what we sent) and `accept` (what the server requires) so a client can render a useful message.
+- **upload_image rejects oversized payload (6 MiB into 5 MiB cap)** - Same descriptor declares `maxSize: 5_242_880` (5 MiB). We synthesize a 6 MiB null-byte buffer, encode as `image/png`, and send it. The validator decodes the data URI, sees the size cap is exceeded, and short-circuits with structured size info.
+- **analyze_documents rejects per-element with field path tracking** - Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender, `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
 
 ## Flow
 
@@ -22,22 +22,22 @@ sequenceDiagram
     participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the file-inputs server
-    Host->>Server: POST /mcp — initialize (capabilities.fileInputs={})
+    Host->>Server: POST /mcp, initialize (capabilities.fileInputs={})
     Server-->>Host: serverInfo + capabilities
 
-    Note over Host,Server: Step 2: tools/list — extract file-input descriptors
+    Note over Host,Server: Step 2: tools/list, extracting file-input descriptors
     Host->>Server: tools/list
     Server-->>Host: tools[] with x-mcp-file marked properties
 
-    Note over Host,Server: Step 3: upload_image — encode + call with a real PNG
+    Note over Host,Server: Step 3: upload_image, encoding and calling with a real PNG
     Host->>Server: tools/call upload_image { image: data:image/png;name=…;base64,… }
     Server-->>Host: text result with size + media type
 
-    Note over Host,Server: Step 4: analyze_documents — array-of-files input
+    Note over Host,Server: Step 4: analyze_documents, an array-of-files input
     Host->>Server: tools/call analyze_documents { documents: [data:application/pdf;…, data:application/pdf;…] }
     Server-->>Host: summary line per document
 
-    Note over Host,Server: Step 5: process_any_file — no accept/maxSize filter
+    Note over Host,Server: Step 5: process_any_file, with no accept/maxSize filter
     Host->>Server: tools/call process_any_file { file: data:text/plain;name=README.txt;base64,… }
     Server-->>Host: decoded media type + size
 
@@ -75,42 +75,42 @@ Any MCP host can connect to the running server (Claude Desktop, VS Code, MCPJam)
 
 SEP-2356 reuses two well-understood pieces:
 
-- **Schema marker** — a string property of `format: "uri"` carries an extra `x-mcp-file` keyword whose value is a `FileInputDescriptor` (`accept` MIME patterns / extensions, optional `maxSize` in decoded bytes). Server-side helpers: `core.FileInputProperty(desc)` and `core.FileInputArrayProperty(desc)`.
-- **Wire encoding** — files travel as RFC 2397 base64 data URIs with an optional percent-encoded `name=` parameter: `data:image/png;name=photo.png;base64,iVBORw0…`. Helpers: `core.EncodeDataURI(data, mediaType, filename)` and `core.DecodeDataURI(uri)`.
+- **Schema marker** - a string property of `format: "uri"` carries an extra `x-mcp-file` keyword whose value is a `FileInputDescriptor` (`accept` MIME patterns / extensions, optional `maxSize` in decoded bytes). Server-side helpers: `core.FileInputProperty(desc)` and `core.FileInputArrayProperty(desc)`.
+- **Wire encoding** - files travel as RFC 2397 base64 data URIs with an optional percent-encoded `name=` parameter: `data:image/png;name=photo.png;base64,iVBORw0…`. Helpers: `core.EncodeDataURI(data, mediaType, filename)` and `core.DecodeDataURI(uri)`.
 
-Capability negotiation: the client advertises `"fileInputs": {}` inside `ClientCapabilities` during `initialize`. Servers MUST NOT include `x-mcp-file` in tool schemas if the client did not declare the capability — `core.HasFileInputs(ctx)` is the server-side check (gating ships in Phase 1.5 of the plan).
+Capability negotiation: the client advertises `"fileInputs": {}` inside `ClientCapabilities` during `initialize`. Servers MUST NOT include `x-mcp-file` in tool schemas if the client did not declare the capability. `core.HasFileInputs(ctx)` is the server-side check (gating ships in Phase 1.5 of the plan).
 
 ### Step 1: Connect to the file-inputs server
 
-`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire — without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.
+`client.NewClient(...)` + `client.WithFileInputs()` + `Connect()`. The `WithFileInputs` option advertises `capabilities.fileInputs={}` on the wire; without it, the server would strip `x-mcp-file` from every tool's inputSchema (per SEP-2356 cap-gating). The next step inspects the raw response to confirm the keyword survives.
 
-### Step 2: tools/list — extract file-input descriptors
+### Step 2: tools/list, extracting file-input descriptors
 
 `client.FileInputsFromTool(tool)` extracts the per-property descriptors a server advertised. Single-file properties land under their name (`"image"`); array-of-files shapes land under `name[]` (`"documents[]"`) so callers can disambiguate without re-walking the schema.
 
-### Step 3: upload_image — encode + call with a real PNG
+### Step 3: upload_image, encoding and calling with a real PNG
 
 Read `testdata/pixel.png` (a 24×24 RGB gradient, embedded at build time), encode it via `core.EncodeDataURI`, and pass the resulting string as the `image` argument. The handler runs `core.DecodeDataURI` to recover bytes, media type, and the original filename. Size and MIME validation will be enforced by `server.ValidateFileInput` once Phase 1.4 lands; today the handler trusts the input.
 
-### Step 4: analyze_documents — array-of-files input
+### Step 4: analyze_documents, an array-of-files input
 
-Demonstrates `core.FileInputArrayProperty` — the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.
+Demonstrates `core.FileInputArrayProperty`, where the schema marks the `documents` array's *items* with `x-mcp-file`, so a host renders one picker per row. The walkthrough loads two embedded PDFs (`testdata/contract.pdf`, `testdata/appendix.pdf`) and sends both in one call.
 
-### Step 5: process_any_file — no accept/maxSize filter
+### Step 5: process_any_file, with no accept/maxSize filter
 
 Empty `FileInputDescriptor{}` means "any file, any size." Useful for ad-hoc inspection. The handler still decodes via `core.DecodeDataURI`, which rejects malformed or non-base64 URIs. The walkthrough reads `testdata/README.txt` so the payload is a real on-disk file.
 
 ### Step 6: Optional: send a file from disk via client.PrepareFileArg
 
-Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)` — single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.
+Pass `--file <path>` on the demo command line to read an image from disk and upload it. Skipped silently when the flag isn't set so the walkthrough stays hermetic. The encode path is now `client.PrepareFileArg(path, descriptor)`, a single call that reads the file, detects MIME, validates against the descriptor (size + accept patterns, same rules as the server-side validator), and returns the data URI. Failures surface as typed errors (`*core.FileTooLargeError`, `*core.FileTypeNotAcceptedError`) so callers can branch with `errors.As`.
 
-### Validation — server rejects non-conforming uploads (Phase 1.4)
+### Validation, where the server rejects non-conforming uploads (Phase 1.4)
 
-The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload — that exact shape is the contract pinned by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).
+The server is started with `server.WithFileInputValidation()` (see `examples/file-inputs/main.go`), so the dispatcher walks each tool's `inputSchema` for `x-mcp-file` properties and runs `core.ValidateFileInput` on every matching arg BEFORE the handler runs. Failures surface as JSON-RPC `-32602` with a structured `data` payload, and that exact shape is the contract pinned by the SEP-2356 conformance scenarios on the panyam/mcpconformance `pending` branch (`src/scenarios/server/file-inputs/`).
 
 The next three steps exercise all three failure modes the validator covers. They drive the server through the Go MCP client (`*client.Client`); the `client.RPCError` returned on rejection carries the same structured `data` field the wire emits. Each step prints `error.code`, `error.message`, and `error.data` so the rejection contract is visible in the demo output.
 
-Each step also attaches a copy-pasteable verbatim block with two variants (rendered via demokit `VerbatimVariants`): a `curl` form (the default — for validating from a non-Go SDK or sanity-checking the JSON shape directly) and a `go` form showing the equivalent `*client.Client` call. Pass `--variant=go` to render only the Go form.
+Each step also attaches a copy-pasteable verbatim block with two variants (rendered via demokit `VerbatimVariants`): a `curl` form (the default, for validating from a non-Go SDK or sanity-checking the JSON shape directly) and a `go` form showing the equivalent `*client.Client` call. Pass `--variant=go` to render only the Go form.
 
 ### Step 7: upload_image rejects wrong MIME (text/plain into image/* slot)
 
@@ -160,7 +160,7 @@ curl -s -X POST http://localhost:8080/mcp \
 
 ### Step 9: analyze_documents rejects per-element with field path tracking
 
-Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender — `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
+Send a 2-element array where element 0 is a valid PDF and element 1 is a text/plain payload. The dispatcher's array-items walker validates each element against `items.x-mcp-file` and surfaces the path of the offender, `data.field == "documents[1]"`. Useful so a client rendering rich error UX can highlight the specific input that failed instead of asking the user to re-pick everything.
 
 #### Reproduce on the wire
 
@@ -174,7 +174,7 @@ curl -s -X POST http://localhost:8080/mcp \
   -H "Content-Type: application/json" -H "Accept: application/json" -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
 
-# Send 2 documents — index 0 valid PDF, index 1 wrong MIME
+# Send 2 documents: index 0 valid PDF, index 1 wrong MIME
 GOOD='data:application/pdf;name=ok.pdf;base64,JVBERi0xLjQKJSVFT0YK'
 BAD='data:text/plain;name=bad.txt;base64,aGVsbG8='
 curl -s -X POST http://localhost:8080/mcp \
@@ -184,22 +184,22 @@ curl -s -X POST http://localhost:8080/mcp \
 
 ### MCP Apps mode (Phase 2.1)
 
-This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers — the human-in-the-loop case file-uploads-wg flagged as a gap:
+This same server also registers two MCP App tools that drive the same handlers via in-iframe file pickers, the human-in-the-loop case file-uploads-wg flagged as a gap:
 
-- `apps_upload_image` — `ui://file-inputs/upload-image` — single image picker (`mcp.selectFile`)
-- `apps_analyze_documents` — `ui://file-inputs/analyze-documents` — multi PDF picker (`mcp.selectFiles`)
+- `apps_upload_image` - `ui://file-inputs/upload-image` - single image picker (`mcp.selectFile`)
+- `apps_analyze_documents` - `ui://file-inputs/analyze-documents` - multi PDF picker (`mcp.selectFiles`)
 
-To exercise these, point a host that supports the MCP Apps extension (e.g. MCPJam) at this server and invoke either tool — the host renders the embedded HTML + bridge, the user clicks the picker, and the bridge encodes the chosen file(s) as data URI(s) before calling the regular tool. The walkthrough above doesn't drive these because demokit can't synthesize iframe user-gestures.
+To exercise these, point a host that supports the MCP Apps extension (e.g. MCPJam) at this server and invoke either tool. The host renders the embedded HTML + bridge, the user clicks the picker, and the bridge encodes the chosen file(s) as data URI(s) before calling the regular tool. The walkthrough above doesn't drive these because demokit can't synthesize iframe user-gestures.
 
 ### Where to look in the code
 
-- Schema helpers: `core.FileInputProperty` / `core.FileInputArrayProperty` / `core.ExtractFileInputDescriptor` — core/file_input.go
-- Wire encoding: `core.EncodeDataURI` / `core.DecodeDataURI` / `core.IsDataURI` — core/datauri.go
-- Capability marker: `ClientCapabilities.FileInputs` + `core.HasFileInputs(ctx)` — core/protocol.go, core/file_input.go
-- Server validation (Phase 1.4): `server.ValidateFileInput` — pending
-- Capability gating (Phase 1.5): strip `x-mcp-file` from tools/list when client lacks the cap — pending
-- Client helpers (Phase 1.6): `client.FileInputsFromTool` / `client.PrepareFileArg` — pending
-- Bridge `selectFile` / `selectFiles` (Phase 2.1): `ext/ui/assets/file-picker.ts` — shipped
+- Schema helpers: `core.FileInputProperty` / `core.FileInputArrayProperty` / `core.ExtractFileInputDescriptor` - core/file_input.go
+- Wire encoding: `core.EncodeDataURI` / `core.DecodeDataURI` / `core.IsDataURI` - core/datauri.go
+- Capability marker: `ClientCapabilities.FileInputs` + `core.HasFileInputs(ctx)` - core/protocol.go, core/file_input.go
+- Server validation (Phase 1.4): `server.ValidateFileInput` - pending
+- Capability gating (Phase 1.5): strip `x-mcp-file` from tools/list when client lacks the cap - pending
+- Client helpers (Phase 1.6): `client.FileInputsFromTool` / `client.PrepareFileArg` - pending
+- Bridge `selectFile` / `selectFiles` (Phase 2.1): `ext/ui/assets/file-picker.ts` - shipped
 - Apps fixtures: `examples/file-inputs/apps/upload-image.html`, `analyze-documents.html`
 - SEP-2356 spec: modelcontextprotocol/specification PR 2356
 

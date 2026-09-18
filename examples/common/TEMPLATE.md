@@ -1,5 +1,5 @@
 <!--
-TEMPLATE.md — canonical README structure for mcpkit examples.
+TEMPLATE.md, the canonical README structure for mcpkit examples.
 
 Used by every fixture under examples/apps/compat/ and meant for new examples
 under examples/ generally. Copy this file into your fixture directory as
@@ -10,15 +10,15 @@ README.md and adapt:
   cp examples/common/TEMPLATE.md examples/<your-example>/README.md
 
 Then walk top-to-bottom and replace every {PLACEHOLDER} with fixture-specific
-content. HTML comments (<!-- ... -->) are author-guidance only — strip them
+content. HTML comments (<!-- ... -->) are author-guidance only, so strip them
 before committing if any are still present.
 
 Conditional sections: "## Run Pre-Recorded" and "## Try It Out from a Host"
-each have a comment block above them — read those before deciding whether
+each have a comment block above them. Read those before deciding whether
 to keep them.
 -->
 
-# {FIXTURE_NAME} — {ONE-LINE TAGLINE}
+# {FIXTURE_NAME}: {ONE-LINE TAGLINE}
 
 <!--
 TAGLINE: half-sentence describing what makes this fixture distinct. Pulled
@@ -44,13 +44,13 @@ the fixture shows. Link to the closest neighbor for context. Example:
 
 ## What it Shows
 
-- **{POINT 1}** — {what's distinctive about this fixture's wire surface}
-- **{POINT 2}** — {what's distinctive about this fixture's iframe / data}
-- **{POINT 3}** — {what the reader should take away beyond "it works"}
+- **{POINT 1}** - {what's distinctive about this fixture's wire surface}
+- **{POINT 2}** - {what's distinctive about this fixture's iframe / data}
+- **{POINT 3}** - {what the reader should take away beyond "it works"}
 
 <!--
 Replace with 2-4 bullet points. Stay focused on what's NEW vs neighboring
-fixtures — not "it's an MCP server with tools" (that's true of all of them).
+fixtures, not "it's an MCP server with tools" (that's true of all of them).
 Reference upstream parity, schema reflection, framework choice, payload
 shape, etc.
 -->
@@ -68,7 +68,7 @@ repo root (e.g. `examples/apps/compat/basic-vanillajs`, or
 published URL.
 -->
 
-> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/{EXAMPLE_PATH}/)** — animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
+> ▶ **[Play the walkthrough in your browser](https://panyam.github.io/mcpkit/walkthroughs/{EXAMPLE_PATH}/)** - animated playback of every curl / Go call the walkthrough makes, step-by-step. No clone, no setup.
 
 ## Or Run Live
 
@@ -86,7 +86,7 @@ Open <http://localhost:8080> in your browser. Then:
 
 1. Pick **{SERVER_INFO_NAME}** from the server dropdown.
 2. Pick **{PRIMARY_TOOL_NAME}** from the tool dropdown, click **Call Tool** {WITH_OR_WITHOUT_INPUT}.
-3. {WHAT_THE_USER_SEES — describe the iframe, any interaction, what the result looks like}
+3. {WHAT_THE_USER_SEES - describe the iframe, any interaction, what the result looks like}
 
 <!--
 Add 1-3 screenshots that show the App rendered. Width=50% with click-to-zoom
@@ -102,11 +102,11 @@ KEEP THIS SECTION for fixtures that have meaningful behavior when an
 LLM is in the loop (most do). DROP IT for examples where there's no
 "prompt the model" story (a wire-only demo, a CLI-only fixture).
 
-The compat README backlink is compat-specific — drop the last sentence
+The compat README backlink is compat-specific, so drop the last sentence
 for examples outside examples/apps/compat/.
 -->
 
-Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
+Connect to `http://localhost:3101/mcp` from your favorite MCP host: VS Code, Claude Desktop, [MCPJam Inspector](https://github.com/MCPJam/inspector), or any spec-compliant client.
 
 **Prompts to try** (LLM-driven hosts):
 
@@ -114,12 +114,12 @@ Connect to `http://localhost:3101/mcp` from your favorite MCP host — VS Code, 
 > "{PROMPT 2}"
 > "{PROMPT 3}"
 
-{ONE_SENTENCE — describe what the model will do with the response}
+{ONE_SENTENCE - describe what the model will do with the response}
 
 See [Other ways to test a fixture](../README.md#other-ways-to-test-a-fixture) in the compat README for wire inspection, upstream comparison, and the strict Playwright gate.
 
 ## What to Try Next
 
-- {NEAREST_NEIGHBOR_ON_LADDER — what they should look at to deepen the lesson}
-- {ANOTHER_USEFUL_POINTER — sibling rung, upstream comparison, etc.}
-- See [`main.go`](main.go) — fixture is ~{ESTIMATED_LINE_COUNT} lines.
+- {NEAREST_NEIGHBOR_ON_LADDER - what they should look at to deepen the lesson}
+- {ANOTHER_USEFUL_POINTER - sibling rung, upstream comparison, etc.}
+- See [`main.go`](main.go) - fixture is ~{ESTIMATED_LINE_COUNT} lines.

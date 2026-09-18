@@ -1,6 +1,6 @@
-# SEP-2356 File Inputs — Data URI File Arguments
+# SEP-2356 file inputs as data URI file arguments
 
-> ⚠ **Experimental** — tracks [SEP-2356](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2356) (File Inputs), a draft SEP. Wire format may change.
+> ⚠ **Experimental** - tracks [SEP-2356](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2356) (File Inputs), a draft SEP. Wire format may change.
 
 Demonstrates the `x-mcp-file` JSON Schema extension: a server marks string
 properties of `format: "uri"` as file pickers, the client encodes the
@@ -16,7 +16,7 @@ Spec: modelcontextprotocol/specification PR 2356.
 |------|--------------|--------------|
 | `upload_image` | `image: FileInputProperty(image/*, max 5 MB)` | single-file picker with MIME wildcard + size cap |
 | `analyze_documents` | `documents: FileInputArrayProperty(application/pdf, .pdf)` | array of files (`items.x-mcp-file`) |
-| `process_any_file` | `file: FileInputProperty({})` | empty descriptor — any file, any size |
+| `process_any_file` | `file: FileInputProperty({})` | empty descriptor - any file, any size |
 
 ## Quick Start
 
@@ -31,8 +31,8 @@ go run . --tui
 ```
 
 The walkthrough reads four embedded fixtures from
-[`testdata/`](testdata/) — `pixel.png` (a 24×24 gradient), `contract.pdf`,
-`appendix.pdf`, `README.txt` — encodes each via `core.EncodeDataURI`, and
+[`testdata/`](testdata/): `pixel.png` (a 24×24 gradient), `contract.pdf`,
+`appendix.pdf`, `README.txt`. It encodes each via `core.EncodeDataURI`, and
 invokes every tool. Before each upload, the demo shows a small preview of
 what's being sent: the [iTerm2 inline-image
 protocol](https://iterm2.com/documentation-images.html) for images
@@ -41,7 +41,7 @@ elsewhere), the first lines of text, and a hex preview for everything
 else. See [WALKTHROUGH.md](WALKTHROUGH.md) for the full sequence diagram
 and step-by-step description.
 
-Run `just serve` in a second terminal to watch the server side too — it
+Run `just serve` in a second terminal to watch the server side too, where it
 streams colored `[mcp]` traces (`MCP tools/call ok [276µs]`, `[http] →
 POST /mcp`) for every request the walkthrough fires, matching the
 elicitation / mrtr examples.
@@ -49,7 +49,7 @@ elicitation / mrtr examples.
 The server also writes every received file to a fresh
 `/tmp/file-inputs-demo-XXXX/` directory (announced at startup) so you can
 `ls` the directory and `open pixel.png` to verify byte-for-byte that the
-right payload arrived. The directory is **not** auto-cleaned — `rm -rf
+right payload arrived. The directory is **not** auto-cleaned, so `rm -rf
 /tmp/file-inputs-demo-*` when you're done. The full path is also surfaced
 in each tool's response so the demo client prints it inline (`saved as:
 /tmp/file-inputs-demo-…/pixel.png`).
@@ -85,7 +85,7 @@ Configuration*):
 
 Reload the MCP view; the three tools will appear under
 `file-inputs-demo`. Until VS Code learns the SEP-2356 file-picker hint, it
-shows the file argument as a plain string — paste a data URI manually
+shows the file argument as a plain string, so paste a data URI manually
 (`data:image/png;base64,iVBORw0K…`) or use a small helper to build one.
 
 ### Claude Code
@@ -129,17 +129,17 @@ data:image/png;name=pixel.png;base64,iVBORw0KGgoAAAANS...
 This example exercises Phase 1.1 (types) + 1.2 (data URIs) + a starter
 1.7 walkthrough. Subsequent phases will extend it:
 
-- **1.4** — `server.ValidateFileInput` for size/MIME enforcement (the
+- **1.4** - `server.ValidateFileInput` for size/MIME enforcement (the
   handlers will swap their inline checks for the shared validator).
-- **1.5** — strip `x-mcp-file` from `tools/list` when the client did not
+- **1.5** - strip `x-mcp-file` from `tools/list` when the client did not
   declare `capabilities.fileInputs`.
-- **1.6** — `client.PrepareFileArg(path, descriptor)` so the host side of
+- **1.6** - `client.PrepareFileArg(path, descriptor)` so the host side of
   the walkthrough can drop the manual `os.ReadFile` + `EncodeDataURI`
   boilerplate.
-- **2.x** — `mcp.selectFile()` in the MCP Apps bridge so an in-iframe app
+- **2.x** - `mcp.selectFile()` in the MCP Apps bridge so an in-iframe app
   can prompt the user for a file and forward the data URI to a tool.
 
 ## Next steps
 
-- [Elicitation — another client-interaction flow](../elicitation/)
-- [MRTR — the input_required round-trip](../mrtr/)
+- [Elicitation - another client-interaction flow](../elicitation/)
+- [MRTR - the input_required round-trip](../mrtr/)

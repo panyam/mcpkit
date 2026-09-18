@@ -62,9 +62,9 @@ func runDemo() {
 	}
 	defer shutdown(context.Background())
 
-	demo := demokit.New("URL Elicitation — Consent Approval Flow (UC1)").
+	demo := demokit.New("URL elicitation and the consent approval flow (UC1)").
 		Dir("elicitation").
-		Description("**EXPERIMENTAL** — Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.").
+		Description("**EXPERIMENTAL.** Tracks SEP-2643 (Structured Authorization Denials), currently a draft. A scripted MCP host walking through the UC1 consent approval flow. Wire format may change as the SEP evolves.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (just serve)"),
@@ -90,9 +90,9 @@ func runDemo() {
 
 	// --- Step 1: Connect to server ---
 	demo.Step("Connect to the MCP server and initialize session").
-		Arrow("Host", "Server", "POST /mcp — initialize").
+		Arrow("Host", "Server", "POST /mcp, initialize").
 		DashedArrow("Server", "Host", "serverInfo + Mcp-Session-Id").
-		Arrow("Host", "Server", "GET /mcp — open SSE stream for notifications").
+		Arrow("Host", "Server", "GET /mcp, open SSE stream for notifications").
 		Note("Connect with a notification callback listening for notifications/elicitation/complete. The GET SSE stream receives server-pushed notifications.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Initialize an MCP session and capture the session id returned in the headers.
@@ -126,7 +126,7 @@ c := client.NewClient(serverURL+"/mcp",
     }),
     client.WithGetSSEStream(),
 )
-if err := c.Connect(); err != nil { /* server not up — run: just serve */ }
+if err := c.Connect(); err != nil { /* server not up, run: just serve */ }
 tools, _ := c.ListTools(ctx.Ctx)`),
 		).
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
@@ -166,7 +166,7 @@ tools, _ := c.ListTools(ctx.Ctx)`),
 		})
 
 	// --- Step 2: Call tool — get denied ---
-	demo.Step("Call access_protected_resource — denied with consent URL").
+	demo.Step("Call access_protected_resource, denied with consent URL").
 		Arrow("Host", "Server", "tools/call: access_protected_resource").
 		DashedArrow("Server", "Host", "error -32042 + consent URL + authzContextId").
 		Note("The consent middleware intercepts the call and returns -32042 (URLElicitationRequired) with a URL the user must visit to approve access.").

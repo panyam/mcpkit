@@ -1,10 +1,10 @@
-# MCP Tasks v2 (SEP-2663) — Server-Directed Async + MRTR
+# MCP Tasks v2 (SEP-2663), Server-Directed Async + MRTR
 
-> **Stable** — implements [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (Tasks v2), merged into the MCP spec.
+> **Stable** - implements [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (Tasks v2), merged into the MCP spec.
 
 Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-driven model: the *server* decides when to create a task, and clients call `tools/call` normally with no task hint.
 
-> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** — 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `just serve` + `just demo`.
+> **🚀 [Skip to the guided walkthrough →](WALKTHROUGH.md)** - 8-step demokit walkthrough covering the full v2 surface: extension negotiation, polymorphic `tools/call`, inlined results, the new `tasks/update` MRTR loop, ack-only cancel, and tool-vs-protocol error semantics. Run it with `just serve` + `just demo`.
 >
 > **🔁 Migrating from v1?** See the [v1 → v2 migration guide](../../docs/TASKS_V2_MIGRATION.md) for the wire-shape diff, server entry points (`tasks.Register` in `ext/tasks` / `server.RegisterTasksV1`), and the rolling-upgrade recipe.
 
@@ -14,10 +14,10 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 |--------|---------------|---------------|
 | Capability slot | `capabilities.tasks` | `capabilities.extensions["io.modelcontextprotocol/tasks"]` |
 | Client opt-in | (none) | `client.WithTasksExtension()` required |
-| Client task hint | `task: {ttl, pollInterval}` in params | **none — server decides** |
+| Client task hint | `task: {ttl, pollInterval}` in params | **none - server decides** |
 | Discriminator on `tools/call` | absent (use `taskId` presence) | `resultType: "task"` |
 | Read endpoints | `tasks/get` + `tasks/result` (two RTTs) | `tasks/get` only (result inlined) |
-| Result on terminal `tasks/get` | only status — fetch separately | inlined `result` / `error` / `inputRequests` |
+| Result on terminal `tasks/get` | only status - fetch separately | inlined `result` / `error` / `inputRequests` |
 | MRTR resume path | side-channel via `tasks/result` long-poll | `tasks/update` (new method) |
 | `tasks/cancel` response | rich task envelope | empty `{}` ack |
 | TTL field | `ttl` (ms by convention) | `ttlMs` (integer milliseconds) |
@@ -48,10 +48,10 @@ This example stays focused on the server side.
 
 ## What it demonstrates
 
-- Tasks-as-extension negotiation — `client.WithTasksExtension()` opts in during initialize; servers gate task-creating `tools/call` and every `tasks/*` method on it.
-- Polymorphic `tools/call` with the `resultType: "task"` discriminator — the *server* decides whether to create a task, no client hint required.
-- Inlined results on terminal `tasks/get` — `result` / `error` / `inputRequests` arrive in one RTT, `tasks/result` removed.
-- Tool-vs-protocol error semantics — tool errors land in `status: completed, isError: true`; protocol errors in `status: failed` with structured `error`.
+- Tasks-as-extension negotiation. `client.WithTasksExtension()` opts in during initialize; servers gate task-creating `tools/call` and every `tasks/*` method on it.
+- Polymorphic `tools/call` with the `resultType: "task"` discriminator, so the *server* decides whether to create a task, no client hint required.
+- Inlined results on terminal `tasks/get`, where `result` / `error` / `inputRequests` arrive in one RTT, `tasks/result` removed.
+- Tool-vs-protocol error semantics: tool errors land in `status: completed, isError: true`; protocol errors in `status: failed` with structured `error`.
 - Empty-ack `tasks/cancel` plus follow-up `tasks/get` to observe the resulting `cancelled` status.
 - The new `tasks/update` MRTR resume path closing the elicitation/sampling loop.
 - The `Mcp-Name` HTTP response header (SEP-2243) carrying taskIds for observability without parsing the body.
@@ -61,7 +61,7 @@ This example stays focused on the server side.
 
 | Tool | TaskSupport | What it demonstrates |
 |------|-------------|---------------------|
-| `greet` | forbidden | Sync-only — server returns ToolResult directly, no `resultType` |
+| `greet` | forbidden | Sync-only - server returns ToolResult directly, no `resultType` |
 | `slow_compute` | optional | Server creates a task; client gets `resultType: "task"` discriminator |
 | `failing_job` | required | Tool error path → terminal `completed` + `isError: true` |
 | `protocol_error_job` | required | Protocol error path → terminal `failed` + `error: {...}` |
@@ -69,7 +69,7 @@ This example stays focused on the server side.
 
 ## Conformance
 
-- Scenarios live in the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork (branch `feat/tasks-mrtr-extension`, upstream Draft PR modelcontextprotocol/conformance#262). Run via `just testconf-tasks-v2` from the repo root — points the fork's vitest run at this binary.
+- Scenarios live in the [`panyam/mcpconformance`](https://github.com/panyam/mcpconformance) fork (branch `feat/tasks-mrtr-extension`, upstream Draft PR modelcontextprotocol/conformance#262). Run via `just testconf-tasks-v2` from the repo root, which points the fork's vitest run at this binary.
 - Migration guide: [`docs/TASKS_V2_MIGRATION.md`](../../docs/TASKS_V2_MIGRATION.md)
 - Spec: [SEP-2663](https://github.com/modelcontextprotocol/specification/pull/2663)
 
@@ -79,10 +79,10 @@ This example stays focused on the server side.
 - Server library: [`ext/tasks/tasks.go`](../../ext/tasks/tasks.go)
 - Wire types: [`core/task_v2.go`](../../core/task_v2.go)
 - Client helpers: [`client/tasks.go`](../../client/tasks.go) (`ToolCall`, `GetTask`, `WaitForTask`, `UpdateTask`, `CancelTask`)
-- Conformance scenarios: [panyam/mcpconformance — `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks)
+- Conformance scenarios: [panyam/mcpconformance, `src/scenarios/server/tasks/`](https://github.com/panyam/mcpconformance/tree/feat/tasks-mrtr-extension/src/scenarios/server/tasks)
 - Local sentinel for mcpkit-stricter scenarios: [`conformance/tasks-v2/`](../../conformance/tasks-v2/)
 
 ## Next steps
 
-- [MRTR — the input_required envelope tasks v2 reuses](../mrtr/)
+- [MRTR - the input_required envelope tasks v2 reuses](../mrtr/)
 - [Tasks tutorial](../../docs/TASKS_TUTORIAL.md)
