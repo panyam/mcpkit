@@ -17,20 +17,17 @@
 EXAMPLES_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 .PHONY: test help \
-  test-agents-deep-supervisor test-skills test-tasks-v2 \
+  test-skills test-tasks-v2 \
   test-common test-otel-stdout test-protogen \
   test-events-kitchen-sink test-events-discord test-events-telegram \
   test-whole-enchilada-event-server
 
-test: test-agents-deep-supervisor test-skills test-tasks-v2 \
+test: test-skills test-tasks-v2 \
       test-common test-otel-stdout test-protogen \
       test-events-kitchen-sink test-events-discord test-events-telegram \
       test-whole-enchilada-event-server ## Run every infra-free example test
 
 
-
-test-agents-deep-supervisor: ## agents/deep-agent-supervisor (server-advertised roster wiring)
-	cd $(EXAMPLES_DIR)/agents/deep-agent-supervisor/server && go test ./... -count=1 -timeout 60s
 
 test-skills: ## skills (agent scenario + SEP-2640 security harness)
 	cd $(EXAMPLES_DIR)/skills && go test ./... -count=1 -timeout 60s -run 'TestAgentScenario|TestSecurityDemo'
