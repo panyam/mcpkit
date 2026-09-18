@@ -154,6 +154,14 @@ These span packages and will bite on a task that never opens a routed doc.
   conformance#504. An earlier version of this note said upstream edits need the web UI or a classic
   PAT; that is only true of the fine-grained token.
   Pushing to our fork branches is unaffected. See `conformance/NOTES.md`.
+  **The fine-grained PAT cannot create a branch carrying workflow files**, even when no commit on
+  it touches `.github/`. Creating a ref counts every workflow present on that ref as "created", so
+  the push is rejected with "refusing to allow a Personal Access Token to create or update workflow
+  `.github/workflows/test.yml` without `workflow` scope". Pushing to a branch that already exists,
+  and pushing tags, both work on the PAT, which is why a release push succeeds and the *first* push
+  of a new branch does not. The `gho_` login carries `workflow`, so hand that push to it:
+  `env -u GH_TOKEN git -c credential.helper='!gh auth git-credential' push -u https://github.com/panyam/mcpkit.git <branch>`.
+  Cost a round-trip on #1405.
   **SSH pushes use the agent, not a key file.** `~/.ssh/id_github` does not exist in the container —
   only `~/.ssh/agent.sock`, which holds the right key. Use
   `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`; the `-i ~/.ssh/id_github` form fails with
