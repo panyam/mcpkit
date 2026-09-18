@@ -1,9 +1,4 @@
 {
   "_comment": "Known dependency-version divergence across published modules. This should shrink to empty as the monthly sweep unifies pins; regenerate with: just update-dep-baseline",
-  "allowed": {
-    "github.com/panyam/goutils": [
-      "v0.1.13",
-      "v0.1.8"
-    ]
-  }
+  "allowed": {}
 }
