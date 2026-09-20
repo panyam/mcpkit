@@ -3,8 +3,6 @@
 Examples of the **server side** of agent work: MCP servers that advertise a roster of specialist
 agents, and a server set broad enough to exercise a host end to end.
 
-- **`deep-agent-supervisor`** — a server advertising a roster of specialist agents over
-  `experimental/ext/agents`, the pre-SEP server-declared discovery extension.
 - **`kitchen-sink`** — the demo, skills, and events servers wired together so one host can reach
   every surface at once.
 
@@ -15,8 +13,9 @@ agents, and a server set broad enough to exercise a host end to end.
 shared `llm.json`, `common.just`, and the `agentchat-multi-agent.json` sub-agent host config, along
 with `examples/playground`.
 
-The two examples above stayed because they demonstrate a protocol extension rather than the SDK, and
-never import it.
+`kitchen-sink` stays because it demonstrates a protocol extension rather than the SDK, and never
+imports it. `experimental/ext/agents` carries its own tests, so the extension is exercised without a
+host-driven demo here.
 
 ## Driving these with a host
 

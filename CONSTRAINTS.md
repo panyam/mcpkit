@@ -171,8 +171,8 @@ inline. `echo` banners do not count at all. A `just` shebang recipe is judged by
 the shebang is only how `just` runs more than one line of bash.
 
 **No known divergence.** `scripts/recipe-complexity-allowed.txt` is empty. The sweep took it from
-66 entries to none; the last one, `deep-agent-supervisor`'s `web`, was deleted rather than extracted
-because it ran `agent/surfaces/web`, a tree that left with the agent SDK extraction to chakra.
+66 entries to none; the last one was deleted along with the recipe rather than extracted, because
+the recipe itself was dead.
 
 The baseline only shrinks, and the checker fails on an entry that no longer violates, so it cannot
 rot the way a `--update-baseline` flag lets a baseline rot. An addition means someone decided to
