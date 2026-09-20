@@ -16,7 +16,7 @@ Current state, worth knowing before trusting one:
 | C7 | **CI gate** — `make check-stateless-middleware`, run by `.github/workflows/test.yml` |
 | C8 | **CI gate** — `make check-recipe-complexity`, run by `.github/workflows/test.yml` |
 | C1, C2, C3 | manual `grep` recipes; nothing runs them |
-| C5 | says so explicitly; no automated check exists |
+| C5, C9 | says so explicitly; no automated check exists |
 
 C6 was an agent-SDK constraint and left with that tree in `caf24e8f`. Its row sat in this table
 afterwards, pointing at a constraint that no longer existed, which is the same drift the rest of
@@ -191,3 +191,43 @@ control flow. The asymmetry gave that one away — the justfile's identical `{{i
 flagged. In a Makefile `$(...)` is an expansion and `$$(...)` is shell; in a justfile `{{...}}` is
 the expansion and `$(...)` is shell. A case whose recipe no longer exists fails rather than being
 skipped, for the reason the section on `Verify` lines gives.
+
+---
+
+## C9: No `replace` may resolve outside the repository
+
+A `replace` whose target escapes the repo root pins a dependency to a path on one developer's
+disk. The module then builds against whatever happens to be there: a different commit on another
+machine, a stale checkout, or nothing at all on a fresh clone or a release runner. Intra-repo
+replaces (`../..`, `../../ext/ui`, `../common`) are how this monorepo wires its sub-modules
+together and are fine; the rule is only about targets that leave the tree.
+
+`examples/host/go.mod` carried `github.com/panyam/demokit => ../../../../demokit` for several
+releases. Two things followed. The example silently built against a sibling checkout of another
+project, which is why it picked up a demokit fix in 2026-09 without appearing in the bump that
+delivered that fix to every other example. And a directory replace suppresses `go.sum` entries,
+so nothing about that dependency was verifiable: `go mod verify` had nothing to check. Fixed in
+`3853a192` by dropping the replace and pinning `demokit` and `demokit/notebook` at v0.0.32, which
+is also when `go.sum` gained the real hashes.
+
+The cost of keeping one is paid by whoever clones next, so it is not visible to the author. A
+local checkout is still the right tool while developing against an unreleased dependency; it just
+belongs in `go mod edit -replace` before the work and out of the tree before the commit.
+
+**Verify:** no automated check exists. The recipe, run from the repo root:
+
+```bash
+python3 - <<'PY'
+import os, re, subprocess
+root = os.path.abspath(".")
+for f in subprocess.run(["git","ls-files","*go.mod"],capture_output=True,text=True).stdout.split():
+    d = os.path.dirname(os.path.abspath(f))
+    for m in re.finditer(r'^\s*(\S+)\s+=>\s+(\.\S*)\s*$', open(f).read(), re.M):
+        t = os.path.normpath(os.path.join(d, m.group(2)))
+        if not t.startswith(root + os.sep) and t != root:
+            print("out-of-repo replace:", f, m.group(1), "->", m.group(2))
+PY
+```
+
+Currently zero across the tree. This is cheap to promote to a CI gate and has not been, only
+because the single violation was found and fixed by hand.

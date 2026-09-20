@@ -135,6 +135,13 @@ These span packages and will bite on a task that never opens a routed doc.
   `make refresh-conformance` and commit the result, or CI fails after everything else has gone
   green. Cost a round-trip on #1378. The full checklist for a new target is in
   `conformance/NOTES.md` § Adding a testconf-* target.
+- **Example walkthrough prose is generated, and lives in Go, not in the `.md`.** Every
+  `examples/*/WALKTHROUGH.md` comes from `go run . --doc md`, so hand-editing one is reverted by
+  the next `just readme` and reported as drift by `/example-audit`. The words live in
+  `walkthrough.go` / `main.go` string literals and in demokit's own renderer, which is a separate
+  repo. **`examples/host/` inverts the pair:** there the `README.md` is the generated file
+  (`--readme`) and the `WALKTHROUGH.md` is hand-written, the opposite of everywhere else. Check
+  for a `readme` recipe before editing any example doc. Detail in `examples/NOTES.md` § demokit.
 - **The docs-site conformance page needs no separate update.**
   `docs/site/content/conformance/index.html` is a shim that renders `CONFORMANCE.md` at build
   time, so regenerating that file *is* the site update. Same for the audit pages.

@@ -70,6 +70,32 @@ sweeps over the common path miss them.
   the binary's own value flags declared as extras so they survive the filter. Declare your own
   flags **first**, then call `flag.CommandLine.Parse` **once** on the filtered list.
 
+### Generated docs have two prose sources, and one of them is not this repo
+
+`WALKTHROUGH.md` is `go run . --doc md` output. Editing it directly is reverted by the next
+`just readme` and shows up as drift in `/example-audit`, so the words have to be changed where
+they actually live:
+
+1. **The example's own Go strings** - `demokit.New(...)`, `.Description(...)`, `demo.Step(...)`,
+   `Note(...)`, `Arrow(...)`, `Section(...)` in `walkthrough.go` / `main.go`.
+2. **demokit's renderer** - `Demo.Markdown()` in `github.com/panyam/demokit`. Anything it formats
+   around your strings is not yours to change here.
+
+A docs-wide prose pass found this the hard way in 2026-09. Purging em-dashes from the published
+docs left 99 behind across twelve walkthroughs, all from one line in `demokit/markdown.go` that
+wrote the "What you'll learn" teaser as `- **%s** — %s`. No amount of editing this repo could
+remove them; it took demokit v0.0.32 and a bump. Budget for that when a convention has to hold
+across generated output.
+
+**`examples/host/` is the exception and inverts the pair.** `01-apphost` and `02-multi-server`
+generate `README.md` (`go run ./<dir>/ --readme > README.md`) and hand-write `WALKTHROUGH.md`.
+Everywhere else it is the other way round. Check the `readme` recipe before editing either file.
+
+**Regeneration must be deterministic or the file diffs against itself.** `examples/host/01-apphost`
+flapped for a while because `InProcessAppBridge` ranged a map to answer `tools/list`; two `make
+readme` runs produced two different READMEs. Nothing gated it, so it read as unrelated churn in
+whichever PR regenerated next. See `ext/ui/NOTES.md`.
+
 ---
 
 ## whole-enchilada stage 2 (`examples/whole-enchilada/events/`)

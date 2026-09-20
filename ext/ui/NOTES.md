@@ -62,6 +62,27 @@ traceparent, and the test fails for a reason that has nothing to do with the bri
 
 ---
 
+## Map order reaches generated docs
+
+`InProcessAppBridge.handleToolsList` answers `tools/list` from `b.tools`, a map, and
+`AppHost.ListAllTools` preserves whatever the bridge returns. That is deliberate on the host side:
+a real iframe app's tool order is the app's own and may be meaningful, so the host does not sort
+it. But it meant the in-process bridge handed back a different order every run.
+
+That reached disk, because `examples/host/01-apphost` regenerates its `README.md` from a live run.
+`make readme` produced a different file each time, and since nothing gates generated example docs
+it surfaced as unexplained churn in whichever PR regenerated next (#1405 was the one that noticed).
+
+Fixed in #1408 by sorting in the bridge, matching `ServerRegistry.AllTools`, which already sorts
+its own aggregation for the same reason. `TestBridge_Send_ToolsList_Deterministic` pins it with
+four tools registered in neither sorted nor reverse-sorted order, asserted over 10 iterations, so
+a pass-through implementation cannot coincidentally satisfy it.
+
+The general rule: anything an example renders into a committed file has to be deterministic. A map
+range that is invisible in a test is not invisible in a regenerated document.
+
+---
+
 ## Open items
 
 - **`ctx.Elicit` / `ctx.Sample` handlers need migrating to MRTR** for stateless-wire support
