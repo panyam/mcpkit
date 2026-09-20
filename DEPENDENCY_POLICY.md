@@ -17,7 +17,8 @@ The sweep exists because per-directory updates cannot satisfy the lock-step rule
 
 Security fixes do not wait for the monthly sweep:
 
-- **Dependabot security updates** are a repository setting, independent of `.github/dependabot.yml`, and still open CVE pull requests immediately.
+- **Dependabot security updates** are a repository setting, independent of `.github/dependabot.yml`, and still open CVE pull requests immediately. `dependabot.yml` has no `go_modules` ecosystem, so **any Go PR from Dependabot arrives by this route** and has the per-directory shape the sweep exists to avoid.
+- **Resolve a Dependabot Go PR with a sweep, not by patching it.** It cannot reach modules outside the group it is bumping, so a family split across repositories breaks. Worked example: PR 1398 bumped `otlploggrpc` in 27 directories, which pulled `go.opentelemetry.io/otel/log` forward while leaving `contrib/bridges/otelslog` behind — a different repository, so out of group — and every example stopped compiling on `undefined: log.Value`. `make dep-sweep` fixed it in one pass by unifying the whole family; the Dependabot PR was then closed unmerged.
 - **`.github/workflows/vulncheck.yml`** scans the published surface weekly, plus on every release tag. It is time-triggered rather than tied to pushes because the advisory database moves independently of this repository: a CVE published after your last commit affects code that has not changed.
 - `just audit` runs govulncheck, gosec, and gitleaks. It is a pre-release gate, not a per-PR CI job.
 - `just vulncheck` scans the whole published module surface: the root module plus every module in `SUB_MODS_TO_TAG`. This matters because `govulncheck ./...` is module-scoped and does not descend into nested modules, so a root-only scan silently skips every sub-module. Examples are out of scope; they are demos, not modules anyone imports.
