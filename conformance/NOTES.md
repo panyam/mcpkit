@@ -160,6 +160,22 @@ scenario through the CLI instead. The per-suite history is in `CONFORMANCE.md` f
 fixture so it *must* fail, and confirm the suite goes red. Nothing else caught this — tasks reported
 an identical 48/48 with and without an upstream PR applied, which is what finally looked wrong.
 
+**Break the code under test, not the fixture, when the scenarios discover at runtime.** The events
+suite selects an event type by capability rather than by name, on purpose: nothing is hardcoded to a
+fixture's names, so a scenario asks which types offer poll and takes one. That makes the obvious
+break useless. Removing `poll` from `alert.fired` during #1416 left the suite at 29/29, because the
+scenario simply chose `chat.message` instead, and a reader who stopped there would have concluded
+the suite was not grading anything. Disabling the poll delivery gate in the library did turn
+`sep-9999-poll-mode-unsupported` red, with a message naming the source. The rule generalises: a
+fixture break only proves grading against a suite that cannot route around it, so for any
+capability-discovering suite, break the behaviour the check describes.
+
+**A suite's own notes go stale and will mislead you.** The `sep-9999.yaml` header attributed
+`sep-9999-descriptor-input-schema` to `events.topology` alone and recorded that #1381 had given the
+three kitchen-sink sources an `inputSchema`. Neither was true by the time it was read: the failure
+was on `chat.message`, and no source in that example declared one. The artifacts say what actually
+failed, so read `checks-*/\*/checks.json` rather than the prose written about a previous run.
+
 **Env vars are not a contract.** `FILE_INPUTS_SERVER_URL` and `AUTH_SERVER_URL` *are* read by the
 fork's test files; `MRTR_SERVER_URL` and `TASKS_SERVER_URL` never were. Grep the target worktree
 before assuming a var does anything.
@@ -375,15 +391,56 @@ reach over `https` — localhost cannot serve that, since the SSRF rules the sui
 require a conformant server to refuse it.
 
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
-`nextPollSeconds` rename and #1381 added `list_changed`, termination, and `inputSchema` on the three
-real sources. The remaining five are #1380, and three of those collapse into one question: the
-`events.topology` meta-source does not keep the descriptor contract at all (`delivery: null`, no
-`inputSchema`, answers `events/poll` while advertising no poll delivery). Whether a meta-source
-belongs in `events/list` as a peer of real event types is worth settling before patching symptoms.
+`nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.
+With that branch applied both scenarios report **events-discovery 12/12 and events-poll 29/29, zero
+failures**; it is open at the time of writing. The
+discovery denominator moved from 11 to 12 because a check that could not previously run now does.
 
-Flip to a gate once #1380 closes and the spec text stabilises.
+What #1416 settled, since the issue left two of them open as questions:
+
+- **The meta-source keeps the same contract as everyone else.** #1380 scoped `events.topology` out
+  as entangled with G34, but enforcing `delivery` on the poll path made that impossible to defer: a
+  source advertising `delivery: null` stops answering polls the moment the gate lands. Exempting the
+  library's own descriptor from the contract it enforces on authors' descriptors was the worse
+  option, so topology now carries a delivery array and an `inputSchema`.
+- **`delivery` is enforced, and an undeclared array is derived rather than defaulted.** 68 of the
+  121 `EventDef` literals in the package's tests leave it unset, so strict enforcement would have
+  broken them wholesale, and defaulting to all three modes would have claimed push for sources that
+  cannot stream. `normalizeDelivery` keeps an author's own list untouched and otherwise derives from
+  what the source can actually serve.
+
+**Three things it found that the issue did not know about.** `events/list` ranged a map, so its
+order flapped (now constraint C10). No kitchen-sink source declared an `inputSchema` at all, so
+argument validation had never been graded. And `sep-9999-poll-invalid-arguments` reports
+*untestable* rather than failing when the selected event type declares no typed property, which
+looks like a defect in the report and is a fixture gap.
+
+**The capability location is an open WG question, not a settled fact.** The document puts it
+top-level under `capabilities.events`; metronome, the sketch author's own server, puts it under the
+SEP-2133 `extensions` map. mcpkit follows the document. Do not soften
+`sep-9999-capability-events-object` to make both pass: two implementations disagreeing is the signal
+worth carrying into the WG. If it moves, `EVENTS_CAPABILITY` in `helpers.ts`, `core.EventsCap` and
+the call in `events.Register` move together.
+
+Flip to a gate once the spec text stabilises. The numbers no longer block it.
 
 ---
+
+## `traceability.json` is generated against the reference SDK, not against us
+
+`src/seps/traceability.json` upstream maps, per SEP, which declared check IDs are emitted when the
+suite runs **against the TypeScript reference SDK**. It feeds plan.modelcontextprotocol.io, and
+`AGENTS.md` says the traceability workflow refreshes it by PR.
+
+Running `tsx src/index.ts traceability --results <dir>` locally rewrites that file from whatever
+results directory you point at. Point it at one suite's output, which is the only kind we produce,
+and every other SEP in the file flips to `untested` and `source` becomes `null`. During the SEP-2640
+refresh this produced a 1281-line diff that looked like a legitimate regeneration and would have
+been a destructive change to someone else's data.
+
+Run it to read the numbers, then `git checkout -- src/seps/traceability.json` before committing.
+The local run is still the right way to confirm a yaml edit parses and that the untested count
+matches what a header claims.
 
 ## Generated artifacts
 

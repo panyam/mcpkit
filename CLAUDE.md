@@ -23,6 +23,7 @@ make testall           # Everything (9 stages, 21 sub-stages) + Keycloak + HTML 
 make audit             # govulncheck + gosec + gitleaks + race
 make tidy-all          # Required after touching core/ imports
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (RELEASING.md; pre-release is vX.Y.Z-bN)
+make check-release-workflows V=vX.Y.Z  # Confirm the tag actually triggered its workflows
 ```
 
 Conformance targets (`testconf`, `testconf-client`, `testconf-tasks-v2`, `testconf-mrtr`,
@@ -187,6 +188,21 @@ These span packages and will bite on a task that never opens a routed doc.
   fires on a merge to the **default** branch, so carry it on whichever PR actually reaches main.
   Two branches that both append tests to the end of the same file will re-conflict at every cross
   merge; land the shared base before branching the second consumer.
+- **A release that triggers no workflows looks exactly like one whose workflows all passed.**
+  `make tag-push` used to send 20 refs in a single `git push`, and GitHub raises no push event for
+  a tag push that large, so `publish-images.yml` never ran once and `vulncheck.yml` only ever fired
+  on its weekly schedule. Five releases shipped that way, v0.4.0 through v0.6.0, with the repo green
+  throughout: a published tag and nothing red reads identically either way. #1411 split the push and
+  #1413 added `make check-release-workflows V=<tag>`, now a step in `RELEASING.md`. The checker
+  derives its list from `on.push.tags` across `.github/workflows/`, so a third tag-triggered
+  workflow is covered the day it lands. Its OK path has still never been seen live, since no tag in
+  this repo's history has had a workflow fire against it; the next release is the first real
+  exercise. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
+  because for five releases it did not.
+- **A list response is built from sorted keys, never from map iteration.** Constraint C10, added
+  after the same bug turned up twice: `tools/list` on the apps bridge (#1408) and `events/list`
+  (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
+  downstream assumed a stable order, and it surfaces as flakiness somewhere else.
 - **`check-dep-consistency` failures want `--prune-baseline`, not `--update-baseline`.** The CI
   error text suggests the latter, which also accepts any *new* divergence silently, defeating the
   point of the baseline. Prune only drops entries that stopped diverging. A cross-module
@@ -235,15 +251,28 @@ implementation is how two bugs in the suite were found and fixed, neither reacha
 alone. Detail in `ext/skills/NOTES.md`, per-SDK setup in `RUNNING_SEP2640.md` on the conformance
 branch.
 
-**MCP Events has a conformance suite, and it is red on purpose.** `testconf-events` (stage 8i,
-`INFO`) drives `examples/events/kitchen-sink` against scenarios proposed upstream as a draft in
+**MCP Events has a conformance suite.** `testconf-events` (stage 8i, `INFO`) drives
+`examples/events/kitchen-sink` against scenarios proposed upstream as a draft in
 `modelcontextprotocol/conformance` PR 504. It scores against the design sketch that merged
 2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
 with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
 renamed before that PR can merge. Phase 1 ships 2 of 5 scenarios and emits 45 of 131 declared rows;
-push and webhook follow. Building it surfaced six divergences in our own implementation, three of
-which #1379 and #1381 have since closed; the rest are #1380. Detail in `conformance/NOTES.md`
+push and webhook follow. Building it surfaced six divergences in our own implementation, closed by #1379 and #1381, with the
+remaining four in #1416 (open), which takes both scenarios to **12/12 and 29/29**. It stays `INFO`
+until the spec text stabilises rather than because it is red. Detail in `conformance/NOTES.md`
 § MCP Events suite.
+
+**Events declares its capability top-level, unlike every other extension here.**
+`capabilities.events`, not `capabilities.extensions["io.modelcontextprotocol/events"]`, so
+`server.WithExtension` / `RegisterExtension` is the wrong plumbing for it; `core.EventsCap` plus
+`srv.SetEventsCap` is the right one, modelled on `caps.Tasks`. That is what the design sketch
+specifies and what the suite grades, but the sketch author's own reference server
+(`metronome-mcp.fly.dev`) declares it under `extensions` instead. The disagreement is live and
+deliberate: following the document keeps two implementations visibly disagreeing, which is the
+signal the suite exists to produce, where declaring under both would have made our own suite green
+and erased the data point. If the WG settles on the extensions map, `core.EventsCap`,
+`EVENTS_CAPABILITY` in the suite's `helpers.ts`, and the call in `events.Register` all move
+together.
 
 `testconf-scope-challenge` runs mcpkit against the upstream SEP-2350 server scope-challenge
 scenario (`modelcontextprotocol/conformance` PR 481), currently 17/17. It is `INFO` rather than
