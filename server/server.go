@@ -759,6 +759,18 @@ func (s *Server) SetTasksCap(cap *core.TasksCap) {
 	s.dispatcher.tasksCap = cap
 }
 
+// SetEventsCap configures the MCP Events capability advertised during
+// initialize, on both the session and stateless wires. Pass nil to withdraw it.
+// Must be called before accepting connections.
+//
+// experimental/ext/events Register calls this, so servers wiring events through
+// that package do not need to. Unlike tasks v2 and skills, events declares at
+// the top level of `capabilities` rather than through the extensions map; see
+// core.EventsCap for why, and for the open question about it.
+func (s *Server) SetEventsCap(cap *core.EventsCap) {
+	s.dispatcher.eventsCap = cap
+}
+
 // RegisterExtension declares a protocol extension at runtime, the way
 // WithExtension does at construction time. Used by RegisterTasks (and other
 // post-construction hookups like ext/auth) so the extension is advertised in

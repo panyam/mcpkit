@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -108,7 +109,13 @@ type Registry struct {
 	// request because compilation walks and resolves the whole schema
 	// while validation only evaluates it. Absent entry means the source
 	// declared no InputSchema, which the validator treats as accept-all.
-	schemas   map[string]*core.CompiledSchema
+	schemas map[string]*core.CompiledSchema
+	// delivery holds each source's advertised delivery modes, keyed by
+	// source name and derived at registration when the source declares
+	// none. Kept here rather than written back onto the source because
+	// EventSource is an interface: Def() may build a fresh EventDef on
+	// every call, so there is nothing stable to mutate.
+	delivery  map[string][]string
 	emitter   Emitter
 	tp        core.TracerProvider
 	metaYield func(context.Context, TopologyEvent) error
@@ -125,6 +132,7 @@ func newRegistry(srv *server.Server, webhooks *WebhookRegistry, emitter Emitter,
 		webhooks: webhooks,
 		sources:  make(map[string]EventSource),
 		schemas:  make(map[string]*core.CompiledSchema),
+		delivery: make(map[string][]string),
 		emitter:  emitter,
 		tp:       tp,
 	}
@@ -137,9 +145,19 @@ func newRegistry(srv *server.Server, webhooks *WebhookRegistry, emitter Emitter,
 	metaSource, metaYield := NewYieldingSource[TopologyEvent](EventDef{
 		Name:        TopologySourceName,
 		Description: "SDK meta-source. Yields a TopologyEvent for every AddSource / RemoveSource against this server's Registry. Use to observe source lifecycle without polling events/list.",
+		// The meta-source takes no subscription arguments, and says so
+		// rather than leaving the field absent: a descriptor with no
+		// inputSchema is indistinguishable from one whose schema nobody
+		// wrote, and this is the one descriptor the library itself owns.
+		InputSchema: map[string]any{
+			"type":                 "object",
+			"properties":           map[string]any{},
+			"additionalProperties": false,
+		},
 	})
 	r.wireLocked(metaSource)
 	r.sources[TopologySourceName] = metaSource
+	r.delivery[TopologySourceName] = deriveDelivery(metaSource, webhooks != nil)
 	r.metaYield = metaYield
 	return r
 }
@@ -183,6 +201,7 @@ func (r *Registry) AddSource(src EventSource) error {
 	}
 	r.wireLocked(src)
 	r.sources[name] = src
+	r.delivery[name] = normalizeDelivery(src.Def().Delivery, src, r.webhooks != nil)
 	if compiled != nil {
 		r.schemas[name] = compiled
 	}
@@ -219,6 +238,7 @@ func (r *Registry) RemoveSource(name string) error {
 	}
 	delete(r.sources, name)
 	delete(r.schemas, name)
+	delete(r.delivery, name)
 	r.mu.Unlock()
 
 	// Spec §"Event Type Removal and Breaking Changes" (commit 28ec35e9):
@@ -328,6 +348,56 @@ func (r *Registry) Source(name string) (EventSource, bool) {
 	return s, ok
 }
 
+// Def returns the descriptor the server advertises for a source, which is the
+// source's own EventDef with its delivery modes resolved.
+//
+// Read this rather than src.Def() wherever the answer has to match what
+// events/list published. A source that declared no delivery modes gets a
+// derived set at registration, and only the registry holds it.
+func (r *Registry) Def(name string) (EventDef, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	src, ok := r.sources[name]
+	if !ok {
+		return EventDef{}, false
+	}
+	def := src.Def()
+	if d, ok := r.delivery[name]; ok {
+		def.Delivery = d
+	}
+	return def, true
+}
+
+// normalizeDelivery resolves what a source advertises. A declared set is
+// returned unchanged, including one that narrows to a single mode; the spec
+// wants a non-empty subset of poll/push/webhook and an author who wrote one
+// means it.
+//
+// An absent set is derived rather than defaulted to all three. Claiming push
+// for a source that cannot stream would put the same kind of lie on the wire
+// that an absent declaration does, one layer further in.
+func normalizeDelivery(declared []string, src EventSource, hasWebhooks bool) []string {
+	if len(declared) > 0 {
+		return declared
+	}
+	return deriveDelivery(src, hasWebhooks)
+}
+
+// deriveDelivery reports the modes a source can actually serve. Poll is
+// unconditional because Poll is on the EventSource interface. Push needs the
+// optional Subscribe channel that registerStream requires. Webhook needs a
+// registry to deliver through and the same fanout push uses.
+func deriveDelivery(src EventSource, hasWebhooks bool) []string {
+	modes := []string{DeliveryModePoll.String()}
+	if _, ok := src.(streamSubscribable); ok {
+		modes = append(modes, DeliveryModePush.String())
+		if hasWebhooks {
+			modes = append(modes, DeliveryModeWebhook.String())
+		}
+	}
+	return modes
+}
+
 // SourceNames returns the names of all currently registered sources in
 // no particular order. Useful for diagnostic / admin handlers that
 // want to list what's installed.
@@ -348,9 +418,19 @@ func (r *Registry) SourceNames() []string {
 func (r *Registry) snapshot() []EventSource {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]EventSource, 0, len(r.sources))
-	for _, s := range r.sources {
-		out = append(out, s)
+	names := make([]string, 0, len(r.sources))
+	for name := range r.sources {
+		names = append(names, name)
+	}
+	// Sorted, because this backs events/list and ranging the map put the
+	// response in a different order on every call. #1408 was the same bug on
+	// the apps bridge's tools/list. It stayed invisible here while the one
+	// source a client could not poll happened to be excluded from selection;
+	// giving events.topology a delivery array made the order load-bearing.
+	sort.Strings(names)
+	out := make([]EventSource, 0, len(names))
+	for _, name := range names {
+		out = append(out, r.sources[name])
 	}
 	return out
 }

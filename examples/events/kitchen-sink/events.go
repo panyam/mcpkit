@@ -119,6 +119,19 @@ func chatEventDef() events.EventDef {
 		Description: "Chat messages from synthetic feeders. Match by params.channel.",
 		Delivery:    []string{"push", "poll", "webhook"},
 		Meta:        map[string]any{"category": "messaging"},
+		// The arguments Match actually reads. Declaring them lets the library
+		// reject a bad subscription with -32602 before any hook runs, instead
+		// of Match silently treating a non-string channel as "match all".
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"channel": map[string]any{
+					"type":        "string",
+					"description": "Deliver only messages on this channel. Omit for every channel.",
+				},
+			},
+			"additionalProperties": false,
+		},
 		Match: func(_ events.HookContext, e events.Event, params map[string]any) bool {
 			want, _ := params["channel"].(string)
 			if want == "" {
@@ -143,6 +156,21 @@ func alertEventDef() events.EventDef {
 		Description: "Alerts from synthetic feeders. Match by params.severity; Transform redacts PII when params.redact_pii.",
 		Delivery:    []string{"push", "poll", "webhook"},
 		Meta:        map[string]any{"category": "ops"},
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"severity": map[string]any{
+					"type":        "string",
+					"enum":        []any{"info", "warning", "critical"},
+					"description": "Deliver only alerts at this severity. Omit for every severity.",
+				},
+				"redact_pii": map[string]any{
+					"type":        "boolean",
+					"description": "Strip the reporter and any email addresses from the message body.",
+				},
+			},
+			"additionalProperties": false,
+		},
 		Match: func(_ events.HookContext, e events.Event, params map[string]any) bool {
 			want, _ := params["severity"].(string)
 			if want == "" {
@@ -187,6 +215,17 @@ func presenceEventDef(registry *watchListRegistry) events.EventDef {
 		Description: "Cursorless presence transitions. OnSubscribe records params.watch_users; the feeder uses EmitToSubscription to deliver only matched users to each subscription.",
 		Delivery:    []string{"push", "webhook"},
 		Meta:        map[string]any{"category": "presence"},
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"watch_users": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "User ids whose transitions this subscription wants.",
+				},
+			},
+			"additionalProperties": false,
+		},
 		OnSubscribe: func(ctx events.HookContext, params map[string]any) error {
 			users := stringSlice(params["watch_users"])
 			registry.set(ctx.SubscriptionID(), users)

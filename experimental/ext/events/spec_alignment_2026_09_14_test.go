@@ -218,10 +218,28 @@ func TestEventsList_OmitsInputSchemaWhenUndeclared(t *testing.T) {
 
 	body, err := json.Marshal(resp.Result)
 	require.NoError(t, err)
-	// Neither fakeSecretValidationSource nor the events.topology meta-source
-	// declares an InputSchema, so the key must be absent from the whole list.
-	assert.NotContains(t, string(body), `"inputSchema"`,
-		"a source with no InputSchema must not emit the key at all")
+
+	// Scoped to the source under test rather than the whole list body. The
+	// assertion used to lean on events.topology declaring no InputSchema
+	// either, which stopped being true when the meta-source was brought up to
+	// the descriptor contract the conformance suite checks (#1380). The rule
+	// being pinned here is unchanged and still exactly enforced: a source that
+	// declares nothing emits nothing.
+	var list struct {
+		Events []map[string]any `json:"events"`
+	}
+	require.NoError(t, json.Unmarshal(body, &list))
+
+	var found bool
+	for _, e := range list.Events {
+		if e["name"] != "fake.event" {
+			continue
+		}
+		found = true
+		assert.NotContains(t, e, "inputSchema",
+			"a source with no InputSchema must not emit the key at all")
+	}
+	require.True(t, found, "fake.event missing from events/list: %s", body)
 }
 
 // TestSubscribe_RejectsArgumentsViolatingInputSchema covers spec L115: -32602

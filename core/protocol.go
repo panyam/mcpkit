@@ -87,17 +87,37 @@ type RootsListResult struct {
 // ServerCapabilities describes the features the server supports,
 // returned in the initialize response.
 type ServerCapabilities struct {
-	Tools       *ToolsCap       `json:"tools,omitempty"`
-	Resources   *ResourcesCap   `json:"resources,omitempty"`
-	Prompts     *PromptsCap     `json:"prompts,omitempty"`
-	Tasks       *TasksCap       `json:"tasks,omitempty"`
-	Logging     *struct{}       `json:"logging,omitempty"`
-	Completions *struct{}       `json:"completions,omitempty"`
+	Tools       *ToolsCap                      `json:"tools,omitempty"`
+	Resources   *ResourcesCap                  `json:"resources,omitempty"`
+	Prompts     *PromptsCap                    `json:"prompts,omitempty"`
+	Tasks       *TasksCap                      `json:"tasks,omitempty"`
+	Events      *EventsCap                     `json:"events,omitempty"`
+	Logging     *struct{}                      `json:"logging,omitempty"`
+	Completions *struct{}                      `json:"completions,omitempty"`
 	Extensions  map[string]ExtensionCapability `json:"extensions,omitempty"`
 }
 
 // ToolsCap describes the server's tools capability.
 type ToolsCap struct {
+	ListChanged bool `json:"listChanged,omitempty"`
+}
+
+// EventsCap describes the server's MCP Events capability.
+//
+// Events declares itself at the top level of `capabilities`, not through the
+// SEP-2133 `extensions` map that ext/skills, ext/tasks and experimental/ext/
+// agents use. That is what the merged design sketch specifies
+// (modelcontextprotocol/experimental-ext-triggers-events, §"Listing Available
+// Events"), and it is what the conformance suite grades. Note that the sketch
+// author's own reference server declares it under `extensions` instead; the
+// disagreement is live and tracked in the suite's own notes, so expect this to
+// move if the WG settles on the extensions map.
+//
+// A nil *EventsCap means the server serves no event sources and the key is
+// absent from the initialize result.
+type EventsCap struct {
+	// ListChanged reports whether the server emits
+	// notifications/events/list_changed when its set of event types changes.
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
