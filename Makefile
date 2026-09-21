@@ -379,9 +379,18 @@ ghdeploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-
 tag: ## Tag root + all sub-modules (usage: make tag V=v0.0.11)
 	@V="$(V)" ./scripts/tag-all.sh
 
+# The root tag is pushed BY ITSELF, ahead of the sub-module tags. GitHub does
+# not raise push events for a tag push carrying many refs at once, and this
+# repo pushes twenty. The symptom is silent: the release succeeds, and the
+# workflows keyed on `tags: ['v*']` simply never run. Both of ours were in that
+# state from v0.4.0 through v0.6.0 -- publish-images.yml had zero runs ever, and
+# vulncheck.yml only ever fired on its schedule, which quietly falsified
+# DEPENDENCY_POLICY.md's claim that the audit runs before every tagged release.
+# Two pushes, not one, is the whole fix. See #1391.
 tag-push: ## Tag and push in one step (usage: make tag-push V=v0.0.11)
 	@$(MAKE) tag V=$(V)
-	git push origin $(V) $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')
+	git push origin $(V)
+	git push origin $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')
 
 # ---------------------------------------------------------------------------
 # Agent SDK release (STAGED, not part of a protocol release, not run today)
