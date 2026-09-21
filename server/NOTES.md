@@ -159,3 +159,12 @@ Affected public symbols are enumerated in `docs/SEP_2577_DEPRECATIONS.md`.
   plus a client.
 - Version negotiation, feature gating, and duplicate-initialize behavior all have tests keyed to
   `protocol_features.go`; add there rather than inline.
+- **Compare context errors with `errors.Is`, never `==`, once an HTTP client is in the path.**
+  `TestWaitForTaskTimeout` asserted `err != context.DeadlineExceeded` and flaked in CI.
+  `WaitForTaskV1` polls on an interval against a deadline, so which error surfaces is a race: expire
+  between polls and you get `ctx.Err()` bare, expire while a POST is in flight and `http.Client`
+  returns a `*url.Error` wrapping it. Identity comparison passed only in the first case.
+  `-count=60 -cpu=1` reproduces it; at default parallelism it hid through 40 clean runs.
+  `ext/tasks/client_integration_test.go` had the same shape on `context.Canceled`. Identity is still
+  fine where nothing can wrap the error — a goroutine handing back `ctx.Err()` over a channel, or
+  `core/detach_test.go` comparing `ctx.Err()` directly.

@@ -78,6 +78,13 @@ per-package `NOTES.md`, the design docs, and the roadmap.
 **`SUB_MODS_TO_TAG` in the root `Makefile` is the authoritative list.** Do not maintain a copy
 here, it rots. `make test` does not cover sub-modules; each has its own target.
 
+**That list is parsed, not just expanded.** `scripts/check_dep_consistency.py` reads it out of the
+`Makefile` with a regex, so its *shape* is load-bearing: the backslash-continued form is what the
+parser expects. The justfile used to carry a second copy that no recipe referenced, and deleting it
+as dead broke that gate with `SUB_MODS_TO_TAG not found in justfile`. Before removing a variable
+from a build file, grep the whole tree rather than only the recipes — a Python script reading a
+Makefile does not look like a reference.
+
 Run **`make tidy-all` after touching `core/` imports** or sub-module `go.sum` files drift and CI
 fails in a module you did not edit.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# C6 gate — every stateless dispatcher handler for a request-bearing method
+# C7 gate — every stateless dispatcher handler for a request-bearing method
 # must route through Backend.InvokeWithMiddleware, so that a middleware
 # applies identically on the session and stateless wires.
 #
