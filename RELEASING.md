@@ -42,13 +42,19 @@ From a green `main`:
    tag plus one per sub-module (`ext/tasks/<version>`, …). The `Makefile` just
    string-interpolates `V`, so hyphenated pre-release strings are valid git
    tags.
-4. **Verify resolution.** From a scratch module:
+4. **Verify the tag's workflows fired.** `make check-release-workflows V=<version>`.
+   A tag that triggers nothing is indistinguishable from a tag whose workflows
+   all passed: green repo, published tag, no red anywhere. That is how v0.4.0
+   through v0.6.0 shipped with `publish-images.yml` never having run and
+   `vulncheck.yml` firing only on its schedule (#1412). Do not skip this on the
+   grounds that #1411 fixed the push; the fix is what this step verifies.
+5. **Verify resolution.** From a scratch module:
    ```
    GOPROXY=direct GOFLAGS=-mod=mod go list -m github.com/panyam/mcpkit@<version>
    GOPROXY=direct GOFLAGS=-mod=mod go list -m github.com/panyam/mcpkit/ext/tasks@<version>
    ```
    For a pre-release, also confirm `@latest` still returns the stable tag.
-5. **GitHub Release.** See the token note below. For a stable release write a
+6. **GitHub Release.** See the token note below. For a stable release write a
    release note; for a `-bN` pre-release, publish with **"Set as a pre-release"**
    checked.
 
@@ -118,4 +124,7 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin 
       like a real tag, so a sibling pinned at a tag nobody pushed passes it and
       breaks `go get` for every outside consumer. That is what #1291 was.
 - [ ] `make tag-push V=vX.Y.0`; verify `go get …@vX.Y.0`
+- [ ] `make check-release-workflows V=vX.Y.0` green — confirms the tag actually
+      triggered `publish-images` and `vulncheck` rather than silently firing
+      neither (#1412)
 - [ ] GitHub Release published (`env -u GH_TOKEN gh release create`, per the token note)

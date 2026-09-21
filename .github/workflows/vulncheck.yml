@@ -16,8 +16,13 @@ on:
     # Mondays 06:30 UTC, staggered off scorecard.yml's 02:30 Monday slot.
     - cron: '30 6 * * 1'
   push:
-    # DEPENDENCY_POLICY.md: the audit runs before every tagged release. This is
-    # what makes that claim enforced rather than aspirational.
+    # A second pass at release time, on top of the schedule above.
+    #
+    # This leg was dead from v0.4.0 through v0.6.0 and nobody noticed, because
+    # `make tag-push` sent 20 refs in one push and GitHub raises no push event
+    # for a tag push that large. Every release in that window was covered by
+    # the weekly schedule alone (#1412). #1411 split the push; `make
+    # check-release-workflows V=<tag>` is what confirms this fired.
     tags: ['v*']
   workflow_dispatch:
 

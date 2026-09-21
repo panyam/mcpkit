@@ -419,6 +419,13 @@ check-recipe-complexity: ## CI gate — fail if a Makefile/justfile recipe holds
 	@./scripts/check_recipe_complexity.py --selftest
 	@./scripts/check_recipe_complexity.py
 
+check-release-workflows: ## Release step — fail if a tag-triggered workflow never ran for V (usage: make check-release-workflows V=v0.6.0)
+	@./scripts/check_release_workflows.py --selftest
+	@./scripts/check_release_workflows.py $(V)
+
+check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
+	@./scripts/check_release_workflows.py --selftest
+
 setup: setup-tools setup-hooks ## Full development setup
 
 help: ## Show this help
