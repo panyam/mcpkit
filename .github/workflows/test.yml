@@ -48,6 +48,13 @@ jobs:
       - name: Recipes dispatch, not script
         run: make check-recipe-complexity
 
+      # The checker for #1412 reads the Actions API, so the live half only runs
+      # at release time against a real tag. Its self-test needs no network and
+      # gates here, because a broken detector reports the same all-clear as a
+      # healthy release and that is the failure it exists to catch.
+      - name: Release-workflow checker self-test
+        run: make check-release-workflows-selftest
+
       # examples/ holds 58 modules but `make test-examples` only runs the ~10
       # that have tests, so nothing compiled the rest. apps/react/server was
       # broken from c45ccb78 until it was found by hand, with CI green

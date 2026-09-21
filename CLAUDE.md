@@ -226,8 +226,9 @@ the MRTR fixture is `cmd/testserver`, how to regenerate the reports when a red s
 stale, and the two inputs regeneration never touches (`known-gaps.yaml`,
 `client-check-counts.json`).
 
-**SEP-2640 is Accepted** (CM vote 2026-09-01). Conformance tests are one of three deliverables
-gating Final and are ours: `modelcontextprotocol/conformance` PR 330, 96 requirement rows with 89
+**SEP-2640 went Final on 2026-09-11** (`8075db4a` upstream; Accepted was `d6b31a03`, 2026-09-03).
+The conformance tests that gated Final are ours and have merged:
+`modelcontextprotocol/conformance` PR 330, 96 requirement rows with 89
 checks, three server scenarios and five client scenarios. Cross-checked against three independent
 implementations (mcpkit, go-sdk, csharp-sdk), all green. Running it against someone else's
 implementation is how two bugs in the suite were found and fixed, neither reachable from mcpkit
