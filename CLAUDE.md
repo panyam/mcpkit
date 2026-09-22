@@ -244,9 +244,12 @@ stale, and the two inputs regeneration never touches (`known-gaps.yaml`,
 
 **SEP-2640 went Final on 2026-09-11** (`8075db4a` upstream; Accepted was `d6b31a03`, 2026-09-03).
 The conformance tests that gated Final are ours and have merged:
-`modelcontextprotocol/conformance` PR 330, 96 requirement rows with 89
-checks, three server scenarios and five client scenarios. Cross-checked against three independent
-implementations (mcpkit, go-sdk, csharp-sdk), all green. Running it against someone else's
+`modelcontextprotocol/conformance` PR 330, three server scenarios and five client scenarios,
+cross-checked against three independent implementations (mcpkit, go-sdk, csharp-sdk), all green.
+**Do not quote row or check counts from here.** This paragraph said 96 rows and 89 checks against a
+merged file holding 98 and 90, and the yaml's own header was wrong by a similar margin in four
+places. Nothing recomputes either, so both are claims with a date. Read the counts from a
+`traceability` run. Running it against someone else's
 implementation is how two bugs in the suite were found and fixed, neither reachable from mcpkit
 alone. Detail in `ext/skills/NOTES.md`, per-SDK setup in `RUNNING_SEP2640.md` on the conformance
 branch.
