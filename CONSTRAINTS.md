@@ -231,3 +231,38 @@ PY
 
 Currently zero across the tree. This is cheap to promote to a CI gate and has not been, only
 because the single violation was found and fixed by hand.
+
+---
+
+## C10: A list response is built from sorted keys, never from map iteration order
+
+Any handler that turns a `map` into a JSON array sorts the keys first. Go randomizes map iteration
+deliberately, so a list method that ranges its registry answers in a different order on every call.
+
+This is not theoretical and it is not one-off. `InProcessAppBridge` ranged a map for `tools/list`
+and the order flapped between calls (#1408). `experimental/ext/events` did the same for
+`events/list`, and it hid for months because the one source a client could not select was excluded
+from selection anyway; the moment `events.topology` became poll-eligible, conformance scenarios
+that pick "the first event type offering poll" started choosing a different one per run and the
+suite's results moved without the code moving.
+
+That is the shape of the damage. The response is not *wrong* in a way a unit test catches, since
+every entry is present and correct. What breaks is everything downstream that assumed a stable
+order: a client caching by index, a golden-file test, a conformance scenario selecting a fixture,
+a human diffing two runs. The bug reports arrive as flakiness somewhere else entirely.
+
+Pagination makes it worse rather than better. A cursor into an unordered sequence can repeat an
+entry and skip another between pages, so a paginating list method with unstable order is incorrect
+rather than merely untidy.
+
+**Verify:** no automated check exists; the pattern is not reliably greppable, since the offending
+`for … range` is several lines from the response it feeds. The manual recipe is to find list
+handlers and read them:
+
+```bash
+grep -rn 'func.*handle.*List\|"[a-z]*/list"' --include='*.go' core/ server/ ext/ experimental/   | grep -v '_test.go'
+```
+
+For each, confirm the slice it marshals came from `sort.Strings` over the keys, or from an
+explicitly ordered structure such as `server/registry.go`'s `toolOrder`, which exists for this
+reason.

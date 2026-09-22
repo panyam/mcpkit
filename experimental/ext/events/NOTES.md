@@ -123,3 +123,72 @@ regex for any mechanical signature sweep across test files.
 `curl http://localhost:3200/api/search?tags=service.name=X&limit=N` for trace IDs, then
 `curl http://localhost:3200/api/v2/traces/<id>` for the full span tree. Proves spans land in Tempo
 with the right attributes without needing the UI.
+
+---
+
+## The capability is top-level, and that is contested
+
+`capabilities.events`, not `capabilities.extensions["io.modelcontextprotocol/events"]`. This is the
+only extension in the tree that does not go through the SEP-2133 extensions map, so
+`server.WithExtension` and `srv.RegisterExtension` are the wrong plumbing: they write into
+`caps.Extensions`. Use `core.EventsCap` and `srv.SetEventsCap`, which `Register` calls for you,
+modelled on how `caps.Tasks` is wired.
+
+The merged design sketch specifies top-level and the conformance suite grades it there. Metronome
+(`metronome-mcp.fly.dev`), written by the sketch's own author, declares under `extensions`. Both
+cannot be right and the WG has not said which. Declaring under both would pass every check and
+destroy the only useful thing about the disagreement, which is that two implementations reading the
+same document landed in different places.
+
+If it moves, three things move together: this call in `Register`, `core.EventsCap`, and
+`EVENTS_CAPABILITY` in the suite's `src/scenarios/server/events/helpers.ts`.
+
+`listChanged` is reported `true` unconditionally, including on a server with no sources yet, because
+`AddSource` and `RemoveSource` broadcast `notifications/events/list_changed` either way.
+
+---
+
+## `delivery` is a contract, and the registry owns the resolved answer
+
+An `EventDef.Delivery` that lists push and webhook means `events/poll` refuses that type with
+`-32014 Unsupported`, `data.feature: "deliveryMode"`. Before #1416 the array was decorative: poll
+answered for anything registered, so a client reading the descriptor to decide what to call was
+reading a promise nothing kept.
+
+Enforcement forced two design choices worth knowing before touching this:
+
+**A declared array is never widened or narrowed; an absent one is derived, not defaulted.**
+`normalizeDelivery` returns an author's list untouched. For a source that declared none it calls
+`deriveDelivery`, which reports poll unconditionally (`Poll` is on the `EventSource` interface),
+push when the source implements `streamSubscribable`, and webhook when push is available and a
+`WebhookRegistry` is wired. Defaulting to all three would have put the same lie one layer further
+in, claiming push for a `TypedSource` that cannot stream. Strict enforcement with no default would
+have broken 68 of the 121 `EventDef` literals in this package's own tests, which leave the field
+unset.
+
+**The resolved value lives in the registry, not on the source.** `EventSource` is an interface and
+`Def()` may build a fresh struct per call, as several test doubles do, so there is nothing stable to
+write back to. `Registry.delivery` holds it and `Registry.Def(name)` is how everything else reads
+it. **Read `reg.Def(name)`, not `src.Def()`, anywhere the answer has to match what `events/list`
+published.**
+
+Poll and stream still gate on different bases: stream asks whether the source implements
+`streamSubscribable`, poll asks what the descriptor advertises. They agree today only because the
+derivation uses the same type assertion, and they diverge the moment an author declares explicitly.
+Tracked in #1417, along with webhook having no gate at all.
+
+---
+
+## `events` is always an array, and `events/list` is always sorted
+
+Two wire-shape rules that each hid behind something else.
+
+`pollResultWire.Events` carries no `omitempty`, **and** `MarshalJSON` normalizes a nil slice to
+`[]`. Dropping the tag alone is not enough, since a nil slice marshals to `null`, which fails the
+same client loop an absent key fails. The handler also allocates, so the marshaller is defence for
+future producers rather than the thing the conformance check exercises.
+
+`snapshot()` sorts by name. It used to range the map, and the flapping order stayed invisible
+because the one source a client could not poll was never a selection candidate; giving
+`events.topology` a delivery array made the order load-bearing and conformance scenarios began
+picking a different event type per run. Same bug as #1408 on the apps bridge, now constraint C10.
