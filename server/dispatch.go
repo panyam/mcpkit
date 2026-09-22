@@ -47,10 +47,10 @@ type Dispatcher struct {
 	inflight conc.SyncMap[string, context.CancelFunc]
 
 	// Session state set during initialization handshake.
-	negotiatedVersion string             // set by initialize
+	negotiatedVersion string                  // set by initialize
 	clientCaps        core.ClientCapabilities // set by initialize
 	clientInfo        core.ClientInfo         // set by initialize
-	initialized       bool               // set to true by notifications/initialized
+	initialized       bool                    // set to true by notifications/initialized
 
 	// Logging state (per-session).
 	// logLevel stores the minimum log level set by the client via logging/setLevel.
@@ -66,20 +66,20 @@ type Dispatcher struct {
 	notifyMu   sync.RWMutex
 
 	// Subscription state (per-session).
-	subscriptionsEnabled bool                    // advertise "subscribe": true in resources capability
-	sessionID            string                  // set by transport, used as key in subscription registry
-	subManager           *subscriptionRegistry   // shared pointer to Server's registry (nil if disabled)
+	subscriptionsEnabled bool                  // advertise "subscribe": true in resources capability
+	sessionID            string                // set by transport, used as key in subscription registry
+	subManager           *subscriptionRegistry // shared pointer to Server's registry (nil if disabled)
 
 	// Roots state — tracked per session. See refreshRoots for the full state
 	// machine. rootsMu guards roots, rootsStale, and rootsFetching; it must
 	// NOT be held across user-callback invocations or network round trips.
-	rootsMu            sync.Mutex
-	roots              []core.Root
-	rootsStale         bool
-	rootsFetching      bool
-	rootsFetchTimeout  time.Duration     // from WithRootsFetchTimeout; 0 = default 30s
-	onRootsChanged     func([]core.Root) // optional callback, set via WithOnRootsChanged
-	allowedRoots       []string          // static allowlist from WithAllowedRoots
+	rootsMu           sync.Mutex
+	roots             []core.Root
+	rootsStale        bool
+	rootsFetching     bool
+	rootsFetchTimeout time.Duration     // from WithRootsFetchTimeout; 0 = default 30s
+	onRootsChanged    func([]core.Root) // optional callback, set via WithOnRootsChanged
+	allowedRoots      []string          // static allowlist from WithAllowedRoots
 
 	// Server-to-client request infrastructure.
 	// pushRequest pushes a raw JSON-RPC request to the client stream (set by
@@ -119,6 +119,12 @@ type Dispatcher struct {
 	// tasksCap is the tasks capability to advertise during initialize.
 	// nil means tasks are not enabled. Set via Server.SetTasksCap().
 	tasksCap *core.TasksCap
+
+	// eventsCap is the MCP Events capability to advertise during initialize.
+	// Set by experimental/ext/events Register; nil when no event sources are
+	// registered. Top-level rather than an entry in the extensions map, per
+	// core.EventsCap.
+	eventsCap *core.EventsCap
 
 	// mrtr is the SEP-2322 ephemeral MRTR runtime — signing key + TTL for
 	// requestState tokens. Always non-nil (built with zero-value defaults
@@ -264,7 +270,7 @@ type promptEntry struct {
 
 // initializeParams is the params object sent by the client in an initialize request.
 type initializeParams struct {
-	ProtocolVersion string             `json:"protocolVersion"`
+	ProtocolVersion string                  `json:"protocolVersion"`
 	Capabilities    core.ClientCapabilities `json:"capabilities"`
 	ClientInfo      core.ClientInfo         `json:"clientInfo"`
 }
@@ -298,6 +304,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		skipSchemaValidation: d.skipSchemaValidation,
 		validateFileInputs:   d.validateFileInputs,
 		tasksCap:             d.tasksCap,
+		eventsCap:            d.eventsCap,
 		customHandlers:       d.customHandlers,
 		mrtr:                 d.mrtr,
 		listTTLMs:            d.listTTLMs,
@@ -536,6 +543,9 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	}
 	if d.tasksCap != nil {
 		caps.Tasks = d.tasksCap
+	}
+	if d.eventsCap != nil {
+		caps.Events = d.eventsCap
 	}
 	if len(d.extensions) > 0 {
 		exts := make(map[string]core.ExtensionCapability, len(d.extensions))

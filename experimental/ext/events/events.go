@@ -368,6 +368,16 @@ func Register(cfg Config) *Registry {
 		}
 	}
 
+	// Declare the capability so a client that reads capabilities before
+	// calling can find the surface at all. Top-level `capabilities.events`
+	// rather than the SEP-2133 extensions map, per core.EventsCap.
+	//
+	// listChanged is true unconditionally because AddSource and RemoveSource
+	// broadcast notifications/events/list_changed whether or not any source is
+	// registered yet, so a server that starts empty and grows still tells its
+	// clients.
+	srv.SetEventsCap(&core.EventsCap{ListChanged: true})
+
 	leases := cfg.PollLeases
 	if leases == nil {
 		leases = NewPollLeaseTable()
@@ -504,16 +514,36 @@ func EmitToWebhooks(ctx context.Context, webhooks *WebhookRegistry, event Event)
 // Note: there is intentionally no `omitempty` — cursored sources with empty
 // cursor still emit `cursor: ""`, only nil maps to JSON null.
 //
+// Events carries no `omitempty` for the same reason. The spec's response shape
+// has `events` always present, and an empty array is the common case rather
+// than an edge one: a client looping over the field breaks on the quiet poll,
+// which is most of them. A nil slice still marshals to `null`, so the handler
+// has to hand this an allocated empty slice, not just drop the tag.
+//
 // Per-result errors used to live inside this struct (legacy partial-
 // success model). They now surface as top-level JSON-RPC errors per
 // the spec — single-sub call, single-sub response, single-sub error
 // path. See the NotFound branch in registerPoll.
 type pollResultWire struct {
-	Events     []Event `json:"events,omitempty"`
+	Events     []Event `json:"events"`
 	Cursor     *string `json:"cursor"`
 	HasMore    bool    `json:"hasMore"`
 	Truncated  bool    `json:"truncated,omitempty"`
 	NextPollMs int     `json:"nextPollMs,omitempty"`
+}
+
+// MarshalJSON emits `events` as an array even when the slice is nil.
+//
+// Dropping `omitempty` is not enough on its own: a nil slice marshals to
+// `null`, which fails the same client loop that an absent key fails. Putting
+// the guarantee here rather than at the one call site means a future producer
+// of this struct cannot reintroduce the bug by forgetting to allocate.
+func (p pollResultWire) MarshalJSON() ([]byte, error) {
+	type wire pollResultWire // strip the method to avoid recursing
+	if p.Events == nil {
+		p.Events = []Event{}
+	}
+	return json.Marshal(wire(p))
 }
 
 // listResultWire is the events/list response shape (spec follow-on
@@ -536,6 +566,13 @@ func registerList(srv *server.Server, reg *Registry) {
 		current := reg.snapshot()
 		defs := make([]EventDef, 0, len(current))
 		for _, s := range current {
+			// Publish the registry's resolved descriptor, not the
+			// source's raw one: a source that declared no delivery
+			// modes has a derived set that only the registry holds.
+			if def, ok := reg.Def(s.Def().Name); ok {
+				defs = append(defs, def)
+				continue
+			}
 			defs = append(defs, s.Def())
 		}
 		return core.NewResponse(id, listResultWire{Events: defs})
@@ -581,6 +618,17 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		if !ok {
 			return newNotFoundError(id, "event", "NotFound")
 		}
+
+		// The `delivery` array is a contract, not a description. Answering a
+		// poll for a type that advertises push and webhook only would make it
+		// unreliable in the direction that matters, since a client reads it to
+		// decide what to call. registerStream has gated on the same error for
+		// its own mode since it was written; this is the poll half.
+		if def, ok := reg.Def(req.Name); ok && !supportsDeliveryMode(def.Delivery, DeliveryModePoll) {
+			return newUnsupportedError(id, "deliveryMode", DeliveryModePoll.String(),
+				"Unsupported: event type "+req.Name+" does not offer poll delivery")
+		}
+
 		if errResp := validateArguments(id, reg, req.Name, req.Arguments); errResp != nil {
 			return errResp
 		}
@@ -710,6 +758,13 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			wireCursor = &c
 		}
 
+		// `events` is always an array on the wire, and a nil slice marshals
+		// to null, so an empty result has to be allocated rather than left
+		// zero. Source.Poll may legitimately return nil on a quiet source.
+		if events == nil {
+			events = []Event{}
+		}
+
 		return core.NewResponse(id, pollResultWire{
 			Events:     events,
 			Cursor:     wireCursor,
@@ -718,6 +773,19 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			NextPollMs: 5000,
 		})
 	})
+}
+
+// supportsDeliveryMode reports whether an advertised delivery array offers a
+// mode. An empty array is treated as offering nothing, which is only reachable
+// for a source the registry never normalized.
+func supportsDeliveryMode(advertised []string, mode DeliveryMode) bool {
+	want := mode.String()
+	for _, m := range advertised {
+		if m == want {
+			return true
+		}
+	}
+	return false
 }
 
 // resolvePrincipal returns the principal to use for the canonical
