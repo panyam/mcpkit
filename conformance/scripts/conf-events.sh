@@ -38,17 +38,27 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.3
 done
 
-# Phase 1 of the suite ships the discovery and poll scenarios. The push and
-# webhook scenarios land later; add them here as they do. Webhook delivery in
-# particular needs a callback URL the fixture can reach over https, which this
-# localhost setup deliberately cannot provide.
-EVENTS_SCENARIOS="events-discovery events-poll"
+# Four of the suite's five scenarios. events-webhook-delivery is deliberately
+# absent: it needs a callback the fixture can reach, the harness serves one on
+# loopback, and kitchen-sink only accepts that because it sets
+# WithWebhookAllowPrivateNetworks(true) for `make demo`. Running it here would
+# park two SSRF rows permanently red for a reason that is fixture
+# configuration rather than a library defect, which is the kind of red people
+# learn to scroll past. Tracked separately.
+EVENTS_SCENARIOS="events-discovery events-poll events-push events-webhook"
 RC=0
 for S in ${EVENTS_SCENARIOS}; do
+    # events-push watches an idle heartbeat to grade the cadence rows, so it
+    # needs longer than the runner's default or those rows report untestable.
+    # The others are request/response and finish in seconds.
+    TIMEOUT_ARGS=""
+    [ "${S}" = "events-push" ] && TIMEOUT_ARGS="--timeout 60000"
+    # shellcheck disable=SC2086 # deliberate word-splitting: empty means no flag
     (cd "${MCPCONFORMANCE_EVENTS_PATH}" && \
         node dist/index.js server \
             --url http://localhost:18101/mcp \
             --scenario "${S}" \
+            ${TIMEOUT_ARGS} \
             -o "$OUT/checks-${S}" > "$OUT/runner-${S}.log" 2>&1)
     SRC=$?
     SUMMARY=$(grep -E "Passed:" "$OUT/runner-${S}.log" | tail -1 | sed 's/\x1b\[[0-9;]*m//g')
@@ -62,15 +72,16 @@ wait $PID 2>/dev/null
 if [ $RC -ne 0 ]; then
     echo "==================================================================="
     echo "testconf-events: INFORMATIONAL — a runner invocation exited $RC (artifacts in $OUT)"
-    echo "This suite is INFO status in conformance/local-suites.yaml. Known"
-    echo "divergences it is expected to report, all tracked in issue 1380:"
-    echo "  - events/list answers while capabilities.events is never declared,"
-    echo "    so the surface is unreachable for a spec-following client."
-    echo "  - events/poll omits the events key instead of returning [] when"
-    echo "    nothing happened."
-    echo "  - the events.topology meta-source does not keep the descriptor"
-    echo "    contract: delivery null, no inputSchema, and it answers"
-    echo "    events/poll despite advertising no poll delivery."
+    echo "This suite is INFO status in conformance/local-suites.yaml."
+    echo "events-discovery and events-poll are green; issue 1380 closed the"
+    echo "divergences they used to report. The push and webhook scenarios are"
+    echo "expected to report these, tracked in issue 1425:"
+    echo "  - push notifications carry no subscriptionId in _meta, so a client"
+    echo "    running two subscriptions cannot tell which one an event is for."
+    echo "  - events/subscribe accepts an http:// delivery.url, where the"
+    echo "    document requires -32602."
+    echo "  - events/unsubscribe answers success for a key that was never"
+    echo "    subscribed, so a typo reads as a successful teardown."
     echo "Exiting 0 so the umbrella reaches refresh-conformance. See issue 1374."
     echo "==================================================================="
     for S in ${EVENTS_SCENARIOS}; do
