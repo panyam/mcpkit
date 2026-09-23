@@ -69,7 +69,7 @@ jobs:
       # this are on Apple silicon, where an amd64-only image runs under
       # emulation and the Keycloak realm import gets slow enough to trip its
       # own healthcheck.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
