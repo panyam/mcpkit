@@ -259,11 +259,14 @@ branch.
 `modelcontextprotocol/conformance` PR 504. It scores against the design sketch that merged
 2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
 with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
-renamed before that PR can merge. Phase 1 ships 2 of 5 scenarios and emits 45 of 131 declared rows;
-push and webhook follow. Building it surfaced six divergences in our own implementation, closed by #1379 and #1381, with the
-remaining four in #1416 (open), which takes both scenarios to **12/12 and 29/29**. It stays `INFO`
-until the spec text stabilises rather than because it is red. Detail in `conformance/NOTES.md`
-§ MCP Events suite.
+renamed before that PR can merge. The suite has five scenarios;
+`testconf-events` drives four of them, at **12/12, 29/29, 12/15 and 17/23**. `events-webhook-delivery`
+is deliberately unwired: its rows need a callback the fixture can reach, and the only one available
+is loopback, which kitchen-sink accepts solely because a demo flag disables the SSRF checks.
+Building the suite surfaced twelve divergences in our own implementation. Six are closed by #1379,
+#1381 and #1416; the other six are #1425, and three of those are invisible to CI until the delivery
+scenario can run. It stays `INFO` until the spec text stabilises rather than because it is red.
+Detail in `conformance/NOTES.md` § MCP Events suite.
 
 **The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
 extensions map like everything else here (`io.modelcontextprotocol/events`), via

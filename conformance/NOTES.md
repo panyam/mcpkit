@@ -384,11 +384,20 @@ client can reach, and a SKIP would report that as green. mcpkit is in exactly th
 conventional design would have hidden the single most consequential finding. Same reasoning as
 `declaredSkillsCapability` upstream, applied to an absent declaration rather than a malformed one.
 
-**Phase 1 is 2 of 5 scenarios**, emitting 45 of 131 declared rows; the other 86 report `untested`,
-which is the manifest working rather than a gap. `events-push` and `events-webhook` follow.
-`events-webhook-delivery` is split out because it needs a callback URL the server under test can
-reach over `https` — localhost cannot serve that, since the SSRF rules the suite itself checks
-require a conformant server to refuse it.
+**All five scenarios exist; `testconf-events` drives four.** That gap was invisible for three days:
+the scenarios landed on the fork branch on 2026-09-20 and `conf-events.sh` kept a two-name list with
+a comment saying push and webhook would "land later", so the target reported 12/12 and 29/29 while
+covering 40% of the suite. Worth remembering as a shape, not just an incident: a suite you author and
+a suite you run are two different things, and the same gap exists today for SEP-2640's five
+client-side scenarios, which `testconf-skills` does not run either.
+
+`events-webhook-delivery` is the one deliberately left out. Its rows need a callback the server under
+test can reach, the harness serves one on loopback, and `examples/events/kitchen-sink` accepts
+loopback only because it sets `WithWebhookAllowPrivateNetworks(true)` for `make demo`. Wiring it
+against that fixture parks two SSRF rows permanently red for a reason that is fixture configuration
+rather than a library defect; wiring it against a fixture without the flag makes the fixture
+correctly refuse the harness, and all 21 rows go untestable instead of 9 failing. Neither is a signal
+worth having, so it waits on a reachable callback.
 
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
 `nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.
