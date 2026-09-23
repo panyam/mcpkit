@@ -59,6 +59,10 @@ func serve() {
 	chatEvery := flag.Duration("chat-every", defaultChatEvery, "synthetic chat feeder cadence")
 	alertEvery := flag.Duration("alert-every", defaultAlertEvery, "synthetic alert feeder cadence")
 	presenceEvery := flag.Duration("presence-every", defaultPresenceEvery, "synthetic presence feeder cadence")
+	// Per-surface rather than a bare --conformance, so one fixture can serve
+	// several suites and they compose. See conformance_events.go.
+	conformanceEvents := flag.Bool("conformance-events", false,
+		"register the MCP Events conformance control tools and the poll-only event type (see conformance_events.go)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	wire := common.RegisterWireFlags(flag.CommandLine)
 	// FilterArgs STRIPS the flags listed here. Strip only the --serve
@@ -85,7 +89,7 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
-	wired := buildServer(*addr, tp)
+	wired := buildServer(*addr, tp, *conformanceEvents)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -135,7 +139,7 @@ type wiredServer struct {
 // tp opts the dispatch spine + webhook delivery path into SEP-414
 // instrumentation. Nil or core.NoopTracerProvider{} = zero overhead.
 // Tests pass nil; the serve() path passes the configured TracerProvider.
-func buildServer(addr string, tp core.TracerProvider) *wiredServer {
+func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *wiredServer {
 	registry := newWatchListRegistry()
 
 	chatSrc, chatYield := events.NewYieldingSource[ChatMessageData](chatEventDef(), events.WithMaxSize(eventStoreCap))
@@ -174,8 +178,18 @@ func buildServer(addr string, tp core.TracerProvider) *wiredServer {
 		srvOpts...,
 	)
 	registerResources(srv, chatSrc, alertSrc)
+
+	// The suite needs an event type that does NOT offer webhook delivery to
+	// exercise the unsupported-mode path; every type the demo ships advertises
+	// it, which is why sep-9999-error-unsupported had nothing to probe.
+	sources := []events.EventSource{chatSrc, alertSrc, presenceSrc}
+	if conformanceEvents {
+		buildSrc, _ := events.NewYieldingSource[BuildFinishedData](buildEventDef(), events.WithMaxSize(eventStoreCap))
+		sources = append(sources, buildSrc)
+	}
+
 	events.Register(events.Config{
-		Sources:                  []events.EventSource{chatSrc, alertSrc, presenceSrc},
+		Sources:                  sources,
 		Webhooks:                 webhooks,
 		Server:                   srv,
 		SubscriptionIndex:        idx,
@@ -188,6 +202,11 @@ func buildServer(addr string, tp core.TracerProvider) *wiredServer {
 		// zero overhead in the default unconfigured path.
 		TracerProvider: tp,
 	})
+
+	if conformanceEvents {
+		registerConformanceEventControls(srv, conformanceYielders{chat: chatSrc, alert: alertSrc})
+		log.Printf("[conformance] events control tools registered; this is not a demo path")
+	}
 	return &wiredServer{
 		srv: srv, chatSrc: chatSrc, chatYield: chatYield,
 		alertSrc: alertSrc, alertYield: alertYield,

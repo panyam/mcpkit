@@ -1044,3 +1044,36 @@ external host like MCPJam could connect), promote it to a non-UI example
 shape and drop this addendum's relaxations. That's a per-example decision,
 not a global policy; see the rationale conversation in PR/commit history
 if relitigating.
+
+## Conformance fixtures
+
+An example that a conformance suite drives sometimes has to do things no demo
+would: fail on purpose, drop a subscription, lose data. A harness cannot ask for
+any of that over the protocol, so without a way to provoke it the affected
+checks report untestable, which upstream's policy renders as red and which stays
+red permanently.
+
+When an example needs that surface, add it behind a **per-surface flag named
+`--conformance-<suite>`**, in a file called `conformance_<suite>.go`.
+
+- **Per-surface, not a bare `--conformance`.** One fixture may serve several
+  suites, and separate booleans compose: `--conformance-events
+  --conformance-tasks`. A combined name multiplies with every surface added.
+- **Off by default.** These are published examples first. Someone reading one to
+  learn an API should not have to work out why a chat demo ships a tool for
+  terminating subscriptions.
+- **Gate the trigger, never the behaviour.** Everything a control provokes must
+  be reachable through public library API that a real author could call. If a
+  control needs something the library cannot do, that is a library gap and
+  belongs in the library, not behind a flag. `YieldGap` was added to
+  `experimental/ext/events` for exactly this reason: the push path could report
+  a retention gap but no source could trigger one.
+- **Keep the fixture and the demo the same binary.** `cmd/testserver` exists
+  because `examples/mrtr` genuinely could not serve the fixtures, but a separate
+  fixture means the thing conformance grades drifts from the thing people run.
+  Prefer the flag while one binary can do both.
+
+`examples/events/kitchen-sink` is the worked example: `conformance_events.go`
+registers three control tools and `buildEventDef` adds a type advertising poll
+and push but not webhook, so the unsupported-delivery-mode path has something to
+probe.

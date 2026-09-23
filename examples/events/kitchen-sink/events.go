@@ -250,3 +250,36 @@ func stringSlice(v any) []string {
 	}
 	return out
 }
+
+// BuildFinishedData is the payload of the build.finished event type, which
+// exists only under --conformance-events.
+type BuildFinishedData struct {
+	Project string `json:"project"`
+	Status  string `json:"status"`
+}
+
+// buildEventDef declares an event type offering poll and push but not webhook.
+//
+// Every type the demo ships advertises all three modes, so the suite had no
+// way to probe what a server does when asked to deliver by a mode a type does
+// not offer, and sep-9999-error-unsupported reported untestable. The narrower
+// delivery array is the whole point of this type; it carries no feeder and
+// stays quiet.
+func buildEventDef() events.EventDef {
+	return events.EventDef{
+		Name:        "build.finished",
+		Description: "Conformance fixture: a type offering poll and push but not webhook, so the unsupported-delivery-mode path can be exercised.",
+		Delivery:    []string{"poll", "push"},
+		Meta:        map[string]any{"category": "conformance"},
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"project": map[string]any{
+					"type":        "string",
+					"description": "Deliver only builds for this project.",
+				},
+			},
+			"additionalProperties": false,
+		},
+	}
+}

@@ -340,6 +340,15 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 						Cursor:    c,
 						Truncated: true,
 					})
+					// Truncation usually rides a real delivery, and then the
+					// event frame below follows it. YieldGap sends the marker
+					// alone, for a source that learns of a loss while it has
+					// nothing to deliver; emitting the zero-value Event as an
+					// occurrence would put an empty eventId and name on the
+					// wire.
+					if se.Event.EventID == "" && se.Event.Name == "" {
+						continue
+					}
 				}
 				ctx.Notify("notifications/events/event", eventNotifParams{
 					RequestID: id,
