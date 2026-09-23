@@ -120,12 +120,6 @@ type Dispatcher struct {
 	// nil means tasks are not enabled. Set via Server.SetTasksCap().
 	tasksCap *core.TasksCap
 
-	// eventsCap is the MCP Events capability to advertise during initialize.
-	// Set by experimental/ext/events Register; nil when no event sources are
-	// registered. Top-level rather than an entry in the extensions map, per
-	// core.EventsCap.
-	eventsCap *core.EventsCap
-
 	// mrtr is the SEP-2322 ephemeral MRTR runtime — signing key + TTL for
 	// requestState tokens. Always non-nil (built with zero-value defaults
 	// when the server didn't pass WithMRTRSigning); nil signingKey means
@@ -304,7 +298,6 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		skipSchemaValidation: d.skipSchemaValidation,
 		validateFileInputs:   d.validateFileInputs,
 		tasksCap:             d.tasksCap,
-		eventsCap:            d.eventsCap,
 		customHandlers:       d.customHandlers,
 		mrtr:                 d.mrtr,
 		listTTLMs:            d.listTTLMs,
@@ -543,9 +536,6 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	}
 	if d.tasksCap != nil {
 		caps.Tasks = d.tasksCap
-	}
-	if d.eventsCap != nil {
-		caps.Events = d.eventsCap
 	}
 	if len(d.extensions) > 0 {
 		exts := make(map[string]core.ExtensionCapability, len(d.extensions))

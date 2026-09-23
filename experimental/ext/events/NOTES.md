@@ -126,27 +126,28 @@ with the right attributes without needing the UI.
 
 ---
 
-## The capability is top-level, and that is contested
+## The capability declares through the extensions map, and briefly did not
 
-`capabilities.events`, not `capabilities.extensions["io.modelcontextprotocol/events"]`. This is the
-only extension in the tree that does not go through the SEP-2133 extensions map, so
-`server.WithExtension` and `srv.RegisterExtension` are the wrong plumbing: they write into
-`caps.Extensions`. Use `core.EventsCap` and `srv.SetEventsCap`, which `Register` calls for you,
-modelled on how `caps.Tasks` is wired.
+`capabilities.extensions["io.modelcontextprotocol/events"]`, via `EventsExtension` and
+`srv.RegisterExtension`, exactly like `ext/skills`, `ext/tasks` and `experimental/ext/agents`.
 
-The merged design sketch specifies top-level and the conformance suite grades it there. Metronome
-(`metronome-mcp.fly.dev`), written by the sketch's own author, declares under `extensions`. Both
-cannot be right and the WG has not said which. Declaring under both would pass every check and
-destroy the only useful thing about the disagreement, which is that two implementations reading the
-same document landed in different places.
+It spent a week at the top level of `capabilities` instead. The merged design sketch specified that,
+#1416 implemented it, and `metronome-mcp.fly.dev` — written by the sketch's author — used the
+extensions map. The conformance suite therefore graded one of the two wrong whichever way it read.
+Rather than pick, or declare in both places and make everyone pass, the disagreement went to the
+author on 2026-09-22. His answer: the extensions map is correct and the sketch needed fixing, which
+is upstream PR 7. #1421 moved the implementation and the suite's rows together.
 
-If it moves, three things move together: this call in `Register`, `core.EventsCap`, and
-`EVENTS_CAPABILITY` in the suite's `src/scenarios/server/events/helpers.ts`.
+Worth keeping for the next time a document and a reference implementation disagree: following the
+document is what made the question visible. Declaring in both places would have been the
+accommodating choice and would have left the sketch saying the wrong thing indefinitely.
 
-`listChanged` is reported `true` unconditionally, including on a server with no sources yet, because
-`AddSource` and `RemoveSource` broadcast `notifications/events/list_changed` either way.
-
----
+`ListChanged` is true whenever `Register` wires the handlers, because `AddSource` and `RemoveSource`
+broadcast unconditionally. The spec reads the flag as a promise rather than a hint — a server
+declaring false must not send the notification — so a future option that suppresses the broadcast has
+to move this flag with it. A false `ListChanged` serializes as `{}` rather than
+`{"listChanged": false}`, since the spec defines false as the default and reads an empty object as
+support without list-change notifications.
 
 ## `delivery` is a contract, and the registry owns the resolved answer
 
