@@ -70,13 +70,6 @@ func (b *statelessBackend) Capabilities() core.ServerCapabilities {
 		caps.Completions = &struct{}{}
 	}
 
-	// Events declares top-level, so it has to be carried here as well as in
-	// the session handshake; the stateless wire is the only one some clients
-	// ever see.
-	if c := b.s.dispatcher.eventsCap; c != nil {
-		caps.Events = c
-	}
-
 	if exts := b.s.dispatcher.extensions; len(exts) > 0 {
 		caps.Extensions = make(map[string]core.ExtensionCapability, len(exts))
 		for id, e := range exts {

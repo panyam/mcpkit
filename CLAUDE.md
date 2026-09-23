@@ -265,33 +265,18 @@ remaining four in #1416 (open), which takes both scenarios to **12/12 and 29/29*
 until the spec text stabilises rather than because it is red. Detail in `conformance/NOTES.md`
 § MCP Events suite.
 
-**Events declares its capability top-level, unlike every other extension here.**
-`capabilities.events`, not `capabilities.extensions["io.modelcontextprotocol/events"]`, so
-`server.WithExtension` / `RegisterExtension` is the wrong plumbing for it; `core.EventsCap` plus
-`srv.SetEventsCap` is the right one, modelled on `caps.Tasks`. That is what the design sketch
-specifies and what the suite grades, but the sketch author's own reference server
-(`metronome-mcp.fly.dev`) declares it under `extensions` instead. The disagreement is live and
-deliberate: following the document keeps two implementations visibly disagreeing, which is the
-signal the suite exists to produce, where declaring under both would have made our own suite green
-and erased the data point. If the WG settles on the extensions map, `core.EventsCap`,
-`EVENTS_CAPABILITY` in the suite's `helpers.ts`, and the call in `events.Register` all move
-together.
+**The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
+extensions map like everything else here (`io.modelcontextprotocol/events`), via
+`events.EventsExtension` and `srv.RegisterExtension`. It did not always: the design sketch put it
+top-level under `capabilities.events`, mcpkit implemented that in #1416, and the sketch author's own
+reference server (`metronome-mcp.fly.dev`) used the extensions map instead. Rather than pick a side
+or declare in both places, the disagreement went to the author, who confirmed the extensions map and
+opened upstream PR 7 to correct the sketch. #1421 moved mcpkit and the conformance rows together.
 
-`testconf-scope-challenge` runs mcpkit against the upstream SEP-2350 server scope-challenge
-scenario (`modelcontextprotocol/conformance` PR 481), currently 17/17. It is `INFO` rather than
-gating because it tracks an unmerged PR head, so a red run there means the fixture contract moved.
-Flip it to a gate against upstream `main` once 481 lands.
-
-**The SEP Coverage table counts requirements, not tests.** A SEP showing "1 tested" may be covered
-by dozens of assertions or by one; the two numbers are unrelated and reflect different upstream
-commits. Per-suite pass counts in the local-suites table are hand-recorded from a run, not ingested
-from artifacts, so treat them as claims with a date.
-
-**A conformance ratio hides warnings and skips.** Upstream's runner counts only `SUCCESS + FAILURE`
-in the denominator, so nine checks with one warning print as `8/8`, reading exactly like a scenario
-where a check never ran. Read the `N failed, M warnings` tail too, and prefer our `testconf-*`
-wrappers, which print `pass / fail / warn / skip`. This produced a wrong claim in a draft review
-comment on 2026-09-07; see `conformance/NOTES.md` § Read the denominator, not just the ratio.
+Two things that cost nothing to remember. **Following the document is what surfaced the question** —
+matching metronome quietly would have left the sketch wrong indefinitely. And **the rows now track an
+unmerged upstream PR**, the same posture `testconf-scope-challenge` holds for SEP-2350 PR 481, so a
+red row there means the head moved rather than that mcpkit regressed.
 
 ## Tasks v1 vs v2
 

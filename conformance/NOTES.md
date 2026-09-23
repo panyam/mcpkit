@@ -415,12 +415,26 @@ argument validation had never been graded. And `sep-9999-poll-invalid-arguments`
 *untestable* rather than failing when the selected event type declares no typed property, which
 looks like a defect in the report and is a fixture gap.
 
-**The capability location is an open WG question, not a settled fact.** The document puts it
-top-level under `capabilities.events`; metronome, the sketch author's own server, puts it under the
-SEP-2133 `extensions` map. mcpkit follows the document. Do not soften
-`sep-9999-capability-events-object` to make both pass: two implementations disagreeing is the signal
-worth carrying into the WG. If it moves, `EVENTS_CAPABILITY` in `helpers.ts`, `core.EventsCap` and
-the call in `events.Register` move together.
+**The capability location was an open WG question and is now answered, the useful way.** The document
+put it top-level under `capabilities.events`; metronome, the sketch author's own server, put it under
+the SEP-2133 `extensions` map. mcpkit followed the document, the suite graded it there, and the
+disagreement went to the author on 2026-09-22 rather than being smoothed over. He confirmed the
+extensions map and opened upstream PR 7 to correct the sketch; #1421 moved mcpkit and the rows
+together. He also fixed metronome's `-32603`-instead-of-`-32602` on `inputSchema` violations the same
+day, which this suite had reported against him.
+
+Two implementations and a suite, and the suite found a defect in each plus one in the document. That
+is the case for running a suite against something you did not write, and it only worked because the
+rows were not softened to make both sides pass.
+
+**The capability rows now track an unmerged upstream PR.** Same posture `testconf-scope-challenge`
+holds for SEP-2350 PR 481: a red row there means the head moved, not that mcpkit regressed. PR 7 is
+the author's own correction to his own design, so the risk is low, but the rows are ahead of `main`
+until it lands.
+
+**Four rows are declared and not yet emitted** by any scenario, from the same PR: the client
+declaration, the empty-settings case, `listChanged` gating the notification, and the `-32601`
+fallback. They report untested, which is the manifest working.
 
 Flip to a gate once the spec text stabilises. The numbers no longer block it.
 

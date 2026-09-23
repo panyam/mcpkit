@@ -368,15 +368,15 @@ func Register(cfg Config) *Registry {
 		}
 	}
 
-	// Declare the capability so a client that reads capabilities before
-	// calling can find the surface at all. Top-level `capabilities.events`
-	// rather than the SEP-2133 extensions map, per core.EventsCap.
+	// Declare the extension so a client that reads capabilities before calling
+	// can find the surface at all. Through the SEP-2133 extensions map, like
+	// every other extension here; see EventsExtension for why this moved.
 	//
 	// listChanged is true unconditionally because AddSource and RemoveSource
 	// broadcast notifications/events/list_changed whether or not any source is
 	// registered yet, so a server that starts empty and grows still tells its
 	// clients.
-	srv.SetEventsCap(&core.EventsCap{ListChanged: true})
+	srv.RegisterExtension(EventsExtension{ListChanged: true})
 
 	leases := cfg.PollLeases
 	if leases == nil {

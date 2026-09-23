@@ -91,7 +91,6 @@ type ServerCapabilities struct {
 	Resources   *ResourcesCap                  `json:"resources,omitempty"`
 	Prompts     *PromptsCap                    `json:"prompts,omitempty"`
 	Tasks       *TasksCap                      `json:"tasks,omitempty"`
-	Events      *EventsCap                     `json:"events,omitempty"`
 	Logging     *struct{}                      `json:"logging,omitempty"`
 	Completions *struct{}                      `json:"completions,omitempty"`
 	Extensions  map[string]ExtensionCapability `json:"extensions,omitempty"`
@@ -102,22 +101,23 @@ type ToolsCap struct {
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
-// EventsCap describes the server's MCP Events capability.
+// EventsCap is the MCP Events extension's settings object, the value stored
+// under `capabilities.extensions["io.modelcontextprotocol/events"]`.
 //
-// Events declares itself at the top level of `capabilities`, not through the
-// SEP-2133 `extensions` map that ext/skills, ext/tasks and experimental/ext/
-// agents use. That is what the merged design sketch specifies
-// (modelcontextprotocol/experimental-ext-triggers-events, §"Listing Available
-// Events"), and it is what the conformance suite grades. Note that the sketch
-// author's own reference server declares it under `extensions` instead; the
-// disagreement is live and tracked in the suite's own notes, so expect this to
-// move if the WG settles on the extensions map.
-//
-// A nil *EventsCap means the server serves no event sources and the key is
-// absent from the initialize result.
+// Events declares through SEP-2133 Extension Negotiation like every other
+// extension here, so this is a settings object rather than a top-level
+// capability. It did not always: the design sketch originally put `events`
+// at the top level of `capabilities`, mcpkit implemented that in #1416, and
+// the WG corrected the sketch in upstream PR 7 after two implementations
+// disagreed about it. See experimental/ext/events for the provider that
+// registers it.
 type EventsCap struct {
-	// ListChanged reports whether the server emits
+	// ListChanged reports whether the server sends
 	// notifications/events/list_changed when its set of event types changes.
+	//
+	// Optional, default false, and load-bearing in both directions: the spec
+	// says the notification is sent only by a server that declared true here,
+	// so a server that declares false must not send it.
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 

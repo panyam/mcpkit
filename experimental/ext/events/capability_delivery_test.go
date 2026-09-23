@@ -13,7 +13,7 @@ import (
 
 // initialize drives the handshake and hands back the raw initialize result, so
 // assertions can be made on the JSON rather than on a decoded Go struct. The
-// distinction matters here: a `*EventsCap` that is present-but-zero and one
+// distinction matters here: a settings object that is present-but-empty and one
 // that is absent decode identically into a nil-checked field but serialize
 // differently, and the wire is what a client reads.
 func initializeRaw(t *testing.T, srv *server.Server) map[string]any {
@@ -58,8 +58,10 @@ func pollRaw(t *testing.T, srv *server.Server, params string) *core.Response {
 // while declaring nothing leaves the whole surface undiscoverable to a client
 // that reads capabilities first, which is what the spec tells clients to do.
 //
-// The capability sits at the top level of `capabilities`, not in the SEP-2133
-// extensions map. See core.EventsCap for why, and for the open question.
+// The declaration goes through the SEP-2133 extensions map. #1416 put it at the
+// top level of capabilities, following the design sketch as it read then;
+// upstream PR 7 moved the sketch to the extensions map after mcpkit and the
+// reference server disagreed, so this asserts the opposite of what it did.
 func TestInitialize_DeclaresEventsCapability(t *testing.T) {
 	src, _ := NewYieldingSource[fakeFilterPayload](EventDef{Name: "fake.event"})
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
@@ -70,18 +72,33 @@ func TestInitialize_DeclaresEventsCapability(t *testing.T) {
 	})
 
 	caps := capsOf(t, initializeRaw(t, srv))
-	events, ok := caps["events"].(map[string]any)
-	require.True(t, ok, "capabilities.events missing; got %v", caps)
+	assert.NotContains(t, caps, "events",
+		"events must not appear as a top-level capability; it declares through the extensions map")
+
+	exts, ok := caps["extensions"].(map[string]any)
+	require.True(t, ok, "capabilities.extensions missing; got %v", caps)
+	settings, ok := exts[ExtensionID].(map[string]any)
+	require.True(t, ok, "%s missing from the extensions map; got %v", ExtensionID, exts)
 
 	// listChanged is true because AddSource / RemoveSource broadcast
-	// notifications/events/list_changed (#1381). Declaring it without sending
-	// it would be the same class of lie in the other direction.
-	assert.Equal(t, true, events["listChanged"], "capabilities.events.listChanged should be true")
+	// notifications/events/list_changed (#1381). The spec reads this as a
+	// promise rather than a hint: a server declaring false must not send it.
+	assert.Equal(t, true, settings["listChanged"], "listChanged should be true")
+}
 
-	if exts, ok := caps["extensions"].(map[string]any); ok {
-		assert.NotContains(t, exts, "io.modelcontextprotocol/events",
-			"events declares top-level, so it must not also appear in the extensions map")
-	}
+// TestEventsExtension_EmptySettingsWhenNoListChanged pins the false case to an
+// empty object rather than an explicit `listChanged: false`. The spec defines
+// false as the default and reads `{}` as event support without list-change
+// notifications, so the two say the same thing and the shorter one matches a
+// server that never considered the question.
+func TestEventsExtension_EmptySettingsWhenNoListChanged(t *testing.T) {
+	ext := EventsExtension{}.Extension()
+	assert.Equal(t, ExtensionID, ext.ID)
+	assert.Empty(t, ext.Settings, "a false ListChanged must not emit the key")
+
+	raw, err := json.Marshal(ext.Settings)
+	require.NoError(t, err)
+	assert.Equal(t, "{}", string(raw))
 }
 
 // TestInitialize_NoEventsCapabilityWithoutRegister guards the other direction:
@@ -90,6 +107,10 @@ func TestInitialize_NoEventsCapabilityWithoutRegister(t *testing.T) {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	caps := capsOf(t, initializeRaw(t, srv))
 	assert.NotContains(t, caps, "events", "a server with no event sources must not declare capabilities.events")
+	if exts, ok := caps["extensions"].(map[string]any); ok {
+		assert.NotContains(t, exts, ExtensionID,
+			"a server with no event sources must not declare the events extension either")
+	}
 }
 
 // TestPollResponse_EventsAlwaysPresent is sep-9999-poll-events-array. The quiet
