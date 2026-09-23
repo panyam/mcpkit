@@ -431,6 +431,42 @@ func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
 	return nil
 }
 
+// YieldGap signals that events were lost between what a subscriber has
+// already seen and what it will see next, typically because the upstream's
+// retention window moved past the subscriber's position.
+//
+// A gap is not an error. Stream subscribers map this onto a fresh
+// notifications/events/active carrying the source's current cursor and
+// truncated:true, after which delivery continues on the same subscription
+// (spec §"Push-Based Delivery" L285). Use YieldError for a transient upstream
+// failure the subscriber can recover from, and YieldTerminated for a
+// subscription that is over.
+//
+// This is the push-side counterpart of WebhookRegistry.PostGap. It exists
+// because a source wrapping a lossy upstream — a gateway that dropped frames,
+// a broker whose retention expired — has no other way to say so on the stream
+// path: Truncated lives on SubscriberEvent, which only the source can
+// construct.
+//
+// The marker travels alone rather than waiting to ride the next delivery. A
+// source that learns of a loss while it has nothing to send would otherwise
+// stay silent about it until the upstream happened to produce something, which
+// on a quiet source can be never. Truncation reaching a subscriber attached to
+// a real event, which is the ordinary case, still works as it did.
+//
+// No-op after YieldTerminated has fired. Returns nil; the signature mirrors
+// its siblings.
+func (s *YieldingSource[Data]) YieldGap() error {
+	s.mu.Lock()
+	if s.terminated {
+		s.mu.Unlock()
+		return nil
+	}
+	s.fanoutLocked(SubscriberEvent{Truncated: true})
+	s.mu.Unlock()
+	return nil
+}
+
 // YieldTerminated emits a terminal signal to all live subscribers and
 // closes their channels. Stream subscribers map this onto a
 // notifications/events/terminated frame per spec §"Authorization"
