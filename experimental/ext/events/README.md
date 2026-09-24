@@ -242,7 +242,7 @@ The Python `events_client.py` receiver auto-detects which header set is on the i
 
 The server confirms a receiver wants deliveries before activating a subscription. By default it POSTs a signed `{"type":"verification","challenge":"<nonce>"}` envelope during `events/subscribe`, and the receiver must echo `{"challenge":"<nonce>"}` in a `2xx` body; otherwise subscribe fails with `-32015` and `data.reason: "challenge_failed"`. Both shipped clients answer it, and hand-rolled Go receivers can call `events.AnswerVerificationChallenge(w, body)` once the signature checks out. Because the challenge arrives mid-subscribe, the receiver has to be listening first.
 
-Operators can waive the handshake for known URLs with `WithWebhookDeliveryAllowlist` or `WithPreVerifier`. [`DEPLOYMENT.md`](DEPLOYMENT.md#endpoint-verification) covers the options and the cache.
+Operators can waive the handshake for known URLs with `WithWebhookDeliveryAllowlist` or `WithPreVerifier`, and can opt into receiver-published documents with `WithWellKnownReceiverDocs`, which a receiver serves with `events.WellKnownReceiverHandler`. [`DEPLOYMENT.md`](DEPLOYMENT.md#endpoint-verification) covers the options and the cache.
 
 ### Unsubscribe
 

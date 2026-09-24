@@ -301,3 +301,20 @@ rather than traffic.
 Found while wiring the conformance GC row, which is the second time a suite row has surfaced a
 library bug that every unit test passed over.
 
+---
+
+## Path (d) shipped opt-in, and the tests had to be sharpened twice (#1436)
+
+The receiver-published document is off unless `WithWellKnownReceiverDocs()` is passed. Its text has
+been stable since the 2026-06-15 sketch commit, but it is a MAY, it sends a request to every new
+callback origin, and Svix objected to what publishing it reveals. Opt-in keeps the cost of a
+review-time change to one parser and one constant.
+
+Mutation testing caught three tests that could not fail. The origin was built as `https://`
+regardless of the URL's scheme, so the scheme check was unobservable (a plaintext origin just failed
+TLS); it is built from the real scheme now. The oversized-document fixture was invalid JSON once
+truncated, and the redirect fixture carried an HTML body, so both were rejected by the parser before
+the size and status checks mattered; both fixtures now carry a valid document. Worth doing to any
+"falls back to X" test: make the bad input otherwise good, or the fallback proves nothing about the
+check it names.
+

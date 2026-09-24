@@ -10,7 +10,7 @@ package events
 //	(a) a challenge handshake (POST a nonce, expect it echoed in a 2xx body)
 //	(b) a server-configured allowlist            WithWebhookDeliveryAllowlist
 //	(c) prior out-of-band verification           WithPreVerifier / WithPreVerifiedDeliveryURL
-//	(d) a receiver-published well-known document (not implemented yet)
+//	(d) a receiver-published well-known document  WithWellKnownReceiverDocs
 //
 // The result is cached per (principal, url). Issue 490.
 
@@ -196,6 +196,10 @@ func (r *WebhookRegistry) verifyEndpoint(ctx context.Context, p verifyEndpointPa
 		return DeliveryErrorNone
 	}
 	if r.allowlisted(p.URL) || r.preVerified(ctx, p.Principal, p.URL) {
+		r.verified.put(key, now, r.ttl)
+		return DeliveryErrorNone
+	}
+	if r.wellKnown != nil && r.wellKnownCovers(ctx, p.URL, now) {
 		r.verified.put(key, now, r.ttl)
 		return DeliveryErrorNone
 	}

@@ -659,6 +659,7 @@ type WebhookRegistry struct {
 	preVerifiers             []PreVerifier
 	verified                 verificationCache
 	verifyLimit              hostLimiter
+	wellKnown                *wellKnownCache // nil unless WithWellKnownReceiverDocs
 
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
