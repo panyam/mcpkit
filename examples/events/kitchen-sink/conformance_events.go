@@ -54,6 +54,11 @@ type conformanceYielders struct {
 
 // registerConformanceEventControls wires the diagnostic tools. Called only when
 // --conformance-events is set.
+// conformanceCallbackOrigins is where the events-webhook scenario points its
+// callbacks (CALLBACK_BASE in the suite's webhook.ts). It never resolves, so
+// it is only reachable through the allowlist.
+var conformanceCallbackOrigins = []string{"https://conformance.invalid/mcp-events"}
+
 func registerConformanceEventControls(srv *server.Server, y conformanceYielders) {
 	pick := func(name string) (interface {
 		YieldError(events.EventDeliveryError) error
