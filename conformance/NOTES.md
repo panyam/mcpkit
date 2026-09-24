@@ -420,13 +420,30 @@ covering 40% of the suite. Worth remembering as a shape, not just an incident: a
 a suite you run are two different things, and the same gap exists today for SEP-2640's five
 client-side scenarios, which `testconf-skills` does not run either.
 
-`events-webhook-delivery` is the one deliberately left out. Its rows need a callback the server under
-test can reach, the harness serves one on loopback, and `examples/events/kitchen-sink` accepts
-loopback only because it sets `WithWebhookAllowPrivateNetworks(true)` for `make demo`. Wiring it
-against that fixture parks two SSRF rows permanently red for a reason that is fixture configuration
-rather than a library defect; wiring it against a fixture without the flag makes the fixture
-correctly refuse the harness, and all 21 rows go untestable instead of 9 failing. Neither is a signal
-worth having, so it waits on a reachable callback.
+`events-webhook-delivery` was left out until #1457. Its rows need a callback the server under test
+can reach, and the harness has to be that callback, because signatures, headers, retries and the
+verification handshake are only observable from the endpoint the server POSTs to. The harness
+listens on loopback, and a fixture with its SSRF guards on correctly refuses it, which is exactly
+what the two SSRF rows grade. Lifting the guards wholesale for the run parks those rows red. A
+self-signed https receiver doesn't help either, because `https://127.0.0.1` is still refused at
+dial time.
+
+The way in is ordering. The scenario subscribes with the guards on and grades the SSRF rows from
+the refusal, then calls `events_conformance_allow_callback_origin` for its receiver's origin and
+subscribes again. The control calls `WebhookRegistry.UnsafeAllowCallbackOrigin`, which lifts both
+guards for that one origin and leaves every other callback refused. Measured 2026-09-24: 3/30 before
+the control (27 untestable), 21/21 after, with 8 warnings. The warnings are rows needing a second
+principal, a rotation mid-flight, or a gap or termination during the run.
+`ssrf-validate-at-delivery-time` reports SKIPPED, since a delivery to a deliberately permitted
+origin says nothing about revalidation.
+
+**Until #1457, `--conformance-events` only enforced half the SSRF rule.** kitchen-sink set
+`WithWebhookAllowPrivateNetworks(true)` in every mode, so under the conformance flag only the https
+rule was live. `ssrf-reject-non-routable` still passed, because the suite grades it SUCCESS on any
+refusal of its `http://127.0.0.1` receiver, and that refusal was the scheme check's. The fixture now
+sets private networks only for the demo, and `TestConformanceEvents_RefusesNonRoutableHTTPSCallback`
+pins it. The suite still can't tell the two rules apart from one refusal; that belongs on the suite
+side.
 
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
 `nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.
@@ -504,10 +521,10 @@ things, each of which cost a round-trip:
   a day, with CI green because the suite is `INFO` (#1446). kitchen-sink now allowlists that origin
   under `--conformance-events`. Run `make testconf-events` after touching anything on the subscribe
   path.
-- **`events-webhook-delivery` can only be run by hand against plain `--serve` now.** Since #1434,
-  `--conformance-events` enforces https and refuses the harness's `http://127.0.0.1` receiver, so in
-  that mode the scenario grades nothing. Plain `--serve` allows loopback, which parks the two SSRF
-  rows red but makes the rest gradeable: 18 SUCCESS as of 2026-09-24.
+- **`events-webhook-delivery` runs under `--conformance-events` again** (#1457). From #1434 until
+  then, that mode enforced https and refused the harness's `http://127.0.0.1` receiver, so the
+  scenario graded nothing and could only be run by hand against plain `--serve`. The receiver now
+  gets in through `events_conformance_allow_callback_origin` after the SSRF rows are graded.
 - **Probe callbacks answer the challenge before misbehaving** (suite `80d6528`, #1439). A 410 probe
   that also refused the challenge was never subscribed by a server that verifies synchronously.
   The same change made `verification-failure-error` gradeable, and fixed
