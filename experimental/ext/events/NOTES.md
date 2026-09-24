@@ -279,3 +279,25 @@ What that costs, and what bit us while turning it on:
 `VerifiedAt` on the stored target is the persisted half. `verifyEndpoint` checks the store before the
 allowlist, so a no-expiry subscription restored after a restart refreshes without a new POST. The
 in-memory cache is separate and TTL-scoped like the subscription itself.
+
+---
+
+## A suspended no-expiry subscription used to live forever (#1443)
+
+Failure-based GC was decided only inside `recordDeliveryFailure`. A suspended target is skipped by
+`Targets()` and `DeliverToTarget`, so it never records another failure, so its GC window was never
+checked again. With the defaults (suspend after 5 failures, 72 h window) a no-expiry subscription to
+a dead receiver suspended within minutes and then sat in the store indefinitely, with no TTL to
+collect it either. The unit test for GC called `recordDeliveryFailure` directly, which is why it
+passed: it never went through suspension.
+
+`pruneExpiredLocked` now also collects suspended no-expiry targets past the window and drops them
+through `PostTerminated`, so they get the same envelope and `onRemove`. It runs from `Register` as
+before and from `Deliver`, throttled to a quarter of the window and at most once a minute
+(`sweepIfDue`), because a Postgres-backed store pays a full `ListWebhooks` per sweep. A registry with
+no event traffic at all still never sweeps; nothing is delivered in that state, so it costs storage
+rather than traffic.
+
+Found while wiring the conformance GC row, which is the second time a suite row has surfaced a
+library bug that every unit test passed over.
+

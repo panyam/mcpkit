@@ -465,9 +465,10 @@ declaration, the empty-settings case, `listChanged` gating the notification, and
 fallback. They report untested, which is the manifest working.
 
 **Thirteen divergences, and the shape of what the suite catches.** Six closed by #1379/#1381/#1416,
-five by #1432/#1433/#1434, one open (#490, endpoint verification), one a fixture question. Current:
-discovery 12/12, poll 29/29, push 18/18, webhook 22/23, the last red row being untestable rather
-than a defect.
+five by #1432/#1433/#1434, endpoint verification by #1444, and one a fixture question. Current:
+discovery 12/12, poll 29/29, push 18/18, webhook 25/26, the last red row being untestable rather
+than a defect. The TTL durability rows came in with #1443 through a restart control that rebuilds
+kitchen-sink's server over the same subscription store.
 
 Two are worth remembering beyond their fix:
 

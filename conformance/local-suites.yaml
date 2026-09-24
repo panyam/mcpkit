@@ -158,14 +158,15 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      81 pass / 1 fail / 10 warn across four scenarios, measured 2026-09-24
-      against examples/events/kitchen-sink at 9f01daea (hand-recorded from the
-      runner's own summaries, so re-run before trusting it): events-discovery
-      12/12, events-poll 29/29, events-push 18/18, events-webhook 22/23. The
-      fixture is spawned with --conformance-events, which registers five
-      diagnostic controls the scenarios drive; without them six rows describe
-      conditions a healthy server never produces and report untestable, which
-      upstream's policy renders red. See examples/CONVENTIONS.md § Conformance
+      84 pass / 1 fail / 7 warn across four scenarios, measured 2026-09-24
+      against examples/events/kitchen-sink on the 1443 branch (hand-recorded
+      from the runner's own summaries, so re-run before trusting it):
+      events-discovery 12/12, events-poll 29/29, events-push 18/18,
+      events-webhook 25/26. The fixture is spawned with --conformance-events,
+      which registers eight diagnostic controls the scenarios drive, including
+      a restart that rebuilds the server over the same subscription store;
+      without them nine rows describe conditions a harness cannot provoke and
+      report untestable, which upstream's policy renders red. See examples/CONVENTIONS.md § Conformance
       fixtures. The suite's fifth scenario, events-webhook-delivery, is
       deliberately not wired; see conformance/scripts/conf-events.sh for why.
       Proposed upstream as a draft in modelcontextprotocol/conformance 504 and
@@ -178,6 +179,6 @@ suites:
       subscribe-auth-required, is untestable rather than a defect: the harness
       holds one credential for a run and kitchen-sink sets
       UnsafeAnonymousPrincipal by design. Thirteen divergences found in total,
-      twelve closed (1379, 1381, 1416, 1432, 1433, 1434); endpoint verification
-      is 490. Set tracked in 1425.
+      all closed (1379, 1381, 1416, 1432, 1433, 1434, and endpoint verification
+      in 1444). Set tracked in 1425.
     tracking: "mcpkit 1374"

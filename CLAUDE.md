@@ -271,7 +271,7 @@ branch.
 2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
 with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
 renamed before that PR can merge. The suite has five scenarios;
-`testconf-events` drives four of them, at **12/12, 29/29, 18/18 and 22/23**. The fixture is spawned
+`testconf-events` drives four of them, at **12/12, 29/29, 18/18 and 25/26**. The fixture is spawned
 with `--conformance-events`, which registers the diagnostic controls the scenarios drive; see
 `examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery` is deliberately unwired:
 its rows need a callback the fixture can reach, and the only one available is loopback, which
@@ -279,7 +279,7 @@ kitchen-sink accepts solely because a demo flag disables the SSRF checks.
 
 Building the suite surfaced **thirteen divergences in our own implementation**, which is the whole
 argument for having one. Six closed by #1379, #1381 and #1416; five more by #1432, #1433 and #1434;
-the last is endpoint verification (#490). The set is tracked in #1425. The single remaining red row,
+the last, endpoint verification, by #1444. The set is tracked in #1425. The single remaining red row,
 `subscribe-auth-required`, is untestable rather than a defect. It stays `INFO` until the spec text
 stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
 
