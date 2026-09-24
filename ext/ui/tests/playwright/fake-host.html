@@ -42,8 +42,10 @@
           jsonrpc: '2.0',
           id: msg.id,
           result: {
-            hostContext: { theme: 'dark', locale: 'en-US', dimensions: { width: 400, height: 300 } },
-            capabilities: { tools: true, resources: true }
+            protocolVersion: '2026-01-26',
+            hostInfo: { name: 'fake-host', version: '1.0.0' },
+            hostCapabilities: { openLinks: {}, serverTools: {}, serverResources: {} },
+            hostContext: { theme: 'dark', locale: 'en-US', dimensions: { width: 400, height: 300 } }
           }
         }, '*');
         log({ direction: 'out', method: 'ui/initialize-response', id: msg.id });

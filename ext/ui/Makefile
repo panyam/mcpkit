@@ -13,5 +13,8 @@ test-bridge-e2e: ## Run Playwright bridge integration tests (requires Chromium)
 build-bridge: ## Compile mcp-app-bridge.ts → .js (requires pnpm + TypeScript)
 	@bash scripts/build-bridge.sh
 
-.PHONY: test test-bridge test-bridge-e2e build-bridge
+check-bridge: ## Typecheck the bridge and fail if the committed .js is stale
+	@bash scripts/check-bridge.sh
+
+.PHONY: test test-bridge test-bridge-e2e build-bridge check-bridge
 .DEFAULT_GOAL := test

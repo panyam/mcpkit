@@ -36,14 +36,30 @@ type MCPAppEvent =
 
 /** Payload delivered with each event. */
 interface MCPAppEventMap {
-  connected: { hostContext: HostContext; capabilities: Record<string, unknown> };
+  connected: {
+    hostContext: HostContext;
+    capabilities: Record<string, unknown>;
+    hostInfo: HostInfo | null;
+  };
   toolinput: { tool: string; arguments: Record<string, unknown> };
   toolinputpartial: { tool: string; arguments: Record<string, unknown> };
   toolresult: { tool: string; result: unknown };
-  toolcancelled: { tool: string };
+  toolcancelled: { tool: string; reason?: string };
   hostcontextchanged: { hostContext: HostContext };
   teardown: Record<string, never>;
 }
+
+/** Host identity from the ui/initialize result. */
+interface HostInfo {
+  name: string;
+  version: string;
+  [key: string]: unknown;
+}
+
+/** A downloadable item: an embedded resource or a link the host fetches. */
+type DownloadContent =
+  | { type: "resource"; resource: Record<string, unknown>; [key: string]: unknown }
+  | { type: "resource_link"; uri: string; name: string; [key: string]: unknown };
 
 interface HostContext {
   theme?: string;
@@ -205,6 +221,8 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   let _connected = false;
   let _hostContext: HostContext | null = null;
   let _hostCapabilities: Record<string, unknown> | null = null;
+  let _hostInfo: HostInfo | null = null;
+  const _lateListenerWarned = new Set<string>();
 
   // Bidirectional handlers (host → app requests).
   let _oncalltool: CallToolHandler | null = null;
@@ -228,6 +246,14 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     event: E,
     handler: (data: MCPAppEventMap[E]) => void
   ): () => void {
+    // tool-input and tool-result are delivered once, right after the
+    // handshake, so a listener added later can miss them.
+    if (_connected && (event === "toolinput" || event === "toolresult") && !_lateListenerWarned.has(event)) {
+      _lateListenerWarned.add(event);
+      if (typeof console !== "undefined") {
+        console.warn("[MCPApp] " + event + " listener added after the handshake; the initial " + event + " may already have been delivered");
+      }
+    }
     let set = listeners.get(event);
     if (!set) {
       set = new Set();
@@ -412,6 +438,8 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
   }
 
   function handleMessage(event: MessageEvent): void {
+    // Only the host (our parent frame) speaks this protocol to us.
+    if (event.source !== window.parent) return;
     const msg = event.data;
     if (!isJsonRpc(msg)) return;
 
@@ -459,17 +487,21 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       }
       case "ui/notifications/tool-cancelled": {
         const p = (req.params || {}) as any;
-        emit("toolcancelled", { tool: p.name || "" });
+        emit("toolcancelled", { tool: p.name || "", reason: p.reason });
         break;
       }
       case "ui/notifications/host-context-changed": {
         const p = (req.params || {}) as any;
-        _hostContext = p.hostContext || p;
+        // The spec sends only the fields that changed. The {hostContext}
+        // wrapper is accepted for hosts written against older drafts.
+        _hostContext = { ...(_hostContext || {}), ...(p.hostContext || p) };
         applyHostStyles(_hostContext!);
         emit("hostcontextchanged", { hostContext: _hostContext! });
         break;
       }
       case "ui/resource-teardown": {
+        // Spec hosts send this as a request (see handleHostRequest). The
+        // notification form is kept for hosts written against older drafts.
         emit("teardown", {});
         break;
       }
@@ -569,6 +601,15 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
 
     try {
       switch (req.method) {
+        case "ping": {
+          respond(id, {});
+          break;
+        }
+        case "ui/resource-teardown": {
+          emit("teardown", {});
+          respond(id, {});
+          break;
+        }
         case "tools/call": {
           if (_useRegistry) {
             const name = params.name || "";
@@ -724,24 +765,33 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       _connected = false;
     }, 2000);
 
+    // Tools registered before the handshake are declared so a host that
+    // gates tools/list on this capability will ask for them.
+    const appCapabilities: Record<string, unknown> = {};
+    if (_useRegistry || _oncalltool || _onlisttools) {
+      appCapabilities.tools = { listChanged: true };
+    }
+
     request("ui/initialize", {
       protocolVersion: PROTOCOL_VERSION,
       appInfo: { name: APP_NAME, version: APP_VERSION },
-      appCapabilities: {},
+      appCapabilities,
     })
       .then((result: any) => {
         clearTimeout(timeout);
+        _hostContext = result?.hostContext || {};
+        _hostCapabilities = result?.hostCapabilities || {};
+        _hostInfo = result?.hostInfo || null;
+        // initialized must reach the host before anything a connected
+        // listener sends, so it goes out while still unconnected.
+        notify("ui/notifications/initialized", {});
         _connected = true;
-        _hostContext = result?.hostContext || result || {};
-        _hostCapabilities = result?.capabilities || {};
-        // Auto-apply host styles on connect.
         applyHostStyles(_hostContext!);
         emit("connected", {
           hostContext: _hostContext!,
           capabilities: _hostCapabilities!,
+          hostInfo: _hostInfo,
         });
-        // Signal that we're ready.
-        notify("ui/notifications/initialized", { initialized: true });
         setupResizeObserver();
       })
       .catch(() => {
@@ -762,6 +812,9 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     },
     get hostCapabilities(): Record<string, unknown> | null {
       return _hostCapabilities;
+    },
+    get hostInfo(): HostInfo | null {
+      return _hostInfo;
     },
 
     // Event registration.
@@ -789,16 +842,49 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       return request("ui/message", message, options);
     },
 
-    updateModelContext(context: unknown, options?: RequestOptions): Promise<unknown> {
-      return request("ui/update-model-context", { context }, options);
+    /**
+     * Push context the model should see on its next turn. `params` is the
+     * spec shape, `{content?, structuredContent?}`, sent as-is. Each call
+     * replaces the previous update from this view.
+     */
+    updateModelContext(
+      params: { content?: unknown[]; structuredContent?: Record<string, unknown> },
+      options?: RequestOptions
+    ): Promise<unknown> {
+      return request("ui/update-model-context", params, options);
     },
 
     openLink(url: string, options?: RequestOptions): Promise<unknown> {
       return request("ui/open-link", { url }, options);
     },
 
-    downloadFile(url: string, filename?: string, options?: RequestOptions): Promise<unknown> {
-      return request("ui/download-file", { url, filename }, options);
+    /**
+     * Ask the host to download files. Pass the spec shape,
+     * `{contents: (EmbeddedResource | ResourceLink)[]}`, or a URL and
+     * optional filename, which becomes a single `resource_link` named after
+     * the filename (or the URL's last path segment).
+     */
+    downloadFile(
+      paramsOrUrl: { contents: DownloadContent[] } | string,
+      filenameOrOptions?: string | RequestOptions,
+      options?: RequestOptions
+    ): Promise<unknown> {
+      if (typeof paramsOrUrl === "string") {
+        const name =
+          (typeof filenameOrOptions === "string" && filenameOrOptions) ||
+          paramsOrUrl.split(/[?#]/)[0].split("/").filter(Boolean).pop() ||
+          paramsOrUrl;
+        return request(
+          "ui/download-file",
+          { contents: [{ type: "resource_link", uri: paramsOrUrl, name }] },
+          options
+        );
+      }
+      return request(
+        "ui/download-file",
+        paramsOrUrl,
+        typeof filenameOrOptions === "object" ? filenameOrOptions : options
+      );
     },
 
     /**
@@ -829,12 +915,22 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
       return request("ui/request-display-mode", { mode }, options);
     },
 
+    /** Ask the host to close this view. The host decides whether to. */
     requestTeardown(): void {
-      notify("ui/teardown", {});
+      notify("ui/notifications/request-teardown", {});
     },
 
+    /**
+     * Send a log entry to the host as an MCP `notifications/message`. The
+     * logger is the app name. `data` is `message` alone, or
+     * `{message, data}` when extra data is given.
+     */
     log(level: string, message: string, data?: unknown): void {
-      notify("ui/log", { level, message, data });
+      notify("notifications/message", {
+        level,
+        logger: APP_NAME,
+        data: data === undefined ? message : { message, data },
+      });
     },
 
     // Style utilities.

@@ -138,12 +138,20 @@
     let _connected = false;
     let _hostContext = null;
     let _hostCapabilities = null;
+    let _hostInfo = null;
+    const _lateListenerWarned = /* @__PURE__ */ new Set();
     let _oncalltool = null;
     let _onlisttools = null;
     let _traceContextProvider = null;
     const _registeredTools = /* @__PURE__ */ new Map();
     let _useRegistry = false;
     function on(event, handler) {
+      if (_connected && (event === "toolinput" || event === "toolresult") && !_lateListenerWarned.has(event)) {
+        _lateListenerWarned.add(event);
+        if (typeof console !== "undefined") {
+          console.warn("[MCPApp] " + event + " listener added after the handshake; the initial " + event + " may already have been delivered");
+        }
+      }
       let set = listeners.get(event);
       if (!set) {
         set = /* @__PURE__ */ new Set();
@@ -271,6 +279,7 @@
       return typeof data === "object" && data !== null && data.jsonrpc === "2.0";
     }
     function handleMessage(event) {
+      if (event.source !== window.parent) return;
       const msg = event.data;
       if (!isJsonRpc(msg)) return;
       if ("id" in msg && msg.id != null && !("method" in msg)) {
@@ -312,12 +321,12 @@
         }
         case "ui/notifications/tool-cancelled": {
           const p = req.params || {};
-          emit("toolcancelled", { tool: p.name || "" });
+          emit("toolcancelled", { tool: p.name || "", reason: p.reason });
           break;
         }
         case "ui/notifications/host-context-changed": {
           const p = req.params || {};
-          _hostContext = p.hostContext || p;
+          _hostContext = { ..._hostContext || {}, ...p.hostContext || p };
           applyHostStyles(_hostContext);
           emit("hostcontextchanged", { hostContext: _hostContext });
           break;
@@ -398,6 +407,15 @@
       const params = req.params || {};
       try {
         switch (req.method) {
+          case "ping": {
+            respond(id, {});
+            break;
+          }
+          case "ui/resource-teardown": {
+            emit("teardown", {});
+            respond(id, {});
+            break;
+          }
           case "tools/call": {
             if (_useRegistry) {
               const name = params.name || "";
@@ -519,21 +537,27 @@
       const timeout = setTimeout(() => {
         _connected = false;
       }, 2e3);
+      const appCapabilities = {};
+      if (_useRegistry || _oncalltool || _onlisttools) {
+        appCapabilities.tools = { listChanged: true };
+      }
       request("ui/initialize", {
         protocolVersion: PROTOCOL_VERSION,
         appInfo: { name: APP_NAME, version: APP_VERSION },
-        appCapabilities: {}
+        appCapabilities
       }).then((result) => {
         clearTimeout(timeout);
+        _hostContext = result?.hostContext || {};
+        _hostCapabilities = result?.hostCapabilities || {};
+        _hostInfo = result?.hostInfo || null;
+        notify("ui/notifications/initialized", {});
         _connected = true;
-        _hostContext = result?.hostContext || result || {};
-        _hostCapabilities = result?.capabilities || {};
         applyHostStyles(_hostContext);
         emit("connected", {
           hostContext: _hostContext,
-          capabilities: _hostCapabilities
+          capabilities: _hostCapabilities,
+          hostInfo: _hostInfo
         });
-        notify("ui/notifications/initialized", { initialized: true });
         setupResizeObserver();
       }).catch(() => {
         clearTimeout(timeout);
@@ -550,6 +574,9 @@
       },
       get hostCapabilities() {
         return _hostCapabilities;
+      },
+      get hostInfo() {
+        return _hostInfo;
       },
       // Event registration.
       on,
@@ -568,14 +595,37 @@
       sendMessage(message, options) {
         return request("ui/message", message, options);
       },
-      updateModelContext(context, options) {
-        return request("ui/update-model-context", { context }, options);
+      /**
+       * Push context the model should see on its next turn. `params` is the
+       * spec shape, `{content?, structuredContent?}`, sent as-is. Each call
+       * replaces the previous update from this view.
+       */
+      updateModelContext(params, options) {
+        return request("ui/update-model-context", params, options);
       },
       openLink(url, options) {
         return request("ui/open-link", { url }, options);
       },
-      downloadFile(url, filename, options) {
-        return request("ui/download-file", { url, filename }, options);
+      /**
+       * Ask the host to download files. Pass the spec shape,
+       * `{contents: (EmbeddedResource | ResourceLink)[]}`, or a URL and
+       * optional filename, which becomes a single `resource_link` named after
+       * the filename (or the URL's last path segment).
+       */
+      downloadFile(paramsOrUrl, filenameOrOptions, options) {
+        if (typeof paramsOrUrl === "string") {
+          const name = typeof filenameOrOptions === "string" && filenameOrOptions || paramsOrUrl.split(/[?#]/)[0].split("/").filter(Boolean).pop() || paramsOrUrl;
+          return request(
+            "ui/download-file",
+            { contents: [{ type: "resource_link", uri: paramsOrUrl, name }] },
+            options
+          );
+        }
+        return request(
+          "ui/download-file",
+          paramsOrUrl,
+          typeof filenameOrOptions === "object" ? filenameOrOptions : options
+        );
       },
       /**
        * Open a native file picker in the iframe and resolve with the chosen
@@ -602,11 +652,21 @@
       requestDisplayMode(mode, options) {
         return request("ui/request-display-mode", { mode }, options);
       },
+      /** Ask the host to close this view. The host decides whether to. */
       requestTeardown() {
-        notify("ui/teardown", {});
+        notify("ui/notifications/request-teardown", {});
       },
+      /**
+       * Send a log entry to the host as an MCP `notifications/message`. The
+       * logger is the app name. `data` is `message` alone, or
+       * `{message, data}` when extra data is given.
+       */
       log(level, message, data) {
-        notify("ui/log", { level, message, data });
+        notify("notifications/message", {
+          level,
+          logger: APP_NAME,
+          data: data === void 0 ? message : { message, data }
+        });
       },
       // Style utilities.
       applyTheme,
