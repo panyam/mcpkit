@@ -236,6 +236,8 @@ the demos want both, and that conflation meant a fixture needing a local receive
 enforcing https too, so a conformance run reported a demo setting as a library defect.
 `examples/events/kitchen-sink` sets the plaintext hatch only outside `--conformance-events`.
 
+---
+
 ## Endpoint verification runs inside subscribe (#490)
 
 The handshake is synchronous. The spec says a failed one "yields `-32015`" and that the categories
