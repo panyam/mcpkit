@@ -205,7 +205,9 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 	})
 
 	if conformanceEvents {
-		registerConformanceEventControls(srv, conformanceYielders{chat: chatSrc, alert: alertSrc, build: buildSrc})
+		registerConformanceEventControls(srv, conformanceYielders{
+			chat: chatSrc, alert: alertSrc, build: buildSrc, webhooks: webhooks,
+		})
 		log.Printf("[conformance] events control tools registered; this is not a demo path")
 	}
 	return &wiredServer{

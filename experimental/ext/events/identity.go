@@ -112,3 +112,32 @@ func deriveSubscriptionID(canonical []byte) string {
 	sum := sha256.Sum256(canonical)
 	return "sub_" + base64.RawURLEncoding.EncodeToString(sum[:16])
 }
+
+// CanonicalKey computes the bytes that identify a subscription, per the spec's
+// key composition rule: a subscription is fully determined by what it listens
+// for (name, arguments), where it delivers (deliveryURL), and who asked
+// (principal). There is no client-supplied id.
+//
+// Exported because anything that has to agree with the library about which
+// subscription is which needs the same function: a custom WebhookStore
+// resolving a row, an admin surface listing subscriptions per tenant, a test
+// fixture standing one up on another principal's behalf. Computing it by hand
+// gets the separator or the argument canonicalization subtly wrong, and the
+// symptom is a subscription the registry cannot find.
+//
+// Arguments are compared by canonical JSON, so key order does not matter and a
+// nil map and an empty map produce the same bytes.
+func CanonicalKey(principal, deliveryURL, name string, arguments map[string]any) []byte {
+	return canonicalKey(principal, deliveryURL, name, arguments)
+}
+
+// DeriveSubscriptionID returns the public `sub_...` identifier for a canonical
+// key, which is what the wire carries and what clients echo back.
+//
+// The mapping is one-way and deterministic: the same tuple always yields the
+// same id, and the id reveals nothing about the principal or URL it came from.
+// Pair it with CanonicalKey rather than inventing an id, since the registry
+// looks up by canonical bytes and only reports the derived form.
+func DeriveSubscriptionID(canonical []byte) string {
+	return deriveSubscriptionID(canonical)
+}
