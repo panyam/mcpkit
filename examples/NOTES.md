@@ -63,6 +63,13 @@ sweeps over the common path miss them.
 
 - **Non-interactive mode cannot do browser steps.** A step that opens a browser and expects user
   action will fail under `--non-interactive`. Interactive mode is the primary path.
+- **No test runs a walkthrough's `Run` steps, so run the demo after changing library behaviour.**
+  A discord step subscribed to a dead `http://localhost:1/sink` and expected success; endpoint
+  verification broke it and every test stayed green (#1444). Run it non-interactively against a
+  server on a free port: `go run . --serve -addr 127.0.0.1:18411 &` then
+  `go run . --non-interactive --url http://127.0.0.1:18411`, and grep the output for `UNEXPECTED`.
+  Port 8080 is often taken in the container by something else, which makes every call 405 and looks
+  like a demo bug.
 - **`common.SetupRenderer(demo)` is mandatory for `--tui`.** demokit ships no renderer by default,
   so without the call the binary silently falls back to PlainRenderer regardless of `--tui` or
   `--mode=tui`.

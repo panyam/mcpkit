@@ -9,6 +9,42 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **`experimental/ext/events`: webhook endpoints are verified before any
+  delivery** (#1444). `events/subscribe` POSTs a signed
+  `{"type":"verification","challenge":…}` envelope to `delivery.url` and only
+  creates the subscription if the nonce is echoed in a 2xx body; otherwise it
+  fails with `-32015` and `data.reason` `challenge_failed` or a connection
+  category. **Receivers that do not answer stop getting new subscriptions.**
+  `eventsclient.Receiver` and the Python client answer automatically; other
+  receivers call `events.AnswerVerificationChallenge` and must be listening
+  before they subscribe. `WithUnsafeSkipEndpointVerification()` restores the old
+  behaviour. Waivers: `WithWebhookDeliveryAllowlist`, `WithPreVerifier` /
+  `WithPreVerifiedDeliveryURL`, and (#1449, opt-in) receiver-published
+  `/.well-known/mcp-webhook-receiver.json` via `WithWellKnownReceiverDocs`, served
+  with `events.WellKnownReceiverHandler`.
+- **Verification POSTs are rate-limited per destination host** (#1448), 60 a
+  minute by default; over budget, `events/subscribe` answers `-32013` with
+  `data.limit` `verifications_per_host`. Tune with `WithVerificationRateLimit`.
+
+### Fixed
+- **Failure-based GC now drops suspended no-expiry webhook subscriptions**
+  (#1447). A suspended target received no deliveries, so its GC window was never
+  checked again and it stayed in the store indefinitely.
+- **`stores/gorm` persists `VerifiedAt` (#1444), `Subject` and `SessionID`
+  (#1445)**, so a subscription restored after a restart keeps its verification
+  and can still be ended by backchannel logout. New columns default to `''` and
+  `AutoMigrate` adds them to existing tables.
+- Examples: the discord walkthrough subscribes with `arguments`, not `params`
+  (#1445); the skills security harness asserts the `ResolveRelative` defense for
+  a `file://` reference (#1445).
+
+### Conformance
+- `testconf-events` `events-webhook` is 25/26: kitchen-sink allowlists the suite's
+  placeholder callback origin (#1446) and gained restart, generation and
+  subscription-state controls under `--conformance-events`, which grade the three
+  TTL durability rows (#1447).
+
 ## [0.6.0] - 2026-09-17
 
 A minor release consolidating 37 PRs since v0.5.2. Three tagged modules break
