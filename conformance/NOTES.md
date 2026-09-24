@@ -457,6 +457,16 @@ kitchen-sink, which caps `chat.message` and not the push target, reported it unt
 `events_conformance_quota` answers `{"name":"chat.message","max":2}`, read back from the `Quota`,
 and the scenario opens streams on that type until it's refused.
 
+**The webhook envelope rows need per-subscription controls (#1463).** `envelope-gap` and
+`envelope-terminated` reported untestable, and the push scenario's answer (`yield_gap`,
+`terminate`) doesn't carry over. `YieldGap` and `YieldTerminated` fan out to push streams only, so
+a webhook subscriber never hears of either; the registry's `PostGap` and `PostTerminated` are the
+webhook path, per subscription, and nothing in kitchen-sink called them. Terminating by type was
+out too, since no webhook type here is disposable. `events_conformance_webhook_gap` and
+`events_conformance_webhook_terminate` take the subscription id and signal only the harness's own
+subscription. The gap is refused while the source is still empty: `PostGap` with an empty cursor
+sends an envelope without one (#1466).
+
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
 `nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.
 With that branch applied both scenarios report **events-discovery 12/12 and events-poll 29/29, zero
