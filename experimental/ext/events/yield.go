@@ -348,6 +348,7 @@ type YieldingSource[Data any] struct {
 	mu          sync.RWMutex
 	entries     []yieldedEntry[Data]
 	emitHook    func(context.Context, Event)
+	signalHook  func(sourceSignal) // gap / terminated to webhook subscribers; installed by Register
 	metaFunc    func(context.Context, Data) map[string]any
 	subscribers []*subscriberSlot
 	terminated  bool // one-shot YieldTerminated has fired; subsequent yields are no-ops
@@ -442,11 +443,15 @@ func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
 // failure the subscriber can recover from, and YieldTerminated for a
 // subscription that is over.
 //
-// This is the push-side counterpart of WebhookRegistry.PostGap. It exists
-// because a source wrapping a lossy upstream — a gateway that dropped frames,
-// a broker whose retention expired — has no other way to say so on the stream
-// path: Truncated lives on SubscriberEvent, which only the source can
-// construct.
+// Webhook subscribers of the same type get a {type:gap, cursor:<fresh>}
+// envelope carrying Latest(), through WebhookRegistry.PostGapByEventName, when
+// the source is registered with a WebhookRegistry (spec §"Gaps and
+// truncated", webhook row). A cursorless or still-empty source has no position
+// to send, so webhooks hear nothing in that case.
+//
+// It exists because a source wrapping a lossy upstream — a gateway that
+// dropped frames, a broker whose retention expired — has no other way to say
+// so: Truncated lives on SubscriberEvent, which only the source can construct.
 //
 // The marker travels alone rather than waiting to ride the next delivery. A
 // source that learns of a loss while it has nothing to send would otherwise
@@ -463,7 +468,13 @@ func (s *YieldingSource[Data]) YieldGap() error {
 		return nil
 	}
 	s.fanoutLocked(SubscriberEvent{Truncated: true})
+	hook := s.signalHook
 	s.mu.Unlock()
+	// Outside the lock: the webhook side takes its own and reads Latest,
+	// which takes ours for read.
+	if hook != nil {
+		hook(sourceSignal{name: s.def.Name, gap: true, cursor: s.Latest()})
+	}
 	return nil
 }
 
@@ -474,13 +485,19 @@ func (s *YieldingSource[Data]) YieldGap() error {
 // terminated: subsequent yield / YieldError / YieldTerminated calls
 // are silently dropped, and Poll returns empty.
 //
+// Webhook subscriptions to the same type are ended too, with a
+// {type:terminated} envelope carrying err, through
+// WebhookRegistry.TerminateByEventName, when the source is registered with a
+// WebhookRegistry (spec §"Event Type Removal and Breaking Changes": each
+// mode's termination signal).
+//
 // One-shot. Receivers seeing the terminal signal SHOULD remove their
 // local subscription state — there's no recovery path for the source
 // itself; recovery requires re-subscribing.
 func (s *YieldingSource[Data]) YieldTerminated(err EventDeliveryError) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.terminated {
+		s.mu.Unlock()
 		return nil
 	}
 	s.terminated = true
@@ -501,7 +518,39 @@ func (s *YieldingSource[Data]) YieldTerminated(err EventDeliveryError) error {
 		sub.closeChan()
 	}
 	s.subscribers = nil
+	hook := s.signalHook
+	s.mu.Unlock()
+	// Outside the lock: terminating webhooks fires onRemove hooks (quota
+	// release among them), which should never run under the source's lock.
+	if hook != nil {
+		hook(sourceSignal{name: s.def.Name, terminated: &err})
+	}
 	return nil
+}
+
+// sourceSignal is what a source tells the registry beyond events: a gap, with
+// the position delivery resumes from, or the end of the source. The registry
+// relays it to webhook subscribers; push subscribers already heard it on their
+// channels.
+type sourceSignal struct {
+	name       string
+	gap        bool
+	cursor     string
+	terminated *EventDeliveryError
+}
+
+// signalAware is implemented by sources whose gap and terminal signals the
+// registry should relay to webhook subscribers. Unexported: the relay is
+// wiring between Register and YieldingSource, not an extension point. A source
+// outside this package calls PostGapByEventName / TerminateByEventName itself.
+type signalAware interface {
+	setSignalHook(func(sourceSignal))
+}
+
+func (s *YieldingSource[Data]) setSignalHook(hook func(sourceSignal)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.signalHook = hook
 }
 
 // Receive implements server.NotificationRelayReceiver — the
