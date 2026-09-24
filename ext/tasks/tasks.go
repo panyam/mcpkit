@@ -368,6 +368,11 @@ func Register(cfg Config) {
 // handshake to seed session caps from — so without it tasks/* would always
 // emit -32021 on the stateless wire even when the client did declare the
 // extension per-request.
+//
+// core.ClientSupportsExtension reads the stateless envelope itself since
+// issue 1458. The raw params are still parsed here because a legacy-wire
+// request can also carry the _meta override, and the dispatcher attaches an
+// envelope to ctx only on the stateless wire.
 func gateOnTasksExtension(inner server.MethodHandler) server.MethodHandler {
 	return func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var envelope struct {

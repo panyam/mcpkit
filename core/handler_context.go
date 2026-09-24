@@ -431,14 +431,10 @@ func (bc BaseContext) HasScope(scope string) bool {
 	return false
 }
 
-// ClientSupportsExtension checks whether the client declared support for
-// the given extension ID during initialize.
+// ClientSupportsExtension reports whether the client declared the given
+// extension ID, on either wire. See the package-level ClientSupportsExtension.
 func (bc BaseContext) ClientSupportsExtension(extensionID string) bool {
-	if bc.sc == nil || bc.sc.clientCaps == nil {
-		return false
-	}
-	_, ok := bc.sc.clientCaps.Extensions[extensionID]
-	return ok
+	return ClientSupportsExtension(bc.Context, extensionID)
 }
 
 // ClientSupportsUI checks whether the client declared MCP Apps support.

@@ -139,6 +139,21 @@ func TestClientWithUIExtension(t *testing.T) {
 	}
 }
 
+// TestClientWithUIExtension_StatelessWire covers issue 1458 end to end. On the
+// SEP-2575 stateless wire the client declares the extension in each request's
+// _meta, and core.ClientSupportsUI inside the tool handler must see it.
+func TestClientWithUIExtension_StatelessWire(t *testing.T) {
+	c, _ := setupUIStreamableClient(t, client.WithClientMode(client.ClientModeStateless))
+
+	text, err := c.ToolCall(t.Context(), "check_ui", nil)
+	if err != nil {
+		t.Fatalf("ToolCall: %v", err)
+	}
+	if text != "ui: yes" {
+		t.Errorf("result = %q, want 'ui: yes'", text)
+	}
+}
+
 // TestClientWithoutUIExtension verifies that a client without WithUIExtension()
 // does NOT advertise UI support, so the server reports no UI capability.
 func TestClientWithoutUIExtension(t *testing.T) {
