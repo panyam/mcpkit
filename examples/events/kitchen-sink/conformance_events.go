@@ -78,6 +78,7 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 	}
 
 	registerTenantControls(srv, y.webhooks)
+	registerCallbackOriginControl(srv, y.webhooks)
 
 	srv.RegisterTool(core.ToolDef{
 		Name:        "events_conformance_yield_error",
@@ -196,6 +197,44 @@ func registerTenantControls(srv *server.Server, webhooks *events.WebhookRegistry
 			}
 		}
 		return core.TextResult("false"), nil
+	})
+}
+
+// registerCallbackOriginControl lets the harness receive deliveries on its
+// own loopback listener.
+//
+// events-webhook-delivery grades signing, headers, retries and verification,
+// all of which are only observable from the endpoint the server POSTs to, so
+// the harness has to be the receiver. It listens on loopback, which the
+// fixture's SSRF guards correctly refuse, and that refusal is exactly what the
+// suite's SSRF rows grade. The suite grades those rows first against the
+// guards as configured, then calls this for its receiver's origin and
+// subscribes again. Only that origin is lifted; every other callback is still
+// refused, and the order means no SSRF verdict is taken after the override.
+func registerCallbackOriginControl(srv *server.Server, webhooks *events.WebhookRegistry) {
+	srv.RegisterTool(core.ToolDef{
+		Name:        "events_conformance_allow_callback_origin",
+		Description: "Conformance control: permit webhook callbacks under one origin past the https and SSRF guards for the rest of the process, returning the origin permitted. Every other callback stays refused.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"origin": map[string]any{"type": "string", "description": "Origin to permit, e.g. http://127.0.0.1:53211. No path."},
+			},
+			"required":             []any{"origin"},
+			"additionalProperties": false,
+		},
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		var args struct {
+			Origin string `json:"origin"`
+		}
+		if err := json.Unmarshal(req.Arguments, &args); err != nil {
+			return core.ErrorResult("arguments: " + err.Error()), nil
+		}
+		origin, err := webhooks.UnsafeAllowCallbackOrigin(args.Origin)
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		return core.TextResult(origin), nil
 	})
 }
 

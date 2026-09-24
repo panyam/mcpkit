@@ -178,15 +178,17 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	// EmitToSubscription.
 	presenceSrc, _ := events.NewYieldingSource[PresenceChangedData](presenceEventDef(registry), events.WithoutCursors())
 
-	webhookOpts := []events.WebhookOption{
-		events.WithWebhookAllowPrivateNetworks(true),
-	}
-	// Plaintext callbacks are a demo affordance, not a conformance one. `make
-	// demo` delivers to a local http receiver; a conformance run must enforce
-	// the spec's https requirement, or the row that checks it fails against
-	// fixture configuration rather than against the library.
+	var webhookOpts []events.WebhookOption
+	// Loopback and plaintext callbacks are demo affordances, not conformance
+	// ones. `make demo` delivers to a local http receiver; a conformance run
+	// must enforce both the https requirement and the SSRF refusal, or the
+	// rows that check them fail against fixture configuration rather than
+	// against the library. The harness's own receiver gets in through
+	// events_conformance_allow_callback_origin once those rows are graded.
 	if !conformanceEvents {
-		webhookOpts = append(webhookOpts, events.WithUnsafeWebhookAllowPlaintextCallbacks())
+		webhookOpts = append(webhookOpts,
+			events.WithWebhookAllowPrivateNetworks(true),
+			events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	} else {
 		// The events-webhook scenario grades subscribe semantics against
 		// callbacks under a placeholder origin that never resolves, so

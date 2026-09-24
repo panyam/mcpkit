@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
@@ -99,4 +102,53 @@ func TestConformanceEvents_RestartKeepsLongAndNoExpiryGrants(t *testing.T) {
 	assert.Equal(t, "active", subscriptionState(t, after, noExpiry))
 	assert.Equal(t, "active", subscriptionState(t, after, long))
 	assert.Equal(t, "absent", subscriptionState(t, after, "sub_never_existed"))
+}
+
+// Plain --serve lifts the routability guard for `make demo`; the conformance
+// build must not, or the SSRF rows pass on the scheme rule alone.
+func TestConformanceEvents_RefusesNonRoutableHTTPSCallback(t *testing.T) {
+	c := newConformanceTestClient(t)
+	err := conformanceSubscribe(t, c, "https://127.0.0.1:1/mcp-events")
+	require.Error(t, err)
+	rpc := unwrapRPC(err)
+	require.NotNil(t, rpc, "want an RPC error, got %v", err)
+	assert.Equal(t, core.ErrCodeInvalidParams, rpc.Code)
+}
+
+func newVerifyingReceiver(t *testing.T) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		if !events.AnswerVerificationChallenge(w, body) {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+func TestConformanceEvents_AllowCallbackOriginPermitsThatOriginOnly(t *testing.T) {
+	c := newConformanceTestClient(t)
+	receiver := newVerifyingReceiver(t)
+	other := newVerifyingReceiver(t)
+
+	require.Error(t, conformanceSubscribe(t, c, receiver.URL+"/mcp-events"), "refused before the control")
+
+	res, err := c.ToolCallFull(t.Context(), "events_conformance_allow_callback_origin",
+		map[string]any{"origin": receiver.URL})
+	require.NoError(t, err)
+	require.False(t, res.IsError)
+	require.Len(t, res.Content, 1)
+	assert.Equal(t, receiver.URL, res.Content[0].Text)
+
+	require.NoError(t, conformanceSubscribe(t, c, receiver.URL+"/mcp-events"))
+	assert.Error(t, conformanceSubscribe(t, c, other.URL+"/mcp-events"), "another origin stays refused")
+}
+
+func TestConformanceEvents_AllowCallbackOriginRejectsNonOrigin(t *testing.T) {
+	c := newConformanceTestClient(t)
+	res, err := c.ToolCallFull(t.Context(), "events_conformance_allow_callback_origin",
+		map[string]any{"origin": "http://127.0.0.1:8080/path"})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
 }
