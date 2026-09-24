@@ -39,6 +39,12 @@ import (
 type conformanceYielders struct {
 	chat  *events.YieldingSource[ChatMessageData]
 	alert *events.YieldingSource[AlertData]
+	// build is the disposable one. Terminating a source is one-shot for the
+	// life of the process, and the four events scenarios share a single
+	// fixture, so a scenario that terminates chat.message or alert.fired
+	// poisons whatever runs after it. build.finished exists only under this
+	// flag, carries no feeder, and nothing else subscribes to it.
+	build *events.YieldingSource[BuildFinishedData]
 }
 
 // registerConformanceEventControls wires the diagnostic tools. Called only when
@@ -54,8 +60,10 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 			return y.chat, nil
 		case "alert.fired":
 			return y.alert, nil
+		case "build.finished":
+			return y.build, nil
 		default:
-			return nil, fmt.Errorf("no conformance control for event type %q (have chat.message, alert.fired)", name)
+			return nil, fmt.Errorf("no conformance control for event type %q (have chat.message, alert.fired, build.finished)", name)
 		}
 	}
 
@@ -102,7 +110,7 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 
 	srv.RegisterTool(core.ToolDef{
 		Name:        "events_conformance_terminate",
-		Description: "Conformance control: end every live subscription to an event type. Stream subscribers receive notifications/events/terminated and the stream closes. One-shot per source: the source stays terminated for the life of the process.",
+		Description: "Conformance control: end every live subscription to an event type. Stream subscribers receive notifications/events/terminated and the stream closes. One-shot per source: the source stays terminated for the life of the process, so prefer build.finished, which nothing else uses.",
 		InputSchema: eventNameSchema(),
 	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 		name, err := eventNameOf(req)
@@ -129,7 +137,7 @@ func eventNameSchema() map[string]any {
 		"properties": map[string]any{
 			"name": map[string]any{
 				"type":        "string",
-				"enum":        []any{"chat.message", "alert.fired"},
+				"enum":        []any{"chat.message", "alert.fired", "build.finished"},
 				"description": "Event type to act on.",
 			},
 		},
