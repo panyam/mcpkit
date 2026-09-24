@@ -471,6 +471,13 @@ webhook subscriber of the type, `YieldTerminated` ends them with a `terminated` 
 `PostGap` sends nothing for an empty cursor, where it used to send a gap with no cursor. The
 controls stay, since they signal one subscription where the yields signal the whole type.
 
+**`truncated-false-when-no-replay` is graded on push too (#1468).** Only poll graded it, against a
+target that replays, so it read SKIPPED while push streams on `presence.changed` got
+`active{cursor: null, truncated: true}` on every gap. The push scenario now finds a type whose
+stream confirms with `cursor: null`, asks for a gap through `yield_gap` (which accepts
+`presence.changed` for this), and checks no `truncated: true` follows. The library fix skips the
+fresh `active` whenever there is no cursor to put in it, the same rule webhook's `PostGap` applies.
+
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
 `nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.
 With that branch applied both scenarios report **events-discovery 12/12 and events-poll 29/29, zero

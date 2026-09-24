@@ -155,7 +155,9 @@ func (s *subscriberSlot) deliverEvent(event Event) {
 // WithSubscriberBuffer overrides the per-Subscribe channel buffer size
 // (default 64). Larger buffers tolerate slower consumers without dropping;
 // smaller buffers fail fast and surface gaps via Truncated markers earlier.
-// Has no effect on existing subscribers.
+// On the wire that marker becomes truncated:true only for a source with
+// cursors; a cursorless type has no position to report. Has no effect on
+// existing subscribers.
 func WithSubscriberBuffer(n int) YieldingOption {
 	return func(c *yieldingConfig) {
 		if n > 0 {
@@ -439,7 +441,9 @@ func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
 // A gap is not an error. Stream subscribers map this onto a fresh
 // notifications/events/active carrying the source's current cursor and
 // truncated:true, after which delivery continues on the same subscription
-// (spec §"Push-Based Delivery" L285). Use YieldError for a transient upstream
+// (spec §"Push-Based Delivery" L285). A cursorless or still-empty source has
+// no cursor to send, so its stream subscribers get no frame, the same as its
+// webhook subscribers: for a type without replay truncated SHOULD be false. Use YieldError for a transient upstream
 // failure the subscriber can recover from, and YieldTerminated for a
 // subscription that is over.
 //

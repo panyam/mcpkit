@@ -249,7 +249,7 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 
 	if conformanceEvents {
 		registerConformanceEventControls(srv, conformanceYielders{
-			chat: chatSrc, alert: alertSrc, build: buildSrc, webhooks: webhooks,
+			chat: chatSrc, alert: alertSrc, build: buildSrc, presence: presenceSrc, webhooks: webhooks,
 			quota: quota,
 		})
 		registerRestartControls(srv, rt)
