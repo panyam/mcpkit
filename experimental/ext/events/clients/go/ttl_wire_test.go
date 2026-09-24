@@ -37,7 +37,7 @@ import (
 func snifferStack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, *atomic.Pointer[string]) {
 	t.Helper()
 
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	src, _ := events.NewYieldingSource[fakePayload](events.EventDef{
 		Name:        "fake.event",

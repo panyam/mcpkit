@@ -248,7 +248,7 @@ func TestWebhookDelivery_410GoneIsTerminalWithoutSubscriptionEffect(t *testing.T
 	}))
 	defer receiver.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	defResolver := func(string) EventDef { return EventDef{} }
 	canonical := canonicalKey("alice", receiver.URL, "fake.event", nil)
 	r.SetDefResolver(defResolver)

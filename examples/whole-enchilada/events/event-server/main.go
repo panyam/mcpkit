@@ -135,7 +135,7 @@ func main() {
 		// Stage-1 escape: demo receivers run on loopback (compose network
 		// resolves to private IPs); production-default SSRF guard would
 		// reject. Production stages will wire a real allowlist.
-		events.WithWebhookAllowPrivateNetworks(true),
+		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 		// SEP-414 P6 follow-up: emit events.webhook.deliver spans
 		// around each outbound POST so Peter's demo shows the full
 		// chain (client tools/call → server dispatch → webhook
@@ -363,27 +363,27 @@ func buildBCLHandlers(webhooks *events.WebhookRegistry) map[string]*extauth.Back
 // caller falls back to the next posture in the chain. Recognized env
 // vars:
 //
-//   OAUTH_INTROSPECTION_URLS REQUIRED. Comma-separated list of N
-//                            Keycloak introspection endpoints — one
-//                            per realm the event-server accepts
-//                            tokens from. Each URL's
-//                            /realms/<realm>/ segment is parsed as
-//                            the routing key; the inbound JWT's iss
-//                            picks which child to delegate to.
-//                            Single-realm deployments pass exactly
-//                            one URL.
-//   OAUTH_CLIENT_ID          REQUIRED. Client ID used to authenticate
-//                            to every realm's introspection endpoint
-//                            via client_secret_basic. The same client
-//                            ID is registered in every realm in the
-//                            demo; production deployments may need
-//                            per-realm IDs (file an issue if needed).
-//   OAUTH_CLIENT_SECRET      REQUIRED. Same as above — shared across
-//                            realms for demo simplicity.
-//   OAUTH_CACHE_TTL          Optional duration. Default 30s. Set to 0
-//                            to disable caching (every request hits
-//                            the AS — the load-bearing knob for the
-//                            "token revocation" walkthrough step).
+//	OAUTH_INTROSPECTION_URLS REQUIRED. Comma-separated list of N
+//	                         Keycloak introspection endpoints — one
+//	                         per realm the event-server accepts
+//	                         tokens from. Each URL's
+//	                         /realms/<realm>/ segment is parsed as
+//	                         the routing key; the inbound JWT's iss
+//	                         picks which child to delegate to.
+//	                         Single-realm deployments pass exactly
+//	                         one URL.
+//	OAUTH_CLIENT_ID          REQUIRED. Client ID used to authenticate
+//	                         to every realm's introspection endpoint
+//	                         via client_secret_basic. The same client
+//	                         ID is registered in every realm in the
+//	                         demo; production deployments may need
+//	                         per-realm IDs (file an issue if needed).
+//	OAUTH_CLIENT_SECRET      REQUIRED. Same as above — shared across
+//	                         realms for demo simplicity.
+//	OAUTH_CACHE_TTL          Optional duration. Default 30s. Set to 0
+//	                         to disable caching (every request hits
+//	                         the AS — the load-bearing knob for the
+//	                         "token revocation" walkthrough step).
 //
 // The previous OAUTH_INTROSPECTION_URL singular-form env var is no
 // longer recognized — single-realm deployments now pass exactly one

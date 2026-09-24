@@ -32,13 +32,19 @@ func buildTestStack(t *testing.T) (*httptest.Server, *events.HTTPSource[ChatMess
 		YieldingOpts: []events.YieldingOption{events.WithMaxSize(100)},
 	})
 	presenceSrc := events.NewHTTPSource[PresenceChangedData](events.EventDef{
-		Name:     "presence.changed",
-		Delivery: []string{"push", "webhook"},
+		Name: "presence.changed",
+		// Poll is declared because this fixture is polled: TestE2E_Cursorless
+		// PresenceShape asserts that a cursorless source answers a poll with an
+		// empty batch and a null cursor. Cursorless and poll-capable are
+		// orthogonal. The production descriptor in main.go offers push and
+		// webhook only, which is why the poll gate (#1416) refused this and the
+		// test went red without CI noticing (#1431).
+		Delivery: []string{"poll", "push", "webhook"},
 	}, events.HTTPSourceConfig{
 		YieldingOpts: []events.YieldingOption{events.WithoutCursors()},
 	})
 
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "whole-enchilada-test", Version: "0.1.0"},

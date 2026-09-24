@@ -31,7 +31,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
 	// production-default SSRF dial guard (spec §"Webhook Security"
 	// → "SSRF prevention" L464).
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
 	typingSource, _ := newDiscordTypingSource()
@@ -58,7 +58,7 @@ func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, f
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
 	// production-default SSRF dial guard (spec §"Webhook Security"
 	// → "SSRF prevention" L464).
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newDiscordSource()
 	typingSource, yieldTyping := newDiscordTypingSource()
@@ -586,10 +586,16 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 	assert.Nil(t, cursorVal, "cursorless event must wire as cursor:null")
 }
 
-// TestE2ECursorlessPollAlwaysEmpty verifies events/poll on a cursorless
-// source returns no events and a null cursor regardless of how the client
-// addressed it. Subscribers can't replay missed indicators by design.
-func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
+// TestE2EPollRefusedOnPushOnlySource verifies that discord.typing, which
+// advertises push and webhook and not poll, refuses events/poll.
+//
+// This used to assert the opposite — that polling it returned an empty batch
+// and a null cursor — because the library answered polls for any registered
+// type and the `delivery` array was decoration. #1416 made the array a
+// contract, so the honest behaviour for a type that declines poll is to say
+// so. The cursorless poll shape this once covered is exercised in the events
+// package's own tests, against a source that actually offers poll.
+func TestE2EPollRefusedOnPushOnlySource(t *testing.T) {
 	srv, _, yieldTyping, _ := buildTestStackWithTyping()
 	c, _ := connectClient(t, srv)
 
@@ -597,16 +603,13 @@ func TestE2ECursorlessPollAlwaysEmpty(t *testing.T) {
 		require.NoError(t, yieldTyping(context.Background(), newDiscordTypingEvent("g", "c", "alice", time.Now())))
 	}
 
-	result, err := c.Call(t.Context(), "events/poll", map[string]any{
+	_, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "discord.typing",
 		"cursor": "0",
 	})
-	require.NoError(t, err)
-
-	var resp pollResult
-	require.NoError(t, json.Unmarshal(result.Raw, &resp))
-	assert.Empty(t, resp.Events)
-	assert.Nil(t, resp.Cursor, "poll on cursorless source must return cursor:null")
+	require.Error(t, err, "a type advertising push and webhook only must refuse a poll")
+	assert.Contains(t, err.Error(), "-32014",
+		"the refusal is Unsupported, naming the delivery mode")
 }
 
 // TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest verifies the

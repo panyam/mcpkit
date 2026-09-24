@@ -32,7 +32,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
 	// production-default SSRF dial guard (spec §"Webhook Security"
 	// → "SSRF prevention" L464).
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	source, yield := newTelegramSource()
 	typingSource, _ := newTelegramTypingSource()
@@ -58,7 +58,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 // tests so they can publish typing events without spinning up a Telegram
 // session.
 func buildTestStackWithTyping() (*server.Server, func(context.Context, TelegramEventData) error, func(context.Context, TelegramTypingData) error) {
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	source, yield := newTelegramSource()
 	typingSource, yieldTyping := newTelegramTypingSource()
 

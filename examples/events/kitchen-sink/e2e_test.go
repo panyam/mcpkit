@@ -379,7 +379,7 @@ func TestQuota_OnSubscribeRejection_WireShape(t *testing.T) {
 		},
 	})
 
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	srv := server.NewServer(
 		core.ServerInfo{Name: "kitchen-sink-rejecting-hook-test", Version: "0.1.0"},
 		server.WithSubscriptions(),

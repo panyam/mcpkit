@@ -64,7 +64,7 @@ func buildRemovalStack(t *testing.T) (*Registry, *WebhookRegistry, *captureBroad
 	cap := &captureBroadcast{}
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"},
 		server.WithNotificationRelay(cap))
-	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	reg := Register(Config{
 		Sources:                  []EventSource{},
 		Webhooks:                 webhooks,

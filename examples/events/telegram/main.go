@@ -66,7 +66,7 @@ func serve() {
 		// deployments leave this OFF so loopback/private-IP webhook
 		// URLs are rejected at dial per spec §"Webhook Security" →
 		// "SSRF prevention" L464.
-		events.WithWebhookAllowPrivateNetworks(true),
+		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 	}
 	log.Printf("[server] webhook headers=%s; client-supplied secrets only", headerMode)
 
@@ -234,12 +234,13 @@ func hasOAuthEnv() bool {
 // UnsafeAnonymousPrincipal demo escape.
 //
 // Recognized env vars:
-//   OAUTH_ISSUER    REQUIRED. The OIDC issuer URL.
-//                   For Keycloak: http://localhost:8081/realms/<realm>
-//   OAUTH_JWKS_URL  Optional. Defaults to <issuer>/protocol/openid-connect/certs
-//                   (Keycloak convention). Override for non-Keycloak providers.
-//   OAUTH_AUDIENCE  Optional. Defaults to "mcp-events". Tokens MUST have
-//                   this audience claim to be accepted.
+//
+//	OAUTH_ISSUER    REQUIRED. The OIDC issuer URL.
+//	                For Keycloak: http://localhost:8081/realms/<realm>
+//	OAUTH_JWKS_URL  Optional. Defaults to <issuer>/protocol/openid-connect/certs
+//	                (Keycloak convention). Override for non-Keycloak providers.
+//	OAUTH_AUDIENCE  Optional. Defaults to "mcp-events". Tokens MUST have
+//	                this audience claim to be accepted.
 func tryEnableAuth() *auth.JWTValidator {
 	issuer := os.Getenv("OAUTH_ISSUER")
 	if issuer == "" {

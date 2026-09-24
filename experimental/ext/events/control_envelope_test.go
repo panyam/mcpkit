@@ -74,7 +74,7 @@ func TestControlEnvelope_GapShape(t *testing.T) {
 	srv := httptest.NewServer(cap.handler())
 	defer srv.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := canonicalKey("alice", srv.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeMs: 0})
@@ -121,7 +121,7 @@ func TestControlEnvelope_TerminatedShape(t *testing.T) {
 	srv := httptest.NewServer(cap.handler())
 	defer srv.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := canonicalKey("alice", srv.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeMs: 0})
@@ -166,7 +166,7 @@ func TestControlEnvelope_TypeDiscriminatorIsTopLevel(t *testing.T) {
 	srv := httptest.NewServer(cap.handler())
 	defer srv.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := canonicalKey("alice", srv.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeMs: 0})

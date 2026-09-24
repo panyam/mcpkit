@@ -40,7 +40,7 @@ import (
 func ssrfTestRegistry(allowPrivate bool, captureLog *captureLog) *WebhookRegistry {
 	opts := []WebhookOption{}
 	if allowPrivate {
-		opts = append(opts, WithWebhookAllowPrivateNetworks(true))
+		opts = append(opts, WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	}
 	r := NewWebhookRegistry(opts...)
 	// Shorten the timeout so test failures are fast; preserve the
@@ -112,7 +112,7 @@ func TestDelivery_RejectsLoopbackAtDialTime(t *testing.T) {
 }
 
 // TestDelivery_AllowsLoopbackWithEscape verifies the demo escape hatch:
-// WithWebhookAllowPrivateNetworks(true) permits loopback dials so demos
+// WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks() permits loopback dials so demos
 // can deliver to local httptest servers without standing up public DNS.
 // Counter-test for TestDelivery_RejectsLoopbackAtDialTime.
 func TestDelivery_AllowsLoopbackWithEscape(t *testing.T) {

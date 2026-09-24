@@ -201,7 +201,7 @@ func TestSuspend_AfterThresholdConsecutiveFailures(t *testing.T) {
 
 	const threshold = 3
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(threshold),
 		WithWebhookSuspendWindow(10*time.Second),
 	)
@@ -235,7 +235,7 @@ func TestSuspend_FailuresOutsideWindowDontAccumulate(t *testing.T) {
 
 	const threshold = 3
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(threshold),
 		WithWebhookSuspendWindow(200*time.Millisecond),
 	)
@@ -273,7 +273,7 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 	defer receiver.Close()
 
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
 	)
@@ -325,7 +325,7 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 	defer receiver.Close()
 
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
 	)
@@ -383,7 +383,7 @@ func TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension(t *testing.T) {
 	defer receiver.Close()
 
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
 	)
@@ -429,7 +429,7 @@ func TestSuspend_DoesNotAutoPostTerminatedTwice(t *testing.T) {
 	defer receiver.Close()
 
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendThreshold(2),
 		WithWebhookSuspendWindow(10*time.Second),
 	)

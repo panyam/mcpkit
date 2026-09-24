@@ -34,7 +34,7 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(c
 	// the loopback escape so the dial-time SSRF guard (spec
 	// §"Webhook Security" → "SSRF prevention" L464) doesn't block
 	// the test deliveries. Per-test whOpts can still override.
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true)}, whOpts...)
+	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	src, yield := events.NewYieldingSource[fakePayload](events.EventDef{
 		Name:        "fake.event",

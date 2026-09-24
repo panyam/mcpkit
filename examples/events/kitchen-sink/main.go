@@ -155,6 +155,13 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 	webhookOpts := []events.WebhookOption{
 		events.WithWebhookAllowPrivateNetworks(true),
 	}
+	// Plaintext callbacks are a demo affordance, not a conformance one. `make
+	// demo` delivers to a local http receiver; a conformance run must enforce
+	// the spec's https requirement, or the row that checks it fails against
+	// fixture configuration rather than against the library.
+	if !conformanceEvents {
+		webhookOpts = append(webhookOpts, events.WithUnsafeWebhookAllowPlaintextCallbacks())
+	}
 	if tp != nil {
 		webhookOpts = append(webhookOpts, events.WithWebhookTracerProvider(tp))
 	}

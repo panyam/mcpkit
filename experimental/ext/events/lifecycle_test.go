@@ -33,10 +33,10 @@ import (
 // HookContext snapshot at fire time so tests can assert mode and
 // principal as well as count. Concurrent-safe.
 type hookCounter struct {
-	mu             sync.Mutex
-	subscribes     []hookCall
-	unsubscribes   []hookCall
-	subscribeErr   error // returned from on_subscribe; nil = succeed
+	mu           sync.Mutex
+	subscribes   []hookCall
+	unsubscribes []hookCall
+	subscribeErr error // returned from on_subscribe; nil = succeed
 }
 
 type hookCall struct {
@@ -107,15 +107,15 @@ type lifecycleFixture struct {
 func newLifecycleFixture(t *testing.T, hooks *hookCounter, webhookOpts ...WebhookOption) *lifecycleFixture {
 	t.Helper()
 	def := EventDef{
-		Name:        "lifecycle.test",
-		Description: "lifecycle hook firing tests",
-		Delivery:    []string{"poll", "push", "webhook"},
-		OnSubscribe: hooks.onSubscribe,
+		Name:          "lifecycle.test",
+		Description:   "lifecycle hook firing tests",
+		Delivery:      []string{"poll", "push", "webhook"},
+		OnSubscribe:   hooks.onSubscribe,
 		OnUnsubscribe: hooks.onUnsubscribe,
 	}
 	src, yield := NewYieldingSource[map[string]any](def)
 	wh := NewWebhookRegistry(append([]WebhookOption{
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 	}, webhookOpts...)...)
 	leases := NewPollLeaseTable(
 		WithPollLeaseTTL(40*time.Millisecond),
@@ -176,7 +176,7 @@ func TestLifecycle_Webhook_SubscribeUnsubscribe_FiresHooksOnce(t *testing.T) {
 	defer receiver.Close()
 
 	subParams := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -204,9 +204,9 @@ func TestLifecycle_Webhook_SubscribeUnsubscribe_FiresHooksOnce(t *testing.T) {
 	}
 
 	unsubParams := map[string]any{
-		"name":     "lifecycle.test",
-		"arguments":   map[string]any{"sev": "high"},
-		"delivery": map[string]any{"url": receiver.URL},
+		"name":      "lifecycle.test",
+		"arguments": map[string]any{"sev": "high"},
+		"delivery":  map[string]any{"url": receiver.URL},
 	}
 	resp = f.dispatch("events/unsubscribe", unsubParams)
 	require.Nil(t, resp.Error, "unsubscribe failed: %+v", resp.Error)
@@ -229,7 +229,7 @@ func TestLifecycle_Webhook_RefreshDoesNotReFireOnSubscribe(t *testing.T) {
 	defer receiver.Close()
 
 	subParams := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -263,7 +263,7 @@ func TestLifecycle_Webhook_TTLPruneFiresOnUnsubscribe(t *testing.T) {
 	defer receiver.Close()
 
 	subParams := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -277,7 +277,7 @@ func TestLifecycle_Webhook_TTLPruneFiresOnUnsubscribe(t *testing.T) {
 	// Force expiry, then a Register call to trigger pruneExpiredLocked.
 	f.webhooks.ExpireAll()
 	resp = f.dispatch("events/subscribe", map[string]any{
-		"name": "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "low"}, // distinct → new sub, triggers prune
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -303,7 +303,7 @@ func TestLifecycle_Webhook_PostTerminatedFiresOnUnsubscribe(t *testing.T) {
 	defer receiver.Close()
 
 	subParams := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -345,7 +345,7 @@ func TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe(t *testing.T) {
 	defer f.close()
 
 	subParams := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -399,7 +399,7 @@ func TestLifecycle_Webhook_OnSubscribeError_RollsBack(t *testing.T) {
 	defer receiver.Close()
 
 	resp := f.dispatch("events/subscribe", map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",
@@ -434,7 +434,7 @@ func TestLifecycle_Push_OpenCloseFiresHooksOnce(t *testing.T) {
 	// the channel is acquired) and unsubscribe (on return).
 	ctx, cancel := context.WithCancel(context.Background())
 	rawReq, err := json.Marshal(map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 	})
 	require.NoError(t, err)
@@ -484,7 +484,7 @@ func TestLifecycle_Push_OnSubscribeError_RejectsStream(t *testing.T) {
 	defer f.close()
 
 	rawReq, err := json.Marshal(map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 	})
 	require.NoError(t, err)
@@ -570,7 +570,7 @@ func TestLifecycle_Poll_OnSubscribeError_Rejects(t *testing.T) {
 	defer f.close()
 
 	body := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 	}
 	raw, err := json.Marshal(body)
@@ -602,7 +602,7 @@ func TestLifecycle_Webhook_ConcurrentSubscribe_FiresOnce(t *testing.T) {
 	defer receiver.Close()
 
 	subParams := map[string]any{
-		"name":   "lifecycle.test",
+		"name":      "lifecycle.test",
 		"arguments": map[string]any{"sev": "high"},
 		"delivery": map[string]any{
 			"mode":   "webhook",

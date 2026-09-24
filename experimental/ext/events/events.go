@@ -861,6 +861,17 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		if _, ok := reg.Source(req.Name); !ok {
 			return newNotFoundError(id, "event", "NotFound")
 		}
+
+		// The webhook half of the same contract registerPoll enforces. An event
+		// type advertising push only should not accept a webhook subscription:
+		// a client reads `delivery` to decide what to call, and a server that
+		// answers for a mode it never offered makes the array decoration.
+		// Found by conformance rather than reasoning, once a fixture finally
+		// offered a type that declines webhook (#1417).
+		if def, ok := reg.Def(req.Name); ok && !supportsDeliveryMode(def.Delivery, DeliveryModeWebhook) {
+			return newUnsupportedError(id, "deliveryMode", DeliveryModeWebhook.String(),
+				"Unsupported: event type "+req.Name+" does not offer webhook delivery")
+		}
 		if errResp := validateArguments(id, reg, req.Name, req.Arguments); errResp != nil {
 			return errResp
 		}
@@ -871,13 +882,15 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "delivery.url is required")
 		}
 		if err := webhooks.ValidateWebhookURL(req.Delivery.URL); err != nil {
-			// Subscribe-time URL validation rejects scheme / loopback /
-			// parse failures — none map cleanly onto the runtime
-			// DeliveryErrorBucket categories. "connection_refused" is
-			// the closest fit for "callback endpoint is not reachable
-			// from this server". Real delivery-time failures use the
-			// finer-grained bucket via the DeliveryStatus path.
-			return newCallbackEndpointError(id, string(DeliveryErrorConnectionRefused), err.Error())
+			// -32602, not the callback-endpoint error this used to return.
+			// The spec names InvalidParams for a rejected delivery.url, and
+			// it is the right shape besides: the caller sent a parameter the
+			// server will not accept, which is a different thing from a
+			// callback that exists and cannot be reached. Delivery-time
+			// failures still carry the finer-grained DeliveryErrorBucket via
+			// the DeliveryStatus path.
+			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+				"delivery.url rejected: "+err.Error())
 		}
 
 		// Spec: delivery.secret is REQUIRED, client-supplied, and MUST
@@ -1114,7 +1127,14 @@ func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry, unsafeAn
 		}
 
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Arguments)
-		webhooks.Unregister(canonical)
+		if !webhooks.Unregister(canonical) {
+			// A tuple that never named a subscription is NotFound, not a
+			// silent success. wire_shape_test.go described this as future
+			// work; the registry has always computed it and the handler
+			// threw it away, so a typo in name, arguments or delivery.url
+			// read back as a completed teardown.
+			return newNotFoundError(id, "subscription", "NotFound")
+		}
 		return core.NewResponse(id, map[string]any{})
 	})
 }

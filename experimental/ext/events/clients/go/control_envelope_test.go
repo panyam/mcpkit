@@ -37,7 +37,7 @@ func TestReceiver_RoutesGapToCallback(t *testing.T) {
 	srv := httptest.NewServer(recv)
 	defer srv.Close()
 
-	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := []byte("gap-test-key")
 	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_gap_test", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
@@ -72,7 +72,7 @@ func TestReceiver_RoutesTerminatedToCallback(t *testing.T) {
 	srv := httptest.NewServer(recv)
 	defer srv.Close()
 
-	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := []byte("terminated-test-key")
 	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_term_test", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
@@ -102,7 +102,7 @@ func TestReceiver_NoCallbacksRegistered(t *testing.T) {
 	defer srv.Close()
 
 	var serverPostFailed atomic.Bool
-	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	r := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := []byte("no-cb-key")
 	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_no_cb", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 

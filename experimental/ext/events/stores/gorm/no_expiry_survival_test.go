@@ -81,7 +81,7 @@ func TestNoExpirySurvival_RestartSurvivalThroughGORMSQLite(t *testing.T) {
 	{
 		store, closeDB := openStore()
 		r := events.NewWebhookRegistry(
-			events.WithWebhookAllowPrivateNetworks(true),
+			events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 			events.WithAllowInfiniteWebhookTTL(),
 			events.WithWebhookStore(store),
 		)
@@ -111,7 +111,7 @@ func TestNoExpirySurvival_RestartSurvivalThroughGORMSQLite(t *testing.T) {
 		store, closeDB := openStore()
 		defer closeDB()
 		r := events.NewWebhookRegistry(
-			events.WithWebhookAllowPrivateNetworks(true),
+			events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 			events.WithAllowInfiniteWebhookTTL(),
 			events.WithWebhookStore(store),
 		)

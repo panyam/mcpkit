@@ -113,7 +113,7 @@ func TestQuota_Webhook_RejectsThirdSubscribe(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 2))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -127,7 +127,7 @@ func TestQuota_Webhook_RejectsThirdSubscribe(t *testing.T) {
 	subscribe := func(t *testing.T, urlVariant string) *core.Response {
 		t.Helper()
 		body := map[string]any{
-			"name":   "alert.fired",
+			"name":      "alert.fired",
 			"arguments": map[string]any{"variant": urlVariant},
 			"delivery": map[string]any{
 				"mode":   "webhook",
@@ -170,7 +170,7 @@ func TestQuota_Webhook_UnsubscribeReleases(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -235,7 +235,7 @@ func TestQuota_Webhook_TTLPruneReleases(t *testing.T) {
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	wh := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookTTL(time.Hour),
 	)
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
@@ -250,7 +250,7 @@ func TestQuota_Webhook_TTLPruneReleases(t *testing.T) {
 
 	subscribe := func(variant string) *core.Response {
 		body, _ := json.Marshal(map[string]any{
-			"name":   "alert.fired",
+			"name":      "alert.fired",
 			"arguments": map[string]any{"variant": variant},
 			"delivery": map[string]any{
 				"mode":   "webhook",
@@ -292,7 +292,7 @@ func TestQuota_Webhook_OnSubscribeErrorReleases(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -413,7 +413,7 @@ func TestQuota_Poll_RejectsOverCap(t *testing.T) {
 
 	poll := func(variant string) *core.Response {
 		body, _ := json.Marshal(map[string]any{
-			"name":   "alert.fired",
+			"name":      "alert.fired",
 			"arguments": map[string]any{"variant": variant},
 		})
 		resp, err := srv.Dispatch(context.Background(), &core.Request{
@@ -471,7 +471,7 @@ func TestQuota_OnSubscribeNeverFiresWhenAtCap(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -484,7 +484,7 @@ func TestQuota_OnSubscribeNeverFiresWhenAtCap(t *testing.T) {
 
 	subscribe := func(variant string) *core.Response {
 		body, _ := json.Marshal(map[string]any{
-			"name":   "alert.fired",
+			"name":      "alert.fired",
 			"arguments": map[string]any{"variant": variant},
 			"delivery": map[string]any{
 				"mode":   "webhook",
@@ -517,7 +517,7 @@ func (q *Quota) countForTest(principal, eventName string) int {
 	defer q.mu.Unlock()
 	resp, _ := q.store.CountQuota(context.Background(), CountQuotaRequest{
 		Principal: principal,
-		Key: eventName,
+		Key:       eventName,
 	})
 	return resp.Count
 }
