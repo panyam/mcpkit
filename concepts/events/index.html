@@ -876,6 +876,14 @@ The three modes are not mutually exclusive per event source. The same <code>Even
 <td>yes</td>
 </tr>
 <tr>
+<td><strong>Gap</strong> (lost upstream events)</td>
+<td><code>source.YieldGap()</code></td>
+<td><code>Truncated:true</code>, sent alone</td>
+<td>fresh <code>notifications/events/active{truncated:true, cursor:source.Latest()}</code></td>
+<td><code>{type:gap, cursor:source.Latest()}</code> control envelope to every webhook subscription on this type, via <code>PostGapByEventName</code>; none when the source has no cursor to give</td>
+<td>yes</td>
+</tr>
+<tr>
 <td><strong>Transient error</strong></td>
 <td><code>source.YieldError(EventDeliveryError{Code, Message})</code></td>
 <td><code>Error</code> populated</td>
@@ -888,7 +896,7 @@ The three modes are not mutually exclusive per event source. The same <code>Even
 <td><code>source.YieldTerminated(EventDeliveryError{Code, Message})</code></td>
 <td><code>Terminated</code> populated; subscriber chan closed</td>
 <td><code>notifications/events/terminated{requestId, error{code,message}}</code> (<a href="https://github.com/modelcontextprotocol/experimental-ext-triggers-events/blob/pja/design-sketch/docs/design-sketch-proposal.md#lifecycle">spec §&ldquo;Lifecycle&rdquo;</a>) → handler returns <code>StreamEventsResult{Meta:{}}</code></td>
-<td>auto-emitted <code>{type:terminated}</code> control envelope to every webhook target on this source - see <code>postTerminatedSilent</code></td>
+<td><code>{type:terminated}</code> control envelope to every webhook subscription on this type, which is then removed, via <code>TerminateByEventName</code></td>
 <td><strong>no</strong></td>
 </tr>
 </tbody>
