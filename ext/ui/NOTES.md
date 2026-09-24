@@ -83,9 +83,37 @@ range that is invisible in a test is not invisible in a regenerated document.
 
 ---
 
+## Spec conformance: the tests agreed with the bug
+
+A 2026-09-24 diff of ext-apps v2.0.1 against this package (kept in mcpcontrib at
+`proposals/mcp-apps-wg/ext-apps-v2.0.1-coverage.md`) found the bridge JS sending `ui/*` messages in
+shapes the spec does not define: `updateModelContext` as `{context}`, `downloadFile` as
+`{url, filename}`, host capabilities read from `result.capabilities` instead of `hostCapabilities`,
+`ui/resource-teardown` handled as a notification when it is a request. Every bridge test passed,
+because the fixtures in `mcp-app-bridge.test.ts` were written to match the bridge rather than the
+spec.
+
+The same blind spot hid a silent failure between our own halves. The Go host handlers decode the
+spec shape, the bridge sends the wrong one, and the pair yields an empty request with no error.
+Each side's unit tests pass on their own.
+
+Two rules follow. Test fixtures come from upstream's `src/spec.types.ts`, never from what our code
+emits. And a feature that spans the bridge and `AppHost` needs a pair test that drives the real
+bridge JS into the Go host.
+
+The review also found that `AppHost` cannot host a stock ext-apps View at all: it forwards
+`ui/initialize` to the MCP server, and `AppBridge` has no host→View notify path. Tracked in #1454.
+
+---
+
 ## Open items
 
 - **`ctx.Elicit` / `ctx.Sample` handlers need migrating to MRTR** for stateless-wire support
-  (#835). They are forbidden on the stateless wire by construction.
-- **ext-apps v1.7.0 bridge JS feature coverage** is tracked in #772: `createSamplingMessage`,
-  handshake guards, `allowUnsafeEval`.
+  (#835). They are forbidden on the stateless wire by construction. SEP-3118 (app-rendered
+  elicitations) depends on this path.
+- **Spec conformance against ext-apps v2.0.1**, from the review above: bridge wire shapes (#1452),
+  `AppHost` answering `ui/*` host requests (#1456), View lifecycle (#1454), proxy policy for
+  visibility, errors and cancellation (#1453), resource metadata emitted on the tool instead of the
+  resource (#1455). #772, the v1.7.0 tracker, is closed.
+- **`ClientSupportsUI` is false on the stateless wire** even when the request declares the
+  extension (#1458), so Apps servers fall back to plain output for every stateless client.

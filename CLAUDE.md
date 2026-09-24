@@ -201,6 +201,11 @@ These span packages and will bite on a task that never opens a routed doc.
   this repo's history has had a workflow fire against it; the next release is the first real
   exercise. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
   because for five releases it did not.
+- **Extension-support checks must read per-request caps too.** On the 2026-07-28 stateless wire
+  there is no `initialize`, so client capabilities arrive only in each request's `_meta`.
+  `ctx.ClientCaps()` merges both sources. `core.ClientSupportsExtension` and `ClientSupportsUI`
+  read session caps only and return false for every stateless client (#1458). Until that lands,
+  gate on `ClientCaps()` or `ClientSupportsExtensionForRequest`, as `ext/tasks` does.
 - **A list response is built from sorted keys, never from map iteration.** Constraint C10, added
   after the same bug turned up twice: `tools/list` on the apps bridge (#1408) and `events/list`
   (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
