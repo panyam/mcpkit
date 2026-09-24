@@ -50,6 +50,10 @@ type conformanceYielders struct {
 	// principal for a whole run, so without this the two-tenant case cannot be
 	// constructed at all.
 	webhooks *events.WebhookRegistry
+	// quota is the one kitchen-sink enforces, capping chat.message per
+	// principal. events_conformance_quota reads it so the suite knows where
+	// -32013 is reachable.
+	quota *events.Quota
 }
 
 // registerConformanceEventControls wires the diagnostic tools. Called only when
@@ -79,6 +83,7 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 
 	registerTenantControls(srv, y.webhooks)
 	registerCallbackOriginControl(srv, y.webhooks)
+	registerQuotaControl(srv, y.quota)
 
 	srv.RegisterTool(core.ToolDef{
 		Name:        "events_conformance_yield_error",
@@ -235,6 +240,35 @@ func registerCallbackOriginControl(srv *server.Server, webhooks *events.WebhookR
 			return core.ErrorResult(err.Error()), nil
 		}
 		return core.TextResult(permitted[0]), nil
+	})
+}
+
+// quotaEventName is the event type kitchen-sink caps. The cap itself is read
+// back from the Quota, so the control reports what is enforced rather than a
+// second copy of quotaCap.
+const quotaEventName = "chat.message"
+
+// registerQuotaControl tells the harness which event type is capped and at
+// what, as {"name": ..., "max": ...}.
+//
+// sep-9999-error-resource-exhausted is only reachable by exceeding a limit,
+// and nothing in the protocol says where a server's limits are. The suite's
+// concurrency probe cannot stand in: it opens three streams on one type and
+// needs all three to stay open, so provoking -32013 there would fail the
+// stream-exempt-from-concurrency-cap MUST beside it. With the capped type
+// named, the suite probes the quota on its own. Read-only, like
+// events_conformance_generation.
+func registerQuotaControl(srv *server.Server, quota *events.Quota) {
+	srv.RegisterTool(core.ToolDef{
+		Name:        "events_conformance_quota",
+		Description: "Conformance control: report the event type kitchen-sink caps per principal and the cap, as {\"name\", \"max\"}. Read-only.",
+		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		out, err := json.Marshal(map[string]any{"name": quotaEventName, "max": quota.Cap(quotaEventName)})
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		return core.TextResult(string(out)), nil
 	})
 }
 

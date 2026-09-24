@@ -152,3 +152,36 @@ func TestConformanceEvents_AllowCallbackOriginRejectsNonOrigin(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 }
+
+// events-push probes -32013 on whichever type this control names, since its
+// concurrency probe needs its own target uncapped (#1461).
+func TestConformanceEvents_QuotaControlReportsTheEnforcedCap(t *testing.T) {
+	c := newConformanceTestClient(t)
+	text, err := c.ToolCall(t.Context(), "events_conformance_quota", map[string]any{})
+	require.NoError(t, err)
+	var got struct {
+		Name string `json:"name"`
+		Max  int    `json:"max"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(text), &got))
+	assert.Equal(t, "chat.message", got.Name)
+	assert.Equal(t, quotaCap, got.Max)
+
+	var refusal error
+	for i := 0; i <= got.Max && refusal == nil; i++ {
+		_, refusal = c.Call(t.Context(), "events/subscribe", map[string]any{
+			"name": got.Name,
+			"delivery": map[string]any{
+				"mode": "webhook", "secret": events.GenerateSecret(),
+				"url": "https://conformance.invalid/mcp-events/quota-" + string(rune('a'+i)),
+			},
+		})
+	}
+	require.Error(t, refusal, "subscription %d on %s must be refused", got.Max+1, got.Name)
+	rpc := unwrapRPC(refusal)
+	require.NotNil(t, rpc, "want an RPC error, got %v", refusal)
+	assert.Equal(t, events.ErrCodeResourceExhausted, rpc.Code)
+	data, ok := rpc.Data.(map[string]any)
+	require.True(t, ok, "want data object, got %T", rpc.Data)
+	assert.Equal(t, "subscriptions", data["limit"])
+}

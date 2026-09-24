@@ -203,7 +203,7 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	}
 	webhooks := events.NewWebhookRegistry(webhookOpts...)
 	idx := events.NewSubscriptionIndex()
-	quota := events.NewQuota(events.WithMaxSubscriptionsPerPrincipal("chat.message", quotaCap))
+	quota := events.NewQuota(events.WithMaxSubscriptionsPerPrincipal(quotaEventName, quotaCap))
 
 	// Canonical baseline (WithListen + the color logger wired to both
 	// transport request logging and dispatch middleware) per
@@ -250,6 +250,7 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	if conformanceEvents {
 		registerConformanceEventControls(srv, conformanceYielders{
 			chat: chatSrc, alert: alertSrc, build: buildSrc, webhooks: webhooks,
+			quota: quota,
 		})
 		registerRestartControls(srv, rt)
 		log.Printf("[conformance] events control tools registered; this is not a demo path")
