@@ -430,7 +430,7 @@ dial time.
 
 The way in is ordering. The scenario subscribes with the guards on and grades the SSRF rows from
 the refusal, then calls `events_conformance_allow_callback_origin` for its receiver's origin and
-subscribes again. The control calls `WebhookRegistry.UnsafeAllowCallbackOrigin`, which lifts both
+subscribes again. The control calls `WebhookRegistry.UnsafeAllowCallbackOrigins`, which lifts both
 guards for that one origin and leaves every other callback refused. Measured 2026-09-24: 3/30 before
 the control (27 untestable), 21/21 after, with 8 warnings. The warnings are rows needing a second
 principal, a rotation mid-flight, or a gap or termination during the run.

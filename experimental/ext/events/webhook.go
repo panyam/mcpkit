@@ -623,7 +623,7 @@ type WebhookRegistry struct {
 	suspendWindow           time.Duration     // sliding window over which failures accumulate; default 10min
 
 	// callbackOrigins holds origins permitted past both guards at run time
-	// by UnsafeAllowCallbackOrigin, keyed "scheme://host:port" with the port
+	// by UnsafeAllowCallbackOrigins, keyed "scheme://host:port" with the port
 	// always explicit. callbackDialAddrs is the same set as the "host:port"
 	// the transport dials, since the dialer never sees a scheme.
 	callbackOriginsMu sync.RWMutex
@@ -847,7 +847,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 // rebinding); the address passed to Control is the exact one the
 // connect syscall will use.
 //
-// A dial to a host:port permitted by UnsafeAllowCallbackOrigin skips
+// A dial to a host:port permitted by UnsafeAllowCallbackOrigins skips
 // Control entirely; that match is on the address before resolution.
 func (r *WebhookRegistry) dialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
 	open := &net.Dialer{Timeout: DefaultWebhookAckTimeout}
@@ -1724,7 +1724,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 // ValidateWebhookURL is a fail-fast subscribe-time check on a webhook
 // callback URL. Rejects non-http(s) schemes and obvious loopback hostnames
 // unless the registry has WithWebhookAllowPrivateNetworks(true).
-// A URL under an origin passed to UnsafeAllowCallbackOrigin skips both checks.
+// A URL under an origin passed to UnsafeAllowCallbackOrigins skips both checks.
 //
 // This is the SUBSCRIBE-time check, not the load-bearing one. The
 // authoritative SSRF guard is the dial-time check in dialContext, which

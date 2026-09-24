@@ -230,11 +230,11 @@ func registerCallbackOriginControl(srv *server.Server, webhooks *events.WebhookR
 		if err := json.Unmarshal(req.Arguments, &args); err != nil {
 			return core.ErrorResult("arguments: " + err.Error()), nil
 		}
-		origin, err := webhooks.UnsafeAllowCallbackOrigin(args.Origin)
+		permitted, err := webhooks.UnsafeAllowCallbackOrigins(args.Origin)
 		if err != nil {
 			return core.ErrorResult(err.Error()), nil
 		}
-		return core.TextResult(origin), nil
+		return core.TextResult(permitted[0]), nil
 	})
 }
 
