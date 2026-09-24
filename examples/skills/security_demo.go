@@ -156,12 +156,19 @@ func runSecurityDemo(out io.Writer) (bool, error) {
 	r.reject(errors.Is(errBudget, skills.ErrResourceTooLarge), errBudget,
 		"over-cap read rejected as ErrResourceTooLarge before decode")
 
-	// Step 4 — cross-origin scheme rejection (threat model T5, adv-file-url).
-	r.step(4, "Cross-origin scheme rejection (file:// URI refused)",
-		"threat model T5 (adv-file-url) · ErrInvalidScheme")
-	_, errScheme := skills.ParseURI("file:///etc/passwd")
-	r.reject(errors.Is(errScheme, skills.ErrInvalidScheme), errScheme,
-		"file:///etc/passwd rejected as ErrInvalidScheme")
+	// Step 4 — cross-origin reference rejection (threat model T5,
+	// adv-file-url). ParseURI accepts any scheme since SEP-2640 privileges
+	// none, so the defense is at resolution: a reference inside a skill that
+	// names its own scheme cannot leave the skill's scope.
+	r.step(4, "Cross-origin reference rejection (file:// from inside a skill refused)",
+		"threat model T5 (adv-file-url) · ErrRelativeEscapesSkill")
+	root, errRoot := skills.ParseURI(entry.URI)
+	if errRoot != nil {
+		return false, fmt.Errorf("parse %q manifest URI: %w", refundsSkill, errRoot)
+	}
+	_, errEscape := skills.ResolveRelative(root, "file:///etc/passwd")
+	r.reject(errors.Is(errEscape, skills.ErrRelativeEscapesSkill), errEscape,
+		"file:///etc/passwd referenced from a skill rejected as ErrRelativeEscapesSkill")
 
 	r.summary()
 	return r.allOK, nil

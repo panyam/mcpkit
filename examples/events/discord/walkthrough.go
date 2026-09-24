@@ -73,7 +73,7 @@ func runDemo() {
 		"- **Cursorless source** - typing indicators that wire as `cursor: null`. Subscribers can't replay, only see live events.",
 		"- **Source-side health signals** - `YieldError` (transient `notifications/events/error`, stream stays open).",
 		"- **Webhook + auto-refresh** - `events/subscribe` with the typed `Subscription` + `Receiver[Data]` from `clients/go`. Includes the hardened delivery loop: dial-time SSRF guard, no-redirects, 256 KiB body cap with 413 non-retryable, Standard Webhooks signature scheme as default.",
-		"- **Multi-subscription routing** - two subs to `discord.message` with different params; one event fans out to both, distinguished by `X-MCP-Subscription-Id` plus push-side `requestId` echo on every notification.",
+		"- **Multi-subscription routing** - two subs to `discord.message` with different arguments; one event fans out to both, distinguished by `X-MCP-Subscription-Id` plus push-side `requestId` echo on every notification.",
 		"- **Webhook delivery health** - `deliveryStatus` block on subscribe-refresh response after a failed delivery; suspend state machine flips Active=false after N consecutive failures and auto-Posts a `{type:terminated}` control envelope when run with `just serve-fast-suspend`.",
 		"- **Auth posture** - `events/subscribe` requires an authenticated principal per spec; demo runs anonymously via `UnsafeAnonymousPrincipal`. Production deployments wire real OIDC and reject anonymous subscribes with `-32012 Forbidden`.",
 		"- **Spec validation** - empty / malformed `delivery.secret` rejected; client-supplied `id` rejected; valid `whsec_` accepted with no secret echoed.",
@@ -441,7 +441,7 @@ defer stream.Stop()`),
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# events/subscribe registers a callback URL + a client-supplied whsec_ secret with a TTL.
 # Response carries { id, refreshBefore } and does NOT echo the secret (spec).
-# Tear down by tuple (name, params, delivery.url); the derived id is not accepted as input.
+# Tear down by tuple (name, arguments, delivery.url); the derived id is not accepted as input.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":6,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<client-supplied>"},"maxAgeMs":300000}}' | jq '.result'
@@ -498,7 +498,7 @@ defer c.Call("events/unsubscribe", map[string]any{
 			defer func() {
 				sub.Stop()
 				// Unsubscribe by tuple (spec §"Unsubscribing:
-				// events/unsubscribe" L509) — (name, params,
+				// events/unsubscribe" L509) — (name, arguments,
 				// delivery.url). The derived id is not accepted
 				// as input.
 				_, _ = c.Call(ctx, "events/unsubscribe", map[string]any{
@@ -536,35 +536,35 @@ defer c.Call("events/unsubscribe", map[string]any{
 		})
 
 	// --- Step 6.5: Multi-subscription routing (X-MCP-Subscription-Id + requestId echo) ---
-	demo.Step("Two subs to the same event with different params, so how do I tell deliveries apart?").
-		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'alpha'}, ... }").
+	demo.Step("Two subs to the same event with different arguments, so how do I tell deliveries apart?").
+		Arrow("Host", "Server", "events/subscribe { name: discord.message, arguments: {channel_id: 'alpha'}, ... }").
 		DashedArrow("Server", "Host", "{ id: sub_<A>, ... }").
-		Arrow("Host", "Server", "events/subscribe { name: discord.message, params: {channel_id: 'beta'}, ... }").
-		DashedArrow("Server", "Host", "{ id: sub_<B>, ... }   (id differs from A: different params → different canonical tuple)").
+		Arrow("Host", "Server", "events/subscribe { name: discord.message, arguments: {channel_id: 'beta'}, ... }").
+		DashedArrow("Server", "Host", "{ id: sub_<B>, ... }   (id differs from A: different arguments → different canonical tuple)").
 		Arrow("Receiver", "Server", "POST /inject (one event)").
 		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Subscription-Id: sub_<A>").
 		DashedArrow("Server", "Receiver", "POST <url> + X-MCP-Subscription-Id: sub_<B>").
 		Note(
-			"Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §\"Webhook Event Delivery\" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, params)` (spec §\"Subscription Identity\" → \"Key composition\" L363), so two subscribes with the same `(principal, url, name)` but different `params` produce different ids, and the receiver branches by header without parsing the body.",
+			"Each delivery POST carries its own `X-MCP-Subscription-Id` header (per spec §\"Webhook Event Delivery\" L390), and on the push side every notification echoes the originating `events/stream` request id in `params.requestId`. Subscriptions are identified by the canonical tuple `(principal, delivery.url, name, arguments)` (spec §\"Subscription Identity\" → \"Key composition\" L363), so two subscribes with the same `(principal, url, name)` but different `arguments` produce different ids, and the receiver branches by header without parsing the body.",
 			"",
-			"- The library fans out one yielded event to **both** webhook targets by default. Authors that want per-subscription filtering attach a `Match` (and optionally `Transform`) hook on the `EventDef` - the hook fires once per (event × subscription) on the fanout step and short-circuits delivery for non-matching subs. The discord demo doesn't wire one because params-based routing (different ids per `(name, params)` tuple) is enough for the \"two subs, same event, different params\" story.",
+			"- The library fans out one yielded event to **both** webhook targets by default. Authors that want per-subscription filtering attach a `Match` (and optionally `Transform`) hook on the `EventDef` - the hook fires once per (event × subscription) on the fanout step and short-circuits delivery for non-matching subs. The discord demo doesn't wire one because arguments-based routing (different ids per `(name, arguments)` tuple) is enough for the \"two subs, same event, different arguments\" story.",
 			"- Push side: the same routing works via the `requestId` echo on every `notifications/events/event` payload - each `events/stream` POST gets its own JSON-RPC id, and notifications carry it in `params.requestId`.",
 		).
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `# Two subscribes, same (principal, url, name) but different params → different ids.
+			demokit.MakeVariant("curl", "bash", `# Two subscribes, same (principal, url, name) but different arguments → different ids.
 # One event then fans out to both; each delivery POST carries its own X-MCP-Subscription-Id.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"alpha"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<a>"}}}' | jq '.result.id'
+  -d '{"jsonrpc":"2.0","id":7,"method":"events/subscribe","params":{"name":"discord.message","arguments":{"channel_id":"alpha"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<a>"}}}' | jq '.result.id'
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":8,"method":"events/subscribe","params":{"name":"discord.message","params":{"channel_id":"beta"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<b>"}}}' | jq '.result.id'
-# later: events/unsubscribe per tuple: { name, params: { channel_id }, delivery: { url } }`).Default(),
-			demokit.MakeVariant("go", "go", `// Two events/subscribe to the same name+url but different params → distinct ids.
+  -d '{"jsonrpc":"2.0","id":8,"method":"events/subscribe","params":{"name":"discord.message","arguments":{"channel_id":"beta"},"delivery":{"mode":"webhook","url":"https://receiver.example/hook","secret":"whsec_<b>"}}}' | jq '.result.id'
+# later: events/unsubscribe per tuple: { name, arguments: { channel_id }, delivery: { url } }`).Default(),
+			demokit.MakeVariant("go", "go", `// Two events/subscribe to the same name+url but different arguments → distinct ids.
 // One yielded event fans out to both targets (no per-sub match filter yet).
 res, err := c.Call("events/subscribe", map[string]any{
     "name":   "discord.message",
-    "params": map[string]any{"channel_id": channelLabel}, // "alpha" then "beta"
+    "arguments": map[string]any{"channel_id": channelLabel}, // "alpha" then "beta"
     "delivery": map[string]any{
         "mode":   "webhook",
         "url":    recv.URL,
@@ -600,8 +600,8 @@ if err != nil {
 			subscribe := func(channelLabel string) (string, error) {
 				supplied := events.GenerateSecret()
 				res, err := c.Call(context.Background(), "events/subscribe", map[string]any{
-					"name":   "discord.message",
-					"params": map[string]any{"channel_id": channelLabel},
+					"name":      "discord.message",
+					"arguments": map[string]any{"channel_id": channelLabel},
 					"delivery": map[string]any{
 						"mode":   "webhook",
 						"url":    recv.URL,
@@ -631,21 +631,21 @@ if err != nil {
 			fmt.Printf("    sub_alpha id: %s\n", subA)
 			fmt.Printf("    sub_beta  id: %s\n", subB)
 			if subA == subB {
-				fmt.Printf("    UNEXPECTED: ids should differ - different params → different canonical tuple\n")
+				fmt.Printf("    UNEXPECTED: ids should differ - different arguments → different canonical tuple\n")
 				return
 			}
 
 			// Eager unsubscribe on both at the end.
 			defer func() {
 				_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
-					"name":     "discord.message",
-					"params":   map[string]any{"channel_id": "alpha"},
-					"delivery": map[string]any{"url": recv.URL},
+					"name":      "discord.message",
+					"arguments": map[string]any{"channel_id": "alpha"},
+					"delivery":  map[string]any{"url": recv.URL},
 				})
 				_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
-					"name":     "discord.message",
-					"params":   map[string]any{"channel_id": "beta"},
-					"delivery": map[string]any{"url": recv.URL},
+					"name":      "discord.message",
+					"arguments": map[string]any{"channel_id": "beta"},
+					"delivery":  map[string]any{"url": recv.URL},
 				})
 			}()
 
@@ -710,13 +710,13 @@ if err != nil {
 # deliveryStatus { active, lastDeliveryAt, lastError, failedSince }.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":9,"method":"events/subscribe","params":{"name":"discord.message","params":{"role":"health-demo"},"delivery":{"mode":"webhook","url":"https://dead-receiver.example/hook","secret":"whsec_<v>"}}}' | jq '.result'
+  -d '{"jsonrpc":"2.0","id":9,"method":"events/subscribe","params":{"name":"discord.message","arguments":{"role":"health-demo"},"delivery":{"mode":"webhook","url":"https://dead-receiver.example/hook","secret":"whsec_<v>"}}}' | jq '.result'
 # (inject an event, let the ~8.5s retry cycle exhaust, then re-issue the SAME subscribe to see deliveryStatus)`).Default(),
 			demokit.MakeVariant("go", "go", `// events/subscribe twice on the same canonical tuple: initial, then refresh.
 // The refresh response carries a deliveryStatus block once a delivery has failed.
 subParams := map[string]any{
     "name":   "discord.message",
-    "params": map[string]any{"role": "health-demo"},
+    "arguments": map[string]any{"role": "health-demo"},
     "delivery": map[string]any{
         "mode":   "webhook",
         "url":    deadReceiver.URL,
@@ -763,8 +763,8 @@ _ = res2`),
 
 			supplied := events.GenerateSecret()
 			subParams := map[string]any{
-				"name":   "discord.message",
-				"params": map[string]any{"role": "health-demo"},
+				"name":      "discord.message",
+				"arguments": map[string]any{"role": "health-demo"},
 				"delivery": map[string]any{
 					"mode":   "webhook",
 					"url":    deadReceiver.URL,
@@ -782,9 +782,9 @@ _ = res2`),
 			}
 			defer func() {
 				_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
-					"name":     "discord.message",
-					"params":   map[string]any{"role": "health-demo"},
-					"delivery": map[string]any{"url": deadReceiver.URL},
+					"name":      "discord.message",
+					"arguments": map[string]any{"role": "health-demo"},
+					"delivery":  map[string]any{"url": deadReceiver.URL},
 				})
 			}()
 			var firstResp map[string]any
@@ -947,7 +947,7 @@ rpcErr := err.(*client.RPCError) // code == -32602, must start with the whsec_ p
 		Arrow("Host", "Server", "events/subscribe { id: 'mine', ... }").
 		DashedArrow("Server", "Host", "-32602 InvalidParams: client-supplied id is not accepted").
 		Note(
-			"Rejected with `-32602 InvalidParams`. Per spec §\"Subscription Identity\" → \"Key composition\" L363, the id is server-derived from `(principal, name, params, url)`, and there is no client-generated id. Old SDKs that send an `id` field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.",
+			"Rejected with `-32602 InvalidParams`. Per spec §\"Subscription Identity\" → \"Key composition\" L363, the id is server-derived from `(principal, name, arguments, url)`, and there is no client-generated id. Old SDKs that send an `id` field get a loud error rather than a silent mis-keying that would alias subscriptions and break tenant isolation.",
 		).
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# The id is server-derived; a client-supplied id field is rejected → -32602 InvalidParams.

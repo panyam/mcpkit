@@ -24,7 +24,7 @@ SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a s
 - **Reject an over-budget resource fetch (threat model T6)** - A host bounds how many bytes a skill read may pull before decoding, so a hostile or runaway server can't exhaust it. mcpkit puts the bound at the fetch layer; an over-cap read fails with ErrResourceTooLarge before the body is decoded. Anchor: threat model T6 · experimental-ext-skills#831 · issue 867.
 - **Refuse an unpinned supporting file (threat model B1)** - ReadFromEntry only reads files the entry's resources manifest lists. The manifest is complete, so a URI absent from it is a file the skill does not contain, whether an attacker's extra file or a typo, and is refused with ErrURINotInResources rather than read unverified. Anchor: threat model B1 · issue 866.
 - **Reject a digest mismatch (threat model B1)** - If a server returns bytes that don't match the pinned digest, through corruption or tampering, ReadAndVerify returns ErrDigestMismatch and the host MUST NOT use the content. Here the mismatch is forced by verifying against a deliberately wrong pin; `just security` proves the same rejection with a real post-listing on-disk swap. Anchor: threat model B1.
-- **Reject a cross-origin resource scheme (threat model T5)** - Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI, the threat model's adv-file-url, is rejected by ParseURI with ErrInvalidScheme, so a skill can't redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).
+- **Reject a cross-origin reference from inside a skill (threat model T5)** - SEP-2640 privileges no scheme, so ParseURI accepts a skill served as github:// or anything else. The threat model's adv-file-url, a skill steering the host into reading a local file, is stopped at resolution instead: ResolveRelative refuses any reference that carries its own scheme or authority, so file:///etc/passwd written inside a skill fails with ErrRelativeEscapesSkill before anything is fetched. Anchor: threat model T5 (adv-file-url).
 
 ## Flow
 
@@ -111,7 +111,7 @@ sequenceDiagram
     Note over Host,Server: Step 20: Reject a digest mismatch (threat model B1)
     Host->>Server: resources/read uri=skill://acme/billing/refunds/SKILL.md
 
-    Note over Host,Server: Step 21: Reject a cross-origin resource scheme (threat model T5)
+    Note over Host,Server: Step 21: Reject a cross-origin reference from inside a skill (threat model T5)
 ```
 
 ## Steps
@@ -509,19 +509,20 @@ sc := skills.NewClient(c)
 _, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat("0", 64))   // -> ErrDigestMismatch
 ```
 
-### Step 21: Reject a cross-origin resource scheme (threat model T5)
+### Step 21: Reject a cross-origin reference from inside a skill (threat model T5)
 
-Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI, the threat model's adv-file-url, is rejected by ParseURI with ErrInvalidScheme, so a skill can't redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).
+SEP-2640 privileges no scheme, so ParseURI accepts a skill served as github:// or anything else. The threat model's adv-file-url, a skill steering the host into reading a local file, is stopped at resolution instead: ResolveRelative refuses any reference that carries its own scheme or authority, so file:///etc/passwd written inside a skill fails with ErrRelativeEscapesSkill before anything is fetched. Anchor: threat model T5 (adv-file-url).
 
 #### Reproduce in Go
 
 ```go
-_, err := skills.ParseURI("file:///etc/passwd")   // -> ErrInvalidScheme
+root, _ := skills.ParseURI(uriRefundsManifest)
+_, err := skills.ResolveRelative(root, "file:///etc/passwd")   // -> ErrRelativeEscapesSkill
 ```
 
 ### Wrap-up
 
-Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, scheme rejection). The same client code paths served both distribution modes; only the URI shape and the post-fetch unpack step differ.
+Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, cross-origin reference rejection). The same client code paths served both distribution modes; only the URI shape and the post-fetch unpack step differ.
 
 ## Run it
 
