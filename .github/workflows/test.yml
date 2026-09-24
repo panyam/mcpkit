@@ -124,6 +124,24 @@ jobs:
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
 
+      # The bridge JS tests and the stale-build check ran in no workflow, so
+      # fixtures that matched a wrong wire shape stayed green (issue 1452).
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: ext/ui/assets/pnpm-lock.yaml
+
+      - name: Run bridge JS tests
+        run: bash ext/ui/scripts/test-bridge.sh
+
+      - name: Typecheck the bridge and check the committed build is current
+        run: bash ext/ui/scripts/check-bridge.sh
+
   conformance-report:
     # Regenerates CONFORMANCE.md against the current testserver + the upstream
     # conformance SHA pinned in the committed file's stamp line, and fails if

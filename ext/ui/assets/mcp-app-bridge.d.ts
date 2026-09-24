@@ -33,13 +33,31 @@ interface HostContext {
   [key: string]: unknown;
 }
 
+/** Host identity from the ui/initialize result. */
+interface HostInfo {
+  name: string;
+  version: string;
+  [key: string]: unknown;
+}
+
+/** A downloadable item: an embedded resource or a link the host fetches. */
+type DownloadContent =
+  | { type: "resource"; resource: Record<string, unknown>; [key: string]: unknown }
+  | { type: "resource_link"; uri: string; name: string; [key: string]: unknown };
+
 /** Payload delivered with each event. */
 interface MCPAppEventMap {
-  connected: { hostContext: HostContext; capabilities: Record<string, unknown> };
+  /** `capabilities` is the initialize result's `hostCapabilities`. */
+  connected: {
+    hostContext: HostContext;
+    capabilities: Record<string, unknown>;
+    hostInfo: HostInfo | null;
+  };
   toolinput: { tool: string; arguments: Record<string, unknown> };
   toolinputpartial: { tool: string; arguments: Record<string, unknown> };
   toolresult: { tool: string; result: unknown };
-  toolcancelled: { tool: string };
+  toolcancelled: { tool: string; reason?: string };
+  /** `hostContext` is the merged context after applying the host's partial update. */
   hostcontextchanged: { hostContext: HostContext };
   teardown: Record<string, never>;
 }
@@ -126,8 +144,11 @@ interface MCPAppBridge {
   /** Host context (theme, locale, dimensions, styles) from initialization. */
   readonly hostContext: HostContext | null;
 
-  /** Host capabilities from initialization. */
+  /** Host capabilities (`hostCapabilities` from the ui/initialize result). */
   readonly hostCapabilities: Record<string, unknown> | null;
+
+  /** Host name and version from the ui/initialize result. */
+  readonly hostInfo: HostInfo | null;
 
   // --- Events ---
 
@@ -164,13 +185,25 @@ interface MCPAppBridge {
   /** Send a message to the conversation. */
   sendMessage(message: unknown, options?: RequestOptions): Promise<unknown>;
 
-  /** Update the model context visible to the LLM. */
-  updateModelContext(context: unknown, options?: RequestOptions): Promise<unknown>;
+  /**
+   * Push context the model should see on its next turn, in the spec shape
+   * `{content?, structuredContent?}`. Each call replaces the previous update
+   * from this view.
+   */
+  updateModelContext(
+    params: { content?: unknown[]; structuredContent?: Record<string, unknown> },
+    options?: RequestOptions
+  ): Promise<unknown>;
 
   /** Open a URL in the host browser (not inside the iframe). */
   openLink(url: string, options?: RequestOptions): Promise<unknown>;
 
-  /** Initiate a file download through the host. */
+  /** Ask the host to download files, in the spec shape `{contents}`. */
+  downloadFile(params: { contents: DownloadContent[] }, options?: RequestOptions): Promise<unknown>;
+  /**
+   * Convenience form: sends one `resource_link` named after `filename`, or
+   * the URL's last path segment when omitted.
+   */
   downloadFile(url: string, filename?: string, options?: RequestOptions): Promise<unknown>;
 
   /**
@@ -189,10 +222,13 @@ interface MCPAppBridge {
   /** Request a display mode change (inline, fullscreen, pip). */
   requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown>;
 
-  /** Request app teardown. */
+  /** Ask the host to close this view (`ui/notifications/request-teardown`). */
   requestTeardown(): void;
 
-  /** Send a log message to the host. */
+  /**
+   * Send a log entry as an MCP `notifications/message`, logger set to the
+   * app name. `data` is `message` alone, or `{message, data}` with extra data.
+   */
   log(level: string, message: string, data?: unknown): void;
 
   // --- Style utilities ---

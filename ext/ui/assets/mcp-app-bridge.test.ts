@@ -13,6 +13,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
+import {
+  McpUiDownloadFileRequestSchema,
+  McpUiInitializeRequestSchema,
+  McpUiInitializeResultSchema,
+  McpUiInitializedNotificationSchema,
+  McpUiRequestTeardownNotificationSchema,
+  McpUiResourceTeardownResultSchema,
+  McpUiUpdateModelContextRequestSchema,
+} from "@modelcontextprotocol/ext-apps";
 
 // --- Test helpers -----------------------------------------------------------
 
@@ -22,11 +31,37 @@ let sentMessages: any[] = [];
 /** Listeners registered on the window for "message" events. */
 let messageListeners: ((event: MessageEvent) => void)[] = [];
 
-/** Simulate a message from the host to the iframe. */
-function hostSends(data: any) {
+/** Simulate a message arriving from `source` (the host is window.parent). */
+function sendFrom(source: unknown, data: any) {
   const event = new MessageEvent("message", { data, origin: "*" });
+  Object.defineProperty(event, "source", { value: source });
   messageListeners.forEach((fn) => fn(event));
 }
+
+/** Simulate a message from the host to the iframe. */
+function hostSends(data: any) {
+  sendFrom(window.parent, data);
+}
+
+/**
+ * Assert that a message the bridge sent conforms to upstream's schema with
+ * nothing left over. The ext-apps zod schemas strip unknown keys rather than
+ * rejecting them, so `{context: ...}` parses as a valid update-model-context
+ * with empty params. Requiring the parse to round-trip unchanged catches it.
+ */
+function expectSpecShape(schema: { parse(v: unknown): unknown }, msg: any) {
+  // Upstream models {method, params} without the JSON-RPC envelope.
+  const { jsonrpc: _j, id: _i, ...body } = msg;
+  expect(schema.parse(body)).toEqual(body);
+}
+
+/** A ui/initialize result in the 2026-01-26 spec shape. */
+const INITIALIZE_RESULT = {
+  protocolVersion: "2026-01-26",
+  hostInfo: { name: "test-host", version: "1.0.0" },
+  hostCapabilities: { openLinks: {}, serverTools: {} },
+  hostContext: { theme: "dark", locale: "en-US" },
+};
 
 /** Auto-respond to ui/initialize with a host context. */
 function autoRespondToInitialize() {
@@ -37,10 +72,7 @@ function autoRespondToInitialize() {
     hostSends({
       jsonrpc: "2.0",
       id: init.id,
-      result: {
-        hostContext: { theme: "dark", locale: "en-US" },
-        capabilities: { tools: true },
-      },
+      result: INITIALIZE_RESULT,
     });
   }
 }
@@ -370,10 +402,191 @@ describe("outbound requests", () => {
     (window as any).MCPApp.log("info", "test message", { extra: true });
 
     await new Promise((r) => setTimeout(r, 10));
-    const msg = sentMessages.find((m) => m.method === "ui/log");
+    const msg = sentMessages.find((m) => m.method === "notifications/message");
     expect(msg).toBeDefined();
     expect(msg.params.level).toBe("info");
-    expect(msg.params.message).toBe("test message");
+    expect(msg.params.data).toEqual({ message: "test message", data: { extra: true } });
+  });
+});
+
+describe("spec conformance (ext-apps 2026-01-26, issue 1452)", () => {
+  async function connect() {
+    autoRespondToInitialize();
+    await waitForConnect();
+    sentMessages.length = 0;
+  }
+
+  it("the test fixture itself is a spec initialize result", () => {
+    expectSpecShape(McpUiInitializeResultSchema, INITIALIZE_RESULT);
+  });
+
+  it("ui/initialize request matches the spec schema", () => {
+    const init = sentMessages.find((m) => m.method === "ui/initialize");
+    expectSpecShape(McpUiInitializeRequestSchema, init);
+  });
+
+  it("exposes hostCapabilities and hostInfo from the initialize result", async () => {
+    const connected = vi.fn();
+    (window as any).MCPApp.on("connected", connected);
+    await connect();
+    const app = (window as any).MCPApp;
+    expect(app.hostCapabilities).toEqual({ openLinks: {}, serverTools: {} });
+    expect(app.hostInfo).toEqual({ name: "test-host", version: "1.0.0" });
+    expect(connected.mock.calls[0][0].capabilities).toEqual({ openLinks: {}, serverTools: {} });
+  });
+
+  it("sends ui/notifications/initialized before anything a connected listener sends", async () => {
+    (window as any).MCPApp.on("connected", () => {
+      (window as any).MCPApp.callTool("echo", {}).catch(() => {});
+    });
+    autoRespondToInitialize();
+    await waitForConnect();
+    const methods = sentMessages.map((m) => m.method);
+    const initIdx = methods.indexOf("ui/notifications/initialized");
+    const callIdx = methods.indexOf("tools/call");
+    expect(initIdx).toBeGreaterThan(-1);
+    expect(callIdx).toBeGreaterThan(initIdx);
+    expectSpecShape(McpUiInitializedNotificationSchema, sentMessages[initIdx]);
+  });
+
+  it("updateModelContext sends {content, structuredContent}, not {context}", async () => {
+    await connect();
+    const params = {
+      content: [{ type: "text", text: "3 items selected" }],
+      structuredContent: { selected: 3 },
+    };
+    (window as any).MCPApp.updateModelContext(params).catch(() => {});
+    const msg = sentMessages.find((m) => m.method === "ui/update-model-context");
+    expect(msg.params).toEqual(params);
+    expectSpecShape(McpUiUpdateModelContextRequestSchema, msg);
+  });
+
+  it("downloadFile passes a spec {contents} object through", async () => {
+    await connect();
+    const params = {
+      contents: [
+        { type: "resource_link", uri: "https://example.com/r.pdf", name: "r.pdf", mimeType: "application/pdf" },
+      ],
+    };
+    (window as any).MCPApp.downloadFile(params).catch(() => {});
+    const msg = sentMessages.find((m) => m.method === "ui/download-file");
+    expect(msg.params).toEqual(params);
+    expectSpecShape(McpUiDownloadFileRequestSchema, msg);
+  });
+
+  it("downloadFile(url, filename) becomes a resource_link", async () => {
+    await connect();
+    (window as any).MCPApp.downloadFile("https://example.com/r.pdf", "report.pdf").catch(() => {});
+    const msg = sentMessages.find((m) => m.method === "ui/download-file");
+    expect(msg.params).toEqual({
+      contents: [{ type: "resource_link", uri: "https://example.com/r.pdf", name: "report.pdf" }],
+    });
+    expectSpecShape(McpUiDownloadFileRequestSchema, msg);
+  });
+
+  it("requestTeardown sends ui/notifications/request-teardown", async () => {
+    await connect();
+    (window as any).MCPApp.requestTeardown();
+    const msg = sentMessages.find((m) => m.method === "ui/notifications/request-teardown");
+    expect(msg).toBeDefined();
+    expectSpecShape(McpUiRequestTeardownNotificationSchema, msg);
+    expect(sentMessages.find((m) => m.method === "ui/teardown")).toBeUndefined();
+  });
+
+  it("log sends notifications/message with level, logger and data", async () => {
+    await connect();
+    (window as any).MCPApp.log("warning", "disk low");
+    const msg = sentMessages.find((m) => m.method === "notifications/message");
+    expect(msg.params).toEqual({ level: "warning", logger: "mcp-app", data: "disk low" });
+    expect(sentMessages.find((m) => m.method === "ui/log")).toBeUndefined();
+  });
+
+  it("answers ui/resource-teardown as a request and fires teardown", async () => {
+    await connect();
+    const teardown = vi.fn();
+    (window as any).MCPApp.on("teardown", teardown);
+    hostSends({ jsonrpc: "2.0", id: 7, method: "ui/resource-teardown", params: {} });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(teardown).toHaveBeenCalledOnce();
+    const reply = sentMessages.find((m) => m.id === 7);
+    expect(reply).toEqual({ jsonrpc: "2.0", id: 7, result: {} });
+    expectSpecShape(McpUiResourceTeardownResultSchema, reply.result);
+  });
+
+  it("answers ping", async () => {
+    await connect();
+    hostSends({ jsonrpc: "2.0", id: 9, method: "ping" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sentMessages.find((m) => m.id === 9)).toEqual({ jsonrpc: "2.0", id: 9, result: {} });
+  });
+
+  it("merges a partial host-context-changed into the stored context", async () => {
+    await connect();
+    hostSends({
+      jsonrpc: "2.0",
+      method: "ui/notifications/host-context-changed",
+      params: { displayMode: "fullscreen" },
+    });
+    const ctx = (window as any).MCPApp.hostContext;
+    expect(ctx.displayMode).toBe("fullscreen");
+    expect(ctx.theme).toBe("dark");
+    expect(ctx.locale).toBe("en-US");
+  });
+
+  it("toolcancelled carries the reason", async () => {
+    await connect();
+    const handler = vi.fn();
+    (window as any).MCPApp.on("toolcancelled", handler);
+    hostSends({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-cancelled",
+      params: { reason: "user aborted" },
+    });
+    expect(handler.mock.calls[0][0].reason).toBe("user aborted");
+  });
+
+  it("ignores messages from a window other than the parent", async () => {
+    await connect();
+    const handler = vi.fn();
+    (window as any).MCPApp.on("toolresult", handler);
+    sendFrom({}, {
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: { content: [{ type: "text", text: "spoofed" }] },
+    });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("warns once when a tool-input listener attaches after the handshake", async () => {
+    await connect();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    (window as any).MCPApp.on("toolinput", () => {});
+    (window as any).MCPApp.on("toolinput", () => {});
+    const lateWarnings = warn.mock.calls.filter((c) => String(c[0]).includes("toolinput"));
+    expect(lateWarnings).toHaveLength(1);
+    warn.mockRestore();
+  });
+});
+
+describe("appCapabilities (issue 1452)", () => {
+  it("declares tools when a tool is registered before the handshake", () => {
+    delete (window as any).MCPApp;
+    sentMessages = [];
+    messageListeners = [];
+    const readyState = vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    loadBridge();
+    (window as any).MCPApp.registerTool("pick", { description: "Pick one" }, () => ({ content: [] }));
+    readyState.mockRestore();
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+
+    const init = sentMessages.find((m) => m.method === "ui/initialize");
+    expect(init.params.appCapabilities).toEqual({ tools: { listChanged: true } });
+    expectSpecShape(McpUiInitializeRequestSchema, init);
+  });
+
+  it("declares no tools when none are registered", () => {
+    const init = sentMessages.find((m) => m.method === "ui/initialize");
+    expect(init.params.appCapabilities).toEqual({});
   });
 });
 
@@ -898,7 +1111,7 @@ describe("pre-handshake guarding", () => {
 
     app.log("info", "test");
 
-    const logMsg = sentMessages.find((m: any) => m.method === "ui/log");
+    const logMsg = sentMessages.find((m: any) => m.method === "notifications/message");
     expect(logMsg).toBeUndefined();
   });
 });
@@ -1310,7 +1523,7 @@ describe("trace context relay (SEP-414 P6, issue 660)", () => {
     (window as any).MCPApp.setTraceContextProvider(() => ({ traceparent: tp }));
     (window as any).MCPApp.log("info", "test log");
     await new Promise((r) => setTimeout(r, 10));
-    const note = sentMessages.find((m) => m.method === "ui/log");
+    const note = sentMessages.find((m) => m.method === "notifications/message");
     expect(note).toBeDefined();
     expect(note.params._meta?.traceparent).toBe(tp);
   });

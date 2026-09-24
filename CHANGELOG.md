@@ -10,6 +10,24 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 ## [Unreleased]
 
 ### Changed
+- **`ext/ui` bridge JS speaks the MCP Apps `2026-01-26` wire shapes** (#1452).
+  `MCPApp.updateModelContext(params)` sends `{content?, structuredContent?}`
+  as given instead of wrapping it in `{context}`. `downloadFile` takes the spec
+  `{contents}` object; the old `(url, filename)` form still works and becomes a
+  single `resource_link`. `requestTeardown()` sends
+  `ui/notifications/request-teardown` and `log()` sends `notifications/message`
+  (`{level, logger, data}`) instead of the non-spec `ui/teardown` and `ui/log`.
+  `hostCapabilities` is read from the initialize result's `hostCapabilities`
+  (it was always `{}` against a spec host), and `MCPApp.hostInfo` is new.
+  `ui/resource-teardown` is answered as a request, `ping` is answered,
+  host-context updates merge instead of replacing, `toolcancelled` carries
+  `reason`, `ui/notifications/initialized` goes out before anything a
+  `connected` listener sends, `appCapabilities.tools` is declared when tools are
+  registered before the handshake, and messages from any window other than the
+  parent are ignored. **Hosts that answered `ui/initialize` with `capabilities`
+  instead of `hostCapabilities`, or that relied on `ui/log` / `ui/teardown`,
+  need updating.** The bridge's unit tests now run in CI and check every
+  outbound message against the upstream ext-apps schemas.
 - **`experimental/ext/events`: webhook endpoints are verified before any
   delivery** (#1444). `events/subscribe` POSTs a signed
   `{"type":"verification","challenge":…}` envelope to `delivery.url` and only
