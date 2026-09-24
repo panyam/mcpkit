@@ -945,7 +945,10 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			Secret:       req.Delivery.Secret,
 			DerivedID:    derivedID,
 			CanonicalKey: canonical,
-		}); bucket != DeliveryErrorNone {
+		}); bucket == verificationThrottled {
+			return newResourceExhaustedError(id, "verifications_per_host", int64(webhooks.verifyLimit.max),
+				"too many endpoint verifications to this host; retry later")
+		} else if bucket != DeliveryErrorNone {
 			return newCallbackEndpointError(id, string(bucket), "endpoint verification failed")
 		}
 		var verifiedAt *time.Time

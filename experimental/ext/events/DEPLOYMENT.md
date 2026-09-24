@@ -92,7 +92,9 @@ Results are cached per `(principal, url)`, so refreshes and subscribes that diff
 
 **Turning it off.** `WithUnsafeSkipEndpointVerification()` restores the old behavior of delivering to any URL that passes validation. It exists for tests and for receivers that predate the handshake, and it violates the spec's MUST. Prefer the allowlist.
 
-Not implemented yet: the receiver-published `/.well-known/mcp-webhook-receiver.json` path, asymmetric `v1a,` server signing, and per-host rate limiting of verification POSTs.
+**Rate limiting.** Challenge POSTs to any one destination hostname are capped at `DefaultVerificationsPerHost` (60) a minute, as a token bucket with the same burst. Only real challenges count, so cache hits, allowlist matches and pre-verified URLs are free. A subscribe over budget fails with `-32013 ResourceExhausted`, `data.limit: "verifications_per_host"`. Tune it with `WithVerificationRateLimit(max, window)`; `WithVerificationRateLimit(0, 0)` turns it off. A gateway onboarding many tenants behind one host is the case to size it for.
+
+Not implemented yet: the receiver-published `/.well-known/mcp-webhook-receiver.json` path and asymmetric `v1a,` server signing.
 
 ## Retry and backoff timing
 

@@ -657,6 +657,7 @@ type WebhookRegistry struct {
 	deliveryAllowlist        []*url.URL
 	preVerifiers             []PreVerifier
 	verified                 verificationCache
+	verifyLimit              hostLimiter
 
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
@@ -794,6 +795,8 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 		noExpiryFailureGCWindow: DefaultNoExpiryFailureGCWindow,
 		logf:                    log.Printf,
 	}
+	r.verifyLimit.max = DefaultVerificationsPerHost
+	r.verifyLimit.window = DefaultVerificationWindow
 	for _, o := range opts {
 		o(r)
 	}

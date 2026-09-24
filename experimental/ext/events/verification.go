@@ -199,6 +199,9 @@ func (r *WebhookRegistry) verifyEndpoint(ctx context.Context, p verifyEndpointPa
 		r.verified.put(key, now, r.ttl)
 		return DeliveryErrorNone
 	}
+	if u, err := url.Parse(p.URL); err == nil && !r.verifyLimit.allow(strings.ToLower(u.Hostname()), now) {
+		return verificationThrottled
+	}
 	if bucket := r.challenge(ctx, p); bucket != DeliveryErrorNone {
 		return bucket
 	}
@@ -302,5 +305,83 @@ func AnswerVerificationChallenge(w http.ResponseWriter, body []byte) bool {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"challenge": env.Challenge})
+	return true
+}
+
+// DefaultVerificationsPerHost and DefaultVerificationWindow are the default
+// budget for challenge POSTs to one destination host: 60 a minute, allowing a
+// burst of 60. Generous on purpose, since a gateway fronting many tenants
+// verifies once per (principal, url) behind a single host.
+const (
+	DefaultVerificationsPerHost = 60
+	DefaultVerificationWindow   = time.Minute
+)
+
+// WithVerificationRateLimit caps challenge POSTs to any one destination
+// hostname at max per window, as a token bucket that refills continuously and
+// holds at most max (spec §"Endpoint verification": the verification POST
+// "SHOULD be rate-limited per destination host"). Only real challenges count:
+// cache hits, allowlist matches and pre-verified URLs are free. A subscribe
+// over budget fails with -32013 ResourceExhausted, data.limit
+// "verifications_per_host". max <= 0 or window <= 0 disables the limit.
+func WithVerificationRateLimit(max int, window time.Duration) WebhookOption {
+	return func(r *WebhookRegistry) {
+		r.verifyLimit.max = max
+		r.verifyLimit.window = window
+	}
+}
+
+// verificationThrottled is verifyEndpoint's answer for a challenge the
+// per-host budget refused. It is not a spec lastError category and never
+// reaches the wire as one; the subscribe handler turns it into -32013.
+const verificationThrottled DeliveryErrorBucket = "verification_throttled"
+
+// maxTrackedHosts bounds the limiter's memory. Past it, hosts whose buckets
+// have refilled completely are forgotten, which loses nothing.
+const maxTrackedHosts = 4096
+
+type hostLimiter struct {
+	mu     sync.Mutex
+	max    int
+	window time.Duration
+	hosts  map[string]*hostBucket
+}
+
+type hostBucket struct {
+	tokens float64
+	last   time.Time
+}
+
+func (l *hostLimiter) allow(host string, now time.Time) bool {
+	if l.max <= 0 || l.window <= 0 {
+		return true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.hosts == nil {
+		l.hosts = map[string]*hostBucket{}
+	}
+	rate := float64(l.max) / float64(l.window)
+	b, ok := l.hosts[host]
+	if !ok {
+		if len(l.hosts) >= maxTrackedHosts {
+			for h, old := range l.hosts {
+				if old.tokens+float64(now.Sub(old.last))*rate >= float64(l.max) {
+					delete(l.hosts, h)
+				}
+			}
+		}
+		b = &hostBucket{tokens: float64(l.max), last: now}
+		l.hosts[host] = b
+	}
+	b.tokens += float64(now.Sub(b.last)) * rate
+	if b.tokens > float64(l.max) {
+		b.tokens = float64(l.max)
+	}
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
 	return true
 }
