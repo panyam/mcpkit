@@ -464,8 +464,12 @@ a webhook subscriber never hears of either; the registry's `PostGap` and `PostTe
 webhook path, per subscription, and nothing in kitchen-sink called them. Terminating by type was
 out too, since no webhook type here is disposable. `events_conformance_webhook_gap` and
 `events_conformance_webhook_terminate` take the subscription id and signal only the harness's own
-subscription. The gap is refused while the source is still empty: `PostGap` with an empty cursor
-sends an envelope without one (#1466).
+subscription. The gap is refused while the source is still empty.
+
+#1466 closed the asymmetry in the library: `YieldGap` now posts a gap carrying `Latest()` to every
+webhook subscriber of the type, `YieldTerminated` ends them with a `terminated` envelope, and
+`PostGap` sends nothing for an empty cursor, where it used to send a gap with no cursor. The
+controls stay, since they signal one subscription where the yields signal the whole type.
 
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
 `nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.

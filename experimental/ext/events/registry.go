@@ -277,7 +277,9 @@ func (r *Registry) terminateSubscriptions(name string, src EventSource) {
 		})
 	}
 	// Push subscribers hold a channel handed out by the source itself, so
-	// only the source can signal them. YieldingSource can; a source that
+	// only the source can signal them. YieldTerminated also relays to
+	// webhooks through the signal hook, which finds nothing left to end
+	// because the call above already did. YieldingSource can; a source that
 	// cannot implement the terminal signal simply closes its subscriber
 	// channels when it shuts down, which streams already treat as an end.
 	if t, ok := src.(sourceTerminator); ok {
@@ -444,13 +446,29 @@ func (r *Registry) snapshot() []EventSource {
 	return out
 }
 
-// wireLocked attaches per-source plumbing — emit hook + TracerProvider
+// wireLocked attaches per-source plumbing — emit hook, signal hook +
+// TracerProvider
 // — for a source being added to the registry. Mirrors the per-source
 // loop body inside Register. Caller MUST hold r.mu for write.
 func (r *Registry) wireLocked(src EventSource) {
 	if ea, ok := src.(emitterAware); ok {
 		ea.SetEmitHook(func(ctx context.Context, event Event) {
 			_ = r.emitter.Emit(ctx, event)
+		})
+	}
+	if sa, ok := src.(signalAware); ok && r.webhooks != nil {
+		webhooks := r.webhooks
+		sa.setSignalHook(func(sig sourceSignal) {
+			switch {
+			case sig.gap:
+				webhooks.PostGapByEventName(sig.name, sig.cursor)
+			case sig.terminated != nil:
+				webhooks.TerminateByEventName(sig.name, ControlError{
+					Code:    sig.terminated.Code,
+					Message: sig.terminated.Message,
+					Data:    sig.terminated.Data,
+				})
+			}
 		})
 	}
 	if r.tp != nil {

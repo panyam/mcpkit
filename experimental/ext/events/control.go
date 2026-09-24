@@ -65,7 +65,17 @@ type controlEnvelope struct {
 // already expired or been unregistered). Logged via the registry's
 // logf hook on best-effort failure; this method does not retry beyond
 // the deliver-loop's existing exponential backoff.
+//
+// Also a no-op, logged, when freshCursor is empty. The envelope's cursor is
+// the position the client persists and resumes from; a cursorless source or
+// one that has yielded nothing has no position, and the spec's shape has no
+// cursor-less gap. For a type without replay there is nothing to have
+// skipped past (§"Replay is optional per event type").
 func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
+	if freshCursor == "" {
+		r.logf("[webhook] PostGap: no cursor to send, skipping the gap envelope")
+		return
+	}
 	r.mu.RLock()
 	resp, _ := r.store.GetWebhook(context.Background(), GetWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.RUnlock()
@@ -78,6 +88,38 @@ func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
 		return
 	}
 	safeGo("events.control.gap", func() { r.deliverControl(resp.Target, "gap", body) })
+}
+
+// PostGapByEventName sends a {type:gap, cursor:<fresh>} envelope to every
+// webhook subscription for event name and returns how many it signalled.
+// Nothing is removed; a gap is not an ending.
+//
+// This is what YieldingSource.YieldGap calls when the source is registered
+// with a WebhookRegistry. A source that fans out itself (a TypedSource with
+// EmitToWebhooks, say) calls it directly on detecting a loss, alongside
+// whatever it tells its push subscribers.
+//
+// Every subscription gets the same cursor, the position the source can serve
+// from now, which is also what push subscribers receive in their fresh
+// notifications/events/active. name == "" is a no-op, and so is an empty
+// cursor (see PostGap).
+func (r *WebhookRegistry) PostGapByEventName(name, freshCursor string) int {
+	if name == "" || freshCursor == "" {
+		return 0
+	}
+	r.mu.RLock()
+	listResp, _ := r.store.ListWebhooks(context.Background(), ListWebhooksRequest{})
+	r.mu.RUnlock()
+
+	var signalled int
+	for _, t := range listResp.Targets {
+		if t.EventName != name {
+			continue
+		}
+		r.PostGap(t.CanonicalKey, freshCursor)
+		signalled++
+	}
+	return signalled
 }
 
 // PostTerminated delivers a {type:terminated, error:...} envelope to
