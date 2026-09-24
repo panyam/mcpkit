@@ -9,9 +9,10 @@ import (
 // Used in initialize handshake for both server advertisement and client capability declaration.
 const UIExtensionID = "io.modelcontextprotocol/ui"
 
-// ClientSupportsUI checks whether the connected client declared support for the
-// MCP Apps extension during the initialize handshake. Tool handlers can use this
-// to decide whether to include UI-specific content or fall back to text-only.
+// ClientSupportsUI checks whether the client declared support for the MCP Apps
+// extension, from initialize or the stateless per-request envelope. Tool
+// handlers use it to decide whether to include UI-specific content or fall
+// back to text-only.
 func ClientSupportsUI(ctx context.Context) bool {
 	return ClientSupportsExtension(ctx, UIExtensionID)
 }

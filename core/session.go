@@ -273,9 +273,11 @@ func statelessNotifyFuncFromContext(ctx context.Context) NotifyFunc {
 	return fn
 }
 
-// ClientSupportsExtension checks whether the connected client declared support
-// for the given extension ID during the initialize handshake. Returns false if
-// no session context is present or the client did not advertise the extension.
+// ClientSupportsExtension reports whether the client declared the given
+// extension ID, on either wire. It checks the capabilities cached from the
+// initialize handshake and the SEP-2575 per-request _meta envelope, and a
+// declaration in either counts. The stateless wire has no initialize, so the
+// envelope is its only source. Returns false when neither is present.
 //
 // Usage in a tool handler:
 //
@@ -283,12 +285,16 @@ func statelessNotifyFuncFromContext(ctx context.Context) NotifyFunc {
 //	    // client can render MCP Apps
 //	}
 func ClientSupportsExtension(ctx context.Context, extensionID string) bool {
-	sc := sessionFromContext(ctx)
-	if sc == nil || sc.clientCaps == nil {
-		return false
+	if sc := sessionFromContext(ctx); sc != nil && sc.clientCaps != nil {
+		if _, ok := sc.clientCaps.Extensions[extensionID]; ok {
+			return true
+		}
 	}
-	_, ok := sc.clientCaps.Extensions[extensionID]
-	return ok
+	if meta := RequestMetaFromContext(ctx); meta != nil && meta.ClientCapabilities != nil {
+		_, ok := meta.ClientCapabilities.Extensions[extensionID]
+		return ok
+	}
+	return false
 }
 
 // PerRequestClientCapsKey is the SEP-2575 _meta key under which a client may

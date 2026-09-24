@@ -528,6 +528,72 @@ func TestClientSupportsUI(t *testing.T) {
 	}
 }
 
+// TestClientSupportsExtension_StatelessWire covers issue 1458. The SEP-2575
+// stateless wire has no initialize handshake, so the only place a client
+// declares an extension is the per-request _meta envelope. Both the
+// package-level helpers and the typed-context methods must read it.
+func TestClientSupportsExtension_StatelessWire(t *testing.T) {
+	meta := &RequestMeta{
+		ProtocolVersion: DraftProtocolVersion2026V1,
+		ClientInfo:      &ClientInfo{Name: "x", Version: "1"},
+		ClientCapabilities: &ClientCapabilities{
+			Extensions: map[string]ClientExtensionCap{UIExtensionID: {MIMETypes: []string{AppMIMEType}}},
+		},
+	}
+	ctx := WithRequestMeta(context.Background(), meta)
+
+	if !ClientSupportsExtension(ctx, UIExtensionID) {
+		t.Error("ClientSupportsExtension = false, want true from per-request caps")
+	}
+	if !ClientSupportsUI(ctx) {
+		t.Error("ClientSupportsUI = false, want true from per-request caps")
+	}
+	if ClientSupportsExtension(ctx, "io.example/nonexistent") {
+		t.Error("ClientSupportsExtension = true for an undeclared extension")
+	}
+	tc := NewToolContext(ctx)
+	if !tc.ClientSupportsExtension(UIExtensionID) || !tc.ClientSupportsUI() {
+		t.Error("ToolContext methods = false, want true from per-request caps")
+	}
+
+	undeclared := WithRequestMeta(context.Background(), &RequestMeta{
+		ProtocolVersion:    DraftProtocolVersion2026V1,
+		ClientInfo:         &ClientInfo{Name: "x", Version: "1"},
+		ClientCapabilities: &ClientCapabilities{},
+	})
+	if ClientSupportsUI(undeclared) || NewToolContext(undeclared).ClientSupportsUI() {
+		t.Error("ClientSupportsUI = true when the request declared no extensions")
+	}
+}
+
+// TestClientSupportsExtension_SessionAndRequestCombine pins the additive rule
+// ClientSupportsExtensionForRequest already documents: a declaration in either
+// source counts, and a request envelope without the extension does not revoke
+// a session-level declaration.
+func TestClientSupportsExtension_SessionAndRequestCombine(t *testing.T) {
+	sessionCaps := &ClientCapabilities{
+		Extensions: map[string]ClientExtensionCap{UIExtensionID: {}},
+	}
+	ctx := ContextWithSession(context.Background(), nil, nil, nil, sessionCaps, nil)
+	ctx = WithRequestMeta(ctx, &RequestMeta{
+		ProtocolVersion: DraftProtocolVersion2026V1,
+		ClientInfo:      &ClientInfo{Name: "x", Version: "1"},
+		ClientCapabilities: &ClientCapabilities{
+			Extensions: map[string]ClientExtensionCap{TasksExtensionID: {}},
+		},
+	})
+
+	if !ClientSupportsExtension(ctx, UIExtensionID) {
+		t.Error("session-declared extension lost when the request envelope omits it")
+	}
+	if !ClientSupportsExtension(ctx, TasksExtensionID) {
+		t.Error("request-declared extension ignored when a session is present")
+	}
+	if !NewToolContext(ctx).ClientSupportsExtension(TasksExtensionID) {
+		t.Error("ToolContext.ClientSupportsExtension ignored the request envelope")
+	}
+}
+
 // TestUIExtensionIDConstant verifies the extension ID constant matches the
 // MCP Apps spec value exactly.
 func TestUIExtensionIDConstant(t *testing.T) {
