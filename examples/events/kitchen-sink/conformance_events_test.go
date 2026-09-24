@@ -265,3 +265,12 @@ func TestConformanceEvents_WebhookEnvelopeControlsRejectUnknownID(t *testing.T) 
 		assert.True(t, res.IsError, tool)
 	}
 }
+
+// events-push grades truncated-false-when-no-replay by asking for a gap on a
+// type without replay, and presence.changed is the only one here (#1468).
+func TestConformanceEvents_YieldGapAcceptsTheCursorlessType(t *testing.T) {
+	c := newConformanceTestClient(t)
+	text, err := c.ToolCall(t.Context(), "events_conformance_yield_gap", map[string]any{"name": "presence.changed"})
+	require.NoError(t, err)
+	assert.Equal(t, "ok: presence.changed", text)
+}

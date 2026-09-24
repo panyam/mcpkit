@@ -45,6 +45,11 @@ type conformanceYielders struct {
 	// poisons whatever runs after it. build.finished exists only under this
 	// flag, carries no feeder, and nothing else subscribes to it.
 	build *events.YieldingSource[BuildFinishedData]
+	// presence is the one type without replay (WithoutCursors). Only the gap
+	// control is meant for it: events-push asks for a gap on it to grade
+	// truncated-false-when-no-replay, which needs a stream that confirms with
+	// cursor: null.
+	presence *events.YieldingSource[PresenceChangedData]
 	// webhooks backs the tenant controls, which stand a subscription up on
 	// another principal's behalf. The harness authenticates as exactly one
 	// principal for a whole run, so without this the two-tenant case cannot be
@@ -76,8 +81,10 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 			return y.alert, nil
 		case "build.finished":
 			return y.build, nil
+		case "presence.changed":
+			return y.presence, nil
 		default:
-			return nil, fmt.Errorf("no conformance control for event type %q (have chat.message, alert.fired, build.finished)", name)
+			return nil, fmt.Errorf("no conformance control for event type %q (have chat.message, alert.fired, build.finished, presence.changed)", name)
 		}
 	}
 
@@ -394,7 +401,7 @@ func eventNameSchema() map[string]any {
 		"properties": map[string]any{
 			"name": map[string]any{
 				"type":        "string",
-				"enum":        []any{"chat.message", "alert.fired", "build.finished"},
+				"enum":        []any{"chat.message", "alert.fired", "build.finished", "presence.changed"},
 				"description": "Event type to act on.",
 			},
 		},
