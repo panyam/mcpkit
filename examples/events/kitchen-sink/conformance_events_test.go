@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/experimental/ext/events"
@@ -44,4 +46,57 @@ func TestConformanceEvents_OtherUnreachableCallbacksStillVerified(t *testing.T) 
 	rpc := unwrapRPC(err)
 	require.NotNil(t, rpc, "want an RPC error, got %v", err)
 	assert.Equal(t, events.ErrCodeCallbackEndpointError, rpc.Code)
+}
+
+func subscribeForID(t *testing.T, c *client.Client, url string, ttlMs any) (id string, refreshBefore any) {
+	t.Helper()
+	raw, err := c.Call(t.Context(), "events/subscribe", map[string]any{
+		"name":     "alert.fired",
+		"delivery": map[string]any{"mode": "webhook", "url": url, "secret": events.GenerateSecret()},
+		"ttlMs":    ttlMs,
+	})
+	require.NoError(t, err)
+	var res map[string]any
+	require.NoError(t, json.Unmarshal(raw.Raw, &res))
+	id, _ = res["id"].(string)
+	require.NotEmpty(t, id)
+	return id, res["refreshBefore"]
+}
+
+func subscriptionState(t *testing.T, c *client.Client, id string) string {
+	t.Helper()
+	text, err := c.ToolCall(t.Context(), "events_conformance_subscription_state", map[string]any{"id": id})
+	require.NoError(t, err)
+	return text
+}
+
+// The TTL rows need a restart the harness can ask for. The control rebuilds
+// the server and registry over the same store; the old session has to die
+// (proof the rebuild happened) and both grants have to survive it.
+func TestConformanceEvents_RestartKeepsLongAndNoExpiryGrants(t *testing.T) {
+	cs := newConformanceServer(":0", nil, nil)
+	ts := httptest.NewServer(cs)
+	t.Cleanup(ts.Close)
+
+	before := newTestClient(t, ts)
+	noExpiry, rb := subscribeForID(t, before, "https://conformance.invalid/mcp-events/ttl-null", nil)
+	assert.Nil(t, rb, "the fixture opts into no-expiry grants, so ttlMs:null is granted as refreshBefore:null")
+	long, rb := subscribeForID(t, before, "https://conformance.invalid/mcp-events/ttl-long", 24*3600*1000)
+	assert.NotNil(t, rb)
+
+	target, err := before.ToolCall(t.Context(), "events_conformance_restart", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, "2", target, "the restart control answers the generation it is moving to")
+	require.Eventually(t, func() bool {
+		_, err := before.ToolCall(t.Context(), "events_conformance_subscription_state", map[string]any{"id": noExpiry})
+		return err != nil
+	}, 3*time.Second, 50*time.Millisecond, "the pre-restart session must not survive the restart")
+
+	after := newTestClient(t, ts)
+	gen, err := after.ToolCall(t.Context(), "events_conformance_generation", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, target, gen)
+	assert.Equal(t, "active", subscriptionState(t, after, noExpiry))
+	assert.Equal(t, "active", subscriptionState(t, after, long))
+	assert.Equal(t, "absent", subscriptionState(t, after, "sub_never_existed"))
 }

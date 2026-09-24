@@ -89,6 +89,21 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
+	if *conformanceEvents {
+		// Conformance mode serves through a handler that a restart control
+		// can swap, so the feeders are started per build rather than once.
+		feeders := func(ctx context.Context, w *wiredServer) {
+			go runChatFeeder(ctx, w.chatYield, *chatEvery)
+			go runAlertFeeder(ctx, w.alertYield, *alertEvery)
+			go runPresenceFeeder(ctx, w.idx, w.registry, *presenceEvery)
+		}
+		log.Printf("[server] kitchen-sink (conformance) listening on %s (MCP at /mcp)", *addr)
+		if err := http.ListenAndServe(*addr, newConformanceServer(*addr, tp, feeders)); err != nil {
+			log.Fatalf("ListenAndServe: %v", err)
+		}
+		return
+	}
+
 	wired := buildServer(*addr, tp, *conformanceEvents)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,6 +155,17 @@ type wiredServer struct {
 // instrumentation. Nil or core.NoopTracerProvider{} = zero overhead.
 // Tests pass nil; the serve() path passes the configured TracerProvider.
 func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *wiredServer {
+	var rt *conformanceRuntime
+	if conformanceEvents {
+		rt = newConformanceRuntime()
+	}
+	return buildServerWith(addr, tp, conformanceEvents, rt)
+}
+
+// buildServerWith is buildServer with the conformance runtime passed in, so a
+// restart can rebuild over the store the previous build used. rt is nil
+// unless conformanceEvents is set.
+func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool, rt *conformanceRuntime) *wiredServer {
 	registry := newWatchListRegistry()
 
 	chatSrc, chatYield := events.NewYieldingSource[ChatMessageData](chatEventDef(), events.WithMaxSize(eventStoreCap))
@@ -168,6 +194,7 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 		// that single origin is spec path (b), the same thing an operator
 		// does for a known receiver; any other URL still gets the handshake.
 		webhookOpts = append(webhookOpts, events.WithWebhookDeliveryAllowlist(conformanceCallbackOrigins))
+		webhookOpts = append(webhookOpts, rt.webhookOptions()...)
 	}
 	if tp != nil {
 		webhookOpts = append(webhookOpts, events.WithWebhookTracerProvider(tp))
@@ -222,6 +249,7 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 		registerConformanceEventControls(srv, conformanceYielders{
 			chat: chatSrc, alert: alertSrc, build: buildSrc, webhooks: webhooks,
 		})
+		registerRestartControls(srv, rt)
 		log.Printf("[conformance] events control tools registered; this is not a demo path")
 	}
 	return &wiredServer{

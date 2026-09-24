@@ -1074,6 +1074,10 @@ When an example needs that surface, add it behind a **per-surface flag named
   Prefer the flag while one binary can do both.
 
 `examples/events/kitchen-sink` is the worked example: `conformance_events.go`
-registers three control tools and `buildEventDef` adds a type advertising poll
+registers the control tools and `buildEventDef` adds a type advertising poll
 and push but not webhook, so the unsupported-delivery-mode path has something to
-probe.
+probe. `conformance_restart.go` is the largest control: a restart the harness
+can ask for, done by rebuilding the whole server over the same subscription
+store behind a swappable handler. It stays inside the rule because every piece
+is public API (`WithWebhookStore`, a fresh `server.Server`); what it would
+break is the rule's spirit if it reached into the registry to fake survival.
