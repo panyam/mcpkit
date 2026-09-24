@@ -1,0 +1,98 @@
+[
+  {
+    "name": "updateModelContext",
+    "method": "ui/update-model-context",
+    "params": {
+      "content": [
+        {
+          "type": "text",
+          "text": "Map is centred on Detroit"
+        }
+      ],
+      "structuredContent": {
+        "city": "Detroit"
+      }
+    }
+  },
+  {
+    "name": "downloadFile(object)",
+    "method": "ui/download-file",
+    "params": {
+      "contents": [
+        {
+          "type": "resource_link",
+          "uri": "https://example.com/r.pdf",
+          "name": "r.pdf",
+          "mimeType": "application/pdf"
+        },
+        {
+          "type": "resource",
+          "resource": {
+            "uri": "file:///notes.txt",
+            "mimeType": "text/plain",
+            "text": "hello"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "downloadFile(url, filename)",
+    "method": "ui/download-file",
+    "params": {
+      "contents": [
+        {
+          "type": "resource_link",
+          "uri": "https://example.com/report.csv",
+          "name": "report.csv"
+        }
+      ]
+    }
+  },
+  {
+    "name": "sendMessage",
+    "method": "ui/message",
+    "params": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What's near here?"
+        }
+      ]
+    }
+  },
+  {
+    "name": "openLink",
+    "method": "ui/open-link",
+    "params": {
+      "url": "https://example.com/detroit"
+    }
+  },
+  {
+    "name": "requestDisplayMode",
+    "method": "ui/request-display-mode",
+    "params": {
+      "mode": "fullscreen"
+    }
+  },
+  {
+    "name": "requestTeardown",
+    "method": "ui/notifications/request-teardown",
+    "params": {}
+  },
+  {
+    "name": "log",
+    "method": "notifications/message",
+    "params": {
+      "level": "warning",
+      "logger": "mcp-app",
+      "data": {
+        "message": "disk low",
+        "data": {
+          "freeMB": 12
+        }
+      }
+    }
+  }
+]

@@ -1,7 +1,7 @@
 ========================================================================
   AppHost and host-side app management
   Demonstrates AppHost mediating between an MCP server and an app bridge with bidirectional tool calls.
-  8 steps
+  9 steps
 ========================================================================
 
   Step 1: Create MCP server with tools
@@ -42,6 +42,7 @@
 
   Step 4: Create AppHost and wire everything together
   ----------------------------------------------------------------------
+    Host ->> Host: WithHostHandlers (ui/* host capabilities)
     Host ->> Bridge: SetRequestHandler (app→host)
     Host ->> Bridge: SetNotificationHandler (list_changed)
     Host ->> Bridge: Start()
@@ -49,7 +50,8 @@
     Bridge -->> Host: {tools: [app_greet, app_counter]}
 
     AppHost wires up bidirectional routing and fetches the initial app
-    tool list.
+    tool list. HostHandlers supplies the ui/* methods that belong to the
+    host, not the server.
 
     Press Enter to run this step...
   AppHost started: bridge handlers wired, initial tool list fetched
@@ -98,7 +100,26 @@
     Press Enter to run this step...
   App called server_echo → echo: from the app
 
-  Step 8: Dynamic registration, where the app adds a tool at runtime
+  Step 8: App calls the host, not the server
+  ----------------------------------------------------------------------
+    Refs: MCP Apps Extension
+    Bridge ->> Host: ui/update-model-context {content, structuredContent}
+    Host -->> Bridge: {}
+    Bridge ->> Host: ui/message {role: user, content}
+    Host -->> Bridge: {}
+    Bridge ->> Host: ui/open-link, ui/request-display-mode
+
+    Four of the app's requests are host capabilities the MCP server has
+    never heard of. AppHost answers them from HostHandlers and forwards
+    only tools/call and resources/read.
+
+    Press Enter to run this step...
+  Model context slot: "Map is centred on Ann Arbor" (the Detroit update was replaced)
+  Follow-up turns queued for the model: 1 ("What's near here?")
+  [host] would open https://example.com/detroit in the user's browser
+  Asked for pip, host granted {"mode":"inline"}
+
+  Step 9: Dynamic registration, where the app adds a tool at runtime
   ----------------------------------------------------------------------
     Bridge ->> Bridge: RegisterTool("app_dice")
     Bridge ->> Host: notifications/tools/list_changed

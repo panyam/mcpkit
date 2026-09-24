@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import {
   McpUiDownloadFileRequestSchema,
@@ -1526,5 +1526,58 @@ describe("trace context relay (SEP-414 P6, issue 660)", () => {
     const note = sentMessages.find((m) => m.method === "notifications/message");
     expect(note).toBeDefined();
     expect(note.params._meta?.traceparent).toBe(tp);
+  });
+});
+
+// The Go side replays this file through AppHost (host_handlers_test.go,
+// TestHostHandlers_BridgeWireFixture), so a bridge change that alters what
+// the host receives shows up as a fixture diff and a Go test failure rather
+// than a silent mismatch between the two halves (issue 1456).
+// Regenerate with UPDATE_FIXTURES=1 pnpm test.
+describe("wire fixture for the Go host (issue 1456)", () => {
+  const FIXTURE = join(__dirname, "..", "testdata", "bridge-wire.json");
+
+  it("bridge-wire.json matches what the bridge sends", async () => {
+    autoRespondToInitialize();
+    await waitForConnect();
+    const app = (window as any).MCPApp;
+    const recorded: Array<{ name: string; method: string; params: unknown }> = [];
+    const capture = (name: string, call: () => unknown) => {
+      sentMessages.length = 0;
+      const p = call();
+      if (p && typeof (p as any).catch === "function") (p as Promise<unknown>).catch(() => {});
+      const msg = sentMessages[sentMessages.length - 1];
+      recorded.push({ name, method: msg.method, params: msg.params });
+    };
+
+    capture("updateModelContext", () =>
+      app.updateModelContext({
+        content: [{ type: "text", text: "Map is centred on Detroit" }],
+        structuredContent: { city: "Detroit" },
+      })
+    );
+    capture("downloadFile(object)", () =>
+      app.downloadFile({
+        contents: [
+          { type: "resource_link", uri: "https://example.com/r.pdf", name: "r.pdf", mimeType: "application/pdf" },
+          { type: "resource", resource: { uri: "file:///notes.txt", mimeType: "text/plain", text: "hello" } },
+        ],
+      })
+    );
+    capture("downloadFile(url, filename)", () => app.downloadFile("https://example.com/report.csv", "report.csv"));
+    capture("sendMessage", () =>
+      app.sendMessage({ role: "user", content: [{ type: "text", text: "What's near here?" }] })
+    );
+    capture("openLink", () => app.openLink("https://example.com/detroit"));
+    capture("requestDisplayMode", () => app.requestDisplayMode("fullscreen"));
+    capture("requestTeardown", () => app.requestTeardown());
+    capture("log", () => app.log("warning", "disk low", { freeMB: 12 }));
+
+    const actual = JSON.stringify(recorded, null, 2) + "\n";
+    if (process.env.UPDATE_FIXTURES) {
+      writeFileSync(FIXTURE, actual);
+    }
+    expect(existsSync(FIXTURE), "missing " + FIXTURE + ", run UPDATE_FIXTURES=1 pnpm test").toBe(true);
+    expect(readFileSync(FIXTURE, "utf-8")).toBe(actual);
   });
 });

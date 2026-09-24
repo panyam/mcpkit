@@ -60,6 +60,11 @@ func main() {
 		bridge *ui.InProcessAppBridge
 		host   *ui.AppHost
 		ctx    = context.Background()
+
+		// What a real host would hand its model loop: the app's latest
+		// context slot and any follow-up turns the app asked for.
+		modelContext ui.ModelContextUpdate
+		pendingTurns []ui.MessageRequest
 	)
 
 	// --- Step 1: Create MCP server ---
@@ -155,14 +160,35 @@ func main() {
 
 	// --- Step 4: Create and start AppHost ---
 	demo.Step("Create AppHost and wire everything together").
+		Arrow("Host", "Host", "WithHostHandlers (ui/* host capabilities)").
 		Arrow("Host", "Bridge", "SetRequestHandler (app→host)").
 		Arrow("Host", "Bridge", "SetNotificationHandler (list_changed)").
 		Arrow("Host", "Bridge", "Start()").
 		Arrow("Host", "Bridge", "Send(tools/list), initial fetch").
 		DashedArrow("Bridge", "Host", "{tools: [app_greet, app_counter]}").
-		Note("AppHost wires up bidirectional routing and fetches the initial app tool list.").
+		Note("AppHost wires up bidirectional routing and fetches the initial app tool list. HostHandlers supplies the ui/* methods that belong to the host, not the server.").
 		Run(func(_ demokit.StepContext) *demokit.StepResult {
-			host = ui.NewAppHost(c, bridge, ui.WithTracerProvider(tp))
+			handlers := ui.HostHandlers{
+				UpdateModelContext: func(_ context.Context, u ui.ModelContextUpdate) error {
+					modelContext = u // one slot per view: each update replaces the last
+					return nil
+				},
+				Message: func(_ context.Context, m ui.MessageRequest) error {
+					pendingTurns = append(pendingTurns, m)
+					return nil
+				},
+				OpenLink: func(_ context.Context, r ui.OpenLinkRequest) error {
+					fmt.Printf("  [host] would open %s in the user's browser\n", r.URL)
+					return nil
+				},
+				RequestDisplayMode: func(_ context.Context, r ui.DisplayModeRequest) (ui.DisplayModeResult, error) {
+					if r.Mode == "pip" {
+						return ui.DisplayModeResult{Mode: "inline"}, nil // this host has no pip
+					}
+					return ui.DisplayModeResult{Mode: r.Mode}, nil
+				},
+			}
+			host = ui.NewAppHost(c, bridge, ui.WithTracerProvider(tp), ui.WithHostHandlers(handlers))
 			if err := host.Start(ctx); err != nil {
 				fmt.Printf("  ERROR: %v\n", err)
 				return nil
@@ -236,7 +262,38 @@ func main() {
 			return nil
 		})
 
-	// --- Step 8: Dynamic tool registration ---
+	// --- Step 8: App calls the host ---
+	demo.Step("App calls the host, not the server").
+		Ref(refs.MCPAppsSpec).
+		Arrow("Bridge", "Host", "ui/update-model-context {content, structuredContent}").
+		DashedArrow("Host", "Bridge", "{}").
+		Arrow("Bridge", "Host", "ui/message {role: user, content}").
+		DashedArrow("Host", "Bridge", "{}").
+		Arrow("Bridge", "Host", "ui/open-link, ui/request-display-mode").
+		Note("Four of the app's requests are host capabilities the MCP server has never heard of. AppHost answers them from HostHandlers and forwards only tools/call and resources/read.").
+		Run(func(_ demokit.StepContext) *demokit.StepResult {
+			for _, city := range []string{"Detroit", "Ann Arbor"} {
+				bridge.SendToHost(ctx, ui.MethodUpdateModelContext, map[string]any{
+					"content":           []map[string]any{{"type": "text", "text": "Map is centred on " + city}},
+					"structuredContent": map[string]any{"city": city},
+				})
+			}
+			fmt.Printf("  Model context slot: %q (the Detroit update was replaced)\n", modelContext.Content[0].Text)
+
+			bridge.SendToHost(ctx, ui.MethodMessage, map[string]any{
+				"role": "user", "content": map[string]any{"type": "text", "text": "What's near here?"},
+			})
+			fmt.Printf("  Follow-up turns queued for the model: %d (%q)\n", len(pendingTurns), pendingTurns[0].Content[0].Text)
+
+			bridge.SendToHost(ctx, ui.MethodOpenLink, map[string]any{"url": "https://example.com/detroit"})
+
+			resp, _ := bridge.SendToHost(ctx, ui.MethodRequestDisplayMode, map[string]any{"mode": "pip"})
+			raw, _ := ui.ToBytes(resp.Result)
+			fmt.Printf("  Asked for pip, host granted %s\n", raw)
+			return nil
+		})
+
+	// --- Step 9: Dynamic tool registration ---
 	demo.Step("Dynamic registration, where the app adds a tool at runtime").
 		Arrow("Bridge", "Bridge", "RegisterTool(\"app_dice\")").
 		Arrow("Bridge", "Host", "notifications/tools/list_changed").
