@@ -158,27 +158,26 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      72 pass / 8 fail / 12 warn across four scenarios, measured 2026-09-24
-      against examples/events/kitchen-sink at 3845317e (hand-recorded from the
+      81 pass / 1 fail / 10 warn across four scenarios, measured 2026-09-24
+      against examples/events/kitchen-sink at 9f01daea (hand-recorded from the
       runner's own summaries, so re-run before trusting it): events-discovery
-      12/12, events-poll 29/29, events-push 14/16, events-webhook 17/23. The
-      fixture is spawned with --conformance-events, which registers the
-      diagnostic controls the push scenario fires and the poll-and-push-only
-      event type the webhook scenario probes; without it six rows describe
-      conditions a healthy server never produces and report untestable. The
-      suite's fifth scenario, events-webhook-delivery, is deliberately not
-      wired; see conformance/scripts/conf-events.sh for why, and issue 1425.
+      12/12, events-poll 29/29, events-push 18/18, events-webhook 22/23. The
+      fixture is spawned with --conformance-events, which registers five
+      diagnostic controls the scenarios drive; without them six rows describe
+      conditions a healthy server never produces and report untestable, which
+      upstream's policy renders red. See examples/CONVENTIONS.md § Conformance
+      fixtures. The suite's fifth scenario, events-webhook-delivery, is
+      deliberately not wired; see conformance/scripts/conf-events.sh for why.
       Proposed upstream as a draft in modelcontextprotocol/conformance 504 and
-      tracked on the fork branch until it lands. INFO for two reasons. The
-      suite scores against the design sketch in
+      tracked on the fork branch until it lands. INFO because the suite scores
+      against the design sketch in
       modelcontextprotocol/experimental-ext-triggers-events, which has no SEP
       number, so check IDs carry a placeholder sep-9999- prefix that gets
       renamed once one is reserved; the capability rows additionally track
-      upstream PR 7, which is unmerged. And the failures are ours: push
-      notifications carry no subscriptionId, events/subscribe accepts an
-      http:// callback and answers -32015 rather than -32602, events/subscribe
-      also accepts a webhook subscription for an event type that does not
-      advertise webhook delivery, and events/unsubscribe reports success for a
-      key that was never subscribed. Tracked in 1425. 1380 closed the discovery
-      and poll divergences, which is why those two are green.
+      upstream PR 7, which is unmerged. The one remaining red row,
+      subscribe-auth-required, is untestable rather than a defect: the harness
+      holds one credential for a run and kitchen-sink sets
+      UnsafeAnonymousPrincipal by design. Thirteen divergences found in total,
+      twelve closed (1379, 1381, 1416, 1432, 1433, 1434); endpoint verification
+      is 490. Set tracked in 1425.
     tracking: "mcpkit 1374"

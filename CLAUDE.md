@@ -203,6 +203,17 @@ These span packages and will bite on a task that never opens a routed doc.
   after the same bug turned up twice: `tools/list` on the apps bridge (#1408) and `events/list`
   (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
   downstream assumed a stable order, and it surfaces as flakiness somewhere else.
+- **`make test-examples` runs in no workflow, so a broken example test ships green.** `test.yml`
+  runs `scripts/check-examples-build.sh`, which compiles each module's *packages* and not their
+  `_test.go` files, and mentions `test-examples` only in a comment explaining why it exists.
+  Three merged PRs in one week shipped with example tests red: a stale `buildServer` call site, an
+  `inputSchema` enum invented from a field name rather than read off the fixture that feeds it, and
+  two tests polling event types whose descriptors decline poll. Tracked as #1431. Until it is
+  wired, run the affected example's own `go test` by hand after touching anything it uses.
+- **Never `gofmt -w` a glob in this repo.** The tree is not gofmt-clean, so `gofmt -w pkg/*.go`
+  rewrites pre-existing drift alongside your file and `git add -A` sweeps it into the commit. It
+  happened twice in one session, 36 files then 9, both caught only by reading `git status` before
+  pushing. Format the files you actually edited, by name.
 - **`check-dep-consistency` failures want `--prune-baseline`, not `--update-baseline`.** The CI
   error text suggests the latter, which also accepts any *new* divergence silently, defeating the
   point of the baseline. Prune only drops entries that stopped diverging. A cross-module
@@ -260,13 +271,17 @@ branch.
 2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
 with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
 renamed before that PR can merge. The suite has five scenarios;
-`testconf-events` drives four of them, at **12/12, 29/29, 12/15 and 17/23**. `events-webhook-delivery`
-is deliberately unwired: its rows need a callback the fixture can reach, and the only one available
-is loopback, which kitchen-sink accepts solely because a demo flag disables the SSRF checks.
-Building the suite surfaced twelve divergences in our own implementation. Six are closed by #1379,
-#1381 and #1416; the other six are #1425, and three of those are invisible to CI until the delivery
-scenario can run. It stays `INFO` until the spec text stabilises rather than because it is red.
-Detail in `conformance/NOTES.md` § MCP Events suite.
+`testconf-events` drives four of them, at **12/12, 29/29, 18/18 and 22/23**. The fixture is spawned
+with `--conformance-events`, which registers the diagnostic controls the scenarios drive; see
+`examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery` is deliberately unwired:
+its rows need a callback the fixture can reach, and the only one available is loopback, which
+kitchen-sink accepts solely because a demo flag disables the SSRF checks.
+
+Building the suite surfaced **thirteen divergences in our own implementation**, which is the whole
+argument for having one. Six closed by #1379, #1381 and #1416; five more by #1432, #1433 and #1434;
+the last is endpoint verification (#490). The set is tracked in #1425. The single remaining red row,
+`subscribe-auth-required`, is untestable rather than a defect. It stays `INFO` until the spec text
+stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
 
 **The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
 extensions map like everything else here (`io.modelcontextprotocol/events`), via
