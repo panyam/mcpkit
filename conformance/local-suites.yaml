@@ -158,23 +158,27 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      70 pass / 9 fail / 13 warn across four scenarios, measured 2026-09-23
-      against examples/events/kitchen-sink at 860a30d0 (hand-recorded from the
+      72 pass / 8 fail / 12 warn across four scenarios, measured 2026-09-24
+      against examples/events/kitchen-sink at 3845317e (hand-recorded from the
       runner's own summaries, so re-run before trusting it): events-discovery
-      12/12, events-poll 29/29, events-push 12/15, events-webhook 17/23. The
+      12/12, events-poll 29/29, events-push 14/16, events-webhook 17/23. The
+      fixture is spawned with --conformance-events, which registers the
+      diagnostic controls the push scenario fires and the poll-and-push-only
+      event type the webhook scenario probes; without it six rows describe
+      conditions a healthy server never produces and report untestable. The
       suite's fifth scenario, events-webhook-delivery, is deliberately not
       wired; see conformance/scripts/conf-events.sh for why, and issue 1425.
-      45 of the 135 requirement rows in src/seps/sep-9999.yaml are emitted.
       Proposed upstream as a draft in modelcontextprotocol/conformance 504 and
       tracked on the fork branch until it lands. INFO for two reasons. The
       suite scores against the design sketch in
       modelcontextprotocol/experimental-ext-triggers-events, which has no SEP
       number, so check IDs carry a placeholder sep-9999- prefix that gets
       renamed once one is reserved; the capability rows additionally track
-      upstream PR 7, which is unmerged. And the nine failures are ours: push
+      upstream PR 7, which is unmerged. And the failures are ours: push
       notifications carry no subscriptionId, events/subscribe accepts an
-      http:// callback and answers -32015 rather than -32602, and
-      events/unsubscribe reports success for a key that was never subscribed.
-      Tracked in 1425. 1380 closed the discovery and poll divergences, which is
-      why those two are now green.
+      http:// callback and answers -32015 rather than -32602, events/subscribe
+      also accepts a webhook subscription for an event type that does not
+      advertise webhook delivery, and events/unsubscribe reports success for a
+      key that was never subscribed. Tracked in 1425. 1380 closed the discovery
+      and poll divergences, which is why those two are green.
     tracking: "mcpkit 1374"
