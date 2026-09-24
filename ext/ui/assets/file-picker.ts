@@ -218,3 +218,19 @@ export async function selectFilesInternal(
   }
   return Promise.all(files.map((f) => readAsDataURI(f)));
 }
+
+/**
+ * Open a native file picker and resolve with the chosen file as an RFC 2397
+ * data URI (`data:<mediaType>;name=<pct-encoded>;base64,<payload>`), the form
+ * `core.DecodeDataURI` reads. Must be called from a user-gesture handler.
+ * Rejects with MCPFileSelectionCanceled, MCPFileTooLarge or
+ * MCPFileTypeNotAccepted.
+ */
+export function selectFile(descriptor?: FileInputDescriptor): Promise<string> {
+  return selectFilesInternal(descriptor, false).then((uris) => uris[0]);
+}
+
+/** Multi-select variant of selectFile, resolving in selection order. */
+export function selectFiles(descriptor?: FileInputDescriptor): Promise<string[]> {
+  return selectFilesInternal(descriptor, true);
+}

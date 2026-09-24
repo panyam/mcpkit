@@ -168,10 +168,39 @@ For the full runtime architecture (iframe nesting, postMessage relay details, wh
 
 | Asset | Purpose |
 |---|---|
-| `assets/mcp-app-bridge.ts` → compiled JS + `.d.ts` | TypeScript source for mcpkit's bridge — the JS library that runs inside your App iframe and exposes `mcp.callTool`, `mcp.readResource`, `mcp.sendMessage`, `mcp.sendLog`, `mcp.openLink`, `mcp.updateModelContext`, `mcp.requestDisplayMode`, `mcp.downloadFile`, `mcp.selectFile`/`selectFiles`. Spec-compatible with upstream's bridge. |
+| `assets/mcp-app-bridge.ts` → compiled JS + `.d.ts` | TypeScript source for mcpkit's bridge — the JS library that runs inside your App iframe and exposes `mcp.callTool`, `mcp.readResource`, `mcp.sendMessage`, `mcp.log`, `mcp.openLink`, `mcp.updateModelContext`, `mcp.requestDisplayMode`, `mcp.downloadFile`, `mcp.selectFile`/`selectFiles`. Spec-compatible with upstream's bridge. |
 | `BridgeTemplateDef()` + `BridgeData` | Go `html/template` integration — drop `{{ template "mcp-app-bridge" . }}` into your App HTML template to inject the bridge inline |
 | `ServeBridge()` (HTTP handler) | Serves the bridge JS at `/_mcpkit/mcp-app-bridge.js` for external `<script src>` loading |
 | `InjectAppBridge(html)` / `AppShellHTML(title, body)` | Convenience helpers for ad-hoc inline injection |
+
+### Extras on upstream's `App`
+
+The bridge is optional (see [Frontend independence](../../docs/APPS_DESIGN.md#frontend-independence)).
+A View built on upstream's `App` from `@modelcontextprotocol/ext-apps` can still use mcpkit's
+extras from `assets/mcp-app-extras.js`, an ES module with types in `mcp-app-extras.d.ts`. The
+bridge uses the same code.
+
+| Export | Purpose |
+|---|---|
+| `selectFile(descriptor)` / `selectFiles(descriptor)` | SEP-2356 file picker. Resolves to a data URI that `core.DecodeDataURI` reads. |
+| `withTraceRelay(transport, provider)` | SEP-414 trace relay. Stamps `_meta.traceparent` / `tracestate` onto every outbound request and notification, never overwriting values the caller set. |
+
+```ts
+import { App, PostMessageTransport } from "@modelcontextprotocol/ext-apps";
+import { selectFile, withTraceRelay } from "./mcp-app-extras.js";
+
+const app = new App({ name: "my-view", version: "1.0.0" });
+await app.connect(
+  withTraceRelay(new PostMessageTransport(window.parent, window.parent), () => ({
+    traceparent: currentTraceparent(),
+  })),
+);
+const photo = await selectFile({ accept: ["image/*"], maxSize: 5_000_000 });
+```
+
+`withTraceRelay` replaces `send` on the transport it is given and returns the same object, so wrap
+the transport before `connect`. The module is not published to npm yet, so vendor the built file or
+import the `.ts` source.
 
 ### Host-side helpers (for harness / agent-runner builders)
 

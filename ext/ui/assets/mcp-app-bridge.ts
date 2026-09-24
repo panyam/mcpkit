@@ -16,9 +16,15 @@
  */
 
 import {
-  selectFilesInternal,
+  selectFile,
+  selectFiles,
   type FileInputDescriptor,
 } from "./file-picker.js";
+import {
+  mergeTraceMeta,
+  resolveTraceContext,
+  type TraceContextProvider,
+} from "./trace-relay.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,28 +92,6 @@ interface RequestOptions {
   timeout?: number;
 }
 
-/**
- * Trace context returned by a TraceContextProvider — W3C Trace Context
- * (https://www.w3.org/TR/trace-context/) fields. Both are optional; an
- * absent traceparent disables propagation for this request.
- */
-interface TraceContext {
-  /** W3C traceparent header value (`00-<trace-id>-<span-id>-<flags>`). */
-  traceparent?: string;
-  /** W3C tracestate header value (vendor-specific key=value pairs). */
-  tracestate?: string;
-}
-
-/**
- * Function the bridge calls before sending each outbound request to
- * ask "should I stamp a traceparent on this?". Return null /
- * undefined / an empty traceparent to skip propagation.
- *
- * Typical adopter wiring: feed from your browser OTel SDK via
- * `propagation.inject({}, carrier)` or extract from the active span.
- * Demo wiring: return a fixed traceparent string.
- */
-type TraceContextProvider = () => TraceContext | null | undefined;
 
 /** Handler for incoming tool calls from the host. */
 type CallToolHandler = (params: {
@@ -370,61 +354,16 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
     send({ jsonrpc: "2.0", method, params: injectTraceContext(params) });
   }
 
-  // injectTraceContext stamps the active browser-side traceparent /
-  // tracestate onto params._meta if a TraceContextProvider is wired
-  // and returns a non-empty value. Caller-set values in
-  // params._meta.traceparent / _meta.tracestate are preserved
-  // verbatim (never clobbered) — matches Go-side
-  // core.InjectTraceContextIntoParams semantics so the boundary
-  // crossing stays bidirectionally symmetric.
-  //
-  // Params shape: only object params get the merge (matches MCP
-  // _meta convention). Non-object params (positional arrays,
-  // scalars) are returned as-is. Undefined / null params get
-  // upgraded to `{}` then merged so the relay works for tools that
-  // take no arguments.
+  // Stamps the provider's trace context onto params._meta (see
+  // trace-relay.ts for the merge rules, shared with withTraceRelay).
+  // Undefined params become {} even without a provider, which the bridge
+  // has always sent.
   function injectTraceContext(params: unknown): unknown {
-    if (!_traceContextProvider) {
+    const tc = resolveTraceContext(_traceContextProvider, "[MCPApp]");
+    if (!tc) {
       return params === undefined ? {} : params;
     }
-    let tc: TraceContext | null | undefined;
-    try {
-      tc = _traceContextProvider();
-    } catch (err) {
-      if (typeof console !== "undefined") {
-        console.warn("[MCPApp] traceContextProvider threw; skipping trace propagation:", err);
-      }
-      return params === undefined ? {} : params;
-    }
-    if (!tc || !tc.traceparent) {
-      return params === undefined ? {} : params;
-    }
-
-    let merged: Record<string, unknown>;
-    if (params === undefined || params === null) {
-      merged = {};
-    } else if (typeof params === "object" && !Array.isArray(params)) {
-      merged = { ...(params as Record<string, unknown>) };
-    } else {
-      // Non-object params don't get _meta; the propagation contract
-      // assumes the MCP convention. Return untouched.
-      return params;
-    }
-
-    const existingMeta = merged._meta;
-    const meta: Record<string, unknown> =
-      existingMeta && typeof existingMeta === "object" && !Array.isArray(existingMeta)
-        ? { ...(existingMeta as Record<string, unknown>) }
-        : {};
-
-    if (meta.traceparent === undefined && tc.traceparent) {
-      meta.traceparent = tc.traceparent;
-    }
-    if (meta.tracestate === undefined && tc.tracestate) {
-      meta.tracestate = tc.tracestate;
-    }
-    merged._meta = meta;
-    return merged;
+    return mergeTraceMeta(params, tc);
   }
 
   // --- Incoming message handler --------------------------------------------
@@ -900,7 +839,7 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
      * special-casing for browser-side encoding quirks.
      */
     selectFile(descriptor?: FileInputDescriptor): Promise<string> {
-      return selectFilesInternal(descriptor, false).then((uris) => uris[0]);
+      return selectFile(descriptor);
     },
 
     /**
@@ -908,7 +847,7 @@ type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse;
      * resolves with an array of data URIs in selection order.
      */
     selectFiles(descriptor?: FileInputDescriptor): Promise<string[]> {
-      return selectFilesInternal(descriptor, true);
+      return selectFiles(descriptor);
     },
 
     requestDisplayMode(mode: string, options?: RequestOptions): Promise<unknown> {

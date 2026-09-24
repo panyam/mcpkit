@@ -10,6 +10,13 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 ## [Unreleased]
 
 ### Added
+- **`ext/ui`: mcpkit's View extras work on upstream's `App`** (#1475).
+  `ext/ui/assets/mcp-app-extras.js` (ES module, types in `mcp-app-extras.d.ts`)
+  exports the SEP-2356 file picker (`selectFile`, `selectFiles`) and
+  `withTraceRelay(transport, provider)`, which stamps SEP-414 trace context onto
+  outbound requests and notifications of any MCP transport, including
+  upstream's `PostMessageTransport`. The bridge now uses the same modules, and
+  CI checks both bundles against their sources.
 - **`ext/ui`: `AppHost` answers the View's `ui/*` host requests itself** (#1456).
   `ui/open-link`, `ui/download-file`, `ui/message`, `ui/request-display-mode`
   and `ui/update-model-context` go to the `HostHandlers` passed with

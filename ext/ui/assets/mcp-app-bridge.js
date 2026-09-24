@@ -123,6 +123,43 @@
     }
     return Promise.all(files.map((f) => readAsDataURI(f)));
   }
+  function selectFile(descriptor) {
+    return selectFilesInternal(descriptor, false).then((uris) => uris[0]);
+  }
+  function selectFiles(descriptor) {
+    return selectFilesInternal(descriptor, true);
+  }
+
+  // trace-relay.ts
+  function resolveTraceContext(provider, logPrefix = "[mcpkit]") {
+    if (!provider) return null;
+    let tc;
+    try {
+      tc = provider();
+    } catch (err) {
+      if (typeof console !== "undefined") {
+        console.warn(logPrefix + " traceContextProvider threw; skipping trace propagation:", err);
+      }
+      return null;
+    }
+    return tc && tc.traceparent ? tc : null;
+  }
+  function mergeTraceMeta(params, tc) {
+    let merged;
+    if (params === void 0 || params === null) {
+      merged = {};
+    } else if (typeof params === "object" && !Array.isArray(params)) {
+      merged = { ...params };
+    } else {
+      return params;
+    }
+    const existing = merged._meta;
+    const meta = existing && typeof existing === "object" && !Array.isArray(existing) ? { ...existing } : {};
+    if (meta.traceparent === void 0 && tc.traceparent) meta.traceparent = tc.traceparent;
+    if (meta.tracestate === void 0 && tc.tracestate) meta.tracestate = tc.tracestate;
+    merged._meta = meta;
+    return merged;
+  }
 
   // mcp-app-bridge.ts
   (function() {
@@ -241,39 +278,11 @@
       send({ jsonrpc: "2.0", method, params: injectTraceContext(params) });
     }
     function injectTraceContext(params) {
-      if (!_traceContextProvider) {
+      const tc = resolveTraceContext(_traceContextProvider, "[MCPApp]");
+      if (!tc) {
         return params === void 0 ? {} : params;
       }
-      let tc;
-      try {
-        tc = _traceContextProvider();
-      } catch (err) {
-        if (typeof console !== "undefined") {
-          console.warn("[MCPApp] traceContextProvider threw; skipping trace propagation:", err);
-        }
-        return params === void 0 ? {} : params;
-      }
-      if (!tc || !tc.traceparent) {
-        return params === void 0 ? {} : params;
-      }
-      let merged;
-      if (params === void 0 || params === null) {
-        merged = {};
-      } else if (typeof params === "object" && !Array.isArray(params)) {
-        merged = { ...params };
-      } else {
-        return params;
-      }
-      const existingMeta = merged._meta;
-      const meta = existingMeta && typeof existingMeta === "object" && !Array.isArray(existingMeta) ? { ...existingMeta } : {};
-      if (meta.traceparent === void 0 && tc.traceparent) {
-        meta.traceparent = tc.traceparent;
-      }
-      if (meta.tracestate === void 0 && tc.tracestate) {
-        meta.tracestate = tc.tracestate;
-      }
-      merged._meta = meta;
-      return merged;
+      return mergeTraceMeta(params, tc);
     }
     function isJsonRpc(data) {
       return typeof data === "object" && data !== null && data.jsonrpc === "2.0";
@@ -640,14 +649,14 @@
        * special-casing for browser-side encoding quirks.
        */
       selectFile(descriptor) {
-        return selectFilesInternal(descriptor, false).then((uris) => uris[0]);
+        return selectFile(descriptor);
       },
       /**
        * Open a multi-select file picker. Same wire format as `selectFile`;
        * resolves with an array of data URIs in selection order.
        */
       selectFiles(descriptor) {
-        return selectFilesInternal(descriptor, true);
+        return selectFiles(descriptor);
       },
       requestDisplayMode(mode, options) {
         return request("ui/request-display-mode", { mode }, options);
