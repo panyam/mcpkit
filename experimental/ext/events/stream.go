@@ -66,6 +66,49 @@ type streamSubscribable interface {
 	Subscribe(ctx context.Context, opts SubscribeOpts) (<-chan SubscriberEvent, func(Event))
 }
 
+// streamMeta carries the parent events/stream request id under the SEP-2575
+// key, on every notifications/events/* frame the stream sends.
+//
+// The id is already on each frame as a top-level `requestId`, which is what the
+// design sketch's own examples show, and mcpkit shipped only that for months.
+// A client running two concurrent streams has no way to route from it, because
+// `requestId` is this extension's own spelling and nothing else in MCP reads
+// it; the `_meta` key is the one the rest of the protocol uses for exactly this
+// (core.MetaKeySubscriptionID, SEP-2575). Both are sent: the sketch shows
+// `requestId` and the rule names `_meta`.
+//
+// The id is passed through as a JSON value rather than a string, since JSON-RPC
+// permits a number or a string and re-encoding would change it.
+func streamMeta(id json.RawMessage) map[string]any {
+	if len(id) == 0 {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(id, &v); err != nil {
+		return nil
+	}
+	return map[string]any{core.MetaKeySubscriptionID: v}
+}
+
+// mergeStreamMeta adds the subscription id to an event's own `_meta` without
+// mutating it. The event's map belongs to the source and may be shared across
+// subscribers, so writing the per-stream id into it would leak one subscriber's
+// request id to every other one.
+func mergeStreamMeta(eventMeta map[string]any, id json.RawMessage) map[string]any {
+	sub := streamMeta(id)
+	if len(eventMeta) == 0 {
+		return sub
+	}
+	merged := make(map[string]any, len(eventMeta)+1)
+	for k, v := range eventMeta {
+		merged[k] = v
+	}
+	for k, v := range sub {
+		merged[k] = v
+	}
+	return merged
+}
+
 // activeNotifParams is the wire shape of notifications/events/active per
 // spec L240. Cursor is *string so cursorless sources serialize as null.
 // Truncated is omitted when false to match the spec example payload.
@@ -73,6 +116,7 @@ type activeNotifParams struct {
 	RequestID json.RawMessage `json:"requestId"`
 	Cursor    *string         `json:"cursor"`
 	Truncated bool            `json:"truncated,omitempty"`
+	Meta      map[string]any  `json:"_meta,omitempty"`
 }
 
 // eventNotifParams is the wire shape of notifications/events/event per
@@ -94,6 +138,7 @@ type eventNotifParams struct {
 type heartbeatNotifParams struct {
 	RequestID json.RawMessage `json:"requestId"`
 	Cursor    *string         `json:"cursor"`
+	Meta      map[string]any  `json:"_meta,omitempty"`
 }
 
 // errorNotifParams is the shared wire shape of notifications/events/error
@@ -104,6 +149,7 @@ type heartbeatNotifParams struct {
 type errorNotifParams struct {
 	RequestID json.RawMessage `json:"requestId"`
 	Error     errPayload      `json:"error"`
+	Meta      map[string]any  `json:"_meta,omitempty"`
 }
 
 // errPayload mirrors the JSON-RPC error object shape used in the
@@ -264,6 +310,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		ctx.Notify("notifications/events/active", activeNotifParams{
 			RequestID: id,
 			Cursor:    initialCursor,
+			Meta:      streamMeta(id),
 		})
 
 		// Lifecycle hooks for push (spec §"Server SDK Guidance" →
@@ -310,6 +357,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 					ctx.Notify("notifications/events/terminated", errorNotifParams{
 						RequestID: id,
 						Error:     errPayload{Code: se.Terminated.Code, Message: se.Terminated.Message, Data: se.Terminated.Data},
+						Meta:      streamMeta(id),
 					})
 					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
 				}
@@ -322,6 +370,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 					ctx.Notify("notifications/events/error", errorNotifParams{
 						RequestID: id,
 						Error:     errPayload{Code: se.Error.Code, Message: se.Error.Message, Data: se.Error.Data},
+						Meta:      streamMeta(id),
 					})
 					continue
 				}
@@ -339,6 +388,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 						RequestID: id,
 						Cursor:    c,
 						Truncated: true,
+						Meta:      streamMeta(id),
 					})
 					// Truncation usually rides a real delivery, and then the
 					// event frame below follows it. YieldGap sends the marker
@@ -357,7 +407,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 					Timestamp: se.Event.Timestamp,
 					Data:      se.Event.Data,
 					Cursor:    se.Event.Cursor,
-					Meta:      se.Event.Meta,
+					Meta:      mergeStreamMeta(se.Event.Meta, id),
 				})
 
 			case <-ticker.C:
@@ -369,6 +419,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				ctx.Notify("notifications/events/heartbeat", heartbeatNotifParams{
 					RequestID: id,
 					Cursor:    c,
+					Meta:      streamMeta(id),
 				})
 			}
 		}
