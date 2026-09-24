@@ -291,8 +291,8 @@ needs the harness's loopback receiver, so it grades the SSRF refusal first and t
 
 Building the suite surfaced **thirteen divergences in our own implementation**, which is the whole
 argument for having one. Six closed by #1379, #1381 and #1416; five more by #1432, #1433 and #1434;
-the last, endpoint verification, by #1444. The set is tracked in #1425. Both remaining red rows,
-`subscribe-auth-required` and push's `error-resource-exhausted`, are untestable rather than defects. It stays `INFO` until the spec text
+the last, endpoint verification, by #1444. The set is tracked in #1425. The single remaining red row,
+`subscribe-auth-required`, is untestable rather than a defect. It stays `INFO` until the spec text
 stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
 
 **The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
