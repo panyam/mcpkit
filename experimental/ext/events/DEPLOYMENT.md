@@ -83,10 +83,11 @@ The check runs inside `events/subscribe`, before the subscription is created, an
 | Challenge handshake | Server POSTs `{"type":"verification","challenge":"<nonce>"}`, signed and headed like a delivery. The endpoint must answer `2xx` with `{"challenge":"<nonce>"}`. | default |
 | Allowlist | Delivery URL matches an operator-configured pattern: same scheme and host, path prefix at a segment boundary. | `WithWebhookDeliveryAllowlist([]string{...})` |
 | Out-of-band | Your own registry says this principal already verified this URL, for example through a dashboard. | `WithPreVerifier(pv)`, `WithPreVerifiedDeliveryURL(principal, url)` |
+| Well-known document | The callback's `https` origin serves `/.well-known/mcp-webhook-receiver.json` listing the path prefixes that accept deliveries (`{"receivers": ["/hooks/"]}`), and the URL falls under one. Opt-in. | `WithWellKnownReceiverDocs()`; receivers publish with `events.WellKnownReceiverHandler(prefixes...)` |
 
 A handshake that reaches the endpoint but gets no correct echo fails the subscribe with `-32015 CallbackEndpointError`, `data.reason: "challenge_failed"`. One that cannot connect reports the connection category (`connection_refused`, `timeout`, `tls_error`). Nothing from the endpoint's response reaches the subscriber.
 
-Results are cached per `(principal, url)`, so refreshes and subscribes that differ only in `arguments` do not repeat the POST, and one principal's verification never covers another. The verification POST goes through the same SSRF-guarded client as deliveries and does not follow redirects. Allowlisted and pre-verified URLs skip the handshake but not the SSRF guard.
+Results are cached per `(principal, url)`, so refreshes and subscribes that differ only in `arguments` do not repeat the POST, and one principal's verification never covers another. The verification POST goes through the same SSRF-guarded client as deliveries and does not follow redirects. Allowlisted, pre-verified and well-known-covered URLs skip the handshake but not the SSRF guard.
 
 **What receivers have to do.** Answer the challenge, and be serving before calling `events/subscribe`, because the POST arrives while that call is in flight. `eventsclient.Receiver` and the Python `events_client.py` receiver answer automatically. A hand-rolled Go receiver can call `events.AnswerVerificationChallenge(w, body)` after checking the signature. A receiver that has not been told the secret yet should either accept unsigned challenges or learn the secret before subscribing; `eventsclient.SubscribeOptions.Secret` lets the caller choose it up front.
 
@@ -94,7 +95,9 @@ Results are cached per `(principal, url)`, so refreshes and subscribes that diff
 
 **Rate limiting.** Challenge POSTs to any one destination hostname are capped at `DefaultVerificationsPerHost` (60) a minute, as a token bucket with the same burst. Only real challenges count, so cache hits, allowlist matches and pre-verified URLs are free. A subscribe over budget fails with `-32013 ResourceExhausted`, `data.limit: "verifications_per_host"`. Tune it with `WithVerificationRateLimit(max, window)`; `WithVerificationRateLimit(0, 0)` turns it off. A gateway onboarding many tenants behind one host is the case to size it for.
 
-Not implemented yet: the receiver-published `/.well-known/mcp-webhook-receiver.json` path and asymmetric `v1a,` server signing.
+**Well-known documents.** Off unless you pass `WithWellKnownReceiverDocs()`, because it sends a request to every new callback origin and it is the part of the section most likely to change during SEP review. Only `https` origins count, since the document stands in for proof the receiver controls the origin. The fetch uses the same SSRF-guarded, no-redirect client, is capped at 64 KiB, and spends one token of the host's verification budget on a cache miss. Documents are cached per origin, honouring `Cache-Control: max-age` up to an hour (5 minutes without one), and an origin with no usable document is left alone for a minute. A missing, malformed, redirected or oversized document never fails a subscribe; the handshake decides instead. Publishing the document also tells anyone who fetches it where your endpoints are, which is the trade-off Svix raised; receivers that mind can rely on the handshake.
+
+Not implemented yet: asymmetric `v1a,` server signing (#1437, waiting on SEP-2127).
 
 ## Retry and backoff timing
 
