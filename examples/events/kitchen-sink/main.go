@@ -161,6 +161,13 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 	// fixture configuration rather than against the library.
 	if !conformanceEvents {
 		webhookOpts = append(webhookOpts, events.WithUnsafeWebhookAllowPlaintextCallbacks())
+	} else {
+		// The events-webhook scenario grades subscribe semantics against
+		// callbacks under a placeholder origin that never resolves, so
+		// endpoint verification would refuse every one of them. Allowlisting
+		// that single origin is spec path (b), the same thing an operator
+		// does for a known receiver; any other URL still gets the handshake.
+		webhookOpts = append(webhookOpts, events.WithWebhookDeliveryAllowlist(conformanceCallbackOrigins))
 	}
 	if tp != nil {
 		webhookOpts = append(webhookOpts, events.WithWebhookTracerProvider(tp))

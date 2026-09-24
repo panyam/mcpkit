@@ -264,6 +264,13 @@ What that costs, and what bit us while turning it on:
 - **The discord walkthrough had a success step aimed at `http://localhost:1/sink`.** No test runs
   walkthrough steps, so only running the demo found it. Run the affected demos by hand after touching
   subscribe; `make test-examples` is in no workflow (#1431).
+- **It emptied `events-webhook` for a day and nothing went red.** That scenario grades subscribe
+  semantics against callbacks under `https://conformance.invalid/mcp-events`, which never resolves,
+  so with verification on every subscribe failed and 26 of 28 rows went untestable (22/23 to 1).
+  `testconf-events` is `INFO`, so CI stayed green, and #1444 was checked against the one unwired
+  scenario rather than the four wired ones. kitchen-sink now allowlists that origin under
+  `--conformance-events`. Run `make testconf-events` after touching anything on the subscribe path;
+  an `INFO` suite only protects you if someone reads it.
 - **The conformance harness's probe callbacks answer every POST with their failure status**, the
   verification POST included, so the 410/413/retry/redirect rows in `events-webhook-delivery` went
   untestable once the handshake existed. That is a suite fix, not a library one: a probe should answer
