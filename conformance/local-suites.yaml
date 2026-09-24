@@ -158,12 +158,12 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      107 pass / 1 fail / 15 warn across five scenarios, measured 2026-09-24
-      against examples/events/kitchen-sink on the 1461 branch (hand-recorded
+      109 pass / 1 fail / 13 warn across five scenarios, measured 2026-09-24
+      against examples/events/kitchen-sink on the 1463 branch (hand-recorded
       from the runner's own summaries, so re-run before trusting it):
       events-discovery 12/12, events-poll 30/30, events-push 19/19,
-      events-webhook 25/26, events-webhook-delivery 21/21. The fixture is
-      spawned with --conformance-events, which registers ten diagnostic
+      events-webhook 25/26, events-webhook-delivery 23/23. The fixture is
+      spawned with --conformance-events, which registers twelve diagnostic
       controls the scenarios drive, including a restart that rebuilds the
       server over the same subscription store and one that permits the
       harness's loopback receiver past the callback guards after the SSRF rows

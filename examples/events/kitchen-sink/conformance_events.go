@@ -84,6 +84,15 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 	registerTenantControls(srv, y.webhooks)
 	registerCallbackOriginControl(srv, y.webhooks)
 	registerQuotaControl(srv, y.quota)
+	registerWebhookEnvelopeControls(srv, y.webhooks, func(name string) (string, bool) {
+		switch name {
+		case "chat.message":
+			return y.chat.Latest(), true
+		case "alert.fired":
+			return y.alert.Latest(), true
+		}
+		return "", false
+	})
 
 	srv.RegisterTool(core.ToolDef{
 		Name:        "events_conformance_yield_error",
@@ -269,6 +278,84 @@ func registerQuotaControl(srv *server.Server, quota *events.Quota) {
 			return core.ErrorResult(err.Error()), nil
 		}
 		return core.TextResult(string(out)), nil
+	})
+}
+
+// registerWebhookEnvelopeControls signal one webhook subscription, the
+// harness's own, with the two control envelopes it cannot otherwise provoke.
+//
+// YieldGap and YieldTerminated reach push streams only; a webhook subscriber
+// hears about a gap or an ending through WebhookRegistry.PostGap and
+// PostTerminated, which a source author calls per subscription. Nothing in
+// kitchen-sink does, so without these the envelope-gap and
+// envelope-terminated rows report untestable. They address one subscription
+// rather than an event type because no webhook type here is disposable:
+// ending chat.message or alert.fired for the rest of the process would break
+// whatever scenario runs next.
+//
+// latest supplies the fresh cursor a gap carries, the source's current
+// position for the subscription's event type.
+func registerWebhookEnvelopeControls(srv *server.Server, webhooks *events.WebhookRegistry, latest func(name string) (string, bool)) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"id": map[string]any{"type": "string", "description": "Subscription id, as events/subscribe returned it."},
+		},
+		"required":             []any{"id"},
+		"additionalProperties": false,
+	}
+	target := func(req core.ToolRequest) (events.WebhookTarget, error) {
+		var args struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(req.Arguments, &args); err != nil {
+			return events.WebhookTarget{}, fmt.Errorf("arguments: %w", err)
+		}
+		for _, t := range webhooks.Targets() {
+			if t.ID == args.ID {
+				return t, nil
+			}
+		}
+		return events.WebhookTarget{}, fmt.Errorf("no webhook subscription %q", args.ID)
+	}
+
+	srv.RegisterTool(core.ToolDef{
+		Name:        "events_conformance_webhook_gap",
+		Description: "Conformance control: send a {type:gap} envelope to one webhook subscription, carrying its event type's current cursor, and answer that cursor.",
+		InputSchema: schema,
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		t, err := target(req)
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		cursor, ok := latest(t.EventName)
+		if !ok {
+			return core.ErrorResult("no cursor source for event type " + t.EventName), nil
+		}
+		// The envelope's cursor is the position the client resumes from, and
+		// an empty source has none; PostGap would send the envelope without
+		// one. The feeders fill every source within seconds of startup.
+		if cursor == "" {
+			return core.ErrorResult("no cursor yet for " + t.EventName + ": nothing has been yielded, so a gap has no position to point at"), nil
+		}
+		webhooks.PostGap(t.CanonicalKey, cursor)
+		return core.TextResult(cursor), nil
+	})
+
+	srv.RegisterTool(core.ToolDef{
+		Name:        "events_conformance_webhook_terminate",
+		Description: "Conformance control: end one webhook subscription as a revoked authorization would, sending it {type:terminated} with -32012 and removing it.",
+		InputSchema: schema,
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		t, err := target(req)
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		webhooks.PostTerminated(t.CanonicalKey, events.ControlError{
+			Code:    events.ErrCodeForbidden,
+			Message: "conformance: authorization revoked",
+		})
+		return core.TextResult("ok: " + t.ID), nil
 	})
 }
 
