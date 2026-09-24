@@ -30,8 +30,14 @@ echo "Spawning fixture on :18101, scratch dir $OUT"
 # cadence, which is what gives the EventOccurrence checks something real to
 # grade; a silent fixture reports them untestable instead, which is correct but
 # tells us less.
+# --conformance-events registers the diagnostic control tools and the
+# poll-and-push-only event type. Without it several rows describe conditions a
+# healthy server never produces during a run — an upstream failure, a retention
+# gap, a delivery mode a type does not offer — and report untestable, which the
+# suite renders red. The flag is off by default because kitchen-sink is a
+# published example first; see examples/CONVENTIONS.md § Conformance fixtures.
 "${REPO_ROOT}/examples/events/kitchen-sink/kitchen-sink-events" \
-    --serve -addr=:18101 > "$OUT/server.log" 2>&1 &
+    --serve -addr=:18101 --conformance-events > "$OUT/server.log" 2>&1 &
 PID=$!
 for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -sf -o /dev/null -X OPTIONS http://localhost:18101/mcp && break
