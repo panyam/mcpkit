@@ -45,6 +45,11 @@ type conformanceYielders struct {
 	// poisons whatever runs after it. build.finished exists only under this
 	// flag, carries no feeder, and nothing else subscribes to it.
 	build *events.YieldingSource[BuildFinishedData]
+	// webhooks backs the tenant controls, which stand a subscription up on
+	// another principal's behalf. The harness authenticates as exactly one
+	// principal for a whole run, so without this the two-tenant case cannot be
+	// constructed at all.
+	webhooks *events.WebhookRegistry
 }
 
 // registerConformanceEventControls wires the diagnostic tools. Called only when
@@ -66,6 +71,8 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 			return nil, fmt.Errorf("no conformance control for event type %q (have chat.message, alert.fired, build.finished)", name)
 		}
 	}
+
+	registerTenantControls(srv, y.webhooks)
 
 	srv.RegisterTool(core.ToolDef{
 		Name:        "events_conformance_yield_error",
@@ -129,6 +136,92 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 		}
 		return core.TextResult("ok: " + name), nil
 	})
+}
+
+// registerTenantControls wires the two controls that need a second principal.
+//
+// sep-9999-subscribe-cross-tenant-isolation asserts that two tenants
+// subscribing to the same event with the same callback get distinct
+// subscriptions, because the principal is part of the key. A conformance run
+// holds one principal for its lifetime, so the harness can supply one side of
+// that comparison and not the other.
+//
+// Both controls use the same public identity functions the subscribe handler
+// does, so what they register is addressable by the registry exactly as a real
+// subscription would be. Nothing here bypasses the key rule; it supplies a
+// principal the harness cannot authenticate as.
+func registerTenantControls(srv *server.Server, webhooks *events.WebhookRegistry) {
+	srv.RegisterTool(core.ToolDef{
+		Name:        "events_conformance_subscribe_as",
+		Description: "Conformance control: register a webhook subscription on behalf of another principal, returning its derived subscription id. Lets a single-principal harness construct the two-tenant case.",
+		InputSchema: tenantSchema(),
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		args, err := tenantArgsOf(req)
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		key := events.CanonicalKey(args.Principal, args.URL, args.Name, nil)
+		id := events.DeriveSubscriptionID(key)
+		webhooks.Register(events.RegisterParams{
+			CanonicalKey: key,
+			DerivedID:    id,
+			URL:          args.URL,
+			Secret:       "whsec_Y29uZm9ybWFuY2UtdGVuYW50LWNvbnRyb2w",
+			EventName:    args.Name,
+			Principal:    args.Principal,
+		})
+		return core.TextResult(id), nil
+	})
+
+	srv.RegisterTool(core.ToolDef{
+		Name:        "events_conformance_subscription_exists",
+		Description: "Conformance control: report whether a subscription for the given principal, event type and callback is still registered. Lets the harness prove one tenant's unsubscribe left another tenant's subscription alone.",
+		InputSchema: tenantSchema(),
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		args, err := tenantArgsOf(req)
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		want := events.DeriveSubscriptionID(
+			events.CanonicalKey(args.Principal, args.URL, args.Name, nil),
+		)
+		for _, t := range webhooks.Targets() {
+			if t.ID == want {
+				return core.TextResult("true"), nil
+			}
+		}
+		return core.TextResult("false"), nil
+	})
+}
+
+func tenantSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"principal": map[string]any{"type": "string", "description": "Principal to act as."},
+			"name":      map[string]any{"type": "string", "description": "Event type."},
+			"url":       map[string]any{"type": "string", "description": "Callback URL."},
+		},
+		"required":             []any{"principal", "name", "url"},
+		"additionalProperties": false,
+	}
+}
+
+type tenantArgs struct {
+	Principal string `json:"principal"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+}
+
+func tenantArgsOf(req core.ToolRequest) (tenantArgs, error) {
+	var a tenantArgs
+	if err := json.Unmarshal(req.Arguments, &a); err != nil {
+		return a, fmt.Errorf("arguments: %w", err)
+	}
+	if a.Principal == "" || a.Name == "" || a.URL == "" {
+		return a, fmt.Errorf("principal, name and url are all required")
+	}
+	return a, nil
 }
 
 func eventNameSchema() map[string]any {
