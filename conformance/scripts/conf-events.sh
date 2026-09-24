@@ -44,21 +44,21 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.3
 done
 
-# Four of the suite's five scenarios. events-webhook-delivery is deliberately
-# absent: it needs a callback the fixture can reach, the harness serves one on
-# loopback, and kitchen-sink only accepts that because it sets
-# WithWebhookAllowPrivateNetworks(true) for `make demo`. Running it here would
-# park two SSRF rows permanently red for a reason that is fixture
-# configuration rather than a library defect, which is the kind of red people
-# learn to scroll past. Tracked separately.
-EVENTS_SCENARIOS="events-discovery events-poll events-push events-webhook"
+# All five scenarios. events-webhook-delivery needs the harness to be the
+# receiver, on loopback, which the fixture's SSRF guards refuse. The scenario
+# grades that refusal first, then calls events_conformance_allow_callback_origin
+# for its receiver's origin alone and subscribes again (#1457). Before that
+# control existed the scenario was left out, because the only way in was
+# lifting the guards wholesale, which parks the SSRF rows red.
+EVENTS_SCENARIOS="events-discovery events-poll events-push events-webhook events-webhook-delivery"
 RC=0
 for S in ${EVENTS_SCENARIOS}; do
     # events-push watches an idle heartbeat to grade the cadence rows, so it
     # needs longer than the runner's default or those rows report untestable.
-    # The others are request/response and finish in seconds.
+    # events-webhook-delivery waits out the server's retry schedule (~30s).
     TIMEOUT_ARGS=""
     [ "${S}" = "events-push" ] && TIMEOUT_ARGS="--timeout 60000"
+    [ "${S}" = "events-webhook-delivery" ] && TIMEOUT_ARGS="--timeout 90000"
     # shellcheck disable=SC2086 # deliberate word-splitting: empty means no flag
     (cd "${MCPCONFORMANCE_EVENTS_PATH}" && \
         node dist/index.js server \

@@ -622,6 +622,14 @@ type WebhookRegistry struct {
 	suspendThreshold        int               // consecutive failures → Active=false (spec §"Webhook Delivery Status" L460); default 5
 	suspendWindow           time.Duration     // sliding window over which failures accumulate; default 10min
 
+	// callbackOrigins holds origins permitted past both guards at run time
+	// by UnsafeAllowCallbackOrigins, keyed "scheme://host:port" with the port
+	// always explicit. callbackDialAddrs is the same set as the "host:port"
+	// the transport dials, since the dialer never sees a scheme.
+	callbackOriginsMu sync.RWMutex
+	callbackOrigins   map[string]struct{}
+	callbackDialAddrs map[string]struct{}
+
 	// onRemoveHooks fire when a target is actually removed from the
 	// registry (Unregister, TTL prune, PostTerminated). The SDK uses
 	// these to drive on_unsubscribe and quota release per spec
@@ -838,8 +846,12 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 // where the resolver and the dialer could see different addresses (DNS
 // rebinding); the address passed to Control is the exact one the
 // connect syscall will use.
+//
+// A dial to a host:port permitted by UnsafeAllowCallbackOrigins skips
+// Control entirely; that match is on the address before resolution.
 func (r *WebhookRegistry) dialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
-	dialer := &net.Dialer{
+	open := &net.Dialer{Timeout: DefaultWebhookAckTimeout}
+	guarded := &net.Dialer{
 		Timeout: DefaultWebhookAckTimeout,
 		Control: func(network, address string, _ syscall.RawConn) error {
 			if r.allowPrivateNetworks {
@@ -859,7 +871,12 @@ func (r *WebhookRegistry) dialContext() func(ctx context.Context, network, addr 
 			return nil
 		},
 	}
-	return dialer.DialContext
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if r.callbackDialAddrPermitted(addr) {
+			return open.DialContext(ctx, network, addr)
+		}
+		return guarded.DialContext(ctx, network, addr)
+	}
 }
 
 // isBlockedIP returns a non-empty reason string when ip falls in any of
@@ -1707,6 +1724,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 // ValidateWebhookURL is a fail-fast subscribe-time check on a webhook
 // callback URL. Rejects non-http(s) schemes and obvious loopback hostnames
 // unless the registry has WithWebhookAllowPrivateNetworks(true).
+// A URL under an origin passed to UnsafeAllowCallbackOrigins skips both checks.
 //
 // This is the SUBSCRIBE-time check, not the load-bearing one. The
 // authoritative SSRF guard is the dial-time check in dialContext, which
@@ -1718,6 +1736,9 @@ func (r *WebhookRegistry) ValidateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if r.callbackOriginPermitted(u) {
+		return nil
 	}
 	switch {
 	case u.Scheme == "https":
