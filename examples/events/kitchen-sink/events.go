@@ -160,8 +160,12 @@ func alertEventDef() events.EventDef {
 			"type": "object",
 			"properties": map[string]any{
 				"severity": map[string]any{
-					"type":        "string",
-					"enum":        []any{"info", "warning", "critical"},
+					"type": "string",
+					// The values the synthetic feeder actually emits
+					// (synthetic_alert.go). An enum invented from the field
+					// name rejects the example's own data, which is how this
+					// arrived broken.
+					"enum":        []any{"P1", "P2", "P3"},
 					"description": "Deliver only alerts at this severity. Omit for every severity.",
 				},
 				"redact_pii": map[string]any{

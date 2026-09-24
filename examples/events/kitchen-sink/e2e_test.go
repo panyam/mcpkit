@@ -19,7 +19,7 @@ import (
 
 func newTestStack(t *testing.T) (*httptest.Server, *wiredServer) {
 	t.Helper()
-	w := buildServer(":0", nil)
+	w := buildServer(":0", nil, false)
 	handler := w.srv.Handler(server.WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
