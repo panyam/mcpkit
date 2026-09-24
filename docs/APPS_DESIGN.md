@@ -4,7 +4,7 @@
 
 MCPKit adds support for the MCP Apps extension (`io.modelcontextprotocol/ui`), enabling servers to return interactive HTML user interfaces that render inline in host conversations (Claude, ChatGPT, VS Code Copilot, Goose, etc.). This document covers the architecture, protocol surface, edge cases, conformance strategy, and the slyds reference integration.
 
-MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `_meta.ui.resourceUri`, and resources serve the HTML content with MIME type `text/html;profile=mcp-app`. The interactive iframe↔host protocol (JSON-RPC over `postMessage`) is the host's responsibility; mcpkit's scope is the server-side metadata, resource serving, capability negotiation, and client-side detection.
+MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `_meta.ui.resourceUri`, and resources serve the HTML content with MIME type `text/html;profile=mcp-app`. The interactive iframe↔host protocol (JSON-RPC over `postMessage`) runs between the View and the host. mcpkit's core scope is the Go side of that picture: server-side metadata, resource serving and capability negotiation, plus a Go host runtime (`AppHost`). The View's JavaScript runtime is pluggable, as [Frontend independence](#frontend-independence) records.
 
 ## Design Principles
 
@@ -13,6 +13,35 @@ MCP Apps combines two existing MCP primitives. Tools declare a UI resource via `
 3. **Interface in core, implementation in sub-module** - core defines the `UIMetadata` struct and `_meta` plumbing. A future `mcpkit/ui` sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.
 4. **Follow the auth pattern** - `UIExtension` implements `ExtensionProvider`, registered via `WithExtension(ui.UIExtension{})`. Capability negotiation mirrors auth exactly.
 5. **Slyds as the reference app** - we validate every design decision against a real HTML slide deck editor served as an MCP App.
+6. **Any frontend** - the Go backend depends only on the wire protocol, never on a particular View runtime. See [Frontend independence](#frontend-independence).
+
+## Frontend independence
+
+*Decision recorded 2026-09-24. Status: accepted.*
+
+### Context
+
+An MCP App has three parts. The **server** declares app tools and serves `ui://` HTML. The **host** renders that HTML in a sandboxed iframe and relays JSON-RPC over `postMessage`. The **View** is the code inside the iframe, and it needs a small runtime to speak that protocol.
+
+Upstream publishes a View runtime, `App`, in [`@modelcontextprotocol/ext-apps`](https://github.com/modelcontextprotocol/ext-apps), with React bindings (`useApp`). mcpkit ships its own, the bridge in `ext/ui/assets/mcp-app-bridge.ts`. A review against ext-apps v2.0.1 found the bridge had drifted from the spec in several places while its tests stayed green (#1452, fixed in #1472), which raised the question of what the bridge is for.
+
+### Decision
+
+mcpkit's MCP Apps support is the **Go backend**: the server helpers in `ext/ui` (`RegisterAppTool`, `ui://` resources, `_meta.ui`) and the Go host runtime (`AppHost`, `ServerRegistry`). **Any View runtime that speaks the `2026-01-26` wire protocol works with it**, and the backend does nothing runtime-specific. Upstream's `App` is the recommended runtime for single-page and framework apps.
+
+The mcpkit bridge stays as an optional, additive runtime with a fixed scope:
+
+- **Wire conformance.** Every message it sends is checked against upstream's schemas in CI, so it cannot drift silently again.
+- **Zero build step.** It is one script that `ui.InjectAppBridge` drops into server-rendered HTML, such as a Go template, with no bundler.
+- **mcpkit extras.** The SEP-2356 file picker (`selectFile`) and SEP-414 trace-context relay. These are being packaged so they also work on top of upstream's `App` (#1475).
+
+It does **not** chase feature parity with upstream's `App`. When a View needs something upstream's runtime has and the bridge lacks, the answer is to use upstream's runtime, with mcpkit's extras added on if wanted.
+
+### Consequences
+
+- Nothing in the Go server path injects or assumes the bridge. `InjectAppBridge` and `AppShellHTML` are opt-in helpers. `examples/apps/compat/*` already serves upstream's own built Views from Go servers and passes upstream's Playwright suite. A showcase that serves one tool through upstream `App`, React `useApp` and the bridge from the same Go server is tracked in #1474.
+- Bridge work is limited to conformance fixes and the extras. Parity items were dropped from #1473.
+- On the host side, the same rule means `AppHost` has to accept a stock upstream View, which requires answering `ui/initialize` (#1454).
 
 ## Spec Reference
 
