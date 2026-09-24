@@ -237,7 +237,9 @@ These span packages and will bite on a task that never opens a routed doc.
   rate limit: `experimental/ext/events/DEPLOYMENT.md` § Endpoint verification.
 - **A regression in an `INFO` suite is invisible.** `testconf-events` fell from 22/23 to 1 for a day
   after #1444 and nothing went red (#1446). After touching a surface an `INFO` suite grades, run
-  that suite by hand, all of its wired scenarios rather than the one you had in mind.
+  that suite by hand, all of its wired scenarios rather than the one you had in mind. Run it through
+  `make testconf-*`, not `node dist/index.js` directly: only the make path rebuilds `dist/`, and a
+  stale build reports the previous suite's numbers with no warning.
 - **mcpkit does not paginate by default, anywhere.** `server/pagination.go` sets
   `defaultPageSize = 0` for tools, resources, templates and prompts, which `paginate` reads as
   "return everything, emit no cursor". `ext/skills` gained `WithSkillsListPageSize` and

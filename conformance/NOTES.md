@@ -46,6 +46,11 @@ guarding on `[ ! -f dist/index.js ]`. That guard cannot tell a fresh build from 
 a `git pull`, and it bit us: a `dist/` predating the conformance PR 468 merge kept reporting the
 issue 424 wire-schema failures that had already been fixed upstream.
 
+Running a scenario by hand (`node dist/index.js server --scenario …`) skips `build_conf_dist`
+entirely, so it grades whatever was last built. Twice in one session a hand run reported the numbers
+from before a suite commit, once as a missing row and once as a missing control. `npm run build`
+first, or grep `dist/index.js` for the new check id.
+
 **Two kinds of stale, and only one is auto-fixed.** Rebuilding `dist/` fixes a stale *build* of the
 checked-out commit. It does nothing about a stale *checkout*, where the worktree itself sits behind
 upstream and the whole suite is old. `require_conf_dir` therefore calls `conf_source_status`, which
@@ -336,6 +341,20 @@ PR 330:
 
 Both now have recorded negative controls in `server/skills/negative.test.ts`, which is the standing
 rule on this branch: never publish a check's numbers without watching it fail.
+
+The events suite found three more shapes of the same thing in one week (2026-09-24):
+
+- **A verdict drawn from an outcome two rules share.** `ssrf-reject-non-routable` passed on the
+  refusal of an `http://127.0.0.1` receiver, which the https rule produces on its own, so a server
+  with no routability check passed (#1460). A probe has to be one only the rule under test can
+  refuse, and here also needed a listener to tell a refusal from a dial that failed afterwards.
+- **A negative test asserting only `WARNING`.** An untestable row is also a `WARNING`, so a test for
+  "malformed envelope warns" passed against a scenario that never saw an envelope (#1463). Assert on
+  the graded body (`details.body`) as well as the status.
+- **A row graded in one scenario, against a target it does not apply to.**
+  `truncated-false-when-no-replay` was graded only by poll, whose target replays, so it read
+  `SKIPPED` while push broke the rule on every gap (#1468). A `SKIPPED` that nobody reads for the
+  reason is the same blind spot as a green one.
 
 ## What SEP-2640 delegates, and what that means for checks
 

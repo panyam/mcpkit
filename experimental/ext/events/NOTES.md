@@ -318,3 +318,25 @@ the size and status checks mattered; both fixtures now carry a valid document. W
 "falls back to X" test: make the bad input otherwise good, or the fallback proves nothing about the
 check it names.
 
+## Source signals reach webhooks through a registry hook (#1466, #1468)
+
+`YieldGap` and `YieldTerminated` used to fan out to push streams only. Webhook subscribers heard
+nothing, so a source that ended left its webhook subscriptions registered against a name that would
+never emit again. `Register` now installs a signal hook next to the emit hook (`wireLocked`), and the
+hook routes a gap to `PostGapByEventName` and termination to `TerminateByEventName`.
+
+Two things about it that are easy to break:
+
+- **The hook runs after `s.mu` is released.** `Latest()` takes the lock for read, and terminating
+  fires `onRemove` hooks (quota release) that must not run under the source's lock. `YieldTerminated`
+  lost its `defer` unlock for this reason.
+- **"No position" is decided on the wire, in both modes.** `PostGap` sends nothing for an empty
+  cursor, and the stream handler sends no fresh `active{truncated:true}` when `Latest()` is empty
+  or the source is cursorless. `SubscriberEvent.Truncated` itself is unchanged, since a custom
+  `Subscribe` consumer may still want to know events were lost.
+
+The tutorial's signal table had claimed for months that `YieldTerminated` already sent webhooks a
+`terminated` envelope "via `postTerminatedSilent`". It never did: that function is the suspend path.
+Nobody noticed because nothing exercised it; the conformance fixture reached webhooks per
+subscription instead. If a doc describes wiring, check it against the code before relying on it.
+

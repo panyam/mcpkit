@@ -1068,6 +1068,18 @@ When an example needs that surface, add it behind a **per-surface flag named
   belongs in the library, not behind a flag. `YieldGap` was added to
   `experimental/ext/events` for exactly this reason: the push path could report
   a retention gap but no source could trigger one.
+- **Signal one subscription when the real signal is type-wide.** Ending or
+  truncating an event type is one-shot for the life of the process, and the
+  scenarios share one fixture, so a control that terminates `chat.message`
+  breaks every scenario after it. The webhook envelope controls take a
+  subscription id and call `PostGap`/`PostTerminated` on that one target
+  (#1463). Where a type-wide control is unavoidable, give it a disposable type
+  (`build.finished`) nothing else subscribes to.
+- **Report configuration rather than set it.** When the suite only needs to know
+  where a limit is, a read-only control is enough: `events_conformance_quota`
+  answers the capped type and its cap, read back from the `Quota`, and the
+  suite provokes `-32013` itself (#1461). A setter would need library state to
+  be mutable at run time, which is a behaviour change dressed as a control.
 - **Keep the fixture and the demo the same binary.** `cmd/testserver` exists
   because `examples/mrtr` genuinely could not serve the fixtures, but a separate
   fixture means the thing conformance grades drifts from the thing people run.
