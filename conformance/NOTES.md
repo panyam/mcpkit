@@ -442,8 +442,20 @@ origin says nothing about revalidation.
 rule was live. `ssrf-reject-non-routable` still passed, because the suite grades it SUCCESS on any
 refusal of its `http://127.0.0.1` receiver, and that refusal was the scheme check's. The fixture now
 sets private networks only for the demo, and `TestConformanceEvents_RefusesNonRoutableHTTPSCallback`
-pins it. The suite still can't tell the two rules apart from one refusal; that belongs on the suite
-side.
+pins it. The suite couldn't tell the two rules apart from one refusal either, so #1460 gave
+`reject-non-routable` its own probe: an `https://127.0.0.1` callback aimed at a bare TCP listener
+that records whether the server connected. The https scheme takes the scheme rule out of it, and
+the listener separates a refusal from a dial that failed afterwards, which matters because a server
+that skips the check and then fails verification answers `-32015`, and that reads as a refusal.
+Turning private networks back on under `--conformance-events` now fails the row with exactly that
+message.
+
+**`error-resource-exhausted` needs a capped type named (#1461).** The push scenario used to grade
+`-32013` only inside its concurrency probe, three streams on one type, which also has to keep all
+three open for `stream-exempt-from-concurrency-cap`. On one type the two rows can't both pass, so
+kitchen-sink, which caps `chat.message` and not the push target, reported it untestable.
+`events_conformance_quota` answers `{"name":"chat.message","max":2}`, read back from the `Quota`,
+and the scenario opens streams on that type until it's refused.
 
 **Building it found six divergences in mcpkit**, which was the point. #1379 closed the
 `nextPollSeconds` rename, #1381 added `list_changed` and termination, and #1416 closes the rest.
