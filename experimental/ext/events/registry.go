@@ -383,17 +383,26 @@ func normalizeDelivery(declared []string, src EventSource, hasWebhooks bool) []s
 	return deriveDelivery(src, hasWebhooks)
 }
 
-// deriveDelivery reports the modes a source can actually serve. Poll is
-// unconditional because Poll is on the EventSource interface. Push needs the
-// optional Subscribe channel that registerStream requires. Webhook needs a
-// registry to deliver through and the same fanout push uses.
+// deriveDelivery reports the modes a source can actually serve.
+//
+// Poll is unconditional, because Poll is on the EventSource interface. Push
+// needs the optional Subscribe channel registerStream requires. Webhook needs
+// only a registry to deliver through: delivery goes out through the
+// WebhookRegistry rather than through the source, so a source with no Subscribe
+// channel is still perfectly deliverable.
+//
+// That last clause was wrong when this was written, nesting webhook inside the
+// streamSubscribable branch. Nothing noticed until events/subscribe started
+// enforcing the array, at which point every TypedSource in the test suite
+// began refusing webhook subscriptions it had always accepted. A derived value
+// is only as good as the derivation.
 func deriveDelivery(src EventSource, hasWebhooks bool) []string {
 	modes := []string{DeliveryModePoll.String()}
 	if _, ok := src.(streamSubscribable); ok {
 		modes = append(modes, DeliveryModePush.String())
-		if hasWebhooks {
-			modes = append(modes, DeliveryModeWebhook.String())
-		}
+	}
+	if hasWebhooks {
+		modes = append(modes, DeliveryModeWebhook.String())
 	}
 	return modes
 }

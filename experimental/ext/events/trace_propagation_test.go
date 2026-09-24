@@ -272,7 +272,7 @@ func TestHTTPSourceInject_NoTraceparent_NoStamp(t *testing.T) {
 // trace-relay tests (each tests the same outbound delivery shape).
 func newWebhookRegistryWithTarget(t *testing.T, receiverURL string) *WebhookRegistry {
 	t.Helper()
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	target := WebhookTarget{
 		EventName: "fake.event",
 		URL:       receiverURL,

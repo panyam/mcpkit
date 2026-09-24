@@ -384,6 +384,27 @@ func WithWebhookAllowPrivateNetworks(allow bool) WebhookOption {
 	}
 }
 
+// WithUnsafeWebhookAllowPlaintextCallbacks permits `http://` delivery URLs.
+//
+// The spec requires callback URLs to use https and requires servers to reject
+// anything else with -32602, because a plaintext callback carries the signed
+// payload, and the headers that authenticate it, in the clear. Default off.
+//
+// Split out from WithWebhookAllowPrivateNetworks, which used to imply it. The
+// two are different decisions that happened to travel together because the
+// demos want both: a receiver on loopback, reachable over http. Conflating them
+// meant a fixture that needed a local receiver silently also stopped enforcing
+// the scheme, and a conformance run against it reported "accepts plaintext
+// callbacks" as though it were a library defect rather than a demo setting.
+//
+// Unsafe-prefixed, like the other escape hatches here, because there is no
+// deployment where this is the right answer.
+func WithUnsafeWebhookAllowPlaintextCallbacks() WebhookOption {
+	return func(r *WebhookRegistry) {
+		r.allowPlaintextCallbacks = true
+	}
+}
+
 // WithWebhookExtraHeaders adds caller-supplied headers to every outbound
 // delivery POST. The map is set on the request BEFORE the signature /
 // X-MCP-Subscription-Id / traceparent / tracestate headers, so any caller
@@ -586,6 +607,7 @@ type WebhookRegistry struct {
 	// TTL"). Default is 72h; tune via WithNoExpiryFailureGCWindow.
 	noExpiryFailureGCWindow time.Duration
 	headerMode              WebhookHeaderMode
+	allowPlaintextCallbacks bool              // when true, http:// callbacks are accepted; the spec requires https (§"Webhook Security")
 	allowPrivateNetworks    bool              // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
 	extraHeaders            map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
 	maxBodyBytes            int               // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
@@ -1031,22 +1053,27 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 	return expiresAt, isNew
 }
 
-// Unregister removes a webhook subscription by canonical-tuple key.
-// No-op if no entry matches. Per spec §"Unsubscribing: events/unsubscribe"
+// Unregister removes a webhook subscription by canonical-tuple key and
+// reports whether one matched. Per spec §"Unsubscribing: events/unsubscribe"
 // L509, the derived id is not accepted as input — callers resolve via
 // the same canonical tuple they would for a subscribe.
+//
+// The bool matters to the handler, which must answer -32011 NotFound for a key
+// that was never subscribed: without it a client cannot tell a teardown from a
+// no-op, and a typo in the tuple reads as success.
 //
 // Fires onRemove hooks for the deleted target — explicit Unregister
 // gets the same on_unsubscribe lifecycle (spec §"Server SDK
 // Guidance" → "Unsubscribe timing by mode" L707) as TTL prune and
 // PostTerminated.
-func (r *WebhookRegistry) Unregister(canonicalKey []byte) {
+func (r *WebhookRegistry) Unregister(canonicalKey []byte) bool {
 	r.mu.Lock()
 	resp, _ := r.store.DeleteWebhook(context.Background(), DeleteWebhookRequest{CanonicalKey: canonicalKey})
 	r.mu.Unlock()
 	if resp.Found {
 		r.fireOnRemove(resp.Removed)
 	}
+	return resp.Found
 }
 
 // Targets returns a snapshot of all non-expired AND non-suspended
@@ -1618,8 +1645,13 @@ func (r *WebhookRegistry) ValidateWebhookURL(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("unsupported scheme %q (must be http or https)", u.Scheme)
+	switch {
+	case u.Scheme == "https":
+	case u.Scheme == "http" && r.allowPlaintextCallbacks:
+	case u.Scheme == "http":
+		return fmt.Errorf("delivery.url must use https (got http); set WithUnsafeWebhookAllowPlaintextCallbacks() for demos")
+	default:
+		return fmt.Errorf("unsupported scheme %q (delivery.url must use https)", u.Scheme)
 	}
 	if r.allowPrivateNetworks {
 		return nil

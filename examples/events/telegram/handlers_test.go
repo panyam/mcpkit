@@ -81,7 +81,7 @@ type pollResult struct {
 // end-to-end against the YieldingSource path. Two pages of 5 cover all 10.
 func TestEventsPollCursorPagination(t *testing.T) {
 	source, _ := preloadedSource(10)
-	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
 	// Flat events/poll request shape per spec §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
@@ -116,7 +116,7 @@ func TestEventsPollCursorPagination(t *testing.T) {
 // and a stable cursor — sanity check for the no-data case.
 func TestEventsPollEmptyStore(t *testing.T) {
 	source, _ := newTelegramSource()
-	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
 	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "telegram.message",
@@ -137,7 +137,7 @@ func TestEventsPollEmptyStore(t *testing.T) {
 // Single-sub call, single-sub response, single-sub error path.
 func TestEventsPollUnknownEvent(t *testing.T) {
 	source, _ := newTelegramSource()
-	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
 	_, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "nonexistent.event",
@@ -153,7 +153,7 @@ func TestEventsPollUnknownEvent(t *testing.T) {
 // typed payloads from the YieldingSource — no separate buffer involved.
 func TestResourceRecentMessages(t *testing.T) {
 	source, _ := preloadedSource(3)
-	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
 	text, err := c.ReadResource(t.Context(), "telegram://messages/recent")
 	require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestResourceRecentMessages(t *testing.T) {
 // {cursor} to the matching event payload. Cursor is the addressing scheme.
 func TestResourceMessageByCursor(t *testing.T) {
 	source, _ := preloadedSource(3)
-	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
 	text, err := c.ReadResource(t.Context(), "telegram://message/2")
 	require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 
 	webhooks := events.NewWebhookRegistry(
 		events.WithWebhookHeaderMode(events.MCPHeaders),
-		events.WithWebhookAllowPrivateNetworks(true), // httptest is loopback; bypass SSRF dial guard
+		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(), // httptest is loopback; bypass SSRF dial guard
 	)
 	// Direct registry poke (skip the JSON-RPC subscribe handler).
 	// Register is keyed on canonical-tuple bytes (spec §"Subscription
@@ -242,7 +242,7 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 // result. Critical for clients deciding whether to poll again immediately.
 func TestEventsPollHasMore(t *testing.T) {
 	source, _ := preloadedSource(5)
-	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true)))
+	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
 	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
@@ -274,7 +274,7 @@ func TestEventsPollHasMore(t *testing.T) {
 // refresh.
 func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	source, _ := newTelegramSource()
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	c, _ := newConnectedClient(t, source, webhooks)
 
 	result, err := c.Call(t.Context(), "events/subscribe", map[string]any{
@@ -307,7 +307,7 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 // (§"Subscription Identity" → "Cross-tenant isolation" L378) at
 // the registry level.
 func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	keyA := []byte("alice\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
 	keyB := []byte("bob\x1fhttp://example.com/hook\x1ftelegram.message\x1f{}")
 	webhooks.Register(events.RegisterParams{CanonicalKey: keyA, DerivedID: "sub_alice", URL: "http://example.com/hook", Secret: "whsec_secret-1", MaxAgeMs: 0})
@@ -325,7 +325,7 @@ func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 // TestWebhookTTLExpiry verifies the test-helper ExpireAll path does what
 // it claims — used by other tests that exercise post-TTL behavior.
 func TestWebhookTTLExpiry(t *testing.T) {
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("exp-test"), DerivedID: "sub_exp", URL: "http://example.com/hook", Secret: "whsec_secret", MaxAgeMs: 0})
 	assert.Len(t, webhooks.Targets(), 1)
 
@@ -352,7 +352,7 @@ func TestWebhookRetryOnServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("retry-test"), DerivedID: "sub_retry", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	event := events.MakeEvent("telegram.message", "evt_retry", "1", time.Now(),
@@ -380,7 +380,7 @@ func TestWebhookNoRetryOn4xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("no-retry"), DerivedID: "sub_no_retry", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	event := events.MakeEvent("telegram.message", "evt_4xx", "1", time.Now(),

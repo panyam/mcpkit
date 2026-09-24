@@ -60,7 +60,7 @@ func registerNoExpiryTarget(t *testing.T, r *WebhookRegistry, principal, eventNa
 // the spec's "MAY drop after sustained delivery failure" path.
 func TestFailureGC_NoExpiry_DropsAfterContinuousFailureWindow(t *testing.T) {
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithAllowInfiniteWebhookTTL(),
 		WithNoExpiryFailureGCWindow(50*time.Millisecond),
 	)
@@ -108,7 +108,7 @@ func TestFailureGC_NoExpiry_DropsAfterContinuousFailureWindow(t *testing.T) {
 // suspended by the existing suspend-threshold path, but not dropped).
 func TestFailureGC_NoExpiry_DoesNotDropWhileWindowNotElapsed(t *testing.T) {
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithAllowInfiniteWebhookTTL(),
 		WithNoExpiryFailureGCWindow(10*time.Second), // not going to elapse during this test
 	)
@@ -137,7 +137,7 @@ func TestFailureGC_NoExpiry_DoesNotDropWhileWindowNotElapsed(t *testing.T) {
 // dropped. Its backstop is TTL expiry, not failure-based GC.
 func TestFailureGC_FiniteSub_NotAffectedByGCPath(t *testing.T) {
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithNoExpiryFailureGCWindow(50*time.Millisecond),
 	)
 	recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -174,7 +174,7 @@ func TestFailureGC_FiniteSub_NotAffectedByGCPath(t *testing.T) {
 // delivery resets the GC clock so the next failure starts a fresh
 // continuous run.
 func TestFailingContinuouslySince_ClearedOnSuccess(t *testing.T) {
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -183,7 +183,7 @@ func TestFailingContinuouslySince_ClearedOnSuccess(t *testing.T) {
 	key := gcTestKey(t, "alice", "fake.event", recv.URL)
 	_, _ = r.Register(RegisterParams{
 		CanonicalKey: key, DerivedID: "sub_ok", URL: recv.URL,
-		Secret: "whsec_" + strings.Repeat("a", 32),
+		Secret:    "whsec_" + strings.Repeat("a", 32),
 		EventName: "fake.event", Principal: "alice",
 	})
 
@@ -205,7 +205,7 @@ func TestFailingContinuouslySince_ClearedOnSuccess(t *testing.T) {
 // not "failing within a recent window."
 func TestFailingContinuouslySince_NotResetBySlidingWindow(t *testing.T) {
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookSuspendWindow(50*time.Millisecond),
 	)
 	recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -216,7 +216,7 @@ func TestFailingContinuouslySince_NotResetBySlidingWindow(t *testing.T) {
 	key := gcTestKey(t, "alice", "fake.event", recv.URL)
 	_, _ = r.Register(RegisterParams{
 		CanonicalKey: key, DerivedID: "sub_window", URL: recv.URL,
-		Secret: "whsec_" + strings.Repeat("a", 32),
+		Secret:    "whsec_" + strings.Repeat("a", 32),
 		EventName: "fake.event", Principal: "alice",
 	})
 

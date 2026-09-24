@@ -69,7 +69,7 @@ func buildTenantTestStack(t *testing.T) (*httptest.Server, *events.HTTPSource[Ch
 		YieldingOpts: []events.YieldingOption{events.WithoutCursors()},
 	})
 
-	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true))
+	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 
 	srv := server.NewServer(
 		core.ServerInfo{Name: "whole-enchilada-tenant-test", Version: "0.1.0"},

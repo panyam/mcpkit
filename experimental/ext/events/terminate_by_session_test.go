@@ -35,7 +35,7 @@ func TestTerminateBySession_KillsMatchingSubscriptionsAndPosts(t *testing.T) {
 	defer srvA2.Close()
 	defer srvB.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 
 	// Two subscriptions tied to session-alice, one to session-bob.
 	register := func(principal, sub, sid, url string) {
@@ -99,7 +99,7 @@ func TestTerminateBySession_EmptySidIsNoop(t *testing.T) {
 	srv := httptest.NewServer(recv.handler())
 	defer srv.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	canonical := canonicalKey("anon", srv.URL, "fake.event", nil)
 	r.Register(RegisterParams{
 		CanonicalKey: canonical,
@@ -132,7 +132,7 @@ func TestTerminateBySubject_KillsAllSessionsForSubject(t *testing.T) {
 	defer srv2.Close()
 	defer srvOther.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	register := func(sub, sid, url string) {
 		canonical := canonicalKey("tenant-a/"+sub, url, "fake.event", nil)
 		r.Register(RegisterParams{

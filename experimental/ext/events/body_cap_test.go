@@ -39,7 +39,7 @@ func TestDelivery_OversizedEventNotPosted(t *testing.T) {
 
 	// 1 KiB cap so we don't allocate a 256 KiB+ blob in the test process.
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookMaxBodyBytes(1024),
 	)
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
@@ -70,7 +70,7 @@ func TestDelivery_OversizedEventLogged(t *testing.T) {
 
 	logCap := &captureLog{}
 	r := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookMaxBodyBytes(1024),
 	)
 	logCap.attach(r)
@@ -110,7 +110,7 @@ func TestDelivery_413NotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	r.Register(RegisterParams{CanonicalKey: []byte("k"), DerivedID: "sub_test", URL: srv.URL, Secret: "whsec_secret", MaxAgeMs: 0})
 
 	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_413", "1", time.Now(),

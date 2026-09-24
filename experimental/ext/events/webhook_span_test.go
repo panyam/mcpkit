@@ -116,7 +116,7 @@ func TestWebhookDeliver_EmitsSpanWithAttributes(t *testing.T) {
 
 	tp := &fakeTP{}
 	wh := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookTracerProvider(tp),
 	)
 	registerTestTarget(t, wh, receiver.URL)
@@ -158,7 +158,7 @@ func TestWebhookDeliver_RetriesExhausted_RecordsError(t *testing.T) {
 
 	tp := &fakeTP{}
 	wh := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
 		WithWebhookTracerProvider(tp),
 	)
 	registerTestTarget(t, wh, receiver.URL)
@@ -191,7 +191,7 @@ func TestWebhookDeliver_NoTracerProvider_NoSpan(t *testing.T) {
 	}))
 	defer receiver.Close()
 
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	registerTestTarget(t, wh, receiver.URL)
 
 	// Drive a delivery; the Noop StartSpan returns a no-op Span; should

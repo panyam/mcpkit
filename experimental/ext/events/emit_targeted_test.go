@@ -220,7 +220,7 @@ func TestEmitToSubscription_Webhook_RoutesToOneTarget(t *testing.T) {
 		Delivery:    []string{"webhook"},
 	})
 	idx := NewSubscriptionIndex()
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -315,7 +315,7 @@ func TestEmitToSubscription_Webhook_RefreshKeepsSameID(t *testing.T) {
 		Delivery:    []string{"webhook"},
 	})
 	idx := NewSubscriptionIndex()
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true))
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	Register(Config{
 		Sources:                  []EventSource{src},

@@ -74,7 +74,7 @@ func serve() {
 		// dial-time SSRF guard would block. Production deployments leave
 		// this OFF so loopback/private-IP webhook URLs are rejected at
 		// dial per spec §"Webhook Security" → "SSRF prevention" L464.
-		events.WithWebhookAllowPrivateNetworks(true),
+		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 	}
 	if *whTTL > 0 {
 		whOpts = append(whOpts, events.WithWebhookTTL(*whTTL))

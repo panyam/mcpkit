@@ -192,7 +192,7 @@ func TestRefreshBefore_WireShape_NullSerialisesAsJSONNull(t *testing.T) {
 // register a no-expiry target with a stale ExpiresAt sentinel (nil),
 // fire pruneExpiredLocked, assert the target survives.
 func TestPruneLoop_SkipsNoExpiryTargets(t *testing.T) {
-	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithAllowInfiniteWebhookTTL())
+	r := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithAllowInfiniteWebhookTTL())
 
 	// Register one no-expiry + one finite-but-expired target.
 	noExpiryKey := canonicalKey("alice", "https://no.expiry.test/wh", "fake.event", nil)
@@ -297,7 +297,7 @@ func TestNegotiateExpiry_DirectMatrix(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := []WebhookOption{WithWebhookAllowPrivateNetworks(true)}
+			opts := []WebhookOption{WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks()}
 			if tc.allowInfTTL {
 				opts = append(opts, WithAllowInfiniteWebhookTTL())
 			}
