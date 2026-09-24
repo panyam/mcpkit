@@ -54,20 +54,26 @@ webhooks, err := gormstore.NewWebhookStore(db, gormstore.WithoutAutoMigrate())
 
 ```sql
 CREATE TABLE webhooks (
-    canonical_key            BYTEA PRIMARY KEY,
-    id                       TEXT NOT NULL,
-    url                      TEXT NOT NULL,
-    secret                   TEXT NOT NULL,
-    expires_at               TIMESTAMPTZ NOT NULL,
-    max_age_seconds          BIGINT NOT NULL,
-    event_name               TEXT NOT NULL,
-    principal                TEXT NOT NULL,
-    params                   JSONB,
-    status_active            BOOLEAN NOT NULL,
-    status_last_delivery_at  TIMESTAMPTZ,
-    status_last_error        TEXT NOT NULL,
-    status_failed_since      TIMESTAMPTZ,
-    failure_count            BIGINT NOT NULL
+    canonical_key                      BYTEA PRIMARY KEY,
+    id                                 TEXT NOT NULL,
+    url                                TEXT NOT NULL,
+    secret                             TEXT NOT NULL,
+    expires_at                         TIMESTAMPTZ,              -- NULL = no-expiry grant
+    max_age_ms                         BIGINT NOT NULL,
+    event_name                         TEXT NOT NULL,
+    principal                          TEXT NOT NULL,
+    arguments                          JSONB,
+    subject                            TEXT NOT NULL DEFAULT '', -- OAuth sub, for backchannel logout
+    session_id                         TEXT NOT NULL DEFAULT '', -- OIDC sid, for backchannel logout
+    status_active                      BOOLEAN NOT NULL,
+    status_last_delivery_at            TIMESTAMPTZ,
+    status_last_error                  TEXT NOT NULL,
+    status_failed_since                TIMESTAMPTZ,
+    status_throttled                   BOOLEAN NOT NULL,
+    status_retry_after_ms              BIGINT,
+    status_failing_continuously_since  TIMESTAMPTZ,
+    failure_count                      BIGINT NOT NULL,
+    verified_at                        TIMESTAMPTZ               -- NULL = endpoint verification skipped
 );
 CREATE INDEX idx_webhooks_principal_event ON webhooks(principal, event_name);
 

@@ -1013,20 +1013,26 @@ _, err := sc.ReadAndVerify(ctx.Ctx, uriRefundsManifest, "sha256:"+strings.Repeat
 			return nil
 		})
 
-	demo.Step("Reject a cross-origin resource scheme (threat model T5)").
-		Note("Skill URIs must use the skill:// scheme. A file:// (or any other-scheme) URI, the threat model's adv-file-url, is rejected by ParseURI with ErrInvalidScheme, so a skill can't redirect a host into reading local files. Anchor: threat model T5 (adv-file-url).").
+	demo.Step("Reject a cross-origin reference from inside a skill (threat model T5)").
+		Note("SEP-2640 privileges no scheme, so ParseURI accepts a skill served as github:// or anything else. The threat model's adv-file-url, a skill steering the host into reading a local file, is stopped at resolution instead: ResolveRelative refuses any reference that carries its own scheme or authority, so file:///etc/passwd written inside a skill fails with ErrRelativeEscapesSkill before anything is fetched. Anchor: threat model T5 (adv-file-url).").
 		VerbatimVariants("Reproduce in Go",
-			demokit.MakeVariant("go", "go", `_, err := skills.ParseURI("file:///etc/passwd")   // -> ErrInvalidScheme`),
+			demokit.MakeVariant("go", "go", `root, _ := skills.ParseURI(uriRefundsManifest)
+_, err := skills.ResolveRelative(root, "file:///etc/passwd")   // -> ErrRelativeEscapesSkill`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
-			_, err := skills.ParseURI("file:///etc/passwd")
-			reportGuard(errors.Is(err, skills.ErrInvalidScheme), err,
-				"file:///etc/passwd → ErrInvalidScheme")
+			root, err := skills.ParseURI(uriRefundsManifest)
+			if err != nil {
+				reportGuard(false, err, "parse the refunds manifest URI")
+				return nil
+			}
+			_, err = skills.ResolveRelative(root, "file:///etc/passwd")
+			reportGuard(errors.Is(err, skills.ErrRelativeEscapesSkill), err,
+				"file:///etc/passwd from inside a skill → ErrRelativeEscapesSkill")
 			return nil
 		})
 
 	demo.Section("Wrap-up",
-		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, scheme rejection). The same client code paths served both distribution modes; only the URI shape and the post-fetch unpack step differ.",
+		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, cross-origin reference rejection). The same client code paths served both distribution modes; only the URI shape and the post-fetch unpack step differ.",
 	)
 
 	_ = serverInfo

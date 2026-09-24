@@ -186,3 +186,33 @@ func TestWebhookStore_VerifiedAtRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// Backchannel logout matches a revoked session to its subscriptions by
+// these two fields without asking the AS again, so a subscription
+// restored after a restart must still carry them.
+func TestWebhookStore_SubjectAndSessionIDRoundTrip(t *testing.T) {
+	for _, bk := range backends(t) {
+		bk := bk
+		t.Run(bk.name, func(t *testing.T) {
+			store := bk.newWebhookStore(t)
+			ctx := context.Background()
+
+			target := mkTarget([]byte("ck-bcl"), "tenant/alice", "chat.message")
+			target.Subject = "alice"
+			target.SessionID = "sid-123"
+			_, err := store.SaveWebhook(ctx, events.SaveWebhookRequest{Target: target})
+			require.NoError(t, err)
+
+			got, err := store.GetWebhook(ctx, events.GetWebhookRequest{CanonicalKey: target.CanonicalKey})
+			require.NoError(t, err)
+			assert.Equal(t, "alice", got.Target.Subject)
+			assert.Equal(t, "sid-123", got.Target.SessionID)
+
+			list, err := store.ListWebhooks(ctx, events.ListWebhooksRequest{})
+			require.NoError(t, err)
+			require.Len(t, list.Targets, 1)
+			assert.Equal(t, "alice", list.Targets[0].Subject)
+			assert.Equal(t, "sid-123", list.Targets[0].SessionID)
+		})
+	}
+}

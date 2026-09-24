@@ -49,9 +49,15 @@ template is in `examples/CONVENTIONS.md`.
 `examples/skills` ships a SEP-2640 security/conformance harness (`security_demo.go`). `make
 security` (`--security`) runs the host-side defenses over the fixture against an in-process
 server, covering progressive disclosure, supporting-file digest (`ErrDigestMismatch` /
-`ErrSupportingFileUnpinned`), resource byte budget (`ErrResourceTooLarge`), `file://` scheme
-rejection (`ErrInvalidScheme`), with each step printing its SEP/threat-model anchor plus PASS/REJECT.
-It doubles as `TestSecurityDemo` in CI.
+`ErrSupportingFileUnpinned`), resource byte budget (`ErrResourceTooLarge`), and a `file://`
+reference from inside a skill (`ErrRelativeEscapesSkill`), with each step printing its
+SEP/threat-model anchor plus PASS/REJECT. It doubles as `TestSecurityDemo`, though only when the
+example's tests are run, which no workflow does yet (#1431).
+
+That last step used to assert `ParseURI("file:///etc/passwd")` fails with `ErrInvalidScheme`.
+`a65dc274` made `ParseURI` accept any scheme, correctly, since SEP-2640 privileges none, and the
+step sat red on main unnoticed for two weeks (#1442). The T5 defense is at resolution:
+`ResolveRelative` refuses a reference carrying its own scheme or authority.
 
 **Two surfaces by design**: the `--security` harness owns its in-process server so it can stage a
 real post-listing on-disk tamper. The walkthrough runs against the external `make serve`, so its

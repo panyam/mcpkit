@@ -37,6 +37,15 @@ type webhookRow struct {
 	EventName string         `gorm:"not null;index:idx_webhooks_principal_event"`
 	Principal string         `gorm:"not null;index:idx_webhooks_principal_event"`
 	Arguments map[string]any `gorm:"serializer:json"` // column renamed from params: spec PR1 commit 082166f0
+	// Subject and SessionID mirror the OAuth sub / OIDC sid stamped on
+	// events.WebhookTarget, which backchannel logout (issue 709) matches
+	// against without asking the AS again. Without them a subscription
+	// restored after a restart survives a revoked session (#1441). The
+	// '' default is safe despite the note above: the zero value and the
+	// default are the same, and it lets AutoMigrate add the columns to a
+	// populated table.
+	Subject   string `gorm:"not null;default:''"`
+	SessionID string `gorm:"not null;default:''"`
 	// DeliveryStatus flattened — kept queryable, ordering preserved with
 	// the events.DeliveryStatus struct definition.
 	//
@@ -75,6 +84,8 @@ func rowFromTarget(t events.WebhookTarget) webhookRow {
 		EventName:                      t.EventName,
 		Principal:                      t.Principal,
 		Arguments:                      t.Arguments,
+		Subject:                        t.Subject,
+		SessionID:                      t.SessionID,
 		StatusActive:                   t.Status.Active,
 		StatusLastDeliveryAt:           t.Status.LastDeliveryAt,
 		StatusLastError:                string(t.Status.LastError),
@@ -98,6 +109,8 @@ func targetFromRow(r webhookRow) events.WebhookTarget {
 		EventName:    r.EventName,
 		Principal:    r.Principal,
 		Arguments:    r.Arguments,
+		Subject:      r.Subject,
+		SessionID:    r.SessionID,
 		Status: events.DeliveryStatus{
 			Active:                   r.StatusActive,
 			LastDeliveryAt:           r.StatusLastDeliveryAt,
