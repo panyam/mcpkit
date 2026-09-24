@@ -193,3 +193,38 @@ future producers rather than the thing the conformance check exercises.
 because the one source a client could not poll was never a selection candidate; giving
 `events.topology` a delivery array made the order load-bearing and conformance scenarios began
 picking a different event type per run. Same bug as #1408 on the apps bridge, now constraint C10.
+
+## Endpoint verification runs inside subscribe (#490)
+
+The handshake is synchronous. The spec says a failed one "yields `-32015`" and that the categories
+appear "as `data.reason` on a `-32015 CallbackEndpointError` returned synchronously from
+`events/subscribe`", so the error has to come back on that call. The asynchronous alternative (register
+inactive, verify in the background, report through `deliveryStatus`) would need a pending state the
+registry does not have, and a failure would only surface on the next refresh.
+
+What that costs, and what bit us while turning it on:
+
+- **The receiver must be serving before it subscribes.** `examples/whole-enchilada/events/webhook`
+  bound its listener, subscribed, and only then called `Serve`. The TCP connect succeeds against the
+  backlog and the handshake then waits out the 5 s client timeout. It now generates the secret, starts
+  serving, and subscribes with `SubscribeOptions.Secret`.
+- **A receiver that learns the secret after subscribe returns cannot verify the challenge.**
+  `eventsclient.Receiver` constructed with `""` accepts anything, which is why the
+  `NewReceiver("")` then `SetSecret(sub.Secret())` pattern in the demos still works. One constructed
+  with a fixed secret the subscription does not use now refuses the challenge, correctly.
+- **Default-on broke 41 package tests and every example e2e test**, none of them about verification.
+  The shared stacks (`buildAuthGateStackWithOpts`, `buildSecretValidationStack`, …) now pass
+  `WithUnsafeSkipEndpointVerification()`, the same way they already pass the private-network hatch.
+  `buildVerifyingStack` in `verification_test.go` is the one that leaves it on. The client module
+  allowlists its dead `http://localhost:1/sink` instead, so its real receivers still handshake.
+- **The discord walkthrough had a success step aimed at `http://localhost:1/sink`.** No test runs
+  walkthrough steps, so only running the demo found it. Run the affected demos by hand after touching
+  subscribe; `make test-examples` is in no workflow (#1431).
+- **The conformance harness's probe callbacks answer every POST with their failure status**, the
+  verification POST included, so the 410/413/retry/redirect rows in `events-webhook-delivery` went
+  untestable once the handshake existed. That is a suite fix, not a library one: a probe should answer
+  the challenge and misbehave afterwards.
+
+`VerifiedAt` on the stored target is the persisted half. `verifyEndpoint` checks the store before the
+allowlist, so a no-expiry subscription restored after a restart refreshes without a new POST. The
+in-memory cache is separate and TTL-scoped like the subscription itself.
