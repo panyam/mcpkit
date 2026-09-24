@@ -44,6 +44,42 @@ func generateSecret() string {
 	return webhookSecretPrefix + base64.RawURLEncoding.EncodeToString(buf[:])
 }
 
+// signingKey returns the bytes a webhook signature is computed over, which the
+// spec defines as "the base64-decoded bytes of the value after the `whsec_`
+// prefix" — not the literal string.
+//
+// That distinction was lost for four months. Signing landed 2026-04-29 when the
+// secret was an opaque server-minted token and HMACing the string was correct;
+// the whsec_ + base64 format arrived two days later and key derivation was
+// never revisited. Server, both verifiers, the Go and Python clients, the
+// whole-enchilada receiver and the telegram tests all used the literal, so
+// every one of them agreed with the others and none agreed with the spec.
+// Nothing mcpkit owned could see it; the conformance suite could.
+//
+// Both base64 alphabets are accepted, matching validateClientSecret, because
+// the SDKs do not agree on which they emit.
+//
+// A value that does not decode falls back to its raw bytes. validateClientSecret
+// rejects those at subscribe time, so reaching here means a stored legacy secret
+// or a caller that bypassed validation, and refusing to sign would silently stop
+// deliveries rather than surface the problem.
+func signingKey(secret string) []byte {
+	// Only a whsec_-prefixed value is a spec-format secret. Decoding anything
+	// else would silently reinterpret a plain string that happens to be valid
+	// base64, which is most short strings.
+	if !strings.HasPrefix(secret, webhookSecretPrefix) {
+		return []byte(secret)
+	}
+	body := secret[len(webhookSecretPrefix):]
+	if decoded, err := base64.StdEncoding.DecodeString(body); err == nil {
+		return decoded
+	}
+	if decoded, err := base64.RawURLEncoding.DecodeString(body); err == nil {
+		return decoded
+	}
+	return []byte(secret)
+}
+
 // validateClientSecret enforces the spec's webhook-secret format on a
 // client-supplied delivery.secret. The value MUST be `whsec_` followed
 // by a base64-encoded payload that decodes to between 24 and 64 raw

@@ -555,9 +555,12 @@ def _verify_signature(headers, body: bytes, secret: str) -> bool:
     if std_sig:
         msg_id = headers.get("webhook-id", "")
         ts = headers.get("webhook-timestamp", "")
-        import base64
         expected = "v1," + base64.b64encode(
-            hmac.new(secret.encode(), (msg_id + "." + ts + ".").encode() + body, hashlib.sha256).digest()
+            hmac.new(
+                _signing_key(secret),
+                (msg_id + "." + ts + ".").encode() + body,
+                hashlib.sha256,
+            ).digest()
         ).decode()
         # Standard Webhooks allows multiple space-separated v1 sigs; any match wins.
         for cand in std_sig.split():
@@ -565,6 +568,26 @@ def _verify_signature(headers, body: bytes, secret: str) -> bool:
                 return True
         return False
     return False
+
+
+def _signing_key(secret: str) -> bytes:
+    """The bytes a Standard Webhooks signature is computed over.
+
+    The spec defines the key as the base64-decoded value after the ``whsec_``
+    prefix, not the literal string. Both alphabets are tried because the SDKs
+    do not agree on which they emit. A value without the prefix is not a
+    spec-format secret and is used verbatim, since decoding it would silently
+    reinterpret any short string that happens to be valid base64.
+    """
+    if not secret.startswith("whsec_"):
+        return secret.encode()
+    body = secret[len("whsec_") :]
+    for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+        try:
+            return decoder(body + "=" * (-len(body) % 4))
+        except Exception:
+            continue
+    return secret.encode()
 
 
 def _make_webhook_handler(secret_holder):

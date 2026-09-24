@@ -345,9 +345,16 @@ func (r *deliveryReceiver) handle(w http.ResponseWriter, req *http.Request) {
 
 func verifySignature(secret, id, ts string, body []byte, signature string) bool {
 	rawSecret := secret
+	// Both base64 alphabets, because the SDKs do not agree on which they emit
+	// and mcpkit's own GenerateSecret uses the raw URL-safe form. Trying only
+	// standard base64 here used to fail silently and fall through to the
+	// literal string, which happened to match a server that was also keying on
+	// the literal. Two bugs cancelling is not interoperability.
 	if strings.HasPrefix(rawSecret, "whsec_") {
-		decoded, err := base64.StdEncoding.DecodeString(rawSecret[len("whsec_"):])
-		if err == nil {
+		body := rawSecret[len("whsec_"):]
+		if decoded, err := base64.StdEncoding.DecodeString(body); err == nil {
+			rawSecret = string(decoded)
+		} else if decoded, err := base64.RawURLEncoding.DecodeString(body); err == nil {
 			rawSecret = string(decoded)
 		}
 	}

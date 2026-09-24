@@ -102,13 +102,21 @@ func (d signedDelivery) applyHeaders(req *http.Request) {
 }
 
 // signMCP produces the legacy MCP-headers signed delivery.
-//   X-MCP-Signature:  sha256=<hex(HMAC(secret, ts + "." + body))>
-//   X-MCP-Timestamp:  <unix>
+//
+//	X-MCP-Signature:  sha256=<hex(HMAC(secret, ts + "." + body))>
+//	X-MCP-Timestamp:  <unix>
 //
 // msgID is unused by this signer (the legacy MCP-headers wire format
 // has no equivalent of webhook-id), but the parameter is kept for
 // signature-parity with signStandardWebhooks so the caller doesn't
 // branch on mode.
+//
+// This mode keys the HMAC on the literal secret string, where
+// signStandardWebhooks keys it on the decoded bytes. That is deliberate rather
+// than an oversight repeated: the spec defines the key derivation for the
+// Standard Webhooks formula only, and these headers predate it. Changing this
+// one would break every receiver of the legacy mode with nothing in the
+// specification to point at.
 func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery {
 	ts := strconv.FormatInt(now.Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(secret))
@@ -126,9 +134,10 @@ func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery
 }
 
 // signStandardWebhooks produces a Standard Webhooks v1 signed delivery.
-//   webhook-id:        <msgID — caller-supplied; spec mandates eventId for event deliveries>
-//   webhook-timestamp: <unix>
-//   webhook-signature: v1,<base64(HMAC(secret, msgId + "." + ts + "." + body))>
+//
+//	webhook-id:        <msgID — caller-supplied; spec mandates eventId for event deliveries>
+//	webhook-timestamp: <unix>
+//	webhook-signature: v1,<base64(HMAC(secret, msgId + "." + ts + "." + body))>
 //
 // The msgID parameter is the message identifier the receiver dedups on.
 // For event deliveries it MUST be the event's eventId so the same upstream
@@ -141,7 +150,7 @@ func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery
 // see newMessageID.
 func signStandardWebhooks(msgID string, body []byte, secret string, now time.Time) signedDelivery {
 	ts := strconv.FormatInt(now.Unix(), 10)
-	mac := hmac.New(sha256.New, []byte(secret))
+	mac := hmac.New(sha256.New, signingKey(secret))
 	mac.Write([]byte(msgID))
 	mac.Write([]byte("."))
 	mac.Write([]byte(ts))
@@ -214,7 +223,7 @@ func VerifyMCPSignature(body []byte, secret, timestamp, signature string) bool {
 // Webhooks allows multiple space-separated versioned signatures
 // (e.g. "v1,abc v1,def"); we accept any matching v1.
 func VerifyStandardWebhooksSignature(body []byte, secret, msgID, timestamp, signature string) bool {
-	mac := hmac.New(sha256.New, []byte(secret))
+	mac := hmac.New(sha256.New, signingKey(secret))
 	mac.Write([]byte(msgID))
 	mac.Write([]byte("."))
 	mac.Write([]byte(timestamp))
