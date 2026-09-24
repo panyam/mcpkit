@@ -284,14 +284,12 @@ func registerQuotaControl(srv *server.Server, quota *events.Quota) {
 // registerWebhookEnvelopeControls signal one webhook subscription, the
 // harness's own, with the two control envelopes it cannot otherwise provoke.
 //
-// YieldGap and YieldTerminated reach push streams only; a webhook subscriber
-// hears about a gap or an ending through WebhookRegistry.PostGap and
-// PostTerminated, which a source author calls per subscription. Nothing in
-// kitchen-sink does, so without these the envelope-gap and
-// envelope-terminated rows report untestable. They address one subscription
-// rather than an event type because no webhook type here is disposable:
-// ending chat.message or alert.fired for the rest of the process would break
-// whatever scenario runs next.
+// YieldGap and YieldTerminated do reach webhook subscribers (#1466), but for
+// every subscription to the type, and nothing in a run calls them on a
+// webhook-capable one. These address one subscription instead, through
+// WebhookRegistry.PostGap and PostTerminated, because no webhook type here is
+// disposable: ending chat.message or alert.fired for the rest of the process
+// would break whatever scenario runs next.
 //
 // latest supplies the fresh cursor a gap carries, the source's current
 // position for the subscription's event type.
@@ -333,8 +331,9 @@ func registerWebhookEnvelopeControls(srv *server.Server, webhooks *events.Webhoo
 			return core.ErrorResult("no cursor source for event type " + t.EventName), nil
 		}
 		// The envelope's cursor is the position the client resumes from, and
-		// an empty source has none; PostGap would send the envelope without
-		// one. The feeders fill every source within seconds of startup.
+		// an empty source has none; PostGap would skip the envelope and the
+		// control would answer success for nothing sent. The feeders fill
+		// every source within seconds of startup.
 		if cursor == "" {
 			return core.ErrorResult("no cursor yet for " + t.EventName + ": nothing has been yielded, so a gap has no position to point at"), nil
 		}
