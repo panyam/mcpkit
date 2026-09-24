@@ -654,6 +654,7 @@ type WebhookRegistry struct {
 	// and pre-verifiers are fixed at construction; verified is the
 	// per-(principal, url) cache with its own lock.
 	skipEndpointVerification bool
+	lastDeliverSweep         time.Time // guarded by mu; see sweepIfDue
 	deliveryAllowlist        []*url.URL
 	preVerifiers             []PreVerifier
 	verified                 verificationCache
@@ -998,7 +999,7 @@ type RegisterParams struct {
 // mode" L707).
 func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNew bool) {
 	r.mu.Lock()
-	pruned := r.pruneExpiredLocked()
+	pruned, gcDue := r.pruneExpiredLocked()
 	// Negotiated expiry per spec PR1 commit 99f3589c §"Subscription
 	// TTL". Precedence: NoExpiry > ExpiresAtOverride > registry default.
 	switch {
@@ -1072,9 +1073,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 	// listener (e.g., one that releases an upstream resource via
 	// blocking I/O inside on_unsubscribe) shouldn't serialize the
 	// registry's hot path.
-	for _, t := range pruned {
-		r.fireOnRemove(t)
-	}
+	r.finishSweep(pruned, gcDue)
 	return expiresAt, isNew
 }
 
@@ -1145,7 +1144,7 @@ func (r *WebhookRegistry) lookupTarget(canonicalKey []byte) (WebhookTarget, bool
 // removed targets so the caller can fire onRemove hooks OUTSIDE the
 // lock — TTL prune is an unsubscribe per spec §"Server SDK Guidance"
 // → "Unsubscribe timing by mode" L707. Must hold r.mu write lock.
-func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
+func (r *WebhookRegistry) pruneExpiredLocked() (removed []WebhookTarget, gcDue [][]byte) {
 	now := time.Now()
 	r.verified.sweep(now)
 	ctx := context.Background()
@@ -1155,14 +1154,19 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	// seam contract is the same for both backends; #630 doesn't have
 	// to special-case this path.
 	listResp, _ := r.store.ListWebhooks(ctx, ListWebhooksRequest{})
-	var removed []WebhookTarget
 	for _, t := range listResp.Targets {
 		// No-expiry targets have nil ExpiresAt — they are explicitly
 		// exempted from TTL-based GC per spec PR1 commit 99f3589c
 		// §"Subscription TTL": "TTL expiry no longer garbage-collects
 		// orphans or dead endpoints." Their cleanup is failure-based
-		// GC, tracked under follow-up issue 764.
+		// GC. recordDeliveryFailure makes that call for an active
+		// target, but a suspended one gets no deliveries and so no
+		// more failures, so the window is checked here as well (#1443).
 		if t.ExpiresAt == nil {
+			if !t.Status.Active && t.Status.FailingContinuouslySince != nil &&
+				now.Sub(*t.Status.FailingContinuouslySince) > r.noExpiryFailureGCWindow {
+				gcDue = append(gcDue, t.CanonicalKey)
+			}
 			continue
 		}
 		if (*t.ExpiresAt).After(now) || (*t.ExpiresAt).Equal(now) {
@@ -1174,7 +1178,42 @@ func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 			removed = append(removed, delResp.Removed)
 		}
 	}
-	return removed
+	return removed, gcDue
+}
+
+// sweepIfDue runs pruneExpiredLocked from the delivery path, at most once per
+// quarter of the failure-GC window and never more than once a minute, so a
+// busy emitter does not list the whole store on every event.
+func (r *WebhookRegistry) sweepIfDue() {
+	every := r.noExpiryFailureGCWindow / 4
+	if every > time.Minute {
+		every = time.Minute
+	}
+	now := time.Now()
+	r.mu.Lock()
+	if now.Sub(r.lastDeliverSweep) < every {
+		r.mu.Unlock()
+		return
+	}
+	r.lastDeliverSweep = now
+	pruned, gcDue := r.pruneExpiredLocked()
+	r.mu.Unlock()
+	r.finishSweep(pruned, gcDue)
+}
+
+// finishSweep runs the post-unlock half of pruneExpiredLocked: onRemove for
+// TTL-expired targets, and the failure-GC drop (delete, onRemove, terminated
+// envelope) for suspended no-expiry targets past their window.
+func (r *WebhookRegistry) finishSweep(removed []WebhookTarget, gcDue [][]byte) {
+	for _, t := range removed {
+		r.fireOnRemove(t)
+	}
+	for _, key := range gcDue {
+		r.PostTerminated(key, ControlError{
+			Code:    -32603,
+			Message: "no-expiry subscription dropped after sustained delivery failure: suspended past the failure window",
+		})
+	}
 }
 
 // DeliverToTarget POSTs an event to a single target identified by
@@ -1263,6 +1302,11 @@ func (r *WebhookRegistry) ExpireAll() {
 // get a passthrough — Match=nil delivers to all matching-name targets,
 // Transform=nil reuses the original body.
 func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
+	// Event traffic is the one thing a suspended no-expiry subscription
+	// still sees, so it is where the failure-GC window gets checked for
+	// targets that no longer receive deliveries.
+	r.sweepIfDue()
+
 	targets := r.Targets()
 	if len(targets) == 0 {
 		return

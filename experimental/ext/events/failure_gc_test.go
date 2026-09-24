@@ -1,6 +1,8 @@
 package events
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -300,4 +302,57 @@ func TestConstructorWarning_FiniteTTLDoesNotWarn(t *testing.T) {
 	r.setLogfForTest(logf)
 	r.warnIfInfiniteTTLWithDefaultStore()
 	assert.Empty(t, logs, "default registry (no infinite-TTL opt-in) MUST NOT emit a no-expiry warning")
+}
+
+// A dead receiver suspends a target long before the GC window runs out, and
+// a suspended target receives no deliveries, so recordDeliveryFailure never
+// runs for it again. The window has to be evaluated somewhere a suspended
+// target still reaches, or no-expiry subscriptions to dead endpoints stay in
+// the store forever (#1443).
+func TestFailureGC_NoExpiry_SuspendedTargetDroppedAfterWindow(t *testing.T) {
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
+		WithAllowInfiniteWebhookTTL(),
+		WithWebhookSuspendThreshold(1),
+		WithNoExpiryFailureGCWindow(50*time.Millisecond),
+	)
+	var terminated atomic.Int32
+	recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		if strings.Contains(string(body), "dropped after sustained delivery failure") {
+			terminated.Add(1)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer recv.Close()
+
+	key := registerNoExpiryTarget(t, r, "alice", "fake.event", recv.URL)
+	r.recordDeliveryFailure(key, DeliveryError5xx)
+	target, found := r.lookupTarget(key)
+	require.True(t, found)
+	require.False(t, target.Status.Active, "precondition: one failure suspends at threshold 1")
+
+	time.Sleep(60 * time.Millisecond)
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(), map[string]string{"k": "v"}))
+
+	_, stillThere := r.lookupTarget(key)
+	assert.False(t, stillThere, "a suspended no-expiry target past the GC window must be dropped")
+	require.Eventually(t, func() bool { return terminated.Load() == 1 }, 2*time.Second, 20*time.Millisecond,
+		"the drop must POST the failure-GC terminated envelope")
+}
+
+func TestFailureGC_NoExpiry_SuspendedTargetKeptInsideWindow(t *testing.T) {
+	r := NewWebhookRegistry(
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
+		WithAllowInfiniteWebhookTTL(),
+		WithWebhookSuspendThreshold(1),
+		WithNoExpiryFailureGCWindow(time.Hour),
+	)
+	key := registerNoExpiryTarget(t, r, "alice", "fake.event", "http://127.0.0.1:1/hook")
+	r.recordDeliveryFailure(key, DeliveryError5xx)
+	r.Deliver(context.Background(), MakeEvent("fake.event", "evt_1", "1", time.Now(), map[string]string{"k": "v"}))
+
+	target, found := r.lookupTarget(key)
+	require.True(t, found, "suspended but inside the window: refresh can still reactivate it")
+	assert.False(t, target.Status.Active)
 }
