@@ -24,7 +24,7 @@ func subscribeStack(t *testing.T, opts ...WebhookOption) *server.Server {
 	srv := server.NewServer(core.ServerInfo{Name: "t", Version: "1"})
 	Register(Config{
 		Sources:                  []EventSource{src, pushOnly},
-		Webhooks:                 NewWebhookRegistry(opts...),
+		Webhooks:                 NewWebhookRegistry(append([]WebhookOption{WithUnsafeSkipEndpointVerification()}, opts...)...),
 		Server:                   srv,
 		UnsafeAnonymousPrincipal: "test-principal",
 	})

@@ -156,3 +156,33 @@ func TestWebhookStore_NoExpiryRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+// A no-expiry subscription resumes after a restart on the strength of
+// its stored verification (spec §"Endpoint verification"), so the store
+// must round-trip VerifiedAt, including its absence.
+func TestWebhookStore_VerifiedAtRoundTrip(t *testing.T) {
+	for _, bk := range backends(t) {
+		bk := bk
+		t.Run(bk.name, func(t *testing.T) {
+			store := bk.newWebhookStore(t)
+			ctx := context.Background()
+
+			verified := mkTarget([]byte("ck-verified"), "alice", "chat.message")
+			verified.VerifiedAt = ptr(time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC))
+			unverified := mkTarget([]byte("ck-unverified"), "bob", "chat.message")
+			for _, tgt := range []events.WebhookTarget{verified, unverified} {
+				_, err := store.SaveWebhook(ctx, events.SaveWebhookRequest{Target: tgt})
+				require.NoError(t, err)
+			}
+
+			got, err := store.GetWebhook(ctx, events.GetWebhookRequest{CanonicalKey: verified.CanonicalKey})
+			require.NoError(t, err)
+			require.NotNil(t, got.Target.VerifiedAt)
+			assert.True(t, verified.VerifiedAt.Equal(*got.Target.VerifiedAt))
+
+			got, err = store.GetWebhook(ctx, events.GetWebhookRequest{CanonicalKey: unverified.CanonicalKey})
+			require.NoError(t, err)
+			assert.Nil(t, got.Target.VerifiedAt)
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,12 +19,16 @@ import (
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-// nopReceiverServer returns an httptest server that 200-OKs every
-// webhook delivery without signature verification. Used by the quota
-// step which only cares whether subscribe was accepted, not whether
-// deliveries arrive.
+// nopReceiverServer returns an httptest server that answers the
+// endpoint-verification challenge and 200-OKs every webhook delivery
+// without signature verification. Used by the quota step which only
+// cares whether subscribe was accepted, not whether deliveries arrive.
 func nopReceiverServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 }

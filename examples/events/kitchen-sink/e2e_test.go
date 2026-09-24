@@ -317,11 +317,13 @@ func TestQuota_RejectsBeyondCapWithStructuredError(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			c := newTestClient(t, ts)
-			recv := httptest.NewServer(eventsclient.NewReceiver[ChatMessageData]("whsec_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+			const secret = "whsec_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			recv := httptest.NewServer(eventsclient.NewReceiver[ChatMessageData](secret))
 			t.Cleanup(recv.Close)
 			sub, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
 				EventName:   "chat.message",
 				CallbackURL: recv.URL,
+				Secret:      secret,
 			})
 			mu.Lock()
 			results = append(results, subResult{err: err, sub: sub})

@@ -41,7 +41,7 @@ func buildAuthGateStack(t *testing.T, unsafeAnon string) (*server.Server, *Webho
 func buildAuthGateStackWithOpts(t *testing.T, unsafeAnon string, extra ...WebhookOption) (*server.Server, *WebhookRegistry) {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	opts := append([]WebhookOption{WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks()}, extra...)
+	opts := append([]WebhookOption{WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification()}, extra...)
 	webhooks := NewWebhookRegistry(opts...)
 	Register(Config{
 		Sources:                  []EventSource{fakeSecretValidationSource{}},
@@ -238,7 +238,7 @@ func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
 	// delivery need WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks() to bypass
 	// the dial-time SSRF guard (spec §"Webhook Security" → "SSRF
 	// prevention" L464).
-	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	canonical := canonicalKey("test-principal", callback.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)
 	webhooks.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: callback.URL, Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeMs: 0})

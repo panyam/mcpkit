@@ -318,6 +318,9 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		msgID := r.Header.Get("webhook-id")
 		ts := r.Header.Get("webhook-timestamp")
 		sig := r.Header.Get("webhook-signature")
@@ -442,6 +445,9 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		msgID := r.Header.Get("webhook-id")
 		ts := r.Header.Get("webhook-timestamp")
 		sig := r.Header.Get("webhook-signature")
@@ -496,6 +502,9 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		sig := r.Header.Get("X-MCP-Signature")
 		ts := r.Header.Get("X-MCP-Timestamp")
 		assert.NotEmpty(t, sig, "must emit X-MCP-Signature")
@@ -546,6 +555,9 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		mu.Lock()
 		_ = json.Unmarshal(body, &deliveryBody)
 		mu.Unlock()
@@ -625,9 +637,15 @@ func TestE2ESubscribeCursorNullOnCursoredSourceReturnsLatest(t *testing.T) {
 	expected := source.Latest()
 	require.NotEmpty(t, expected, "precondition: source has a head cursor")
 
+	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		events.AnswerVerificationChallenge(w, body)
+	}))
+	defer sink.Close()
+
 	raw, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "discord.message",
-		"delivery": map[string]any{"mode": "webhook", "url": "http://localhost:1/sink", "secret": events.GenerateSecret()},
+		"delivery": map[string]any{"mode": "webhook", "url": sink.URL, "secret": events.GenerateSecret()},
 		// cursor field intentionally omitted → JSON null on parse
 	})
 	require.NoError(t, err)

@@ -279,7 +279,7 @@ func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFil
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	Register(Config{
 		Sources:                  []EventSource{src},
-		Webhooks:                 NewWebhookRegistry(),
+		Webhooks:                 NewWebhookRegistry(WithUnsafeSkipEndpointVerification()),
 		Server:                   srv,
 		UnsafeAnonymousPrincipal: "test-principal",
 	})

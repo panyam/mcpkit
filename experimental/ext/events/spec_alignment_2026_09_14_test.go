@@ -57,7 +57,7 @@ func (schemaSource) Latest() string                           { return "" }
 func buildSchemaStack(t *testing.T) (*server.Server, *WebhookRegistry) {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	Register(Config{
 		Sources:                  []EventSource{schemaSource{}},
 		Webhooks:                 webhooks,

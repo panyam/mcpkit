@@ -162,6 +162,9 @@ func TestE2E_WebhookDelivery(t *testing.T) {
 	recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body := new(bytes.Buffer)
 		_, _ = body.ReadFrom(r.Body)
+		if events.AnswerVerificationChallenge(w, body.Bytes()) {
+			return
+		}
 		ch <- captured{
 			ID:   r.Header.Get("webhook-id"),
 			TS:   r.Header.Get("webhook-timestamp"),

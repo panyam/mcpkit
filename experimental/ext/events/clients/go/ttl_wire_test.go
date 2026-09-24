@@ -37,7 +37,14 @@ import (
 func snifferStack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, *atomic.Pointer[string]) {
 	t.Helper()
 
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
+	// The "http://localhost:1/sink" callbacks exercise only the subscribe
+	// wire and never answer; the allowlist covers them and nothing else,
+	// so httptest receivers still go through the verification handshake.
+	whOpts = append([]events.WebhookOption{
+		events.WithWebhookAllowPrivateNetworks(true),
+		events.WithUnsafeWebhookAllowPlaintextCallbacks(),
+		events.WithWebhookDeliveryAllowlist([]string{"http://localhost:1/sink"}),
+	}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	src, _ := events.NewYieldingSource[fakePayload](events.EventDef{
 		Name:        "fake.event",

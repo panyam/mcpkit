@@ -113,7 +113,7 @@ func TestQuota_Webhook_RejectsThirdSubscribe(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 2))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -170,7 +170,7 @@ func TestQuota_Webhook_UnsubscribeReleases(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -235,7 +235,7 @@ func TestQuota_Webhook_TTLPruneReleases(t *testing.T) {
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	wh := NewWebhookRegistry(
-		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification(),
 		WithWebhookTTL(time.Hour),
 	)
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
@@ -292,7 +292,7 @@ func TestQuota_Webhook_OnSubscribeErrorReleases(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
 	Register(Config{
 		Sources:                  []EventSource{src},
@@ -471,7 +471,7 @@ func TestQuota_OnSubscribeNeverFiresWhenAtCap(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	q := NewQuota(WithMaxSubscriptionsPerPrincipal("alert.fired", 1))
 	Register(Config{
 		Sources:                  []EventSource{src},
