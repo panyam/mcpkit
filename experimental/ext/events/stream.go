@@ -14,7 +14,8 @@ package events
 //  4. Loops on (event arrival, heartbeat tick, ctx.Done):
 //     - Event arrival → notifications/events/event (L243-271). If the source
 //       signals Truncated=true, prepends a fresh notifications/events/active
-//       per spec L285.
+//       per spec L285, unless the source has no position to give (cursorless,
+//       or nothing yielded yet), where truncated SHOULD be false.
 //     - Heartbeat tick → notifications/events/heartbeat with the source's
 //       current cursor (L294). Cursor is JSON null for cursorless sources.
 //     - Ctx done (HTTP abort or notifications/cancelled on stdio) → return
@@ -378,18 +379,24 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				if se.Truncated {
 					// Spec L285: "the server sends a fresh
 					// notifications/events/active {requestId, cursor:<fresh>,
-					// truncated:true} and continues delivering."
-					var c *string
+					// truncated:true} and continues delivering." Only when
+					// there is a fresh position to send: for a type without
+					// replay truncated SHOULD be false (§"Gaps and
+					// truncated"), and a source with cursors that has yielded
+					// nothing has no position either. Webhook skips the same
+					// cases in PostGap.
+					latest := ""
 					if !cursorless {
-						latest := source.Latest()
-						c = &latest
+						latest = source.Latest()
 					}
-					ctx.Notify("notifications/events/active", activeNotifParams{
-						RequestID: id,
-						Cursor:    c,
-						Truncated: true,
-						Meta:      streamMeta(id),
-					})
+					if latest != "" {
+						ctx.Notify("notifications/events/active", activeNotifParams{
+							RequestID: id,
+							Cursor:    &latest,
+							Truncated: true,
+							Meta:      streamMeta(id),
+						})
+					}
 					// Truncation usually rides a real delivery, and then the
 					// event frame below follows it. YieldGap sends the marker
 					// alone, for a source that learns of a loss while it has
