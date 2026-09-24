@@ -185,3 +185,83 @@ func TestConformanceEvents_QuotaControlReportsTheEnforcedCap(t *testing.T) {
 	require.True(t, ok, "want data object, got %T", rpc.Data)
 	assert.Equal(t, "subscriptions", data["limit"])
 }
+
+// events-webhook-delivery grades the gap and terminated envelopes on the
+// harness's own subscription, since YieldGap and YieldTerminated reach push
+// streams only and ending a whole webhook type would poison later scenarios
+// (#1463).
+func TestConformanceEvents_WebhookEnvelopeControlsSignalOneSubscription(t *testing.T) {
+	type envelope struct {
+		Type   string         `json:"type"`
+		Cursor *string        `json:"cursor"`
+		Error  map[string]any `json:"error"`
+	}
+	got := make(chan envelope, 8)
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
+		var e envelope
+		if json.Unmarshal(body, &e) == nil && e.Type != "" {
+			got <- e
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(receiver.Close)
+
+	w := buildServer(":0", nil, true)
+	ts := httptest.NewServer(w.srv.Handler(server.WithStreamableHTTP(true)))
+	t.Cleanup(ts.Close)
+	c := newTestClient(t, ts)
+	// A gap carries the source's current cursor, and an empty source has none.
+	require.NoError(t, w.alertYield(t.Context(), AlertData{Severity: "P3", Service: "conformance", Message: "seed"}))
+
+	_, err := c.ToolCall(t.Context(), "events_conformance_allow_callback_origin", map[string]any{"origin": receiver.URL})
+	require.NoError(t, err)
+	id, _ := subscribeForID(t, c, receiver.URL+"/mcp-events", 60_000)
+
+	next := func(want string) envelope {
+		t.Helper()
+		for {
+			select {
+			case e := <-got:
+				if e.Type == want {
+					return e
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatalf("no %q envelope arrived", want)
+			}
+		}
+	}
+
+	cursor, err := c.ToolCall(t.Context(), "events_conformance_webhook_gap", map[string]any{"id": id})
+	require.NoError(t, err)
+	gap := next("gap")
+	require.NotNil(t, gap.Cursor)
+	assert.Equal(t, cursor, *gap.Cursor)
+
+	_, err = c.ToolCall(t.Context(), "events_conformance_webhook_terminate", map[string]any{"id": id})
+	require.NoError(t, err)
+	term := next("terminated")
+	assert.EqualValues(t, events.ErrCodeForbidden, term.Error["code"])
+	assert.Equal(t, "absent", subscriptionState(t, c, id))
+}
+
+func TestConformanceEvents_WebhookGapRefusesAnEmptySource(t *testing.T) {
+	c := newConformanceTestClient(t)
+	id, _ := subscribeForID(t, c, "https://conformance.invalid/mcp-events/gap-empty", 60_000)
+	res, err := c.ToolCallFull(t.Context(), "events_conformance_webhook_gap", map[string]any{"id": id})
+	require.NoError(t, err)
+	require.True(t, res.IsError)
+	assert.Contains(t, res.Content[0].Text, "no cursor yet")
+}
+
+func TestConformanceEvents_WebhookEnvelopeControlsRejectUnknownID(t *testing.T) {
+	c := newConformanceTestClient(t)
+	for _, tool := range []string{"events_conformance_webhook_gap", "events_conformance_webhook_terminate"} {
+		res, err := c.ToolCallFull(t.Context(), tool, map[string]any{"id": "sub_nope"})
+		require.NoError(t, err, tool)
+		assert.True(t, res.IsError, tool)
+	}
+}
