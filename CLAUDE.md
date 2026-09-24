@@ -168,7 +168,9 @@ These span packages and will bite on a task that never opens a routed doc.
   create and edit PRs and post review comments on `modelcontextprotocol/*`. Verified on
   conformance#504. An earlier version of this note said upstream edits need the web UI or a classic
   PAT; that is only true of the fine-grained token.
-  Pushing to our fork branches is unaffected. See `conformance/NOTES.md`.
+  Pushing to our fork branches is unaffected. See `conformance/NOTES.md`, which also covers the
+  `panyam/mcpconformance` pre-push hook: it runs the full suite (~4.5 min), so never wrap that
+  push in `timeout`.
   **The fine-grained PAT cannot create a branch carrying workflow files**, even when no commit on
   it touches `.github/`. Creating a ref counts every workflow present on that ref as "created", so
   the push is rejected with "refusing to allow a Personal Access Token to create or update workflow
@@ -226,6 +228,16 @@ These span packages and will bite on a task that never opens a routed doc.
   A 403 is not a 404, and a status check that treats any non-success as "disabled" reports a
   configured repo as unprotected.
 
+- **Endpoint verification is on by default for webhook subscribes** (#1444). `events/subscribe`
+  POSTs a signed challenge to `delivery.url` and fails with `-32015` unless it is echoed, so any
+  test, demo or fixture that subscribes to a URL nobody answers now fails. Shared test stacks opt
+  out with `WithUnsafeSkipEndpointVerification()`; fixtures allowlist a known origin
+  (`WithWebhookDeliveryAllowlist`); a hand-rolled receiver calls
+  `events.AnswerVerificationChallenge` and must be serving *before* it subscribes. Paths, cache and
+  rate limit: `experimental/ext/events/DEPLOYMENT.md` § Endpoint verification.
+- **A regression in an `INFO` suite is invisible.** `testconf-events` fell from 22/23 to 1 for a day
+  after #1444 and nothing went red (#1446). After touching a surface an `INFO` suite grades, run
+  that suite by hand, all of its wired scenarios rather than the one you had in mind.
 - **mcpkit does not paginate by default, anywhere.** `server/pagination.go` sets
   `defaultPageSize = 0` for tools, resources, templates and prompts, which `paginate` reads as
   "return everything, emit no cursor". `ext/skills` gained `WithSkillsListPageSize` and

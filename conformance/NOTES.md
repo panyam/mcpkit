@@ -285,6 +285,16 @@ not the fine-grained PAT"**, and we already have one. Keep `GH_TOKEN="$GH_PERSON
 Pushing to our own fork branches is unaffected, that is SSH — via the agent socket, since
 `~/.ssh/id_github` does not exist in the container: `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`.
 
+**The fork's pre-push hook runs the whole suite, and a `timeout` wrapper kills it without a word.**
+`conf-events` (and any clone of `panyam/mcpconformance`) has a lefthook `pre-push` that runs prettier
+and all ~736 vitest tests, plus the browser tests, about 4.5 minutes. Wrapping the push in
+`timeout 90` killed the hook partway through three times in one session and left the branch
+unpushed with nothing on screen saying so, since the push is what prints and the push never ran. An
+HTTPS push to the fork also hangs on a credential prompt instead of failing. So push over SSH with no
+timeout, in the background if needed, and confirm with
+`git ls-remote git@github.com:panyam/mcpconformance.git refs/heads/<branch>` rather than trusting the
+exit status of a command that may have been killed.
+
 **`modelcontextprotocol/conformance` dismisses stale reviews on push.** A commit landed after an
 approval flips that review to `DISMISSED` and `reviewDecision` back to `REVIEW_REQUIRED`. This cost
 PR 330 its approval on 2026-09-09, and routing a reviewer there in the first place took from 08-29
@@ -484,6 +494,31 @@ Two are worth remembering beyond their fix:
   streamability branch, so sources without a `Subscribe` channel derived poll-only. Webhook goes out
   through the registry, not the source. Wrong from the day it was written in #1416 and invisible
   until `events/subscribe` started enforcing the array.
+
+**Endpoint verification changed what every subscribe-driven row needs (#1444 onwards).** Four
+things, each of which cost a round-trip:
+
+- **The wired `events-webhook` scenario subscribes to `https://conformance.invalid/mcp-events/…`**,
+  a placeholder that never resolves, because it grades subscribe semantics rather than delivery.
+  With verification on by default every subscribe failed and the scenario fell from 22/23 to 1, for
+  a day, with CI green because the suite is `INFO` (#1446). kitchen-sink now allowlists that origin
+  under `--conformance-events`. Run `make testconf-events` after touching anything on the subscribe
+  path.
+- **`events-webhook-delivery` can only be run by hand against plain `--serve` now.** Since #1434,
+  `--conformance-events` enforces https and refuses the harness's `http://127.0.0.1` receiver, so in
+  that mode the scenario grades nothing. Plain `--serve` allows loopback, which parks the two SSRF
+  rows red but makes the rest gradeable: 18 SUCCESS as of 2026-09-24.
+- **Probe callbacks answer the challenge before misbehaving** (suite `80d6528`, #1439). A 410 probe
+  that also refused the challenge was never subscribed by a server that verifies synchronously.
+  The same change made `verification-failure-error` gradeable, and fixed
+  `retry-regenerates-signature`, which flapped against mcpkit's 500 ms first retry because
+  `webhook-timestamp` is whole seconds.
+- **The TTL durability rows need three fixture controls** (#1443, suite `77c10e0`): a restart that
+  rebuilds the server over the same store, a generation counter, and a subscription-state lookup
+  that sees suspended subscriptions. The generation pair is what makes a restart detectable against
+  both a stateful server (the session dies) and a stateless one (the same connection starts reaching
+  the new build); waiting for the session to die only works on the first. Wiring the GC row turned
+  up a library bug: suspended no-expiry subscriptions were never garbage-collected.
 
 **Upstream requires 41 fixture tools and declares none of them machine-readably.** `slow_compute`,
 `test_error_handling`, `test_reconnection`, the whole `test_input_required_result_*` family. The
