@@ -16,6 +16,13 @@ import (
 // auto-detecting whether the request carries X-MCP-* (default) or
 // webhook-* (Standard Webhooks) headers per the server's WebhookHeaderMode.
 //
+// Answers the server's endpoint-verification challenge (spec §"Endpoint
+// verification") by echoing the nonce, but only when the challenge's
+// signature verifies. That arrives while Subscribe is still in flight,
+// so the secret must already be set, or empty, by then; a receiver
+// holding the wrong secret refuses the challenge and Subscribe fails
+// with -32015 challenge_failed.
+//
 // Decodes the wire envelope's Data field into the typed Data parameter
 // and delivers Event[Data] values on the Events() channel.
 type Receiver[Data any] struct {
@@ -135,6 +142,9 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	_ = json.Unmarshal(body, &probe)
 	switch probe.Type {
+	case "verification":
+		events.AnswerVerificationChallenge(w, body)
+		return
 	case "gap":
 		var env struct {
 			Cursor string `json:"cursor"`

@@ -586,6 +586,9 @@ if err != nil {
 			gotDelivery := make(chan delivery, 8)
 			recv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
+				if events.AnswerVerificationChallenge(w, body) {
+					return
+				}
 				gotDelivery <- delivery{
 					SubID: r.Header.Get("X-MCP-Subscription-Id"),
 					Body:  body,
@@ -741,6 +744,11 @@ _ = res2`),
 			var controlBody []byte
 			deadReceiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				whID := r.Header.Get("webhook-id")
+				if strings.HasPrefix(whID, "msg_verification_") {
+					body, _ := io.ReadAll(r.Body)
+					events.AnswerVerificationChallenge(w, body)
+					return
+				}
 				if strings.HasPrefix(whID, "msg_terminated_") {
 					body, _ := io.ReadAll(r.Body)
 					controlBody = body
@@ -989,20 +997,28 @@ rpcErr := err.(*client.RPCError) // code == -32602, client-supplied id is not ac
 			"Subscribe succeeds. The response carries the server-derived `id` (`sub_<base64>` per spec §\"Subscription Identity\" → \"Derived id\" L367), plus `cursor` and `refreshBefore`. Notably absent is the `secret`. The client supplied it, so the server doesn't echo it back. Echoing would risk leaks via proxies, logs, or IDE network panes.",
 			"",
 			"- The id carries no security weight; it's surfaced as `X-MCP-Subscription-Id` on delivery POSTs, but knowing the value grants no operations on the subscription.",
+			"- Before answering, the server POSTs a signed `{type: \"verification\", challenge}` envelope to `delivery.url` and only accepts the subscription once the endpoint echoes the nonce (spec §\"Endpoint verification\"). This step stands up a local receiver that answers it. (in mcpkit: `events.AnswerVerificationChallenge(w, body)`; the Go SDK's `eventsclient.Receiver` does it for you)",
 		).
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# A valid whsec_ secret succeeds: response carries the server-derived id, cursor,
 # and refreshBefore, and notably NOT the secret (the server never echoes it).
+# $HOOK must answer the server's verification challenge before subscribe returns.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":13,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"http://localhost:1/sink","secret":"whsec_<valid>"}}}' | jq '.result'
+  -d '{"jsonrpc":"2.0","id":13,"method":"events/subscribe","params":{"name":"discord.message","delivery":{"mode":"webhook","url":"'"$HOOK"'","secret":"whsec_<valid>"}}}' | jq '.result'
 # then tear down by tuple: events/unsubscribe { name, delivery: { url } }`).Default(),
 			demokit.MakeVariant("go", "go", `// A conforming whsec_ secret succeeds; res.Raw has id + cursor + refreshBefore, no secret echo.
+// The callback must answer the verification challenge while subscribe is in flight.
+sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    body, _ := io.ReadAll(r.Body)
+    events.AnswerVerificationChallenge(w, body)
+}))
+defer sink.Close()
 res, err := c.Call("events/subscribe", map[string]any{
     "name": "discord.message",
     "delivery": map[string]any{
         "mode":   "webhook",
-        "url":    "http://localhost:1/sink",
+        "url":    sink.URL,
         "secret": events.GenerateSecret(),
     },
 })
@@ -1013,10 +1029,15 @@ _ = res
 // Tear down by tuple (no id):
 c.Call("events/unsubscribe", map[string]any{
     "name":     "discord.message",
-    "delivery": map[string]any{"url": "http://localhost:1/sink"},
+    "delivery": map[string]any{"url": sink.URL},
 })`),
 		).
 		Run(func(_ demokit.StepContext) (result *demokit.StepResult) {
+			sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				events.AnswerVerificationChallenge(w, body)
+			}))
+			defer sink.Close()
 			supplied := events.GenerateSecret()
 			fmt.Printf("    supplied secret:  %s...\n", truncate(supplied, 16))
 
@@ -1024,7 +1045,7 @@ c.Call("events/unsubscribe", map[string]any{
 				"name": "discord.message",
 				"delivery": map[string]any{
 					"mode":   "webhook",
-					"url":    "http://localhost:1/sink",
+					"url":    sink.URL,
 					"secret": supplied,
 				},
 			})
@@ -1043,7 +1064,7 @@ c.Call("events/unsubscribe", map[string]any{
 			// for a TTL window after the demo ends.
 			_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{
 				"name":     "discord.message",
-				"delivery": map[string]any{"url": "http://localhost:1/sink"},
+				"delivery": map[string]any{"url": sink.URL},
 			})
 			return
 		})

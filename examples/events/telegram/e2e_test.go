@@ -228,6 +228,9 @@ func TestE2EWebhookDelivery(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		msgID := r.Header.Get("webhook-id")
 		ts := r.Header.Get("webhook-timestamp")
 		sig := r.Header.Get("webhook-signature")
@@ -300,6 +303,9 @@ func TestE2EWebhookDelivery_StandardHeaders(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		msgID := r.Header.Get("webhook-id")
 		ts := r.Header.Get("webhook-timestamp")
 		sig := r.Header.Get("webhook-signature")
@@ -359,6 +365,9 @@ func TestE2EWebhookDelivery_MCPHeadersOptIn(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		sig := r.Header.Get("X-MCP-Signature")
 		ts := r.Header.Get("X-MCP-Timestamp")
 		assert.NotEmpty(t, sig, "must emit X-MCP-Signature")
@@ -453,6 +462,9 @@ func TestE2ECursorlessWebhookDelivery(t *testing.T) {
 
 	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if events.AnswerVerificationChallenge(w, body) {
+			return
+		}
 		mu.Lock()
 		_ = json.Unmarshal(body, &deliveryBody)
 		mu.Unlock()

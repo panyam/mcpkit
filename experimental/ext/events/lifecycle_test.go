@@ -115,7 +115,7 @@ func newLifecycleFixture(t *testing.T, hooks *hookCounter, webhookOpts ...Webhoo
 	}
 	src, yield := NewYieldingSource[map[string]any](def)
 	wh := NewWebhookRegistry(append([]WebhookOption{
-		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(),
+		WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification(),
 	}, webhookOpts...)...)
 	leases := NewPollLeaseTable(
 		WithPollLeaseTTL(40*time.Millisecond),

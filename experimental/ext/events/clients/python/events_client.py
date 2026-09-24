@@ -621,6 +621,22 @@ def _make_webhook_handler(secret_holder):
                 return
 
             envelope_type = payload.get("type")
+            if envelope_type == "verification":
+                # Spec §"Endpoint verification": echo the nonce in a 2xx
+                # body to consent to deliveries. Only when the signature
+                # verifies, so we never consent for a secret we don't hold.
+                print(f"── WEBHOOK VERIFICATION ({label}) " + "─" * 24, flush=True)
+                if not sig_ok:
+                    self.send_response(401)
+                    self.end_headers()
+                    return
+                reply = json.dumps({"challenge": payload.get("challenge", "")}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(reply)))
+                self.end_headers()
+                self.wfile.write(reply)
+                return
             if envelope_type == "gap":
                 print()
                 print(f"── WEBHOOK GAP ({label}) " + "─" * 32)

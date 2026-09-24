@@ -72,6 +72,28 @@ For production, **add DNS resolution + private-IP rejection**:
 
 The cheapest place to add this is by wrapping `ValidateWebhookURL` and configuring your own validator on the registry, or by patching the existing function for your fork. Until the spec settles, it's an operator responsibility.
 
+## Endpoint verification
+
+A subscriber authenticates to the MCP server, but nothing about that tells the server whether the receiver at `delivery.url` wants the traffic. Without a check, any authenticated caller can point deliveries at a third party. The HMAC signature stops that third party being fooled by forged events; it does nothing to stop the POSTs arriving. So the server confirms the endpoint's intent before it activates a subscription (spec §"Webhook Security" → "Endpoint verification"). This is **on by default**.
+
+The check runs inside `events/subscribe`, before the subscription is created, and takes the first of these that applies:
+
+| Path | How | Option |
+|---|---|---|
+| Challenge handshake | Server POSTs `{"type":"verification","challenge":"<nonce>"}`, signed and headed like a delivery. The endpoint must answer `2xx` with `{"challenge":"<nonce>"}`. | default |
+| Allowlist | Delivery URL matches an operator-configured pattern: same scheme and host, path prefix at a segment boundary. | `WithWebhookDeliveryAllowlist([]string{...})` |
+| Out-of-band | Your own registry says this principal already verified this URL, for example through a dashboard. | `WithPreVerifier(pv)`, `WithPreVerifiedDeliveryURL(principal, url)` |
+
+A handshake that reaches the endpoint but gets no correct echo fails the subscribe with `-32015 CallbackEndpointError`, `data.reason: "challenge_failed"`. One that cannot connect reports the connection category (`connection_refused`, `timeout`, `tls_error`). Nothing from the endpoint's response reaches the subscriber.
+
+Results are cached per `(principal, url)`, so refreshes and subscribes that differ only in `arguments` do not repeat the POST, and one principal's verification never covers another. The verification POST goes through the same SSRF-guarded client as deliveries and does not follow redirects. Allowlisted and pre-verified URLs skip the handshake but not the SSRF guard.
+
+**What receivers have to do.** Answer the challenge, and be serving before calling `events/subscribe`, because the POST arrives while that call is in flight. `eventsclient.Receiver` and the Python `events_client.py` receiver answer automatically. A hand-rolled Go receiver can call `events.AnswerVerificationChallenge(w, body)` after checking the signature. A receiver that has not been told the secret yet should either accept unsigned challenges or learn the secret before subscribing; `eventsclient.SubscribeOptions.Secret` lets the caller choose it up front.
+
+**Turning it off.** `WithUnsafeSkipEndpointVerification()` restores the old behavior of delivering to any URL that passes validation. It exists for tests and for receivers that predate the handshake, and it violates the spec's MUST. Prefer the allowlist.
+
+Not implemented yet: the receiver-published `/.well-known/mcp-webhook-receiver.json` path, asymmetric `v1a,` server signing, and per-host rate limiting of verification POSTs.
+
 ## Retry and backoff timing
 
 The default `WebhookRegistry.deliver` policy (in `webhook.go`):
@@ -120,7 +142,7 @@ The library wires the in-process pieces: prune loop skips no-expiry targets, `We
 
 **Construction-time validation.** Calling `WithAllowInfiniteWebhookTTL()` without also passing `WithWebhookStore(persistent)` triggers a stark warning at registry construction. No-expiry subscriptions held in the default in-memory store violate the spec's "persist across restarts" obligation — the warning points operators at the GORM-backed implementation as the supported choice. Dev/test setups can ignore it; production deployments must replace the default store.
 
-**Persisted verification status** is the one remaining piece of the spec's no-expiry obligation list still pending — tracked under issue 490 (PostVerification rewrite covering all four verification paths). The current ext/events impl is verification-stub-only; once #490 lands, the stub becomes a real persisted field.
+**Persisted verification status.** Each subscription records `WebhookTarget.VerifiedAt` when its endpoint is verified (see [Endpoint verification](#endpoint-verification)), and the GORM store round-trips it. A refresh of a subscription restored from a durable store after a restart finds `VerifiedAt` set and skips the handshake, which is the spec's requirement for no-expiry grants. Custom `WebhookStore` backends must persist the field too.
 
 ### Refresh loop
 
@@ -214,6 +236,7 @@ Before going live with a webhook-enabled events server in a private-cloud deploy
 - [ ] MCP server has outbound egress to receiver URLs.
 - [ ] SSRF protection — DNS resolution + private-IP rejection wraps `ValidateWebhookURL`.
 - [ ] WAF / proxy idle timeouts > 25 s to survive the worst-case retry chain.
+- [ ] Receiver answers the endpoint-verification challenge (or its URLs are covered by `WithWebhookDeliveryAllowlist` / a `PreVerifier`). `WithUnsafeSkipEndpointVerification` is not set.
 - [ ] Receiver is idempotent on `event.eventId`.
 - [ ] Receiver returns 2xx for accept, 4xx for reject-permanently, 5xx for retry.
 - [ ] Webhook secrets (each subscription's `whsec_` value) reach the receiver via your secrets-management path; rotation procedure documented.

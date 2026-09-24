@@ -246,7 +246,7 @@ func TestMatchTransform_Webhook_MatchAndTransformPerTarget(t *testing.T) {
 	defer rC.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	Register(Config{
 		Sources:                  []EventSource{src},
 		Webhooks:                 wh,
@@ -353,7 +353,7 @@ func TestMatchTransform_Webhook_FiltersByEventName(t *testing.T) {
 	defer receiver.Close()
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	Register(Config{
 		Sources:                  []EventSource{srcA, srcB},
 		Webhooks:                 wh,
@@ -469,7 +469,7 @@ func TestMatchTransform_CrossModeParity(t *testing.T) {
 	src, yield := NewYieldingSource[sevPayload](def)
 
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
-	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks())
+	wh := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	Register(Config{
 		Sources:                  []EventSource{src},
 		Webhooks:                 wh,

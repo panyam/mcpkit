@@ -44,6 +44,7 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
@@ -154,9 +155,45 @@ func main() {
 	}
 	defer func() { _ = c.Close() }()
 
+	// The server's endpoint-verification challenge arrives while Subscribe
+	// is in flight, so the receiver has to be serving, and holding the
+	// secret it will be signed with, before the call is made.
+	secret := events.GenerateSecret()
+	receiver := &deliveryReceiver{
+		secret:      secret,
+		prefix:      prefix,
+		replyStatus: *replyStatus,
+	}
+	// EXIT_AFTER closes shutdown so the main select loop unwinds.
+	// We make it a function call to avoid a data race between the
+	// receiver writing to a channel and the select reading; the
+	// channel is closed exactly once via sync.Once.
+	shutdown := make(chan struct{})
+	if *exitAfter > 0 {
+		log.Printf("%s exit-after=%d — process will exit after %d successfully-received deliveries", prefix, *exitAfter, *exitAfter)
+		receiver.exitAfter = *exitAfter
+		receiver.exitSignal = shutdown
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webhook", receiver.handle)
+
+	srv := &http.Server{Handler: mux}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+		close(serverErr)
+	}()
+
 	subOpts := eventsclient.SubscribeOptions{
 		EventName:   *eventName,
 		CallbackURL: callbackURL + "/webhook",
+		Secret:      secret,
 	}
 	// Wire the --ttl-ms tristate into the SDK options. "null" sets
 	// NoExpiry; a positive int sets TTLMs; empty leaves both unset so
@@ -191,37 +228,6 @@ func main() {
 		log.Printf("%s subscribed sub_id=%s refreshBefore=null (no-expiry granted) — events route to %s/webhook",
 			prefix, sub.ID(), callbackURL)
 	}
-
-	receiver := &deliveryReceiver{
-		secret:      sub.Secret(),
-		prefix:      prefix,
-		replyStatus: *replyStatus,
-	}
-	// EXIT_AFTER closes shutdown so the main select loop unwinds.
-	// We make it a function call to avoid a data race between the
-	// receiver writing to a channel and the select reading; the
-	// channel is closed exactly once via sync.Once.
-	shutdown := make(chan struct{})
-	if *exitAfter > 0 {
-		log.Printf("%s exit-after=%d — process will exit after %d successfully-received deliveries", prefix, *exitAfter, *exitAfter)
-		receiver.exitAfter = *exitAfter
-		receiver.exitSignal = shutdown
-	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/webhook", receiver.handle)
-
-	srv := &http.Server{Handler: mux}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	serverErr := make(chan error, 1)
-	go func() {
-		if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
-			serverErr <- err
-		}
-		close(serverErr)
-	}()
 
 	select {
 	case <-ctx.Done():
@@ -289,6 +295,10 @@ func (r *deliveryReceiver) handle(w http.ResponseWriter, req *http.Request) {
 	}
 	if !verifySignature(r.secret, id, ts, body, sig) {
 		http.Error(w, "signature verification failed", http.StatusBadRequest)
+		return
+	}
+	if events.AnswerVerificationChallenge(w, body) {
+		log.Printf("%s answered endpoint-verification challenge", r.prefix)
 		return
 	}
 

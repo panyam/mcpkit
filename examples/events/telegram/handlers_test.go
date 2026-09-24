@@ -276,10 +276,15 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	source, _ := newTelegramSource()
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())
 	c, _ := newConnectedClient(t, source, webhooks)
+	sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		events.AnswerVerificationChallenge(w, body)
+	}))
+	defer sink.Close()
 
 	result, err := c.Call(t.Context(), "events/subscribe", map[string]any{
 		"name":     "telegram.message",
-		"delivery": map[string]any{"mode": "webhook", "url": "http://example.com/hook", "secret": events.GenerateSecret()},
+		"delivery": map[string]any{"mode": "webhook", "url": sink.URL, "secret": events.GenerateSecret()},
 	})
 	require.NoError(t, err)
 

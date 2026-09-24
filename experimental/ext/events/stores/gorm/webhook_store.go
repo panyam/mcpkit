@@ -57,6 +57,9 @@ type webhookRow struct {
 	// before this seam; exported in the same PR that introduced the
 	// store so external backends can round-trip it.
 	FailureCount int `gorm:"not null"`
+	// VerifiedAt mirrors events.WebhookTarget.VerifiedAt. NULL means the
+	// subscription was registered with verification skipped.
+	VerifiedAt *time.Time
 }
 
 func (webhookRow) TableName() string { return "webhooks" }
@@ -80,6 +83,7 @@ func rowFromTarget(t events.WebhookTarget) webhookRow {
 		StatusRetryAfterMs:             t.Status.RetryAfterMs,
 		StatusFailingContinuouslySince: t.Status.FailingContinuouslySince,
 		FailureCount:                   t.FailureCount,
+		VerifiedAt:                     t.VerifiedAt,
 	}
 }
 
@@ -104,6 +108,7 @@ func targetFromRow(r webhookRow) events.WebhookTarget {
 			FailingContinuouslySince: r.StatusFailingContinuouslySince,
 		},
 		FailureCount: r.FailureCount,
+		VerifiedAt:   r.VerifiedAt,
 	}
 }
 

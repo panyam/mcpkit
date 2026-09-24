@@ -231,7 +231,7 @@ func buildSecretValidationStack(t *testing.T) *server.Server {
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
 	Register(Config{
 		Sources:                  []EventSource{fakeSecretValidationSource{}},
-		Webhooks:                 NewWebhookRegistry(),
+		Webhooks:                 NewWebhookRegistry(WithUnsafeSkipEndpointVerification()),
 		Server:                   srv,
 		UnsafeAnonymousPrincipal: "test-principal",
 	})

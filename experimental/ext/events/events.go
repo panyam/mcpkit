@@ -936,6 +936,24 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Arguments)
 		derivedID := deriveSubscriptionID(canonical)
 
+		// Spec §"Endpoint verification": no delivery until the endpoint
+		// confirms it wants them. Runs synchronously so a failure comes
+		// back from this call as -32015 carrying only the category.
+		if bucket := webhooks.verifyEndpoint(ctx, verifyEndpointParams{
+			Principal:    principal,
+			URL:          req.Delivery.URL,
+			Secret:       req.Delivery.Secret,
+			DerivedID:    derivedID,
+			CanonicalKey: canonical,
+		}); bucket != DeliveryErrorNone {
+			return newCallbackEndpointError(id, string(bucket), "endpoint verification failed")
+		}
+		var verifiedAt *time.Time
+		if !webhooks.skipEndpointVerification {
+			now := time.Now()
+			verifiedAt = &now
+		}
+
 		noExpiry, expiresOverride := webhooks.NegotiateExpiry(req.TTLMs)
 		expiresAt, isNew := webhooks.Register(RegisterParams{
 			CanonicalKey:      canonical,
@@ -950,6 +968,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			Arguments:         req.Arguments,
 			NoExpiry:          noExpiry,
 			ExpiresAtOverride: expiresOverride,
+			VerifiedAt:        verifiedAt,
 		})
 
 		// On first registration only, enforce the quota then fire

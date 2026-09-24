@@ -507,6 +507,14 @@ type WebhookTarget struct {
 	// snapshot returned by Targets()/DeliveryStatus() is consistent.
 	Status DeliveryStatus
 
+	// VerifiedAt records when the endpoint confirmed it wants deliveries
+	// for this principal (spec §"Endpoint verification"). nil when
+	// verification was skipped via WithUnsafeSkipEndpointVerification.
+	// Persistent WebhookStore implementations MUST round-trip it: a
+	// no-expiry subscription restored after a restart resumes delivery
+	// on the strength of this field, with no handshake to fall back on.
+	VerifiedAt *time.Time
+
 	// FailureCount is the internal counter for the suspend state machine.
 	// Tracks consecutive failures within the current sliding-window run.
 	// Not surfaced on the wire; the wire-visible signal is Status.Active.
@@ -641,6 +649,14 @@ type WebhookRegistry struct {
 	// so call sites can unconditionally StartSpan without nil-
 	// checking. SEP-414 P6 (issue 683 follow-up).
 	tp core.TracerProvider
+
+	// Endpoint verification (verification.go, issue 490). The allowlist
+	// and pre-verifiers are fixed at construction; verified is the
+	// per-(principal, url) cache with its own lock.
+	skipEndpointVerification bool
+	deliveryAllowlist        []*url.URL
+	preVerifiers             []PreVerifier
+	verified                 verificationCache
 
 	// logf is the logging hook used by deliver paths. Defaults to log.Printf;
 	// tests override via setLogfForTest to capture failures (including SSRF
@@ -942,6 +958,11 @@ type RegisterParams struct {
 	// Nil + NoExpiry false reverts to the registry's default — preserves
 	// the pre-#760 behavior for unchanged callers.
 	ExpiresAtOverride *time.Time
+
+	// VerifiedAt is stamped on the target when the caller has confirmed
+	// the endpoint (WebhookRegistry.verifyEndpoint). On refresh it only
+	// fills a nil value; an earlier verification time is kept.
+	VerifiedAt *time.Time
 }
 
 // Register adds or refreshes a webhook subscription keyed on the spec's
@@ -1006,6 +1027,9 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 		if p.MaxAgeMs > 0 {
 			existing.MaxAgeMs = p.MaxAgeMs
 		}
+		if existing.VerifiedAt == nil {
+			existing.VerifiedAt = p.VerifiedAt
+		}
 		// A successful refresh reactivates a suspended target per spec
 		// §"Webhook Delivery Status" L460. Clear the failure run so
 		// deliveries can resume. Pending events do NOT replay
@@ -1033,6 +1057,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 			Subject:      p.Subject,
 			SessionID:    p.SessionID,
 			Arguments:    p.Arguments,
+			VerifiedAt:   p.VerifiedAt,
 			// Active defaults to true on first registration. The
 			// suspend state machine flips this to false after
 			// repeated failures (spec §"Webhook Delivery Status"
@@ -1122,6 +1147,7 @@ func (r *WebhookRegistry) lookupTarget(canonicalKey []byte) (WebhookTarget, bool
 // → "Unsubscribe timing by mode" L707. Must hold r.mu write lock.
 func (r *WebhookRegistry) pruneExpiredLocked() []WebhookTarget {
 	now := time.Now()
+	r.verified.sweep(now)
 	ctx := context.Background()
 	// ListWebhooks snapshot + per-key DeleteWebhook avoids mutating
 	// the store during iteration — the in-memory impl tolerates Go map

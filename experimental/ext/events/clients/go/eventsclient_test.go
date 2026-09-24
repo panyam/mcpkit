@@ -1,12 +1,14 @@
 package eventsclient_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,7 +36,14 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(c
 	// the loopback escape so the dial-time SSRF guard (spec
 	// §"Webhook Security" → "SSRF prevention" L464) doesn't block
 	// the test deliveries. Per-test whOpts can still override.
-	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
+	// The "http://localhost:1/sink" callbacks exercise only the subscribe
+	// wire and never answer; the allowlist covers them and nothing else,
+	// so httptest receivers still go through the verification handshake.
+	whOpts = append([]events.WebhookOption{
+		events.WithWebhookAllowPrivateNetworks(true),
+		events.WithUnsafeWebhookAllowPlaintextCallbacks(),
+		events.WithWebhookDeliveryAllowlist([]string{"http://localhost:1/sink"}),
+	}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
 	src, yield := events.NewYieldingSource[fakePayload](events.EventDef{
 		Name:        "fake.event",
@@ -194,7 +203,7 @@ func TestReceiver_DeliversTypedEvents(t *testing.T) {
 func TestReceiver_RejectsBadSignature(t *testing.T) {
 	c, yield, _ := stack(t)
 
-	recv := eventsclient.NewReceiver[fakePayload]("the-wrong-secret")
+	recv := eventsclient.NewReceiver[fakePayload]("")
 	defer recv.Close()
 
 	hookSrv := httptest.NewServer(recv)
@@ -209,7 +218,9 @@ func TestReceiver_RejectsBadSignature(t *testing.T) {
 	})
 	require.NoError(t, err)
 	defer sub.Stop()
-	// deliberately do NOT call recv.SetSecret(sub.Secret())
+	// Past the verification handshake, swap in a secret that does not
+	// match what the server signs with.
+	recv.SetSecret("the-wrong-secret")
 
 	require.NoError(t, yield(context.Background(), fakePayload{Msg: "should-be-rejected"}))
 
@@ -219,6 +230,70 @@ func TestReceiver_RejectsBadSignature(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		// expected — silent rejection at the HTTP layer
 	}
+}
+
+// A receiver holding a secret other than the one the subscription
+// supplies cannot verify the challenge, so it must not consent to it.
+func TestReceiver_RefusesChallengeSignedWithAnotherSecret(t *testing.T) {
+	c, _, _ := stack(t)
+
+	recv := eventsclient.NewReceiver[fakePayload]("whsec_" + strings.Repeat("A", 32))
+	defer recv.Close()
+	hookSrv := httptest.NewServer(recv)
+	defer hookSrv.Close()
+
+	_, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
+		EventName:   "fake.event",
+		CallbackURL: hookSrv.URL,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "endpoint verification failed")
+}
+
+// TestReceiver_EchoesVerificationChallenge pins the handshake answer: a
+// correctly signed challenge gets its nonce back in a 2xx JSON body.
+func TestReceiver_EchoesVerificationChallenge(t *testing.T) {
+	c, _, _ := stack(t)
+
+	var challenges, echoes []string
+	var mu sync.Mutex
+	recv := eventsclient.NewReceiver[fakePayload]("")
+	defer recv.Close()
+	hookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var in struct{ Type, Challenge string }
+		_ = json.Unmarshal(body, &in)
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		recv.ServeHTTP(rec, r)
+		if in.Type == "verification" {
+			var out struct{ Challenge string }
+			_ = json.Unmarshal(rec.Body.Bytes(), &out)
+			mu.Lock()
+			challenges, echoes = append(challenges, in.Challenge), append(echoes, out.Challenge)
+			mu.Unlock()
+			assert.Equal(t, http.StatusOK, rec.Code)
+		}
+		for k, v := range rec.Header() {
+			w.Header()[k] = v
+		}
+		w.WriteHeader(rec.Code)
+		_, _ = w.Write(rec.Body.Bytes())
+	}))
+	defer hookSrv.Close()
+
+	sub, err := eventsclient.Subscribe(context.Background(), c, eventsclient.SubscribeOptions{
+		EventName:   "fake.event",
+		CallbackURL: hookSrv.URL,
+	})
+	require.NoError(t, err)
+	defer sub.Stop()
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, challenges, 1)
+	assert.NotEmpty(t, challenges[0])
+	assert.Equal(t, challenges, echoes)
 }
 
 // TestReceiver_AcceptsStandardWebhooksHeaders verifies that switching the

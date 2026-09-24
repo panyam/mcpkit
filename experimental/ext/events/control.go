@@ -50,9 +50,10 @@ type ControlError struct {
 // optional and use omitempty so envelopes only carry the field they
 // need.
 type controlEnvelope struct {
-	Type   string        `json:"type"`
-	Cursor string        `json:"cursor,omitempty"`
-	Error  *ControlError `json:"error,omitempty"`
+	Type      string        `json:"type"`
+	Cursor    string        `json:"cursor,omitempty"`
+	Error     *ControlError `json:"error,omitempty"`
+	Challenge string        `json:"challenge,omitempty"` // type:verification only, see verification.go
 }
 
 // PostGap delivers a {type:gap, cursor:<fresh>} envelope to the
