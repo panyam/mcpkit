@@ -201,6 +201,12 @@ These span packages and will bite on a task that never opens a routed doc.
   this repo's history has had a workflow fire against it; the next release is the first real
   exercise. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
   because for five releases it did not.
+- **Capability checks must read the per-request envelope too.** On the 2026-07-28 stateless wire
+  there is no `initialize`, so client capabilities arrive only in each request's `_meta`
+  (`core.RequestMetaFromContext`). A helper that reads session caps alone answers false for every
+  stateless client, silently. `core.ClientSupportsExtension` did exactly that until #1470, which
+  made it read both. `ClientSupportsTasksV1` still reads session caps only (v1 is frozen and
+  legacy-only). Any new capability helper checks both sources.
 - **A list response is built from sorted keys, never from map iteration.** Constraint C10, added
   after the same bug turned up twice: `tools/list` on the apps bridge (#1408) and `events/list`
   (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever

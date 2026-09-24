@@ -83,9 +83,45 @@ range that is invisible in a test is not invisible in a regenerated document.
 
 ---
 
+## Spec conformance: the tests agreed with the bug
+
+A 2026-09-24 diff of ext-apps v2.0.1 against this package (kept in mcpcontrib at
+`proposals/mcp-apps-wg/ext-apps-v2.0.1-coverage.md`) found the bridge JS sending `ui/*` messages in
+shapes the spec does not define: `updateModelContext` as `{context}`, `downloadFile` as
+`{url, filename}`, host capabilities read from `result.capabilities` instead of `hostCapabilities`,
+`ui/resource-teardown` handled as a notification when it is a request. Every bridge test passed,
+because the fixtures in `mcp-app-bridge.test.ts` were written to match the bridge rather than the
+spec.
+
+The same blind spot hid a silent failure between our own halves. The Go host handlers decode the
+spec shape, the bridge sends the wrong one, and the pair yields an empty request with no error.
+Each side's unit tests pass on their own.
+
+Two rules follow, and both are now enforced. Bridge fixtures come from upstream's schemas, never
+from what our code emits: every outbound message must survive a parse with upstream ext-apps' zod
+schemas unchanged (#1472). The "unchanged" part matters, because those schemas strip unknown keys, so
+`{context: ...}` parses as a valid update with empty params. And a feature that spans the bridge and
+`AppHost` needs a pair test: vitest records what the real bridge sends into
+`testdata/bridge-wire.json`, and a Go test replays it through `AppHost` (#1477). Run against a
+fixture recorded from the old bridge, that replay fails on exactly the bugs above.
+
+The review also found that `AppHost` cannot host a stock ext-apps View at all: it forwards
+`ui/initialize` to the MCP server, and `AppBridge` has no host→View notify path. Tracked in #1454.
+Since the bridge is optional (`docs/APPS_DESIGN.md` § Frontend independence), that gap matters more
+than any bridge feature: the Go host is where mcpkit has no upstream equivalent.
+
+---
+
 ## Open items
 
 - **`ctx.Elicit` / `ctx.Sample` handlers need migrating to MRTR** for stateless-wire support
-  (#835). They are forbidden on the stateless wire by construction.
-- **ext-apps v1.7.0 bridge JS feature coverage** is tracked in #772: `createSamplingMessage`,
-  handshake guards, `allowUnsafeEval`.
+  (#835). They are forbidden on the stateless wire by construction. SEP-3118 (app-rendered
+  elicitations) depends on this path.
+- **Spec conformance against ext-apps v2.0.1**, from the review above. Done: bridge wire shapes
+  (#1452, PR #1472), stateless `ClientSupportsUI` (#1458, PR #1470). In review: `AppHost` answering
+  `ui/*` host requests (#1456, PR #1477). Open: View lifecycle (#1454), proxy policy for visibility,
+  errors and cancellation (#1453), resource metadata emitted on the tool instead of the resource
+  (#1455), bridge abort and error codes (#1473). #772, the v1.7.0 tracker, is closed.
+- **The bridge is frozen to wire conformance plus extras** (`docs/APPS_DESIGN.md` § Frontend
+  independence). Extras as add-ons over upstream's `App` are #1475, and the any-frontend showcase
+  is #1474. Don't add parity features to the bridge.
