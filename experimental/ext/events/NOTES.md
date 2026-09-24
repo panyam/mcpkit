@@ -194,6 +194,48 @@ because the one source a client could not poll was never a selection candidate; 
 `events.topology` a delivery array made the order load-bearing and conformance scenarios began
 picking a different event type per run. Same bug as #1408 on the apps bridge, now constraint C10.
 
+---
+
+## Webhook signatures key on the decoded secret
+
+`HMAC-SHA256(decoded(secret), webhook-id + "." + webhook-timestamp + "." + body)`, base64 with a
+`v1,` prefix. `signingKey` in `secret.go` does the decoding, accepting both base64 alphabets because
+the SDKs disagree on which they emit, and only when the `whsec_` prefix is present: an unprefixed
+value is not a spec-format secret, and decoding one anyway reinterprets most short strings.
+
+For four months everything here keyed on the literal string instead. Signing landed 2026-04-29 when
+the secret was an opaque token and that was right; the `whsec_` format arrived two days later and
+derivation was never revisited. Signer, both verifiers, the Go and Python clients and the
+whole-enchilada receiver all agreed with each other and none agreed with the spec, so every test
+passed. If you touch signing, test against the specification text rather than against this package's
+own signer.
+
+The legacy `X-MCP-Signature` mode still keys on the literal, deliberately: the spec defines
+derivation for the Standard Webhooks formula only.
+
+## `delivery` is enforced on poll and subscribe, and derived when absent
+
+Both `registerPoll` and `registerSubscribe` refuse a mode the descriptor does not advertise, with
+`-32014` and `data.feature: "deliveryMode"`. `registerStream` still gates on whether the source
+implements `streamSubscribable` instead, which is a third basis for the same decision and is
+tracked in #1417.
+
+`deriveDelivery` fills in a source that declared nothing: poll always, push when the source is
+`streamSubscribable`, webhook when a registry is wired. That last clause used to be nested inside
+the push branch, which made every non-streamable source derive poll-only. Nothing noticed until
+subscribe began enforcing, because until then the array was decoration.
+
+**Read `Registry.Def(name)`, not `src.Def()`,** anywhere the answer must match what `events/list`
+published.
+
+## Two escape hatches, deliberately separate
+
+`WithWebhookAllowPrivateNetworks` governs *hosts* (loopback, RFC1918, link-local, ULA).
+`WithUnsafeWebhookAllowPlaintextCallbacks` governs the *scheme*. They used to be one flag because
+the demos want both, and that conflation meant a fixture needing a local receiver silently stopped
+enforcing https too, so a conformance run reported a demo setting as a library defect.
+`examples/events/kitchen-sink` sets the plaintext hatch only outside `--conformance-events`.
+
 ## Endpoint verification runs inside subscribe (#490)
 
 The handshake is synchronous. The spec says a failed one "yields `-32015`" and that the categories

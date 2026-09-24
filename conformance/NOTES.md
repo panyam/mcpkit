@@ -185,6 +185,25 @@ before assuming a var does anything.
 `cmd/testserver/conformance_input_required.go` registers. Pointing a gate at an example that cannot
 serve the fixtures gives you a gate that can never pass.
 
+## "Failed" in these suites means failed-or-unmeasurable
+
+Upstream's policy (#248, `src/scenarios/untestable.ts`) is that a check whose prerequisite is
+missing reports **red, not SKIPPED** — SKIPPED reads as green in pass counts, exit codes and
+baselines, so a gap would be invisible to anyone burning down a list. Severity follows the
+underlying requirement's keyword, so an untestable MUST is FAILURE and an untestable SHOULD is
+WARNING.
+
+The consequence is that a summary line cannot distinguish "you violated this" from "nobody can
+check this". `events-webhook` once read `6 failed` when three were defects and three were
+untestable. Every untestable check carries `details.untestable: true` and a `Not testable:` prefix
+in its message, so the distinction is in the artifacts; our `testconf-*` wrappers print only the
+ratio. Read `checks-*/*/checks.json` before believing a count, and see "Read the denominator" above
+for the sibling trap.
+
+The productive response is to remove the prerequisite gap rather than to soften the row. Of eleven
+untestable rows in the events suite, six became real grades once the fixture could be provoked, and
+one of those six immediately caught a defect nobody had evidence for.
+
 ## The fork's own main goes stale
 
 `origin` in the `conf-skills` worktree is `panyam/mcpconformance`, the fork, not
@@ -445,6 +464,40 @@ until it lands.
 declaration, the empty-settings case, `listChanged` gating the notification, and the `-32601`
 fallback. They report untested, which is the manifest working.
 
+**Thirteen divergences, and the shape of what the suite catches.** Six closed by #1379/#1381/#1416,
+five by #1432/#1433/#1434, one open (#490, endpoint verification), one a fixture question. Current:
+discovery 12/12, poll 29/29, push 18/18, webhook 22/23, the last red row being untestable rather
+than a defect.
+
+Two are worth remembering beyond their fix:
+
+- **Mutual consistency is not correctness.** Webhook signatures keyed the HMAC on the literal
+  `whsec_` string where the spec says the decoded bytes. Signer, both verifiers, the Go and Python
+  clients and the whole-enchilada receiver all made the same substitution, so every round-trip test
+  passed and every other implementation rejected our deliveries. The fix's test computes the
+  expected value from the specification text rather than from our own signer, which is the only
+  shape that could have caught it. The whole-enchilada receiver was a near-miss on top: it *did*
+  decode, but only standard base64 while `GenerateSecret` emits raw-URL, so its decode failed
+  silently and it matched the buggy server by accident.
+- **A derived value is only as good as its derivation.** `deriveDelivery` nested webhook inside the
+  streamability branch, so sources without a `Subscribe` channel derived poll-only. Webhook goes out
+  through the registry, not the source. Wrong from the day it was written in #1416 and invisible
+  until `events/subscribe` started enforcing the array.
+
+**Upstream requires 41 fixture tools and declares none of them machine-readably.** `slow_compute`,
+`test_error_handling`, `test_reconnection`, the whole `test_input_required_result_*` family. The
+only documentation is prose in `examples/servers/typescript/README.md`; there is no `requiredTools`
+in `types.ts` and no manifest. So an SDK author implementing conformance reads someone else's
+reference server, reverse-engineers each tool's behaviour from scenario source, then discovers by
+running which checks went untestable.
+
+Events was the only scenario set requiring none, which is why so many of its rows were
+unmeasurable. It now has five controls and is the worked example for the convention in
+`examples/CONVENTIONS.md` § Conformance fixtures. The idea worth proposing upstream, with that as
+evidence: scenarios declare their fixture prerequisites the way they declare check ids, which
+collates into a manifest and supports a `fixture-check --url` command telling an implementer which
+tools they are missing and which checks each would unblock.
+
 Flip to a gate once the spec text stabilises. The numbers no longer block it.
 
 ---
@@ -464,6 +517,19 @@ been a destructive change to someone else's data.
 Run it to read the numbers, then `git checkout -- src/seps/traceability.json` before committing.
 The local run is still the right way to confirm a yaml edit parses and that the untested count
 matches what a header claims.
+
+## Two things about `check-conformance-stale` that cost runs
+
+**It compares the working tree to HEAD**, which its own target comment says and which reads
+backwards the first time you hit it. Regenerate `CONFORMANCE.md` and the gate goes *red*, because
+the file now differs from the committed one. The flow is `make refresh-conformance`, commit, then
+the gate agrees. Two confused runs before reading the target.
+
+**Its verdict depends on sibling worktrees it does not control.** It rebuilds `dist/` in whatever
+`../conf-upstream-main` currently has checked out and renders from that. A worktree parked on a
+feature branch silently answers a different question: an unmerged SEP-2640 branch there reported
+sep-2243 drift that did not exist. `make -C conformance sync-conformance` exists to catch exactly
+this (dirty trees, behind-origin branches) and needs `uv`, which is why nobody had run it.
 
 ## Generated artifacts
 
