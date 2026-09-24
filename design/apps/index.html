@@ -240,7 +240,7 @@
 <h1 id="mcp-apps-extension-design">MCP Apps extension design <a class="anchor" href="#mcp-apps-extension-design">¶</a></h1>
 <h2 id="overview">Overview <a class="anchor" href="#overview">¶</a></h2>
 <p>MCPKit adds support for the MCP Apps extension (<code>io.modelcontextprotocol/ui</code>), enabling servers to return interactive HTML user interfaces that render inline in host conversations (Claude, ChatGPT, VS Code Copilot, Goose, etc.). This document covers the architecture, protocol surface, edge cases, conformance strategy, and the slyds reference integration.</p>
-<p>MCP Apps combines two existing MCP primitives. Tools declare a UI resource via <code>_meta.ui.resourceUri</code>, and resources serve the HTML content with MIME type <code>text/html;profile=mcp-app</code>. The interactive iframe↔host protocol (JSON-RPC over <code>postMessage</code>) is the host&rsquo;s responsibility; mcpkit&rsquo;s scope is the server-side metadata, resource serving, capability negotiation, and client-side detection.</p>
+<p>MCP Apps combines two existing MCP primitives. Tools declare a UI resource via <code>_meta.ui.resourceUri</code>, and resources serve the HTML content with MIME type <code>text/html;profile=mcp-app</code>. The interactive iframe↔host protocol (JSON-RPC over <code>postMessage</code>) runs between the View and the host. mcpkit&rsquo;s core scope is the Go side of that picture: server-side metadata, resource serving and capability negotiation, plus a Go host runtime (<code>AppHost</code>). The View&rsquo;s JavaScript runtime is pluggable, as <a href="#frontend-independence">Frontend independence</a> records.</p>
 <h2 id="design-principles">Design Principles <a class="anchor" href="#design-principles">¶</a></h2>
 <ol>
 <li><strong>Core module stays zero-deps</strong> - UI metadata types live in mcpkit core. No HTML processing, no JS bundling, no browser dependencies.</li>
@@ -248,7 +248,28 @@
 <li><strong>Interface in core, implementation in sub-module</strong> - core defines the <code>UIMetadata</code> struct and <code>_meta</code> plumbing. A future <code>mcpkit/ui</code> sub-module could provide helpers (CSP builders, HTML inlining), but is not required for v1.</li>
 <li><strong>Follow the auth pattern</strong> - <code>UIExtension</code> implements <code>ExtensionProvider</code>, registered via <code>WithExtension(ui.UIExtension{})</code>. Capability negotiation mirrors auth exactly.</li>
 <li><strong>Slyds as the reference app</strong> - we validate every design decision against a real HTML slide deck editor served as an MCP App.</li>
+<li><strong>Any frontend</strong> - the Go backend depends only on the wire protocol, never on a particular View runtime. See <a href="#frontend-independence">Frontend independence</a>.</li>
 </ol>
+<h2 id="frontend-independence">Frontend independence <a class="anchor" href="#frontend-independence">¶</a></h2>
+<p><em>Decision recorded 2026-09-24. Status: accepted.</em></p>
+<h3 id="context">Context <a class="anchor" href="#context">¶</a></h3>
+<p>An MCP App has three parts. The <strong>server</strong> declares app tools and serves <code>ui://</code> HTML. The <strong>host</strong> renders that HTML in a sandboxed iframe and relays JSON-RPC over <code>postMessage</code>. The <strong>View</strong> is the code inside the iframe, and it needs a small runtime to speak that protocol.</p>
+<p>Upstream publishes a View runtime, <code>App</code>, in <a href="https://github.com/modelcontextprotocol/ext-apps"><code>@modelcontextprotocol/ext-apps</code></a>, with React bindings (<code>useApp</code>). mcpkit ships its own, the bridge in <a href="https://github.com/panyam/mcpkit/blob/main/ext/ui/assets/mcp-app-bridge.ts"><code>ext/ui/assets/mcp-app-bridge.ts</code></a>. A review against ext-apps v2.0.1 found the bridge had drifted from the spec in several places while its tests stayed green (#1452, fixed in #1472), which raised the question of what the bridge is for.</p>
+<h3 id="decision">Decision <a class="anchor" href="#decision">¶</a></h3>
+<p>mcpkit&rsquo;s MCP Apps support is the <strong>Go backend</strong>: the server helpers in <code>ext/ui</code> (<code>RegisterAppTool</code>, <code>ui://</code> resources, <code>_meta.ui</code>) and the Go host runtime (<code>AppHost</code>, <code>ServerRegistry</code>). <strong>Any View runtime that speaks the <code>2026-01-26</code> wire protocol works with it</strong>, and the backend does nothing runtime-specific. Upstream&rsquo;s <code>App</code> is the recommended runtime for single-page and framework apps.</p>
+<p>The mcpkit bridge stays as an optional, additive runtime with a fixed scope:</p>
+<ul>
+<li><strong>Wire conformance.</strong> Every message it sends is checked against upstream&rsquo;s schemas in CI, so it cannot drift silently again.</li>
+<li><strong>Zero build step.</strong> It is one script that <code>ui.InjectAppBridge</code> drops into server-rendered HTML, such as a Go template, with no bundler.</li>
+<li><strong>mcpkit extras.</strong> The SEP-2356 file picker (<code>selectFile</code>) and SEP-414 trace-context relay. These are being packaged so they also work on top of upstream&rsquo;s <code>App</code> (#1475).</li>
+</ul>
+<p>It does <strong>not</strong> chase feature parity with upstream&rsquo;s <code>App</code>. When a View needs something upstream&rsquo;s runtime has and the bridge lacks, the answer is to use upstream&rsquo;s runtime, with mcpkit&rsquo;s extras added on if wanted.</p>
+<h3 id="consequences">Consequences <a class="anchor" href="#consequences">¶</a></h3>
+<ul>
+<li>Nothing in the Go server path injects or assumes the bridge. <code>InjectAppBridge</code> and <code>AppShellHTML</code> are opt-in helpers. <code>examples/apps/compat/*</code> already serves upstream&rsquo;s own built Views from Go servers and passes upstream&rsquo;s Playwright suite. A showcase that serves one tool through upstream <code>App</code>, React <code>useApp</code> and the bridge from the same Go server is tracked in #1474.</li>
+<li>Bridge work is limited to conformance fixes and the extras. Parity items were dropped from #1473.</li>
+<li>On the host side, the same rule means <code>AppHost</code> has to accept a stock upstream View, which requires answering <code>ui/initialize</code> (#1454).</li>
+</ul>
 <h2 id="spec-reference">Spec Reference <a class="anchor" href="#spec-reference">¶</a></h2>
 <ul>
 <li>Extension ID: <code>io.modelcontextprotocol/ui</code></li>
