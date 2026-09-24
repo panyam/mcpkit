@@ -183,8 +183,9 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 	// exercise the unsupported-mode path; every type the demo ships advertises
 	// it, which is why sep-9999-error-unsupported had nothing to probe.
 	sources := []events.EventSource{chatSrc, alertSrc, presenceSrc}
+	var buildSrc *events.YieldingSource[BuildFinishedData]
 	if conformanceEvents {
-		buildSrc, _ := events.NewYieldingSource[BuildFinishedData](buildEventDef(), events.WithMaxSize(eventStoreCap))
+		buildSrc, _ = events.NewYieldingSource[BuildFinishedData](buildEventDef(), events.WithMaxSize(eventStoreCap))
 		sources = append(sources, buildSrc)
 	}
 
@@ -204,7 +205,7 @@ func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *w
 	})
 
 	if conformanceEvents {
-		registerConformanceEventControls(srv, conformanceYielders{chat: chatSrc, alert: alertSrc})
+		registerConformanceEventControls(srv, conformanceYielders{chat: chatSrc, alert: alertSrc, build: buildSrc})
 		log.Printf("[conformance] events control tools registered; this is not a demo path")
 	}
 	return &wiredServer{
