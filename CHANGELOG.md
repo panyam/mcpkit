@@ -9,6 +9,20 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **`ext/ui`: `AppHost` answers the View's `ui/*` host requests itself** (#1456).
+  `ui/open-link`, `ui/download-file`, `ui/message`, `ui/request-display-mode`
+  and `ui/update-model-context` go to the `HostHandlers` passed with
+  `ui.WithHostHandlers` instead of being forwarded to the MCP server, which
+  cannot answer them. A nil handler returns `-32601`, bad params `-32602`, and
+  a handler can pick its own code with `ui.HostError`.
+  `ui/request-display-mode` with no handler answers `inline`
+  (`ui.DefaultDisplayMode`), since the spec requires an answer. Other View
+  notifications (`size-changed`, `request-teardown`, `notifications/message`)
+  reach `HostHandlers.Notification`. A fixture recorded from the real bridge JS
+  is replayed through `AppHost` in tests, so the two halves cannot drift apart
+  unnoticed.
+
 ### Changed
 - **`ext/ui` bridge JS speaks the MCP Apps `2026-01-26` wire shapes** (#1452).
   `MCPApp.updateModelContext(params)` sends `{content?, structuredContent?}`

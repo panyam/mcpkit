@@ -75,6 +75,28 @@ sequenceDiagram
     Bridge-->>App: {content: [{type: "text", text: "server:hi"}]}
 ```
 
+#### App→Host: Host Capabilities
+
+`ui/open-link`, `ui/download-file`, `ui/message`, `ui/request-display-mode` and
+`ui/update-model-context` belong to the host, not the server. AppHost answers them from the
+`HostHandlers` passed with `WithHostHandlers` and never forwards them. A nil handler means the host
+does not support that method, and the app gets `-32601`. `ui/request-display-mode` is the exception:
+the spec requires the host to answer with the mode in effect, so with no handler it answers
+`{mode: "inline"}` (`ui.DefaultDisplayMode`). `HostHandlers.Notification` receives every
+app notification except `notifications/tools/list_changed`, which AppHost consumes itself.
+
+```go
+host := ui.NewAppHost(c, bridge, ui.WithHostHandlers(ui.HostHandlers{
+    UpdateModelContext: func(ctx context.Context, u ui.ModelContextUpdate) error {
+        session.SetAppContext(u) // replaces the previous update from this view
+        return nil
+    },
+    Message: func(ctx context.Context, m ui.MessageRequest) error {
+        return session.QueueTurn(m)
+    },
+}))
+```
+
 #### Dynamic Tool Registration
 
 When the app registers a new tool at runtime, a `notifications/tools/list_changed` notification triggers a cache refresh.

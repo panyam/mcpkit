@@ -7,10 +7,11 @@ Demonstrates AppHost mediating between an MCP server and an app bridge with bidi
 - **Create MCP server with tools** — The server provides two tools: echo (returns input) and time (returns current time).
 - **Connect client to server via in-process transport** — The client connects without HTTP — using InProcessTransport for direct dispatch.
 - **Create InProcessAppBridge with app-provided tools** — The bridge simulates an MCP App (iframe). It registers two tools that the host/model can call directly.
-- **Create AppHost and wire everything together** — AppHost wires up bidirectional routing and fetches the initial app tool list.
+- **Create AppHost and wire everything together** — AppHost wires up bidirectional routing and fetches the initial app tool list. HostHandlers supplies the ui/* methods that belong to the host, not the server.
 - **ListAllTools — aggregated server + app tools** — ListAllTools merges tools from the MCP server and the app bridge into a single list.
 - **CallAppTool — host invokes an app-provided tool** — The host calls a tool registered by the app. The bridge dispatches to the Go handler.
 - **App calls server tool via bridge → AppHost → Client** — The app calls a server-side tool through the bridge. AppHost forwards to the MCP server via the Client.
+- **App calls the host, not the server** — ui/update-model-context, ui/message, ui/open-link and ui/request-display-mode are answered by the host's HostHandlers and never reach the MCP server.
 - **Dynamic registration — app adds a tool at runtime** — The app registers a new tool after startup. AppHost detects the change and refreshes its cache.
 
 ## Flow
@@ -59,7 +60,14 @@ sequenceDiagram
     Client-->>Host: CallResult
     Host-->>Bridge: Response
 
-    Note over Srv,Bridge: Step 8: Dynamic registration — app adds a tool at runtime
+    Note over Srv,Bridge: Step 8: App calls the host, not the server
+    Bridge->>Host: ui/update-model-context {content, structuredContent}
+    Host-->>Bridge: {}
+    Bridge->>Host: ui/message {role: user, content}
+    Host-->>Bridge: {}
+    Bridge->>Host: ui/open-link, ui/request-display-mode
+
+    Note over Srv,Bridge: Step 9: Dynamic registration — app adds a tool at runtime
     Bridge->>Bridge: RegisterTool("app_dice")
     Bridge->>Host: notifications/tools/list_changed
     Host->>Bridge: Send(tools/list) — refresh
@@ -100,7 +108,11 @@ The host calls a tool registered by the app. The bridge dispatches to the Go han
 
 The app calls a server-side tool through the bridge. AppHost forwards to the MCP server via the Client.
 
-### Step 8: Dynamic registration — app adds a tool at runtime
+### Step 8: App calls the host, not the server
+
+Four of the app's requests are host capabilities the MCP server has never heard of. AppHost answers them from the `HostHandlers` passed with `WithHostHandlers` and forwards only `tools/call` and `resources/read`. Each `ui/update-model-context` replaces the previous one from the same view, so the host keeps one slot per view rather than a log. A nil handler means the host does not support that method and the app gets `-32601`, except `ui/request-display-mode`, which always gets an answer (`inline` when there is no handler).
+
+### Step 9: Dynamic registration — app adds a tool at runtime
 
 The app registers a new tool after startup. AppHost detects the change and refreshes its cache.
 

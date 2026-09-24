@@ -18,6 +18,7 @@ import (
 // It provides:
 //   - Host→App: ListAppTools and CallAppTool forward requests to the app
 //   - App→Host: app requests (tools/call, resources/read) are forwarded to the server
+//   - App→Host: ui/* host-capability requests go to HostHandlers, never the server
 //   - Cache: app tool list is cached and refreshed on notifications/tools/list_changed
 //   - Aggregation: ListAllTools merges server and app tools for LLM presentation
 type AppHost struct {
@@ -31,6 +32,8 @@ type AppHost struct {
 	cancel context.CancelFunc
 
 	tp core.TracerProvider
+
+	handlers HostHandlers
 }
 
 // AppHostOption configures an AppHost.
@@ -200,8 +203,9 @@ func (h *AppHost) RefreshAppTools(ctx context.Context) error {
 	return nil
 }
 
-// handleAppRequest routes app→host JSON-RPC requests to the MCP server.
-// Called when the app uses MCPApp.callTool(), MCPApp.readResource(), etc.
+// handleAppRequest routes app→host JSON-RPC requests. The ui/* host
+// capabilities (see HostHandlers) are answered here; everything else is
+// forwarded to the MCP server, e.g. MCPApp.callTool() and readResource().
 //
 // SEP-414 P6 (issue 660): when a TracerProvider is wired via
 // WithTracerProvider, the iframe-relayed `params._meta.traceparent`
@@ -211,6 +215,10 @@ func (h *AppHost) RefreshAppTools(ctx context.Context) error {
 // preserves caller-set _meta.traceparent on the wire, so the trace
 // stitches end-to-end: browser → bridge → AppHost → server dispatch.
 func (h *AppHost) handleAppRequest(ctx context.Context, req *core.Request) *core.Response {
+	if isHostMethod(req.Method) {
+		return h.handleHostRequest(ctx, req)
+	}
+
 	// Inbound trace context from the bridge envelope. When no provider
 	// was wired on the iframe side this returns zero and the span emits
 	// with no parent — same shape as auth running outside a traced
@@ -256,6 +264,10 @@ func (h *AppHost) handleAppNotification(method string, params json.RawMessage) {
 				h.RefreshAppTools(h.ctx)
 			}
 		}()
+	default:
+		if h.handlers.Notification != nil {
+			h.handlers.Notification(method, params)
+		}
 	}
 }
 
