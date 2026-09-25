@@ -266,7 +266,7 @@
 <p>It does <strong>not</strong> chase feature parity with upstream&rsquo;s <code>App</code>. When a View needs something upstream&rsquo;s runtime has and the bridge lacks, the answer is to use upstream&rsquo;s runtime, with mcpkit&rsquo;s extras added on if wanted.</p>
 <h3 id="consequences">Consequences <a class="anchor" href="#consequences">¶</a></h3>
 <ul>
-<li>Nothing in the Go server path injects or assumes the bridge. <code>InjectAppBridge</code> and <code>AppShellHTML</code> are opt-in helpers. <code>examples/apps/compat/*</code> already serves upstream&rsquo;s own built Views from Go servers and passes upstream&rsquo;s Playwright suite. A showcase that serves one tool through upstream <code>App</code>, React <code>useApp</code> and the bridge from the same Go server is tracked in #1474.</li>
+<li>Nothing in the Go server path injects or assumes the bridge. <code>InjectAppBridge</code> and <code>AppShellHTML</code> are opt-in helpers. <code>examples/apps/compat/*</code> already serves upstream&rsquo;s own built Views from Go servers and passes upstream&rsquo;s Playwright suite. <a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/any-frontend"><code>examples/apps/any-frontend</code></a> serves one app through upstream <code>App</code>, React <code>useApp</code>, upstream <code>App</code> plus mcpkit&rsquo;s extras, and the bridge from the same Go server, and CI drives all four in Chromium.</li>
 <li>Bridge work is limited to conformance fixes and the extras. Parity items were dropped from #1473.</li>
 <li>On the host side, the same rule means <code>AppHost</code> has to accept a stock upstream View, which requires answering <code>ui/initialize</code> (#1454).</li>
 </ul>

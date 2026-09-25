@@ -255,6 +255,10 @@
 </thead>
 <tbody>
 <tr>
+<td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/any-frontend">any-frontend/</a></td>
+<td>One Go backend serving the same app through four View runtimes: the mcpkit bridge, upstream <code>App</code>, upstream React <code>useApp</code>, and upstream <code>App</code> plus mcpkit extras. Start here to choose a runtime.</td>
+</tr>
+<tr>
 <td><a href="https://github.com/panyam/mcpkit/tree/main/examples/apps/vanilla">vanilla/</a></td>
 <td>Minimal MCP App - plain JS, no build step</td>
 </tr>
@@ -307,7 +311,7 @@
 <ul>
 <li><strong>Server-defined UI</strong>: tool authors ship the rendering, not just the data. The host gives the app a sandboxed iframe.</li>
 <li><strong>Bidirectional tools</strong>: the app can register tools the model can call, and the model&rsquo;s tool calls can target either the server or the app.</li>
-<li><strong>Bridge events</strong>: a small JS API (<code>MCPApp.callTool</code>, <code>MCPApp.on('event', ...)</code>) handles host ↔ app messaging.</li>
+<li><strong>Any frontend runtime</strong>: the Go server only serves the View&rsquo;s bytes. The examples here mostly use mcpkit&rsquo;s bridge (<code>MCPApp.callTool</code>, <code>MCPApp.on('event', ...)</code>), a zero-build option for server-rendered pages, but upstream&rsquo;s <code>App</code> works just as well. <code>any-frontend/</code> shows both side by side.</li>
 </ul>
 <p>See <a href="/mcpkit/packages/ext-ui/"><code>docs/APPS_DESIGN.md</code></a> for the full architecture.</p>
 <h2 id="troubleshooting">Troubleshooting <a class="anchor" href="#troubleshooting">¶</a></h2>
