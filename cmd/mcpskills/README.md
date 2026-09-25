@@ -7,12 +7,13 @@ The binary is deliberately implementation-agnostic on the inspect side. It speak
 ## Install / build
 
 ```bash
-# From the mcpkit repo root:
+git clone https://github.com/panyam/mcpkit && cd mcpkit
 make build-mcpskills          # produces ./bin/mcpskills
-
-# Or directly with go install:
-go install github.com/panyam/mcpkit/cmd/mcpskills@latest
 ```
+
+`go install github.com/panyam/mcpkit/cmd/mcpskills@latest` does not work yet. The module's
+`go.mod` carries the in-repo `replace` directives used for local development, and `go install`
+refuses any module that has them. Making the command installable is issue 1488.
 
 ## Subcommands
 
