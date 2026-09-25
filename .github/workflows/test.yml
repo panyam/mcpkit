@@ -55,6 +55,12 @@ jobs:
       - name: Release-workflow checker self-test
         run: make check-release-workflows-selftest
 
+      # bump-root once left tagged sub-modules pinning their siblings a
+      # release behind, which broke v0.7.0's stores/gorm for anyone fetching
+      # it alone until the pins were fixed by hand.
+      - name: bump-root pin self-test
+        run: make bump-pins-selftest
+
       # examples/ holds 58 modules but `make test-examples` only runs the ~10
       # that have tests, so nothing compiled the rest. apps/react/server was
       # broken from c45ccb78 until it was found by hand, with CI green
