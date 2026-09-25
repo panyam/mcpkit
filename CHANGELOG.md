@@ -9,23 +9,38 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-25
+
+A patch release for `ext/tasks`: tasks can report progress through
+`statusMessage`, and a status update racing `tasks/cancel` no longer turns a
+cancelled task into a completed one. No protocol changes and no breaking API
+changes. Full write-up: [`docs/releases/v0.7.1.md`](docs/releases/v0.7.1.md).
+
 ### Added
 - **`ext/tasks`: `TaskContext.SetStatusMessage(msg)`** sets a running task's
   `statusMessage` and sends `notifications/tasks`. SEP-2663 forbids
   `notifications/progress` on a task and points at `statusMessage` instead,
-  but there was no public way to set it: `SetStatus` changes only the status
-  and the store is private, so servers had to hold their own handle on the
-  store and write the field themselves.
+  but there was no public way to set it (#1490).
 
 ### Fixed
-- **`ext/tasks`: `SetStatus` no longer revives a finished task.**
+- **`ext/tasks`: a status update no longer revives a finished task.**
   `TaskStore.Update` has no terminal guard, so a `SetStatus(TaskWorking)` that
   landed after `tasks/cancel` moved the task back to `working`, and the
   handler's result was then stored over it: a cancelled task reported
   `completed`. `SetStatus` and `SetStatusMessage` now return
   `tasks.ErrTaskTerminal` and change nothing once the task is terminal. The
   `input_required` transitions inside `TaskElicit` / `TaskSample` go through
-  the same guard, and every update now stamps `lastUpdatedAt`.
+  the same guard, and every update now stamps `lastUpdatedAt` (#1490).
+- **`ext/skills` doc comments and the skills walkthrough describe
+  `skills/list` / `skills/get`** rather than the index removed in v0.6.0. The
+  walkthrough's archive digest step no longer always reports a mismatch
+  (walkthrough in #1489).
+
+### Changed
+- **`make bump-root` repoints sibling pins in tagged modules**, with a fixture
+  self-test in CI, so a release no longer needs hand edits (#1489).
+- **`make audit` fails on a gitleaks finding** instead of reporting it as a
+  missing tool (#1489).
 
 ## [0.7.0] - 2026-09-25
 

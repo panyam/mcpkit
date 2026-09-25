@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/protogen/bookservice
 go 1.26.6
 
 require (
-	github.com/panyam/mcpkit v0.7.0
+	github.com/panyam/mcpkit v0.7.1
 	github.com/panyam/mcpkit/experimental/ext/protogen v0.2.47
 	github.com/stretchr/testify v1.12.1
 	google.golang.org/protobuf v1.36.12

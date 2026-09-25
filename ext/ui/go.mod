@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/ext/ui
 go 1.26.6
 
 require (
-	github.com/panyam/mcpkit v0.7.0
+	github.com/panyam/mcpkit v0.7.1
 	github.com/stretchr/testify v1.12.1
 )
 
