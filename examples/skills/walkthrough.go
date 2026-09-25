@@ -57,7 +57,7 @@ func runDemo() {
 
 	demo := demokit.New("MCP Skills extension (SEP-2640), the reference walkthrough").
 		Dir("skills").
-		Description("SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a skill directory is a `skill://` URI; `skill://index.json` enumerates them with SHA-256 digests.").
+		Description("SEP-2640 serves Agent Skills over MCP's Resources primitive: each file under a skill directory is a `skill://` URI. The `skills/list` and `skills/get` methods enumerate skills, and each entry pins every file of its skill with a SHA-256 digest and a byte size.").
 		Actors(
 			demokit.Actor("Host", "MCP Host (this client)"),
 			demokit.Actor("Server", "MCP Server (just serve, file mode by default)"),
@@ -161,8 +161,8 @@ supports  := c.ServerSupportsExtension(skills.ExtensionID)`),
 
 	demo.Step("resources/list returns every cataloged skill URI").
 		Arrow("Host", "Server", "resources/list").
-		DashedArrow("Server", "Host", "resources[] including skill://index.json + each SKILL.md").
-		Note("In file mode the list has N entries per skill (one for SKILL.md, one per supporting file) plus the index. In archive mode it's one entry per skill plus the index.").
+		DashedArrow("Server", "Host", "resources[] with one entry per served file").
+		Note("In file mode the list has one entry per file: each SKILL.md plus each supporting file. In archive mode it has one entry per skill, the packed archive. This list is plain MCP resources. SEP-2640 discovery happens through skills/list in the next section.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
@@ -189,8 +189,8 @@ for _, d := range defs {
 			return nil
 		})
 
-	demo.Section("Discovery index",
-		"`skill://index.json` enumerates skills with `{$schema, skills:[{type, name, description, url, digest}]}`. Optional in the SEP; mcpkit auto-registers unless `WithoutIndex()`.",
+	demo.Section("Skill discovery",
+		"`skills/list` enumerates skills as `{skills:[{uri, frontmatter, resources:[{uri, digest, size}]}], nextCursor, ttlMs, cacheScope, _meta}`. `uri` names the skill's SKILL.md. `frontmatter` is the SKILL.md frontmatter carried verbatim. `resources` lists every file of the skill, SKILL.md included, or is the string `\"dynamic\"` when the server generates content at read time. `skills/get` takes `{uri}` and returns one entry as `{skill:{...}}`. Declaring the extension commits a server to both methods, and `Provider.RegisterWith(srv)` wires them.",
 	)
 
 	var (
@@ -198,22 +198,28 @@ for _, d := range defs {
 		detected      modeInfo
 	)
 
-	demo.Step("Read skill://index.json").
-		Arrow("Host", "Server", "resources/read uri=skill://index.json").
-		DashedArrow("Server", "Host", "{ $schema, skills: [...] }").
-		Note("The Indexer caches the result with a TTL and per-skill mtime invalidation. Repeated reads return the same bytes until something in a SKILL.md actually changes. The file is not on disk; mcpkit generates it from the live provider catalog on each cache miss.").
+	demo.Step("List skills with skills/list").
+		Arrow("Host", "Server", "skills/list").
+		DashedArrow("Server", "Host", "{ skills: [{uri, frontmatter, resources}], ttlMs, cacheScope, _meta }").
+		Note("ListSkillEntries follows nextCursor until the listing ends. mcpkit returns everything in one page by default, and WithSkillsListPageSize turns paging on. The Indexer builds entries from the live provider catalog and caches them with a TTL and per-skill mtime invalidation. The listing carries a ttlMs cache hint, one minute unless the server sets another. An empty or partial listing does not prove the server lacks a skill. A host holding a skill URI from elsewhere calls skills/get for it.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
-  | jq -r '.result.contents[0].text' | jq '.'`).Default(),
-			demokit.MakeVariant("go", "go", `body, _ := c.ReadResource(skills.IndexURI)
-var idx skills.Index
-json.Unmarshal([]byte(body), &idx)
-for _, e := range idx.Skills {
-    fmt.Printf("[%s] %s digest=%s…\n", e.Type, e.Name, e.Digest[:14])
-}`),
+  -d '{"jsonrpc":"2.0","id":2,"method":"skills/list","params":{}}' \
+  | jq '.result.skills[] | {uri, name: .frontmatter.name, files: [.resources[]?.uri]}'
+
+# One skill by its SKILL.md URI:
+#   -d '{"jsonrpc":"2.0","id":2,"method":"skills/get","params":{"uri":"skill://git-workflow/SKILL.md"}}'
+#   | jq '.result.skill'`).Default(),
+			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
+entries, _ := sc.ListSkillEntries(ctx)
+for _, e := range entries {
+    fmt.Printf("%s uri=%s files=%d\n", e.Name(), e.URI, len(e.Resources.Files))
+}
+
+// One skill by its SKILL.md URI, including one the listing omits:
+e, _ := sc.GetSkill(ctx, "skill://git-workflow/SKILL.md")`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
@@ -233,26 +239,26 @@ for _, e := range idx.Skills {
 		})
 
 	demo.Section("Distribution mode",
-		"SEP-2640 lets a server publish each skill as either individual files (`type:skill-md`) or one packed archive per skill (`type:archive` with `.tar.gz` / `.zip` suffix). The shape is visible on the index entries, so the walkthrough sniffs it once and threads the result through the rest of the steps so the file-mode and archive-mode narratives stay tidy.",
+		"mcpkit can serve each skill as individual files or as one packed archive per skill (`.tar.gz` or `.zip`). The 2026-08-21 SEP revision dropped the entry `type` field and deferred archives to an appendix, so a `skills/list` entry no longer says which shape the server uses. The walkthrough sniffs the served resource URIs once and threads the result through the remaining steps, which keeps the file-mode and archive-mode paths apart.",
 	)
 
-	demo.Step("Detect server distribution mode from the index").
-		Note("In file mode every entry's type is skill-md; the host fetches SKILL.md plus any supporting files individually. In archive mode every entry's type is archive and the URL ends in .tar.gz or .zip; the host fetches one resource per skill and unpacks it in-process. The current Provider is per-mode (no mixing), so the first archive entry sighted in the index is enough to decide.").
+	demo.Step("Detect server distribution mode from resource URIs").
+		Arrow("Host", "Server", "resources/list").
+		DashedArrow("Server", "Host", "resource URIs (archive mode: skill://<path>.tar.gz or .zip)").
+		Note("In file mode every served resource is one file, and the host reads SKILL.md and each supporting file individually. In archive mode each skill is one resource whose URI ends in .tar.gz or .zip, and the host fetches it and unpacks it in-process. A Provider serves one mode at a time, so the first archive URI decides.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("jq", "bash", `# Distinct types appearing in the index: "skill-md" or "archive".
+			demokit.MakeVariant("jq", "bash", `# Archive suffixes among the served URIs. Empty output means file mode.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":11,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
-  | jq -r '.result.contents[0].text' \
-  | jq -r '[.skills[].type] | unique | join(",")'`).Default(),
-			demokit.MakeVariant("go", "go", `var idx skills.Index
-json.Unmarshal(indexBody, &idx)
-for _, e := range idx.Skills {
-    if e.Type == skills.SkillTypeArchive {
-        f := skills.DetectArchiveFormat(e.URL, nil) // .tar.gz or .zip
-        // archive mode — fetch one resource per skill, unpack in-memory
-        _ = f
+  -d '{"jsonrpc":"2.0","id":11,"method":"resources/list"}' \
+  | jq -r '[.result.resources[].uri | capture("(?<s>\\.tar\\.gz|\\.zip)$") | .s] | unique | join(",")'`).Default(),
+			demokit.MakeVariant("go", "go", `defs, _ := c.ListResources(ctx)
+for _, d := range defs {
+    if f := skills.DetectArchiveFormat(d.URI, nil); f != skills.ArchiveFormatUnknown {
+        suffix := f.Suffix() // ".tar.gz" or ".zip"
+        // archive mode: fetch one resource per skill, unpack in-memory
+        _ = suffix
         break
     }
 }`),
@@ -278,44 +284,44 @@ for _, e := range idx.Skills {
 		})
 
 	demo.Section("Digest contract",
-		"Each entry carries `sha256:{64hex}` over the raw artifact bytes (SKILL.md for skill-md, packed archive for archive). Hosts MUST verify before use.",
+		"Each entry's `resources` array pins every file of the skill as `{uri, digest, size}`. `digest` is `sha256:{64hex}` over the file's raw bytes and `size` is its length in bytes. Hosts MUST verify both before use.",
 	)
 
-	demo.Step("Verify digest by re-fetching git-workflow's canonical artifact").
-		Arrow("Host", "Server", "resources/read uri=skill://git-workflow{/SKILL.md | .tar.gz | .zip}").
-		DashedArrow("Server", "Host", "text/markdown body (file mode) OR archive bytes (archive mode)").
-		Note("Treat the response bytes as the artifact, hash them, compare against the digest field from the index. The artifact is the SKILL.md in file mode and the packed archive in archive mode, and the verify ritual is the same either way. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content.").
+	demo.Step("Verify git-workflow's SKILL.md against its listed digest").
+		Arrow("Host", "Server", "resources/read uri=skill://git-workflow/SKILL.md").
+		DashedArrow("Server", "Host", "text/markdown body").
+		Note("Take the SKILL.md digest from the entry's resources array, read the file, hash the bytes, and compare. A mismatch indicates corruption or tampering, and per the SEP the host MUST NOT use the content. This step does the arithmetic by hand. ReadFromEntry runs the same check plus the size and frontmatter checks in one call. Archive mode serves no per-file SKILL.md, so the step skips there.").
 		VerbatimVariants("Reproduce on the wire",
-			demokit.MakeVariant("curl", "bash", `# File mode: re-read SKILL.md, recompute sha256, compare against the index entry's digest.
+			demokit.MakeVariant("curl", "bash", `# Take the pinned digest from skills/list, re-read SKILL.md, recompute sha256, compare.
 WANT=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
-  | jq -r '.result.contents[0].text' \
-  | jq -r '.skills[] | select(.url=="skill://git-workflow/SKILL.md") | .digest')
+  -d '{"jsonrpc":"2.0","id":3,"method":"skills/list","params":{}}' \
+  | jq -r '.result.skills[].resources[]? | select(.uri=="skill://git-workflow/SKILL.md") | .digest')
 GOT="sha256:$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
   -d '{"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://git-workflow/SKILL.md"}}' \
-  | jq -r '.result.contents[0].text' | shasum -a 256 | awk '{print $1}')"
-[ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"
-
-# Archive mode: swap the URI; the body is base64-encoded under .contents[0].blob.
-#   uri=skill://git-workflow.tar.gz     # or skill://git-workflow.zip
-#   jq -r '.result.contents[0].blob' | base64 -d | shasum -a 256`).Default(),
-			demokit.MakeVariant("go", "go", `target := uriGitWorkflow                 // file mode default
-if detected.archive {
-    target = "skill://git-workflow" + detected.suffix
+  | jq -j '.result.contents[0].text' | shasum -a 256 | awk '{print $1}')"
+[ "$WANT" = "$GOT" ] && echo "verified" || echo "MISMATCH"`).Default(),
+			demokit.MakeVariant("go", "go", `var want string
+for _, e := range entries {                // from skills/list
+    for _, f := range e.Resources.Files {
+        if f.URI == uriGitWorkflow {
+            want = f.Digest
+        }
+    }
 }
-result, _ := c.ReadResourceFull(target)
-raw := []byte(result.Contents[0].Text)
-if raw == nil {                          // archive mode returns base64 blob
-    raw, _ = base64.StdEncoding.DecodeString(result.Contents[0].Blob)
-}
-sum := sha256.Sum256(raw)
+result, _ := c.ReadResourceFull(ctx, uriGitWorkflow)
+sum := sha256.Sum256([]byte(result.Contents[0].Text))
 got := "sha256:" + hex.EncodeToString(sum[:])
-// compare got against e.Digest from skill://index.json — host MUST NOT use mismatched content`),
+// got != want means the host MUST NOT use the content.
+// sc.ReadFromEntry(ctx, entry, uriGitWorkflow) does this plus size and frontmatter.`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil || len(listedEntries) == 0 {
+				return nil
+			}
+			if detected.archive {
+				fmt.Printf("    Detected archive mode - no per-file SKILL.md is served to verify. See the Archive mode section below.\n")
 				return nil
 			}
 			target := uriGitWorkflow
@@ -572,23 +578,22 @@ fmt.Println(body)`),
 		})
 
 	demo.Section("Push-based invalidation (issue #795)",
-		"`skill://index.json` carries `_meta.io.modelcontextprotocol.skills/version`, a monotonic counter the server bumps whenever skill content changes. Stateful clients also receive `notifications/resources/list_changed` when the bump happens. Stateless clients (no persistent push channel) detect the change by polling the index and observing the field. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable; this walkthrough uses a demo-only `_demo/refresh` tool that calls `Provider.Refresh()` directly.",
+		"Every `skills/list` result carries `_meta[\"io.modelcontextprotocol.skills/version\"]`, a monotonic counter the server bumps whenever skill content changes. The counter is mcpkit metadata, not a SEP field. Stateful clients also receive `notifications/resources/list_changed` when the bump happens. Stateless clients have no push channel, so they call `skills/list` again and compare the counter. The listing's `ttlMs` says how long a listing may be cached, which is a separate question from whether it changed. Detectors that drive the bump (fsnotify, webhook, manual sweep) are pluggable. This walkthrough uses a demo-only `_demo/refresh` tool that calls `Provider.Refresh()` directly.",
 	)
 
 	demo.Step("Read the version, refresh, observe it bump").
-		Arrow("Host", "Server", "resources/read uri=skill://index.json (capture _meta version)").
+		Arrow("Host", "Server", "skills/list (capture _meta version)").
 		Arrow("Host", "Server", "tools/call name=_demo/refresh (server calls Provider.Refresh())").
 		DashedArrow("Server", "Host", "notifications/resources/list_changed (stateful wire only)").
-		Arrow("Host", "Server", "resources/read uri=skill://index.json (observe version bumped)").
-		Note("The version field lives under `_meta` with the reverse-domain key `io.modelcontextprotocol.skills/version`, matching mcpkit's existing convention for extension metadata. The dual-wire story: subscribed stateful clients get the push notification; stateless clients see the same change by re-reading and comparing the version.").
+		Arrow("Host", "Server", "skills/list (observe version bumped)").
+		Note("The version lives in the skills/list result's `_meta` under the reverse-domain key `io.modelcontextprotocol.skills/version` (skills.MetaKeyVersion), matching mcpkit's convention for extension metadata. Subscribed stateful clients get the push notification. Stateless clients see the same change by listing again and comparing the version.").
 		VerbatimVariants("Reproduce on the wire",
 			demokit.MakeVariant("curl", "bash", `# Read once, capture version.
 V1=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":20,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
-  | jq -r '.result.contents[0].text' \
-  | jq -r '._meta["io.modelcontextprotocol.skills/version"]')
+  -d '{"jsonrpc":"2.0","id":20,"method":"skills/list","params":{}}' \
+  | jq -r '.result._meta["io.modelcontextprotocol.skills/version"]')
 
 # Refresh.
 curl -s -X POST http://localhost:8080/mcp \
@@ -601,36 +606,34 @@ curl -s -X POST http://localhost:8080/mcp \
 V2=$(curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","id":22,"method":"resources/read","params":{"uri":"skill://index.json"}}' \
-  | jq -r '.result.contents[0].text' \
-  | jq -r '._meta["io.modelcontextprotocol.skills/version"]')
+  -d '{"jsonrpc":"2.0","id":22,"method":"skills/list","params":{}}' \
+  | jq -r '.result._meta["io.modelcontextprotocol.skills/version"]')
 
 echo "before=$V1 after=$V2"`).Default(),
-			demokit.MakeVariant("go", "go", `// Read once, capture version.
-body, _ := c.ReadResource(skills.IndexURI)
-var idx struct {
-    Meta map[string]any `+"`"+`json:"_meta"`+"`"+`
+			demokit.MakeVariant("go", "go", `// List once, capture version.
+version := func() uint64 {
+    res, _ := c.Call(ctx, skills.MethodSkillsList, skills.SkillsListRequest{})
+    var lr skills.SkillsListResult
+    res.Unmarshal(&lr)
+    v, _ := lr.Meta[skills.MetaKeyVersion].(float64) // JSON numbers decode as float64
+    return uint64(v)
 }
-json.Unmarshal([]byte(body), &idx)
-before, _ := idx.Meta["io.modelcontextprotocol.skills/version"].(float64)
+before := version()
 
-// Trigger Refresh via the demo tool. Production deployments would call
-// Provider.Refresh() directly from their own admin endpoint / webhook
-// handler / fsnotify goroutine (see follow-up tickets #799 + the
-// pushdown-to-templar issue).
-c.CallTool("_demo/refresh", map[string]any{})
+// Trigger Refresh via the demo tool. Production deployments call
+// Provider.Refresh() from their own admin endpoint, webhook handler,
+// or fsnotify goroutine.
+c.ToolCall(ctx, "_demo/refresh", map[string]any{})
 
-// Read again, observe bump.
-body, _ = c.ReadResource(skills.IndexURI)
-json.Unmarshal([]byte(body), &idx)
-after, _ := idx.Meta["io.modelcontextprotocol.skills/version"].(float64)
-fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
+// List again, observe bump.
+after := version()
+fmt.Printf("before=%d after=%d\n", before, after)`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {
 				return nil
 			}
-			before := readIndexVersion(c)
+			before := readListVersion(c)
 			fmt.Printf("    before refresh: version = %d\n", before)
 
 			if _, err := c.ToolCall(ctx.Ctx, "_demo/refresh", map[string]any{}); err != nil {
@@ -639,7 +642,7 @@ fmt.Printf("before=%d after=%d\n", uint64(before), uint64(after))`),
 			}
 			fmt.Printf("    called _demo/refresh - server bumped Provider.Version()\n")
 
-			after := readIndexVersion(c)
+			after := readListVersion(c)
 			fmt.Printf("    after refresh:  version = %d\n", after)
 			if after > before {
 				fmt.Printf("    version bumped by %d - stateful subscribers also received notifications/resources/list_changed\n", after-before)
@@ -694,7 +697,7 @@ defer provider.Shutdown(context.Background()) // graceful drain on signal
 			if c == nil {
 				return nil
 			}
-			before := readIndexVersion(c)
+			before := readListVersion(c)
 			fmt.Printf("    before edit: version = %d\n", before)
 
 			target := "skills/git-workflow/SKILL.md"
@@ -722,7 +725,7 @@ defer provider.Shutdown(context.Background()) // graceful drain on signal
 			deadline := time.Now().Add(10 * time.Second)
 			for time.Now().Before(deadline) {
 				time.Sleep(300 * time.Millisecond)
-				after := readIndexVersion(c)
+				after := readListVersion(c)
 				if after > before {
 					fmt.Printf("    after edit: version = %d (bump observed via fsnotify; coalesced into one broadcast)\n", after)
 					return nil
@@ -845,10 +848,10 @@ for _, r := range result.Resources {
 		})
 
 	demo.Section("Archive mode, atomic delivery plus in-process unpack",
-		"In archive mode every skill is delivered as a single `.tar.gz` or `.zip` resource. The host hashes the archive bytes against the index digest, then unpacks in-memory to recover the post-unpack virtual namespace, the same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.",
+		"In archive mode every skill is delivered as a single `.tar.gz` or `.zip` resource. No `skills/list` entry pins the archive, because the 2026-08-21 SEP revision deferred archives to an appendix. The host hashes the archive bytes for the record, then unpacks in-memory to recover the post-unpack virtual namespace, the same files the file-mode wire would have served piecemeal. Demonstrates pdf-processing (multi-file skill) because the unpacked listing actually shows something.",
 	)
 
-	demo.Step("Read pdf-processing archive, verify digest, unpack, list recovered files").
+	demo.Step("Read pdf-processing archive, hash it, unpack, list recovered files").
 		Arrow("Host", "Server", "resources/read uri=skill://pdf-processing.tar.gz (or .zip)").
 		DashedArrow("Server", "Host", "application/gzip OR application/zip blob").
 		Note("Only meaningful in archive mode. In file mode the step prints the detected mode and exits. See the per-file read steps above for the equivalent file-mode story.").
@@ -861,11 +864,11 @@ curl -s -X POST http://localhost:8080/mcp \
   | jq -r '.result.contents[0].blob' | base64 -d > /tmp/pdf.tgz
 
 # Verify and list:
-shasum -a 256 /tmp/pdf.tgz                 # compare against index entry digest
+shasum -a 256 /tmp/pdf.tgz                 # no listing entry pins the archive
 tar -tzf /tmp/pdf.tgz                      # recovered file tree`).Default(),
-			demokit.MakeVariant("go", "go", `result, _ := c.ReadResourceFull("skill://pdf-processing" + detected.suffix)
+			demokit.MakeVariant("go", "go", `result, _ := c.ReadResourceFull(ctx, "skill://pdf-processing" + detected.suffix)
 raw, _ := base64.StdEncoding.DecodeString(result.Contents[0].Blob)
-// hash raw, compare against index digest
+// hash raw for the record: no listing entry pins the archive
 files, _ := unpackArchive(detected.format, raw)
 for _, f := range files {
     fmt.Printf("%s (%d bytes)\n", f.Name, len(f.Bytes))
@@ -883,7 +886,6 @@ for _, f := range files {
 			// appendix by the 2026-08-21 SEP revision), so the digest is
 			// computed from the fetched bytes rather than read from a pin.
 			target := "skill://pdf-processing" + detected.suffix
-			var want string
 			result, err := c.ReadResourceFull(ctx.Ctx, target)
 			if err != nil {
 				fmt.Printf("    ERROR: %v\n", err)
@@ -897,13 +899,8 @@ for _, f := range files {
 			sum := sha256.Sum256(raw)
 			got := "sha256:" + hex.EncodeToString(sum[:])
 			fmt.Printf("    archive: %s (%d bytes)\n", target, len(raw))
-			fmt.Printf("    want %s\n", want)
-			fmt.Printf("    got  %s\n", got)
-			if got != want {
-				fmt.Printf("    DIGEST MISMATCH - content MUST NOT be used per the SEP\n")
-				return nil
-			}
-			fmt.Printf("    digest matches - unpacking via stdlib (%s)…\n", detected.format.String())
+			fmt.Printf("    digest %s (no listing entry pins the archive)\n", got)
+			fmt.Printf("    unpacking via stdlib (%s)…\n", detected.format.String())
 			files, err := unpackArchive(detected.format, raw)
 			if err != nil {
 				fmt.Printf("    ERROR: unpack failed: %v\n", err)
@@ -1032,7 +1029,7 @@ _, err := skills.ResolveRelative(root, "file:///etc/passwd")   // -> ErrRelative
 		})
 
 	demo.Section("Wrap-up",
-		"Negotiated extension, enumerated index, sniffed the distribution mode, verified one digest against the canonical artifact (SKILL.md in file mode, packed archive in archive mode), exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, cross-origin reference rejection). The same client code paths served both distribution modes; only the URI shape and the post-fetch unpack step differ.",
+		"Negotiated extension, enumerated skills with skills/list, sniffed the distribution mode, verified SKILL.md against its listed digest, exercised the mode-specific read flow, and exercised the host-side threat-model defenses (byte budget, unpinned-file refusal, digest mismatch, cross-origin reference rejection). The same client code paths served both distribution modes. Only the URI shape and the post-fetch unpack step differ.",
 	)
 
 	_ = serverInfo
@@ -1099,13 +1096,13 @@ func isInteractive() bool {
 	return true
 }
 
-// readIndexVersion reads the _meta.io.modelcontextprotocol.skills/version
+// readListVersion reads the _meta.io.modelcontextprotocol.skills/version
 // counter from a skills/list result (issue #795). It moved there from the
 // retired skill://index.json.
 //
 // Returns 0 when the field is absent — it is opt-in mcpkit metadata, not a
 // SEP requirement, so non-mcpkit servers will lack it.
-func readIndexVersion(c *client.Client) uint64 {
+func readListVersion(c *client.Client) uint64 {
 	res, err := c.Call(context.Background(), skills.MethodSkillsList, skills.SkillsListRequest{})
 	if err != nil {
 		return 0
@@ -1128,7 +1125,7 @@ func readIndexVersion(c *client.Client) uint64 {
 }
 
 // modeInfo captures the distribution shape detected from the server's
-// skill://index.json. It controls which steps below take the file-mode
+// resource URIs. It controls which steps below take the file-mode
 // path (per-file SKILL.md reads) vs the archive-mode path (one archive
 // per skill, unpacked in-process to recover the same files).
 type modeInfo struct {
@@ -1167,10 +1164,9 @@ type archiveMember struct {
 
 // unpackArchive decodes raw archive bytes into the list of recovered
 // regular files using nothing but the stdlib. The walkthrough calls
-// this after the SHA-256 digest has been verified against the index
-// entry — production hosts SHOULD also enforce an unpacked-size cap
-// (see skills.DefaultArchiveMaxBytes); omitted here because the demo
-// fixtures are tiny and the focus is the verify-then-unpack shape.
+// this after hashing the archive bytes. Production hosts SHOULD also
+// enforce an unpacked-size cap (see skills.DefaultArchiveMaxBytes). The
+// demo omits it because the fixtures are tiny.
 func unpackArchive(format skills.ArchiveFormat, raw []byte) ([]archiveMember, error) {
 	switch format {
 	case skills.ArchiveFormatTarGz:

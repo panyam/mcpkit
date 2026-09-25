@@ -222,27 +222,27 @@ func TestClientCredentialsTokenSource_ValidationErrors(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		ts      ClientCredentialsTokenSource
+		ts      *ClientCredentialsTokenSource
 		wantMsg string
 	}{
 		{
 			name:    "missing ClientID",
-			ts:      ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientSecret: "x"},
+			ts:      &ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientSecret: "x"},
 			wantMsg: "ClientID is required",
 		},
 		{
 			name:    "missing credentials",
-			ts:      ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientID: "c"},
+			ts:      &ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientID: "c"},
 			wantMsg: "ClientSecret or PrivateKeyPEM is required",
 		},
 		{
 			name:    "both credentials set",
-			ts:      ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientID: "c", ClientSecret: "x", PrivateKeyPEM: "y"},
+			ts:      &ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientID: "c", ClientSecret: "x", PrivateKeyPEM: "y"},
 			wantMsg: "mutually exclusive",
 		},
 		{
 			name:    "JWT missing SigningAlgorithm",
-			ts:      ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientID: "c", PrivateKeyPEM: "y"},
+			ts:      &ClientCredentialsTokenSource{ServerURL: mock.URL + "/mcp", ClientID: "c", PrivateKeyPEM: "y"},
 			wantMsg: "SigningAlgorithm is required",
 		},
 	}

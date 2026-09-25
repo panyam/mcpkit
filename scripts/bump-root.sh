@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Points every sub-module's `require github.com/panyam/mcpkit` at version V,
-# then tidies and re-verifies the dependency policy.
+# and every tagged sub-module's requires on other tagged sub-modules at V too
+# (scripts/bump-pins.sh), then tidies and re-verifies the dependency policy.
 #
-# Only the root self-reference is touched. Sub-module cross-references
-# (github.com/panyam/mcpkit/ext/auth, /ext/ui) have their own independent tag
-# timelines and must be bumped by hand to a real ext/* tag — or left alone when
-# a `replace` directive is in play.
+# Sibling pins move because every tagged module gets the same tag in one
+# `make tag-push`. Leaving them a release behind broke v0.7.0's stores/gorm
+# for anyone who fetched it without also requiring events@v0.7.0.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -18,12 +18,7 @@ if [ -z "$V" ]; then
     exit 1
 fi
 
-for mod in $MODS; do
-    [ -f "$mod/go.mod" ] || continue
-    grep -q "github.com/panyam/mcpkit v" "$mod/go.mod" || continue
-    echo "==> $mod/go.mod: require github.com/panyam/mcpkit $V"
-    (cd "$mod" && go mod edit -require="github.com/panyam/mcpkit@$V")
-done
+V="$V" SUB_MODS_ALL="$MODS" bash scripts/bump-pins.sh "$PWD"
 
 # $(MAKE) rather than a bare `make`, so a nested run inherits the jobserver and
 # any -n / -k the caller passed.
