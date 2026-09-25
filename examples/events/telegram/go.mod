@@ -14,9 +14,9 @@ replace (
 require (
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/panyam/demokit v0.0.32
-	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit v0.7.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
-	github.com/panyam/mcpkit/experimental/ext/events v0.6.0
+	github.com/panyam/mcpkit/experimental/ext/events v0.7.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.6.0
 	github.com/panyam/mcpkit/ext/auth v0.6.0
 	github.com/panyam/servicekit v0.1.5

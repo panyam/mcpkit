@@ -15,9 +15,9 @@ replace (
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
-	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit v0.7.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
-	github.com/panyam/mcpkit/experimental/ext/events v0.6.0
+	github.com/panyam/mcpkit/experimental/ext/events v0.7.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/ext/events/stores/gorm v0.6.0
 	github.com/panyam/mcpkit/experimental/ext/events/stores/redis v0.6.0
@@ -76,7 +76,7 @@ require (
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
-	github.com/panyam/mcpkit/stores/redis v0.6.0 // indirect
+	github.com/panyam/mcpkit/stores/redis v0.7.0 // indirect
 	github.com/panyam/oneauth v0.1.37 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect

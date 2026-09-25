@@ -8,7 +8,7 @@ replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 
 require (
 	github.com/panyam/demokit v0.0.32
-	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit v0.7.0
 	github.com/panyam/mcpkit/ext/otel v0.6.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
 	go.opentelemetry.io/otel v1.46.0

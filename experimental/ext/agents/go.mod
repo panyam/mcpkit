@@ -5,7 +5,7 @@ go 1.26.6
 replace github.com/panyam/mcpkit => ../../..
 
 require (
-	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit v0.7.0
 	github.com/stretchr/testify v1.12.1
 )
 

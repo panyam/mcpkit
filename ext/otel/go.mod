@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/ext/otel
 go 1.26.6
 
 require (
-	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit v0.7.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/metric v1.46.0

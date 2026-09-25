@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/panyam/demokit v0.0.32
-	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit v0.7.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
 	github.com/panyam/oneauth v0.1.37

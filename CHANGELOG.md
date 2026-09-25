@@ -9,14 +9,71 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-25
+
+A minor release consolidating 57 PRs since v0.6.0. Two tagged modules,
+`experimental/ext/events` and `ext/ui`, break behaviour on the wire, so this is
+a minor rather than a patch. Full write-up:
+[`docs/releases/v0.7.0.md`](docs/releases/v0.7.0.md).
+
+**Breaking:** Events webhooks are signed with the decoded secret, endpoints must
+answer a verification challenge before they get a subscription, `http://`
+callbacks are refused, and `events/poll` and `events/subscribe` honour each
+type's `delivery` list. The `ext/ui` bridge JS sends MCP Apps `2026-01-26` wire
+shapes, so hosts written against the old bridge output need updating. Migration
+for each is in the write-up.
+
+The Go toolchain floor is now 1.26.6, which clears five standard-library
+vulnerabilities (#1485). `cmd/mcpskills`, which did not compile at v0.6.0, builds
+again (#1487). Install it from source until #1488 lands.
+
+This is the first release whose tag-triggered workflows are expected to run
+(#1411, #1413). Confirm with `make check-release-workflows V=v0.7.0`.
+
+### Breaking
+- **`experimental/ext/events`: webhook signatures key the HMAC on the decoded
+  secret** (#1432), as the spec defines, rather than on the literal `whsec_...`
+  string. Out-of-tree receivers must decode too. `eventsclient.Receiver`, the
+  Python client and the whole-enchilada receiver are updated. The legacy
+  `X-MCP-Signature` mode is unchanged.
+- **`experimental/ext/events`: webhook endpoints are verified before any
+  delivery** (#1444). `events/subscribe` POSTs a signed
+  `{"type":"verification","challenge":…}` envelope to `delivery.url` and only
+  creates the subscription if the nonce is echoed in a 2xx body. Otherwise it
+  fails with `-32015` and `data.reason` `challenge_failed` or a connection
+  category. **Receivers that do not answer stop getting new subscriptions.**
+  `eventsclient.Receiver` and the Python client answer automatically. Other
+  receivers call `events.AnswerVerificationChallenge` and must be listening
+  before they subscribe. `WithUnsafeSkipEndpointVerification()` restores the old
+  behaviour. Waivers: `WithWebhookDeliveryAllowlist`, `WithPreVerifier` /
+  `WithPreVerifiedDeliveryURL`, and the receiver-published document below.
+- **`experimental/ext/events`: `events/subscribe` and `events/unsubscribe`
+  enforce the spec** (#1434). An `http://` callback is refused with `-32602`
+  unless `WithUnsafeWebhookAllowPlaintextCallbacks()` is set, and
+  `WithWebhookAllowPrivateNetworks(true)` no longer implies it. A subscribe for a
+  mode the type does not advertise returns `-32014`. An unsubscribe naming no
+  subscription returns `-32011` instead of success. `WebhookRegistry.Unregister`
+  returns a `bool`. A source with no declared `Delivery` now advertises
+  `webhook` whenever a webhook registry exists, not only when it can stream.
+- **`experimental/ext/events`: `events/poll` honours the descriptor's
+  `delivery` list** (#1416). Polling a type whose `delivery` omits `poll`
+  returns `-32014 Unsupported`. A source with no declared `Delivery` gets one
+  derived at registration: `poll`, plus `push` if it implements `Subscribe`,
+  plus `webhook` if a webhook registry exists.
+- **`ext/ui` bridge JS speaks the MCP Apps `2026-01-26` wire shapes** (#1452).
+  `MCPApp.updateModelContext(params)` sends `{content?, structuredContent?}` as
+  given instead of wrapping it in `{context}`. `downloadFile` takes the spec
+  `{contents}` object, and the old `(url, filename)` form still works and becomes
+  a single `resource_link`. `requestTeardown()` sends
+  `ui/notifications/request-teardown` and `log()` sends `notifications/message`
+  (`{level, logger, data}`) instead of the non-spec `ui/teardown` and `ui/log`.
+  `hostCapabilities` is read from the initialize result's `hostCapabilities`
+  (it was always `{}` against a spec host). Messages from any window other than
+  the parent are ignored. **Hosts that answered `ui/initialize` with
+  `capabilities` instead of `hostCapabilities`, or that relied on `ui/log` or
+  `ui/teardown`, need updating.** View code needs no change.
+
 ### Added
-- **`ext/ui`: mcpkit's View extras work on upstream's `App`** (#1475).
-  `ext/ui/assets/mcp-app-extras.js` (ES module, types in `mcp-app-extras.d.ts`)
-  exports the SEP-2356 file picker (`selectFile`, `selectFiles`) and
-  `withTraceRelay(transport, provider)`, which stamps SEP-414 trace context onto
-  outbound requests and notifications of any MCP transport, including
-  upstream's `PostMessageTransport`. The bridge now uses the same modules, and
-  CI checks both bundles against their sources.
 - **`ext/ui`: `AppHost` answers the View's `ui/*` host requests itself** (#1456).
   `ui/open-link`, `ui/download-file`, `ui/message`, `ui/request-display-mode`
   and `ui/update-model-context` go to the `HostHandlers` passed with
@@ -26,47 +83,71 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   `ui/request-display-mode` with no handler answers `inline`
   (`ui.DefaultDisplayMode`), since the spec requires an answer. Other View
   notifications (`size-changed`, `request-teardown`, `notifications/message`)
-  reach `HostHandlers.Notification`. A fixture recorded from the real bridge JS
-  is replayed through `AppHost` in tests, so the two halves cannot drift apart
-  unnoticed.
+  reach `HostHandlers.Notification`. Those five methods used to fail at the
+  server as unknown methods, so no working setup depended on the old path. A
+  fixture recorded from the real bridge JS is replayed through `AppHost` in
+  tests, so the two halves cannot drift apart unnoticed.
+- **`ext/ui`: mcpkit's View extras work on upstream's `App`** (#1475).
+  `ext/ui/assets/mcp-app-extras.js` (ES module, types in `mcp-app-extras.d.ts`)
+  exports the SEP-2356 file picker (`selectFile`, `selectFiles`) and
+  `withTraceRelay(transport, provider)`, which stamps SEP-414 trace context onto
+  outbound requests and notifications of any MCP transport, including
+  upstream's `PostMessageTransport`. The bridge now uses the same modules, and
+  CI checks both bundles against their sources. `MCPApp.hostInfo` is new (#1452).
+- **`experimental/ext/events`: receiver-published well-known document** (#1449,
+  opt-in). With `WithWellKnownReceiverDocs()`, a callback is verified without a
+  challenge when its origin serves `/.well-known/mcp-webhook-receiver.json`
+  covering its path. Publish one with `events.WellKnownReceiverHandler`.
+- **`experimental/ext/events`: `YieldGap`** (#1427), public `CanonicalKey` and
+  `DeriveSubscriptionID` (#1430), `WebhookRegistry.UnsafeAllowCallbackOrigins`
+  (#1462), `WebhookRegistry.PostGapByEventName` (#1469), and `EventsExtension`,
+  which declares the capability under
+  `capabilities.extensions["io.modelcontextprotocol/events"]` (#1416, #1424).
+  v0.6.0 declared no Events capability, and the top-level form #1416 briefly
+  added never shipped, so this is additive.
+- **`examples/apps/any-frontend`** (#1474): one Go backend serving the same App
+  through the mcpkit bridge, upstream `App`, React `useApp`, and `App` with the
+  extras, driven by a Playwright suite in CI.
 
 ### Changed
-- **`ext/ui` bridge JS speaks the MCP Apps `2026-01-26` wire shapes** (#1452).
-  `MCPApp.updateModelContext(params)` sends `{content?, structuredContent?}`
-  as given instead of wrapping it in `{context}`. `downloadFile` takes the spec
-  `{contents}` object; the old `(url, filename)` form still works and becomes a
-  single `resource_link`. `requestTeardown()` sends
-  `ui/notifications/request-teardown` and `log()` sends `notifications/message`
-  (`{level, logger, data}`) instead of the non-spec `ui/teardown` and `ui/log`.
-  `hostCapabilities` is read from the initialize result's `hostCapabilities`
-  (it was always `{}` against a spec host), and `MCPApp.hostInfo` is new.
-  `ui/resource-teardown` is answered as a request, `ping` is answered,
-  host-context updates merge instead of replacing, `toolcancelled` carries
-  `reason`, `ui/notifications/initialized` goes out before anything a
-  `connected` listener sends, `appCapabilities.tools` is declared when tools are
-  registered before the handshake, and messages from any window other than the
-  parent are ignored. **Hosts that answered `ui/initialize` with `capabilities`
-  instead of `hostCapabilities`, or that relied on `ui/log` / `ui/teardown`,
-  need updating.** The bridge's unit tests now run in CI and check every
-  outbound message against the upstream ext-apps schemas.
-- **`experimental/ext/events`: webhook endpoints are verified before any
-  delivery** (#1444). `events/subscribe` POSTs a signed
-  `{"type":"verification","challenge":…}` envelope to `delivery.url` and only
-  creates the subscription if the nonce is echoed in a 2xx body; otherwise it
-  fails with `-32015` and `data.reason` `challenge_failed` or a connection
-  category. **Receivers that do not answer stop getting new subscriptions.**
-  `eventsclient.Receiver` and the Python client answer automatically; other
-  receivers call `events.AnswerVerificationChallenge` and must be listening
-  before they subscribe. `WithUnsafeSkipEndpointVerification()` restores the old
-  behaviour. Waivers: `WithWebhookDeliveryAllowlist`, `WithPreVerifier` /
-  `WithPreVerifiedDeliveryURL`, and (#1449, opt-in) receiver-published
-  `/.well-known/mcp-webhook-receiver.json` via `WithWellKnownReceiverDocs`, served
-  with `events.WellKnownReceiverHandler`.
+- **`core.ClientSupportsExtension` reads the SEP-2575 per-request envelope**
+  (#1458), so `ClientSupportsUI`, `ClientSupportsTasks` and the `BaseContext`
+  methods return true on the stateless wire for a client that declared the
+  extension there. They returned false for every stateless client. Same API,
+  and the old answer was wrong, so this is a change rather than a break. The
+  session wire is unaffected.
 - **Verification POSTs are rate-limited per destination host** (#1448), 60 a
-  minute by default; over budget, `events/subscribe` answers `-32013` with
+  minute by default. Over budget, `events/subscribe` answers `-32013` with
   `data.limit` `verifications_per_host`. Tune with `WithVerificationRateLimit`.
+- **A source's gap and termination reach its webhook subscribers** (#1466).
+  `YieldGap` sends a `gap` envelope with the source's latest cursor and
+  `YieldTerminated` sends `terminated` and removes the subscription. `PostGap`
+  with an empty cursor sends nothing.
+- **Push frames carry the subscription id in `_meta`** (#1433), on every
+  `notifications/events/*` frame. The top-level `requestId` stays.
+- **The events stack is one compose file** (#1384). `docker-compose.yaml` is
+  gone and `make up` layers `compose.dev.yaml` over `events-stack.yaml`, with
+  follow-up fixes to the smoke script, stale recipes and `just clean-backends`.
+  `examples/agents/deep-agent-supervisor` is removed.
+- **Release process:** `make tag-push` pushes the root tag separately so tag
+  workflows fire (#1411), and `make check-release-workflows V=<tag>` confirms
+  they did (#1413).
+- **Constraint C8:** recipes dispatch to `scripts/` and do not hold shell logic,
+  gated by `make check-recipe-complexity`. The baseline went from 66 to 0.
+- The bridge tests run in CI against upstream's ext-apps schemas.
+  `docs/APPS_DESIGN.md` records frontend independence as a design decision. A
+  prose pass across the published docs, and dependency updates including the
+  OTel log family in lock-step at v0.22.0.
 
 ### Fixed
+- **`cmd/mcpskills` compiles against the current `ext/skills`** (#1487). At
+  v0.6.0 it called the removed `ListSkills` and `ErrNestedSkill`. `inspect` now
+  uses `skills/list` and its JSON drops `indexSchema` and `type`, and `verify`
+  accepts nested skills.
+- **Go toolchain floor raised to 1.26.6** (#1485), clearing GO-2026-6218,
+  GO-2026-6090, GO-2026-6089, GO-2026-6091 and GO-2026-5972.
+- **`client` `list_changed` tests no longer race the GET SSE stream** (#1484,
+  contributed by hy3560, fixes #1482).
 - **Failure-based GC now drops suspended no-expiry webhook subscriptions**
   (#1447). A suspended target received no deliveries, so its GC window was never
   checked again and it stayed in the store indefinitely.
@@ -74,15 +155,25 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   (#1445)**, so a subscription restored after a restart keeps its verification
   and can still be ended by backchannel logout. New columns default to `''` and
   `AutoMigrate` adds them to existing tables.
+- **Push sends no `truncated: true` when the source has no position** (#1468),
+  per the spec's rule for types without replay.
+- **`events/poll` always returns an `events` array and `events/list` is sorted**
+  (#1416). **`InProcessAppBridge` `tools/list` is sorted** (#1408).
+- **The bridge answers `ui/resource-teardown` as a request and answers `ping`**
+  (#1452). Host-context updates merge, `toolcancelled` carries `reason`, and
+  `ui/notifications/initialized` goes out before anything a `connected`
+  listener sends.
 - Examples: the discord walkthrough subscribes with `arguments`, not `params`
-  (#1445); the skills security harness asserts the `ResolveRelative` defense for
-  a `file://` reference (#1445).
+  (#1445), and the skills security harness asserts the `ResolveRelative` defense
+  for a `file://` reference (#1445). A flaky `TestWaitForTaskTimeout` compares
+  errors with `errors.Is` (#1406).
 
 ### Conformance
-- `testconf-events` `events-webhook` is 25/26: kitchen-sink allowlists the suite's
-  placeholder callback origin (#1446) and gained restart, generation and
-  subscription-state controls under `--conformance-events`, which grade the three
-  TTL durability rows (#1447).
+- `testconf-events` drives all five scenarios: discovery 12/12, poll 30/30,
+  push 20/20, webhook 25/26, webhook-delivery 23/23. kitchen-sink gained the
+  `--conformance-events` controls the scenarios need (#1427, #1429, #1430,
+  #1446, #1447, #1462, #1464, #1467). The one red row,
+  `subscribe-auth-required`, is untestable rather than a defect.
 
 ## [0.6.0] - 2026-09-17
 
@@ -589,6 +680,7 @@ Full notes: [`docs/releases/v0.3.0.md`](docs/releases/v0.3.0.md).
 - `step-up-keycloak` no longer forces stateless mode by default. (PR 821)
 - `CAPABILITIES.md` protocol-negotiation version list corrected.
 
+[0.7.0]: https://github.com/panyam/mcpkit/releases/tag/v0.7.0
 [0.6.0]: https://github.com/panyam/mcpkit/releases/tag/v0.6.0
 [0.5.2]: https://github.com/panyam/mcpkit/releases/tag/v0.5.2
 [0.5.1]: https://github.com/panyam/mcpkit/releases/tag/v0.5.1
