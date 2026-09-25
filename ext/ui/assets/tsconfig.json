@@ -10,6 +10,6 @@
     "sourceMap": false,
     "outDir": "."
   },
-  "include": ["mcp-app-bridge.ts"],
-  "exclude": ["mcp-app-bridge.js", "mcp-app-bridge.d.ts"]
+  "include": ["mcp-app-bridge.ts", "mcp-app-extras.ts"],
+  "exclude": ["mcp-app-bridge.js", "mcp-app-bridge.d.ts", "mcp-app-extras.js", "mcp-app-extras.d.ts"]
 }
