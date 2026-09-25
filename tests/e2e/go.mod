@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/tests/e2e
 
-go 1.26.5
+go 1.26.6
 
 replace (
 	github.com/panyam/mcpkit => ../..

@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/events/kitchen-sink
 
-go 1.26.5
+go 1.26.6
 
 replace (
 	github.com/panyam/mcpkit => ../../..

@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/whole-enchilada/events/streamer
 
-go 1.26.5
+go 1.26.6
 
 replace (
 	github.com/panyam/mcpkit => ../../../..
