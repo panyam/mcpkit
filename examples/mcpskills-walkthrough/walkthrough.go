@@ -31,17 +31,17 @@ type inspectReport struct {
 	URL                string         `json:"url"`
 	ClientInfo         string         `json:"clientInfo"`
 	CapabilityDeclared bool           `json:"capabilityDeclared"`
-	IndexSchema        string         `json:"indexSchema,omitempty"`
 	Entries            []inspectEntry `json:"entries,omitempty"`
 	HasFailures        bool           `json:"hasFailures"`
 }
 
 type inspectEntry struct {
 	Name        string `json:"name"`
-	Type        string `json:"type"`
 	URL         string `json:"url"`
 	Digest      string `json:"digest,omitempty"`
 	Description string `json:"description,omitempty"`
+	Files       int    `json:"files"`
+	Dynamic     bool   `json:"dynamic,omitempty"`
 	Verified    *bool  `json:"verified,omitempty"`
 	Error       string `json:"error,omitempty"`
 }
@@ -116,7 +116,7 @@ func runDemo() {
 		})
 
 	demo.Step("mcpskills verify <tmp>/skills").
-		Note("Lints the fixture for SEP-2640 compliance: required SKILL.md, frontmatter name matches directory, no nested SKILL.md.").
+		Note("Lints the fixture for SEP-2640 compliance: required SKILL.md, frontmatter name matches directory, valid skill-name characters. Nested skills are legal and verified as skills in their own right.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if !state.ready() {
 				return nil
@@ -167,9 +167,9 @@ func runDemo() {
 		})
 
 	demo.Step("mcpskills inspect <url> --json (verify every cataloged digest)").
-		Arrow("CLI", "Server", "initialize + resources/read skill://index.json + per-entry verify").
+		Arrow("CLI", "Server", "initialize + skills/list + per-file verify").
 		DashedArrow("Server", "CLI", "JSON report with verified flags per entry").
-		Note("The --json flag is what makes this useful inside a script. Each entry's `verified` boolean is a SHA-256 check against the index's promised digest.").
+		Note("The --json flag is what makes this useful inside a script. Each entry's `verified` boolean covers every file the skills/list entry pins: SHA-256 digest, byte size, and SKILL.md frontmatter.").
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if !state.ready() {
 				return nil
@@ -183,7 +183,7 @@ func runDemo() {
 			fmt.Printf("    capability declared: %t\n", report.CapabilityDeclared)
 			fmt.Printf("    %d entries:\n", len(report.Entries))
 			for _, e := range report.Entries {
-				verified := "(template)"
+				verified := "(dynamic)"
 				if e.Verified != nil {
 					if *e.Verified {
 						verified = "verified"
@@ -191,7 +191,7 @@ func runDemo() {
 						verified = "FAILED"
 					}
 				}
-				fmt.Printf("      %-22s [%s] %s\n", e.Name, e.Type, verified)
+				fmt.Printf("      %-22s [%d files] %s\n", e.Name, e.Files, verified)
 			}
 			if report.HasFailures {
 				state.fatal = fmt.Errorf("inspect reported digest failures")

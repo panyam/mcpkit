@@ -4,15 +4,15 @@ Drives the mcpskills binary end-to-end against a tiny fixture: verify, serve, in
 
 ## What you'll learn
 
-- **Locate or build the mcpskills binary** — Discovery order: $MCPSKILLS_BIN, <repo-root>/bin/mcpskills, else `go build` into a temp file. The temp binary is cleaned up at the end.
-- **Write the embedded fixture to a temp dir** — Two skills: git-workflow (single SKILL.md) and pdf-processing (SKILL.md + a supporting file). Self-contained — no sibling-example dependency.
-- **mcpskills verify <tmp>/skills** — Lints the fixture for SEP-2640 compliance: required SKILL.md, frontmatter name matches directory, no nested SKILL.md.
-- **mcpskills serve <tmp>/skills --addr 127.0.0.1:<freeport>** — A free port is picked via net.Listen on :0 then closed, so the child mcpskills server gets an unused port rather than colliding with :8080.
-- **mcpskills inspect <url> --json (verify every cataloged digest)** — The --json flag is what makes this useful inside a script. Each entry's `verified` boolean is a SHA-256 check against the index's promised digest.
-- **(optional) Repeat inspect against a second URL** — Run with MCPSKILLS_INSPECT_UPSTREAM_URL pointed at any spec-compliant server (mcpkit, TS SDK reference, PHP SDK, etc.) and the same command works. Skipped when the env var is unset.
-- **mcpskills pack <tmp>/skills/pdf-processing -o <tmp>/pdf-processing.tar.gz** — Packs a single skill directory into a SEP-2640 archive. Output mime is application/gzip.
-- **mcpskills unpack <archive> -o <tmp>/unpacked** — Unpack enforces the four SEP-2640 safety MUSTs (../ rejection, absolute-path rejection, escaping link rejection, size cap). On clean input that's invisible — but it's the same code path that would refuse a malicious archive.
-- **Diff the unpacked tree against the source** — Walks both trees and asserts byte equality file-for-file. A mismatch here would mean pack or unpack lost or corrupted content.
+- **Locate or build the mcpskills binary** - Discovery order: $MCPSKILLS_BIN, <repo-root>/bin/mcpskills, else `go build` into a temp file. The temp binary is cleaned up at the end.
+- **Write the embedded fixture to a temp dir** - Two skills: git-workflow (single SKILL.md) and pdf-processing (SKILL.md + a supporting file). Self-contained — no sibling-example dependency.
+- **mcpskills verify <tmp>/skills** - Lints the fixture for SEP-2640 compliance: required SKILL.md, frontmatter name matches directory, valid skill-name characters. Nested skills are legal and verified as skills in their own right.
+- **mcpskills serve <tmp>/skills --addr 127.0.0.1:<freeport>** - A free port is picked via net.Listen on :0 then closed, so the child mcpskills server gets an unused port rather than colliding with :8080.
+- **mcpskills inspect <url> --json (verify every cataloged digest)** - The --json flag is what makes this useful inside a script. Each entry's `verified` boolean covers every file the skills/list entry pins: SHA-256 digest, byte size, and SKILL.md frontmatter.
+- **(optional) Repeat inspect against a second URL** - Run with MCPSKILLS_INSPECT_UPSTREAM_URL pointed at any spec-compliant server (mcpkit, TS SDK reference, PHP SDK, etc.) and the same command works. Skipped when the env var is unset.
+- **mcpskills pack <tmp>/skills/pdf-processing -o <tmp>/pdf-processing.tar.gz** - Packs a single skill directory into a SEP-2640 archive. Output mime is application/gzip.
+- **mcpskills unpack <archive> -o <tmp>/unpacked** - Unpack enforces the four SEP-2640 safety MUSTs (../ rejection, absolute-path rejection, escaping link rejection, size cap). On clean input that's invisible — but it's the same code path that would refuse a malicious archive.
+- **Diff the unpacked tree against the source** - Walks both trees and asserts byte equality file-for-file. A mismatch here would mean pack or unpack lost or corrupted content.
 
 ## Flow
 
@@ -32,7 +32,7 @@ sequenceDiagram
     Server-->>CLI: ready (listener up on <freeport>)
 
     Note over CLI,Server: Step 5: mcpskills inspect <url> --json (verify every cataloged digest)
-    CLI->>Server: initialize + resources/read skill://index.json + per-entry verify
+    CLI->>Server: initialize + skills/list + per-file verify
     Server-->>CLI: JSON report with verified flags per entry
 
     Note over CLI,Server: Step 6: (optional) Repeat inspect against a second URL
@@ -70,7 +70,7 @@ Two skills: git-workflow (single SKILL.md) and pdf-processing (SKILL.md + a supp
 
 ### Step 3: mcpskills verify <tmp>/skills
 
-Lints the fixture for SEP-2640 compliance: required SKILL.md, frontmatter name matches directory, no nested SKILL.md.
+Lints the fixture for SEP-2640 compliance: required SKILL.md, frontmatter name matches directory, valid skill-name characters. Nested skills are legal and verified as skills in their own right.
 
 ### Step 4: mcpskills serve <tmp>/skills --addr 127.0.0.1:<freeport>
 
@@ -78,7 +78,7 @@ A free port is picked via net.Listen on :0 then closed, so the child mcpskills s
 
 ### Step 5: mcpskills inspect <url> --json (verify every cataloged digest)
 
-The --json flag is what makes this useful inside a script. Each entry's `verified` boolean is a SHA-256 check against the index's promised digest.
+The --json flag is what makes this useful inside a script. Each entry's `verified` boolean covers every file the skills/list entry pins: SHA-256 digest, byte size, and SKILL.md frontmatter.
 
 ### Step 6: (optional) Repeat inspect against a second URL
 

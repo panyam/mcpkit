@@ -932,11 +932,11 @@ for _, f := range files {
 		Note("A host bounds how many bytes a skill read may pull before decoding, so a hostile or runaway server can't exhaust it. mcpkit puts the bound at the fetch layer; an over-cap read fails with ErrResourceTooLarge before the body is decoded. Anchor: threat model T6 · experimental-ext-skills#831 · issue 867.").
 		VerbatimVariants("Reproduce in Go",
 			demokit.MakeVariant("go", "go", `sc := skills.NewClient(c)
-idx, _ := sc.ListSkills(ctx.Ctx)
+entries, _ := sc.ListSkillEntries(ctx.Ctx)
 e, _ := findManifestEntry(entries, uriRefundsManifest)
-full, _ := sc.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+full, _ := sc.ReadFromEntry(ctx.Ctx, e, e.URI)
 capped := skills.NewClient(c, skills.WithMaxResourceBytes(int64(len(full.Bytes)/2)))
-_, err := capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)   // -> ErrResourceTooLarge`),
+_, err := capped.ReadFromEntry(ctx.Ctx, e, e.URI)   // -> ErrResourceTooLarge`),
 		).
 		Run(func(ctx demokit.StepContext) *demokit.StepResult {
 			if c == nil {

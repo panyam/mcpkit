@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -62,6 +64,12 @@ func TestInspectCmd_JSON(t *testing.T) {
 		if e.Verified == nil || !*e.Verified {
 			t.Errorf("entry %q: verified = %v, want true", e.Name, e.Verified)
 		}
+		if e.Files < 1 {
+			t.Errorf("entry %q: files = %d, want at least the SKILL.md", e.Name, e.Files)
+		}
+		if !strings.HasPrefix(e.Digest, "sha256:") {
+			t.Errorf("entry %q: digest = %q, want the SKILL.md's sha256 pin", e.Name, e.Digest)
+		}
 	}
 }
 
@@ -83,7 +91,7 @@ func TestInspectCmd_Text(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"io.modelcontextprotocol/skills declared",
-		"skill://index.json",
+		"skills/list: 3 skills",
 		"digest verified",
 	} {
 		if !strings.Contains(got, want) {
@@ -119,5 +127,55 @@ func TestInspectCmd_PlainServer(t *testing.T) {
 	}
 	if len(report.Entries) != 0 {
 		t.Errorf("entries = %d, want 0 on a server without the extension", len(report.Entries))
+	}
+}
+
+// TestInspectCmd_TamperedFile edits a supporting file after the Provider
+// has pinned its digest, so skills/list promises bytes the server no
+// longer serves. inspect must flag that skill and exit non-zero.
+func TestInspectCmd_TamperedFile(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "tamper-me")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "---\nname: tamper-me\ndescription: Fixture whose supporting file changes after pinning\n---\n\nBody.\n"
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notePath := filepath.Join(skillDir, "note.md")
+	if err := os.WriteFile(notePath, []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	url := startSkillsServer(t, dir)
+	if err := os.WriteFile(notePath, []byte("tampered\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := &bytes.Buffer{}
+	root := newRoot()
+	root.SetOut(out)
+	root.SetErr(out)
+	root.SetArgs([]string{"inspect", url, "--json", "--color", "never"})
+
+	if err := root.Execute(); err == nil {
+		t.Fatalf("Execute: want an error for a tampered file, got nil\noutput:\n%s", out.String())
+	}
+	var report inspectReport
+	if err := json.NewDecoder(out).Decode(&report); err != nil {
+		t.Fatalf("decode report: %v\nraw:\n%s", err, out.String())
+	}
+	if !report.HasFailures {
+		t.Errorf("HasFailures = false, want true")
+	}
+	if len(report.Entries) != 1 {
+		t.Fatalf("entries = %d, want 1", len(report.Entries))
+	}
+	e := report.Entries[0]
+	if e.Verified == nil || *e.Verified {
+		t.Errorf("verified = %v, want false", e.Verified)
+	}
+	if !strings.Contains(e.Error, "note.md") {
+		t.Errorf("error = %q, want it to name the tampered file", e.Error)
 	}
 }
