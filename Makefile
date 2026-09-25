@@ -299,7 +299,7 @@ seccheck: ## Run gosec security scanner (install: go install github.com/securego
 	gosec -quiet -severity=medium ./...
 
 secrets: ## Scan for accidentally committed secrets (install: go install github.com/gitleaks/gitleaks/v8@latest)
-	gitleaks detect --source . -v
+	gitleaks detect --source . --config .gitleaks.toml -v
 
 verify-submodule-deps: ## Verify sub-module go.mod files reference a real root version (not v0.0.0)
 	@bash scripts/verify-submodule-deps.sh
@@ -313,7 +313,7 @@ audit: vulncheck verify-submodule-deps ## Full security audit: dependency vulns 
 	@gosec -quiet -severity=high ./... || true
 	@echo ""
 	@echo "=== gitleaks ==="
-	@gitleaks detect --source . -v 2>/dev/null || echo "gitleaks not installed (go install github.com/gitleaks/gitleaks/v8@latest)"
+	@bash scripts/audit-gitleaks.sh
 	@echo ""
 	@echo "=== Race detection ==="
 	go test -race ./... -count=1 -timeout 60s
@@ -425,6 +425,9 @@ check-release-workflows: ## Release step — fail if a tag-triggered workflow ne
 
 check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
 	@./scripts/check_release_workflows.py --selftest
+
+bump-pins-selftest: ## CI gate — bump-root repoints root and tagged-sibling pins, and leaves untagged examples' sibling pins alone
+	@bash scripts/bump-pins-selftest.sh
 
 setup: setup-tools setup-hooks ## Full development setup
 

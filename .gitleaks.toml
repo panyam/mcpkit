@@ -1,0 +1,9 @@
+# gitleaks configuration for mcpkit. Extends the default rules and allowlists
+# only synthetic values known to be fake, by exact value, so a real secret of
+# the same shape is still reported.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic Standard Webhooks secret in events tests: base64 of the ASCII string 0123456789abcdef0123456789abcdef"
+regexes = ['''whsec_MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY''']
