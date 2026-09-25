@@ -59,7 +59,8 @@ The continuation goroutine re-invokes the same handler with a `TaskContext` acce
 func myHandler(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
     if tasks.GetTaskContext(ctx) != nil {
         // Continuation: do the real work. TaskElicit / TaskSample / SetStatus
-        // are all available; emissions are filtered per SEP-2663 G6.
+        // are all available; emissions are filtered per SEP-2663 G6, so
+        // report progress with SetStatusMessage.
         return doRealWork(ctx, req)
     }
 
@@ -87,7 +88,7 @@ The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact p
 |---|---|
 | `tasks.Register(tasks.Config)` | Canonical entry point. |
 | `tasks.Config` | Holds `Server`, `Store`, `DefaultTTLMs`, `DefaultPollMs`, `TracerProvider`. |
-| `tasks.TaskContext` | Typed-context for tool handlers running as v2 tasks. Exposes `TaskID()`, `ProgressToken()`, `SetStatus(status)`, `TaskElicit(req)`, `TaskSample(req)`. |
+| `tasks.TaskContext` | Typed-context for tool handlers running as v2 tasks. Exposes `TaskID()`, `ProgressToken()`, `SetStatus(status)`, `SetStatusMessage(msg)`, `TaskElicit(req)`, `TaskSample(req)`. Both setters return `ErrTaskTerminal` once the task has finished. |
 | `tasks.WithTaskContext` / `tasks.GetTaskContext` | Context wiring (mirrors core's typed-context pattern). |
 
 ## Tracing (SEP-414 P6, issue 659)

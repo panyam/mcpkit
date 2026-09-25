@@ -9,6 +9,24 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **`ext/tasks`: `TaskContext.SetStatusMessage(msg)`** sets a running task's
+  `statusMessage` and sends `notifications/tasks`. SEP-2663 forbids
+  `notifications/progress` on a task and points at `statusMessage` instead,
+  but there was no public way to set it: `SetStatus` changes only the status
+  and the store is private, so servers had to hold their own handle on the
+  store and write the field themselves.
+
+### Fixed
+- **`ext/tasks`: `SetStatus` no longer revives a finished task.**
+  `TaskStore.Update` has no terminal guard, so a `SetStatus(TaskWorking)` that
+  landed after `tasks/cancel` moved the task back to `working`, and the
+  handler's result was then stored over it: a cancelled task reported
+  `completed`. `SetStatus` and `SetStatusMessage` now return
+  `tasks.ErrTaskTerminal` and change nothing once the task is terminal. The
+  `input_required` transitions inside `TaskElicit` / `TaskSample` go through
+  the same guard, and every update now stamps `lastUpdatedAt`.
+
 ## [0.7.0] - 2026-09-25
 
 A minor release consolidating 57 PRs since v0.6.0. Two tagged modules,

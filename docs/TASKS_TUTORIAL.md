@@ -261,13 +261,27 @@ type TaskContext struct {
 func (tc *TaskContext) TaskID() string
 func (tc *TaskContext) ProgressToken() any   // from _meta.progressToken; nil if not set
 func (tc *TaskContext) SetStatus(status core.TaskStatus) error
+func (tc *TaskContext) SetStatusMessage(msg string) error
 func (tc *TaskContext) TaskElicit(req core.ElicitationRequest) (core.ElicitationResult, error)
 func (tc *TaskContext) TaskSample(req core.CreateMessageRequest) (core.CreateMessageResult, error)
 ```
 
 ### `SetStatus`
 
-Transitions the task's status and fires a `notifications/tasks` event. Use it to mark transitions other than the implicit `working → completed/failed` (e.g., when a long-running job hits an interesting milestone you want to surface). Status transitions enforce a state machine. See §6.
+Transitions the task's status and fires a `notifications/tasks` event. Use it to mark transitions other than the implicit `working → completed/failed` (e.g., when a long-running job hits an interesting milestone you want to surface). Status transitions enforce a state machine. See §6. Once the task is terminal it returns `tasks.ErrTaskTerminal` and changes nothing, so a late call can't move a cancelled task back to `working`.
+
+### `SetStatusMessage`
+
+Sets `statusMessage` and fires `notifications/tasks`, leaving the status alone. This is how a task reports progress, since G6 forbids `notifications/progress` (§8):
+
+```go
+for i, item := range items {
+    tc.SetStatusMessage(fmt.Sprintf("Processing %d/%d", i+1, len(items)))
+    // ...
+}
+```
+
+Like `SetStatus`, it returns `tasks.ErrTaskTerminal` once the task is terminal, so an update racing `tasks/cancel` can't overwrite the cancellation. A loop can treat that error as a signal to stop.
 
 ### `TaskElicit` and `TaskSample`, the in-task input flow
 
@@ -275,7 +289,7 @@ These are the equivalents of MRTR's `elicitation/create` and `sampling/createMes
 
 ### What's missing from the v1 surface
 
-Notably absent: any equivalent of v1's `ProgressToken` parameter on `SetStatus`, or v1's `EmitProgress`-via-task-channel. SEP-2663's G6 rule says tasks don't speak progress/message, so surface progress through `SetStatus(...)` and `statusMessage` instead. See §8.
+Notably absent: any equivalent of v1's `ProgressToken` parameter on `SetStatus`, or v1's `EmitProgress`-via-task-channel. SEP-2663's G6 rule says tasks don't speak progress/message, so surface progress through `SetStatusMessage(...)` instead. See §8.
 
 ---
 
@@ -444,7 +458,7 @@ On the legacy wire, these fan out on the persistent GET SSE stream. On the state
 
 SEP-2663 G6: **a task's notification channel is reserved for `notifications/tasks`**. Two notifications that work fine on sync tools are forbidden inside tasks:
 
-- `notifications/progress` - was used for streaming progress %. Replacement: `tc.SetStatus(...)` + `statusMessage` on `TaskInfo`. Clients observe progress via `tasks/get` polling or the `notifications/tasks` stream.
+- `notifications/progress` - was used for streaming progress %. Replacement: `tc.SetStatusMessage(...)`, which sets `statusMessage` on the task. Clients observe progress via `tasks/get` polling or the `notifications/tasks` stream.
 - `notifications/message` - was used for streaming server-side log emissions. Replacement: structured `result.content` when the task completes (final output), or out-of-band server-side logging for live observability (your own log infra, OpenTelemetry, etc.). The spec is "MCP isn't the transport for that; use real logging."
 
 mcpkit enforces this in [`ext/tasks/tasks.go`](../ext/tasks/tasks.go):
