@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/ext/otel
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/panyam/mcpkit v0.6.0

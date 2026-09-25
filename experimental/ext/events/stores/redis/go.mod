@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/experimental/ext/events/stores/redis
 
-go 1.26.5
+go 1.26.6
 
 replace github.com/panyam/mcpkit => ../../../../..
 

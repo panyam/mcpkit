@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/cmd/common
 
-go 1.26.5
+go 1.26.6
 
 require golang.org/x/term v0.46.0
 

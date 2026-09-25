@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/whole-enchilada/events/webhook
 
-go 1.26.5
+go 1.26.6
 
 replace (
 	github.com/panyam/mcpkit => ../../../..
@@ -10,6 +10,7 @@ replace (
 
 require (
 	github.com/panyam/mcpkit v0.6.0
+	github.com/panyam/mcpkit/experimental/ext/events v0.6.0
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.6.0
 )
 
@@ -20,7 +21,6 @@ require (
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/mcpkit/experimental/ext/events v0.6.0 // indirect
 	github.com/panyam/servicekit v0.1.5 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect

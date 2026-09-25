@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/docs/site
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/panyam/s3gen v0.1.6

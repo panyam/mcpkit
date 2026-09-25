@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/fine-grained-auth
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/panyam/demokit v0.0.32
