@@ -13,9 +13,9 @@
 // with resources/read and resolve relative references against the skill's
 // root.
 //
-// This package provides the value types (Index, IndexEntry, Frontmatter,
+// This package provides the value types (SkillEntry, Frontmatter,
 // Metadata), the skill:// URI parser, and the SKILL.md frontmatter parser.
-// Higher-level affordances (provider, index generator, archives, client
+// Higher-level affordances (provider, Indexer, archives, client
 // helpers) live in sibling files in this package.
 //
 // No code execution, no disk staging. A skill is treated as data delivered

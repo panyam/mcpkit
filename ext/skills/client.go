@@ -16,7 +16,7 @@ import (
 )
 
 // Client wraps a *client.Client with SEP-2640 host-workflow helpers:
-// capability detection, discovery index fetch, manifest and supporting
+// capability detection, skills/list and skills/get, manifest and supporting
 // file reads, digest verification, and SEP-414 P7 (#748) activation
 // telemetry.
 //
@@ -117,7 +117,7 @@ func (c *Client) SupportsDirectoryRead() bool {
 // ReadSkillURI reads any skill:// URI and returns the bytes the server
 // served. Used when a host receives a skill URI from server
 // instructions, the user, or another skill and wants to fetch the
-// content without going through the index.
+// content without first calling skills/list or skills/get.
 //
 // Returns text bytes when the resource is text-typed; base64-decoded
 // blob bytes when the resource is binary-typed (e.g., archive entries
@@ -473,10 +473,9 @@ var ReadResourceToolInputSchema = map[string]any{
 
 // --- internal helpers -------------------------------------------------------
 
-// isNotFoundErr classifies the wire-level signals mcpkit's resources/read
-// returns when the target URI is absent. SEP-2640 says hosts MUST
-// tolerate an absent skill://index.json; this helper centralizes the
-// matching so the public surface stays simple. Match shape:
+// isNotFoundErr reports whether err is the wire-level signal mcpkit's
+// resources/read returns when the target URI is absent. It matches on the
+// error message. Match shape:
 //
 //   - "not found" — generic JSON-RPC error text from older servers
 //   - "unknown resource" — mcpkit's current resources/read shape on

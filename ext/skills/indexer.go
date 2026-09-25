@@ -13,13 +13,13 @@ import (
 	"github.com/panyam/mcpkit/server"
 )
 
-// Indexer computes the SEP-2640 discovery index for a Provider's skills,
-// digests each artifact with SHA-256, and exposes the result via
-// resources/read of skill://index.json.
+// Indexer computes the SEP-2640 skill entries for a Provider's skills,
+// digests each artifact with SHA-256, and serves the result through the
+// skills/list and skills/get methods.
 //
 // The zero value is not useful. Call NewIndexer.
 //
-// Indexer is safe for concurrent use; Index() takes the cache lock
+// Indexer is safe for concurrent use. Entries() takes the cache lock
 // internally. The cache invalidates on the first of two events:
 //
 //   - the configured cache TTL elapses, or
@@ -28,7 +28,7 @@ import (
 //
 // When the underlying fs.FS reports a zero ModTime (notably embed.FS),
 // mtime invalidation cannot run for that build and the cache reverts to
-// TTL-only freshness. With TTL also unset (zero), every Index() call
+// TTL-only freshness. With TTL also unset (zero), every Entries() call
 // recomputes.
 //
 // WithMtimeChecks(false) disables the per-skill mtime comparison for a
@@ -50,8 +50,10 @@ type indexerConfig struct {
 	// backings where fs.Stat is expensive (issue 576).
 	mtimeChecks bool
 	// listTTLMs and listCacheScope are the SEP-2549 attributes attached to
-	// skills/list results. Zero / empty omit the attribute; see
-	// WithListCacheHints for why there is no default.
+	// skills/list and skills/get results. A zero listTTLMs falls back to the
+	// cache TTL and then to DefaultListTTLMs, so ttlMs is always sent. An
+	// empty listCacheScope omits cacheScope. NewIndexer defaults it to
+	// CacheScopePublic. See WithListCacheHints.
 	listTTLMs      int
 	listCacheScope string
 }
@@ -70,8 +72,8 @@ type cacheEntry struct {
 // IndexerOption configures an Indexer via NewIndexer.
 type IndexerOption func(*indexerConfig)
 
-// WithIndexerCacheTTL sets the duration the indexer caches a computed
-// Index before recomputing. The default (zero) means every Index() call
+// WithIndexerCacheTTL sets the duration the indexer caches computed
+// entries before recomputing. The default (zero) means every Entries() call
 // recomputes. Mtime-based invalidation runs in addition to TTL on
 // fs.FS implementations that report a non-zero ModTime.
 func WithIndexerCacheTTL(d time.Duration) IndexerOption {
@@ -90,17 +92,17 @@ func WithIndexerCacheTTL(d time.Duration) IndexerOption {
 // cost and defeats the point of caching. The cache then invalidates on TTL
 // (WithIndexerCacheTTL) and explicit Provider.NotifyChanged only. With mtime
 // checks off AND a zero TTL there is nothing to drive invalidation, so
-// Index() recomputes every call (the same fallback as a zero-ModTime fs.FS) —
-// pair WithMtimeChecks(false) with a non-zero TTL.
+// Entries() recomputes every call (the same fallback as a zero-ModTime fs.FS). Pair
+// WithMtimeChecks(false) with a non-zero TTL.
 func WithMtimeChecks(enabled bool) IndexerOption {
 	return func(c *indexerConfig) {
 		c.mtimeChecks = enabled
 	}
 }
 
-// WithListCacheHints overrides the SEP-2549 list-caching attributes carried
-// on skills/list results, which SEP-2640 expects on protocol 2026-07-28 and
-// later.
+// WithListCacheHints overrides the SEP-2549 caching attributes carried
+// on skills/list and skills/get results, which SEP-2640 expects on protocol
+// 2026-07-28 and later.
 //
 // The default scope is "public", which is accurate for this Indexer: a
 // Provider draws from one fs.FS fixed at construction, so every caller gets
@@ -110,10 +112,12 @@ func WithMtimeChecks(enabled bool) IndexerOption {
 // another.
 //
 // The default ttlMs is the Indexer's own cache TTL when one is configured,
-// and omitted otherwise, so clients are never told to cache a listing for
-// longer than the server itself considers it fresh.
+// so clients are never told to cache a listing for longer than the server
+// itself considers it fresh. With no cache TTL it is DefaultListTTLMs.
 //
-// ttlMs <= 0 or an empty scope omits that attribute.
+// A ttlMs <= 0 selects that default resolution. The result always carries
+// ttlMs. An empty cacheScope removes the scope entirely, so the result
+// omits cacheScope (the field is omitempty).
 func WithListCacheHints(ttlMs int, cacheScope string) IndexerOption {
 	return func(c *indexerConfig) {
 		c.listTTLMs = ttlMs
@@ -137,7 +141,7 @@ func NewIndexer(provider *Provider, opts ...IndexerOption) *Indexer {
 	return idx
 }
 
-// Invalidate marks the cached index entry stale so the next Index()
+// Invalidate marks the cached entries stale so the next Entries()
 // call rebuilds. Provider.NotifyChanged calls this when the version
 // counter bumps; tests can use it to drive cache regeneration
 // deterministically without waiting for TTL or mtime changes.
@@ -246,9 +250,9 @@ func (i *Indexer) RegisterWith(srv *server.Server) {
 // skill, each carrying its verbatim frontmatter and complete resource
 // manifest.
 //
-// Shares the Index cache: entries are rebuilt on the same freshness rules
+// Reads through the Indexer cache: entries are rebuilt on the freshness rules
 // (version counter, TTL, mtime) documented on Indexer, so a skills/list and a
-// concurrent index read observe the same snapshot.
+// concurrent skills/get observe the same snapshot.
 //
 // Callers should treat the result as immutable; successive calls may return
 // the same backing array.

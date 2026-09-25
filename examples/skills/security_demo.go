@@ -11,7 +11,7 @@
 //  1. Progressive disclosure — catalog (frontmatter-only) + on-demand body.
 //  2. Supporting-file integrity — verified read passes; a post-listing tamper
 //     is rejected (ErrDigestMismatch); an unlisted file is rejected
-//     (ErrSupportingFileUnpinned).
+//     (ErrURINotInResources).
 //  3. Resource-fetch byte budget — an over-cap read is rejected before decode
 //     (ErrResourceTooLarge).
 //  4. Cross-origin scheme rejection — a file:// URI is rejected (ErrInvalidScheme).

@@ -29,36 +29,28 @@ type providerConfig struct {
 	directoryReadPageSize int
 }
 
-// SupportingDigestMode selects how a Provider pins the integrity of a
-// skill's supporting files (every regular file under the skill directory
-// except SKILL.md) in its index. The supporting-file digest shape is
-// still undecided in the SEP (issues 780 / 839), so mcpkit makes the
-// strategy selectable rather than committing to one on the wire.
+// SupportingDigestMode selected how a Provider pinned the integrity of a
+// skill's supporting files in the retired skill://index.json.
+//
+// It has no effect since v0.6.0. The skills/list entry carries a digest for
+// every file in resources.files as part of the SEP-2640 shape, so the
+// Provider always pins each supporting file and Client.ReadFromEntry always
+// verifies against that pin. The type and its constants remain so existing
+// callers compile.
 type SupportingDigestMode int
 
 const (
-	// SupportingDigestsPerFile pins each supporting file with its own
-	// SHA-256, carried under MetaKeyFileDigests in the entry's _meta. A
-	// host verifies a single file on read via Client.ReadSkillFileVerified
-	// without fetching the whole skill. This is the default and closes WG
-	// threat B1 (issue 866).
+	// SupportingDigestsPerFile was the default: one SHA-256 per supporting
+	// file (WG threat B1, issue 866). It is now the only behavior.
 	SupportingDigestsPerFile SupportingDigestMode = iota
 
-	// SupportingDigestsOff pins SKILL.md only (via IndexEntry.Digest),
-	// matching today's spec text exactly. Supporting files carry no pin, so
-	// ReadSkillFileVerified returns ErrSupportingFileUnpinned for them. Use
-	// this for strict spec-only index output until the SEP clarifies.
+	// SupportingDigestsOff pinned SKILL.md only. It has no effect since
+	// v0.6.0, and supporting files are still pinned.
 	SupportingDigestsOff
 )
 
-// WithSupportingFileDigests selects the supporting-file integrity strategy
-// (see SupportingDigestMode). Default is SupportingDigestsPerFile.
-//
-// The pins live under a reverse-domain _meta key, so they never collide
-// with a top-level field the SEP may later define; when the SEP settles on
-// a shape mcpkit maps to it (issue 780). Until then this option lets an
-// operator emit strict spec-only output (SupportingDigestsOff) or keep the
-// per-file hardening (the default).
+// WithSupportingFileDigests has no effect since v0.6.0. See
+// SupportingDigestMode. It remains so existing callers compile.
 func WithSupportingFileDigests(mode SupportingDigestMode) ProviderOption {
 	return func(c *providerConfig) { c.supportingDigests = mode }
 }
@@ -117,9 +109,9 @@ func WithMetaPrefix(prefix string) ProviderOption {
 }
 
 // WithIndexCacheTTL forwards a cache TTL to the Indexer that
-// Provider.RegisterWith builds for skill://index.json. Equivalent to
-// constructing an Indexer explicitly with WithIndexerCacheTTL(d).
-// Ignored when WithoutIndex is also supplied. See Indexer for the full
+// Provider.RegisterWith builds to serve skills/list and skills/get.
+// Equivalent to constructing an Indexer explicitly with
+// WithIndexerCacheTTL(d). See Indexer for the full
 // cache semantics including the zero-mtime fallback.
 func WithIndexCacheTTL(d time.Duration) ProviderOption {
 	return func(c *providerConfig) {
@@ -201,7 +193,7 @@ func WithCoalesceWindow(d time.Duration) ProviderOption {
 //
 // Composes with WithCoalesceWindow: coalesce runs first (group events
 // into one broadcast intent); throttle enforces the minimum-interval
-// contract on the actual broadcast. The version counter and the index
+// contract on the actual broadcast. The version counter and the Indexer
 // cache invalidation still fire on the coalesce boundary so polling
 // stateless clients see changes promptly — only the stateful-wire
 // notification rate is throttled.
@@ -292,7 +284,7 @@ func WithFSWatcherErrorHandler(fn func(error)) WatcherOption {
 // called. The default is ON because a Provider can always enumerate
 // directories from its underlying fs.FS at trivial cost.
 //
-// Suppress when the caller wants the discovery index without the
+// Suppress when the caller wants skills/list and skills/get without the
 // directory-navigation surface (e.g., to stay on the pre-2e04c48d SEP
 // shape during a transition window, or to gate the capability behind a
 // feature flag the application owns).

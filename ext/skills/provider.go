@@ -370,7 +370,7 @@ func (p *Provider) NotifyChanged(paths ...string) error {
 
 // NotifyChangedEvents is the typed Applier entry point. The Provider
 // bumps its version counter, invalidates the Indexer cache so the
-// next skill://index.json read rebuilds, accumulates the events into a
+// next skills/list or skills/get rebuilds, accumulates the events into a
 // deduplicated pending set, and — subject to the coalesce window and
 // throttle interval — broadcasts a notifications/resources/list_changed
 // event to subscribed sessions on the stateful wire.
@@ -393,24 +393,24 @@ func (p *Provider) NotifyChanged(paths ...string) error {
 // the last broadcast defers to last+d so subscribers never see two
 // broadcasts closer than d apart.
 //
-// The version counter bump and index cache invalidation happen
+// The version counter bump and Indexer cache invalidation happen
 // immediately on every call regardless of coalesce/throttle — only
 // the broadcast is deferred. Polling stateless clients see the bumped
-// _meta version on the next index read without waiting for the
+// _meta version on their next skills/list call without waiting for the
 // coalesce window.
 //
 // # Dual-wire
 //
 // Broadcast targets the stateful/streamable-HTTP wire. Stateless
 // clients (SEP-2575) have no persistent push channel; they detect
-// changes by polling skill://index.json and observing
-// _meta.io.modelcontextprotocol.skills/version.
+// changes by polling skills/list and comparing the MetaKeyVersion
+// value in the result's _meta.
 //
 // # Lifecycle
 //
 // Safe to call before RegisterWith (the broadcast is a no-op until a
 // server is bound) and from any goroutine. After Close(), version and
-// index invalidation still fire but broadcasts are suppressed.
+// Indexer cache invalidation still fire but broadcasts are suppressed.
 func (p *Provider) NotifyChangedEvents(events ...PathChange) error {
 	now := time.Now()
 
@@ -469,7 +469,7 @@ func (p *Provider) NotifyChangedEvents(events ...PathChange) error {
 }
 
 // Refresh signals "something in the underlying content changed but I
-// don't know what." Bumps the version counter, invalidates the index
+// don't know what." Bumps the version counter, invalidates the Indexer
 // cache, and (subject to coalesce + throttle) broadcasts an empty-paths
 // notifications/resources/list_changed event. Subscribers seeing an
 // empty Paths map should re-read everything; the Version bump remains
@@ -487,7 +487,7 @@ func (p *Provider) Refresh() error {
 // Close stops any pending broadcast timer, stops the fsnotify Detector
 // goroutine (when WithFSWatcher is in effect) abruptly, and prevents
 // future broadcasts. Idempotent. After Close, the version counter
-// still bumps on NotifyChanged calls and the index cache still
+// still bumps on NotifyChanged calls and the Indexer cache still
 // invalidates (polling clients continue to see fresh state), but the
 // stateful-wire broadcast goroutine is dormant and any buffered
 // fsnotify events are dropped.

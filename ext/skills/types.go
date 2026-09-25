@@ -6,8 +6,8 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// MetaKeyVersion is the reverse-domain key under skill://index.json's
-// _meta map that carries Provider.Version() at index build time.
+// MetaKeyVersion is the reverse-domain key under the skills/list result's
+// _meta map. It carries Provider.Version() at the time the listing is served.
 // Stateless polling clients read this field to detect changes without
 // a persistent push channel (issue #795).
 const MetaKeyVersion = MetaPrefix + "version"
@@ -95,8 +95,8 @@ type PathChangeEntry struct {
 // and rely on Version alone.
 //
 // Version is Provider.Version() at the moment this broadcast was
-// constructed — the same counter the index will carry when a
-// subscriber re-reads it within the same instant. Two contractual
+// constructed, the same counter skills/list will carry when a
+// subscriber re-lists within the same instant. Two contractual
 // uses:
 //
 //   - Idempotency: a duplicate broadcast carrying the same Version

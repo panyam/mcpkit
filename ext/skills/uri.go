@@ -24,7 +24,7 @@ import (
 // skill://acme/billing/refunds/templates/email.md the segments refunds,
 // templates, billing, and acme all satisfy the Agent Skills name rules,
 // and a URI-only scan cannot pick refunds over templates without external
-// knowledge from the discovery index or a prior manifest read. SEP-2640's
+// knowledge from a skills/list entry or a prior manifest read. SEP-2640's
 // host workflow always supplies that knowledge, so the spec's claim holds
 // operationally even though the URI string in isolation is ambiguous.
 //
