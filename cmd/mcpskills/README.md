@@ -7,12 +7,13 @@ The binary is deliberately implementation-agnostic on the inspect side. It speak
 ## Install / build
 
 ```bash
-# From the mcpkit repo root:
+git clone https://github.com/panyam/mcpkit && cd mcpkit
 make build-mcpskills          # produces ./bin/mcpskills
-
-# Or directly with go install:
-go install github.com/panyam/mcpkit/cmd/mcpskills@latest
 ```
+
+`go install github.com/panyam/mcpkit/cmd/mcpskills@latest` does not work yet. The module's
+`go.mod` carries the in-repo `replace` directives used for local development, and `go install`
+refuses any module that has them. Making the command installable is issue 1488.
 
 ## Subcommands
 
@@ -49,13 +50,13 @@ mcpskills unpack ./git-workflow.zip -o ./extracted
 
 ## Cross-implementation inspect
 
-The inspect subcommand can verify any compliant server, not just one started by `mcpskills serve`. Point it at any URL that advertises `io.modelcontextprotocol/skills` and it will fetch `skill://index.json`, walk every entry, and SHA-256-verify each `skill-md` or `archive` payload against the digest the index promises:
+The inspect subcommand can verify any compliant server, not just one started by `mcpskills serve`. Point it at any URL that advertises `io.modelcontextprotocol/skills` and it will enumerate skills with `skills/list`, then read every file each entry pins and check its SHA-256 digest, its byte size, and (for the `SKILL.md`) its frontmatter against the entry. An entry whose resources are `"dynamic"` pins nothing, so it is listed but not verified:
 
 ```bash
 mcpskills inspect http://upstream.example.com/mcp --json
 ```
 
-A non-zero exit means at least one digest did not match.
+A non-zero exit means at least one skill failed verification.
 
 ## Output modes
 

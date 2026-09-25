@@ -33,26 +33,24 @@ func TestVerifyCmd_Valid(t *testing.T) {
 	}
 }
 
-// TestVerifyCmd_NestedSkill walks the bad-nested fixture where one
-// skill contains another skill below it. verify must flag the nested
-// SKILL.md and still pass the surrounding outer skill.
+// TestVerifyCmd_NestedSkill walks the nested fixture where one skill
+// contains another below it. The SEP-2640 2026-08-21 revision made that
+// legal, so verify must pass both the outer and the inner skill.
 func TestVerifyCmd_NestedSkill(t *testing.T) {
 	out := &bytes.Buffer{}
 	root := newRoot()
 	root.SetOut(out)
 	root.SetErr(out)
-	root.SetArgs([]string{"verify", "../../ext/skills/testdata/bad-nested", "--color", "never"})
+	root.SetArgs([]string{"verify", "../../ext/skills/testdata/nested", "--color", "never"})
 
-	err := root.Execute()
-	if err == nil {
-		t.Fatalf("Execute: want non-nil error, got nil\noutput:\n%s", out.String())
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute: %v\noutput:\n%s", err, out.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "nested skill") {
-		t.Errorf("verify output missing nested-skill marker\nfull output:\n%s", got)
-	}
-	if !strings.Contains(got, "1 error") {
-		t.Errorf("verify summary missing error count\nfull output:\n%s", got)
+	for _, want := range []string{"outer", "outer/inner", "2 skills, 0 errors"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("verify output missing %q\nfull output:\n%s", want, got)
+		}
 	}
 }
 

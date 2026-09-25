@@ -19,12 +19,16 @@ func newVerifyCmd() *cobra.Command {
 		Long: `Walk a directory and check that every skill it contains
 satisfies SEP-2640's structural rules: SKILL.md at each skill's root,
 frontmatter required fields, name matches final segment of skill path,
-no nested skills, valid skill-name character class.
+valid skill-name character class.
+
+Nested skills are legal since the SEP-2640 2026-08-21 revision, so a
+SKILL.md below another skill's root is verified as a skill in its own
+right rather than rejected.
 
 verify exits 0 when the directory is clean and 1 when any rule
-violates. The full ErrSkillNameMismatch / ErrNestedSkill /
-ErrFrontmatterMissing* error surfaces on stderr so an author sees
-exactly which file needs editing.`,
+violates. The full ErrSkillNameMismatch / ErrFrontmatterMissing*
+error surfaces on stderr so an author sees exactly which file needs
+editing.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := args[0]
@@ -112,33 +116,7 @@ func verifySkill(skillDir string) error {
 		return fmt.Errorf("%w: directory %q vs frontmatter name %q",
 			skills.ErrSkillNameMismatch, base, fm.Name)
 	}
-	if err := skills.ValidateSkillName(base); err != nil {
-		return err
-	}
-	// Nested SKILL.md check: walk the skill's subtree and reject any
-	// SKILL.md that sits strictly below the skill root. The skill's own
-	// root SKILL.md (filepath.Dir(path) == skillDir) is the expected
-	// manifest and must not be flagged.
-	nestedErr := filepath.WalkDir(skillDir, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if d.Name() != skills.ManifestFilename {
-			return nil
-		}
-		if filepath.Dir(path) == skillDir {
-			// The skill's own root SKILL.md.
-			return nil
-		}
-		return fmt.Errorf("%w: %s", skills.ErrNestedSkill, path)
-	})
-	if nestedErr != nil {
-		return nestedErr
-	}
-	return nil
+	return skills.ValidateSkillName(base)
 }
 
 func relTo(root, p string) string {

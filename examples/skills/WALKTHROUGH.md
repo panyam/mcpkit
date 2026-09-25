@@ -478,11 +478,11 @@ A host bounds how many bytes a skill read may pull before decoding, so a hostile
 
 ```go
 sc := skills.NewClient(c)
-idx, _ := sc.ListSkills(ctx.Ctx)
+entries, _ := sc.ListSkillEntries(ctx.Ctx)
 e, _ := findManifestEntry(entries, uriRefundsManifest)
-full, _ := sc.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)
+full, _ := sc.ReadFromEntry(ctx.Ctx, e, e.URI)
 capped := skills.NewClient(c, skills.WithMaxResourceBytes(int64(len(full.Bytes)/2)))
-_, err := capped.ReadAndVerify(ctx.Ctx, e.URL, e.Digest)   // -> ErrResourceTooLarge
+_, err := capped.ReadFromEntry(ctx.Ctx, e, e.URI)   // -> ErrResourceTooLarge
 ```
 
 ### Step 19: Refuse an unpinned supporting file (threat model B1)

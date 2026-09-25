@@ -25,9 +25,9 @@ func newInspectCmd() *cobra.Command {
 		Use:   "inspect [url]",
 		Short: "Inspect any SEP-2640-compliant MCP server",
 		Long: `Connect to an MCP server, check whether it advertises the
-io.modelcontextprotocol/skills capability, fetch its skill://index.json,
-and verify the SHA-256 digest of every cataloged skill against the
-served bytes.
+io.modelcontextprotocol/skills capability, enumerate its skills via
+skills/list, and verify every file each skill pins (SHA-256 digest,
+byte size, and SKILL.md frontmatter) against the served bytes.
 
 Works against any spec-compliant server: mcpkit, the TypeScript SDK
 reference impl, the PHP SDK, anything that follows SEP-2640's wire
@@ -71,34 +71,14 @@ Examples:
 				return renderText(out, painter, report)
 			}
 
-			idx, err := sc.ListSkills(cmd.Context())
+			entries, err := sc.ListSkillEntries(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("ListSkills: %w", err)
+				return fmt.Errorf("skills/list: %w", err)
 			}
-			report.IndexSchema = idx.Schema
-			report.Entries = make([]inspectEntry, 0, len(idx.Skills))
-
-			for _, e := range idx.Skills {
-				row := inspectEntry{
-					Name:        e.Name,
-					Type:        string(e.Type),
-					URL:         e.URL,
-					Digest:      e.Digest,
-					Description: e.Description,
-				}
-				result, verifyErr := sc.ReadAndVerify(cmd.Context(), e.URL, e.Digest)
-				switch {
-				case verifyErr == nil && result.DigestVerified:
-					t := true
-					row.Verified = &t
-				case verifyErr != nil:
-					f := false
-					row.Verified = &f
-					row.Error = verifyErr.Error()
-					report.HasFailures = true
-				default:
-					f := false
-					row.Verified = &f
+			report.Entries = make([]inspectEntry, 0, len(entries))
+			for _, e := range entries {
+				row := inspectSkill(cmd.Context(), sc, e)
+				if row.Verified != nil && !*row.Verified {
 					report.HasFailures = true
 				}
 				report.Entries = append(report.Entries, row)
@@ -114,7 +94,7 @@ Examples:
 				}
 			}
 			if report.HasFailures {
-				return fmt.Errorf("one or more digest mismatches")
+				return fmt.Errorf("one or more skills failed verification")
 			}
 			return nil
 		},
@@ -129,23 +109,62 @@ type inspectReport struct {
 	URL                string         `json:"url"`
 	ClientInfo         string         `json:"clientInfo"`
 	CapabilityDeclared bool           `json:"capabilityDeclared"`
-	IndexSchema        string         `json:"indexSchema,omitempty"`
 	Entries            []inspectEntry `json:"entries,omitempty"`
 	HasFailures        bool           `json:"hasFailures"`
 }
 
 type inspectEntry struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	URL         string `json:"url"`
+	Name string `json:"name"`
+	// URL is the skill's SKILL.md URI (the entry's uri on the wire). The
+	// JSON key predates skills/list and is kept so existing scripts parse.
+	URL string `json:"url"`
+	// Digest is the pinned digest of the SKILL.md itself.
 	Digest      string `json:"digest,omitempty"`
 	Description string `json:"description,omitempty"`
-	// Verified is true on digest match, false on mismatch or read
-	// failure. Pointer-of-bool is retained so a future SEP revision
-	// that re-introduces a digest-less entry type can flow through
-	// without a struct-shape change.
+	// Files counts the entry's pinned resources, SKILL.md included. Zero
+	// for a dynamic entry.
+	Files int `json:"files"`
+	// Dynamic is true when the server publishes the "dynamic" sentinel
+	// instead of a resource list, so there is nothing to verify against.
+	Dynamic bool `json:"dynamic,omitempty"`
+	// Verified is true when every pinned file matched, false on any
+	// mismatch or read failure, and nil for a dynamic entry.
 	Verified *bool  `json:"verified,omitempty"`
 	Error    string `json:"error,omitempty"`
+}
+
+// inspectSkill verifies every file an entry pins through ReadFromEntry,
+// stopping at the first failure. The SKILL.md is always checked, so a
+// manifest that omits it fails with ErrURINotInResources.
+func inspectSkill(ctx context.Context, sc *skills.Client, e skills.SkillEntry) inspectEntry {
+	row := inspectEntry{
+		Name:        e.Name(),
+		URL:         e.URI,
+		Description: e.Description(),
+		Files:       len(e.Resources.Files),
+		Dynamic:     e.Resources.Dynamic,
+	}
+	if e.Resources.Dynamic {
+		return row
+	}
+	uris := []string{e.URI}
+	for _, f := range e.Resources.Files {
+		if f.URI == e.URI {
+			row.Digest = f.Digest
+			continue
+		}
+		uris = append(uris, f.URI)
+	}
+	ok := true
+	for _, uri := range uris {
+		if _, err := sc.ReadFromEntry(ctx, e, uri); err != nil {
+			ok = false
+			row.Error = err.Error()
+			break
+		}
+	}
+	row.Verified = &ok
+	return row
 }
 
 func renderText(out io.Writer, p *common.Painter, r *inspectReport) error {
@@ -156,29 +175,30 @@ func renderText(out io.Writer, p *common.Painter, r *inspectReport) error {
 	}
 	fmt.Fprintf(out, "  capability: %s io.modelcontextprotocol/skills declared\n", p.Green("✓"))
 	if len(r.Entries) == 0 {
-		fmt.Fprintf(out, "  index: empty or absent (host MAY still load skills by URI)\n")
+		fmt.Fprintf(out, "  skills/list: empty (not proof of absence, a host MAY still fetch skills by URI via skills/get)\n")
 		return nil
 	}
-	fmt.Fprintf(out, "  index: %s (%d %s)\n", p.Cyan("skill://index.json"), len(r.Entries), pluralize(len(r.Entries), "entry", "entries"))
-	if r.IndexSchema != "" {
-		fmt.Fprintf(out, "         $schema: %s\n", p.Dim(r.IndexSchema))
-	}
+	fmt.Fprintf(out, "  skills/list: %d %s\n", len(r.Entries), pluralize(len(r.Entries), "skill", "skills"))
 	for _, e := range r.Entries {
 		marker := p.Dim("·")
-		status := p.Dim("(no digest)")
+		status := p.Dim("(dynamic, nothing pinned)")
+		shape := "dynamic"
+		if !e.Dynamic {
+			shape = fmt.Sprintf("%d %s", e.Files, pluralize(e.Files, "file", "files"))
+		}
 		if e.Verified != nil {
 			if *e.Verified {
 				marker = p.Green("✓")
 				status = "digest verified"
 			} else {
 				marker = p.Red("✗")
-				status = p.Red("digest MISMATCH")
+				status = p.Red("verification FAILED")
 				if e.Error != "" {
-					status = p.Red("digest MISMATCH — ") + p.Dim(e.Error)
+					status = p.Red("verification FAILED — ") + p.Dim(e.Error)
 				}
 			}
 		}
-		fmt.Fprintf(out, "    %s %-30s [%-21s] %s\n", marker, e.Name, e.Type, status)
+		fmt.Fprintf(out, "    %s %-30s [%-9s] %s\n", marker, e.Name, shape, status)
 		fmt.Fprintf(out, "        %s\n", p.Dim(e.URL))
 	}
 	return nil
