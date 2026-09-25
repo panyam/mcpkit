@@ -39,7 +39,7 @@ It does **not** chase feature parity with upstream's `App`. When a View needs so
 
 ### Consequences
 
-- Nothing in the Go server path injects or assumes the bridge. `InjectAppBridge` and `AppShellHTML` are opt-in helpers. `examples/apps/compat/*` already serves upstream's own built Views from Go servers and passes upstream's Playwright suite. A showcase that serves one tool through upstream `App`, React `useApp` and the bridge from the same Go server is tracked in #1474.
+- Nothing in the Go server path injects or assumes the bridge. `InjectAppBridge` and `AppShellHTML` are opt-in helpers. `examples/apps/compat/*` already serves upstream's own built Views from Go servers and passes upstream's Playwright suite. [`examples/apps/any-frontend`](../examples/apps/any-frontend/) serves one app through upstream `App`, React `useApp`, upstream `App` plus mcpkit's extras, and the bridge from the same Go server, and CI drives all four in Chromium.
 - Bridge work is limited to conformance fixes and the extras. Parity items were dropped from #1473.
 - On the host side, the same rule means `AppHost` has to accept a stock upstream View, which requires answering `ui/initialize` (#1454).
 

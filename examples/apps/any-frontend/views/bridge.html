@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Color picker (mcpkit bridge)</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 12px; }
+  #swatch { width: 120px; height: 60px; border-radius: 6px; border: 1px solid #0003; }
+  .runtime { font-size: 12px; opacity: .7; }
+</style>
+{{ template "mcpkit-bridge" .Bridge }}
+</head>
+<body>
+  <div class="runtime" data-testid="runtime">mcpkit bridge</div>
+  <div id="swatch" data-testid="swatch"></div>
+  <p data-testid="label">waiting for a color…</p>
+  <button data-testid="darker" disabled>Darker</button>
+  <p data-testid="status"></p>
+<script type="module">
+  // The mcpkit bridge exposes a global MCPApp. No bundler, no imports. This
+  // script is a module like the bridge's, so it runs after the bridge has
+  // defined MCPApp (classic scripts would run first).
+  const swatch = document.querySelector('[data-testid=swatch]');
+  const label = document.querySelector('[data-testid=label]');
+  const button = document.querySelector('[data-testid=darker]');
+  const status = document.querySelector('[data-testid=status]');
+  let current = null;
+
+  function show(c) {
+    current = c;
+    swatch.style.background = c.hex;
+    swatch.dataset.hex = c.hex;
+    label.textContent = c.name + ' ' + c.hex;
+    button.disabled = false;
+    MCPApp.updateModelContext({
+      content: [{ type: 'text', text: 'The user is looking at ' + c.name + ' ' + c.hex }],
+      structuredContent: { hex: c.hex },
+    }).catch(() => {});
+  }
+
+  MCPApp.on('toolresult', ({ result }) => {
+    if (result && result.structuredContent) show(result.structuredContent);
+  });
+
+  button.addEventListener('click', async () => {
+    try {
+      const r = await MCPApp.callTool('shade_color', { hex: current.hex });
+      show(r.structuredContent);
+      status.textContent = 'shaded by the server';
+    } catch (e) {
+      status.textContent = 'error: ' + e.message;
+    }
+  });
+</script>
+</body>
+</html>

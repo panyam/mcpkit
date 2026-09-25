@@ -10,6 +10,7 @@ Servers exposing **MCP Apps**, the interactive HTML/JS UIs that an MCP host rend
 
 | Example | What it shows |
 |---------|--------------|
+| [any-frontend/](any-frontend/) | One Go backend serving the same app through four View runtimes: the mcpkit bridge, upstream `App`, upstream React `useApp`, and upstream `App` plus mcpkit extras. Start here to choose a runtime. |
 | [vanilla/](vanilla/) | Minimal MCP App - plain JS, no build step |
 | [todolist/](todolist/) | Server-rendered MCP App - bridge events, inline JS, elicitation + sampling |
 | [react/](react/) | React 19 MCP App - hooks, Vite, TypeScript |
@@ -52,7 +53,7 @@ Then point an Apps-capable host at `http://localhost:8080/mcp`:
 
 - **Server-defined UI**: tool authors ship the rendering, not just the data. The host gives the app a sandboxed iframe.
 - **Bidirectional tools**: the app can register tools the model can call, and the model's tool calls can target either the server or the app.
-- **Bridge events**: a small JS API (`MCPApp.callTool`, `MCPApp.on('event', ...)`) handles host ↔ app messaging.
+- **Any frontend runtime**: the Go server only serves the View's bytes. The examples here mostly use mcpkit's bridge (`MCPApp.callTool`, `MCPApp.on('event', ...)`), a zero-build option for server-rendered pages, but upstream's `App` works just as well. `any-frontend/` shows both side by side.
 
 See [`docs/APPS_DESIGN.md`](../../docs/APPS_DESIGN.md) for the full architecture.
 

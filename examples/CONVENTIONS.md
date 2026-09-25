@@ -867,9 +867,17 @@ Desktop) drives interaction, not demokit. They follow these rules instead:
   binary just starts the server. Use `server.Run(*addr)` (simpler) unless
   you need explicit shutdown control.
 - **`server.WithExtension(&ui.UIExtension{})`** is required.
-- **HTML asset** (`<app>.html`) embedded via `//go:embed` and rendered with
-  `html/template`, where `{{ template "mcpkit-bridge" .Bridge }}` injects the
-  bridge JS.
+- **HTML asset** (`<app>.html`) embedded via `//go:embed`. The View may use
+  any runtime that speaks the MCP Apps wire protocol (see
+  `docs/APPS_DESIGN.md` § Frontend independence):
+  - **mcpkit bridge, no build step**: render with `html/template`, where
+    `{{ template "mcpkit-bridge" .Bridge }}` injects the bridge JS. The default
+    for server-rendered examples.
+  - **Upstream `App` / `useApp`, with a build step**: sources under `web/`,
+    bundled into self-contained HTML under `views/` that is **committed**, so
+    `go run .` still needs no Node. Add a stale check and a browser test the
+    way `examples/apps/any-frontend/` does (`scripts/check-views.sh`,
+    `scripts/test-e2e.sh`), and wire both into CI.
 - **Tool registration** uses `ui.RegisterTypedAppTool(...)` (not plain
   `RegisterTool`) so the host knows the tool ships an app.
 - **README.md replaces WALKTHROUGH.md** for procedural docs:
@@ -965,8 +973,10 @@ output rather than emitted as N/A.
 
 - [ ] `ui-extension` - `main.go` registers
   `server.WithExtension(&ui.UIExtension{...})`.
-- [ ] `ui-bridge-template` - HTML asset includes
-  `{{ template "mcpkit-bridge" .Bridge }}`.
+- [ ] `ui-bridge-template` - each HTML asset either includes
+  `{{ template "mcpkit-bridge" .Bridge }}` (no-build-step View), or is a
+  committed bundle built from `web/` for an upstream runtime, with a stale
+  check (`scripts/check-views.sh`) and a browser test wired into CI (see §7).
 - [ ] `ui-typed-app-tool` - UI tools registered via
   `ui.RegisterTypedAppTool(...)`, not plain `RegisterTool`.
 - [ ] `ui-no-walkthrough` - no `walkthrough.go` / `WALKTHROUGH.md` exist.

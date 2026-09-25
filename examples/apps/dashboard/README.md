@@ -1,5 +1,7 @@
 # Dashboard — MCP App with Tool Lifecycle
 
+> This View uses the mcpkit bridge, the no-build-step option for server-rendered pages. An mcpkit server works with any MCP Apps frontend runtime: see [any-frontend](../any-frontend/) to compare them.
+
 A data dashboard that registers 5 app-provided tools and demonstrates the full tool lifecycle: register, enable, disable, remove, and re-register. Tools become available based on app state (data loaded vs empty).
 
 ## MCPKit Features Used
