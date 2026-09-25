@@ -291,14 +291,18 @@ func TestEnterpriseManagedTokenSource_CIMD_PriorityAndValidation(t *testing.T) {
 
 func TestEnterpriseManagedTokenSource_ValidationErrors(t *testing.T) {
 	mock := newEnterpriseMockServers(t)
-	base := EnterpriseManagedTokenSource{
-		ServerURL:        mock.mcpAndAS.URL + "/mcp",
-		ClientID:         "mcp-client",
-		ClientSecret:     "mcp-secret",
-		IdpIDToken:       "idtoken12345abcdef",
-		IdpTokenEndpoint: mock.idp.URL + "/token",
-		HTTPClient:       mock.mcpAndAS.Client(),
-		AllowInsecure:    true,
+	// A constructor rather than a shared value: the token source holds a
+	// sync.Mutex, so each case needs its own instance, not a copy.
+	newBase := func() *EnterpriseManagedTokenSource {
+		return &EnterpriseManagedTokenSource{
+			ServerURL:        mock.mcpAndAS.URL + "/mcp",
+			ClientID:         "mcp-client",
+			ClientSecret:     "mcp-secret",
+			IdpIDToken:       "idtoken12345abcdef",
+			IdpTokenEndpoint: mock.idp.URL + "/token",
+			HTTPClient:       mock.mcpAndAS.Client(),
+			AllowInsecure:    true,
+		}
 	}
 	cases := []struct {
 		name    string
@@ -312,8 +316,8 @@ func TestEnterpriseManagedTokenSource_ValidationErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ts := base
-			tc.mut(&ts)
+			ts := newBase()
+			tc.mut(ts)
 			_, err := ts.Token()
 			if err == nil {
 				t.Fatal("expected error")
