@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -31,7 +33,8 @@ type activeTask struct {
 
 // TaskContext is the typed context for tool handlers running as a v2
 // background task. It embeds core.ToolContext and adds task-specific
-// methods (TaskID, ProgressToken, TaskElicit, TaskSample, SetStatus).
+// methods (TaskID, ProgressToken, TaskElicit, TaskSample, SetStatus,
+// SetStatusMessage).
 //
 // Tool handlers retrieve this via GetTaskContext(ctx). It is nil for
 // synchronous (non-task) tool invocations.
@@ -89,16 +92,58 @@ func (tc *TaskContext) ProgressToken() any {
 	return tc.progressToken
 }
 
+// ErrTaskTerminal is returned by SetStatus and SetStatusMessage when the task
+// has already completed, failed or been cancelled. The task is left as it is.
+var ErrTaskTerminal = errors.New("tasks: task is already in a terminal state")
+
 // SetStatus transitions the task to a new status and emits a notifications/tasks
-// status event so polling/streaming clients pick up the new state.
+// status event so polling/streaming clients pick up the new state. It returns
+// ErrTaskTerminal, and changes nothing, once the task is terminal.
 func (tc *TaskContext) SetStatus(status core.TaskStatus) error {
-	err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+	return tc.update(func(t *core.TaskInfo) {
 		t.Status = status
 	})
-	if err == nil {
-		notifyTransitionStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+}
+
+// SetStatusMessage sets the task's statusMessage and emits notifications/tasks,
+// leaving the status as it is. SEP-2663 forbids notifications/progress on a
+// task, so this is how a task reports how far along it is:
+//
+//	for i, item := range items {
+//	    tc.SetStatusMessage(fmt.Sprintf("Processing %d/%d", i+1, len(items)))
+//	    ...
+//	}
+//
+// It returns ErrTaskTerminal, and changes nothing, once the task is terminal,
+// so a progress update racing tasks/cancel cannot overwrite the cancellation.
+func (tc *TaskContext) SetStatusMessage(msg string) error {
+	return tc.update(func(t *core.TaskInfo) {
+		t.StatusMessage = msg
+	})
+}
+
+// update applies fn to a non-terminal task, stamps lastUpdatedAt and notifies.
+// TaskStore.Update itself has no terminal guard (only StoreTerminalResult
+// does), so without this check a late SetStatus(TaskWorking) would move a
+// cancelled task back to working.
+func (tc *TaskContext) update(fn func(*core.TaskInfo)) error {
+	terminal := false
+	err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
+		if t.Status.IsTerminal() {
+			terminal = true
+			return
+		}
+		fn(t)
+		t.LastUpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	})
+	if err != nil {
+		return err
 	}
-	return err
+	if terminal {
+		return ErrTaskTerminal
+	}
+	notifyTransitionStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+	return nil
 }
 
 // TaskElicit asks the client for elicitation input from inside a running
@@ -170,12 +215,9 @@ func (tc *TaskContext) requestInput(methodPrefix, jsonRpcMethod string, params j
 
 	// Transition to input_required and notify status so polling clients
 	// pick up the new pending request on the next tasks/get.
-	if err := tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-		t.Status = core.TaskInputRequired
-	}); err != nil {
+	if err := tc.SetStatus(core.TaskInputRequired); err != nil {
 		return nil, fmt.Errorf("task %s: set input_required: %w", tc.taskID, err)
 	}
-	notifyTransitionStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
 
 	// Wait for either tasks/update delivery or context cancellation.
 	var payload json.RawMessage
@@ -191,13 +233,10 @@ func (tc *TaskContext) requestInput(methodPrefix, jsonRpcMethod string, params j
 	// Transition back to working before returning — but only if no other
 	// inputs are still pending. A fan-out tool that has multiple TaskElicit /
 	// TaskSample calls in flight must stay in input_required until every
-	// one has been answered. Best-effort: if the task has already gone
-	// terminal, the store's terminal guard rejects this.
+	// one has been answered. If the task went terminal meanwhile (cancelled
+	// while the answer was in flight), SetStatus leaves it terminal.
 	if !tc.inputState.HasPending() {
-		tc.store.Update(tc.taskID, tc.sessionID, func(t *core.TaskInfo) {
-			t.Status = core.TaskWorking
-		})
-		notifyTransitionStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+		tc.SetStatus(core.TaskWorking)
 	}
 
 	return payload, nil
