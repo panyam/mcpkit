@@ -296,7 +296,24 @@
     Host--&gt;&gt;Bridge: Response
     Bridge--&gt;&gt;App: {content: [{type: &quot;text&quot;, text: &quot;server:hi&quot;}]}
 </code></pre>
-<h4 id="dynamic-tool-registration">Dynamic Tool Registration <a class="anchor" href="#dynamic-tool-registration">¶</a></h4>
+<h4 id="apphost-host-capabilities">App→Host: Host Capabilities <a class="anchor" href="#apphost-host-capabilities">¶</a></h4>
+<p><code>ui/open-link</code>, <code>ui/download-file</code>, <code>ui/message</code>, <code>ui/request-display-mode</code> and<br />
+<code>ui/update-model-context</code> belong to the host, not the server. AppHost answers them from the<br />
+<code>HostHandlers</code> passed with <code>WithHostHandlers</code> and never forwards them. A nil handler means the host<br />
+does not support that method, and the app gets <code>-32601</code>. <code>ui/request-display-mode</code> is the exception:<br />
+the spec requires the host to answer with the mode in effect, so with no handler it answers<br />
+<code>{mode: &quot;inline&quot;}</code> (<code>ui.DefaultDisplayMode</code>). <code>HostHandlers.Notification</code> receives every<br />
+app notification except <code>notifications/tools/list_changed</code>, which AppHost consumes itself.</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>host <span style="color:#000;font-weight:bold">:=</span> ui.<span style="color:#900;font-weight:bold">NewAppHost</span>(c, bridge, ui.<span style="color:#900;font-weight:bold">WithHostHandlers</span>(ui.HostHandlers{
+</span></span><span style="display:flex;"><span>    UpdateModelContext: <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, u ui.ModelContextUpdate) <span style="color:#458;font-weight:bold">error</span> {
+</span></span><span style="display:flex;"><span>        session.<span style="color:#900;font-weight:bold">SetAppContext</span>(u) <span style="color:#998;font-style:italic">// replaces the previous update from this view
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#000;font-weight:bold">return</span> <span style="color:#000;font-weight:bold">nil</span>
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    Message: <span style="color:#000;font-weight:bold">func</span>(ctx context.Context, m ui.MessageRequest) <span style="color:#458;font-weight:bold">error</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> session.<span style="color:#900;font-weight:bold">QueueTurn</span>(m)
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>}))
+</span></span></code></pre><h4 id="dynamic-tool-registration">Dynamic Tool Registration <a class="anchor" href="#dynamic-tool-registration">¶</a></h4>
 <p>When the app registers a new tool at runtime, a <code>notifications/tools/list_changed</code> notification triggers a cache refresh.</p>
 <pre><code class="language-mermaid">sequenceDiagram
     participant App as MCP App

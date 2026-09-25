@@ -237,10 +237,10 @@
 
     <div class="content-body">
         
-<h1 id="8-steps">========================================================================<br />
+<h1 id="9-steps">========================================================================<br />
 AppHost and host-side app management<br />
 Demonstrates AppHost mediating between an MCP server and an app bridge with bidirectional tool calls.<br />
-8 steps <a class="anchor" href="#8-steps">¶</a></h1>
+9 steps <a class="anchor" href="#9-steps">¶</a></h1>
 <h2 id="step-1-create-mcp-server-with-tools">Step 1: Create MCP server with tools <a class="anchor" href="#step-1-create-mcp-server-with-tools">¶</a></h2>
 <pre><code>Refs: MCP Specification
 Srv -&gt;&gt; Srv: RegisterTool(&quot;server_echo&quot;)
@@ -275,14 +275,16 @@ Press Enter to run this step...
 </code></pre>
 <p>Bridge created with 2 app tools: app_greet, app_counter</p>
 <h2 id="step-4-create-apphost-and-wire-everything-together">Step 4: Create AppHost and wire everything together <a class="anchor" href="#step-4-create-apphost-and-wire-everything-together">¶</a></h2>
-<pre><code>Host -&gt;&gt; Bridge: SetRequestHandler (app→host)
+<pre><code>Host -&gt;&gt; Host: WithHostHandlers (ui/* host capabilities)
+Host -&gt;&gt; Bridge: SetRequestHandler (app→host)
 Host -&gt;&gt; Bridge: SetNotificationHandler (list_changed)
 Host -&gt;&gt; Bridge: Start()
 Host -&gt;&gt; Bridge: Send(tools/list), initial fetch
 Bridge --&gt;&gt; Host: {tools: [app_greet, app_counter]}
 
 AppHost wires up bidirectional routing and fetches the initial app
-tool list.
+tool list. HostHandlers supplies the ui/* methods that belong to the
+host, not the server.
 
 Press Enter to run this step...
 </code></pre>
@@ -328,7 +330,25 @@ forwards to the MCP server via the Client.
 Press Enter to run this step...
 </code></pre>
 <p>App called server_echo → echo: from the app</p>
-<h2 id="step-8-dynamic-registration-where-the-app-adds-a-tool-at-runtime">Step 8: Dynamic registration, where the app adds a tool at runtime <a class="anchor" href="#step-8-dynamic-registration-where-the-app-adds-a-tool-at-runtime">¶</a></h2>
+<h2 id="step-8-app-calls-the-host-not-the-server">Step 8: App calls the host, not the server <a class="anchor" href="#step-8-app-calls-the-host-not-the-server">¶</a></h2>
+<pre><code>Refs: MCP Apps Extension
+Bridge -&gt;&gt; Host: ui/update-model-context {content, structuredContent}
+Host --&gt;&gt; Bridge: {}
+Bridge -&gt;&gt; Host: ui/message {role: user, content}
+Host --&gt;&gt; Bridge: {}
+Bridge -&gt;&gt; Host: ui/open-link, ui/request-display-mode
+
+Four of the app's requests are host capabilities the MCP server has
+never heard of. AppHost answers them from HostHandlers and forwards
+only tools/call and resources/read.
+
+Press Enter to run this step...
+</code></pre>
+<p>Model context slot: &ldquo;Map is centred on Ann Arbor&rdquo; (the Detroit update was replaced)<br />
+Follow-up turns queued for the model: 1 (&ldquo;What&rsquo;s near here?&rdquo;)<br />
+[host] would open <a href="https://example.com/detroit">https://example.com/detroit</a> in the user&rsquo;s browser<br />
+Asked for pip, host granted {&ldquo;mode&rdquo;:&ldquo;inline&rdquo;}</p>
+<h2 id="step-9-dynamic-registration-where-the-app-adds-a-tool-at-runtime">Step 9: Dynamic registration, where the app adds a tool at runtime <a class="anchor" href="#step-9-dynamic-registration-where-the-app-adds-a-tool-at-runtime">¶</a></h2>
 <pre><code>Bridge -&gt;&gt; Bridge: RegisterTool(&quot;app_dice&quot;)
 Bridge -&gt;&gt; Host: notifications/tools/list_changed
 Host -&gt;&gt; Bridge: Send(tools/list), refresh
