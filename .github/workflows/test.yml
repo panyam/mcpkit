@@ -142,6 +142,45 @@ jobs:
       - name: Typecheck the bridge and check the committed build is current
         run: bash ext/ui/scripts/check-bridge.sh
 
+  # One Go backend serving the same app through four View runtimes, driven in
+  # Chromium through upstream's reference AppBridge (issue 1474). The first
+  # browser test in CI, so a View that stops working fails here rather than in
+  # a reader's host.
+  apps-any-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/apps/any-frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: examples/apps/any-frontend/web/pnpm-lock.yaml
+
+      - name: Go tests
+        run: go test ./... -count=1
+
+      - name: Typecheck the Views and check the committed build is current
+        run: bash scripts/check-views.sh
+
+      - name: Install Chromium and its system libraries
+        working-directory: examples/apps/any-frontend/web
+        run: pnpm install --frozen-lockfile --silent && pnpm exec playwright install --with-deps chromium
+
+      - name: Drive all four Views through /host
+        run: bash scripts/test-e2e.sh
+
   conformance-report:
     # Regenerates CONFORMANCE.md against the current testserver + the upstream
     # conformance SHA pinned in the committed file's stamp line, and fails if

@@ -1,5 +1,7 @@
 # Tic-Tac-Toe — Interactive MCP App
 
+> This View uses the mcpkit bridge, the no-build-step option for server-rendered pages. An mcpkit server works with any MCP Apps frontend runtime: see [any-frontend](../any-frontend/) to compare them.
+
 A tic-tac-toe game where the user plays by clicking cells in the iframe and the model plays by calling app-provided tools. Demonstrates the full bidirectional app-provided tools pattern from the ext-apps spec.
 
 ## MCPKit Features Used

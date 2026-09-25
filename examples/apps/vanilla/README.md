@@ -1,5 +1,7 @@
 # Dice Roller — Vanilla JS MCP App
 
+> This View uses the mcpkit bridge, the no-build-step option for server-rendered pages. An mcpkit server works with any MCP Apps frontend runtime: see [any-frontend](../any-frontend/) to compare them.
+
 A minimal MCP App using the bridge with plain JavaScript. No framework, no build step.
 
 ## MCPKit Features Used
