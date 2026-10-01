@@ -1,0 +1,16 @@
+python3 scripts/check_dep_consistency.py
+scanned 20 published modules
+divergent third-party deps: 0 (0 baselined)
+OK: no unexpected divergence.
+go test ./... -count=1 -timeout 30s
+ok  	github.com/panyam/mcpkit/client	8.794s
+?   	github.com/panyam/mcpkit/cmd/external-checker	[no test files]
+?   	github.com/panyam/mcpkit/cmd/testserver	[no test files]
+ok  	github.com/panyam/mcpkit/core	0.039s
+ok  	github.com/panyam/mcpkit/server	10.509s
+ok  	github.com/panyam/mcpkit/server/stateless	0.008s
+ok  	github.com/panyam/mcpkit/stores	0.002s
+ok  	github.com/panyam/mcpkit/testutil	0.021s
+?   	github.com/panyam/mcpkit/tools/check-auth-markers	[no test files]
+?   	github.com/panyam/mcpkit/tools/check-snippets	[no test files]
+make: *** No rule to make target 'test-agent'.  Stop.
