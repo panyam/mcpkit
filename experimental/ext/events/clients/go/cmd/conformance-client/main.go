@@ -102,8 +102,24 @@ func main() {
 				continue
 			}
 			defer sub.Stop()
+		case "poll":
+			poll, err := eventsclient.Poll(ctx, c, eventsclient.PollOptions{
+				EventName: d.Name,
+				// Re-listing is the application's part of the rule; the SDK
+				// only surfaces the notification.
+				OnListChanged: func() {
+					if _, err := c.Call(ctx, "events/list", map[string]any{}); err != nil {
+						log.Printf("events/list after list_changed: %v", err)
+					}
+				},
+			})
+			if err != nil {
+				log.Printf("events/poll %s: %v", d.Name, err)
+				continue
+			}
+			defer poll.Stop()
 		default:
-			log.Printf("%s: this SDK has no %s loop; leaving it unsubscribed", d.Name, d.Delivery[0])
+			log.Printf("%s: unknown delivery mode %q", d.Name, d.Delivery[0])
 		}
 	}
 
