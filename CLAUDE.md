@@ -287,7 +287,7 @@ branch.
 
 **MCP Events has a conformance suite.** `testconf-events` (stage 8i, `INFO`) drives
 `examples/events/kitchen-sink` against scenarios proposed upstream as a draft in
-`modelcontextprotocol/conformance` PR 504. It scores against the design sketch that merged
+`modelcontextprotocol/conformance` PR 521. It scores against the design sketch that merged
 2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
 with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
 renamed before that PR can merge. `testconf-events` drives
@@ -302,6 +302,12 @@ argument for having one. Six closed by #1379, #1381 and #1416; five more by #143
 the last, endpoint verification, by #1444. The set is tracked in #1425. The single remaining red row,
 `subscribe-auth-required`, is untestable rather than a defect. It stays `INFO` until the spec text
 stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
+
+**The Events client has a conformance suite too**, proposed as conformance PR 541 (issue 540) and
+stacked on PR 521. Its scenarios grade what a client sends to a scripted mock server, and the Go
+client is driven through `experimental/ext/events/clients/go/cmd/conformance-client`, which lives in
+that module so the root module never imports `experimental/`. The driver only calls what the SDK
+offers, so a red row is an SDK gap, never a driver choice to patch.
 
 **The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
 extensions map like everything else here (`io.modelcontextprotocol/events`), via
