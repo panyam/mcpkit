@@ -112,7 +112,7 @@ func registerTicTacToeTools(srv *server.Server, gameHTML string) {
 			gameMu.Lock()
 			resetGame()
 			gameMu.Unlock()
-			return "New game started. X goes first. The user plays by clicking cells in the app. You (the model) can play by calling the make_move app tool with a position 0-8.", nil
+			return "New game started. The user plays X by clicking cells in the app, and the app will message you after each of their moves. You play O by calling server_move with a position 0-8. Wait for the user to move first.", nil
 		},
 		ResourceURI: "ui://tictactoe/board",
 		Visibility:  []core.UIVisibility{core.UIVisibilityModel, core.UIVisibilityApp},

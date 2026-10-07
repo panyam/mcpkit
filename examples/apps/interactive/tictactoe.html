@@ -77,43 +77,67 @@
     document.getElementById('status').textContent = msg;
   }
 
-  // User clicks a cell — call the server_move tool to place their piece.
+  // User clicks a cell — call the server_move tool to place their piece,
+  // then tell the model it's its turn. Without the ui/message the model has
+  // no idea the user moved and the game stalls.
   function userMove(pos) {
-    if (board[pos] || gameOver) return;
+    if (board[pos] || gameOver || currentTurn !== 'X') return;
     updateStatus('Placing...');
-    MCPApp.callTool('server_move', { position: pos }).then(function(result) {
-      syncFromServer();
+    MCPApp.callTool('server_move', { position: pos }).then(function() {
+      return syncFromServer();
+    }).then(function(state) {
+      if (!state || state.gameOver) return;
+      updateStatus('Waiting for the model...');
+      return MCPApp.sendMessage({
+        role: 'user',
+        content: [{ type: 'text', text:
+          'I placed X at position ' + pos + '. Your turn: play O by calling server_move with a position 0-8.' }]
+      }).then(waitForModelMove);
     }).catch(function(err) {
       updateStatus('Error: ' + err.message);
     });
   }
 
-  // Sync game state from server.
+  // The model moves by calling server_move from the chat, and hosts only send
+  // ui/notifications/tool-result for the call that opened this iframe, so the
+  // app never hears about it. Poll until the turn comes back to X.
+  var pollTimer = null;
+  function waitForModelMove() {
+    clearInterval(pollTimer);
+    var tries = 0;
+    pollTimer = setInterval(function() {
+      if (++tries > 120) { clearInterval(pollTimer); updateStatus(currentTurn + "'s turn"); return; }
+      syncFromServer().then(function(state) {
+        if (state && (state.gameOver || state.turn === 'X')) clearInterval(pollTimer);
+      });
+    }, 1000);
+  }
+
+  // Sync game state from server. Resolves with the parsed state.
   function syncFromServer() {
-    MCPApp.callTool('get_game_state', {}).then(function(result) {
-      if (result && result.content && result.content[0]) {
-        try {
-          var state = JSON.parse(result.content[0].text);
-          board = state.board || board;
-          currentTurn = state.turn || currentTurn;
-          gameOver = state.gameOver || false;
-          renderBoard();
-          if (state.winner === 'draw') {
-            updateStatus("It's a draw!");
-          } else if (state.winner) {
-            updateStatus(state.winner + ' wins!');
-          } else {
-            updateStatus(currentTurn + "'s turn");
-          }
-        } catch(e) {
-          updateStatus(result.content[0].text || (currentTurn + "'s turn"));
-          renderBoard();
-        }
+    return MCPApp.callTool('get_game_state', {}).then(function(result) {
+      var state = result && result.structuredContent;
+      if (!state && result && result.content && result.content[0]) {
+        try { state = JSON.parse(result.content[0].text); } catch (e) {}
       }
+      if (!state) return null;
+      board = state.board || board;
+      currentTurn = state.turn || currentTurn;
+      gameOver = state.gameOver || false;
+      renderBoard();
+      if (state.winner === 'draw') {
+        updateStatus("It's a draw!");
+      } else if (state.winner) {
+        updateStatus(state.winner + ' wins!');
+      } else {
+        updateStatus(currentTurn === 'X' ? "Your turn (X)" : "Model's turn (O)");
+      }
+      return state;
     });
   }
 
   function newGame() {
+    clearInterval(pollTimer);
     MCPApp.callTool('new_game', {}).then(function() {
       board = ['','','','','','','','',''];
       currentTurn = 'X';
@@ -136,35 +160,11 @@
       required: ['position']
     }
   }, function(args) {
-    var pos = args.position;
-    if (typeof pos !== 'number' || pos < 0 || pos > 8) {
-      return { content: [{ type: 'text', text: 'Invalid position. Must be 0-8.' }], isError: true };
-    }
-    if (board[pos] !== '') {
-      return { content: [{ type: 'text', text: 'Position ' + pos + ' is already taken by ' + board[pos] + '.' }], isError: true };
-    }
-    if (gameOver) {
-      return { content: [{ type: 'text', text: 'Game is over. Call new_game to start a new one.' }], isError: true };
-    }
-
-    board[pos] = currentTurn;
-    var winner = checkWinner();
-    var prevTurn = currentTurn;
-    currentTurn = currentTurn === 'X' ? 'O' : 'X';
-    renderBoard();
-
-    if (winner === 'draw') {
-      gameOver = true;
-      updateStatus("It's a draw!");
-      return { content: [{ type: 'text', text: prevTurn + ' placed at ' + pos + ". It's a draw!" }] };
-    }
-    if (winner) {
-      gameOver = true;
-      updateStatus(winner + ' wins!');
-      return { content: [{ type: 'text', text: prevTurn + ' placed at ' + pos + '. ' + winner + ' wins!' }] };
-    }
-    updateStatus(currentTurn + "'s turn");
-    return { content: [{ type: 'text', text: prevTurn + ' placed at ' + pos + '. ' + currentTurn + "'s turn." }] };
+    // Delegate to the server so the app and server share one board.
+    return MCPApp.callTool('server_move', { position: args.position }).then(function(result) {
+      syncFromServer();
+      return result;
+    });
   });
 
   MCPApp.registerTool('get_board', {
@@ -189,20 +189,8 @@
     return { content: [{ type: 'text', text: JSON.stringify(state, null, 2) }] };
   });
 
-  function checkWinner() {
-    var lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    for (var i = 0; i < lines.length; i++) {
-      var a = lines[i][0], b = lines[i][1], c = lines[i][2];
-      if (board[a] && board[a] === board[b] && board[b] === board[c]) return board[a];
-    }
-    var full = true;
-    for (var j = 0; j < 9; j++) { if (!board[j]) { full = false; break; } }
-    return full ? 'draw' : '';
-  }
-
   MCPApp.on('connected', function() {
-    updateStatus("X's turn — click a cell to play!");
-    renderBoard();
+    syncFromServer();
   });
 
   MCPApp.on('toolresult', function(data) {

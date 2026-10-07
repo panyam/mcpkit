@@ -1,6 +1,6 @@
 # examples/skills
 
-> ⚠ **Experimental** - tracks [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) (Skills), a draft SEP. Wire format may change.
+> **Final extension** - implements [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) (Skills, `io.modelcontextprotocol/skills`). Host support is still early.
 
 End-to-end example for SEP-2640 (Skills extension): a mcpkit server that
 exposes Agent Skills under the `skill://` URI scheme, plus a demokit

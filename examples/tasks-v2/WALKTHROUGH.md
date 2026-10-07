@@ -4,7 +4,7 @@ Walks through the v2 Tasks extension where the *server* decides whether to creat
 
 ## What you'll learn
 
-- **Connect to the v2 tasks server (declare extension)** - `client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
+- **Connect to the v2 tasks server (declare extension)** - `client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions, sent in `_meta` on every request on the 2026-07-28 wire (or once in `initialize` on the legacy wire). Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
 - **Sync call: greet, where ToolCall returns the Sync variant** - `client.ToolCall(c, name, args)` returns a polymorphic `*ToolCallResult`. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain `ToolResult` and the helper sets `Sync` (not `Task`). Callers branch on `result.IsTask()`.
 - **slow_compute (no task hint!), so the server creates a task → ToolCall returns the Task variant** - Critical v2 semantics: no `task` param in the request, so the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator `resultType: "task"` lights up `result.IsTask()` on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.
 - **failing_job → status: completed, result.isError: true (TOOL error semantics)** - In v2, a tool that returns an error result lands in status `completed` with `result.isError: true`. The task itself ran to completion: the *operation* failed but the *infrastructure* didn't. Distinct from protocol failures (next step).
@@ -20,12 +20,12 @@ sequenceDiagram
     participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the v2 tasks server (declare extension)
-    Host->>Server: POST /mcp, initialize (declares io.modelcontextprotocol/tasks)
+    Host->>Server: POST /mcp, server/discover (every request declares io.modelcontextprotocol/tasks in _meta)
     Server-->>Host: serverInfo + tasks extension advertised under capabilities.extensions
 
     Note over Host,Server: Step 2: Sync call: greet, where ToolCall returns the Sync variant
     Host->>Server: tools/call: greet {name: "world"}
-    Server-->>Host: ToolResult (no resultType discriminator → ToolCallResult.Sync)
+    Server-->>Host: ToolResult (resultType: complete → ToolCallResult.Sync)
 
     Note over Host,Server: Step 3: slow_compute (no task hint!), so the server creates a task → ToolCall returns the Task variant
     Host->>Server: tools/call: slow_compute {seconds: 3}
@@ -74,11 +74,11 @@ Terminal 2:  just demo         # this demo
 
 ### v1 vs v2, what changed
 
-v1 (SEP-1036, MCP spec 2025-11-25) had the *client* hint at task vs sync via a `task` param. v2 (SEP-2663, in-flight) flips the contract:
+v1 (SEP-1686, experimental in the core 2025-11-25 spec) had the *client* hint at task vs sync via a `task` param. v2 (SEP-2663, a Final extension alongside the 2026-07-28 spec) moves Tasks out of core and flips the contract:
 
-- **Tasks is an extension** (`io.modelcontextprotocol/tasks`). Clients declare support during `initialize`; servers gate every task-creating `tools/call` and every `tasks/*` method on the negotiation.
+- **Tasks is an extension** (`io.modelcontextprotocol/tasks`). Clients declare support per request in `_meta["io.modelcontextprotocol/clientCapabilities"].extensions` (on the legacy wire, during `initialize`); servers gate every task-creating `tools/call` and every `tasks/*` method on the negotiation.
 - **No client task hint.** Just call `tools/call` normally - the *server* decides whether to run sync or create a task. The client `client.ToolCall` helper returns a polymorphic `ToolCallResult` with either `Sync` or `Task` populated.
-- **`resultType` discriminator** on `tools/call` response: `"task"` means a task was created; absent means sync.
+- **`resultType` discriminator** on `tools/call` response: `"task"` means a task was created; `"complete"` means sync (2026-07-28 makes `resultType` required on every result).
 - **`tasks/get` returns `DetailedTask`** with inlined `result` / `error` / `inputRequests` / `requestState` per status. No separate `tasks/result` round-trip.
 - **`tasks/cancel` returns an empty ack**. Observe the resulting `cancelled` status with the next `tasks/get`.
 - **`tasks/update` is the SEP-2663 resume path** for MRTR input rounds - the client delivers `inputResponses` keyed to whatever `inputRequests` the server emitted.
@@ -89,22 +89,21 @@ v1 (SEP-1036, MCP spec 2025-11-25) had the *client* hint at task vs sync via a `
 
 ### Step 1: Connect to the v2 tasks server (declare extension)
 
-`client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
+`client.WithTasksExtension()` adds `io.modelcontextprotocol/tasks` to ClientCapabilities.Extensions, sent in `_meta` on every request on the 2026-07-28 wire (or once in `initialize` on the legacy wire). Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.
 
 #### Reproduce on the wire
 
 ```bash
-# initialize MUST declare the tasks extension under capabilities.extensions,
-# else the server treats you as a v1/sync-only client and rejects tasks/* with -32601.
-SID=$(curl -s -X POST http://localhost:8080/mcp \
-  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":"i","method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"x","version":"1"},"capabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}}}}' \
-  -D - -o /dev/null | grep -i 'mcp-session-id' | awk '{print $2}' | tr -d '\r\n')
-# notifications/initialized completes the handshake (no response body)
+# 2026-07-28: no initialize, no session. Every request carries its protocol version and
+# client capabilities in _meta; declare the tasks extension there, else tasks/* is rejected with -32601.
 curl -s -X POST http://localhost:8080/mcp \
-  -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Mcp-Session-Id: $SID" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' >/dev/null
-echo "SID=$SID"
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: server/discover' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{
+        "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+        "io.modelcontextprotocol/clientInfo":{"name":"x","version":"1"},
+        "io.modelcontextprotocol/clientCapabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}}}}}' \
+  | jq '.result.capabilities.extensions'
 ```
 
 ### Step 2: Sync call: greet, where ToolCall returns the Sync variant
