@@ -87,4 +87,4 @@ fi
 
 # mcpkit-stricter sentinel (conformance/tasks-v2/) — checks that go beyond what
 # the spec mandates. Placeholder today; see that folder's README.
-(cd "$CONFORMANCE_DIR" && npm install --silent && npx vitest run tasks-v2/) || exit 1
+(cd "$CONFORMANCE_DIR" && pnpm install --silent && pnpm exec vitest run tasks-v2/) || exit 1

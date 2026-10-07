@@ -29,15 +29,20 @@ if ! command -v gh >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! command -v npx >/dev/null 2>&1; then
-    echo "refresh-apps-compat-report: npx not found. Install Node.js 22+." >&2
+if ! command -v pnpm >/dev/null 2>&1; then
+    echo "refresh-apps-compat-report: pnpm not found; tools/compat-reports needs it." >&2
+    echo "  Install with 'npm i -g pnpm' or 'corepack enable pnpm'." >&2
     exit 1
 fi
 
 mkdir -p "$(dirname "$OUT")"
 
 cd "$REPO_ROOT/tools/compat-reports"
-exec npx --yes tsx@^4.0.0 src/apps.ts \
+# Was `npx --yes tsx@^4.0.0`, which resolved a floating tsx at run time — a
+# reproducibility hole in a script whose output is byte-compared by a staleness
+# gate. pnpm runs the version the committed lockfile pins.
+pnpm install --silent || exit 1
+exec pnpm exec tsx src/apps.ts \
     --umbrella "$UMBRELLA_NUMBER" \
     --repo "$UMBRELLA_REPO" \
     --out "$OUT"
