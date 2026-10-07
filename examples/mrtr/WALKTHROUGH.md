@@ -146,7 +146,7 @@ S2=$(echo "$R2" | jq -r '.result.requestState')
 # Round 3: retry with ONLY step2; step1 already rides inside requestState.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step2\":{\"action\":\"accept\",\"content\":{\"color\":\"Alice\"}}},\"requestState\":\"$S2\"}}" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step2\":{\"action\":\"accept\",\"content\":{\"color\":\"blue\"}}},\"requestState\":\"$S2\"}}" \
   | jq '.result'
 ```
 
