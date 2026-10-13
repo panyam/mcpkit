@@ -92,9 +92,9 @@ testconf-events: ## Run MCP Events conformance — informational (exit 0 regardl
 	@bash $(CONFORMANCE_DIR)/scripts/conf-events.sh
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
-	cd $(CONFORMANCE_DIR) && npm install --silent && \
+	cd $(CONFORMANCE_DIR) && pnpm install --silent && \
 	SERVER_URL=$${SERVER_URL:-http://localhost:8080/mcp} \
-	npx tsx --test elicitation/scenarios.test.ts
+	pnpm exec tsx --test elicitation/scenarios.test.ts
 
 refresh-conformance: ## Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Output: CONFORMANCE.md at repo root.
 	@./scripts/with-upstream.sh scripts/refresh-conformance.sh

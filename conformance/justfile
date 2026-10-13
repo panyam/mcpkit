@@ -111,9 +111,9 @@ testconf-events:
 
 # Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 testconf-elicitation:
-    cd {{CONFORMANCE_DIR}} && npm install --silent && \
+    cd {{CONFORMANCE_DIR}} && pnpm install --silent && \
     SERVER_URL=${SERVER_URL:-http://localhost:8080/mcp} \
-    npx tsx --test elicitation/scenarios.test.ts
+    pnpm exec tsx --test elicitation/scenarios.test.ts
 
 # Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Output: CONFORMANCE.md at repo root.
 refresh-conformance:

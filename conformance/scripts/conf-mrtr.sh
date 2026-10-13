@@ -94,4 +94,4 @@ trap - EXIT
 # Upstream negative suite — broken fixture, spawned by the test file itself.
 (cd "$MCPCONFORMANCE_MRTR_PATH" && npx vitest run src/scenarios/server/negative-mrtr.test.ts) || exit 1
 # mcpkit-stricter sentinel.
-(cd "$CONFORMANCE_DIR" && npm install --silent && npx vitest run mrtr/) || exit 1
+(cd "$CONFORMANCE_DIR" && pnpm install --silent && pnpm exec vitest run mrtr/) || exit 1
