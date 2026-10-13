@@ -251,8 +251,8 @@
 <thead>
 <tr>
 <th>Aspect</th>
-<th>v1 (SEP-1036)</th>
-<th>v2 (SEP-2663)</th>
+<th>v1 (SEP-1686, core 2025-11-25)</th>
+<th>v2 (SEP-2663, Final ext)</th>
 </tr>
 </thead>
 <tbody>
@@ -418,7 +418,7 @@ and the SEP-2663 task machinery never surfaces to it.</p>
 <p>Walks through the v2 Tasks extension where the <em>server</em> decides whether to create a task, so clients no longer send a task hint. Polymorphic tools/call, inlined results, ack-only cancel, and the new tasks/update flow that closes the elicit/sample (MRTR) loop.</p>
 <h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
 <ul>
-<li><strong>Connect to the v2 tasks server (declare extension)</strong> - <code>client.WithTasksExtension()</code> adds <code>io.modelcontextprotocol/tasks</code> to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.</li>
+<li><strong>Connect to the v2 tasks server (declare extension)</strong> - <code>client.WithTasksExtension()</code> adds <code>io.modelcontextprotocol/tasks</code> to ClientCapabilities.Extensions, sent in <code>_meta</code> on every request on the 2026-07-28 wire (or once in <code>initialize</code> on the legacy wire). Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.</li>
 <li><strong>Sync call: greet, where ToolCall returns the Sync variant</strong> - <code>client.ToolCall(c, name, args)</code> returns a polymorphic <code>*ToolCallResult</code>. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain <code>ToolResult</code> and the helper sets <code>Sync</code> (not <code>Task</code>). Callers branch on <code>result.IsTask()</code>.</li>
 <li><strong>slow_compute (no task hint!), so the server creates a task → ToolCall returns the Task variant</strong> - Critical v2 semantics: no <code>task</code> param in the request, so the server elects to create a task because slow_compute has TaskSupport=optional. The discriminator <code>resultType: &quot;task&quot;</code> lights up <code>result.IsTask()</code> on the helper. The Mcp-Name HTTP header carries the same taskId so HTTP routing/observability can key off it without parsing the body.</li>
 <li><strong>failing_job → status: completed, result.isError: true (TOOL error semantics)</strong> - In v2, a tool that returns an error result lands in status <code>completed</code> with <code>result.isError: true</code>. The task itself ran to completion: the <em>operation</em> failed but the <em>infrastructure</em> didn&rsquo;t. Distinct from protocol failures (next step).</li>
@@ -432,12 +432,12 @@ and the SEP-2663 task machinery never surfaces to it.</p>
     participant Server as MCP Server (just serve)
 
     Note over Host,Server: Step 1: Connect to the v2 tasks server (declare extension)
-    Host-&gt;&gt;Server: POST /mcp, initialize (declares io.modelcontextprotocol/tasks)
+    Host-&gt;&gt;Server: POST /mcp, server/discover (every request declares io.modelcontextprotocol/tasks in _meta)
     Server--&gt;&gt;Host: serverInfo + tasks extension advertised under capabilities.extensions
 
     Note over Host,Server: Step 2: Sync call: greet, where ToolCall returns the Sync variant
     Host-&gt;&gt;Server: tools/call: greet {name: &quot;world&quot;}
-    Server--&gt;&gt;Host: ToolResult (no resultType discriminator → ToolCallResult.Sync)
+    Server--&gt;&gt;Host: ToolResult (resultType: complete → ToolCallResult.Sync)
 
     Note over Host,Server: Step 3: slow_compute (no task hint!), so the server creates a task → ToolCall returns the Task variant
     Host-&gt;&gt;Server: tools/call: slow_compute {seconds: 3}
@@ -479,11 +479,11 @@ and the SEP-2663 task machinery never surfaces to it.</p>
 Terminal 2:  just demo         # this demo
 </code></pre>
 <h3 id="v1-vs-v2-what-changed">v1 vs v2, what changed <a class="anchor" href="#v1-vs-v2-what-changed">¶</a></h3>
-<p>v1 (SEP-1036, MCP spec 2025-11-25) had the <em>client</em> hint at task vs sync via a <code>task</code> param. v2 (SEP-2663, in-flight) flips the contract:</p>
+<p>v1 (SEP-1686, experimental in the core 2025-11-25 spec) had the <em>client</em> hint at task vs sync via a <code>task</code> param. v2 (SEP-2663, a Final extension alongside the 2026-07-28 spec) moves Tasks out of core and flips the contract:</p>
 <ul>
-<li><strong>Tasks is an extension</strong> (<code>io.modelcontextprotocol/tasks</code>). Clients declare support during <code>initialize</code>; servers gate every task-creating <code>tools/call</code> and every <code>tasks/*</code> method on the negotiation.</li>
+<li><strong>Tasks is an extension</strong> (<code>io.modelcontextprotocol/tasks</code>). Clients declare support per request in <code>_meta[&quot;io.modelcontextprotocol/clientCapabilities&quot;].extensions</code> (on the legacy wire, during <code>initialize</code>); servers gate every task-creating <code>tools/call</code> and every <code>tasks/*</code> method on the negotiation.</li>
 <li><strong>No client task hint.</strong> Just call <code>tools/call</code> normally - the <em>server</em> decides whether to run sync or create a task. The client <code>client.ToolCall</code> helper returns a polymorphic <code>ToolCallResult</code> with either <code>Sync</code> or <code>Task</code> populated.</li>
-<li><strong><code>resultType</code> discriminator</strong> on <code>tools/call</code> response: <code>&quot;task&quot;</code> means a task was created; absent means sync.</li>
+<li><strong><code>resultType</code> discriminator</strong> on <code>tools/call</code> response: <code>&quot;task&quot;</code> means a task was created; <code>&quot;complete&quot;</code> means sync (2026-07-28 makes <code>resultType</code> required on every result).</li>
 <li><strong><code>tasks/get</code> returns <code>DetailedTask</code></strong> with inlined <code>result</code> / <code>error</code> / <code>inputRequests</code> / <code>requestState</code> per status. No separate <code>tasks/result</code> round-trip.</li>
 <li><strong><code>tasks/cancel</code> returns an empty ack</strong>. Observe the resulting <code>cancelled</code> status with the next <code>tasks/get</code>.</li>
 <li><strong><code>tasks/update</code> is the SEP-2663 resume path</strong> for MRTR input rounds - the client delivers <code>inputResponses</code> keyed to whatever <code>inputRequests</code> the server emitted.</li>
@@ -493,19 +493,18 @@ Terminal 2:  just demo         # this demo
 <li><strong><code>tasks/result</code> and <code>tasks/list</code> removed</strong> - <code>tasks/get</code> is the single read endpoint.</li>
 </ul>
 <h3 id="step-1-connect-to-the-v2-tasks-server-declare-extension">Step 1: Connect to the v2 tasks server (declare extension) <a class="anchor" href="#step-1-connect-to-the-v2-tasks-server-declare-extension">¶</a></h3>
-<p><code>client.WithTasksExtension()</code> adds <code>io.modelcontextprotocol/tasks</code> to ClientCapabilities.Extensions during initialize. Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.</p>
+<p><code>client.WithTasksExtension()</code> adds <code>io.modelcontextprotocol/tasks</code> to ClientCapabilities.Extensions, sent in <code>_meta</code> on every request on the 2026-07-28 wire (or once in <code>initialize</code> on the legacy wire). Without that declaration, the v2 server falls through to synchronous tools/call and rejects tasks/* with -32601.</p>
 <h4 id="reproduce-on-the-wire">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire">¶</a></h4>
-<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># initialize MUST declare the tasks extension under capabilities.extensions,</span>
-</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># else the server treats you as a v1/sync-only client and rejects tasks/* with -32601.</span>
-</span></span><span style="display:flex;"><span><span style="color:#008080">SID</span><span style="color:#000;font-weight:bold">=</span><span style="color:#000;font-weight:bold">$(</span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
-</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
-</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:&#34;i&#34;,&#34;method&#34;:&#34;initialize&#34;,&#34;params&#34;:{&#34;protocolVersion&#34;:&#34;2025-11-25&#34;,&#34;clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},&#34;capabilities&#34;:{&#34;extensions&#34;:{&#34;io.modelcontextprotocol/tasks&#34;:{}}}}}&#39;</span> <span style="color:#d14">\
-</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -D - -o /dev/null | grep -i <span style="color:#d14">&#39;mcp-session-id&#39;</span> | awk <span style="color:#d14">&#39;{print $2}&#39;</span> | tr -d <span style="color:#d14">&#39;\r\n&#39;</span><span style="color:#000;font-weight:bold">)</span>
-</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># notifications/initialized completes the handshake (no response body)</span>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># 2026-07-28: no initialize, no session. Every request carries its protocol version and</span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># client capabilities in _meta; declare the tasks extension there, else tasks/* is rejected with -32601.</span>
 </span></span><span style="display:flex;"><span>curl -s -X POST http://localhost:8080/mcp <span style="color:#d14">\
-</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json&#39;</span> -H <span style="color:#d14">&#34;Mcp-Session-Id: </span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span> <span style="color:#d14">\
-</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;method&#34;:&#34;notifications/initialized&#34;}&#39;</span> &gt;/dev/null
-</span></span><span style="display:flex;"><span><span style="color:#0086b3">echo</span> <span style="color:#d14">&#34;SID=</span><span style="color:#008080">$SID</span><span style="color:#d14">&#34;</span>
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;Content-Type: application/json&#39;</span> -H <span style="color:#d14">&#39;Accept: application/json, text/event-stream&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -H <span style="color:#d14">&#39;MCP-Protocol-Version: 2026-07-28&#39;</span> -H <span style="color:#d14">&#39;Mcp-Method: server/discover&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  -d <span style="color:#d14">&#39;{&#34;jsonrpc&#34;:&#34;2.0&#34;,&#34;id&#34;:1,&#34;method&#34;:&#34;server/discover&#34;,&#34;params&#34;:{&#34;_meta&#34;:{
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">        &#34;io.modelcontextprotocol/protocolVersion&#34;:&#34;2026-07-28&#34;,
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">        &#34;io.modelcontextprotocol/clientInfo&#34;:{&#34;name&#34;:&#34;x&#34;,&#34;version&#34;:&#34;1&#34;},
+</span></span></span><span style="display:flex;"><span><span style="color:#d14">        &#34;io.modelcontextprotocol/clientCapabilities&#34;:{&#34;extensions&#34;:{&#34;io.modelcontextprotocol/tasks&#34;:{}}}}}}&#39;</span> <span style="color:#d14">\
+</span></span></span><span style="display:flex;"><span><span style="color:#d14"></span>  | jq <span style="color:#d14">&#39;.result.capabilities.extensions&#39;</span>
 </span></span></code></pre><h3 id="step-2-sync-call-greet-where-toolcall-returns-the-sync-variant">Step 2: Sync call: greet, where ToolCall returns the Sync variant <a class="anchor" href="#step-2-sync-call-greet-where-toolcall-returns-the-sync-variant">¶</a></h3>
 <p><code>client.ToolCall(c, name, args)</code> returns a polymorphic <code>*ToolCallResult</code>. For sync tools (no Execution / TaskSupport=forbidden) the server returns a plain <code>ToolResult</code> and the helper sets <code>Sync</code> (not <code>Task</code>). Callers branch on <code>result.IsTask()</code>.</p>
 <h4 id="reproduce-on-the-wire-1">Reproduce on the wire <a class="anchor" href="#reproduce-on-the-wire-1">¶</a></h4>
