@@ -260,8 +260,10 @@ Two officially-shipped clients live under `clients/`. Both implement the same TT
 
 | Language | Path | Style |
 |---|---|---|
-| Go | [`clients/go/`](clients/go/) | Typed `Subscription` + `Receiver[Data]` (channel-based delivery) |
+| Go | [`clients/go/`](clients/go/) | `Poll` loop, `Stream` call, typed `Subscription` + `Receiver[Data]` (channel-based delivery) |
 | Python | [`clients/python/events_client.py`](clients/python/events_client.py) | Class-based `WebhookSubscription` + CLI subcommands (`list`, `listen`, `webhook`, `poll`) |
+
+The Go client is graded by the client scenarios proposed in modelcontextprotocol/conformance#540 through a thin driver, [`clients/go/cmd/conformance-client`](clients/go/cmd/conformance-client/), which only calls what the SDK offers so a red row is an SDK gap. Run it with `node dist/index.js client --command '<built driver>' --scenario events-client-poll` from a checkout of that branch.
 
 ### Python — auto-refresh
 

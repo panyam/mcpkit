@@ -1,7 +1,13 @@
 // Package eventsclient is the Go-side SDK for the MCP Events extension.
 //
-// Two pieces, designed to compose:
+// One entry point per delivery mode, plus a receiver for webhooks:
 //
+//   - Poll runs an events/poll loop for one subscription: it drains while
+//     the server reports hasMore, waits nextPollMs (never less than a
+//     configurable floor, default 1s) otherwise, and persists the cursor.
+//     Stop via Stop or by cancelling the parent context.
+//   - Stream holds an events/stream call open and dispatches its
+//     notifications to typed callbacks.
 //   - Subscription manages an events/subscribe lifecycle with automatic
 //     TTL refresh per the spec's soft-state model. Construct via Subscribe;
 //     stop via Stop or by cancelling the parent context.
