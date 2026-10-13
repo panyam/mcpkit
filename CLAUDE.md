@@ -98,6 +98,14 @@ dependency runs one way: nothing here may require chakra. `scripts/verify-submod
 enforces two policies rather than three, protocol and non-library, the agent policy having left with
 the tree.
 
+## Issues and missions
+
+Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. The active mission is
+**#1508** (`mission_events_sep3415`): the events server and Go client score green against the
+SEP-3415 conformance suites. Its exercise is `make exercise-events` (wired by #1500). Run it after
+each merged mission PR and log the result on #1508. A new issue gets a priority (`P0`–`P3`) and
+either a mission link (blocked-by on the mission issue) or `waiting` with its trigger.
+
 ## Cross-cutting rules
 
 These span packages and will bite on a task that never opens a routed doc.
