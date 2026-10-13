@@ -94,10 +94,11 @@ if err := c.Connect(); err != nil { /* server not up, run: just serve */ }`),
 		Run(func(ctx demokit.StepContext) (result *demokit.StepResult) {
 			opts := []client.ClientOption{
 				client.WithElicitationHandler(func(ctx context.Context, req core.ElicitationRequest) (core.ElicitationResult, error) {
-					// Canned answer — accepts and returns Alice for any name elicitation.
+					// Canned answers keyed by the field the schema asks for, so each
+					// round's response validates against its requestedSchema.
 					return core.ElicitationResult{
 						Action:  "accept",
-						Content: map[string]any{"name": "Alice"},
+						Content: cannedElicitationContent(req.RequestedSchema),
 					}, nil
 				}),
 				client.WithSamplingHandler(func(ctx context.Context, req core.CreateMessageRequest) (core.CreateMessageResult, error) {
@@ -236,7 +237,7 @@ S2=$(echo "$R2" | jq -r '.result.requestState')
 # Round 3: retry with ONLY step2; step1 already rides inside requestState.
 curl -s -X POST http://localhost:8080/mcp \
   -H 'Content-Type: application/json' -H 'Accept: text/event-stream, application/json' -H "Mcp-Session-Id: $SID" \
-  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step2\":{\"action\":\"accept\",\"content\":{\"color\":\"Alice\"}}},\"requestState\":\"$S2\"}}" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"test_incomplete_result_multi_round\",\"arguments\":{},\"inputResponses\":{\"step2\":{\"action\":\"accept\",\"content\":{\"color\":\"blue\"}}},\"requestState\":\"$S2\"}}" \
   | jq '.result'`).Default(),
 			demokit.MakeVariant("go", "go", `// Same one-liner; CallToolWithInputs drives all three rounds. The wire
 // only ever ships the latest round's inputResponses; prior answers ride
@@ -288,4 +289,24 @@ res, _ := client.CallToolWithInputs(context.Background(), c,
 	if c != nil {
 		c.Close()
 	}
+}
+
+// cannedElicitationContent answers whichever required field the schema asks
+// for: name -> "Alice", color -> "blue", ok -> true.
+func cannedElicitationContent(schema json.RawMessage) map[string]any {
+	answers := map[string]any{"name": "Alice", "color": "blue", "ok": true}
+	var s struct {
+		Properties map[string]any `json:"properties"`
+	}
+	_ = json.Unmarshal(schema, &s)
+	out := map[string]any{}
+	for field := range s.Properties {
+		if v, ok := answers[field]; ok {
+			out[field] = v
+		}
+	}
+	if len(out) == 0 {
+		out["name"] = "Alice"
+	}
+	return out
 }
