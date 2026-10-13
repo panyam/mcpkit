@@ -2,13 +2,12 @@
 # MCP Events conformance — informational (exit 0 regardless of check results).
 # Drives examples/events/kitchen-sink via the fork's scenario runner.
 #
-# INFO rather than a gate for two reasons. The suite scores against the merged
-# design sketch in modelcontextprotocol/experimental-ext-triggers-events, which
-# is a design document rather than a ratified spec and has no SEP number yet, so
-# the check IDs still carry the placeholder `sep-9999-` prefix. And mcpkit has
-# known divergences from that document (issue 1380), so a red run here is the
-# suite doing its job rather than a regression. Flip this to a gate once 1380
-# closes and the spec text stabilises.
+# INFO rather than a gate because MCP Events is SEP-3415, still a draft
+# (modelcontextprotocol/modelcontextprotocol#3415), and the suite's rows still
+# quote the design sketch it was written from while they are re-extracted
+# against the SEP (issue 1502). A red run can mean the text moved rather than
+# that mcpkit regressed. Flip this to a gate once the rows track the SEP and
+# the SEP is accepted.
 #
 # Runner-agnostic: the Makefile + justfile `testconf-events` recipes call this
 # directly. REPO_ROOT + MCPCONFORMANCE_EVENTS_PATH resolve via _common.sh

@@ -149,7 +149,7 @@ suites:
       that this target does not run.
 
   - suite: testconf-events
-    sep: MCP Events (no SEP number yet)
+    sep: SEP-3415 Events (draft)
     stage: 8i
     status: INFO
     source:
@@ -170,13 +170,12 @@ suites:
       are graded; without them rows describe conditions a harness cannot
       provoke and report untestable, which upstream's policy renders red. See
       examples/CONVENTIONS.md § Conformance fixtures.
-      Proposed upstream as a draft in modelcontextprotocol/conformance 504 and
-      tracked on the fork branch until it lands. INFO because the suite scores
-      against the design sketch in
-      modelcontextprotocol/experimental-ext-triggers-events, which has no SEP
-      number, so check IDs carry a placeholder sep-9999- prefix that gets
-      renamed once one is reserved; the capability rows additionally track
-      upstream PR 7, which is unmerged. The one remaining red row,
+      Proposed upstream as a draft in modelcontextprotocol/conformance 521 and
+      tracked on the fork branch until it lands. Check IDs are sep-3415-*:
+      MCP Events is SEP-3415, a draft in modelcontextprotocol/modelcontextprotocol.
+      INFO because the rows still quote the design sketch in
+      modelcontextprotocol/experimental-ext-triggers-events and are being
+      re-extracted against the SEP (1502). The one remaining red row,
       subscribe-auth-required, is untestable rather than a defect: the harness
       holds one credential for a run and kitchen-sink sets
       UnsafeAnonymousPrincipal by design. Thirteen divergences found in total,
