@@ -128,9 +128,9 @@ func TestSubscriptionStream_AckIsFirst(t *testing.T) {
 	}
 	params, _ := first["params"].(map[string]any)
 	meta, _ := params["_meta"].(map[string]any)
-	if meta == nil || meta[core.MetaKeySubscriptionID] == "" {
-		t.Errorf("ack frame missing %s in _meta; got %+v",
-			core.MetaKeySubscriptionID, params)
+	if meta == nil || meta[core.MetaKeySubscriptionID] != float64(1) {
+		t.Errorf("ack frame %s = %v, want the listen request's id 1; got %+v",
+			core.MetaKeySubscriptionID, meta[core.MetaKeySubscriptionID], params)
 	}
 }
 
@@ -166,9 +166,9 @@ func TestSubscriptionStream_SubscriptionIdOnAllFrames(t *testing.T) {
 	}
 	ackParams, _ := ack["params"].(map[string]any)
 	ackMeta, _ := ackParams["_meta"].(map[string]any)
-	subID, _ := ackMeta[core.MetaKeySubscriptionID].(string)
-	if subID == "" {
-		t.Fatal("no subscriptionId in ack")
+	subID := ackMeta[core.MetaKeySubscriptionID]
+	if subID != float64(1) {
+		t.Fatalf("ack subscriptionId = %v, want the listen request's id 1", subID)
 	}
 
 	notif := frames[1]
@@ -179,7 +179,7 @@ func TestSubscriptionStream_SubscriptionIdOnAllFrames(t *testing.T) {
 	notifParams, _ := notif["params"].(map[string]any)
 	notifMeta, _ := notifParams["_meta"].(map[string]any)
 	if notifMeta[core.MetaKeySubscriptionID] != subID {
-		t.Errorf("frame subscriptionId = %v, want %s (matching ack)",
+		t.Errorf("frame subscriptionId = %v, want %v (matching ack)",
 			notifMeta[core.MetaKeySubscriptionID], subID)
 	}
 }
@@ -263,6 +263,9 @@ func TestSubscriptionStream_DisconnectUnregisters(t *testing.T) {
 func TestSubscriptionStream_PromptsListChangedDeliversToPromptsFilter(t *testing.T) {
 	s, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
 	defer teardown()
+	// promptsListChanged is honored only when the server advertises
+	// prompts.listChanged, which needs at least one prompt.
+	registerTestPrompt(s)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -285,9 +288,9 @@ func TestSubscriptionStream_PromptsListChangedDeliversToPromptsFilter(t *testing
 	}
 	ackParams, _ := ack["params"].(map[string]any)
 	ackMeta, _ := ackParams["_meta"].(map[string]any)
-	subID, _ := ackMeta[core.MetaKeySubscriptionID].(string)
-	if subID == "" {
-		t.Fatal("no subscriptionId in ack")
+	subID := ackMeta[core.MetaKeySubscriptionID]
+	if subID != float64(1) {
+		t.Fatalf("ack subscriptionId = %v, want the listen request's id 1", subID)
 	}
 
 	notif := frames[1]
@@ -298,27 +301,48 @@ func TestSubscriptionStream_PromptsListChangedDeliversToPromptsFilter(t *testing
 	notifParams, _ := notif["params"].(map[string]any)
 	notifMeta, _ := notifParams["_meta"].(map[string]any)
 	if notifMeta[core.MetaKeySubscriptionID] != subID {
-		t.Errorf("frame subscriptionId = %v, want %s (matching ack)",
+		t.Errorf("frame subscriptionId = %v, want %v (matching ack)",
 			notifMeta[core.MetaKeySubscriptionID], subID)
 	}
 }
 
-func TestSubscribeFilter_Matches(t *testing.T) {
+// TestResolveFilter_BaseKeys carries the cases of the old
+// SubscribeFilter.Matches table over to the registry, for a server that
+// advertises all three listChanged capabilities.
+func TestResolveFilter_BaseKeys(t *testing.T) {
+	s := NewServer(core.ServerInfo{Name: "t", Version: "1"})
+	all := core.ServerCapabilities{
+		Tools:     &core.ToolsCap{ListChanged: true},
+		Prompts:   &core.PromptsCap{ListChanged: true},
+		Resources: &core.ResourcesCap{ListChanged: true},
+	}
+	on := core.ListChangedFilter
 	cases := []struct {
 		method string
-		filter stateless.SubscribeFilter
+		filter core.SubscriptionFilter
 		want   bool
 	}{
-		{"notifications/tools/list_changed", stateless.SubscribeFilter{ToolsListChanged: true}, true},
-		{"notifications/tools/list_changed", stateless.SubscribeFilter{PromptsListChanged: true}, false},
-		{"notifications/prompts/list_changed", stateless.SubscribeFilter{PromptsListChanged: true}, true},
-		{"notifications/resources/list_changed", stateless.SubscribeFilter{ResourcesListChanged: true}, true},
-		{"notifications/message", stateless.SubscribeFilter{ToolsListChanged: true}, false},
-		{"random/method", stateless.SubscribeFilter{ToolsListChanged: true}, false},
+		{"notifications/tools/list_changed", on(core.SubscriptionFilterToolsListChanged), true},
+		{"notifications/tools/list_changed", on(core.SubscriptionFilterPromptsListChanged), false},
+		{"notifications/prompts/list_changed", on(core.SubscriptionFilterPromptsListChanged), true},
+		{"notifications/resources/list_changed", on(core.SubscriptionFilterResourcesListChanged), true},
+		{"notifications/message", on(core.SubscriptionFilterToolsListChanged), false},
+		{"random/method", on(core.SubscriptionFilterToolsListChanged), false},
 	}
 	for _, c := range cases {
-		if got := c.filter.Matches(c.method); got != c.want {
-			t.Errorf("Matches(%q, %+v) = %v, want %v", c.method, c.filter, got, c.want)
+		acc, err := s.resolveFilter(context.Background(), c.filter, all)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := acc.admits(c.method, json.RawMessage("null"))
+		if got != c.want {
+			t.Errorf("admits(%q) under %v = %v, want %v", c.method, c.filter, got, c.want)
 		}
 	}
+}
+
+func registerTestPrompt(s *Server) {
+	s.RegisterPrompt(core.PromptDef{Name: "greet"}, func(core.PromptContext, core.PromptRequest) (core.PromptResponse, error) {
+		return core.PromptResult{}, nil
+	})
 }

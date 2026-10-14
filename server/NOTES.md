@@ -129,6 +129,41 @@ spell out the migration with worked examples.
 
 ---
 
+## `subscriptions/listen` filters are a registry, not a struct (#1504)
+
+The 2026-07-28 `SubscriptionFilter` names three base keys, and every extension that delivers a
+notification over `subscriptions/listen` adds one of its own: `eventsListChanged` (SEP-3415),
+`agentsListChanged` (agents-wg#22), `taskIds` (ext-tasks). Until #1504 the filter was a closed
+struct and `Matches` returned false for anything else, so no extension notification could ever
+reach a stateless listener, and nothing failed to say so. Now an extension calls
+`srv.RegisterSubscriptionFilter`, and the listen handler resolves the request key by key.
+
+The hook takes raw JSON and returns a matcher rather than taking a bool, because `taskIds` is an
+array that has to be narrowed per caller (authorization runs in `Accept`, on the request context)
+and matched against each notification's params. A bool-only seam would have covered events and
+agents and then needed a second mechanism for Tasks. The TypeScript SDK's `listenRouter.ts` keeps
+the filter closed, so there is no reference design for this part.
+
+Three things the same PR fixed, all of them 2026-07-28 schema rules the upstream suite does not
+grade:
+
+- **The `subscriptionId` is the listen request's JSON-RPC id.** mcpkit minted a `sub-...` string
+  instead. The suite only checks that frames carry *a* matching id, so it passed. The minted value
+  survives as the internal map key, since two clients can both use id 1.
+- **The acknowledgement carries the honored filter.** A base key counts as honored only when the
+  matching `listChanged` capability is advertised. The schema's own example is
+  `promptsListChanged` on a server with no prompts. mcpkit derives that capability from what is
+  registered, so a stateless server with no prompts at listen time declines the key, and a client
+  that wants prompt changes later has to listen again.
+- **`NewTaggedFrame` nested struct params under `"data"`** and dropped any `_meta` the
+  notification already carried. Harmless while only bare list-changed notifications went out, wrong
+  for every typed extension notification. It now flattens anything that marshals to an object.
+
+Not done: `resourceSubscriptions` and the graceful-close `SubscriptionsListenResult`, both in the
+same schema section. See the follow-up issues linked from #1504.
+
+---
+
 ## SEP-2549 `ttlMs` is two-state client-side
 
 The merged spec treats an absent `ttlMs` the same as `0` (both "immediately stale"). mcpkit still

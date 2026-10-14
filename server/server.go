@@ -35,7 +35,8 @@ type Server struct {
 	sessionClosers      []sessionCloser
 	allSessionClosers   []func()
 	sessionBroadcasters []func(ctx context.Context, method string, params any)
-	subRegistry         *subscriptionRegistry // nil when subscriptions not enabled
+	subRegistry         *subscriptionRegistry      // nil when subscriptions not enabled
+	subFilters          subscriptionFilterRegistry // extension keys for the subscriptions/listen filter
 
 	// metricsMiddleware wraps every dispatched JSON-RPC request when a
 	// non-Noop MeterProvider was installed via WithMeterProvider. nil =
