@@ -1082,3 +1082,30 @@ func TestDispatch_GeneralizedResultType_VersionGated(t *testing.T) {
 		}
 	})
 }
+
+// Every dated revision a shipping client may pin is echoed, not negotiated
+// up. 2025-06-18 was missing for months (#1519): a client pinned to it got
+// 2026-07-28 back, and every call after that failed for missing _meta.
+func TestDispatchInitializeEchoesDatedVersions(t *testing.T) {
+	for _, v := range []string{"2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"} {
+		t.Run(v, func(t *testing.T) {
+			d := NewDispatcher(core.ServerInfo{Name: "test-server", Version: "1.0.0"})
+			resp := d.Dispatch(context.Background(), &core.Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage(`1`),
+				Method:  "initialize",
+				Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"` + v + `","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
+			})
+			if resp == nil || resp.Error != nil {
+				t.Fatalf("initialize failed: %+v", resp)
+			}
+			var result map[string]any
+			if err := resp.ResultAs(&result); err != nil {
+				t.Fatal(err)
+			}
+			if result["protocolVersion"] != v {
+				t.Errorf("protocolVersion = %v, want %q echoed", result["protocolVersion"], v)
+			}
+		})
+	}
+}

@@ -12,14 +12,8 @@ import (
 	core "github.com/panyam/mcpkit/core"
 )
 
-// ndjsonInit is the initialize line from #1517. Sessions that go on to make
-// further calls use ndjsonInitSession instead, because 2025-06-18 is not in
-// supportedProtocolVersions and negotiates up to a revision that wants
-// per-request _meta (#1519).
-const (
-	ndjsonInit        = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`
-	ndjsonInitSession = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`
-)
+// ndjsonInit is the initialize line from #1517.
+const ndjsonInit = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`
 
 // ndjsonPeer drives a RunIO server the way Claude Code and the Python and TS
 // SDKs do: one JSON message per line, no Content-Length header.
@@ -116,7 +110,7 @@ func TestStdioNewlineDelimitedInitialize(t *testing.T) {
 // tool call whose argument is bigger than bufio.Scanner's 64 KiB default.
 func TestStdioNewlineDelimitedToolCallLargeLine(t *testing.T) {
 	p := startNDJSON(t, newTestServer())
-	p.send(ndjsonInitSession)
+	p.send(ndjsonInit)
 	p.recvResponse()
 	p.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 
@@ -154,7 +148,7 @@ func TestStdioNewlineDelimitedBlankLinesAndCRLF(t *testing.T) {
 // A malformed line gets a parse error on its own line and the session goes on.
 func TestStdioNewlineDelimitedParseError(t *testing.T) {
 	p := startNDJSON(t, newTestServer())
-	p.send(ndjsonInitSession)
+	p.send(ndjsonInit)
 	p.recvResponse()
 
 	p.send(`{"jsonrpc":"2.0","id":3,"method":`)
@@ -180,7 +174,7 @@ func TestStdioNewlineDelimitedNotification(t *testing.T) {
 		},
 	)
 	p := startNDJSON(t, srv)
-	p.send(ndjsonInitSession)
+	p.send(ndjsonInit)
 	p.recvResponse()
 	p.send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
 	p.send(`{"jsonrpc":"2.0","id":2,"method":"logging/setLevel","params":{"level":"debug"}}`)

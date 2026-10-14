@@ -22,6 +22,13 @@ wires drift apart before.
   back in with `server.WithAllowReinitialize()`; the `initDispatcher` test helper sets
   `allowReinitialize=true` so capability-inspection tests can re-init.
 
+**Every dated revision goes in `supportedProtocolVersions`, and a gap fails quietly.** #57 closed
+as "implemented" with 2025-06-18 left out, and it stayed out until #1519. Nothing errored. A client
+pinned to it was negotiated up to the draft line, which the spec allows, then failed every later call
+for missing `_meta`, and a Streamable HTTP client sending it in `MCP-Protocol-Version` got a 400. Our
+own clients and fixtures all sent 2025-11-25, so no test noticed. `TestDispatchInitializeEchoesDatedVersions`
+now pins the dated list.
+
 The stateless wire (`server/stateless/dispatch.go`) still has its own version-error path. Fold it
 through the resolver when #493 collapses the package.
 
