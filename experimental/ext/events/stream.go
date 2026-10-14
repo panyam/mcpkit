@@ -49,7 +49,7 @@ type StreamEventsResult struct {
 // streamSubscribable is the optional interface a source implements to support
 // events/stream push delivery. YieldingSource satisfies this; TypedSource
 // does not (it has no internal buffer to fan out from). registerStream
-// rejects events/stream for sources lacking this capability with -32014
+// rejects events/stream for sources lacking this capability with -32026
 // Unsupported (data.feature="deliveryMode", data.value="push") per spec.
 //
 // SubscribeOpts: the SDK passes the resolved subscriber identity
@@ -188,7 +188,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 
 		// Spec §"Subscription Identity" → "Authentication required" L361:
 		// events/stream MUST be called with an authenticated principal —
-		// the spec lists -32012 Forbidden among events/stream's immediate
+		// the spec lists -32024 Forbidden among events/stream's immediate
 		// errors at L267. Same auth gate as events/subscribe.
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
 		if !ok {
@@ -204,7 +204,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		// with plain JSON Accept does not, so ctx.Notify would silently
 		// no-op.
 		//
-		// Fail fast with the same -32014 shape the source-lacks-push
+		// Fail fast with the same -32026 shape the source-lacks-push
 		// branch uses below so clients pick events/poll via one
 		// decision rule.
 		//
@@ -218,7 +218,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		}
 
 		// Sources that don't expose a Subscribe channel (TypedSource today)
-		// can't be served via push. Spec lists -32014 Unsupported among
+		// can't be served via push. Spec lists -32026 Unsupported among
 		// events/stream's immediate errors at L267.
 		sub, ok := source.(streamSubscribable)
 		if !ok {

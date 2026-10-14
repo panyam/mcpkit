@@ -89,7 +89,7 @@ func validSubscribeParams() map[string]any {
 
 // TestSubscribe_RejectsAnonymousUnderStrictSpec verifies the spec-strict
 // path: when the server has no auth wired AND no UnsafeAnonymousPrincipal
-// configured, anonymous webhook subscribes are rejected with -32012
+// configured, anonymous webhook subscribes are rejected with -32024
 // per §"Subscription Identity" → "Authentication required" L361.
 //
 // Without this rejection, a misconfigured deployment would silently
@@ -98,9 +98,9 @@ func TestSubscribe_RejectsAnonymousUnderStrictSpec(t *testing.T) {
 	srv, _ := buildAuthGateStack(t, "")
 	resp := dispatchSubscribe(t, srv, validSubscribeParams())
 
-	require.NotNil(t, resp.Error, "expected -32012; got success result")
+	require.NotNil(t, resp.Error, "expected -32024; got success result")
 	assert.Equal(t, ErrCodeForbidden, resp.Error.Code,
-		"spec-mandated -32012 Forbidden for anonymous webhook subscribe")
+		"spec-mandated -32024 Forbidden for anonymous webhook subscribe")
 }
 
 // TestSubscribe_AcceptsAnonymousWithEscape verifies the demo escape

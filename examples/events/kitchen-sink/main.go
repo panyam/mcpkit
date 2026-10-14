@@ -40,7 +40,7 @@ const (
 
 	// quotaCap is the per-principal subscription cap configured for
 	// chat.message; the walkthrough's quota step subscribes three
-	// times and shows the third returns -32013.
+	// times and shows the third returns -32025.
 	quotaCap = 2
 )
 

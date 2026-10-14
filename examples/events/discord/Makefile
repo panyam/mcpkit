@@ -79,7 +79,7 @@ inject-error:
 	@curl -s -X POST '$(ADDR)/inject?action=error&code=$(or $(CODE),-32603)&message=$(or $(MESSAGE),demo+upstream+failure)' | jq .
 
 inject-terminate:
-	@curl -s -X POST '$(ADDR)/inject?action=terminate&code=$(or $(CODE),-32012)&message=$(or $(MESSAGE),demo+terminated)' | jq .
+	@curl -s -X POST '$(ADDR)/inject?action=terminate&code=$(or $(CODE),-32024)&message=$(or $(MESSAGE),demo+terminated)' | jq .
 
 list:
 	@$(EVENTS_CLIENT) list

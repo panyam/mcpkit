@@ -483,11 +483,11 @@ func TestYieldingSource_YieldTerminated_DeliversTerminatedAndClosesChan(t *testi
 	defer cancel()
 
 	ch, _ := src.Subscribe(ctx, SubscribeOpts{})
-	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: -32012, Message: "Unauthorized"}))
+	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: -32024, Message: "Unauthorized"}))
 
 	se := readSubscriberEvent(t, ch, time.Second)
 	require.NotNil(t, se.Terminated, "Terminated variant must populate the pointer field; got %+v", se)
-	assert.Equal(t, -32012, se.Terminated.Code)
+	assert.Equal(t, -32024, se.Terminated.Code)
 	assert.Equal(t, "Unauthorized", se.Terminated.Message)
 
 	// Channel must close after the terminated event so range loops

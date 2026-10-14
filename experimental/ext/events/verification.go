@@ -326,7 +326,7 @@ const (
 // holds at most max (spec §"Endpoint verification": the verification POST
 // "SHOULD be rate-limited per destination host"). Only real challenges count:
 // cache hits, allowlist matches and pre-verified URLs are free. A subscribe
-// over budget fails with -32013 ResourceExhausted, data.limit
+// over budget fails with -32025 ResourceExhausted, data.limit
 // "verifications_per_host". max <= 0 or window <= 0 disables the limit.
 func WithVerificationRateLimit(max int, window time.Duration) WebhookOption {
 	return func(r *WebhookRegistry) {
@@ -337,7 +337,7 @@ func WithVerificationRateLimit(max int, window time.Duration) WebhookOption {
 
 // verificationThrottled is verifyEndpoint's answer for a challenge the
 // per-host budget refused. It is not a spec lastError category and never
-// reaches the wire as one; the subscribe handler turns it into -32013.
+// reaches the wire as one; the subscribe handler turns it into -32025.
 const verificationThrottled DeliveryErrorBucket = "verification_throttled"
 
 // maxTrackedHosts bounds the limiter's memory. Past it, hosts whose buckets

@@ -20,7 +20,7 @@ import (
 //
 //   - notifications/events/list_changed on AddSource / RemoveSource
 //   - live subscriptions terminated when their event type goes away,
-//     carrying -32011 NotFound with data.kind "event"
+//     carrying -32023 NotFound with data.kind "event"
 //
 // Before this, RemoveSource deleted the map entry and told nobody. A
 // webhook subscriber kept a subscription the server would never deliver
@@ -154,7 +154,7 @@ func TestRemoveSource_TerminatesWebhookSubscriptions(t *testing.T) {
 		require.NoError(t, json.Unmarshal(body, &env))
 		assert.Equal(t, "terminated", env.Type)
 		assert.Equal(t, ErrCodeNotFound, env.Error.Code,
-			"removal terminates with -32011 NotFound, not -32012 Forbidden: the principal's access did not change")
+			"removal terminates with -32023 NotFound, not -32024 Forbidden: the principal's access did not change")
 		assert.Equal(t, "event", env.Error.Data["kind"],
 			"data.kind must be \"event\" so the client can distinguish a removed type from a missing subscription")
 	case <-time.After(3 * time.Second):
@@ -236,7 +236,7 @@ func TestRemoveSource_NonTerminatableSourceStillSucceeds(t *testing.T) {
 	assert.Equal(t, 2, cap.count("notifications/events/list_changed"))
 }
 
-// TestUnsupportedData_CarriesSchemaChangedReason pins the -32014 payload
+// TestUnsupportedData_CarriesSchemaChangedReason pins the -32026 payload
 // shape from §"Event Type Removal and Breaking Changes". mcpkit has no
 // in-place descriptor mutation API yet, so nothing in the library emits
 // this today; the shape is here so an author terminating a subscription by
@@ -250,7 +250,7 @@ func TestUnsupportedData_CarriesSchemaChangedReason(t *testing.T) {
 	assert.JSONEq(t, `{"feature":"payloadSchema","reason":"schema_changed"}`, string(raw))
 }
 
-// TestUnsupportedData_OmitsReasonWhenUnset keeps the existing -32014 wire
+// TestUnsupportedData_OmitsReasonWhenUnset keeps the existing -32026 wire
 // unchanged for the delivery-mode rejections that already use it.
 func TestUnsupportedData_OmitsReasonWhenUnset(t *testing.T) {
 	raw, err := json.Marshal(UnsupportedData{Feature: "deliveryMode", Value: "push"})

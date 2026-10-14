@@ -21,7 +21,7 @@ import (
 // signature verifies. That arrives while Subscribe is still in flight,
 // so the secret must already be set, or empty, by then; a receiver
 // holding the wrong secret refuses the challenge and Subscribe fails
-// with -32015 challenge_failed.
+// with -32027 challenge_failed.
 //
 // Decodes the wire envelope's Data field into the typed Data parameter
 // and delivers Event[Data] values on the Events() channel.

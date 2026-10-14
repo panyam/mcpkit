@@ -57,7 +57,7 @@ type conformanceYielders struct {
 	webhooks *events.WebhookRegistry
 	// quota is the one kitchen-sink enforces, capping chat.message per
 	// principal. events_conformance_quota reads it so the suite knows where
-	// -32013 is reachable.
+	// -32025 is reachable.
 	quota *events.Quota
 }
 
@@ -156,7 +156,7 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 			return core.ErrorResult(err.Error()), nil
 		}
 		if err := src.YieldTerminated(events.EventDeliveryError{
-			Code:    -32011,
+			Code:    events.ErrCodeNotFound,
 			Message: "conformance: subscription terminated",
 		}); err != nil {
 			return core.ErrorResult(err.Error()), nil
@@ -270,7 +270,7 @@ const quotaEventName = "chat.message"
 // sep-9999-error-resource-exhausted is only reachable by exceeding a limit,
 // and nothing in the protocol says where a server's limits are. The suite's
 // concurrency probe cannot stand in: it opens three streams on one type and
-// needs all three to stay open, so provoking -32013 there would fail the
+// needs all three to stay open, so provoking -32025 there would fail the
 // stream-exempt-from-concurrency-cap MUST beside it. With the capped type
 // named, the suite probes the quota on its own. Read-only, like
 // events_conformance_generation.
@@ -350,7 +350,7 @@ func registerWebhookEnvelopeControls(srv *server.Server, webhooks *events.Webhoo
 
 	srv.RegisterTool(core.ToolDef{
 		Name:        "events_conformance_webhook_terminate",
-		Description: "Conformance control: end one webhook subscription as a revoked authorization would, sending it {type:terminated} with -32012 and removing it.",
+		Description: "Conformance control: end one webhook subscription as a revoked authorization would, sending it {type:terminated} with -32024 and removing it.",
 		InputSchema: schema,
 	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 		t, err := target(req)

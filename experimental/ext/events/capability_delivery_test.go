@@ -157,7 +157,7 @@ func TestPoll_RejectsUnsupportedDeliveryMode(t *testing.T) {
 
 	resp := pollRaw(t, srv, `{"name":"push.only","cursor":null}`)
 	require.NotNil(t, resp.Error, "polling a source that does not offer poll must fail")
-	assert.Equal(t, -32014, resp.Error.Code)
+	assert.Equal(t, -32026, resp.Error.Code)
 
 	data, ok := resp.Error.Data.(UnsupportedData)
 	require.True(t, ok, "error data should name the unsupported mode, got %T", resp.Error.Data)

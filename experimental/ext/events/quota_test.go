@@ -20,11 +20,11 @@ import (
 // TooManySubscriptions enforcement per spec §"Server SDK Guidance" →
 // "Subscription lifecycle hooks" L705. Acceptance:
 //   - Cap of N per-event-type per-principal: (N+1)th subscribe
-//     returns -32013.
+//     returns -32025.
 //   - Same cap applies to push and poll modes consistently.
 //   - Unsubscribe / TTL expiry / lease-expire releases the budget.
 //   - on_subscribe fires only AFTER quota check passes.
-//   - -32013 payload includes a human-readable message naming the
+//   - -32025 payload includes a human-readable message naming the
 //     event-type and the cap.
 //   - Cross-event-type and cross-principal counts are isolated.
 

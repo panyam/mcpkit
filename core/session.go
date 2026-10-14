@@ -206,7 +206,7 @@ func RequestMetaFromContext(ctx context.Context) *RequestMeta {
 // WithRequestMeta.
 //
 // Push-shaped handlers (events/stream, future server-initiated streams)
-// use this to fail fast with the spec-shape -32014 Unsupported when push
+// use this to fail fast with the spec-shape -32026 Unsupported when push
 // is structurally impossible on the wire — the stateless dispatch path
 // has no session and no GET SSE channel to deliver notifications onto.
 // Non-stateless paths whose notify channel is merely temporarily absent

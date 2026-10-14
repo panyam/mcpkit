@@ -76,11 +76,11 @@ func TestReceiver_RoutesTerminatedToCallback(t *testing.T) {
 	canonical := []byte("terminated-test-key")
 	r.Register(events.RegisterParams{CanonicalKey: canonical, DerivedID: "sub_term_test", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
-	r.PostTerminated(canonical, events.ControlError{Code: -32012, Message: "Unauthorized"})
+	r.PostTerminated(canonical, events.ControlError{Code: -32024, Message: "Unauthorized"})
 
 	select {
 	case got := <-gotErr:
-		assert.Equal(t, -32012, got.Code)
+		assert.Equal(t, -32024, got.Code)
 		assert.Equal(t, "Unauthorized", got.Message)
 	case <-time.After(2 * time.Second):
 		t.Fatal("OnTerminated callback never fired")

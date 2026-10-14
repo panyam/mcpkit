@@ -493,12 +493,12 @@ pins it. The suite couldn't tell the two rules apart from one refusal either, so
 `reject-non-routable` its own probe: an `https://127.0.0.1` callback aimed at a bare TCP listener
 that records whether the server connected. The https scheme takes the scheme rule out of it, and
 the listener separates a refusal from a dial that failed afterwards, which matters because a server
-that skips the check and then fails verification answers `-32015`, and that reads as a refusal.
+that skips the check and then fails verification answers `-32027`, and that reads as a refusal.
 Turning private networks back on under `--conformance-events` now fails the row with exactly that
 message.
 
 **`error-resource-exhausted` needs a capped type named (#1461).** The push scenario used to grade
-`-32013` only inside its concurrency probe, three streams on one type, which also has to keep all
+`-32025` only inside its concurrency probe, three streams on one type, which also has to keep all
 three open for `stream-exempt-from-concurrency-cap`. On one type the two rows can't both pass, so
 kitchen-sink, which caps `chat.message` and not the push target, reported it untestable.
 `events_conformance_quota` answers `{"name":"chat.message","max":2}`, read back from the `Quota`,

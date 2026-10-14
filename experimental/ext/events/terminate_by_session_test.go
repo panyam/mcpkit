@@ -54,7 +54,7 @@ func TestTerminateBySession_KillsMatchingSubscriptionsAndPosts(t *testing.T) {
 	register("tenant-a/bob", "bob", "session-bob", srvB.URL)
 
 	killed := r.TerminateBySession("session-alice", ControlError{
-		Code:    -32012,
+		Code:    -32024,
 		Message: "session revoked by AS",
 	})
 	assert.Equal(t, 2, killed, "exactly the two alice subscriptions terminate")
@@ -84,7 +84,7 @@ func TestTerminateBySession_KillsMatchingSubscriptionsAndPosts(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(recv.body, &env))
 		assert.Equal(t, "terminated", env.Type)
-		assert.Equal(t, -32012, env.Error.Code)
+		assert.Equal(t, -32024, env.Error.Code)
 		assert.Contains(t, env.Error.Message, "session revoked")
 		recv.mu.Unlock()
 	}
@@ -109,7 +109,7 @@ func TestTerminateBySession_EmptySidIsNoop(t *testing.T) {
 		// SessionID intentionally empty — anonymous subscription.
 	})
 
-	killed := r.TerminateBySession("", ControlError{Code: -32012, Message: "x"})
+	killed := r.TerminateBySession("", ControlError{Code: -32024, Message: "x"})
 	assert.Equal(t, 0, killed, "empty sid must not terminate anything")
 	time.Sleep(100 * time.Millisecond) // give any rogue POST a chance to land
 	recv.mu.Lock()
@@ -149,7 +149,7 @@ func TestTerminateBySubject_KillsAllSessionsForSubject(t *testing.T) {
 	register("alice", "alice-sess-2", srv2.URL)
 	register("bob", "bob-sess-1", srvOther.URL)
 
-	killed := r.TerminateBySubject("alice", ControlError{Code: -32012, Message: "subject revoked"})
+	killed := r.TerminateBySubject("alice", ControlError{Code: -32024, Message: "subject revoked"})
 	assert.Equal(t, 2, killed)
 
 	require.Eventually(t, func() bool {

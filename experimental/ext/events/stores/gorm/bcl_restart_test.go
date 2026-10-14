@@ -42,7 +42,7 @@ func TestBCL_TerminateBySessionAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 	r2 := events.NewWebhookRegistry(events.WithWebhookStore(store2), events.WithAllowInfiniteWebhookTTL())
 
-	n := r2.TerminateBySession("sid-123", events.ControlError{Code: -32012, Message: "session revoked"})
+	n := r2.TerminateBySession("sid-123", events.ControlError{Code: -32024, Message: "session revoked"})
 	assert.Equal(t, 1, n, "the restored subscription must match the revoked session")
 	assert.Empty(t, r2.Targets())
 }

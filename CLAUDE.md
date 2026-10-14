@@ -244,7 +244,7 @@ These span packages and will bite on a task that never opens a routed doc.
   configured repo as unprotected.
 
 - **Endpoint verification is on by default for webhook subscribes** (#1444). `events/subscribe`
-  POSTs a signed challenge to `delivery.url` and fails with `-32015` unless it is echoed, so any
+  POSTs a signed challenge to `delivery.url` and fails with `-32027` unless it is echoed, so any
   test, demo or fixture that subscribes to a URL nobody answers now fails. Shared test stacks opt
   out with `WithUnsafeSkipEndpointVerification()`; fixtures allowlist a known origin
   (`WithWebhookDeliveryAllowlist`); a hand-rolled receiver calls

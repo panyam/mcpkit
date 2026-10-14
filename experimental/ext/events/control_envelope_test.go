@@ -126,7 +126,7 @@ func TestControlEnvelope_TerminatedShape(t *testing.T) {
 	subID := deriveSubscriptionID(canonical)
 	r.Register(RegisterParams{CanonicalKey: canonical, DerivedID: subID, URL: srv.URL, Secret: "whsec_" + strings.Repeat("a", 32), MaxAgeMs: 0})
 
-	r.PostTerminated(canonical, ControlError{Code: -32012, Message: "Unauthorized"})
+	r.PostTerminated(canonical, ControlError{Code: -32024, Message: "Unauthorized"})
 
 	require.Eventually(t, func() bool {
 		cap.mu.Lock()
@@ -142,7 +142,7 @@ func TestControlEnvelope_TerminatedShape(t *testing.T) {
 	assert.Equal(t, "terminated", env["type"])
 	errMap, ok := env["error"].(map[string]any)
 	require.True(t, ok, "terminated envelope MUST include an error object; got %v", env["error"])
-	assert.EqualValues(t, -32012, errMap["code"])
+	assert.EqualValues(t, -32024, errMap["code"])
 	assert.Equal(t, "Unauthorized", errMap["message"])
 
 	wid := cap.headers.Get("webhook-id")

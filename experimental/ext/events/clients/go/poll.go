@@ -76,7 +76,7 @@ type pollResult struct {
 
 // Poll runs an events/poll loop until Stop, parent cancellation, or a poll
 // error. It returns once the first poll has answered, so a rejection
-// (-32011 NotFound, -32012 Forbidden, -32014 Unsupported) surfaces here
+// (-32023 NotFound, -32024 Forbidden, -32026 Unsupported) surfaces here
 // rather than inside the loop.
 //
 // Cursor handling follows §"Cursor Lifecycle": the loop persists every

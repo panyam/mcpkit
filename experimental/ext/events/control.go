@@ -39,7 +39,7 @@ type ControlError struct {
 	// Changes" requires it on both termination shapes: NotFoundData
 	// {kind:"event"} for a removed type, UnsupportedData
 	// {feature, reason:"schema_changed"} for one changed in place.
-	// Without it a receiver sees -32011 and cannot tell a removed event
+	// Without it a receiver sees -32023 and cannot tell a removed event
 	// type from a missing subscription.
 	Data any `json:"data,omitempty"`
 }

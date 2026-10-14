@@ -29,7 +29,7 @@ import (
 //
 // This is the contract the whole-enchilada streamer demo binary relies
 // on. Without the CanNotify-gated admission path, events/stream would
-// either reject with -32014 (old guard) or accept and silently drop
+// either reject with -32026 (old guard) or accept and silently drop
 // events (no guard at all).
 func TestStream_Stateless_SSE_DeliversEvents(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](
@@ -119,7 +119,7 @@ func TestStream_Stateless_SSE_DeliversEvents(t *testing.T) {
 // TestStream_Stateless_PlainJSON_ReturnsUnsupported asserts the
 // admission-gate complement — a stateless POST that does NOT request
 // SSE has no notify channel. CanNotify returns false and registerStream
-// fails fast with the spec-shape -32014 Unsupported response. Clients
+// fails fast with the spec-shape -32026 Unsupported response. Clients
 // pick events/poll via one decision rule regardless of whether the rail
 // is missing because the source lacks push or because the wire does.
 func TestStream_Stateless_PlainJSON_ReturnsUnsupported(t *testing.T) {
@@ -168,8 +168,8 @@ func TestStream_Stateless_PlainJSON_ReturnsUnsupported(t *testing.T) {
 
 	var rpc core.Response
 	require.NoError(t, json.Unmarshal(payload, &rpc), "body: %s", string(payload))
-	require.NotNil(t, rpc.Error, "expected -32014; got result: %s", string(payload))
-	assert.Equal(t, ErrCodeUnsupported, rpc.Error.Code, "want -32014 Unsupported")
+	require.NotNil(t, rpc.Error, "expected -32026; got result: %s", string(payload))
+	assert.Equal(t, ErrCodeUnsupported, rpc.Error.Code, "want -32026 Unsupported")
 
 	dataRaw, err := json.Marshal(rpc.Error.Data)
 	require.NoError(t, err)
