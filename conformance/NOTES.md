@@ -192,6 +192,16 @@ before assuming a var does anything.
 `cmd/testserver/conformance_input_required.go` registers. Pointing a gate at an example that cannot
 serve the fixtures gives you a gate that can never pass.
 
+**A held port grades a stranger.** Every `conf-*.sh` here spawns its fixture on a fixed port in the
+background, and the readiness loop breaks on the first answer from that port, whoever gives it. On
+the first `make exercise-events` run after #1512, a leftover process held `:18101`. The fresh
+kitchen-sink died on `bind: address already in use`, and discovery, poll and push came back green
+against the leftover. The run only looked wrong because that process later went away and the
+webhook scenarios failed. `require_port_free` (before the spawn) and `require_fixture_alive`
+(after the loop) in `_common.sh` now make every fixture-spawning suite refuse instead, exiting 1
+with the port's holder or the fixture's log tail (#1513). The suites never run in CI, so the guards
+are self-tested there instead: `make check-conf-fixture-guards`.
+
 ## "Failed" in these suites means failed-or-unmeasurable
 
 Upstream's policy (#248, `src/scenarios/untestable.ts`) is that a check whose prerequisite is

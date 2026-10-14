@@ -18,12 +18,14 @@ require_conf_dir MCPCONFORMANCE_AUTH_PATH \
 # deliberately-bad-claim variants), so we spawn here (instead of
 # letting vitest auto-spawn) and curl /demo/bootstrap before
 # invoking the scenarios.
+require_port_free 18098
 "${REPO_ROOT}/examples/auth/auth-demo" --serve --addr=:18098 > /tmp/auth-demo.log 2>&1 &
 PID=$!
 for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -sf http://localhost:18098/.well-known/oauth-protected-resource > /dev/null 2>&1 && break
     sleep 0.5
 done
+require_fixture_alive "$PID" /tmp/auth-demo.log
 BOOT=$(curl -sf http://localhost:18098/demo/bootstrap)
 TOK_VALID=$(echo "$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read"])' 2>/dev/null)
 TOK_RW=$(echo "$BOOT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tok_read_write"])' 2>/dev/null)

@@ -27,6 +27,7 @@ build_conf_dist MCPCONFORMANCE_SKILLS_PATH
 
 OUT=$(mktemp -d -t conf-skills.XXXXXX)
 echo "Spawning examples/skills on :${PORT}, scratch dir $OUT"
+require_port_free "${PORT}"
 "${REPO_ROOT}/examples/skills/skills-demo" --serve --addr=":${PORT}" \
     --skills="${REPO_ROOT}/examples/skills/skills" > "$OUT/server.log" 2>&1 &
 PID=$!
@@ -36,6 +37,7 @@ for i in $(seq 1 30); do
     curl -sf -o /dev/null -X OPTIONS "http://localhost:${PORT}/mcp" && break
     sleep 0.3
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 
 # The SEP-2640 server surface is split across three scenarios: enumeration,
 # SKILL.md manifest, and resources/directory/read. Run by exact name because

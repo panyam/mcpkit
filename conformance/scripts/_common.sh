@@ -98,3 +98,47 @@ build_conf_dist() {
     echo "Building conformance dist/ in ${dir} ..."
     (cd "$dir" && npm install --silent && npm run build >/dev/null) || exit 1
 }
+
+# require_port_free PORT
+# Refuse to start a fixture on a port something else already holds.
+#
+# Every fixture here is spawned in the background and the readiness loop only
+# waits for *something* to answer. If the port is taken, the fresh fixture
+# dies on "bind: address already in use" and the suite grades whatever is
+# listening instead, reporting plausible numbers for code that was never under
+# test (#1513: testconf-events graded a leftover kitchen-sink and showed
+# discovery, poll and push green). Probes with bash's /dev/tcp, so it needs no
+# lsof or nc on the runner; lsof only adds the holder's PID when present.
+require_port_free() {
+    local port="$1"
+    if (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+        local holder=""
+        if command -v lsof >/dev/null 2>&1; then
+            holder=$(lsof -t -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | head -1)
+        fi
+        echo "REFUSING: port ${port} is already in use${holder:+ by PID ${holder}}." >&2
+        echo "A fixture started now would fail to bind, and the suite would grade whatever holds the port." >&2
+        echo "Stop it (or pick another port) and re-run." >&2
+        exit 1
+    fi
+}
+
+# require_fixture_alive PID [LOG]
+# Refuse to grade if the fixture this script spawned has already exited.
+#
+# Run after the readiness loop. The loop breaks on the first answer from the
+# port, which says nothing about whose answer it was, and it falls through
+# silently when nothing answers at all. A dead PID here means the suite would
+# grade a stranger or nothing. LOG, when given, is the fixture's own output,
+# and its tail usually names the reason.
+require_fixture_alive() {
+    local pid="$1" log="${2:-}"
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        echo "REFUSING: the fixture (PID ${pid}) exited before grading started." >&2
+        if [ -n "${log}" ] && [ -f "${log}" ]; then
+            echo "Last lines of ${log}:" >&2
+            tail -5 "${log}" >&2
+        fi
+        exit 1
+    fi
+}
