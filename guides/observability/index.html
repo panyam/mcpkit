@@ -1059,7 +1059,7 @@ server span (TraceID T1)              server span (TraceID T2)
 <tr>
 <td><code>agents/list</code></td>
 <td><code>agents.list</code></td>
-<td><code>agents.count</code> (roster size)</td>
+<td><code>agents.count</code> (cards on the returned page)</td>
 </tr>
 <tr>
 <td><code>agents/get</code></td>
@@ -1068,7 +1068,7 @@ server span (TraceID T1)              server span (TraceID T2)
 </tr>
 </tbody>
 </table>
-<p><code>agents.found</code> is set on every path (including empty / unknown <code>agentId</code>), so a failed lookup is visible in the trace rather than silent.</p>
+<p><code>agents.found</code> is set on every path (including an empty, unknown or hidden agent name), so a failed lookup is visible in the trace rather than silent.</p>
 <p><strong>Host side, delegation edge</strong> (chakra&rsquo;s <code>host/server_agents.go</code>). The host&rsquo;s lazy <code>serverAgentSource.resolve</code> wraps the first-use <code>agents/get</code> + child build in an <code>agents.resolve</code> span carrying <code>mcp.agent.id</code>. Cache hits are not spanned. This ties the three pieces a delegation trace should show: <code>supervisor turn -&gt; agents.resolve(agent.id) -&gt; agents.get -&gt; child turn</code>.</p>
 <p><strong>Sub-agent execution reuses the Runner&rsquo;s own spans.</strong> A resolved specialist is a normal <code>agent.AgentSource</code> over a child <code>Runner</code>, so its work already emits <code>agent.turn</code> / <code>agent.step</code> / <code>agent.tool</code> spans (the same instrumentation any Runner gets). The host threads its <code>TracerProvider</code> through the bridge (<code>ServerAgentConfig.TracerProvider</code>), so no separate execution-span machinery is needed. The in-process delegation runs synchronously inside the supervisor&rsquo;s tool-call span, so those child spans nest naturally under it. A new-root-span + link shape (like <code>task.execute</code>) would only be warranted for an async delegation form (<code>AsyncAgentSource</code>) whose run outlives the dispatch; that is deferred until a demo needs it.</p>
 <p>Coverage: <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/agents/tracing_test.go"><code>experimental/ext/agents/tracing_test.go</code></a> pins the discovery spans (list count, get found / not-found, and the zero-overhead nil-TracerProvider path); chakra&rsquo;s <code>host/server_agents_test.go</code> pins the <code>agents.resolve</code> span (emitted on first delegation, not on the cached second).</p>
