@@ -51,6 +51,28 @@ modelTools, _ := c.ListToolsForModel() // excludes app-only tools
 - `ServerSupportsExtension(id)` / `ServerSupportsUI()` - detect server support
 - `ListToolsForModel()` - filters out tools with visibility `["app"]` only
 
+## Listening for notifications (stateless wire)
+
+On the 2026-07-28 wire, server notifications arrive on a `subscriptions/listen` stream. One
+`Listen` call carries every filter key the host wants, including keys that extensions define, and
+routes each notification by method:
+
+```go
+l, err := c.Listen(ctx, client.ListenOptions{
+    Notifications: core.ListChangedFilter("toolsListChanged", "eventsListChanged"),
+    Handlers: map[string]func(json.RawMessage){
+        "notifications/tools/list_changed":  func(json.RawMessage) { refreshTools() },
+        "notifications/events/list_changed": func(json.RawMessage) { refreshEvents() },
+    },
+})
+defer l.Stop()
+l.Honored() // the keys the server agreed to, from its acknowledgement
+```
+
+`Listen` returns once the server has acknowledged the stream. Handlers run one at a time on the
+stream's reader goroutine, so keep them short. On the legacy wire it returns
+`ErrListenNeedsStatelessWire`.
+
 ## Transport interface
 
 The client accepts any `core.Transport` via `WithTransport()`. This enables:

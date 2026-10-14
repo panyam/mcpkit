@@ -28,16 +28,22 @@ import (
 // frames is a small buffered channel — small enough that a misbehaving
 // or paused client backpressures Broadcast quickly (we drop frames
 // rather than block the producer).
+//
+// id is the internal map key and is minted by the server, because two
+// clients may both open a stream with JSON-RPC id 1. wireID is that
+// JSON-RPC id, which is what the client sees as the subscriptionId.
 type statelessSubscriber struct {
 	id     string
+	wireID json.RawMessage
 	scope  string // populated by tryRegister; used by unregister to drop the count
-	filter stateless.SubscribeFilter
+	filter acceptedFilter
 	frames chan stateless.TaggedFrame
 	done   chan struct{}
 }
 
-// newSubscriptionID generates a 128-bit base32-encoded subscriptionId.
-// 26 char output; collision-resistant for the lifetime of the process.
+// newSubscriptionID generates a 128-bit base32-encoded key for the
+// subscriber map. It never reaches the wire. 26 char output;
+// collision-resistant for the lifetime of the process.
 func newSubscriptionID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -193,17 +199,28 @@ func (m *statelessSubMap) unregister(id string) {
 }
 
 // fanout pushes a notification onto every open subscriber whose filter
-// admits the method. Non-blocking: if a subscriber's channel is full
-// the frame drops for that subscriber (the conformance contract is
-// about server-side discipline, not in-flight queueing).
+// admits it. Non-blocking: if a subscriber's channel is full the frame
+// drops for that subscriber (the conformance contract is about
+// server-side discipline, not in-flight queueing).
+//
+// params is marshalled once, and only when a subscriber is open, so
+// every matcher sees the same JSON whatever Go type the broadcaster
+// passed.
 func (m *statelessSubMap) fanout(method string, params any) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	if len(m.subs) == 0 {
+		return
+	}
+	raw, err := json.Marshal(params)
+	if err != nil {
+		raw = json.RawMessage("null")
+	}
 	for _, sub := range m.subs {
-		if !sub.filter.Matches(method) {
+		if !sub.filter.admits(method, raw) {
 			continue
 		}
-		frame := stateless.NewTaggedFrame(method, params, sub.id)
+		frame := stateless.NewTaggedFrame(method, params, sub.wireID)
 		select {
 		case sub.frames <- frame:
 		default:
@@ -219,17 +236,24 @@ func (m *statelessSubMap) fanout(method string, params any) {
 //
 // Flow:
 //  1. Validate _meta + protocol version (reuse dispatcher's validators).
-//  2. Decode the SubscribeParams filter.
-//  3. Mint a subscriptionId; build the subscriber and register it.
-//  4. Open the SSE stream (Content-Type: text/event-stream).
-//  5. Emit the ack frame with subscriptionId in _meta.
-//  6. Loop on the subscriber's frame channel, write each as an SSE
+//  2. Decode the SubscribeParams filter; notifications is required.
+//  3. Resolve the filter key by key against the registry, keeping
+//     only what the server agrees to honor.
+//  4. Build the subscriber under the request's JSON-RPC id and register it.
+//  5. Open the SSE stream (Content-Type: text/event-stream).
+//  6. Emit the ack frame: subscriptionId in _meta, honored filter in
+//     params.notifications.
+//  7. Loop on the subscriber's frame channel, write each as an SSE
 //     data: line. Exit on client disconnect.
-//  7. Unregister on exit.
+//  8. Unregister on exit.
 func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r *http.Request, req *core.Request) {
+	// The subscriptionId is this id, so a listen without one has nothing
+	// to tag its frames with.
 	id := req.ID
-	if id == nil {
-		id = json.RawMessage("null")
+	if len(id) == 0 || string(id) == "null" {
+		writeStatelessResponse(w, core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeInvalidRequest,
+			"subscriptions/listen needs a JSON-RPC id: it becomes the subscriptionId"))
+		return
 	}
 
 	// Header / _meta cross-check (same precedence as handleStatelessPost).
@@ -242,7 +266,8 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	}
 
 	// _meta envelope validation.
-	if _, err := core.DecodeRequestMetaFromRawJSON(&req.Params); err != nil {
+	reqMeta, err := core.DecodeRequestMetaFromRawJSON(&req.Params)
+	if err != nil {
 		writeStatelessResponse(w, core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error()))
 		return
 	}
@@ -252,6 +277,11 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	if err := req.Params.Bind(&params); err != nil {
 		writeStatelessResponse(w, core.NewErrorResponse(id, core.ErrCodeInvalidParams,
 			"invalid subscriptions/listen params: "+err.Error()))
+		return
+	}
+	if params.Notifications == nil {
+		writeStatelessResponse(w, core.NewErrorResponse(id, core.ErrCodeInvalidParams,
+			"invalid subscriptions/listen params: notifications is required"))
 		return
 	}
 
@@ -265,10 +295,19 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 		return
 	}
 
+	acceptCtx := core.WithRequestMeta(r.Context(), reqMeta)
+	caps := newStatelessBackend(t.server).Capabilities()
+	accepted, err := t.server.resolveFilter(acceptCtx, params.Notifications, caps)
+	if err != nil {
+		writeStatelessResponse(w, filterRefusal(id, err))
+		return
+	}
+
 	subID := newSubscriptionID()
 	sub := &statelessSubscriber{
 		id:     subID,
-		filter: params.Notifications,
+		wireID: id,
+		filter: accepted,
 		frames: make(chan stateless.TaggedFrame, 16),
 		done:   make(chan struct{}),
 	}
@@ -294,7 +333,7 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	w.WriteHeader(http.StatusOK)
 
 	// Ack frame — MUST be the first thing on the stream.
-	ack := stateless.NewAcknowledgedFrame(subID)
+	ack := stateless.NewAcknowledgedFrame(id, accepted.honored)
 	if err := writeSSEFrame(w, ack); err != nil {
 		return
 	}

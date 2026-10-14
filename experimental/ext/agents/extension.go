@@ -15,7 +15,8 @@ import "github.com/panyam/mcpkit/core"
 // The extension carries no Config yet, so the wire value is the empty object
 // {}. agents-wg#22 defines one setting, listChanged, which this package will
 // advertise once it can deliver notifications/agents/list_changed over
-// subscriptions/listen (blocked by panyam/mcpkit#1504).
+// subscriptions/listen, by registering an agentsListChanged filter key
+// (server.RegisterSubscriptionFilter, panyam/mcpkit#1504).
 type AgentsExtension struct{}
 
 // Extension implements core.ExtensionProvider. It returns the agents

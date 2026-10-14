@@ -118,7 +118,7 @@ hints, for hosts that cache the roster or page lazily.
 
 Tracked in panyam/mcpkit#1393:
 
-- `notifications/agents/list_changed` via `subscriptions/listen`, blocked by #1504.
+- `notifications/agents/list_changed` via `subscriptions/listen`. The filter key it needs can be registered since #1504.
 - Step-up authorization for an agent the caller may know about but not use.
 - Switching the identifier to `io.modelcontextprotocol/agents`.
 

@@ -9,6 +9,31 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **Extensions can add `subscriptions/listen` filter keys.**
+  `Server.RegisterSubscriptionFilter` takes a key and an `Accept` hook that
+  decides, per request, whether to honor it and which notifications it
+  matches. `server.ListChangedFilterKey` covers the boolean case (#1504).
+- **`Client.Listen`** opens a `subscriptions/listen` stream, returns after the
+  acknowledgement with the honored filter, and routes notifications by method
+  (#1504).
+
+### Changed
+- **`subscriptions/listen` follows the 2026-07-28 schema.** The
+  `subscriptionId` is the listen request's JSON-RPC id rather than a minted
+  `sub-...` string, the acknowledgement carries the honored filter in
+  `params.notifications`, and `notifications` is required. A base key is
+  honored only when the matching `listChanged` capability is advertised
+  (#1504).
+- **Breaking:** `server/stateless.SubscribeFilter` and its `Matches` are gone,
+  replaced by `core.SubscriptionFilter`. `NewAcknowledgedFrame` and
+  `NewTaggedFrame` take the subscription id as `json.RawMessage` (#1504).
+
+### Fixed
+- **Typed notification params reach listen streams intact.** A struct passed
+  to `Broadcast` was nested under `"data"` on a `subscriptions/listen` frame,
+  and any `_meta` it carried was dropped (#1504).
+
 ## [0.7.1] - 2026-09-25
 
 A patch release for `ext/tasks`: tasks can report progress through
