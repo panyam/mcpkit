@@ -30,6 +30,7 @@ build_conf_dist MCPCONFORMANCE_TASKS_V2_PATH
 
 OUT=$(mktemp -d -t conf-tasks-v2.XXXXXX)
 echo "Spawning examples/tasks-v2 on :${PORT}, scratch dir $OUT"
+require_port_free "${PORT}"
 STREAMABLE=1 "${REPO_ROOT}/examples/tasks-v2/tasks-v2" --serve --addr ":${PORT}" \
     > "$OUT/server.log" 2>&1 &
 PID=$!
@@ -43,6 +44,7 @@ for i in $(seq 1 30); do
         2>/dev/null && break
     sleep 1
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 
 SCENARIOS=$(cd "${MCPCONFORMANCE_TASKS_V2_PATH}" && node dist/index.js list --server 2>/dev/null \
     | awk '/^  - /{print $2}' | grep '^tasks-')

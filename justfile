@@ -171,6 +171,10 @@ check-conformance-stale: check-local-suites-stale
 check-local-suites-stale:
     uv run scripts/check_local_suites.py
 
+# CI gate — self-test the conformance fixture guards (held port, dead fixture) in conformance/scripts/_common.sh
+check-conf-fixture-guards:
+    @bash conformance/scripts/_common_selftest.sh
+
 # CI gate — fail if a third-party dep is pinned at 2+ versions across published modules
 check-dep-consistency:
     python3 scripts/check_dep_consistency.py

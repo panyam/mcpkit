@@ -29,12 +29,14 @@ PORT="${CONF_SCOPE_CHALLENGE_PORT:-18140}"
 (cd "${REPO_ROOT}/examples/auth" && go build -o scope-challenge-sut ./conformance-scope-challenge)
 OUT=$(mktemp -d -t conf-scope-challenge.XXXXXX)
 echo "Spawning SUT on :${PORT}, scratch dir $OUT"
+require_port_free "${PORT}"
 "${REPO_ROOT}/examples/auth/scope-challenge-sut" -addr ":${PORT}" > "$OUT/server.log" 2>&1 &
 PID=$!
 for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -sf -o /dev/null "http://localhost:${PORT}/mcp" && break
     sleep 0.3
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 
 (cd "${MCPCONFORMANCE_SCOPE_CHALLENGE_PATH}" && \
     node dist/index.js server \

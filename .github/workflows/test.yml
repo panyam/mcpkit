@@ -55,6 +55,13 @@ jobs:
       - name: Release-workflow checker self-test
         run: make check-release-workflows-selftest
 
+      # Every conf-*.sh spawns its fixture on a fixed port and waits for *any*
+      # answer. Without these guards a held port means the suite grades a
+      # stranger and reports plausible numbers (#1513). Self-tested here because
+      # the suites themselves never run in CI.
+      - name: Conformance fixture guards self-test
+        run: make check-conf-fixture-guards
+
       # bump-root once left tagged sub-modules pinning their siblings a
       # release behind, which broke v0.7.0's stores/gorm for anyone fetching
       # it alone until the pins were fixed by hand.

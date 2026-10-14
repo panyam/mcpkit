@@ -35,6 +35,7 @@ echo "Spawning fixture on :18101, scratch dir $OUT"
 # gap, a delivery mode a type does not offer — and report untestable, which the
 # suite renders red. The flag is off by default because kitchen-sink is a
 # published example first; see examples/CONVENTIONS.md § Conformance fixtures.
+require_port_free 18101
 "${REPO_ROOT}/examples/events/kitchen-sink/kitchen-sink-events" \
     --serve -addr=:18101 --conformance-events > "$OUT/server.log" 2>&1 &
 PID=$!
@@ -42,6 +43,7 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -sf -o /dev/null -X OPTIONS http://localhost:18101/mcp && break
     sleep 0.3
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 
 # All five scenarios. events-webhook-delivery needs the harness to be the
 # receiver, on loopback, which the fixture's SSRF guards refuse. The scenario
