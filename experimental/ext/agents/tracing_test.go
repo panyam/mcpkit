@@ -7,7 +7,6 @@ import (
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/agents"
-	"github.com/panyam/mcpkit/server"
 	"github.com/panyam/mcpkit/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,7 +57,7 @@ func (p *recTP) find(name string) *recSpan {
 // TracerProvider so tests can inspect the discovery spans.
 func newTracedAgentsServer(t *testing.T, tp core.TracerProvider, defs ...agents.AgentDef) *testutil.TestClient {
 	t.Helper()
-	srv := server.NewServer(core.ServerInfo{Name: "agents-trace-test", Version: "0.0.1"})
+	srv := newCatalogServer()
 	_, err := agents.Register(agents.Config{Server: srv, Agents: defs, TracerProvider: tp})
 	require.NoError(t, err)
 	return testutil.NewTestClient(t, srv)
@@ -68,7 +67,7 @@ func newTracedAgentsServer(t *testing.T, tp core.TracerProvider, defs ...agents.
 // roster size, so an operator can see discovery traffic and its cardinality.
 func TestListEmitsSpan(t *testing.T) {
 	tp := &recTP{}
-	tc := newTracedAgentsServer(t, tp, workflowAgent())
+	tc := newTracedAgentsServer(t, tp, sepWorkflowAgent())
 
 	_, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
@@ -83,9 +82,9 @@ func TestListEmitsSpan(t *testing.T) {
 // span tagged with the agent id and found=true.
 func TestGetEmitsSpanFound(t *testing.T) {
 	tp := &recTP{}
-	tc := newTracedAgentsServer(t, tp, workflowAgent())
+	tc := newTracedAgentsServer(t, tp, sepWorkflowAgent())
 
-	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"})
 	require.NoError(t, err)
 
 	sp := tp.find("agents.get")
@@ -99,10 +98,10 @@ func TestGetEmitsSpanFound(t *testing.T) {
 // with found=false, so failed lookups are visible in traces (not silent).
 func TestGetEmitsSpanNotFound(t *testing.T) {
 	tp := &recTP{}
-	tc := newTracedAgentsServer(t, tp, workflowAgent())
+	tc := newTracedAgentsServer(t, tp, sepWorkflowAgent())
 
-	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "no-such-agent"})
-	require.Error(t, err, "unknown agentId is a client error")
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "no-such-agent"})
+	require.Error(t, err, "unknown name is a client error")
 
 	sp := tp.find("agents.get")
 	require.NotNil(t, sp)
@@ -114,13 +113,13 @@ func TestGetEmitsSpanNotFound(t *testing.T) {
 // serves discovery without spans and without panicking — the zero-overhead
 // opt-out contract.
 func TestNoTracerProviderNoPanic(t *testing.T) {
-	srv := server.NewServer(core.ServerInfo{Name: "agents-notrace", Version: "0.0.1"})
-	_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{workflowAgent()}})
+	srv := newCatalogServer()
+	_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{sepWorkflowAgent()}})
 	require.NoError(t, err)
 	tc := testutil.NewTestClient(t, srv)
 
 	_, err = tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
-	_, err = tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	_, err = tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"})
 	require.NoError(t, err)
 }

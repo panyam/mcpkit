@@ -130,6 +130,21 @@ jobs:
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
 
+  test-agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run experimental agents tests
+        run: bash experimental/scripts/test-agents.sh
+
+      - name: Run experimental agents Go client tests
+        run: bash experimental/scripts/test-agents-clients-go.sh
+
       # The bridge JS tests and the stale-build check ran in no workflow, so
       # fixtures that matched a wrong wire shape stayed green (issue 1452).
       - uses: pnpm/action-setup@v6
