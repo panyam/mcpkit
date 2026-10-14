@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -792,5 +793,90 @@ func TestSSEProgressNotification(t *testing.T) {
 		if notifications[i].ProgressToken != "test-token" {
 			t.Errorf("notification[%d].ProgressToken = %v, want test-token", i, notifications[i].ProgressToken)
 		}
+	}
+}
+
+// The legacy SSE transport applies the same batching gate as Streamable HTTP:
+// a session on 2025-06-18 or later gets one -32600 error on the stream and no
+// batch element runs, while 2025-03-26 still dispatches the array.
+func TestSSEBatchGatedByProtocolVersion(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		allowed bool
+	}{
+		{"2025-03-26", true},
+		{"2025-06-18", false},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			ts, srv := testMCPServer()
+			defer ts.Close()
+			var calls atomic.Int32
+			srv.RegisterTool(
+				core.ToolDef{Name: "count", Description: "counts calls", InputSchema: map[string]any{"type": "object"}},
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+					calls.Add(1)
+					return core.TextResult("ok"), nil
+				},
+			)
+
+			sseResp, reader, postURL, err := connectSSE(ts, "/mcp")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer sseResp.Body.Close()
+
+			resp, err := postJSON(postURL, &core.Request{
+				JSONRPC: "2.0",
+				ID:      json.RawMessage(`1`),
+				Method:  "initialize",
+				Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"` + tc.version + `","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}`)),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if _, err := readSSEEvent(reader); err != nil {
+				t.Fatal(err)
+			}
+			resp, err = postJSON(postURL, &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+
+			batch := `[{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"count","arguments":{}}},{"jsonrpc":"2.0","id":11,"method":"ping"}]`
+			resp, err = http.Post(postURL, "application/json", strings.NewReader(batch))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusAccepted {
+				t.Fatalf("batch POST status = %d, want 202", resp.StatusCode)
+			}
+
+			ev, err := readSSEEvent(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got core.Response
+			if err := json.Unmarshal([]byte(ev.Data), &got); err != nil {
+				t.Fatalf("unmarshal %q: %v", ev.Data, err)
+			}
+			if tc.allowed {
+				if got.Error != nil || string(got.ID) != "10" {
+					t.Fatalf("want tools/call result for id 10, got %s", ev.Data)
+				}
+				if calls.Load() != 1 {
+					t.Errorf("count tool ran %d times, want 1", calls.Load())
+				}
+				return
+			}
+			if got.Error == nil || got.Error.Code != core.ErrCodeInvalidRequest || string(got.ID) != "null" {
+				t.Fatalf("want -32600 with null id, got %s", ev.Data)
+			}
+			if calls.Load() != 0 {
+				t.Errorf("count tool ran %d times, want 0", calls.Load())
+			}
+		})
 	}
 }

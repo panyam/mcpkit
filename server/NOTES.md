@@ -29,6 +29,13 @@ for missing `_meta`, and a Streamable HTTP client sending it in `MCP-Protocol-Ve
 own clients and fixtures all sent 2025-11-25, so no test noticed. `TestDispatchInitializeEchoesDatedVersions`
 now pins the dated list.
 
+**JSON-RPC batching is version-gated.** 2025-03-26 added it and 2025-06-18 removed it, so
+`ProtocolFeatures.BatchingRemoved` is set for 2025-06-18 and later. Both HTTP transports check it
+before splitting the array. Streamable HTTP answers 400 with one `-32600`; the legacy SSE transport
+pushes the same error on the stream and returns 202, like its parse errors. No element of a refused
+batch runs. Older sessions keep the permissive path, and the stdio transport has never accepted
+batches at all.
+
 The stateless wire (`server/stateless/dispatch.go`) still has its own version-error path. Fold it
 through the resolver when #493 collapses the package.
 

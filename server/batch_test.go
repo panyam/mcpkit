@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/panyam/mcpkit/core"
@@ -19,10 +20,17 @@ import (
 // the session ID and test server URL. Helper for batch tests.
 func initStreamableSession(t *testing.T, srv *server.Server) (string, *httptest.Server) {
 	t.Helper()
+	return initStreamableSessionAt(t, srv, "2025-03-26")
+}
+
+// initStreamableSessionAt is initStreamableSession on a chosen protocol
+// version, for the batching gate (#1519 follow-up).
+func initStreamableSessionAt(t *testing.T, srv *server.Server, version string) (string, *httptest.Server) {
+	t.Helper()
 	handler := srv.Handler(server.WithStreamableHTTP(true), server.WithSSE(false))
 	ts := httptest.NewServer(handler)
 
-	initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
+	initBody := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + version + `","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`
 	resp, err := http.Post(ts.URL+"/mcp", "application/json", strings.NewReader(initBody))
 	require.NoError(t, err)
 	resp.Body.Close()
@@ -177,4 +185,59 @@ func TestBatchRequiresSession(t *testing.T) {
 	require.NoError(t, err)
 	resp.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// 2025-03-26 added JSON-RPC batching and 2025-06-18 removed it. A session on a
+// revision without it gets one -32600 error and nothing in the array runs;
+// 2024-11-05 and 2025-03-26 keep the old behaviour.
+func TestBatchGatedByProtocolVersion(t *testing.T) {
+	cases := []struct {
+		version string
+		allowed bool
+	}{
+		{"2024-11-05", true},
+		{"2025-03-26", true},
+		{"2025-06-18", false},
+		{"2025-11-25", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.version, func(t *testing.T) {
+			srv := testutil.NewTestServer()
+			var calls atomic.Int32
+			srv.RegisterTool(
+				core.ToolDef{Name: "count", Description: "counts calls", InputSchema: json.RawMessage(`{"type":"object"}`)},
+				func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+					calls.Add(1)
+					return core.ToolResult{Content: []core.Content{{Type: "text", Text: "ok"}}}, nil
+				},
+			)
+			sessionID, ts := initStreamableSessionAt(t, srv, tc.version)
+			defer ts.Close()
+
+			batch := `[{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"count","arguments":{}}},{"jsonrpc":"2.0","id":11,"method":"ping"}]`
+			req, _ := http.NewRequest("POST", ts.URL+"/mcp", strings.NewReader(batch))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Mcp-Session-Id", sessionID)
+			req.Header.Set("MCP-Protocol-Version", tc.version)
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+
+			if tc.allowed {
+				var responses []json.RawMessage
+				require.NoError(t, json.Unmarshal(body, &responses), "want a JSON array, got %s", body)
+				assert.Len(t, responses, 2)
+				assert.Equal(t, int32(1), calls.Load())
+				return
+			}
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			var r core.Response
+			require.NoError(t, json.Unmarshal(body, &r), "want one JSON-RPC error object, got %s", body)
+			require.NotNil(t, r.Error)
+			assert.Equal(t, core.ErrCodeInvalidRequest, r.Error.Code)
+			assert.Equal(t, "null", string(r.ID))
+			assert.Equal(t, int32(0), calls.Load(), "no batch element may run")
+		})
+	}
 }

@@ -1109,3 +1109,17 @@ func TestDispatchInitializeEchoesDatedVersions(t *testing.T) {
 		})
 	}
 }
+
+func TestFeaturesForVersionBatchingRemoved(t *testing.T) {
+	for v, want := range map[string]bool{
+		"2024-11-05":                    false,
+		"2025-03-26":                    false,
+		"2025-06-18":                    true,
+		"2025-11-25":                    true,
+		core.DraftProtocolVersion2026V1: true,
+	} {
+		if got := featuresForVersion(v).BatchingRemoved; got != want {
+			t.Errorf("featuresForVersion(%q).BatchingRemoved = %v, want %v", v, got, want)
+		}
+	}
+}
