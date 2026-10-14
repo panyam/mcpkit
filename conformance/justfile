@@ -108,6 +108,18 @@ testconf-skills:
 testconf-events:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-events.sh
 
+# Run MCP Events client conformance — informational (exit 0 regardless of
+# check results). Drives the Go events client SDK through the four
+# events-client-* scenarios (conformance PR 541) via its conformance-client
+# driver.
+testconf-events-client:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-events-client.sh
+
+# Create the events suite checkouts (MCPCONFORMANCE_EVENTS_PATH,
+# MCPCONFORMANCE_EVENTS_CLIENT_PATH) if missing. Safe to re-run.
+conf-events-setup:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-events-setup.sh
+
 # Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 testconf-elicitation:
     cd {{CONFORMANCE_DIR}} && pnpm install --silent && \
