@@ -31,7 +31,7 @@ Defaults, resolved relative to `conformance/justfile`:
 | `MCPCONFORMANCE_BASE_PATH` | `../conf-upstream-main` (audit + stateless) |
 | `MCPCONFORMANCE_FILE_INPUTS_PATH`, `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` (fork `pending`) |
 | `MCPCONFORMANCE_SKILLS_PATH` | `../conf-upstream-main` (upstream `main`, retargeted once PR 330 merged) |
-| `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, draft upstream PR 504) |
+| `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, draft upstream PR 521) |
 
 Override per invocation when a SEP splits to its own branch awaiting upstream approval. Each target
 fail-fasts with a remediation message if its path is missing.
@@ -171,15 +171,16 @@ fixture's names, so a scenario asks which types offer poll and takes one. That m
 break useless. Removing `poll` from `alert.fired` during #1416 left the suite at 29/29, because the
 scenario simply chose `chat.message` instead, and a reader who stopped there would have concluded
 the suite was not grading anything. Disabling the poll delivery gate in the library did turn
-`sep-9999-poll-mode-unsupported` red, with a message naming the source. The rule generalises: a
+`sep-3415-poll-mode-unsupported` red, with a message naming the source. The rule generalises: a
 fixture break only proves grading against a suite that cannot route around it, so for any
 capability-discovering suite, break the behaviour the check describes.
 
-**A suite's own notes go stale and will mislead you.** The `sep-9999.yaml` header attributed
-`sep-9999-descriptor-input-schema` to `events.topology` alone and recorded that #1381 had given the
-three kitchen-sink sources an `inputSchema`. Neither was true by the time it was read: the failure
-was on `chat.message`, and no source in that example declared one. The artifacts say what actually
-failed, so read `checks-*/\*/checks.json` rather than the prose written about a previous run.
+**A suite's own notes go stale and will mislead you.** The `sep-3415.yaml` header (then
+`sep-9999.yaml`) attributed `sep-3415-descriptor-input-schema` to `events.topology` alone and
+recorded that #1381 had given the three kitchen-sink sources an `inputSchema`. Neither was true by
+the time it was read: the failure was on `chat.message`, and no source in that example declared one.
+The artifacts say what actually failed, so read `checks-*/\*/checks.json` rather than the prose
+written about a previous run.
 
 **Env vars are not a contract.** `FILE_INPUTS_SERVER_URL` and `AUTH_SERVER_URL` *are* read by the
 fork's test files; `MRTR_SERVER_URL` and `TASKS_SERVER_URL` never were. Grep the target worktree
@@ -403,18 +404,23 @@ The docs site needs nothing extra. `docs/site/content/conformance/index.html` is
 
 `testconf-events`, stage 8i, `INFO`. Drives `examples/events/kitchen-sink`; scenarios live on
 `feat/events-conformance-suite` of the fork and are proposed upstream as a **draft**,
-`modelcontextprotocol/conformance` PR 504.
+`modelcontextprotocol/conformance` PR 521 (server) and PR 541 (client, stacked on it).
 
-**It scores against a design document, not a spec.** The source is
+**Its rows quote a design document, and the SEP came later.** The source is
 `docs/design-sketch-proposal.md` on `main` of
-`modelcontextprotocol/experimental-ext-triggers-events`, merged 2026-09-08. There is no SEP, which
-has three consequences worth knowing before touching any of it:
+`modelcontextprotocol/experimental-ext-triggers-events`, merged 2026-09-08. The SEP,
+`modelcontextprotocol/modelcontextprotocol` PR 3415, arrived on 2026-10-05, after the suite was
+built. Three consequences worth knowing before touching any of it:
 
-- **The SEP number is a placeholder.** `sep-9999`. Both traceability gates upstream are numeric —
-  the directory filter `/^sep-\d+\.yaml$/` and the check-id filter `/^sep-\d+-/` — and a
-  non-matching filename is *silently dropped* from the manifest rather than rejected, so there is no
-  honest name that works. Renaming is a **merge blocker** for PR 504, not a follow-up: merging under
-  9999 would publish it to plan.modelcontextprotocol.io as though it were real.
+- **The suite carried a placeholder number for a month.** SEP numbers are PR numbers upstream, and
+  no events PR existed, so the yaml was `sep-9999`. Both traceability gates are numeric, the
+  directory filter `/^sep-\d+\.yaml$/` and the check-id filter `/^sep-\d+-/`, and a non-matching
+  filename is *silently dropped* from the manifest rather than rejected, so no honest name worked.
+  It became `sep-3415` in #1502. The rename left 160 ids and the 135 / 122 / 13
+  declared / tested / untested traceability counts unchanged.
+- **The rows still quote the sketch, not the SEP.** The SEP restates the sketch rather than quoting
+  it, so only 11 of 165 row texts appear in it verbatim even where the rule is unchanged. Re-extracting
+  against the SEP is the rest of #1502, and until then `spec_url` names the sketch text.
 - **`new-sep` does not apply cleanly.** It expects a PR in
   `modelcontextprotocol/modelcontextprotocol` touching `docs/specification/draft/*.mdx`, and
   `specPathToUrl` hard-requires that prefix, so `--spec-path` fails too. Scaffold with `--spec-url`.
@@ -518,7 +524,7 @@ What #1416 settled, since the issue left two of them open as questions:
 
 **Three things it found that the issue did not know about.** `events/list` ranged a map, so its
 order flapped (now constraint C10). No kitchen-sink source declared an `inputSchema` at all, so
-argument validation had never been graded. And `sep-9999-poll-invalid-arguments` reports
+argument validation had never been graded. And `sep-3415-poll-invalid-arguments` reports
 *untestable* rather than failing when the selected event type declares no typed property, which
 looks like a defect in the report and is a fixture gap.
 
@@ -527,17 +533,17 @@ put it top-level under `capabilities.events`; metronome, the sketch author's own
 the SEP-2133 `extensions` map. mcpkit followed the document, the suite graded it there, and the
 disagreement went to the author on 2026-09-22 rather than being smoothed over. He confirmed the
 extensions map and opened upstream PR 7 to correct the sketch; #1421 moved mcpkit and the rows
-together. He also fixed metronome's `-32603`-instead-of-`-32602` on `inputSchema` violations the same
+together. PR 7 then closed unmerged on 2026-09-28, and SEP-3415's Capability Negotiation section
+carries the rule instead, so `main` of the sketch repository still says top-level. He also fixed metronome's `-32603`-instead-of-`-32602` on `inputSchema` violations the same
 day, which this suite had reported against him.
 
 Two implementations and a suite, and the suite found a defect in each plus one in the document. That
 is the case for running a suite against something you did not write, and it only worked because the
 rows were not softened to make both sides pass.
 
-**The capability rows now track an unmerged upstream PR.** Same posture `testconf-scope-challenge`
-holds for SEP-2350 PR 481: a red row there means the head moved, not that mcpkit regressed. PR 7 is
-the author's own correction to his own design, so the risk is low, but the rows are ahead of `main`
-until it lands.
+**The capability rows agree with the SEP and not with the sketch's `main`.** They quote PR 7's head,
+which never merged. SEP-3415 states the same rule, so re-extracting them against the SEP changes
+their citation, not their verdict.
 
 **Four rows are declared and not yet emitted** by any scenario, from the same PR: the client
 declaration, the empty-settings case, `listChanged` gating the notification, and the `-32601`

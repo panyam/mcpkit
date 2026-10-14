@@ -88,7 +88,7 @@ testconf-auth-server: ## Run server-side auth conformance — fork-based scenari
 testconf-skills: ## Run SEP-2640 skills conformance — gating. Drives examples/skills through the three upstream sep-2640-skills-* server scenarios (enumeration, manifest, directory); requires zero FAILURE rows.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-skills.sh
 
-testconf-events: ## Run MCP Events conformance — informational (exit 0 regardless of check results). Drives examples/events/kitchen-sink via the fork's scenario runner. Scores against the merged design sketch in modelcontextprotocol/experimental-ext-triggers-events, which has no SEP number yet, so check IDs carry the placeholder sep-9999- prefix. Expected to report gaps G30/G31/G34.
+testconf-events: ## Run MCP Events conformance — informational (exit 0 regardless of check results). Drives examples/events/kitchen-sink via the fork's scenario runner. Scores against MCP Events, SEP-3415 (check IDs sep-3415-*), with rows still quoting the design sketch until re-extracted (mcpkit#1502).
 	@bash $(CONFORMANCE_DIR)/scripts/conf-events.sh
 
 testconf-elicitation: ## Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)

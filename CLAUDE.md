@@ -98,6 +98,14 @@ dependency runs one way: nothing here may require chakra. `scripts/verify-submod
 enforces two policies rather than three, protocol and non-library, the agent policy having left with
 the tree.
 
+## Issues and missions
+
+Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. The active mission is
+**#1508** (`mission_events_sep3415`): the events server and Go client score green against the
+SEP-3415 conformance suites. Its exercise is `make exercise-events` (wired by #1500). Run it after
+each merged mission PR and log the result on #1508. A new issue gets a priority (`P0`–`P3`) and
+either a mission link (blocked-by on the mission issue) or `waiting` with its trigger.
+
 ## Cross-cutting rules
 
 These span packages and will bite on a task that never opens a routed doc.
@@ -287,10 +295,12 @@ branch.
 
 **MCP Events has a conformance suite.** `testconf-events` (stage 8i, `INFO`) drives
 `examples/events/kitchen-sink` against scenarios proposed upstream as a draft in
-`modelcontextprotocol/conformance` PR 521. It scores against the design sketch that merged
-2026-09-08 in `modelcontextprotocol/experimental-ext-triggers-events`, which is a design document
-with **no SEP number**, so every check id carries a placeholder `sep-9999-` prefix that must be
-renamed before that PR can merge. `testconf-events` drives
+`modelcontextprotocol/conformance` PR 521. MCP Events is **SEP-3415**
+(`modelcontextprotocol/modelcontextprotocol` PR 3415, draft), so check ids carry `sep-3415-`. They
+carried a `sep-9999-` placeholder until #1502, because SEP numbers are PR numbers and no PR existed.
+The rows still quote the design sketch that merged 2026-09-08 in
+`modelcontextprotocol/experimental-ext-triggers-events` until they are re-extracted against the SEP,
+which rewords nearly every sentence. `testconf-events` drives
 all five of the suite's scenarios; take the counts from its note in `conformance/local-suites.yaml`.
 The fixture is spawned with `--conformance-events`, which registers the diagnostic controls the
 scenarios drive; see `examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery`
@@ -316,11 +326,13 @@ top-level under `capabilities.events`, mcpkit implemented that in #1416, and the
 reference server (`metronome-mcp.fly.dev`) used the extensions map instead. Rather than pick a side
 or declare in both places, the disagreement went to the author, who confirmed the extensions map and
 opened upstream PR 7 to correct the sketch. #1421 moved mcpkit and the conformance rows together.
+PR 7 closed unmerged on 2026-09-28. SEP-3415's Capability Negotiation section carries the rule now,
+and the sketch's `main` still says top-level.
 
 Two things that cost nothing to remember. **Following the document is what surfaced the question** —
-matching metronome quietly would have left the sketch wrong indefinitely. And **the rows now track an
-unmerged upstream PR**, the same posture `testconf-scope-challenge` holds for SEP-2350 PR 481, so a
-red row there means the head moved rather than that mcpkit regressed.
+matching metronome quietly would have left the sketch wrong indefinitely. And **ChatGPT reads the
+top-level key**, per OpenAI's MCP Events guide, so following the SEP hides an mcpkit server from the
+largest shipping client. That is an open decision, not a settled one.
 
 ## Tasks v1 vs v2
 
