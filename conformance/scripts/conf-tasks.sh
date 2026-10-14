@@ -8,6 +8,7 @@ set -u
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 cd "$REPO_ROOT/examples/tasks" && go build -o tasks .
+require_port_free 18091
 "$REPO_ROOT/examples/tasks/tasks" --serve -addr :18091 &
 PID=$!
 for i in $(seq 1 30); do
@@ -18,8 +19,9 @@ for i in $(seq 1 30); do
         && break
     sleep 0.5
 done
-(cd "$CONFORMANCE_DIR" && npm install --silent && \
-    SERVER_URL=http://localhost:18091/mcp npx tsx --test tasks/scenarios.test.ts)
+require_fixture_alive "$PID"
+(cd "$CONFORMANCE_DIR" && pnpm install --silent && \
+    SERVER_URL=http://localhost:18091/mcp pnpm exec tsx --test tasks/scenarios.test.ts)
 RC=$?
 kill $PID 2>/dev/null
 wait $PID 2>/dev/null

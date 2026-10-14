@@ -12,10 +12,10 @@ import "github.com/panyam/mcpkit/core"
 // Register do not need to add it explicitly; RegisterExtension is idempotent
 // (keyed by extension ID), so combining the two is safe.
 //
-// The extension carries no Config today — the roster itself is discovered via
-// agents/list, not encoded in the capability. A future revision may add
-// config flags (e.g. a maxAgents hint); until then the wire-level value is the
-// bare empty object {}.
+// The extension carries no Config yet, so the wire value is the empty object
+// {}. agents-wg#22 defines one setting, listChanged, which this package will
+// advertise once it can deliver notifications/agents/list_changed over
+// subscriptions/listen (blocked by panyam/mcpkit#1504).
 type AgentsExtension struct{}
 
 // Extension implements core.ExtensionProvider. It returns the agents

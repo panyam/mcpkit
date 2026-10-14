@@ -1,36 +1,26 @@
-// Package agents implements the experimental server-declared agent-definition
-// discovery primitive for MCP (agents-wg#20, "Agent definition").
+// Package agents implements server-declared agent discovery for MCP, tracking
+// the agents-wg#22 Extensions Track SEP ("MCP Agent Discovery Extension").
 //
-// EXPERIMENTAL: this is pre-SEP research surface. Method names, wire shape,
-// and the extension ID may all change as the MCP Agents WG iterates. The
-// package lives under experimental/ext/ (alongside events and protogen) and
-// is free to churn until a SEP merges; promote to ext/agents only then.
+// EXPERIMENTAL: the SEP has not merged, and the wire shape may still change.
+// The package lives under experimental/ext/ (alongside events and protogen)
+// and is promoted to ext/agents only once the SEP merges.
 //
 // # What it is
 //
-// A server that hosts a fleet of specialist agents advertises them as a small
-// roster of tuples for routing, instead of flattening every specialist's tools
-// into one tools/list. A supervisor host sees N agent summaries (name,
-// description, capability labels, example tasks), picks one, and only then
-// pulls that specialist's instructions and scoped tool schemas. This is the
-// same progressive-disclosure shape as two-tier skills loading (#910):
+// A server groups its tools into agents and advertises them as a compact
+// roster, instead of handing a supervisor host one flat tools/list. The host
+// reads the roster, picks an agent, and only then pulls that agent's
+// instructions and scoped tool schemas:
 //
-//	level 1  capabilities.extensions[io.mcpkit/agents]  — "this server has agents"
-//	level 2  agents/list                                              — the roster, no tool schemas
-//	level 3  agents/get {agentId}                                     — one agent's instructions + scoped tools
+//	level 1  capabilities.extensions[io.mcpkit/agents]  "this server has agents"
+//	level 2  agents/list                                  the roster, no tool schemas
+//	level 3  agents/get {name}                            one agent's instructions and tools
 //
-// Invocation is NOT new wire surface. Each agent advertises a delegateTool
-// (e.g. "invoke_workflow_agent"); the host routes to the agent and calls that
-// tool with the task via the existing tools/call. Only discovery is new here.
-//
-// # Deliberate non-coupling
-//
-// AgentSummary.TasksEnabled ties conceptually to SEP-2663 (an async delegate is
-// a Task) and AgentSummary.SkillURI ties to the skills work, but this package
-// couples to neither: TasksEnabled is an advertised bool and SkillURI is an
-// advertised string. The bridge that turns an agents/get result into a
-// Runner-backed AgentSource is agent-layer work (#1144), not here — per
-// agent/CONSTRAINTS.md A6, this package traffics only in protocol objects.
+// Invocation is not new wire surface. The host builds a local subagent from
+// the agents/get result and calls the scoped tools through the existing
+// tools/call. An agent's tools are the server's own registered tools,
+// resolved by name on every request, so agents/get always returns exactly
+// what the same caller would see in tools/list.
 package agents
 
 // ExtensionID is the reverse-domain identifier a server advertises in its
@@ -38,22 +28,17 @@ package agents
 // speaks the agents discovery primitive. Clients gate agents/list and
 // agents/get behind ServerSupportsExtension(ExtensionID).
 //
-// The identifier sits in mcpkit's own namespace because no SEP defines this
-// primitive yet. The WG has not chosen among the three wire shapes its research
-// doc lists (RPC, resources under agent://, or an extension), and mcpkit ships
-// the RPC shape. Advertising io.modelcontextprotocol/agents would claim the
-// spec namespace for a shape the spec has not picked, so a client recognising
-// the standard identifier would negotiate it and then receive a payload that
-// does not match. Not matching is the safer failure.
-//
-// Switch to the io.modelcontextprotocol/ identifier when a SEP lands and this
-// implementation matches the ratified shape, not merely when the name is known.
+// The identifier stays in mcpkit's namespace until this implementation fully
+// matches agents-wg#22 (tracked in panyam/mcpkit#1393). Advertising
+// io.modelcontextprotocol/agents earlier would let a client that recognises
+// the standard identifier negotiate it and then receive a payload the SEP
+// does not define. See NOTES.md.
 const ExtensionID = "io.mcpkit/agents"
 
-// SpecVersion is the draft the implementation tracks. There is no SEP yet, so
-// this is a date-stamped placeholder aligned with the agents-wg#20 research
-// doc rather than a spec version. Bump it when the WG advances the shape.
-const SpecVersion = "2026-08-03"
+// SpecVersion is the draft the implementation tracks: agents-wg#22 at head
+// 9b16840e, dated by that commit. Bump it when the implementation follows a
+// newer revision of the SEP.
+const SpecVersion = "2026-10-09"
 
 // MethodList and MethodGet are the two JSON-RPC methods this primitive adds.
 // Exported so both the server registry and the client SDK reference one

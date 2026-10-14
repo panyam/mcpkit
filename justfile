@@ -139,6 +139,18 @@ testconf-skills:
 testconf-events:
     just -f conformance/justfile testconf-events
 
+# Run MCP Events client conformance — fork-based, informational (delegates to conformance/justfile)
+testconf-events-client:
+    just -f conformance/justfile testconf-events-client
+
+# Create the two events suite checkouts if missing (delegates to conformance/justfile)
+conf-events-setup:
+    just -f conformance/justfile conf-events-setup
+
+# Mission #1508 exercise: events server + Go client against the SEP-3415 suites, one table
+exercise-events:
+    @bash scripts/exercise-events.sh
+
 # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational; delegates to conformance/justfile)
 testconf-upstream-audit:
     just -f conformance/justfile testconf-upstream-audit
@@ -158,6 +170,10 @@ check-conformance-stale: check-local-suites-stale
 # CI gate — fail if conformance/local-suites.yaml drifts from the justfile (cases A/B/C)
 check-local-suites-stale:
     uv run scripts/check_local_suites.py
+
+# CI gate — self-test the conformance fixture guards (held port, dead fixture) in conformance/scripts/_common.sh
+check-conf-fixture-guards:
+    @bash conformance/scripts/_common_selftest.sh
 
 # CI gate — fail if a third-party dep is pinned at 2+ versions across published modules
 check-dep-consistency:

@@ -2,13 +2,12 @@
 # MCP Events conformance — informational (exit 0 regardless of check results).
 # Drives examples/events/kitchen-sink via the fork's scenario runner.
 #
-# INFO rather than a gate for two reasons. The suite scores against the merged
-# design sketch in modelcontextprotocol/experimental-ext-triggers-events, which
-# is a design document rather than a ratified spec and has no SEP number yet, so
-# the check IDs still carry the placeholder `sep-9999-` prefix. And mcpkit has
-# known divergences from that document (issue 1380), so a red run here is the
-# suite doing its job rather than a regression. Flip this to a gate once 1380
-# closes and the spec text stabilises.
+# INFO rather than a gate because MCP Events is SEP-3415, still a draft
+# (modelcontextprotocol/modelcontextprotocol#3415), and the suite's rows still
+# quote the design sketch it was written from while they are re-extracted
+# against the SEP (issue 1502). A red run can mean the text moved rather than
+# that mcpkit regressed. Flip this to a gate once the rows track the SEP and
+# the SEP is accepted.
 #
 # Runner-agnostic: the Makefile + justfile `testconf-events` recipes call this
 # directly. REPO_ROOT + MCPCONFORMANCE_EVENTS_PATH resolve via _common.sh
@@ -17,7 +16,7 @@ set -u
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 require_conf_dir MCPCONFORMANCE_EVENTS_PATH \
-    "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_EVENTS_PATH=<path-to-clone>." \
+    "Run 'make conf-events-setup' to create it, or set MCPCONFORMANCE_EVENTS_PATH=<path-to-clone>." \
     "Default expects the feat/events-conformance-suite branch checked out at ../conf-events."
 build_conf_dist MCPCONFORMANCE_EVENTS_PATH
 
@@ -36,6 +35,7 @@ echo "Spawning fixture on :18101, scratch dir $OUT"
 # gap, a delivery mode a type does not offer — and report untestable, which the
 # suite renders red. The flag is off by default because kitchen-sink is a
 # published example first; see examples/CONVENTIONS.md § Conformance fixtures.
+require_port_free 18101
 "${REPO_ROOT}/examples/events/kitchen-sink/kitchen-sink-events" \
     --serve -addr=:18101 --conformance-events > "$OUT/server.log" 2>&1 &
 PID=$!
@@ -43,6 +43,7 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
     curl -sf -o /dev/null -X OPTIONS http://localhost:18101/mcp && break
     sleep 0.3
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 
 # All five scenarios. events-webhook-delivery needs the harness to be the
 # receiver, on loopback, which the fixture's SSRF guards refuse. The scenario

@@ -55,6 +55,13 @@ jobs:
       - name: Release-workflow checker self-test
         run: make check-release-workflows-selftest
 
+      # Every conf-*.sh spawns its fixture on a fixed port and waits for *any*
+      # answer. Without these guards a held port means the suite grades a
+      # stranger and reports plausible numbers (#1513). Self-tested here because
+      # the suites themselves never run in CI.
+      - name: Conformance fixture guards self-test
+        run: make check-conf-fixture-guards
+
       # bump-root once left tagged sub-modules pinning their siblings a
       # release behind, which broke v0.7.0's stores/gorm for anyone fetching
       # it alone until the pins were fixed by hand.
@@ -129,6 +136,21 @@ jobs:
 
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
+
+  test-agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run experimental agents tests
+        run: bash experimental/scripts/test-agents.sh
+
+      - name: Run experimental agents Go client tests
+        run: bash experimental/scripts/test-agents-clients-go.sh
 
       # The bridge JS tests and the stale-build check ran in no workflow, so
       # fixtures that matched a wrong wire shape stayed green (issue 1452).
@@ -291,15 +313,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Also needed by the COMPAT.md freshness step below, which shells out to
+      # scripts/refresh-apps-compat-report.sh and installs this package there.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: pnpm
+          cache-dependency-path: tools/compat-reports/pnpm-lock.yaml
 
       - name: Run apps-compat renderer unit tests
         working-directory: tools/compat-reports
         run: |
-          npm install --silent
-          npm test
+          pnpm install --frozen-lockfile
+          pnpm test
 
       - name: Check conformance/apps/COMPAT.md is fresh
         env:

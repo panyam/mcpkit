@@ -34,6 +34,7 @@ build_conf_dist MCPCONFORMANCE_MRTR_PATH
 
 OUT=$(mktemp -d -t conf-mrtr.XXXXXX)
 echo "Spawning cmd/testserver on :${PORT}, scratch dir $OUT"
+require_port_free "${PORT}"
 STREAMABLE=1 PORT="${PORT}" "${REPO_ROOT}/bin/testserver" > "$OUT/server.log" 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null; wait $PID 2>/dev/null' EXIT
@@ -46,6 +47,7 @@ for i in $(seq 1 30); do
         2>/dev/null && break
     sleep 1
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 
 SCENARIOS=$(cd "${MCPCONFORMANCE_MRTR_PATH}" && node dist/index.js list --server 2>/dev/null \
     | awk '/^  - /{print $2}' | grep '^input-required-result-')
@@ -94,4 +96,4 @@ trap - EXIT
 # Upstream negative suite — broken fixture, spawned by the test file itself.
 (cd "$MCPCONFORMANCE_MRTR_PATH" && npx vitest run src/scenarios/server/negative-mrtr.test.ts) || exit 1
 # mcpkit-stricter sentinel.
-(cd "$CONFORMANCE_DIR" && npm install --silent && npx vitest run mrtr/) || exit 1
+(cd "$CONFORMANCE_DIR" && pnpm install --silent && pnpm exec vitest run mrtr/) || exit 1

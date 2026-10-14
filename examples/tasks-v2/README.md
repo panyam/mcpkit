@@ -10,7 +10,7 @@ Server-side implementation of the v2 Tasks extension. v2 inverts v1's client-dri
 
 ## Key Differences from v1
 
-| Aspect | v1 (SEP-1036) | v2 (SEP-2663) |
+| Aspect | v1 (SEP-1686, core 2025-11-25) | v2 (SEP-2663, Final ext) |
 |--------|---------------|---------------|
 | Capability slot | `capabilities.tasks` | `capabilities.extensions["io.modelcontextprotocol/tasks"]` |
 | Client opt-in | (none) | `client.WithTasksExtension()` required |

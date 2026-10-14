@@ -102,18 +102,29 @@ testconf-skills:
 
 # Run MCP Events conformance — informational (exit 0 regardless of check
 # results). Drives examples/events/kitchen-sink via the fork's scenario runner.
-# Scores against the merged design sketch in
-# modelcontextprotocol/experimental-ext-triggers-events, which has no SEP number
-# yet, so check IDs carry the placeholder sep-9999- prefix. Expected to report
-# gaps G30/G31/G34. Tracking: mcpkit#1374.
+# Scores against MCP Events, SEP-3415 (check IDs sep-3415-*), with rows still
+# quoting the design sketch until re-extracted (mcpkit#1502). Tracking:
+# mcpkit#1374.
 testconf-events:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-events.sh
 
+# Run MCP Events client conformance — informational (exit 0 regardless of
+# check results). Drives the Go events client SDK through the four
+# events-client-* scenarios (conformance PR 541) via its conformance-client
+# driver.
+testconf-events-client:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-events-client.sh
+
+# Create the events suite checkouts (MCPCONFORMANCE_EVENTS_PATH,
+# MCPCONFORMANCE_EVENTS_CLIENT_PATH) if missing. Safe to re-run.
+conf-events-setup:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-events-setup.sh
+
 # Run elicitation conformance suite (SEP-1036 URL mode + form, requires Node.js, target server must be running)
 testconf-elicitation:
-    cd {{CONFORMANCE_DIR}} && npm install --silent && \
+    cd {{CONFORMANCE_DIR}} && pnpm install --silent && \
     SERVER_URL=${SERVER_URL:-http://localhost:8080/mcp} \
-    npx tsx --test elicitation/scenarios.test.ts
+    pnpm exec tsx --test elicitation/scenarios.test.ts
 
 # Regenerate CONFORMANCE.md from upstream tier-check + traceability (issue #498). Output: CONFORMANCE.md at repo root.
 refresh-conformance:

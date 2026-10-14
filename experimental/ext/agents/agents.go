@@ -2,121 +2,130 @@ package agents
 
 import "github.com/panyam/mcpkit/core"
 
-// AgentDef is a server author's full declaration of one delegatable agent.
-// It carries both the roster fields (returned by agents/list) and the detail
-// fields (returned only by agents/get). The split is deliberate: the roster is
-// cheap to send to every connecting host, while Instructions and Tools are the
-// expensive level-3 payload a host pulls only after it has chosen this agent.
+// AgentDef is a server author's declaration of one agent. It carries both the
+// roster fields (returned by agents/list) and the detail fields (returned only
+// by agents/get). The split is deliberate: the roster is cheap to send to
+// every connecting host, while Instructions and the tool schemas are the
+// payload a host pulls only after it has chosen this agent.
 //
-// A server hands a slice of these to Register. AgentID must be unique within a
+// A server hands a slice of these to Register. Name must be unique within a
 // server; Register rejects duplicates.
 type AgentDef struct {
-	// AgentID is the stable routing identifier (e.g. "workflow-agent"). Used
-	// as the agents/get lookup key and echoed in both wire shapes.
-	AgentID string
+	// Name is the agent's identifier within the server's roster
+	// (e.g. "workflow-agent"). It is the agents/get lookup key.
+	Name string
 
-	// Description is a one-line summary of what the agent is for. Shown to the
+	// Description is a short summary of what the agent is for, shown to the
 	// supervisor host's model so it can route without pulling tool schemas.
 	Description string
 
-	// Capabilities is a short list of capability labels ("Approval gates",
-	// "Run analysis"). Routing hints, not tool names.
+	// Capabilities is a short list of routing labels ("approval status",
+	// "pipeline failures"). They are descriptive metadata, not tool names.
 	Capabilities []string
 
-	// ExampleTasks are representative prompts the agent handles well. Included
-	// in the roster because few-shot routing works better than description
-	// alone.
-	ExampleTasks []string
-
-	// DelegateTool names the normal tool the host calls (via tools/call) to
-	// invoke this agent with a task. Invocation is not new wire surface — this
-	// is just the advertised entry point.
-	DelegateTool string
-
-	// TasksEnabled advertises that the delegate runs as a SEP-2663 async Task
-	// rather than a synchronous call. Advisory only; this package does not
-	// couple to ext/tasks.
-	TasksEnabled bool
-
-	// SkillURI optionally points at a SKILL.md-shaped resource describing the
-	// agent in depth (skill://...). Advisory only; this package does not
-	// couple to ext/skills.
-	SkillURI string
-
-	// Instructions is the agent's system prompt / behavioral contract. Detail
-	// only — returned by agents/get, never by agents/list.
+	// Instructions is optional guidance a host may use when invoking this
+	// agent. Detail only: returned by agents/get, never by agents/list.
 	Instructions string
 
-	// Tools is the agent's scoped tool set: the schemas a host materializes
-	// into a Runner once it has chosen this agent. Detail only — returned by
-	// agents/get, never by agents/list. This is what keeps the supervisor from
-	// eager-loading a flat tools/list of every specialist's schemas.
-	Tools []core.ToolDef
+	// ModelRoutingHint is optional, advisory guidance for host-side model
+	// selection. Detail only. A server must not assume the host honored it.
+	ModelRoutingHint *ModelRoutingHint
+
+	// Tools names the server tools scoped to this agent. They are resolved
+	// against the server's tool registry on every agents/get, so the returned
+	// definitions are the ones tools/list serves and cannot drift from them.
+	// Tool names are server-scoped: two agents listing the same name share one
+	// callable tool.
+	Tools []string
 }
 
-// Summary projects an AgentDef onto its roster (level-2) wire shape, dropping
-// the Instructions and Tools detail. This is what agents/list returns per
-// agent.
-func (d AgentDef) Summary() AgentSummary {
-	return AgentSummary{
-		AgentID:      d.AgentID,
-		Description:  d.Description,
-		Capabilities: d.Capabilities,
-		ExampleTasks: d.ExampleTasks,
-		DelegateTool: d.DelegateTool,
-		TasksEnabled: d.TasksEnabled,
-		SkillURI:     d.SkillURI,
+// Card projects an AgentDef onto its roster wire shape, dropping the detail
+// fields. This is what agents/list returns per agent.
+func (d AgentDef) Card() AgentCard {
+	caps := d.Capabilities
+	if caps == nil {
+		caps = []string{}
 	}
+	return AgentCard{Name: d.Name, Description: d.Description, Capabilities: caps}
 }
 
-// Detail projects an AgentDef onto its full (level-3) wire shape: the Summary
-// fields plus Instructions and the scoped Tools. This is what agents/get
-// returns.
-func (d AgentDef) Detail() AgentDetail {
-	return AgentDetail{
-		AgentSummary: d.Summary(),
-		Instructions: d.Instructions,
-		Tools:        d.Tools,
-	}
-}
-
-// AgentSummary is the per-agent wire shape returned by agents/list. It carries
-// routing fields only — no Instructions, no Tools. This is the roster a
-// supervisor host reads before deciding which specialist to pull.
-//
-// The JSON tags match the agents-wg#20 research doc §6 payload verbatim so the
-// shape doubles as an interop anchor against the WG proposal.
-type AgentSummary struct {
-	AgentID      string   `json:"agentId"`
+// AgentCard is the per-agent roster entry returned by agents/list. It carries
+// routing fields only, never instructions or tool schemas.
+type AgentCard struct {
+	Name         string   `json:"name"`
 	Description  string   `json:"description,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	ExampleTasks []string `json:"exampleTasks,omitempty"`
-	DelegateTool string   `json:"delegateTool,omitempty"`
-	TasksEnabled bool     `json:"tasksEnabled,omitempty"`
-	SkillURI     string   `json:"skillUri,omitempty"`
+	Capabilities []string `json:"capabilities"`
 }
 
-// AgentDetail is the wire shape returned by agents/get: an AgentSummary plus
-// the level-3 payload (instructions + scoped tool schemas). AgentSummary is
-// embedded so its JSON fields flatten into the same object the roster uses,
-// and a get response is a strict superset of a list entry.
-type AgentDetail struct {
-	AgentSummary
-	Instructions string         `json:"instructions,omitempty"`
-	Tools        []core.ToolDef `json:"tools,omitempty"`
+// ModelRole is a relative model class a host maps onto the models available
+// under its own policy. It is not a provider-specific identifier.
+type ModelRole string
+
+// The three model roles agents-wg#22 defines.
+const (
+	ModelRoleSmall  ModelRole = "small"
+	ModelRoleMedium ModelRole = "medium"
+	ModelRoleLarge  ModelRole = "large"
+)
+
+// ModelRoutingHint is the advisory, agent-scoped model guidance returned by
+// agents/get. Vision is always serialized because the SEP makes it required.
+type ModelRoutingHint struct {
+	Role   ModelRole `json:"role,omitempty"`
+	Vision bool      `json:"vision"`
 }
 
-// ListResult is the agents/list response envelope.
-type ListResult struct {
-	Agents []AgentSummary `json:"agents"`
+// ListAgentsParams is the agents/list request params. Omit Cursor for the
+// first page and pass the previous result's NextCursor for the next one.
+type ListAgentsParams struct {
+	Cursor string `json:"cursor,omitempty"`
 }
 
-// GetParams is the agents/get request params. AgentID selects the agent.
-type GetParams struct {
-	AgentID string `json:"agentId"`
+// ListAgentsResult is the agents/list response. NextCursor is empty on the
+// last page. TTLMs and CacheScope are the SEP-2549 cache hints for the roster
+// as one cache entry.
+type ListAgentsResult struct {
+	ResultType core.ResultType `json:"resultType"`
+	Agents     []AgentCard     `json:"agents"`
+	NextCursor string          `json:"nextCursor,omitempty"`
+	TTLMs      *int            `json:"ttlMs,omitempty"`
+	CacheScope string          `json:"cacheScope,omitempty"`
 }
 
-// GetResult is the agents/get response envelope. Agent is the resolved detail.
-type GetResult struct {
-	Agent AgentDetail `json:"agent"`
+// GetAgentParams is the agents/get request params. Name selects the agent.
+type GetAgentParams struct {
+	Name string `json:"name"`
+}
+
+// GetAgentResult is the agents/get response. Agent is the name of the agent
+// the details belong to. Tools holds the full tool definitions, field for
+// field what the same caller would see in tools/list. TTLMs and CacheScope
+// are the SEP-2549 cache hints for this agent's entry, independent of the
+// roster's.
+type GetAgentResult struct {
+	ResultType       core.ResultType   `json:"resultType"`
+	Agent            string            `json:"agent"`
+	Instructions     string            `json:"instructions,omitempty"`
+	ModelRoutingHint *ModelRoutingHint `json:"modelRoutingHint,omitempty"`
+	Tools            []core.ToolDef    `json:"tools"`
+	TTLMs            *int              `json:"ttlMs,omitempty"`
+	CacheScope       string            `json:"cacheScope,omitempty"`
+}
+
+// The data.reason values agents-wg#22 attaches to agents/get errors.
+const (
+	// ReasonAgentNotFound accompanies -32602 when the agent does not exist or
+	// is hidden from the caller. The two cases are indistinguishable on the
+	// wire by design.
+	ReasonAgentNotFound = "agent_not_found"
+
+	// ReasonInvalidAgentDefinition accompanies -32603 when an agent names a
+	// tool the server catalog does not hold. It signals server
+	// misconfiguration, never a caller authorization outcome.
+	ReasonInvalidAgentDefinition = "invalid_agent_definition"
+)
+
+// ErrorData is the data object on an agents/get error.
+type ErrorData struct {
+	Reason string `json:"reason"`
 }

@@ -16,6 +16,7 @@ build_conf_dist MCPCONFORMANCE_STATELESS_PATH
 (cd "${REPO_ROOT}/examples/stateless" && go build -o stateless-demo .)
 OUT=$(mktemp -d -t conf-stateless.XXXXXX)
 echo "Spawning fixture on :18100, scratch dir $OUT"
+require_port_free 18100
 "${REPO_ROOT}/examples/stateless/stateless-demo" --serve --addr=:18100 > "$OUT/server.log" 2>&1 &
 PID=$!
 for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -25,6 +26,7 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
         http://localhost:18100/mcp > /dev/null 2>&1 && break
     sleep 0.3
 done
+require_fixture_alive "$PID" "$OUT/server.log"
 (cd "${MCPCONFORMANCE_STATELESS_PATH}" && \
     node dist/index.js server \
         --url http://localhost:18100/mcp \

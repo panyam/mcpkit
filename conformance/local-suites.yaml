@@ -149,7 +149,7 @@ suites:
       that this target does not run.
 
   - suite: testconf-events
-    sep: MCP Events (no SEP number yet)
+    sep: SEP-3415 Events (draft)
     stage: 8i
     status: INFO
     source:
@@ -170,16 +170,38 @@ suites:
       are graded; without them rows describe conditions a harness cannot
       provoke and report untestable, which upstream's policy renders red. See
       examples/CONVENTIONS.md § Conformance fixtures.
-      Proposed upstream as a draft in modelcontextprotocol/conformance 504 and
-      tracked on the fork branch until it lands. INFO because the suite scores
-      against the design sketch in
-      modelcontextprotocol/experimental-ext-triggers-events, which has no SEP
-      number, so check IDs carry a placeholder sep-9999- prefix that gets
-      renamed once one is reserved; the capability rows additionally track
-      upstream PR 7, which is unmerged. The one remaining red row,
+      Proposed upstream as a draft in modelcontextprotocol/conformance 521 and
+      tracked on the fork branch until it lands. Check IDs are sep-3415-*:
+      MCP Events is SEP-3415, a draft in modelcontextprotocol/modelcontextprotocol.
+      INFO because the rows still quote the design sketch in
+      modelcontextprotocol/experimental-ext-triggers-events and are being
+      re-extracted against the SEP (1502). The one remaining red row,
       subscribe-auth-required, is untestable rather than a defect: the harness
       holds one credential for a run and kitchen-sink sets
       UnsafeAnonymousPrincipal by design. Thirteen divergences found in total,
       all closed (1379, 1381, 1416, 1432, 1433, 1434, and endpoint verification
       in 1444). Set tracked in 1425.
     tracking: "mcpkit 1374"
+
+  - suite: testconf-events-client
+    sep: SEP-3415 Events, client scenarios (draft)
+    stage: 8j
+    status: INFO
+    source:
+      repo: panyam/mcpconformance
+      branch: feat/events-client-conformance
+      path_var: MCPCONFORMANCE_EVENTS_CLIENT_PATH
+      default_path: ../conf-events-client
+    note: >-
+      Four client scenarios graded against the Go events client SDK through
+      experimental/ext/events/clients/go/cmd/conformance-client, measured
+      2026-10-13: events-client-poll 7/7, events-client-push 0/1 (the client
+      never reconnects a silent stream, 1503), events-client-webhook 2/2,
+      events-client-no-extension 1/1. The harness plays the events server and
+      grades what the client sends. The driver only calls what the SDK offers,
+      so a red row is an SDK gap. Proposed upstream as a draft in
+      modelcontextprotocol/conformance 541, stacked on 521. INFO for the same
+      reason as testconf-events: the rows still quote the design sketch while
+      they are re-extracted against SEP-3415 (1502). `make conf-events-setup`
+      creates this checkout as a worktree of the server one.
+    tracking: "mcpkit 1500"
