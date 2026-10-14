@@ -85,7 +85,7 @@ The check runs inside `events/subscribe`, before the subscription is created, an
 | Out-of-band | Your own registry says this principal already verified this URL, for example through a dashboard. | `WithPreVerifier(pv)`, `WithPreVerifiedDeliveryURL(principal, url)` |
 | Well-known document | The callback's `https` origin serves `/.well-known/mcp-webhook-receiver.json` listing the path prefixes that accept deliveries (`{"receivers": ["/hooks/"]}`), and the URL falls under one. Opt-in. | `WithWellKnownReceiverDocs()`; receivers publish with `events.WellKnownReceiverHandler(prefixes...)` |
 
-A handshake that reaches the endpoint but gets no correct echo fails the subscribe with `-32015 CallbackEndpointError`, `data.reason: "challenge_failed"`. One that cannot connect reports the connection category (`connection_refused`, `timeout`, `tls_error`). Nothing from the endpoint's response reaches the subscriber.
+A handshake that reaches the endpoint but gets no correct echo fails the subscribe with `-32027 CallbackEndpointError`, `data.reason: "challenge_failed"`. One that cannot connect reports the connection category (`connection_refused`, `timeout`, `tls_error`). Nothing from the endpoint's response reaches the subscriber.
 
 Results are cached per `(principal, url)`, so refreshes and subscribes that differ only in `arguments` do not repeat the POST, and one principal's verification never covers another. The verification POST goes through the same SSRF-guarded client as deliveries and does not follow redirects. Allowlisted, pre-verified and well-known-covered URLs skip the handshake but not the SSRF guard.
 
@@ -93,7 +93,7 @@ Results are cached per `(principal, url)`, so refreshes and subscribes that diff
 
 **Turning it off.** `WithUnsafeSkipEndpointVerification()` restores the old behavior of delivering to any URL that passes validation. It exists for tests and for receivers that predate the handshake, and it violates the spec's MUST. Prefer the allowlist.
 
-**Rate limiting.** Challenge POSTs to any one destination hostname are capped at `DefaultVerificationsPerHost` (60) a minute, as a token bucket with the same burst. Only real challenges count, so cache hits, allowlist matches and pre-verified URLs are free. A subscribe over budget fails with `-32013 ResourceExhausted`, `data.limit: "verifications_per_host"`. Tune it with `WithVerificationRateLimit(max, window)`; `WithVerificationRateLimit(0, 0)` turns it off. A gateway onboarding many tenants behind one host is the case to size it for.
+**Rate limiting.** Challenge POSTs to any one destination hostname are capped at `DefaultVerificationsPerHost` (60) a minute, as a token bucket with the same burst. Only real challenges count, so cache hits, allowlist matches and pre-verified URLs are free. A subscribe over budget fails with `-32025 ResourceExhausted`, `data.limit: "verifications_per_host"`. Tune it with `WithVerificationRateLimit(max, window)`; `WithVerificationRateLimit(0, 0)` turns it off. A gateway onboarding many tenants behind one host is the case to size it for.
 
 **Well-known documents.** Off unless you pass `WithWellKnownReceiverDocs()`, because it sends a request to every new callback origin and it is the part of the section most likely to change during SEP review. Only `https` origins count, since the document stands in for proof the receiver controls the origin. The fetch uses the same SSRF-guarded, no-redirect client, is capped at 64 KiB, and spends one token of the host's verification budget on a cache miss. Documents are cached per origin, honouring `Cache-Control: max-age` up to an hour (5 minutes without one), and an origin with no usable document is left alone for a minute. A missing, malformed, redirected or oversized document never fails a subscribe; the handshake decides instead. Publishing the document also tells anyone who fetches it where your endpoints are, which is the trade-off Svix raised; receivers that mind can rely on the handshake.
 
@@ -176,7 +176,7 @@ Operational notes:
 
 ## Auth and tuple subscription identity
 
-Per spec §"Subscription Identity" → "Authentication required" L361, webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32012 Forbidden`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
+Per spec §"Subscription Identity" → "Authentication required" L361, webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32024 Forbidden`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
 
 Production wiring (the spec-strict path):
 
@@ -191,7 +191,7 @@ validator.Start()
 srv := server.NewServer(
     core.ServerInfo{...},
     server.WithSubscriptions(),
-    server.WithAuth(validator),  // ← anonymous webhook subscribes → -32012 Forbidden
+    server.WithAuth(validator),  // ← anonymous webhook subscribes → -32024 Forbidden
 )
 events.Register(events.Config{
     Sources:  ...,
@@ -208,7 +208,7 @@ The `events` package only depends on `core.Claims` (the abstract auth contract),
 
 The `events.Config.UnsafeAnonymousPrincipal` field deliberately deviates from the spec — when set, anonymous calls are accepted under the configured principal. **Production deployments MUST leave this field empty.** The startup log line emitted by `events.Register` explicitly warns when it's non-empty so misconfiguration is loud rather than silent.
 
-If a production deployment sets it: the spec's `-32012 Forbidden` rejection is bypassed; webhook subscribe accepts anonymous calls under a single shared principal; cross-tenant isolation breaks (everyone is "the demo user"); the audit trail loses its principal field. None of these are acceptable production properties.
+If a production deployment sets it: the spec's `-32024 Forbidden` rejection is bypassed; webhook subscribe accepts anonymous calls under a single shared principal; cross-tenant isolation breaks (everyone is "the demo user"); the audit trail loses its principal field. None of these are acceptable production properties.
 
 The demos use it as an escape hatch so `make demo` works without standing up an auth provider. Each demo also auto-detects `OAUTH_ISSUER` and switches to real auth when present — see `examples/events/discord/README.md` for the env-var contract.
 
@@ -245,7 +245,7 @@ Before going live with a webhook-enabled events server in a private-cloud deploy
 - [ ] Receiver is idempotent on `event.eventId`.
 - [ ] Receiver returns 2xx for accept, 4xx for reject-permanently, 5xx for retry.
 - [ ] Webhook secrets (each subscription's `whsec_` value) reach the receiver via your secrets-management path; rotation procedure documented.
-- [ ] **`events.Config.UnsafeAnonymousPrincipal` is EMPTY** in production code paths. Auth is wired via `server.WithAuth(...)`. Anonymous webhook subscribes return `-32012 Forbidden`.
+- [ ] **`events.Config.UnsafeAnonymousPrincipal` is EMPTY** in production code paths. Auth is wired via `server.WithAuth(...)`. Anonymous webhook subscribes return `-32024 Forbidden`.
 - [ ] Server startup log shows `[events] WARNING: UnsafeAnonymousPrincipal=...` is **NOT** present. (Its presence indicates the demo escape hatch is on.)
 - [ ] If using Standard Webhooks header mode, WAF allowlist has the `webhook-*` headers (not `X-MCP-*`).
 - [ ] Subscribers run an SDK that auto-refreshes (or have explicit refresh logic that fires before `refreshBefore`).

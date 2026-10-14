@@ -56,7 +56,7 @@ func TestYieldGap_NoOpAfterTerminated(t *testing.T) {
 	src, _ := NewYieldingSource[fakeFilterPayload](EventDef{Name: "gap.source"})
 	ch, _ := src.Subscribe(context.Background(), SubscribeOpts{SubscriptionID: "sub-1"})
 
-	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: -32011, Message: "gone"}))
+	require.NoError(t, src.YieldTerminated(EventDeliveryError{Code: -32023, Message: "gone"}))
 	drainUntilClosed(t, ch)
 
 	assert.NoError(t, src.YieldGap(), "YieldGap after termination must be a silent no-op")

@@ -152,7 +152,7 @@ support without list-change notifications.
 ## `delivery` is a contract, and the registry owns the resolved answer
 
 An `EventDef.Delivery` that lists push and webhook means `events/poll` refuses that type with
-`-32014 Unsupported`, `data.feature: "deliveryMode"`. Before #1416 the array was decorative: poll
+`-32026 Unsupported`, `data.feature: "deliveryMode"`. Before #1416 the array was decorative: poll
 answered for anything registered, so a client reading the descriptor to decide what to call was
 reading a promise nothing kept.
 
@@ -216,7 +216,7 @@ derivation for the Standard Webhooks formula only.
 ## `delivery` is enforced on poll and subscribe, and derived when absent
 
 Both `registerPoll` and `registerSubscribe` refuse a mode the descriptor does not advertise, with
-`-32014` and `data.feature: "deliveryMode"`. `registerStream` still gates on whether the source
+`-32026` and `data.feature: "deliveryMode"`. `registerStream` still gates on whether the source
 implements `streamSubscribable` instead, which is a third basis for the same decision and is
 tracked in #1417.
 
@@ -240,8 +240,8 @@ enforcing https too, so a conformance run reported a demo setting as a library d
 
 ## Endpoint verification runs inside subscribe (#490)
 
-The handshake is synchronous. The spec says a failed one "yields `-32015`" and that the categories
-appear "as `data.reason` on a `-32015 CallbackEndpointError` returned synchronously from
+The handshake is synchronous. The spec says a failed one "yields `-32027`" and that the categories
+appear "as `data.reason` on a `-32027 CallbackEndpointError` returned synchronously from
 `events/subscribe`", so the error has to come back on that call. The asynchronous alternative (register
 inactive, verify in the background, report through `deliveryStatus`) would need a pending state the
 registry does not have, and a failure would only surface on the next refresh.

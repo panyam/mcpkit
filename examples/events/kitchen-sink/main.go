@@ -40,7 +40,7 @@ const (
 
 	// quotaCap is the per-principal subscription cap configured for
 	// chat.message; the walkthrough's quota step subscribes three
-	// times and shows the third returns -32013.
+	// times and shows the third returns -32025.
 	quotaCap = 2
 )
 
@@ -63,6 +63,8 @@ func serve() {
 	// several suites and they compose. See conformance_events.go.
 	conformanceEvents := flag.Bool("conformance-events", false,
 		"register the MCP Events conformance control tools and the poll-only event type (see conformance_events.go)")
+	flag.BoolVar(&chatGPTCompat, "chatgpt-compat", false,
+		"also declare top-level capabilities.events, for ChatGPT (events.Config.ChatGPTCompat)")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	wire := common.RegisterWireFlags(flag.CommandLine)
 	// FilterArgs STRIPS the flags listed here. Strip only the --serve
@@ -154,6 +156,10 @@ type wiredServer struct {
 // tp opts the dispatch spine + webhook delivery path into SEP-414
 // instrumentation. Nil or core.NoopTracerProvider{} = zero overhead.
 // Tests pass nil; the serve() path passes the configured TracerProvider.
+// chatGPTCompat is set by --chatgpt-compat. A package-level setting rather
+// than a buildServer parameter so the test call sites stay as they are.
+var chatGPTCompat bool
+
 func buildServer(addr string, tp core.TracerProvider, conformanceEvents bool) *wiredServer {
 	var rt *conformanceRuntime
 	if conformanceEvents {
@@ -239,6 +245,7 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 		SubscriptionIndex:        idx,
 		Quota:                    quota,
 		UnsafeAnonymousPrincipal: "demo-principal",
+		ChatGPTCompat:            chatGPTCompat,
 		// SEP-414 P6 (issue 724): emit one `events.fanout` span per
 		// yield carrying the per-yield fanout shape. Register threads
 		// this onto every Source that implements

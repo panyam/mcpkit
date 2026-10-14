@@ -134,7 +134,7 @@ func TestStream_StopEndsTheCall(t *testing.T) {
 }
 
 // TestStream_RejectsInitialError verifies that a server-side validation
-// failure (e.g., unknown event name → -32011) surfaces as an error from
+// failure (e.g., unknown event name → -32023) surfaces as an error from
 // Stream() rather than hanging waiting for an active notification that
 // will never arrive.
 func TestStream_RejectsInitialError(t *testing.T) {

@@ -46,7 +46,7 @@ const testSecret = "whsec_MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY"
 
 // TestSubscribe_RequiresHTTPS covers the rule and the error code together,
 // which were two separate defects: http was accepted at all, and the rejection
-// it did produce was -32015 where the spec names -32602.
+// it did produce was -32027 where the spec names -32602.
 func TestSubscribe_RequiresHTTPS(t *testing.T) {
 	srv := subscribeStack(t)
 	resp := subscribeCall(t, srv, `{"name":"chat.message","delivery":{"mode":"webhook","url":"http://example.test/hook","secret":"`+testSecret+`"}}`)
@@ -78,7 +78,7 @@ func TestSubscribe_RejectsUnsupportedDeliveryMode(t *testing.T) {
 	srv := subscribeStack(t)
 	resp := subscribeCall(t, srv, `{"name":"push.only","delivery":{"mode":"webhook","url":"https://example.test/hook","secret":"`+testSecret+`"}}`)
 	require.NotNil(t, resp.Error)
-	assert.Equal(t, -32014, resp.Error.Code)
+	assert.Equal(t, -32026, resp.Error.Code)
 
 	data, ok := resp.Error.Data.(UnsupportedData)
 	require.True(t, ok, "the error must name the mode, got %T", resp.Error.Data)
@@ -107,7 +107,7 @@ func TestUnsubscribe_UnknownTupleIsNotFound(t *testing.T) {
 
 	typo := unsub("https://example.test/hookk")
 	require.NotNil(t, typo.Error, "a tuple that names no subscription must not report success")
-	assert.Equal(t, -32011, typo.Error.Code)
+	assert.Equal(t, -32023, typo.Error.Code)
 
 	again := unsub("https://example.test/hook")
 	require.NotNil(t, again.Error, "unsubscribing twice must not report success the second time")

@@ -89,7 +89,7 @@ func serve() {
 	// Auto-detect auth posture. Identical pattern to discord's
 	// main.go — if OAUTH_ISSUER is set, wire real OIDC auth and
 	// follow the spec strictly (anonymous webhook subscribes
-	// rejected with -32012 per §"Subscription Identity" L361).
+	// rejected with -32024 per §"Subscription Identity" L361).
 	// Otherwise fall back to the demo escape hatch so `just demo`
 	// works without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")

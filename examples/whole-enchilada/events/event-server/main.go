@@ -339,14 +339,14 @@ func buildBCLHandlers(webhooks *events.WebhookRegistry) map[string]*extauth.Back
 		realmCopy := realm
 		h.RegisterListener(func(_ context.Context, sub, sid string) {
 			killed := webhooks.TerminateBySession(sid, events.ControlError{
-				Code:    -32012,
+				Code:    events.ErrCodeForbidden,
 				Message: "session revoked by authorization server",
 			})
 			if killed == 0 && sub != "" {
 				// Fall back to subject-scoped termination when the
 				// logout_token only carried sub (no sid).
 				killed = webhooks.TerminateBySubject(sub, events.ControlError{
-					Code:    -32012,
+					Code:    events.ErrCodeForbidden,
 					Message: "subject revoked by authorization server",
 				})
 			}

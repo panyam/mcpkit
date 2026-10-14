@@ -1103,7 +1103,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 // L509, the derived id is not accepted as input — callers resolve via
 // the same canonical tuple they would for a subscribe.
 //
-// The bool matters to the handler, which must answer -32011 NotFound for a key
+// The bool matters to the handler, which must answer -32023 NotFound for a key
 // that was never subscribed: without it a client cannot tell a teardown from a
 // no-op, and a typo in the tuple reads as success.
 //
@@ -1730,7 +1730,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 // authoritative SSRF guard is the dial-time check in dialContext, which
 // is TOCTOU-safe under DNS rebinding (per spec §"Webhook Security" →
 // "SSRF prevention" L464). ValidateWebhookURL is a UX aid: catches
-// obvious mistakes at subscribe so the client gets -32015
+// obvious mistakes at subscribe so the client gets -32027
 // CallbackEndpointError immediately rather than a delayed delivery failure.
 func (r *WebhookRegistry) ValidateWebhookURL(rawURL string) error {
 	u, err := url.Parse(rawURL)

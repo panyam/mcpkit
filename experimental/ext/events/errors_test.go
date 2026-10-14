@@ -9,7 +9,7 @@ import (
 )
 
 // TestNotFoundData_WireShape pins the JSON wire shape for the typed
-// data payload on -32011 NotFound responses. The Kind discriminator
+// data payload on -32023 NotFound responses. The Kind discriminator
 // is what lets clients tell "unknown event" apart from "unknown
 // subscription" without parsing the human-readable message.
 func TestNotFoundData_WireShape(t *testing.T) {
@@ -31,7 +31,7 @@ func TestNotFoundData_WireShape(t *testing.T) {
 }
 
 // TestResourceExhaustedData_WireShape pins the JSON wire shape for
-// the typed data payload on -32013 ResourceExhausted responses,
+// the typed data payload on -32025 ResourceExhausted responses,
 // including the omitempty behavior on Max: a zero Max signals "limit
 // hit, ceiling not disclosed" and must not appear in the encoded JSON.
 func TestResourceExhaustedData_WireShape(t *testing.T) {
@@ -48,7 +48,7 @@ func TestResourceExhaustedData_WireShape(t *testing.T) {
 	})
 }
 
-// TestUnsupportedData_WireShape pins the JSON wire shape for -32014
+// TestUnsupportedData_WireShape pins the JSON wire shape for -32026
 // Unsupported. Value is omitempty so a server can reject a feature
 // outright (no specific value carried) by passing Value="".
 func TestUnsupportedData_WireShape(t *testing.T) {
@@ -65,7 +65,7 @@ func TestUnsupportedData_WireShape(t *testing.T) {
 }
 
 // TestCallbackEndpointErrorData_WireShape pins the JSON wire shape
-// for -32015 CallbackEndpointError. The Reason draws from
+// for -32027 CallbackEndpointError. The Reason draws from
 // DeliveryErrorBucket so subscribe-time and delivery-time failures
 // share one vocabulary on the wire.
 func TestCallbackEndpointErrorData_WireShape(t *testing.T) {

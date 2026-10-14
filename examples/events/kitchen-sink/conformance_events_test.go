@@ -153,7 +153,7 @@ func TestConformanceEvents_AllowCallbackOriginRejectsNonOrigin(t *testing.T) {
 	assert.True(t, res.IsError)
 }
 
-// events-push probes -32013 on whichever type this control names, since its
+// events-push probes -32025 on whichever type this control names, since its
 // concurrency probe needs its own target uncapped (#1461).
 func TestConformanceEvents_QuotaControlReportsTheEnforcedCap(t *testing.T) {
 	c := newConformanceTestClient(t)

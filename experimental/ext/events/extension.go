@@ -21,6 +21,12 @@ const ExtensionID = "io.modelcontextprotocol/events"
 // Register sets it true because AddSource and RemoveSource always broadcast.
 type EventsExtension struct {
 	ListChanged bool
+
+	// DeclareTopLevel also declares the capability as top-level
+	// capabilities.events, with the same settings, alongside the SEP-3415
+	// extensions-map entry. Config.ChatGPTCompat sets it; see that field for
+	// why it exists and when it goes.
+	DeclareTopLevel bool
 }
 
 // Extension implements core.ExtensionProvider.
@@ -35,5 +41,9 @@ func (e EventsExtension) Extension() core.Extension {
 	if e.ListChanged {
 		settings["listChanged"] = true
 	}
-	return core.Extension{ID: ExtensionID, Settings: settings}
+	ext := core.Extension{ID: ExtensionID, Settings: settings}
+	if e.DeclareTopLevel {
+		ext.TopLevel = map[string]any{"events": settings}
+	}
+	return ext
 }

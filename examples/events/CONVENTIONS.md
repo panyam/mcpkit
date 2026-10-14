@@ -76,7 +76,7 @@ Demos use the events library defaults. Error codes, payload shapes, and header c
 
 Specifically:
 
-- **Error codes** — use spec codes: `-32011 NotFound`, `-32013 TooManySubscriptions`, `-32014 SubscriptionNotFound`, `-32015 CallbackEndpointError`. Never invent codes.
+- **Error codes** — use spec codes: `-32023 NotFound`, `-32024 Forbidden`, `-32025 ResourceExhausted`, `-32026 Unsupported`, `-32027 CallbackEndpointError`. Never invent codes.
 - **Webhook headers** — Standard Webhooks (`webhook-id`, `webhook-timestamp`, `webhook-signature`) by default. The `mcp` header style is available via `events.WithWebhookHeaderMode(events.HeaderModeMCP)` for compatibility with the pre-spec-r3167245184 shape.
 - **Cursor shape** — pointer for cursored, `null` for cursorless. The demo never serializes `cursor: ""` to mean "no cursor."
 

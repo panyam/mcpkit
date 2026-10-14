@@ -210,7 +210,7 @@ type Config struct {
 	//
 	// This is a deliberate spec deviation. Per spec §"Subscription
 	// Identity" → "Authentication required" L361, servers MUST reject
-	// unauthenticated webhook subscribes with -32012 Forbidden. The
+	// unauthenticated webhook subscribes with -32024 Forbidden. The
 	// escape hatch exists so demos and unauthenticated mcpkit servers
 	// can exercise webhook delivery end-to-end without standing up an
 	// OAuth provider; it is named with the "Unsafe" prefix and produces
@@ -222,6 +222,21 @@ type Config struct {
 	// empty; ctx.AuthClaims().Subject becomes the principal in the
 	// canonical tuple per spec §"Subscription Identity" L361.
 	UnsafeAnonymousPrincipal string
+
+	// ChatGPTCompat also declares the capability as top-level
+	// capabilities.events, alongside the SEP-3415 declaration under
+	// capabilities.extensions["io.modelcontextprotocol/events"]. Off by
+	// default.
+	//
+	// ChatGPT reads the top-level key, which is where the design sketch put
+	// it before SEP-3415 moved it into Extension Negotiation, so without this
+	// a ChatGPT client finds no events capability on the server at all. That
+	// is the only ChatGPT divergence anyone has observed (sketch issue 8,
+	// 2026-10-03), so it is the only one this covers: error codes and
+	// unsubscribe behavior stay SEP-3415 for every client.
+	//
+	// Temporary. It goes once ChatGPT reads the extensions map (#1511).
+	ChatGPTCompat bool
 
 	// StreamHeartbeatInterval is how often events/stream emits
 	// notifications/events/heartbeat (per spec §"Push-Based Delivery"
@@ -268,7 +283,7 @@ type Config struct {
 	// per spec §"Server SDK Guidance" → "Subscription lifecycle
 	// hooks" L705 ("Servers SHOULD enforce TooManySubscriptions
 	// before invoking on_subscribe"). If the principal is at cap,
-	// the request is rejected with -32013 ResourceExhausted (data.
+	// the request is rejected with -32025 ResourceExhausted (data.
 	// limit="subscriptions") and on_subscribe never runs (no upstream
 	// resource provisioning for a rejected sub).
 	//
@@ -376,7 +391,7 @@ func Register(cfg Config) *Registry {
 	// broadcast notifications/events/list_changed whether or not any source is
 	// registered yet, so a server that starts empty and grows still tells its
 	// clients.
-	srv.RegisterExtension(EventsExtension{ListChanged: true})
+	srv.RegisterExtension(EventsExtension{ListChanged: true, DeclareTopLevel: cfg.ChatGPTCompat})
 
 	leases := cfg.PollLeases
 	if leases == nil {
@@ -794,7 +809,7 @@ func supportsDeliveryMode(advertised []string, mode DeliveryMode) bool {
 // UnsafeAnonymousPrincipal escape hatch (events.Config field).
 //
 // Returns: (principal, ok). When ok is false, the handler MUST reject
-// the request with -32012 Forbidden — there is neither real auth
+// the request with -32024 Forbidden — there is neither real auth
 // nor a configured anonymous fallback.
 //
 // Path-1 (real auth): claims != nil → core.PrincipalFor(claims), which
@@ -908,7 +923,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 
 		// Spec §"Subscription Identity" → "Authentication required" L361:
 		// events/subscribe MUST be called with an authenticated principal;
-		// servers MUST reject unauthenticated calls with -32012 Forbidden. The
+		// servers MUST reject unauthenticated calls with -32024 Forbidden. The
 		// UnsafeAnonymousPrincipal escape hatch (Config field) lets demos
 		// run anonymously — see resolvePrincipal docs.
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
@@ -938,7 +953,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 
 		// Spec §"Endpoint verification": no delivery until the endpoint
 		// confirms it wants them. Runs synchronously so a failure comes
-		// back from this call as -32015 carrying only the category.
+		// back from this call as -32027 carrying only the category.
 		if bucket := webhooks.verifyEndpoint(ctx, verifyEndpointParams{
 			Principal:    principal,
 			URL:          req.Delivery.URL,

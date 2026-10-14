@@ -245,7 +245,7 @@ func TestE2EHealthSignalsEndToEnd(t *testing.T) {
 	// in the events module). This test exercises the source-side
 	// terminate flow on the stream side.
 	require.NoError(t, source.YieldTerminated(events.EventDeliveryError{
-		Code: -32012, Message: "demo terminated",
+		Code: -32024, Message: "demo terminated",
 	}))
 	select {
 	case e := <-gotTerminated:
@@ -620,7 +620,7 @@ func TestE2EPollRefusedOnPushOnlySource(t *testing.T) {
 		"cursor": "0",
 	})
 	require.Error(t, err, "a type advertising push and webhook only must refuse a poll")
-	assert.Contains(t, err.Error(), "-32014",
+	assert.Contains(t, err.Error(), "-32026",
 		"the refusal is Unsupported, naming the delivery mode")
 }
 

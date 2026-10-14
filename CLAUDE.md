@@ -244,7 +244,7 @@ These span packages and will bite on a task that never opens a routed doc.
   configured repo as unprotected.
 
 - **Endpoint verification is on by default for webhook subscribes** (#1444). `events/subscribe`
-  POSTs a signed challenge to `delivery.url` and fails with `-32015` unless it is echoed, so any
+  POSTs a signed challenge to `delivery.url` and fails with `-32027` unless it is echoed, so any
   test, demo or fixture that subscribes to a URL nobody answers now fails. Shared test stacks opt
   out with `WithUnsafeSkipEndpointVerification()`; fixtures allowlist a known origin
   (`WithWebhookDeliveryAllowlist`); a hand-rolled receiver calls
@@ -334,8 +334,11 @@ and the sketch's `main` still says top-level.
 
 Two things that cost nothing to remember. **Following the document is what surfaced the question** —
 matching metronome quietly would have left the sketch wrong indefinitely. And **ChatGPT reads the
-top-level key**, per OpenAI's MCP Events guide, so following the SEP hides an mcpkit server from the
-largest shipping client. That is an open decision, not a settled one.
+top-level key** (OpenAI's MCP Events guide, sketch issue 8), so following the SEP alone hides an
+mcpkit server from it. Decided 2026-10-13: SEP by default, plus the opt-in
+`events.Config.ChatGPTCompat`, which declares in both places through the generic
+`core.Extension.TopLevel` hook (#1501). Only the declaration is covered, because it is the only
+ChatGPT behaviour anyone has observed. It goes when ChatGPT reads the extensions map (#1511).
 
 ## Tasks v1 vs v2
 
