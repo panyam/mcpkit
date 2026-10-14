@@ -120,7 +120,8 @@ func main() {
 		return
 	}
 
-	// Stdio mode: Content-Length framed JSON-RPC over stdin/stdout.
+	// Stdio mode: newline-delimited JSON-RPC over stdin/stdout (Content-Length
+	// framing is detected and accepted too).
 	// No HTTP server — the process communicates directly via stdio.
 	if os.Getenv("STDIO") == "1" {
 		log.SetOutput(os.Stderr) // Keep debug output on stderr, not stdout

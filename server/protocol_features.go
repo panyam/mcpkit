@@ -49,8 +49,8 @@ func negotiateProtocolVersion(versions []string, requested string) string {
 
 // ProtocolFeatures describes the version-gated behaviors active for a given
 // negotiated protocol version. Fields are additive: a zero value means "no
-// version-gated behavior," which is the correct default for every dated
-// release before the draft line.
+// version-gated behavior," which is the correct default for 2024-11-05 and
+// 2025-03-26.
 type ProtocolFeatures struct {
 	// RoutingHeaderValidation enforces SEP-2243 §Server Validation: the
 	// Mcp-Method header (always) and Mcp-Name header (for name-carrying
@@ -73,6 +73,12 @@ type ProtocolFeatures struct {
 	// byte-identical — clients on earlier versions are specified to
 	// treat the absent field as "complete" anyway.
 	GeneralizedResultType bool
+
+	// BatchingRemoved refuses JSON-RPC batches. 2025-03-26 added batching
+	// and 2025-06-18 removed it, so sessions on 2025-06-18 and later get a
+	// single -32600 error for a JSON array body and none of its elements
+	// run. 2024-11-05 and 2025-03-26 keep accepting batches (#1519).
+	BatchingRemoved bool
 }
 
 // featuresForVersion resolves the version-gated feature set for a negotiated
@@ -85,7 +91,10 @@ func featuresForVersion(version string) ProtocolFeatures {
 			RoutingHeaderValidation: true,
 			StatelessMetaRequired:   true,
 			GeneralizedResultType:   true,
+			BatchingRemoved:         true,
 		}
+	case "2025-11-25", "2025-06-18":
+		return ProtocolFeatures{BatchingRemoved: true}
 	default:
 		return ProtocolFeatures{}
 	}

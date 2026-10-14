@@ -485,6 +485,7 @@ type Client struct {
 	// Stdio transport fields (set by WithStdioTransport).
 	stdioReader io.Reader
 	stdioWriter io.Writer
+	stdioOpts   []StdioTransportOption
 
 	// ModifyRequest hook for outgoing HTTP requests (set by WithModifyRequest).
 	modifyRequest func(*http.Request)
@@ -676,7 +677,7 @@ func (c *Client) doConnect() error {
 			}
 			tr = &coreTransportAdapter{inner: ct}
 		} else if c.stdioReader != nil && c.stdioWriter != nil {
-			st := NewStdioTransport(c.stdioReader, c.stdioWriter)
+			st := NewStdioTransport(c.stdioReader, c.stdioWriter, c.stdioOpts...)
 			st.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 				return c.HandleServerRequest(req)
 			}

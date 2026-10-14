@@ -611,7 +611,7 @@ func WithTaskBucketKeyer(keyer core.TaskBucketKeyer) Option {
 // a version outside the set.
 //
 // Default (option NOT set): the package-level default
-// (2026-07-28 / 2025-11-25 / 2025-03-26 / 2024-11-05). Operators use this to
+// (2026-07-28 / 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05). Operators use this to
 // drop older versions per deployment, e.g. refuse 2024-11-05:
 //
 //	server.WithSupportedVersions("2026-07-28", "2025-11-25", "2025-03-26")

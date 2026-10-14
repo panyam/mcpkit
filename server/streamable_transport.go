@@ -868,6 +868,15 @@ func (t *streamableTransport) handleBatchPost(w http.ResponseWriter, r *http.Req
 	if !entry.verifyPrincipal(w, claims) {
 		return
 	}
+	if entry.dispatcher.protocolFeatures().BatchingRemoved {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeInvalidRequest,
+			"JSON-RPC batching is not supported on protocol version "+entry.dispatcher.NegotiatedVersion()+" (removed in 2025-06-18)")
+		raw, _ := marshalJSON(errResp)
+		w.Write(raw)
+		return
+	}
 	entry.idleTimer.Acquire()
 	defer entry.idleTimer.Release()
 

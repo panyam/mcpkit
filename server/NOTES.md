@@ -22,6 +22,20 @@ wires drift apart before.
   back in with `server.WithAllowReinitialize()`; the `initDispatcher` test helper sets
   `allowReinitialize=true` so capability-inspection tests can re-init.
 
+**Every dated revision goes in `supportedProtocolVersions`, and a gap fails quietly.** #57 closed
+as "implemented" with 2025-06-18 left out, and it stayed out until #1519. Nothing errored. A client
+pinned to it was negotiated up to the draft line, which the spec allows, then failed every later call
+for missing `_meta`, and a Streamable HTTP client sending it in `MCP-Protocol-Version` got a 400. Our
+own clients and fixtures all sent 2025-11-25, so no test noticed. `TestDispatchInitializeEchoesDatedVersions`
+now pins the dated list.
+
+**JSON-RPC batching is version-gated.** 2025-03-26 added it and 2025-06-18 removed it, so
+`ProtocolFeatures.BatchingRemoved` is set for 2025-06-18 and later. Both HTTP transports check it
+before splitting the array. Streamable HTTP answers 400 with one `-32600`; the legacy SSE transport
+pushes the same error on the stream and returns 202, like its parse errors. No element of a refused
+batch runs. Older sessions keep the permissive path, and the stdio transport has never accepted
+batches at all.
+
 The stateless wire (`server/stateless/dispatch.go`) still has its own version-error path. Fold it
 through the resolver when #493 collapses the package.
 
@@ -150,6 +164,32 @@ the 12-month promise *and* drop mcpkit below 100% conformance and Tier 1, since 
 sampling and elicitation.
 
 Affected public symbols are enumerated in `docs/SEP_2577_DEPRECATIONS.md`.
+
+---
+
+## Stdio framing: both ends were wrong the same way (#1517)
+
+MCP stdio is newline-delimited JSON, one message per line. Until #1517 both `RunIO` and the client's
+`StdioTransport` spoke LSP-style `Content-Length` framing instead, so an mcpkit stdio server never
+answered Claude Code, Cursor, or the Python and TS SDKs. It hung in `ReadFrame`, reading the first
+JSON line as a header and waiting for the blank line that ends the headers. Every stdio test was
+green throughout because every one paired an mcpkit client with an mcpkit server, and a framing both
+ends share round-trips fine.
+
+- Framing lives in `internal/stdioframe`, shared by both sides. `server` and `client` re-export the
+  type as `StdioFraming`.
+- The server defaults to `FramingAuto`: the first non-whitespace byte picks the framing (`{` or `[`
+  means newline-delimited, anything else `Content-Length`), and replies follow it for the rest of the
+  session. Old mcpkit clients keep working.
+- The client cannot detect anything, because it speaks first. It defaults to newline-delimited, so a
+  new client against an mcpkit server built before #1517 hangs at `initialize` unless it passes
+  `FramingContentLength`.
+- Newline-delimited reads use `bufio.Reader.ReadBytes`, not `bufio.Scanner`, whose 64 KiB token
+  limit would cut off a large tool call. Writes compact any message containing a line break, since
+  `stdioPush` forwards raw bytes that never went through `json.Marshal`.
+- The check that doesn't share our code is `tests/e2e/stdio_interop_test.go` (opt-in, pulls
+  `@modelcontextprotocol/server-everything` from npm): `MCPKIT_STDIO_INTEROP=1 go test -run
+  StdioInterop` in `tests/e2e`. Run it after touching either stdio transport.
 
 ---
 

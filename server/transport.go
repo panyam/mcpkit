@@ -208,7 +208,14 @@ func (t *sseTransport) handleMessage(w http.ResponseWriter, r *http.Request) {
 	// JSON-RPC 2.0 batch request: dispatch each, push responses as SSE events.
 	if gohttp.DetectBatch(body) {
 		parts, splitErr := gohttp.SplitBatch(body)
-		if splitErr != nil {
+		if dispatcher.protocolFeatures().BatchingRemoved {
+			errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeInvalidRequest,
+				"JSON-RPC batching is not supported on protocol version "+dispatcher.NegotiatedVersion()+" (removed in 2025-06-18)")
+			raw, _ := marshalJSON(errResp)
+			emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {
+				t.hub.SendEventWithID(sessionID, "message", id, SSEJSON(data))
+			})
+		} else if splitErr != nil {
 			errResp := core.NewErrorResponse(json.RawMessage("null"), core.ErrCodeParse, "invalid batch: "+splitErr.Error())
 			raw, _ := marshalJSON(errResp)
 			emitSSEEvent(dispatcher.eventIDs, t.config.eventStore, sessionID, raw, func(id string, data json.RawMessage) {

@@ -72,7 +72,7 @@ mcpkit/                          # module: github.com/panyam/mcpkit
 │   ├── dispatch.go              # Dispatcher, routing, handlers, subscriptions
 │   ├── transport.go             # SSE server transport
 │   ├── streamable_transport.go  # Streamable HTTP transport
-│   ├── stdio_transport.go       # Stdio transport (Content-Length framed JSON-RPC)
+│   ├── stdio_transport.go       # Stdio transport (newline-delimited JSON-RPC; Content-Length detected)
 │   ├── memory_transport.go      # InProcessTransport (core.Transport)
 │   ├── request.go               # sendServerRequest, routeServerResponse
 │   ├── middleware.go            # Middleware, LoggingMiddleware

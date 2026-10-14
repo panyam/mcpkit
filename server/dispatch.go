@@ -27,7 +27,12 @@ import (
 // types. Accepting it lets draft-aware conformance suites (panyam/mcpconformance
 // feat/tasks-mrtr-extension, upstream PR 262) complete the initialize handshake
 // without forcing them to lie about which version they speak.
-var supportedProtocolVersions = []string{core.DraftProtocolVersion2026V1, "2025-11-25", "2025-03-26", "2024-11-05"}
+//
+// Every dated revision belongs here. "2025-06-18" was missing until #1519, so a
+// client pinned to it was negotiated up to the draft line and then failed every
+// call for missing _meta, while an HTTP client sending it in
+// MCP-Protocol-Version got a 400.
+var supportedProtocolVersions = []string{core.DraftProtocolVersion2026V1, "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"}
 
 // ErrCodeCancelled is the JSON-RPC error code for a cancelled request.
 const ErrCodeCancelled = -32800
