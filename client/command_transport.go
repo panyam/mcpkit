@@ -1,7 +1,7 @@
 package client
 
 // CommandTransport spawns a subprocess MCP server and communicates with it
-// over stdin/stdout using Content-Length framed JSON-RPC. It manages the full
+// over stdin/stdout using newline-delimited JSON-RPC, the MCP stdio framing. It manages the full
 // process lifecycle: start on Connect, graceful shutdown on Close.
 //
 // Under the hood, CommandTransport wraps StdioTransport for the wire protocol
@@ -28,6 +28,7 @@ import (
 	"time"
 
 	core "github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/internal/stdioframe"
 )
 
 const (
@@ -61,6 +62,7 @@ type commandOpts struct {
 	dir             string        // working directory for the subprocess
 	shutdownTimeout time.Duration // time to wait after SIGTERM before SIGKILL (default 5s)
 	stderrWriter    io.Writer     // optional additional stderr destination
+	framing         StdioFraming  // wire framing (default newline-delimited)
 }
 
 // CommandOption configures a CommandTransport.
@@ -88,6 +90,13 @@ func WithShutdownTimeout(d time.Duration) CommandOption {
 // option tees it to an additional destination (e.g., os.Stderr, a logger).
 func WithStderr(w io.Writer) CommandOption {
 	return func(o *commandOpts) { o.stderrWriter = w }
+}
+
+// WithCommandFraming sets the stdio framing used with the subprocess. The
+// default, FramingNewlineDelimited, is what MCP stdio servers speak; use
+// FramingContentLength only for an mcpkit server built before #1517.
+func WithCommandFraming(f StdioFraming) CommandOption {
+	return func(o *commandOpts) { o.framing = f }
 }
 
 // NewCommandTransport creates a CommandTransport that will spawn the given
@@ -153,7 +162,11 @@ func (ct *CommandTransport) Connect(ctx context.Context) error {
 	})
 
 	// Create and connect the stdio transport over the process pipes.
-	ct.stdio = NewStdioTransport(stdout, stdin)
+	var stdioOpts []StdioTransportOption
+	if ct.opts.framing != stdioframe.Auto {
+		stdioOpts = append(stdioOpts, WithStdioFraming(ct.opts.framing))
+	}
+	ct.stdio = NewStdioTransport(stdout, stdin, stdioOpts...)
 	ct.stdio.serverReqHandler = ct.serverReqHandler
 	ct.stdio.notifyHandler = ct.notifyHandler
 	return ct.stdio.Connect(ctx)

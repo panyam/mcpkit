@@ -1,6 +1,7 @@
 package client
 
-// Stdio client transport for Content-Length framed JSON-RPC over reader/writer pairs.
+// Stdio client transport for JSON-RPC over reader/writer pairs, using MCP's
+// newline-delimited stdio framing by default.
 //
 // Implements core.Transport so it can be used with client.WithTransport().
 // Designed for editor-spawned MCP servers where the client communicates with
@@ -12,7 +13,6 @@ package client
 //   - Delivers notifications to the notification handler
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,22 +21,46 @@ import (
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
-	gohttp "github.com/panyam/servicekit/http"
+	"github.com/panyam/mcpkit/internal/stdioframe"
 )
 
-// StdioTransport implements core.Transport over Content-Length framed JSON-RPC.
-// Messages are read from r and written to w using the same framing as the
-// MCP stdio server transport (Content-Length: N\r\n\r\n<body>).
+// StdioFraming selects how a stdio transport delimits messages.
+type StdioFraming = stdioframe.Framing
+
+const (
+	// FramingNewlineDelimited, the default, is the MCP spec framing: one JSON
+	// message per line. Every spec-following stdio server expects it.
+	FramingNewlineDelimited = stdioframe.NewlineDelimited
+	// FramingContentLength is LSP-style "Content-Length: N\r\n\r\n" framing.
+	// Use it to talk to an mcpkit server built before #1517, which accepts
+	// nothing else. Current mcpkit servers accept both.
+	FramingContentLength = stdioframe.ContentLength
+)
+
+// StdioTransportOption configures a StdioTransport.
+type StdioTransportOption func(*StdioTransport)
+
+// WithStdioFraming sets the framing the transport writes and expects back.
+// The client speaks first, so it cannot detect the server's framing; the
+// default is FramingNewlineDelimited.
+func WithStdioFraming(f StdioFraming) StdioTransportOption {
+	return func(t *StdioTransport) { t.framing = f }
+}
+
+// StdioTransport implements core.Transport over stdio-framed JSON-RPC: one
+// JSON message per line by default, or Content-Length headers with
+// WithStdioFraming(FramingContentLength).
 type StdioTransport struct {
-	r io.Reader
-	w io.Writer
+	r       io.Reader
+	w       io.Writer
+	framing StdioFraming
 
 	// Handlers set by the client before Connect().
 	serverReqHandler core.ServerRequestHandler
 	notifyHandler    core.NotificationHandler
 
 	// Internal state.
-	reader   *bufio.Reader
+	reader   *stdioframe.Reader
 	writeMu  sync.Mutex
 	pending  conc.SyncMap[string, chan *core.Response]
 	done     chan struct{}
@@ -44,7 +68,8 @@ type StdioTransport struct {
 }
 
 // NewStdioTransport creates a client transport that communicates via
-// Content-Length framed JSON-RPC over the given reader/writer pair.
+// newline-delimited JSON-RPC over the given reader/writer pair, or in the
+// framing chosen with WithStdioFraming.
 //
 // Typically the reader is connected to the server's stdout and the writer
 // to the server's stdin (or pipe ends in tests).
@@ -57,12 +82,17 @@ type StdioTransport struct {
 //	cmd.Start()
 //	transport := client.NewStdioTransport(stdout, stdin)
 //	c := client.NewClient("stdio://", info, client.WithTransport(transport))
-func NewStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
-	return &StdioTransport{r: r, w: w}
+func NewStdioTransport(r io.Reader, w io.Writer, opts ...StdioTransportOption) *StdioTransport {
+	t := &StdioTransport{r: r, w: w, framing: FramingNewlineDelimited}
+	for _, o := range opts {
+		o(t)
+	}
+	return t
 }
 
-// WithIOTransport configures a Client to use Content-Length framed JSON-RPC
-// over arbitrary reader/writer streams. This is the generic IO transport —
+// WithIOTransport configures a Client to use stdio-framed JSON-RPC
+// (newline-delimited unless opts say otherwise) over arbitrary reader/writer
+// streams. This is the generic IO transport —
 // use it for Unix sockets, named pipes, SSH tunnels, test pipe pairs, or
 // any other stream-based transport.
 //
@@ -72,10 +102,11 @@ func NewStdioTransport(r io.Reader, w io.Writer) *StdioTransport {
 //	cr, sw := io.Pipe()
 //	go srv.RunIO(ctx, sr, sw)
 //	c := client.NewClient("", info, client.WithIOTransport(cr, cw))
-func WithIOTransport(r io.Reader, w io.Writer) ClientOption {
+func WithIOTransport(r io.Reader, w io.Writer, opts ...StdioTransportOption) ClientOption {
 	return func(c *Client) {
 		c.stdioReader = r
 		c.stdioWriter = w
+		c.stdioOpts = opts
 	}
 }
 
@@ -83,13 +114,13 @@ func WithIOTransport(r io.Reader, w io.Writer) ClientOption {
 // equivalent to WithIOTransport with the given reader/writer pair — kept
 // for backward compatibility and naming clarity when used with subprocess
 // servers (where r is stdout and w is stdin of the child process).
-func WithStdioTransport(r io.Reader, w io.Writer) ClientOption {
-	return WithIOTransport(r, w)
+func WithStdioTransport(r io.Reader, w io.Writer, opts ...StdioTransportOption) ClientOption {
+	return WithIOTransport(r, w, opts...)
 }
 
 // Connect starts the background read loop.
 func (t *StdioTransport) Connect(ctx context.Context) error {
-	t.reader = bufio.NewReader(t.r)
+	t.reader = stdioframe.NewReader(t.r, t.framing)
 	t.done = make(chan struct{})
 	safeGo("client.stdio.readLoop", t.readLoop)
 	return nil
@@ -155,19 +186,19 @@ func (t *StdioTransport) Close() error {
 // SessionID returns "stdio" for the stdio transport.
 func (t *StdioTransport) SessionID() string { return "stdio" }
 
-// writeFrame writes a Content-Length framed message, protected by mutex.
+// writeFrame writes one framed message, protected by mutex.
 func (t *StdioTransport) writeFrame(data []byte) error {
 	t.writeMu.Lock()
 	defer t.writeMu.Unlock()
-	return gohttp.WriteFrame(t.w, data)
+	return stdioframe.Write(t.w, t.framing, data)
 }
 
-// readLoop reads Content-Length framed messages and routes them.
+// readLoop reads framed messages and routes them.
 func (t *StdioTransport) readLoop() {
 	defer close(t.done)
 
 	for {
-		data, err := gohttp.ReadFrame(t.reader)
+		data, err := t.reader.Read()
 		if err != nil {
 			if err != io.EOF {
 				t.closeErr = err
@@ -227,4 +258,3 @@ func (t *StdioTransport) routeResponse(resp *core.Response) {
 		ch <- resp
 	}
 }
-

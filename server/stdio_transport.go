@@ -2,11 +2,15 @@ package server
 
 // Stdio transport for editor-spawned MCP servers (Cursor, Claude Desktop, etc.).
 //
-// Implements Content-Length framed JSON-RPC over stdin/stdout per the MCP spec
-// (https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#stdio).
+// Implements the MCP stdio transport
+// (https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#stdio):
+// newline-delimited JSON-RPC, one message per line, over stdin/stdout. The
+// server also accepts LSP-style Content-Length framing, which mcpkit used to
+// speak exclusively (#1517), and answers in whichever framing the client's
+// first message used.
 //
 // Key spec requirements:
-//   - Messages delimited by Content-Length header with \r\n\r\n separator
+//   - Messages delimited by newlines and MUST NOT contain embedded newlines
 //   - Server MUST NOT write non-JSON-RPC data to stdout
 //   - Server MAY write debug/log output to stderr
 //   - Clean EOF handling on client disconnect
@@ -14,10 +18,9 @@ package server
 // Architecture: single session (stdio = 1 client = 1 connection). Uses the same
 // dispatch path as HTTP transports: newSession() → dispatchWithNotifyAndRequest().
 // Notifications and server-to-client requests (sampling, elicitation) are written
-// to stdout as Content-Length framed messages, protected by a write mutex.
+// to stdout in the session's framing, protected by a write mutex.
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,16 +30,39 @@ import (
 	"sync"
 
 	core "github.com/panyam/mcpkit/core"
-	gohttp "github.com/panyam/servicekit/http"
+	"github.com/panyam/mcpkit/internal/stdioframe"
 )
 
 // StdioOption configures the stdio transport.
 type StdioOption func(*stdioConfig)
 
 type stdioConfig struct {
-	input  io.Reader
-	output io.Writer
-	logger *log.Logger
+	input   io.Reader
+	output  io.Writer
+	logger  *log.Logger
+	framing StdioFraming
+}
+
+// StdioFraming selects how the stdio transport delimits messages.
+type StdioFraming = stdioframe.Framing
+
+const (
+	// FramingAuto, the default, detects the framing from the client's first
+	// message and replies in kind: '{' or '[' means newline-delimited JSON,
+	// anything else Content-Length headers.
+	FramingAuto = stdioframe.Auto
+	// FramingNewlineDelimited is the MCP spec framing: one JSON message per
+	// line.
+	FramingNewlineDelimited = stdioframe.NewlineDelimited
+	// FramingContentLength is LSP-style "Content-Length: N\r\n\r\n" framing,
+	// which mcpkit servers and clients spoke before #1517.
+	FramingContentLength = stdioframe.ContentLength
+)
+
+// WithStdioFraming fixes the framing instead of detecting it. Only useful to
+// refuse one framing outright; FramingAuto already serves both.
+func WithStdioFraming(f StdioFraming) StdioOption {
+	return func(c *stdioConfig) { c.framing = f }
 }
 
 // WithStdioInput overrides stdin for the stdio transport.
@@ -58,9 +84,10 @@ func WithStdioLogger(l *log.Logger) StdioOption {
 	return func(c *stdioConfig) { c.logger = l }
 }
 
-// RunIO runs the MCP server over Content-Length framed JSON-RPC on arbitrary
+// RunIO runs the MCP server over stdio-framed JSON-RPC on arbitrary
 // io.Reader/io.Writer streams. Blocks until ctx is cancelled or the reader
-// reaches EOF.
+// reaches EOF. The framing is detected from the client's first message
+// unless WithStdioFraming fixes it.
 //
 // This is the generic version of RunStdio — use it for Unix domain sockets,
 // named pipes, SSH tunnels, or any other stream-based transport. RunStdio
@@ -91,7 +118,8 @@ func (s *Server) RunIO(ctx context.Context, r io.Reader, w io.Writer, opts ...St
 	return s.runIOInternal(ctx, cfg)
 }
 
-// RunStdio runs the MCP server over stdio using Content-Length framed JSON-RPC.
+// RunStdio runs the MCP server over stdio using newline-delimited JSON-RPC,
+// accepting Content-Length framing from clients that send it.
 // Blocks until ctx is cancelled or stdin reaches EOF.
 //
 // This is the primary entry point for editor-spawned MCP servers. Equivalent
@@ -110,12 +138,15 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 	// and responses on stdout.
 	var writeMu sync.Mutex
 	writer := cfg.output
+	reader := stdioframe.NewReader(cfg.input, cfg.framing)
 
-	// writeFrameLocked writes a Content-Length framed message to stdout.
+	// writeFrameLocked writes one message to stdout in the framing the reader
+	// settled on. Nothing is written before the first message is read, so
+	// FramingAuto has been resolved by then.
 	writeFrameLocked := func(data []byte) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		return gohttp.WriteFrame(writer, data)
+		return stdioframe.Write(writer, reader.Framing(), data)
 	}
 
 	// Wire notifyFunc for server-to-client notifications (logging, progress, etc.).
@@ -148,8 +179,6 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 	// Build request func for server-to-client request/response matching.
 	requestFunc := dispatcher.makeRequestFunc(stdioPush)
 
-	reader := bufio.NewReader(cfg.input)
-
 	// Use a channel to decouple the blocking read from context cancellation.
 	type readResult struct {
 		data []byte
@@ -160,7 +189,7 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 	for {
 		// Start a read in a goroutine so we can select on ctx.Done().
 		safeGo("stdio.readFrame", func() {
-			data, err := gohttp.ReadFrame(reader)
+			data, err := reader.Read()
 			readCh <- readResult{data, err}
 		})
 
@@ -239,4 +268,3 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 		}
 	}
 }
-

@@ -153,6 +153,32 @@ Affected public symbols are enumerated in `docs/SEP_2577_DEPRECATIONS.md`.
 
 ---
 
+## Stdio framing: both ends were wrong the same way (#1517)
+
+MCP stdio is newline-delimited JSON, one message per line. Until #1517 both `RunIO` and the client's
+`StdioTransport` spoke LSP-style `Content-Length` framing instead, so an mcpkit stdio server never
+answered Claude Code, Cursor, or the Python and TS SDKs. It hung in `ReadFrame`, reading the first
+JSON line as a header and waiting for the blank line that ends the headers. Every stdio test was
+green throughout because every one paired an mcpkit client with an mcpkit server, and a framing both
+ends share round-trips fine.
+
+- Framing lives in `internal/stdioframe`, shared by both sides. `server` and `client` re-export the
+  type as `StdioFraming`.
+- The server defaults to `FramingAuto`: the first non-whitespace byte picks the framing (`{` or `[`
+  means newline-delimited, anything else `Content-Length`), and replies follow it for the rest of the
+  session. Old mcpkit clients keep working.
+- The client cannot detect anything, because it speaks first. It defaults to newline-delimited, so a
+  new client against an mcpkit server built before #1517 hangs at `initialize` unless it passes
+  `FramingContentLength`.
+- Newline-delimited reads use `bufio.Reader.ReadBytes`, not `bufio.Scanner`, whose 64 KiB token
+  limit would cut off a large tool call. Writes compact any message containing a line break, since
+  `stdioPush` forwards raw bytes that never went through `json.Marshal`.
+- The check that doesn't share our code is `tests/e2e/stdio_interop_test.go` (opt-in, pulls
+  `@modelcontextprotocol/server-everything` from npm): `MCPKIT_STDIO_INTEROP=1 go test -run
+  StdioInterop` in `tests/e2e`. Run it after touching either stdio transport.
+
+---
+
 ## Testing
 
 - **The server requires initialization.** A direct `srv.Dispatch()` in a test fails. Use httptest
