@@ -281,6 +281,22 @@
 <li><code>ServerSupportsExtension(id)</code> / <code>ServerSupportsUI()</code> - detect server support</li>
 <li><code>ListToolsForModel()</code> - filters out tools with visibility <code>[&quot;app&quot;]</code> only</li>
 </ul>
+<h2 id="listening-for-notifications-stateless-wire">Listening for notifications (stateless wire) <a class="anchor" href="#listening-for-notifications-stateless-wire">¶</a></h2>
+<p>On the 2026-07-28 wire, server notifications arrive on a <code>subscriptions/listen</code> stream. One<br />
+<code>Listen</code> call carries every filter key the host wants, including keys that extensions define, and<br />
+routes each notification by method:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>l, err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">Listen</span>(ctx, client.ListenOptions{
+</span></span><span style="display:flex;"><span>    Notifications: core.<span style="color:#900;font-weight:bold">ListChangedFilter</span>(<span style="color:#d14">&#34;toolsListChanged&#34;</span>, <span style="color:#d14">&#34;eventsListChanged&#34;</span>),
+</span></span><span style="display:flex;"><span>    Handlers: <span style="color:#000;font-weight:bold">map</span>[<span style="color:#458;font-weight:bold">string</span>]<span style="color:#000;font-weight:bold">func</span>(json.RawMessage){
+</span></span><span style="display:flex;"><span>        <span style="color:#d14">&#34;notifications/tools/list_changed&#34;</span>:  <span style="color:#000;font-weight:bold">func</span>(json.RawMessage) { <span style="color:#900;font-weight:bold">refreshTools</span>() },
+</span></span><span style="display:flex;"><span>        <span style="color:#d14">&#34;notifications/events/list_changed&#34;</span>: <span style="color:#000;font-weight:bold">func</span>(json.RawMessage) { <span style="color:#900;font-weight:bold">refreshEvents</span>() },
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>})
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">defer</span> l.<span style="color:#900;font-weight:bold">Stop</span>()
+</span></span><span style="display:flex;"><span>l.<span style="color:#900;font-weight:bold">Honored</span>() <span style="color:#998;font-style:italic">// the keys the server agreed to, from its acknowledgement
+</span></span></span></code></pre><p><code>Listen</code> returns once the server has acknowledged the stream. Handlers run one at a time on the<br />
+stream&rsquo;s reader goroutine, so keep them short. On the legacy wire it returns<br />
+<code>ErrListenNeedsStatelessWire</code>.</p>
 <h2 id="transport-interface">Transport interface <a class="anchor" href="#transport-interface">¶</a></h2>
 <p>The client accepts any <code>core.Transport</code> via <code>WithTransport()</code>. This enables:</p>
 <ul>
