@@ -199,6 +199,10 @@ events.Register(events.Config{
 
 When set, anonymous webhook subscribes are accepted under the configured principal. The server logs a startup warning so deployments using it know they're off-spec. **Production deployments leave this empty AND wire `server.WithAuth(validator)` so unauthenticated subscribe attempts hit the spec-mandated `-32024 Forbidden` rejection.**
 
+### ChatGPT compatibility
+
+The capability declares under `capabilities.extensions["io.modelcontextprotocol/events"]`, per SEP-3415. ChatGPT reads the older top-level `capabilities.events` instead (OpenAI's MCP Events guide, and a field report in sketch issue 8), so it finds nothing on a default server. `events.Config{ChatGPTCompat: true}` declares the capability in both places with the same settings. Error codes and the rest of the wire stay SEP-3415. The option is temporary and goes once ChatGPT reads the extensions map (#1511).
+
 ### Auth + extension composition
 
 Events depends only on the `core.Claims` interface, not on any specific auth implementation. The wiring layer (a server's `main.go`) chooses the auth provider:

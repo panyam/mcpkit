@@ -1,6 +1,10 @@
 package core
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"reflect"
+	"strings"
+)
 
 // Protocol-level types shared between server and client packages.
 // These are MCP spec types that appear in both directions of communication.
@@ -94,6 +98,50 @@ type ServerCapabilities struct {
 	Logging     *struct{}                      `json:"logging,omitempty"`
 	Completions *struct{}                      `json:"completions,omitempty"`
 	Extensions  map[string]ExtensionCapability `json:"extensions,omitempty"`
+
+	// TopLevel carries extension-contributed keys rendered at the top level
+	// of the capabilities object (see Extension.TopLevel). MarshalJSON merges
+	// them in and drops any key a field above already claims, set or not.
+	TopLevel map[string]any `json:"-"`
+}
+
+// coreCapabilityKeys is the set of JSON names ServerCapabilities' own fields
+// use, read off the struct tags so a field added later is reserved too.
+var coreCapabilityKeys = func() map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(ServerCapabilities{})
+	for i := 0; i < t.NumField(); i++ {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			keys[name] = true
+		}
+	}
+	return keys
+}()
+
+// MarshalJSON renders the capabilities object, merging TopLevel keys in when
+// there are any. Without TopLevel the output is exactly the default encoding.
+func (c ServerCapabilities) MarshalJSON() ([]byte, error) {
+	type plain ServerCapabilities
+	raw, err := json.Marshal(plain(c))
+	if err != nil || len(c.TopLevel) == 0 {
+		return raw, err
+	}
+	merged := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &merged); err != nil {
+		return nil, err
+	}
+	for key, value := range c.TopLevel {
+		if coreCapabilityKeys[key] {
+			continue
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil, err
+		}
+		merged[key] = encoded
+	}
+	return json.Marshal(merged)
 }
 
 // ToolsCap describes the server's tools capability.

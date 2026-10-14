@@ -223,6 +223,21 @@ type Config struct {
 	// canonical tuple per spec §"Subscription Identity" L361.
 	UnsafeAnonymousPrincipal string
 
+	// ChatGPTCompat also declares the capability as top-level
+	// capabilities.events, alongside the SEP-3415 declaration under
+	// capabilities.extensions["io.modelcontextprotocol/events"]. Off by
+	// default.
+	//
+	// ChatGPT reads the top-level key, which is where the design sketch put
+	// it before SEP-3415 moved it into Extension Negotiation, so without this
+	// a ChatGPT client finds no events capability on the server at all. That
+	// is the only ChatGPT divergence anyone has observed (sketch issue 8,
+	// 2026-10-03), so it is the only one this covers: error codes and
+	// unsubscribe behavior stay SEP-3415 for every client.
+	//
+	// Temporary. It goes once ChatGPT reads the extensions map (#1511).
+	ChatGPTCompat bool
+
 	// StreamHeartbeatInterval is how often events/stream emits
 	// notifications/events/heartbeat (per spec §"Push-Based Delivery"
 	// → "Lifecycle" → "Heartbeat" L294). Zero or negative defaults to
@@ -376,7 +391,7 @@ func Register(cfg Config) *Registry {
 	// broadcast notifications/events/list_changed whether or not any source is
 	// registered yet, so a server that starts empty and grows still tells its
 	// clients.
-	srv.RegisterExtension(EventsExtension{ListChanged: true})
+	srv.RegisterExtension(EventsExtension{ListChanged: true, DeclareTopLevel: cfg.ChatGPTCompat})
 
 	leases := cfg.PollLeases
 	if leases == nil {

@@ -126,3 +126,95 @@ func TestServerDiscoverAdvertisesInlineExtensionSettings(t *testing.T) {
 	}
 	assertInlineSettings(t, extensionsFromWire(t, raw))
 }
+
+// topLevelExtension also declares keys at the top level of capabilities, the
+// way an extension does for clients that predate its move into Extension
+// Negotiation. "tools" collides with a core field and must not win.
+type topLevelExtension struct{}
+
+func (topLevelExtension) Extension() core.Extension {
+	return core.Extension{
+		ID:       "io.example/toplevel",
+		Settings: map[string]any{"listChanged": true},
+		TopLevel: map[string]any{
+			"legacyKey": map[string]any{"listChanged": true},
+			"tools":     "must not override the core tools capability",
+		},
+	}
+}
+
+func assertTopLevelKeys(t *testing.T, raw []byte) {
+	t.Helper()
+	var envelope struct {
+		Capabilities map[string]any `json:"capabilities"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("decode capabilities: %v (raw=%s)", err, raw)
+	}
+	caps := envelope.Capabilities
+	legacy, ok := caps["legacyKey"].(map[string]any)
+	if !ok || legacy["listChanged"] != true {
+		t.Errorf("capabilities.legacyKey = %#v, want {listChanged:true}", caps["legacyKey"])
+	}
+	if _, ok := caps["tools"].(map[string]any); !ok {
+		t.Errorf("capabilities.tools = %#v; a TopLevel key must never replace a core capability", caps["tools"])
+	}
+	exts, _ := caps["extensions"].(map[string]any)
+	if _, ok := exts["io.example/toplevel"]; !ok {
+		t.Errorf("extension missing from capabilities.extensions; TopLevel adds a declaration, it does not move one: %v", exts)
+	}
+}
+
+// TestInitializeAdvertisesTopLevelExtensionKeys covers the legacy initialize
+// handshake.
+func TestInitializeAdvertisesTopLevelExtensionKeys(t *testing.T) {
+	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
+	d.RegisterTool(core.ToolDef{Name: "t"}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+	d.extensions["io.example/toplevel"] = topLevelExtension{}.Extension()
+
+	resp := d.Dispatch(context.Background(), &core.Request{
+		JSONRPC: "2.0",
+		ID:      json.RawMessage(`1`),
+		Method:  "initialize",
+		Params:  core.NewRawJSON(json.RawMessage(`{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"c","version":"1"}}`)),
+	})
+	if resp.Error != nil {
+		t.Fatalf("initialize error: %+v", resp.Error)
+	}
+	raw, err := json.Marshal(resp.Result)
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	assertTopLevelKeys(t, raw)
+}
+
+// TestServerDiscoverAdvertisesTopLevelExtensionKeys covers the SEP-2575
+// stateless wire, which builds its capabilities separately.
+func TestServerDiscoverAdvertisesTopLevelExtensionKeys(t *testing.T) {
+	s, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
+	defer teardown()
+	s.RegisterTool(core.ToolDef{Name: "t"}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+		return core.TextResult("ok"), nil
+	})
+	s.RegisterExtension(topLevelExtension{})
+
+	resp := postStatelessJSON(t, url, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "server/discover",
+		"params": validMetaParams(),
+	}, map[string]string{mcpProtocolVersionHeader: draftVersion})
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status %d, body=%s", resp.StatusCode, string(body))
+	}
+	r := decode(t, resp)
+	if r.Error != nil {
+		t.Fatalf("discover error: %+v", r.Error)
+	}
+	raw, err := json.Marshal(r.Result)
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	assertTopLevelKeys(t, raw)
+}

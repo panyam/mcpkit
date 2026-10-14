@@ -93,3 +93,45 @@ func TestClientExtensionCapMIMETypes(t *testing.T) {
 		})
 	}
 }
+
+// TestServerCapabilities_EncodingUnchangedWithoutTopLevel pins that the custom
+// MarshalJSON is invisible when no extension contributes top-level keys: same
+// keys, same struct order, no re-sorting through a map.
+func TestServerCapabilities_EncodingUnchangedWithoutTopLevel(t *testing.T) {
+	caps := ServerCapabilities{
+		Tools:      &ToolsCap{ListChanged: true},
+		Logging:    &struct{}{},
+		Extensions: map[string]ExtensionCapability{"io.example/x": {}},
+	}
+	raw, err := json.Marshal(caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"tools":{"listChanged":true},"logging":{},"extensions":{"io.example/x":{}}}`
+	if string(raw) != want {
+		t.Errorf("got  %s\nwant %s", raw, want)
+	}
+}
+
+// TestServerCapabilities_TopLevelNeverClaimsACoreKey checks that a TopLevel
+// key naming a core field is dropped even when that field is unset, so an
+// extension cannot invent a capability core owns.
+func TestServerCapabilities_TopLevelNeverClaimsACoreKey(t *testing.T) {
+	caps := ServerCapabilities{
+		TopLevel: map[string]any{"logging": map[string]any{}, "events": map[string]any{}},
+	}
+	raw, err := json.Marshal(caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["logging"]; ok {
+		t.Errorf("TopLevel created core key logging: %s", raw)
+	}
+	if _, ok := got["events"]; !ok {
+		t.Errorf("TopLevel key events missing: %s", raw)
+	}
+}

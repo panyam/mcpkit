@@ -334,8 +334,11 @@ and the sketch's `main` still says top-level.
 
 Two things that cost nothing to remember. **Following the document is what surfaced the question** —
 matching metronome quietly would have left the sketch wrong indefinitely. And **ChatGPT reads the
-top-level key**, per OpenAI's MCP Events guide, so following the SEP hides an mcpkit server from the
-largest shipping client. That is an open decision, not a settled one.
+top-level key** (OpenAI's MCP Events guide, sketch issue 8), so following the SEP alone hides an
+mcpkit server from it. Decided 2026-10-13: SEP by default, plus the opt-in
+`events.Config.ChatGPTCompat`, which declares in both places through the generic
+`core.Extension.TopLevel` hook (#1501). Only the declaration is covered, because it is the only
+ChatGPT behaviour anyone has observed. It goes when ChatGPT reads the extensions map (#1511).
 
 ## Tasks v1 vs v2
 

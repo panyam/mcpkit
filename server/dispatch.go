@@ -543,6 +543,7 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 			exts[id] = core.ExtensionCapability(ext.Settings)
 		}
 		caps.Extensions = exts
+		caps.TopLevel = extensionTopLevel(d.extensions)
 	}
 
 	return core.NewResponse(id, core.InitializeResult{
