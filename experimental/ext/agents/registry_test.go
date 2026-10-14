@@ -1,6 +1,7 @@
 package agents_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/panyam/mcpkit/client"
@@ -12,172 +13,377 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// workflowAgent is the agents-wg#20 §6 example, carried in one place so the
-// roster, detail, and wire-shape tests all assert against the same fixture.
-func workflowAgent() agents.AgentDef {
-	return agents.AgentDef{
-		AgentID:      "workflow-agent",
-		Description:  "Pipelines, approval gates, run history, connectors",
-		Capabilities: []string{"Pipeline catalog and execution", "Approval gates", "Run analysis"},
-		ExampleTasks: []string{"Show pending pipeline approvals", "Why did pipeline X fail?"},
-		DelegateTool: "invoke_workflow_agent",
-		TasksEnabled: true,
-		SkillURI:     "skill://workflow-agent/SKILL.md",
-		Instructions: "You operate CI/CD pipelines. Prefer read-only analysis before any mutation.",
-		Tools: []core.ToolDef{
-			{Name: "list_pipelines", Description: "List pipelines", InputSchema: map[string]any{"type": "object"}},
-			{Name: "approve_gate", Description: "Approve a pending gate", InputSchema: map[string]any{"type": "object"}},
+func noopTool(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+	return core.TextResult("ok"), nil
+}
+
+// catalog is the server tool set every test registers. upload_report carries
+// an x-mcp-file property so the fileInputs strip has something to remove.
+var catalog = []core.ToolDef{
+	{
+		Name:        "list_failed_pipelines",
+		Description: "List failed pipelines for a service.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"service": map[string]any{"type": "string"}},
+			"required":   []any{"service"},
 		},
+	},
+	{Name: "approve_gate", Description: "Approve a pending gate", InputSchema: map[string]any{"type": "object"}},
+	{
+		Name:        "upload_report",
+		Description: "Attach a report",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"report": map[string]any{"type": "string", "format": "uri", core.FileInputSchemaKey: map[string]any{"accept": []any{"application/pdf"}}},
+			},
+		},
+	},
+}
+
+// sepWorkflowAgent is the agent in agents-wg#22's agents/get example.
+func sepWorkflowAgent() agents.AgentDef {
+	return agents.AgentDef{
+		Name:             "workflow-agent",
+		Description:      "Investigates delivery pipelines and approvals",
+		Capabilities:     []string{"pipeline failures", "deployment readiness", "approval status"},
+		Instructions:     "Handle delivery readiness and approval workflows.",
+		ModelRoutingHint: &agents.ModelRoutingHint{Role: agents.ModelRoleMedium},
+		Tools:            []string{"list_failed_pipelines"},
 	}
 }
 
-// newAgentsServer stands up a server with the agents extension registered and
-// returns a connected TestClient plus the Registry.
-func newAgentsServer(t *testing.T, defs ...agents.AgentDef) (*testutil.TestClient, *agents.Registry) {
-	t.Helper()
-	srv := server.NewServer(core.ServerInfo{Name: "agents-test", Version: "0.0.1"})
-	reg, err := agents.Register(agents.Config{Server: srv, Agents: defs})
-	require.NoError(t, err)
-	return testutil.NewTestClient(t, srv), reg
+func opsAgent() agents.AgentDef {
+	return agents.AgentDef{
+		Name:         "ops-agent",
+		Description:  "Approvals and reports",
+		Capabilities: []string{"approvals"},
+		Tools:        []string{"approve_gate", "upload_report", "list_failed_pipelines"},
+	}
 }
 
-// TestExtensionAdvertised confirms the server advertises the agents extension
-// in its initialize capabilities so a host can gate discovery on it.
+func newCatalogServer() *server.Server {
+	srv := server.NewServer(core.ServerInfo{Name: "agents-test", Version: "0.0.1"})
+	for _, td := range catalog {
+		srv.RegisterTool(td, noopTool)
+	}
+	return srv
+}
+
+func newAgentsServerWith(t *testing.T, cfg agents.Config, defs ...agents.AgentDef) (*testutil.TestClient, *agents.Registry) {
+	t.Helper()
+	cfg.Server = newCatalogServer()
+	cfg.Agents = defs
+	reg, err := agents.Register(cfg)
+	require.NoError(t, err)
+	return testutil.NewTestClient(t, cfg.Server), reg
+}
+
+func newAgentsServer(t *testing.T, defs ...agents.AgentDef) (*testutil.TestClient, *agents.Registry) {
+	t.Helper()
+	return newAgentsServerWith(t, agents.Config{}, defs...)
+}
+
+func listAll(t *testing.T, call func(method string, params any) (*client.CallResult, error)) agents.ListAgentsResult {
+	t.Helper()
+	res, err := call(agents.MethodList, nil)
+	require.NoError(t, err)
+	var out agents.ListAgentsResult
+	require.NoError(t, res.Unmarshal(&out))
+	return out
+}
+
+func rpcError(t *testing.T, err error) *client.RPCError {
+	t.Helper()
+	require.Error(t, err)
+	rpcErr, ok := err.(*client.RPCError)
+	require.True(t, ok, "want a JSON-RPC error, got %T", err)
+	return rpcErr
+}
+
+func errorReason(t *testing.T, rpcErr *client.RPCError) string {
+	t.Helper()
+	raw, err := json.Marshal(rpcErr.Data)
+	require.NoError(t, err)
+	var data agents.ErrorData
+	require.NoError(t, json.Unmarshal(raw, &data), "error must carry a data object")
+	return data.Reason
+}
+
 func TestExtensionAdvertised(t *testing.T) {
-	tc, _ := newAgentsServer(t, workflowAgent())
+	tc, _ := newAgentsServer(t, sepWorkflowAgent())
 	assert.True(t, tc.ServerSupportsExtension(agents.ExtensionID),
 		"server must advertise %q in capabilities.extensions", agents.ExtensionID)
 
 	cap, ok := tc.ServerExtensionCapability(agents.ExtensionID)
 	require.True(t, ok)
-	assert.Empty(t, cap, "agents declares no settings, so the object is empty per SEP-2133")
+	assert.Empty(t, cap, "listChanged is not advertised until notifications can be delivered")
 }
 
-// TestListReturnsRosterWithoutSchemas is the load-bearing progressive-
-// disclosure assertion: agents/list returns routing summaries and carries NO
-// instructions and NO tool schemas. If this regresses, a supervisor host would
-// eager-load every specialist's tools at connect — the exact bloat the
-// primitive exists to avoid.
-func TestListReturnsRosterWithoutSchemas(t *testing.T) {
-	tc, _ := newAgentsServer(t, workflowAgent())
+// agents/list carries routing cards only. If instructions or schemas leak
+// into it, a supervisor host eager-loads every agent's tools at connect, which
+// is the cost the primitive exists to avoid.
+func TestListReturnsCardsWithoutDetail(t *testing.T) {
+	tc, _ := newAgentsServer(t, sepWorkflowAgent())
 
 	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
 	require.NoError(t, err)
-	var out agents.ListResult
+	var out agents.ListAgentsResult
 	require.NoError(t, res.Unmarshal(&out))
 
+	assert.Equal(t, core.ResultTypeComplete, out.ResultType)
 	require.Len(t, out.Agents, 1)
-	got := out.Agents[0]
-	assert.Equal(t, "workflow-agent", got.AgentID)
-	assert.Equal(t, "invoke_workflow_agent", got.DelegateTool)
-	assert.True(t, got.TasksEnabled)
-	assert.Equal(t, "skill://workflow-agent/SKILL.md", got.SkillURI)
-	assert.Equal(t, []string{"Pipeline catalog and execution", "Approval gates", "Run analysis"}, got.Capabilities)
-
-	// The roster wire type has no field for instructions or tools at all; the
-	// raw payload must not carry them either.
+	assert.Equal(t, agents.AgentCard{
+		Name:         "workflow-agent",
+		Description:  "Investigates delivery pipelines and approvals",
+		Capabilities: []string{"pipeline failures", "deployment readiness", "approval status"},
+	}, out.Agents[0])
 	assert.NotContains(t, string(res.Raw), "instructions")
-	assert.NotContains(t, string(res.Raw), "list_pipelines")
+	assert.NotContains(t, string(res.Raw), "list_failed_pipelines")
 }
 
-// TestGetReturnsDetailWithTools confirms agents/get resolves the level-3
-// payload: the summary fields PLUS instructions and the scoped tool schemas.
-func TestGetReturnsDetailWithTools(t *testing.T) {
-	tc, _ := newAgentsServer(t, workflowAgent())
+func TestGetReturnsDetail(t *testing.T) {
+	tc, _ := newAgentsServer(t, sepWorkflowAgent())
 
-	res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "workflow-agent"})
+	res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"})
 	require.NoError(t, err)
-	var out agents.GetResult
+	var out agents.GetAgentResult
 	require.NoError(t, res.Unmarshal(&out))
 
-	got := out.Agent
-	assert.Equal(t, "workflow-agent", got.AgentID)             // summary field flattened in
-	assert.Equal(t, "invoke_workflow_agent", got.DelegateTool) // summary field flattened in
-	assert.Contains(t, got.Instructions, "read-only analysis") // detail
-	require.Len(t, got.Tools, 2)                               // detail
-	assert.Equal(t, "list_pipelines", got.Tools[0].Name)
-	assert.Equal(t, "approve_gate", got.Tools[1].Name)
+	assert.Equal(t, core.ResultTypeComplete, out.ResultType)
+	assert.Equal(t, "workflow-agent", out.Agent)
+	assert.Equal(t, "Handle delivery readiness and approval workflows.", out.Instructions)
+	assert.Equal(t, &agents.ModelRoutingHint{Role: agents.ModelRoleMedium}, out.ModelRoutingHint)
+	require.Len(t, out.Tools, 1)
+	assert.Equal(t, "list_failed_pipelines", out.Tools[0].Name)
 }
 
-// TestGetUnknownAgentIsError verifies an unknown agentId maps to InvalidParams
-// rather than an empty success — a host that typos an id gets a clear failure.
-func TestGetUnknownAgentIsError(t *testing.T) {
-	tc, _ := newAgentsServer(t, workflowAgent())
+// toolsByName returns the caller's tools/list keyed by name.
+func toolsByName(t *testing.T, call func(method string, params any) (*client.CallResult, error)) map[string]json.RawMessage {
+	t.Helper()
+	res, err := call("tools/list", nil)
+	require.NoError(t, err)
+	var out struct {
+		Tools []json.RawMessage `json:"tools"`
+	}
+	require.NoError(t, res.Unmarshal(&out))
+	byName := map[string]json.RawMessage{}
+	for _, raw := range out.Tools {
+		var head struct {
+			Name string `json:"name"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &head))
+		byName[head.Name] = raw
+	}
+	return byName
+}
 
-	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{AgentID: "no-such-agent"})
-	require.Error(t, err)
-	rpcErr, ok := err.(*client.RPCError)
-	require.True(t, ok, "want a JSON-RPC error, got %T", err)
+// assertToolsMatchList is the SEP's "all fields MUST match" rule: every tool
+// agents/get returns appears in the same caller's tools/list with identical
+// JSON.
+func assertToolsMatchList(t *testing.T, call func(method string, params any) (*client.CallResult, error), agent string) {
+	t.Helper()
+	listed := toolsByName(t, call)
+
+	res, err := call(agents.MethodGet, agents.GetAgentParams{Name: agent})
+	require.NoError(t, err)
+	var out struct {
+		Tools []json.RawMessage `json:"tools"`
+	}
+	require.NoError(t, res.Unmarshal(&out))
+	require.NotEmpty(t, out.Tools)
+
+	for _, raw := range out.Tools {
+		var head struct {
+			Name string `json:"name"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &head))
+		want, ok := listed[head.Name]
+		require.True(t, ok, "agents/get returned %q, which this caller's tools/list does not hold", head.Name)
+		assert.JSONEq(t, string(want), string(raw), "tool %q differs between agents/get and tools/list", head.Name)
+	}
+}
+
+func TestGetToolsMatchToolsList(t *testing.T) {
+	t.Run("client without fileInputs", func(t *testing.T) {
+		tc, _ := newAgentsServer(t, opsAgent())
+		assertToolsMatchList(t, testCall(t, tc.Client), "ops-agent")
+	})
+	t.Run("client with fileInputs", func(t *testing.T) {
+		srv := newCatalogServer()
+		_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{opsAgent()}})
+		require.NoError(t, err)
+		tc := testutil.NewTestClient(t, srv, client.WithFileInputs())
+		assertToolsMatchList(t, testCall(t, tc.Client), "ops-agent")
+	})
+}
+
+// A tool re-registered after the agent was declared must show up in its new
+// form. A copied definition would keep serving the old one.
+func TestGetToolsFollowReregistration(t *testing.T) {
+	srv := newCatalogServer()
+	_, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{sepWorkflowAgent()}})
+	require.NoError(t, err)
+	srv.RegisterTool(core.ToolDef{Name: "list_failed_pipelines", Description: "v2", InputSchema: map[string]any{"type": "object"}}, noopTool)
+	tc := testutil.NewTestClient(t, srv)
+
+	res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"})
+	require.NoError(t, err)
+	var out agents.GetAgentResult
+	require.NoError(t, res.Unmarshal(&out))
+	require.Len(t, out.Tools, 1)
+	assert.Equal(t, "v2", out.Tools[0].Description)
+}
+
+func TestGetUnknownAgentIsNotFound(t *testing.T) {
+	tc, _ := newAgentsServer(t, sepWorkflowAgent())
+
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "no-such-agent"})
+	rpcErr := rpcError(t, err)
 	assert.Equal(t, core.ErrCodeInvalidParams, rpcErr.Code)
+	assert.Equal(t, agents.ReasonAgentNotFound, errorReason(t, rpcErr))
 }
 
-// TestGetEmptyAgentIsError verifies a missing agentId is rejected as
-// InvalidParams.
-func TestGetEmptyAgentIsError(t *testing.T) {
-	tc, _ := newAgentsServer(t, workflowAgent())
+func TestGetEmptyNameIsInvalidParams(t *testing.T) {
+	tc, _ := newAgentsServer(t, sepWorkflowAgent())
 
-	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetParams{})
-	require.Error(t, err)
-	rpcErr, ok := err.(*client.RPCError)
-	require.True(t, ok, "want a JSON-RPC error, got %T", err)
-	assert.Equal(t, core.ErrCodeInvalidParams, rpcErr.Code)
+	_, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{})
+	assert.Equal(t, core.ErrCodeInvalidParams, rpcError(t, err).Code)
 }
 
-// TestRegisterDuplicateReportsError verifies a duplicate AgentID in the initial
-// roster is reported (first wins) rather than silently overwriting.
+// A caller must not be able to tell a hidden agent from a nonexistent one:
+// it is missing from the roster, and agents/get answers with the identical
+// error object.
+func TestHiddenAgentIsIndistinguishableFromMissing(t *testing.T) {
+	hide := func(_ core.MethodContext, name string) bool { return name != "ops-agent" }
+	tc, _ := newAgentsServerWith(t, agents.Config{Visible: hide}, sepWorkflowAgent(), opsAgent())
+
+	out := listAll(t, testCall(t, tc.Client))
+	require.Len(t, out.Agents, 1)
+	assert.Equal(t, "workflow-agent", out.Agents[0].Name)
+
+	_, hiddenErr := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "ops-agent"})
+	_, missingErr := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "no-such-agent"})
+	hidden, missing := rpcError(t, hiddenErr), rpcError(t, missingErr)
+	assert.Equal(t, missing.Code, hidden.Code)
+	assert.Equal(t, missing.Message, hidden.Message)
+	assert.Equal(t, missing.Data, hidden.Data)
+}
+
+func TestUnregisteredToolIsInvalidDefinition(t *testing.T) {
+	broken := agents.AgentDef{Name: "broken", Tools: []string{"approve_gate", "no_such_tool"}}
+
+	srv := newCatalogServer()
+	reg, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{broken}})
+	require.Error(t, err, "Register must report a tool name the catalog does not hold")
+	assert.Contains(t, err.Error(), "no_such_tool")
+	require.NotNil(t, reg)
+	tc := testutil.NewTestClient(t, srv)
+
+	_, err = tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "broken"})
+	rpcErr := rpcError(t, err)
+	assert.Equal(t, core.ErrCodeInternal, rpcErr.Code)
+	assert.Equal(t, agents.ReasonInvalidAgentDefinition, errorReason(t, rpcErr))
+
+	require.Error(t, reg.AddAgent(agents.AgentDef{Name: "also-broken", Tools: []string{"nope"}}),
+		"AddAgent reports unregistered tools the same way")
+}
+
+func TestCacheHints(t *testing.T) {
+	t.Run("private by default", func(t *testing.T) {
+		tc, _ := newAgentsServer(t, sepWorkflowAgent())
+		out := listAll(t, testCall(t, tc.Client))
+		assert.Equal(t, core.CacheScopePrivate, out.CacheScope)
+		assert.Nil(t, out.TTLMs)
+	})
+	t.Run("configured", func(t *testing.T) {
+		ttl := 5000
+		tc, _ := newAgentsServerWith(t, agents.Config{TTLMs: &ttl, CacheScope: core.CacheScopePublic}, sepWorkflowAgent())
+		out := listAll(t, testCall(t, tc.Client))
+		assert.Equal(t, core.CacheScopePublic, out.CacheScope)
+		require.NotNil(t, out.TTLMs)
+		assert.Equal(t, 5000, *out.TTLMs)
+
+		res, err := tc.Client.Call(t.Context(), agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"})
+		require.NoError(t, err)
+		var get agents.GetAgentResult
+		require.NoError(t, res.Unmarshal(&get))
+		assert.Equal(t, core.CacheScopePublic, get.CacheScope)
+		require.NotNil(t, get.TTLMs)
+		assert.Equal(t, 5000, *get.TTLMs)
+	})
+}
+
+func TestListPagination(t *testing.T) {
+	tc, _ := newAgentsServerWith(t, agents.Config{PageSize: 2},
+		agents.AgentDef{Name: "alpha"}, agents.AgentDef{Name: "bravo"}, agents.AgentDef{Name: "charlie"})
+
+	first := listAll(t, testCall(t, tc.Client))
+	require.Len(t, first.Agents, 2)
+	require.NotEmpty(t, first.NextCursor)
+
+	res, err := tc.Client.Call(t.Context(), agents.MethodList, agents.ListAgentsParams{Cursor: first.NextCursor})
+	require.NoError(t, err)
+	var second agents.ListAgentsResult
+	require.NoError(t, res.Unmarshal(&second))
+	require.Len(t, second.Agents, 1)
+	assert.Equal(t, "charlie", second.Agents[0].Name)
+	assert.Empty(t, second.NextCursor, "the last page omits nextCursor")
+
+	_, err = tc.Client.Call(t.Context(), agents.MethodList, agents.ListAgentsParams{Cursor: "not-a-cursor"})
+	assert.Equal(t, core.ErrCodeInvalidParams, rpcError(t, err).Code)
+}
+
+func TestListUnpaginatedByDefault(t *testing.T) {
+	tc, _ := newAgentsServer(t, agents.AgentDef{Name: "alpha"}, agents.AgentDef{Name: "bravo"}, agents.AgentDef{Name: "charlie"})
+	out := listAll(t, testCall(t, tc.Client))
+	assert.Len(t, out.Agents, 3)
+	assert.Empty(t, out.NextCursor)
+}
+
+// A duplicate name in the initial roster is reported, and the first
+// registration wins rather than being silently overwritten.
 func TestRegisterDuplicateReportsError(t *testing.T) {
-	srv := server.NewServer(core.ServerInfo{Name: "agents-test", Version: "0.0.1"})
-	first := workflowAgent()
-	dup := workflowAgent()
+	srv := newCatalogServer()
+	dup := sepWorkflowAgent()
 	dup.Description = "SHOULD NOT WIN"
-	reg, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{first, dup}})
-	require.Error(t, err, "duplicate agentId must be reported")
+	reg, err := agents.Register(agents.Config{Server: srv, Agents: []agents.AgentDef{sepWorkflowAgent(), dup}})
+	require.Error(t, err, "duplicate name must be reported")
 	require.NotNil(t, reg)
 
-	tc := testutil.NewTestClient(t, srv)
-	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
-	require.NoError(t, err)
-	var out agents.ListResult
-	require.NoError(t, res.Unmarshal(&out))
+	out := listAll(t, testCall(t, testutil.NewTestClient(t, srv).Client))
 	require.Len(t, out.Agents, 1)
-	assert.Equal(t, "Pipelines, approval gates, run history, connectors", out.Agents[0].Description,
-		"first registration must win the duplicate")
+	assert.Equal(t, "Investigates delivery pipelines and approvals", out.Agents[0].Description)
 }
 
-// TestListOrderIsStable verifies agents/list preserves insertion order across
-// the initial roster and a runtime AddAgent, so the wire roster is
-// deterministic rather than map-random.
 func TestListOrderIsStable(t *testing.T) {
-	a := agents.AgentDef{AgentID: "alpha"}
-	b := agents.AgentDef{AgentID: "bravo"}
-	c := agents.AgentDef{AgentID: "charlie"}
-	tc, reg := newAgentsServer(t, a, b)
-	require.NoError(t, reg.AddAgent(c))
+	tc, reg := newAgentsServer(t, agents.AgentDef{Name: "alpha"}, agents.AgentDef{Name: "bravo"})
+	require.NoError(t, reg.AddAgent(agents.AgentDef{Name: "charlie"}))
 
-	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
-	require.NoError(t, err)
-	var out agents.ListResult
-	require.NoError(t, res.Unmarshal(&out))
-
-	ids := []string{out.Agents[0].AgentID, out.Agents[1].AgentID, out.Agents[2].AgentID}
-	assert.Equal(t, []string{"alpha", "bravo", "charlie"}, ids)
+	out := listAll(t, testCall(t, tc.Client))
+	names := []string{out.Agents[0].Name, out.Agents[1].Name, out.Agents[2].Name}
+	assert.Equal(t, []string{"alpha", "bravo", "charlie"}, names)
 }
 
-// TestAddRemoveAgent exercises the runtime roster mutators: AddAgent rejects a
-// duplicate, RemoveAgent drops a known id and no-ops an unknown one.
 func TestAddRemoveAgent(t *testing.T) {
-	tc, reg := newAgentsServer(t, workflowAgent())
+	tc, reg := newAgentsServer(t, sepWorkflowAgent())
 
-	require.Error(t, reg.AddAgent(workflowAgent()), "AddAgent must reject a duplicate")
+	require.Error(t, reg.AddAgent(sepWorkflowAgent()), "AddAgent must reject a duplicate")
 
-	require.NoError(t, reg.AddAgent(agents.AgentDef{AgentID: "second"}))
+	require.NoError(t, reg.AddAgent(agents.AgentDef{Name: "second"}))
 	reg.RemoveAgent("workflow-agent")
-	reg.RemoveAgent("nonexistent") // no-op, must not panic
+	reg.RemoveAgent("nonexistent")
 
-	res, err := tc.Client.Call(t.Context(), agents.MethodList, nil)
-	require.NoError(t, err)
-	var out agents.ListResult
-	require.NoError(t, res.Unmarshal(&out))
+	out := listAll(t, testCall(t, tc.Client))
 	require.Len(t, out.Agents, 1)
-	assert.Equal(t, "second", out.Agents[0].AgentID)
+	assert.Equal(t, "second", out.Agents[0].Name)
+}
+
+// testCall adapts a client to the call signature the shared helpers take, so
+// the same assertions run against the session and stateless wires.
+func testCall(t *testing.T, c *client.Client) func(method string, params any) (*client.CallResult, error) {
+	return func(method string, params any) (*client.CallResult, error) {
+		return c.Call(t.Context(), method, params)
+	}
 }

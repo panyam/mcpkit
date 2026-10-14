@@ -796,10 +796,10 @@ The pass follows the established opt-in contract. `agents.Config.TracerProvider 
 
 | Handler | Span name | Attributes |
 |---|---|---|
-| `agents/list` | `agents.list` | `agents.count` (roster size) |
+| `agents/list` | `agents.list` | `agents.count` (cards on the returned page) |
 | `agents/get` | `agents.get` | `mcp.agent.id`, `agents.found` (`true` / `false`) |
 
-`agents.found` is set on every path (including empty / unknown `agentId`), so a failed lookup is visible in the trace rather than silent.
+`agents.found` is set on every path (including an empty, unknown or hidden agent name), so a failed lookup is visible in the trace rather than silent.
 
 **Host side, delegation edge** (chakra's `host/server_agents.go`). The host's lazy `serverAgentSource.resolve` wraps the first-use `agents/get` + child build in an `agents.resolve` span carrying `mcp.agent.id`. Cache hits are not spanned. This ties the three pieces a delegation trace should show: `supervisor turn -> agents.resolve(agent.id) -> agents.get -> child turn`.
 
