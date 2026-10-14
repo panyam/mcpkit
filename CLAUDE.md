@@ -102,7 +102,8 @@ the tree.
 
 Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. The active mission is
 **#1508** (`mission_events_sep3415`): the events server and Go client score green against the
-SEP-3415 conformance suites. Its exercise is `make exercise-events` (wired by #1500). Run it after
+SEP-3415 conformance suites. Its exercise is `make exercise-events` (after a one-time
+`make conf-events-setup`). Run it after
 each merged mission PR and log the result on #1508. A new issue gets a priority (`P0`–`P3`) and
 either a mission link (blocked-by on the mission issue) or `waiting` with its trigger.
 
@@ -317,7 +318,9 @@ stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
 stacked on PR 521. Its scenarios grade what a client sends to a scripted mock server, and the Go
 client is driven through `experimental/ext/events/clients/go/cmd/conformance-client`, which lives in
 that module so the root module never imports `experimental/`. The driver only calls what the SDK
-offers, so a red row is an SDK gap, never a driver choice to patch.
+offers, so a red row is an SDK gap, never a driver choice to patch. `make testconf-events-client`
+(stage 8j, `INFO`) runs it, `make exercise-events` runs both suites into one table, and
+`make conf-events-setup` creates the two checkouts they read.
 
 **The Events capability moved, and the story is worth keeping.** It declares through the SEP-2133
 extensions map like everything else here (`io.modelcontextprotocol/events`), via

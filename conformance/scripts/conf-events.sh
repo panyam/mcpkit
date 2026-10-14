@@ -16,7 +16,7 @@ set -u
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 require_conf_dir MCPCONFORMANCE_EVENTS_PATH \
-    "Clone https://github.com/panyam/mcpconformance there or set MCPCONFORMANCE_EVENTS_PATH=<path-to-clone>." \
+    "Run 'make conf-events-setup' to create it, or set MCPCONFORMANCE_EVENTS_PATH=<path-to-clone>." \
     "Default expects the feat/events-conformance-suite branch checked out at ../conf-events."
 build_conf_dist MCPCONFORMANCE_EVENTS_PATH
 

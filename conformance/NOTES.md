@@ -32,6 +32,7 @@ Defaults, resolved relative to `conformance/justfile`:
 | `MCPCONFORMANCE_FILE_INPUTS_PATH`, `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` (fork `pending`) |
 | `MCPCONFORMANCE_SKILLS_PATH` | `../conf-upstream-main` (upstream `main`, retargeted once PR 330 merged) |
 | `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, draft upstream PR 521) |
+| `MCPCONFORMANCE_EVENTS_CLIENT_PATH` | `../conf-events-client` (fork `feat/events-client-conformance`, draft upstream PR 541, a worktree of `../conf-events`) |
 
 Override per invocation when a SEP splits to its own branch awaiting upstream approval. Each target
 fail-fasts with a remediation message if its path is missing.
@@ -405,6 +406,17 @@ The docs site needs nothing extra. `docs/site/content/conformance/index.html` is
 `testconf-events`, stage 8i, `INFO`. Drives `examples/events/kitchen-sink`; scenarios live on
 `feat/events-conformance-suite` of the fork and are proposed upstream as a **draft**,
 `modelcontextprotocol/conformance` PR 521 (server) and PR 541 (client, stacked on it).
+
+The client half is `testconf-events-client`, stage 8j, also `INFO`. It reads its own checkout of
+`feat/events-client-conformance` rather than reusing `../conf-events`, so each suite grades the head
+of its own upstream PR. It builds the Go driver into a scratch dir on every run (a bare `go build` in
+the module would leave a binary for `git add -A` to find), and `EVENTS_CLIENT_DRIVER=/usr/bin/false`
+swaps in a driver that cannot speak MCP. All four scenarios go red when you do, which is the quick
+way to confirm the suite is grading the SDK at all. `make conf-events-setup` creates both checkouts,
+the second as a worktree of the first, and `make exercise-events` runs both suites into one table
+for mission #1508. Before those existed, the exercise took a hand-cloned fork, a second checkout, an
+`npm ci`, a hand-built driver and a `node dist/index.js` loop, and a scratch checkout lost between
+sessions meant redoing all of it.
 
 **Its rows quote a design document, and the SEP came later.** The source is
 `docs/design-sketch-proposal.md` on `main` of
