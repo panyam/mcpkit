@@ -243,10 +243,11 @@ func TestStream_EventNotificationCarriesRequestId(t *testing.T) {
 	assert.NotEmpty(t, p["eventId"])
 }
 
-// TestStream_FinalFrameIsStreamEventsResult verifies that after the client
-// cancels the stream, the handler returns an empty StreamEventsResult per
-// spec L293: "{\"_meta\": {}}" — a typed final frame so the JSON-RPC contract
-// (every request has a response) is satisfied.
+// TestStream_FinalFrameIsStreamEventsResult verifies the final frame after the
+// client cancels the stream. SEP-3415: StreamEventsResult "carries only
+// resultType and the subscription ID in _meta", so the subscription ID is the
+// same one every notification on the stream carried. (The design sketch had it
+// as an empty {"_meta": {}}.)
 func TestStream_FinalFrameIsStreamEventsResult(t *testing.T) {
 	st := newStreamTestStack(t, "test-principal")
 	rs := st.startStream(t, validStreamParams())
@@ -261,8 +262,10 @@ func TestStream_FinalFrameIsStreamEventsResult(t *testing.T) {
 	require.NoError(t, err)
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(body, &m))
-	_, ok := m["_meta"]
-	assert.True(t, ok, "StreamEventsResult must contain _meta key per spec L293; got %s", string(body))
+	meta, ok := m["_meta"].(map[string]any)
+	require.True(t, ok, "StreamEventsResult must carry a _meta object; got %s", string(body))
+	assert.EqualValues(t, 42, meta[core.MetaKeySubscriptionID],
+		"StreamEventsResult._meta must carry the subscription ID, the stream's request id; got %s", string(body))
 }
 
 // TestStream_HeartbeatFiresOnInterval verifies the spec heartbeat contract
