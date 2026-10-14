@@ -109,7 +109,7 @@ myDB.OnInsert = func(row Row) {
 | Method | Description |
 |--------|-------------|
 | `events/list` | Returns event definitions with auto-derived `payloadSchema` and `cursorless` flag |
-| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollMs}`); error responses use spec error codes `-32011 NotFound` (`data.kind: "event"`) / `-32015 CallbackEndpointError` |
+| `events/poll` | Single-subscription polling, flat top-level response shape (`{events, cursor, hasMore, truncated, nextPollMs}`); error responses use spec error codes `-32023 NotFound` (`data.kind: "event"`) / `-32027 CallbackEndpointError` |
 | `events/subscribe` | Webhook registration with HMAC secret + TTL + `refreshBefore`. `cursor: null` means "from now" — server resolves to source's current head |
 | `events/unsubscribe` | Webhook removal by `(url, id)` or `(url, secret)` |
 
@@ -197,7 +197,11 @@ events.Register(events.Config{
 })
 ```
 
-When set, anonymous webhook subscribes are accepted under the configured principal. The server logs a startup warning so deployments using it know they're off-spec. **Production deployments leave this empty AND wire `server.WithAuth(validator)` so unauthenticated subscribe attempts hit the spec-mandated `-32012 Forbidden` rejection.**
+When set, anonymous webhook subscribes are accepted under the configured principal. The server logs a startup warning so deployments using it know they're off-spec. **Production deployments leave this empty AND wire `server.WithAuth(validator)` so unauthenticated subscribe attempts hit the spec-mandated `-32024 Forbidden` rejection.**
+
+### ChatGPT compatibility
+
+The capability declares under `capabilities.extensions["io.modelcontextprotocol/events"]`, per SEP-3415. ChatGPT reads the older top-level `capabilities.events` instead (OpenAI's MCP Events guide, and a field report in sketch issue 8), so it finds nothing on a default server. `events.Config{ChatGPTCompat: true}` declares the capability in both places with the same settings. Error codes and the rest of the wire stay SEP-3415. The option is temporary and goes once ChatGPT reads the extensions map (#1511).
 
 ### Auth + extension composition
 
@@ -240,7 +244,7 @@ The Python `events_client.py` receiver auto-detects which header set is on the i
 
 ### Endpoint verification
 
-The server confirms a receiver wants deliveries before activating a subscription. By default it POSTs a signed `{"type":"verification","challenge":"<nonce>"}` envelope during `events/subscribe`, and the receiver must echo `{"challenge":"<nonce>"}` in a `2xx` body; otherwise subscribe fails with `-32015` and `data.reason: "challenge_failed"`. Both shipped clients answer it, and hand-rolled Go receivers can call `events.AnswerVerificationChallenge(w, body)` once the signature checks out. Because the challenge arrives mid-subscribe, the receiver has to be listening first.
+The server confirms a receiver wants deliveries before activating a subscription. By default it POSTs a signed `{"type":"verification","challenge":"<nonce>"}` envelope during `events/subscribe`, and the receiver must echo `{"challenge":"<nonce>"}` in a `2xx` body; otherwise subscribe fails with `-32027` and `data.reason: "challenge_failed"`. Both shipped clients answer it, and hand-rolled Go receivers can call `events.AnswerVerificationChallenge(w, body)` once the signature checks out. Because the challenge arrives mid-subscribe, the receiver has to be listening first.
 
 Operators can waive the handshake for known URLs with `WithWebhookDeliveryAllowlist` or `WithPreVerifier`, and can opt into receiver-published documents with `WithWellKnownReceiverDocs`, which a receiver serves with `events.WellKnownReceiverHandler`. [`DEPLOYMENT.md`](DEPLOYMENT.md#endpoint-verification) covers the options and the cache.
 

@@ -159,7 +159,7 @@ func configureRedisBackend(cfg *events.Config, srv *server.Server, webhooks *eve
 	// Quota — Redis-backed atomic counters with per-event-type caps
 	// parsed out of EVENTS_QUOTA_CAPS (see parseQuotaCaps). The default
 	// in compose.tmpl is "chat.message=3" — small enough that the
-	// walkthrough's "subscribe 4 times, watch the 4th get -32013" beat
+	// walkthrough's "subscribe 4 times, watch the 4th get -32025" beat
 	// is easy to drive by hand. Empty / unset env => no caps (every
 	// Reserve succeeds; matches the pre-cap demo behavior).
 	qs, err := redisstore.NewQuotaStore(opts)

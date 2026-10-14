@@ -142,7 +142,7 @@ just serve
 
 # Real-OIDC posture: set OAUTH_ISSUER (and optionally OAUTH_AUDIENCE / OAUTH_JWKS_URL).
 # Server wires server.WithAuth(JWTValidator) and follows the spec strictly —
-# anonymous webhook subscribes are rejected with -32012 Unauthorized.
+# anonymous webhook subscribes are rejected with -32024 Forbidden.
 # Server logs:  [server] auth: real OIDC (...) — anonymous webhook subscribes rejected per spec
 OAUTH_ISSUER=http://localhost:8081/realms/demo \
 OAUTH_AUDIENCE=mcp-events \

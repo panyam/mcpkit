@@ -135,7 +135,7 @@ The introspection-based auth has *synchronously revocable* tokens — the demo's
 
 1. Open <http://localhost:8180/admin/master/console/#/asgard/users>, login as `admin` / `admin`.
 2. Click user `alice` → **Sessions** tab → **Sign out**.
-3. Within `OAUTH_CACHE_TTL` seconds (default 5s), Asgard's streaming + webhook terminals die with `-32012 Forbidden` — revocation fires across both push surfaces uniformly.
+3. Within `OAUTH_CACHE_TTL` seconds (default 5s), Asgard's streaming + webhook terminals die with `-32024 Forbidden` — revocation fires across both push surfaces uniformly.
 4. Babylon + Camelot terminals stay alive — revocation is per-realm, isolation holds.
 
 This is the operator-facing flow a real production admin would use; nothing in the demo "fakes" the revocation. Log back in (`just streamer TENANT=A USERNAME=alice`) and the subscriber reconnects.

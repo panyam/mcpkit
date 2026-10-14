@@ -123,7 +123,7 @@ func webhookSubscribeParams(url, secret string, args map[string]any) map[string]
 
 func callbackErrorReason(t *testing.T, resp *core.Response) string {
 	t.Helper()
-	require.NotNil(t, resp.Error, "expected -32015; got success")
+	require.NotNil(t, resp.Error, "expected -32027; got success")
 	require.Equal(t, ErrCodeCallbackEndpointError, resp.Error.Code, "error: %+v", resp.Error)
 	raw, err := json.Marshal(resp.Error.Data)
 	require.NoError(t, err)

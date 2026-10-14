@@ -19,6 +19,14 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   (#1504).
 
 ### Changed
+- **`experimental/ext/events`: error codes follow SEP-3415 (wire-breaking).**
+  The five Events codes move from `-32011..-32015` to `-32023..-32027`
+  (`NotFound`, `Forbidden`, `ResourceExhausted`, `Unsupported`,
+  `CallbackEndpointError`). The old numbers sit in the range the core
+  specification leaves to implementations and never assigns, and both
+  SEP-3415 and the design sketch (upstream PR 11) renumbered them. Code that
+  compares against `events.ErrCode*` needs no change. Code or clients matching
+  on the literal numbers do (#1501).
 - **`subscriptions/listen` follows the 2026-07-28 schema.** The
   `subscriptionId` is the listen request's JSON-RPC id rather than a minted
   `sub-...` string, the acknowledgement carries the honored filter in

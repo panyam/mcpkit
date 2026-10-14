@@ -146,7 +146,7 @@ func serve() {
 	//
 	// If OAUTH_ISSUER is set, wire real OIDC auth via server.WithAuth(...)
 	// and follow the spec strictly — anonymous webhook subscribes are
-	// rejected with -32012 per §"Subscription Identity" → "Authentication
+	// rejected with -32024 per §"Subscription Identity" → "Authentication
 	// required" L361. Otherwise fall back to the demo escape hatch so
 	// `just demo` works end-to-end without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")

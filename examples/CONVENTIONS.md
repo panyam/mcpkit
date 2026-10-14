@@ -1088,7 +1088,7 @@ When an example needs that surface, add it behind a **per-surface flag named
 - **Report configuration rather than set it.** When the suite only needs to know
   where a limit is, a read-only control is enough: `events_conformance_quota`
   answers the capped type and its cap, read back from the `Quota`, and the
-  suite provokes `-32013` itself (#1461). A setter would need library state to
+  suite provokes `-32025` itself (#1461). A setter would need library state to
   be mutable at run time, which is a behaviour change dressed as a control.
 - **Keep the fixture and the demo the same binary.** `cmd/testserver` exists
   because `examples/mrtr` genuinely could not serve the fixtures, but a separate

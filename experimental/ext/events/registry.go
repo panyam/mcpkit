@@ -259,12 +259,12 @@ func (r *Registry) RemoveSource(name string) error {
 
 // terminateSubscriptions ends every live subscription to a removed event
 // type, per spec §"Event Type Removal and Breaking Changes". Both modes
-// carry the same error, -32011 NotFound with data.kind "event", which is
+// carry the same error, -32023 NotFound with data.kind "event", which is
 // what tells a client SDK to re-fetch events/list rather than treat the
 // close as an auth failure or a transport blip.
 //
 // Poll needs no equivalent: it holds no server-side subscription, and a
-// poll against a removed name already answers -32011 from the handler's
+// poll against a removed name already answers -32023 from the handler's
 // own lookup miss.
 func (r *Registry) terminateSubscriptions(name string, src EventSource) {
 	// Webhook subscriptions live in the WebhookRegistry, keyed by event

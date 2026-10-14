@@ -59,7 +59,7 @@ func runDemo() {
 		"- **Match by params** — two subs to chat.message, different `channel` params; only matching events delivered.",
 		"- **Transform by params** — two subs to alert.fired, one with `redact_pii:true`; same upstream event, different bytes on the wire per subscriber.",
 		"- **OnSubscribe + EmitToSubscription** — presence.changed uses targeted emit driven by per-subscription watch lists captured at subscribe time; Match / Transform are NOT invoked on this path.",
-		"- **Quota cap rejection** — chat.message capped at 2 subscriptions per principal; the third subscribe returns `-32013 TooManySubscriptions` with the spec wire shape.",
+		"- **Quota cap rejection** — chat.message capped at 2 subscriptions per principal; the third subscribe returns `-32025 ResourceExhausted` with the spec wire shape.",
 		"- **Cursorless source on the wire** — presence emits `cursor:null` and Poll always returns empty.",
 		"",
 		"Single-process; in-memory; synthetic upstreams. Two-terminal flow:",
@@ -230,8 +230,8 @@ func runDemo() {
 
 	demo.Step("What stops a noisy client from subscribing 100 times?").
 		Arrow("Host", "Server", "events/subscribe ×3 (chat.message)").
-		DashedArrow("Server", "Host", "1st: id=sub_...; 2nd: id=sub_...; 3rd: error -32013").
-		Note("Quota is configured per-principal-per-event-type at events.Register time. The third subscribe under the same principal returns -32013 ResourceExhausted with structured data {limit:\"subscriptions\", max:N} — clients read the max to know the cap without consulting docs. " +
+		DashedArrow("Server", "Host", "1st: id=sub_...; 2nd: id=sub_...; 3rd: error -32025").
+		Note("Quota is configured per-principal-per-event-type at events.Register time. The third subscribe under the same principal returns -32025 ResourceExhausted with structured data {limit:\"subscriptions\", max:N} — clients read the max to know the cap without consulting docs. " +
 			"Two emission paths share this shape (see experimental/ext/events/errors.go's ResourceExhaustedData godoc for the canonical table): " +
 			"(a) Reserve failure — quota counter at the configured cap; message names the cap; data.max > 0. " +
 			"(b) on_subscribe rejection — author OnSubscribe hook returned an error AFTER Reserve granted; message starts \"on_subscribe rejected:\"; data.max absent on the wire (the server didn't impose this rejection, the author did). " +

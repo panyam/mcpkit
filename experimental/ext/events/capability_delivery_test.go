@@ -157,7 +157,7 @@ func TestPoll_RejectsUnsupportedDeliveryMode(t *testing.T) {
 
 	resp := pollRaw(t, srv, `{"name":"push.only","cursor":null}`)
 	require.NotNil(t, resp.Error, "polling a source that does not offer poll must fail")
-	assert.Equal(t, -32014, resp.Error.Code)
+	assert.Equal(t, -32026, resp.Error.Code)
 
 	data, ok := resp.Error.Data.(UnsupportedData)
 	require.True(t, ok, "error data should name the unsupported mode, got %T", resp.Error.Data)
@@ -223,4 +223,27 @@ func TestTopologySource_KeepsDescriptorContract(t *testing.T) {
 
 	resp := pollRaw(t, srv, `{"name":"`+TopologySourceName+`","cursor":null}`)
 	assert.Nil(t, resp.Error, "the topology source must still be pollable after the delivery gate")
+}
+
+// TestInitialize_ChatGPTCompatAlsoDeclaresTopLevel pins the opt-in for clients
+// that read the pre-SEP top-level key: the capability appears in both places
+// with the same settings, and the extensions-map declaration stays.
+func TestInitialize_ChatGPTCompatAlsoDeclaresTopLevel(t *testing.T) {
+	src, _ := NewYieldingSource[fakeFilterPayload](EventDef{Name: "fake.event"})
+	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})
+	Register(Config{
+		Sources:       []EventSource{src},
+		Webhooks:      NewWebhookRegistry(),
+		Server:        srv,
+		ChatGPTCompat: true,
+	})
+
+	caps := capsOf(t, initializeRaw(t, srv))
+	top, ok := caps["events"].(map[string]any)
+	require.True(t, ok, "ChatGPTCompat must declare top-level capabilities.events; got %v", caps)
+	assert.Equal(t, true, top["listChanged"])
+
+	exts, ok := caps["extensions"].(map[string]any)
+	require.True(t, ok, "capabilities.extensions missing; got %v", caps)
+	assert.Contains(t, exts, ExtensionID, "the SEP-3415 declaration must stay alongside the compat one")
 }

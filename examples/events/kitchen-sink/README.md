@@ -47,7 +47,7 @@ Each bullet maps to a walkthrough step:
 - **`Match` by params** — two subs to `chat.message` with `params:{channel:"general"}` vs `{channel:"dev"}`. Each sees only its channel; the unrelated `alerts` channel reaches neither.
 - **`Transform` by params** — two subs to `alert.fired` with `params:{redact_pii:true}` vs `{redact_pii:false}`. Same upstream event, different bytes per sub: the redacted variant has its `reporter` cleared and emails in the `message` body replaced with `<redacted-email>`.
 - **`OnSubscribe` + `EmitToSubscription`** — `presence.changed` doesn't use Match; instead, `OnSubscribe` captures `params:{watch_users:[...]}` in a per-sub registry and the presence feeder uses `events.EmitToSubscription(idx, ev, subID)` to deliver each transition straight to the matching subs. Match and Transform are NOT invoked on this path — the routing is fully resolved at emit time by the author code.
-- **Quota cap rejection** — `chat.message` is capped at 2 subscriptions per principal at `events.Register` time. The third subscribe returns `-32013 TooManySubscriptions` with `data:{limit:"subscriptions", max:2}` — the spec wire shape any other consumer can rely on.
+- **Quota cap rejection** — `chat.message` is capped at 2 subscriptions per principal at `events.Register` time. The third subscribe returns `-32025 ResourceExhausted` with `data:{limit:"subscriptions", max:2}` — the spec wire shape any other consumer can rely on.
 - **Cursorless source wire shape** — `presence.changed` polls always return empty + `cursor:null`.
 
 ## Architecture
@@ -95,7 +95,7 @@ just test
 | `TestOnSubscribe_RegistersWatchList` | OnSubscribe populates the per-sub registry. |
 | `TestEmitToSubscription_RoutesOnlyToWatchingSubscriptions` | Targeted emit reaches only watching subs; unmatched transitions reach nobody. |
 | `TestOnUnsubscribe_ClearsWatchList` | OnUnsubscribe purges the registry entry on stream stop. |
-| `TestQuota_RejectsBeyondCapWithStructuredError` | Pins the `-32013` + `{limit, max}` wire shape so 407 stage 4 can reference it. |
+| `TestQuota_RejectsBeyondCapWithStructuredError` | Pins the `-32025` + `{limit, max}` wire shape so 407 stage 4 can reference it. |
 
 ## Library APIs this demo exercises
 

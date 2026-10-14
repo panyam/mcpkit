@@ -30,7 +30,7 @@ The Keycloak admin UI is the operator surface for the demo's revocation walkthro
 - **Admin credentials**: `admin` / `admin` (set on the Keycloak service env in `docker-compose.yaml`, also DEMO ONLY).
 - **Revoke a user**: open `localhost:8180/admin/master/console/#/<realm>/users` → click user → "Sessions" tab → "Sign out" per session, or "Sign out all sessions" globally.
 
-Within `OAUTH_CACHE_TTL` seconds (default 5s), the event-server's introspection cache expires, the next introspection call returns `active: false`, and the affected client receives `-32012 Forbidden`. Other tenants and other users are unaffected.
+Within `OAUTH_CACHE_TTL` seconds (default 5s), the event-server's introspection cache expires, the next introspection call returns `active: false`, and the affected client receives `-32024 Forbidden`. Other tenants and other users are unaffected.
 
 ## Bring your own client
 

@@ -221,6 +221,18 @@ type Extension struct {
 	// extension defines for itself. Nil means the extension declares no
 	// settings, which reaches the wire as the empty object {}.
 	Settings map[string]any
+
+	// TopLevel holds capability keys the extension also declares at the top
+	// level of capabilities, outside the extensions map. It exists for clients
+	// that still read a declaration from where an extension lived before it
+	// moved into Extension Negotiation, and is meant to be temporary: each use
+	// should name the client it serves and when it can go.
+	//
+	// It adds a declaration and never moves one, so the extension still
+	// appears under capabilities.extensions. A key that names a core
+	// capability field (tools, resources, ...) is dropped rather than allowed
+	// to replace it, whether or not the server set that field.
+	TopLevel map[string]any
 }
 
 // ExtensionProvider is implemented by sub-modules to declare their extension.

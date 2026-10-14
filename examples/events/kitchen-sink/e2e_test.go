@@ -351,7 +351,7 @@ func TestQuota_RejectsBeyondCapWithStructuredError(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, failures, 1, "at least one subscribe beyond cap=%d must fail", quotaCap)
 	require.NotNil(t, rpc, "expected at least one *client.RPCError among failures, got: %+v", results)
-	assert.Equal(t, -32013, rpc.Code, "expected -32013 TooManySubscriptions per spec")
+	assert.Equal(t, -32025, rpc.Code, "expected -32025 ResourceExhausted per spec")
 	// Wire shape: library quota error data carries {limit: "subscriptions", max: <N>}.
 	// Pinning this here means a downstream consumer (407 stage-4 walkthrough,
 	// future #635 consistency follow-up) can compare against a known shape.
@@ -361,11 +361,11 @@ func TestQuota_RejectsBeyondCapWithStructuredError(t *testing.T) {
 	assert.EqualValues(t, quotaCap, dataMap["max"], "spec quota error data should include max=cap configured")
 }
 
-// TestQuota_OnSubscribeRejection_WireShape pins the SECOND -32013
+// TestQuota_OnSubscribeRejection_WireShape pins the SECOND -32025
 // emission path documented in experimental/ext/events/errors.go's
 // ResourceExhaustedData godoc: when an EventDef's OnSubscribe hook
 // returns an error AFTER the Reserve granted, the response carries
-// code=-32013, limit="subscriptions", max ABSENT on the wire (the
+// code=-32025, limit="subscriptions", max ABSENT on the wire (the
 // server didn't impose the rejection — the author did), and a message
 // starting with "on_subscribe rejected:".
 //
@@ -412,7 +412,7 @@ func TestQuota_OnSubscribeRejection_WireShape(t *testing.T) {
 
 	rpc := unwrapRPC(err)
 	require.NotNil(t, rpc, "error must unwrap to *client.RPCError; got %T: %v", err, err)
-	assert.Equal(t, -32013, rpc.Code, "second emission path uses the same code as Reserve failure")
+	assert.Equal(t, -32025, rpc.Code, "second emission path uses the same code as Reserve failure")
 	assert.Contains(t, rpc.Message, "on_subscribe rejected:",
 		"second emission path's message starts with %q; got %q", "on_subscribe rejected:", rpc.Message)
 

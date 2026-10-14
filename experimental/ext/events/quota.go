@@ -34,7 +34,7 @@ import (
 
 // ErrTooManySubscriptions is returned by Quota.Reserve when the cap
 // for (principal, event-type) is exceeded. Surfaces on the wire as
-// -32013 ResourceExhausted with data.limit="subscriptions" per the
+// -32025 ResourceExhausted with data.limit="subscriptions" per the
 // MCP Events spec's reusable error-code set.
 //
 // Use errors.Is(err, ErrTooManySubscriptions) to test; the wrapping
@@ -152,7 +152,7 @@ func (q *Quota) Release(principal, eventName string) {
 
 // Cap returns the configured per-principal cap for eventName, or 0 if
 // the event-type is uncapped. Wire-format helper: emission sites use
-// the returned value to populate ResourceExhaustedData.Max on -32013
+// the returned value to populate ResourceExhaustedData.Max on -32025
 // responses without parsing the wrapped error's message.
 func (q *Quota) Cap(eventName string) int {
 	q.mu.Lock()

@@ -29,7 +29,7 @@ import (
 //
 // This is the contract the whole-enchilada streamer demo binary relies
 // on. Without the CanNotify-gated admission path, events/stream would
-// either reject with -32014 (old guard) or accept and silently drop
+// either reject with -32026 (old guard) or accept and silently drop
 // events (no guard at all).
 func TestStream_Stateless_SSE_DeliversEvents(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](
@@ -119,7 +119,7 @@ func TestStream_Stateless_SSE_DeliversEvents(t *testing.T) {
 // TestStream_Stateless_PlainJSON_ReturnsUnsupported asserts the
 // admission-gate complement — a stateless POST that does NOT request
 // SSE has no notify channel. CanNotify returns false and registerStream
-// fails fast with the spec-shape -32014 Unsupported response. Clients
+// fails fast with the spec-shape -32026 Unsupported response. Clients
 // pick events/poll via one decision rule regardless of whether the rail
 // is missing because the source lacks push or because the wire does.
 func TestStream_Stateless_PlainJSON_ReturnsUnsupported(t *testing.T) {
@@ -168,8 +168,8 @@ func TestStream_Stateless_PlainJSON_ReturnsUnsupported(t *testing.T) {
 
 	var rpc core.Response
 	require.NoError(t, json.Unmarshal(payload, &rpc), "body: %s", string(payload))
-	require.NotNil(t, rpc.Error, "expected -32014; got result: %s", string(payload))
-	assert.Equal(t, ErrCodeUnsupported, rpc.Error.Code, "want -32014 Unsupported")
+	require.NotNil(t, rpc.Error, "expected -32026; got result: %s", string(payload))
+	assert.Equal(t, ErrCodeUnsupported, rpc.Error.Code, "want -32026 Unsupported")
 
 	dataRaw, err := json.Marshal(rpc.Error.Data)
 	require.NoError(t, err)
@@ -194,4 +194,65 @@ func readSSEFrames(t *testing.T, r io.Reader) [][]byte {
 		frames = append(frames, []byte(strings.TrimSpace(line[len("data:"):])))
 	}
 	return frames
+}
+
+// TestResultType_CompleteOnEveryEventsResult pins SEP-3415's "Every result this
+// extension defines is a standard Result and carries resultType: "complete"" on
+// the 2026-07-28 wire. The dispatcher stamps it generically, so this guards
+// against an events handler ever building a result that bypasses the stamp.
+func TestResultType_CompleteOnEveryEventsResult(t *testing.T) {
+	src, _ := NewYieldingSource[fakePayload](
+		EventDef{Name: "fake.event", Description: "test", Delivery: []string{"poll", "webhook"}},
+	)
+	srv := server.NewServer(core.ServerInfo{Name: "resulttype-test", Version: "0.0.1"})
+	Register(Config{
+		Sources:                  []EventSource{src},
+		Webhooks:                 NewWebhookRegistry(WithUnsafeSkipEndpointVerification()),
+		Server:                   srv,
+		UnsafeAnonymousPrincipal: "test-anon",
+	})
+	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true), server.WithStatelessMode(stateless.ModeStateless)))
+	defer ts.Close()
+
+	call := func(method string, params map[string]any) map[string]any {
+		t.Helper()
+		params["_meta"] = map[string]any{
+			"io.modelcontextprotocol/protocolVersion":    core.DraftProtocolVersion2026V1,
+			"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "t", "version": "1"},
+			"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+		}
+		raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+		require.NoError(t, err)
+		req, err := http.NewRequestWithContext(context.Background(), "POST", ts.URL+"/mcp", bytes.NewReader(raw))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		payload, _ := io.ReadAll(resp.Body)
+		var rpc struct {
+			Result map[string]any `json:"result"`
+			Error  any            `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(payload, &rpc), "body: %s", string(payload))
+		require.Nil(t, rpc.Error, "%s failed: %s", method, string(payload))
+		return rpc.Result
+	}
+
+	delivery := map[string]any{"mode": "webhook", "url": "https://receiver.example.com/hook"}
+	results := map[string]map[string]any{
+		"events/list": call("events/list", map[string]any{}),
+		"events/poll": call("events/poll", map[string]any{"name": "fake.event", "cursor": nil}),
+		"events/subscribe": call("events/subscribe", map[string]any{
+			"name": "fake.event", "arguments": map[string]any{},
+			"delivery": map[string]any{"mode": "webhook", "url": delivery["url"], "secret": "whsec_" + "dGVzdC1zZWNyZXQtMzItYnl0ZXMtbG9uZy4uLi4uLg=="},
+		}),
+		"events/unsubscribe": call("events/unsubscribe", map[string]any{
+			"name": "fake.event", "arguments": map[string]any{}, "delivery": delivery,
+		}),
+	}
+	for method, result := range results {
+		assert.Equal(t, "complete", result["resultType"], "%s result must carry resultType \"complete\"; got %v", method, result)
+	}
 }

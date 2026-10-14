@@ -212,7 +212,7 @@ type TransformFunc func(ctx HookContext, event Event, params map[string]any) (Ev
 // per-event-type state.
 //
 // Returning a non-nil error fails the subscribe call: the SDK
-// surfaces it as -32013 ResourceExhausted (data.limit="subscriptions")
+// surfaces it as -32025 ResourceExhausted (data.limit="subscriptions")
 // today; a dedicated SubscribeFailed code may follow if a real use
 // case appears. The
 // SDK does NOT roll back webhook registration / push stream open on

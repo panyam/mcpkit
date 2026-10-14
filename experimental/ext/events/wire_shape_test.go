@@ -75,7 +75,7 @@ func TestPollResponse_FlatShape_Truncated(t *testing.T) {
 }
 
 // TestNotFound_UsesSpecCodeWithKindEvent pins the wire shape for the
-// spec's reusable -32011 NotFound error: same code as the pre-2026-05-22
+// spec's reusable -32023 NotFound error: same code as the pre-2026-05-22
 // EventNotFound, but now general-purpose with a typed `data.kind`
 // discriminator. Server emits kind="event" for unknown event names and
 // (in future) kind="subscription" for missing unsubscribe targets.
@@ -90,7 +90,7 @@ func TestNotFound_UsesSpecCodeWithKindEvent(t *testing.T) {
 	require.NoError(t, err)
 	body := string(raw)
 
-	assert.Contains(t, body, `"code":-32011`, "NotFound must use spec code -32011")
+	assert.Contains(t, body, `"code":-32023`, "NotFound must use spec code -32023")
 	assert.Contains(t, body, `"message":"NotFound"`)
 	assert.Contains(t, body, `"kind":"event"`,
 		"typed data.kind discriminator must be present so clients can branch without parsing the message")
@@ -452,7 +452,7 @@ func TestList_NextCursorPresentWhenSet(t *testing.T) {
 }
 
 // TestCallbackEndpointError_UsesSpecCode pins the wire shape for
-// -32015 CallbackEndpointError (renamed from InvalidCallbackUrl on
+// -32027 CallbackEndpointError (renamed from InvalidCallbackUrl on
 // 2026-05-22, same code). The typed data.reason carries a value from
 // the DeliveryErrorBucket vocabulary so a client can use one switch
 // across subscribe-time validation and delivery-time failures.
@@ -463,7 +463,7 @@ func TestCallbackEndpointError_UsesSpecCode(t *testing.T) {
 	require.NoError(t, err)
 	body := string(raw)
 
-	assert.Contains(t, body, `"code":-32015`)
+	assert.Contains(t, body, `"code":-32027`)
 	assert.Contains(t, body, `"reason":"connection_refused"`,
 		"typed data.reason must carry a DeliveryErrorBucket value")
 	assert.False(t, strings.Contains(body, `"code":-32005`),

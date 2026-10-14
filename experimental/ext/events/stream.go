@@ -34,14 +34,14 @@ import (
 
 const defaultStreamHeartbeatInterval = 30 * time.Second
 
-// StreamEventsResult is the typed final frame of an events/stream call per
-// spec §"Push-Based Delivery" → "Lifecycle" → "Stream termination" L293:
-// "an empty typed result ({"_meta": {}})." Carries no information — exists
-// to satisfy JSON-RPC's request/response contract; all meaningful content
-// is in the preceding notifications.
+// StreamEventsResult is the typed final frame of an events/stream call. Per
+// SEP-3415 it "carries only resultType and the subscription ID in _meta":
+// the meaningful content was in the notifications before it, and it exists so
+// the request still gets a response. The design sketch had it as an empty
+// {"_meta": {}}.
 //
-// Meta is intentionally always-emitted (no omitempty) so the wire shape
-// matches the spec example exactly. An empty map serializes to `{}`.
+// Meta is always emitted (no omitempty), and finalStreamResult fills it with
+// the same subscription ID the stream's notifications carried.
 type StreamEventsResult struct {
 	Meta map[string]any `json:"_meta"`
 }
@@ -49,7 +49,7 @@ type StreamEventsResult struct {
 // streamSubscribable is the optional interface a source implements to support
 // events/stream push delivery. YieldingSource satisfies this; TypedSource
 // does not (it has no internal buffer to fan out from). registerStream
-// rejects events/stream for sources lacking this capability with -32014
+// rejects events/stream for sources lacking this capability with -32026
 // Unsupported (data.feature="deliveryMode", data.value="push") per spec.
 //
 // SubscribeOpts: the SDK passes the resolved subscriber identity
@@ -80,6 +80,19 @@ type streamSubscribable interface {
 //
 // The id is passed through as a JSON value rather than a string, since JSON-RPC
 // permits a number or a string and re-encoding would change it.
+// finalStreamResult is the events/stream response once the subscription
+// ends. SEP-3415: it "carries only resultType and the subscription ID in
+// _meta". resultType is stamped by the dispatcher on the 2026-07-28 wire, so
+// only the ID is set here. An undecodable id still gets the empty object
+// rather than a null _meta.
+func finalStreamResult(id json.RawMessage) StreamEventsResult {
+	meta := streamMeta(id)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	return StreamEventsResult{Meta: meta}
+}
+
 func streamMeta(id json.RawMessage) map[string]any {
 	if len(id) == 0 {
 		return nil
@@ -188,7 +201,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 
 		// Spec §"Subscription Identity" → "Authentication required" L361:
 		// events/stream MUST be called with an authenticated principal —
-		// the spec lists -32012 Forbidden among events/stream's immediate
+		// the spec lists -32024 Forbidden among events/stream's immediate
 		// errors at L267. Same auth gate as events/subscribe.
 		principal, ok := resolvePrincipal(ctx, unsafeAnon)
 		if !ok {
@@ -204,7 +217,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		// with plain JSON Accept does not, so ctx.Notify would silently
 		// no-op.
 		//
-		// Fail fast with the same -32014 shape the source-lacks-push
+		// Fail fast with the same -32026 shape the source-lacks-push
 		// branch uses below so clients pick events/poll via one
 		// decision rule.
 		//
@@ -218,7 +231,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		}
 
 		// Sources that don't expose a Subscribe channel (TypedSource today)
-		// can't be served via push. Spec lists -32014 Unsupported among
+		// can't be served via push. Spec lists -32026 Unsupported among
 		// events/stream's immediate errors at L267.
 		sub, ok := source.(streamSubscribable)
 		if !ok {
@@ -341,13 +354,13 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				// Cancellation: HTTP abort (Streamable HTTP) or
 				// notifications/cancelled (stdio, dispatched via the
 				// inflight cancel map at server/dispatch.go).
-				return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
+				return core.NewResponse(id, finalStreamResult(id))
 
 			case se, ok := <-evCh:
 				if !ok {
 					// Subscriber chan closed — source removed our slot.
 					// Treat as ctx done.
-					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
+					return core.NewResponse(id, finalStreamResult(id))
 				}
 
 				// Terminal source signal. Emit notifications/events/
@@ -360,7 +373,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 						Error:     errPayload{Code: se.Terminated.Code, Message: se.Terminated.Message, Data: se.Terminated.Data},
 						Meta:      streamMeta(id),
 					})
-					return core.NewResponse(id, StreamEventsResult{Meta: map[string]any{}})
+					return core.NewResponse(id, finalStreamResult(id))
 				}
 
 				// Transient source signal. Emit notifications/events/

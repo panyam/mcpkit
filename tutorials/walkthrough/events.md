@@ -94,9 +94,9 @@ id = "sub_" + base64(SHA256(canonical)[:16])     // experimental/ext/events/iden
 > **Four rules fall out of the tuple immediately.** Each is enforced in `experimental/ext/events/events.go`:
 >
 > 1. **No client-supplied id.** A subscribe request that includes an `id` field is rejected with `-32602 InvalidParams`. The id is server-derived; accepting one would let clients alias subscriptions and break tenant isolation. (`registerSubscribe`, the `req.ID != ""` guard.)
-> 2. **Authentication required on subscribe and unsubscribe.** Without `claims.Subject` the principal is undefined and the canonical tuple is uncomputable; the handler returns `-32012 Unauthorized`. The `UnsafeAnonymousPrincipal` config field is a deliberate spec deviation for demos, gated by an `Unsafe` prefix and a startup warning. (`resolvePrincipal`.)
+> 2. **Authentication required on subscribe and unsubscribe.** Without `claims.Subject` the principal is undefined and the canonical tuple is uncomputable; the handler returns `-32024 Forbidden`. The `UnsafeAnonymousPrincipal` config field is a deliberate spec deviation for demos, gated by an `Unsafe` prefix and a startup warning. (`resolvePrincipal`.)
 > 3. **Secret is client-supplied and required.** `delivery.secret` must be `whsec_<base64 of 24-64 random bytes>` per Standard Webhooks. Server-generated secrets would let anyone subscribe with `url=<victim>` and have the server happily POST signed events to the victim. HMAC would prove "the MCP server sent this," not "the URL owner asked for it." Client-supplied flips that. (`validateClientSecret`.)
-> 4. **`TooManySubscriptions` enforced before `OnSubscribe` fires.** When a `Quota` is configured (`events.NewQuota(events.WithMaxSubscriptionsPerPrincipal(name, n))`) and a principal hits cap on a given event type, the next subscribe is rejected with `-32013 TooManySubscriptions` *before* the author's `OnSubscribe` hook runs, so a rejected subscription never provisions upstream resources. Same enforcement on push (`events/stream`) and poll (`events/poll`). See [Q9](#q9-how-does-an-author-shape-per-subscription-delivery). (`registerSubscribe`'s `quota.Reserve` call.)
+> 4. **`TooManySubscriptions` enforced before `OnSubscribe` fires.** When a `Quota` is configured (`events.NewQuota(events.WithMaxSubscriptionsPerPrincipal(name, n))`) and a principal hits cap on a given event type, the next subscribe is rejected with `-32025 ResourceExhausted` *before* the author's `OnSubscribe` hook runs, so a rejected subscription never provisions upstream resources. Same enforcement on push (`events/stream`) and poll (`events/poll`). See [Q9](#q9-how-does-an-author-shape-per-subscription-delivery). (`registerSubscribe`'s `quota.Reserve` call.)
 
 ### Worked example: refresh vs. distinct subscription
 
@@ -442,7 +442,7 @@ Domain sources fail. The upstream Discord gateway disconnects, the database driv
 make inject-error CODE=-32603 MESSAGE="upstream gateway disconnected"
 
 # Inject a terminal — stream closes; webhook targets get an auto control envelope
-make inject-terminate CODE=-32012 MESSAGE="auth token revoked"
+make inject-terminate CODE=-32024 MESSAGE="auth token revoked"
 
 # Normal event for comparison
 make inject TEXT="hello from make inject"
@@ -572,7 +572,7 @@ events.Register(events.Config{
 })
 ```
 
-The N+1th subscribe (in any mode) returns `-32013 TooManySubscriptions` *before* `OnSubscribe` runs, so a rejected subscription never provisions upstream resources. Caps are per-event-type per-principal; cross-event-type and cross-principal counts are isolated. Enforcement is mode-uniform: webhook subscribe, push stream open, and poll first-touch all go through the same `quota.Reserve` call. Backed by `golang.org/x/sync/semaphore.Weighted`; release pairs 1:1 with the lifecycle (`Unregister` / TTL prune / `PostTerminated` / stream close / lease expiry).
+The N+1th subscribe (in any mode) returns `-32025 ResourceExhausted` *before* `OnSubscribe` runs, so a rejected subscription never provisions upstream resources. Caps are per-event-type per-principal; cross-event-type and cross-principal counts are isolated. Enforcement is mode-uniform: webhook subscribe, push stream open, and poll first-touch all go through the same `quota.Reserve` call. Backed by `golang.org/x/sync/semaphore.Weighted`; release pairs 1:1 with the lifecycle (`Unregister` / TTL prune / `PostTerminated` / stream close / lease expiry).
 
 ### `TypedSource` doesn't get hook plumbing
 

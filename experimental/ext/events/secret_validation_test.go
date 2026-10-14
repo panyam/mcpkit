@@ -220,7 +220,7 @@ func (fakeSecretValidationSource) Latest() string                  { return "" }
 
 // buildSecretValidationStack returns a server with the events handlers
 // registered (with UnsafeAnonymousPrincipal: "test-principal" so the
-// handlers don't reject every test request with -32012 Unauthorized
+// handlers don't reject every test request with -32024 Forbidden
 // per spec §"Subscription Identity" → "Authentication required" L361.
 // The secret-validation tests here are concerned with the validator
 // and unsubscribe shape, not the auth gate; auth-specific tests live

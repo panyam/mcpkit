@@ -75,6 +75,7 @@ func (b *statelessBackend) Capabilities() core.ServerCapabilities {
 		for id, e := range exts {
 			caps.Extensions[id] = core.ExtensionCapability(e.Settings)
 		}
+		caps.TopLevel = extensionTopLevel(exts)
 	}
 	return caps
 }

@@ -76,7 +76,7 @@ call() {
 
 refused() {
   case "$STATUS" in 401|403) return 0 ;; esac
-  case "$BODY" in *-32012*|*Forbidden*|*forbidden*) return 0 ;; esac
+  case "$BODY" in *-32024*|*Forbidden*|*forbidden*) return 0 ;; esac
   return 1
 }
 

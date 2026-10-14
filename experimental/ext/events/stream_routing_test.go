@@ -323,7 +323,7 @@ func TestStream_EmitsNotificationsEventsTerminated(t *testing.T) {
 	expectNotif(t, st.notifs, "notifications/events/active", time.Second)
 
 	// Inject terminal.
-	fake.ch <- SubscriberEvent{Terminated: &EventDeliveryError{Code: -32012, Message: "Unauthorized"}}
+	fake.ch <- SubscriberEvent{Terminated: &EventDeliveryError{Code: -32024, Message: "Unauthorized"}}
 
 	n := expectNotif(t, st.notifs, "notifications/events/terminated", time.Second)
 	var p map[string]any
@@ -331,7 +331,7 @@ func TestStream_EmitsNotificationsEventsTerminated(t *testing.T) {
 	assert.EqualValues(t, 700, p["requestId"])
 	errMap, ok := p["error"].(map[string]any)
 	require.True(t, ok)
-	assert.EqualValues(t, -32012, errMap["code"])
+	assert.EqualValues(t, -32024, errMap["code"])
 	assert.Equal(t, "Unauthorized", errMap["message"])
 
 	// Stream must close — call returns. We cancel ctx to be safe but

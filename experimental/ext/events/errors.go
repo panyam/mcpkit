@@ -6,28 +6,24 @@ import (
 	"github.com/panyam/mcpkit/core"
 )
 
-// JSON-RPC error codes used by the MCP Events extension.
+// JSON-RPC error codes used by the MCP Events extension, per SEP-3415
+// § Error Handling.
 //
-// These five codes are intentionally general-purpose. The MCP Events
-// spec consolidated its error surface on 2026-05-22 (design-sketch
-// commit 567be29): seven events-specific codes collapsed into five
-// reusable codes carrying typed `data` discriminators. The spec frames
-// the new set as "candidates for promotion to the base MCP error
-// registry" with the directive that "future SEPs SHOULD reuse them
-// rather than introduce overlapping codes."
+// Five general-purpose codes, each carrying a typed `data` discriminator,
+// that SEP-3415 asks the core schema to allocate. The core specification
+// leaves -32000..-32019 to implementations and allocates -32020..-32099
+// sequentially; -32020..-32022 were taken, so these are the next five. The
+// SEP calls the numbers provisional until it is accepted.
 //
-// The codes live here pending that promotion. Other extensions in
-// this repo (or downstream SEPs) should feel free to reuse these
-// constants rather than mint new ones in the same JSON-RPC server
-// range [-32000, -32099].
+//	-32023 NotFound              — Unknown event or subscription (discriminate via data.kind)
+//	-32024 Forbidden             — Caller lacks permission for this operation
+//	-32025 ResourceExhausted     — Server-imposed limit reached (e.g., subscription cap)
+//	-32026 Unsupported           — Requested feature/value combination is unsupported
+//	-32027 CallbackEndpointError — Webhook endpoint is unreachable or rejected the request
 //
-// Spec-defined codes (full set):
-//
-//	-32011 NotFound              — Unknown event or subscription (discriminate via data.kind)
-//	-32012 Forbidden             — Caller lacks permission for this operation
-//	-32013 ResourceExhausted     — Server-imposed limit reached (e.g., subscription cap)
-//	-32014 Unsupported           — Requested feature/value combination is unsupported
-//	-32015 CallbackEndpointError — Webhook endpoint is unreachable or rejected the request
+// Earlier design-sketch revisions used -32011..-32015, which sit in the range
+// the specification never assigns. mcpkit shipped those through v0.7.x
+// (#1501 renumbered them).
 //
 // Each emission site SHOULD attach the matching typed `data` payload so
 // clients can branch on machine-readable discriminators without
@@ -35,14 +31,14 @@ import (
 // further down (newNotFoundError, newForbiddenError, …) enforce this:
 // they wrap core.NewErrorResponseWithData with the right struct shape.
 const (
-	ErrCodeNotFound              = -32011
-	ErrCodeForbidden             = -32012
-	ErrCodeResourceExhausted     = -32013
-	ErrCodeUnsupported           = -32014
-	ErrCodeCallbackEndpointError = -32015
+	ErrCodeNotFound              = -32023
+	ErrCodeForbidden             = -32024
+	ErrCodeResourceExhausted     = -32025
+	ErrCodeUnsupported           = -32026
+	ErrCodeCallbackEndpointError = -32027
 )
 
-// NotFoundData is the typed `data` payload attached to -32011 NotFound
+// NotFoundData is the typed `data` payload attached to -32023 NotFound
 // responses. The Kind discriminator tells the client what was missing
 // without parsing the human-readable message — "event" for an unknown
 // event name on poll/subscribe/stream, "subscription" for an
@@ -51,7 +47,7 @@ type NotFoundData struct {
 	Kind string `json:"kind"` // "event" | "subscription"
 }
 
-// ResourceExhaustedData is the typed `data` payload attached to -32013
+// ResourceExhaustedData is the typed `data` payload attached to -32025
 // ResourceExhausted responses. Limit names the exhausted resource
 // (e.g., "subscriptions"); Max carries the configured ceiling when the
 // server is willing to expose it. Max is omitted when zero so the
@@ -73,7 +69,7 @@ type NotFoundData struct {
 // Clients that want to discriminate the two paths read `data.max`
 // presence: present → server-imposed quota with a known ceiling;
 // absent → author-imposed refusal without a disclosed ceiling. Both
-// paths return identical Code (-32013) and Limit ("subscriptions"),
+// paths return identical Code (-32025) and Limit ("subscriptions"),
 // so generic "too many subscriptions" UX can treat them uniformly.
 //
 // emission sites: experimental/ext/events/events.go (registerPoll and
@@ -83,7 +79,7 @@ type ResourceExhaustedData struct {
 	Max   int64  `json:"max,omitempty"`
 }
 
-// UnsupportedData is the typed `data` payload attached to -32014
+// UnsupportedData is the typed `data` payload attached to -32026
 // Unsupported responses. Feature names the dimension the server is
 // rejecting on (e.g., "deliveryMode"); Value carries the specific
 // rejected input ("push", "webhook") when one applies.
@@ -108,7 +104,7 @@ type UnsupportedData struct {
 const ReasonSchemaChanged = "schema_changed"
 
 // CallbackEndpointErrorData is the typed `data` payload attached to
-// -32015 CallbackEndpointError responses. Reason mirrors the
+// -32027 CallbackEndpointError responses. Reason mirrors the
 // DeliveryErrorBucket categorical set used on the runtime delivery
 // side, so a client gets the same vocabulary for subscribe-time
 // validation failures and subsequent delivery failures.
@@ -116,7 +112,7 @@ type CallbackEndpointErrorData struct {
 	Reason string `json:"reason"` // "connection_refused" | "timeout" | "tls_error" | "http_4xx" | "http_5xx" | "challenge_failed"
 }
 
-// newNotFoundError returns a -32011 response with a typed
+// newNotFoundError returns a -32023 response with a typed
 // NotFoundData{Kind: kind} payload. Use kind "event" when the named
 // event source is not registered; use "subscription" when an
 // unsubscribe target cannot be located.
@@ -124,7 +120,7 @@ func newNotFoundError(id json.RawMessage, kind, message string) *core.Response {
 	return core.NewErrorResponseWithData(id, ErrCodeNotFound, message, NotFoundData{Kind: kind})
 }
 
-// newForbiddenError returns a -32012 response. Forbidden has no
+// newForbiddenError returns a -32024 response. Forbidden has no
 // machine-readable discriminators today; the helper exists so emission
 // sites stay symmetrical with the other typed-data helpers and so a
 // future spec revision can add a data shape in one place.
@@ -132,7 +128,7 @@ func newForbiddenError(id json.RawMessage, message string) *core.Response {
 	return core.NewErrorResponse(id, ErrCodeForbidden, message)
 }
 
-// newResourceExhaustedError returns a -32013 response with a typed
+// newResourceExhaustedError returns a -32025 response with a typed
 // ResourceExhaustedData payload. Pass max=0 when the configured
 // ceiling is not exposed; the field is omitted in that case.
 func newResourceExhaustedError(id json.RawMessage, limit string, max int64, message string) *core.Response {
@@ -140,7 +136,7 @@ func newResourceExhaustedError(id json.RawMessage, limit string, max int64, mess
 		ResourceExhaustedData{Limit: limit, Max: max})
 }
 
-// newUnsupportedError returns a -32014 response with a typed
+// newUnsupportedError returns a -32026 response with a typed
 // UnsupportedData payload. Use empty value when the feature itself is
 // unsupported regardless of the input.
 func newUnsupportedError(id json.RawMessage, feature, value, message string) *core.Response {
@@ -148,7 +144,7 @@ func newUnsupportedError(id json.RawMessage, feature, value, message string) *co
 		UnsupportedData{Feature: feature, Value: value})
 }
 
-// newCallbackEndpointError returns a -32015 response with a typed
+// newCallbackEndpointError returns a -32027 response with a typed
 // CallbackEndpointErrorData payload. The reason MUST be drawn from the
 // DeliveryErrorBucket vocabulary so client decoders can use one switch
 // across both subscribe-time and delivery-time failures.

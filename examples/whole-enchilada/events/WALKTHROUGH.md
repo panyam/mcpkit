@@ -229,7 +229,7 @@ Compose ships `EVENTS_QUOTA_CAPS=chat.message=10` as the default (room for norma
 ### Step 7: Aarti × 4 — trip a tightened subscription cap.
 
 - Demonstrates: cap is enforced GLOBALLY (Redis Lua-atomic INCR-with-check) — replica-locality of subscribes doesn't help bypass it.
-- Expected: first three windows print steady delivery; the fourth exits immediately with -32013 ResourceExhausted limit=subscriptions max=3. We use aarti (not alice/anand) so the subscriptions from Phase 1 don't already count toward her cap.
+- Expected: first three windows print steady delivery; the fourth exits immediately with -32025 ResourceExhausted limit=subscriptions max=3. We use aarti (not alice/anand) so the subscriptions from Phase 1 don't already count toward her cap.
 
 #### Tighten the cap first, then run in four sibling windows; the 4th rejects
 
@@ -243,7 +243,7 @@ make clear-all   # clear stale aarti subs from any prior runs
 make webhook TENANT=A USERNAME=aarti   # window 1 — succeeds
 make webhook TENANT=A USERNAME=aarti   # window 2 — succeeds
 make webhook TENANT=A USERNAME=aarti   # window 3 — succeeds (at cap)
-make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32013
+make webhook TENANT=A USERNAME=aarti   # window 4 — rejects with -32025
 
 # Restore the looser default afterwards:
 docker compose -f events-stack.yaml -f compose.dev.yaml up -d

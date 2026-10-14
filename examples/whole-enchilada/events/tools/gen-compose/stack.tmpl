@@ -220,7 +220,7 @@ services:
       # WithMaxSubscriptionsPerPrincipal(name, n) per entry. Cross-
       # replica enforcement comes from the Redis-backed QuotaStore
       # (issue 718); a 4th subscribe for the same principal lands on
-      # any replica → -32013 ResourceExhausted with the
+      # any replica → -32025 ResourceExhausted with the
       # {limit:"subscriptions", max:N} envelope.
       # Default chat.message=10 gives operating headroom for normal
       # demo play (3 streamers + 3 webhooks + some accumulated Ctrl+C
