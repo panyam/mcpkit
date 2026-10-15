@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -106,7 +107,7 @@ func TestOAuthTokenSource_DCRRegistersTheRedirectItListensOn(t *testing.T) {
 		EnableDCR:     true,
 		Scopes:        []string{"mcp"},
 		AllowInsecure: true,
-		OpenBrowser:   followOrFail,
+		OpenBrowser:   client.FollowRedirects(nil),
 	}
 	tok, err := src.Token()
 	if err != nil {
@@ -128,7 +129,7 @@ func TestOAuthTokenSource_ReloginReusesTheRegisteredRedirect(t *testing.T) {
 		EnableDCR:     true,
 		Scopes:        []string{"mcp"},
 		AllowInsecure: true,
-		OpenBrowser:   followOrFail,
+		OpenBrowser:   client.FollowRedirects(nil),
 	}
 	if _, err := src.Token(); err != nil {
 		t.Fatalf("first Token() = %v", err)
@@ -158,7 +159,7 @@ func TestOAuthTokenSource_CallbackPortPinsTheRedirect(t *testing.T) {
 		CallbackPort:  port,
 		Scopes:        []string{"mcp"},
 		AllowInsecure: true,
-		OpenBrowser:   followOrFail,
+		OpenBrowser:   client.FollowRedirects(nil),
 	}
 	if _, err := src.Token(); err != nil {
 		t.Fatalf("Token() = %v", err)
@@ -171,22 +172,6 @@ func TestOAuthTokenSource_CallbackPortPinsTheRedirect(t *testing.T) {
 			t.Errorf("client %s registered %v, want %s", id, uris, want)
 		}
 	}
-}
-
-// followOrFail stands in for the browser like oneauth's FollowRedirects, but
-// fails when the authorization server answers with an error instead of
-// redirecting. FollowRedirects returns nil there and the login waits out its
-// five-minute timeout, which is how the redirect bug used to look.
-func followOrFail(authURL string) error {
-	resp, err := http.Get(authURL)
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("authorize answered %s", resp.Status)
-	}
-	return nil
 }
 
 func freeLoopbackPortForTest(t *testing.T) int {
@@ -211,7 +196,7 @@ func TestOAuthTokenSource_HoldsItsCallbackPortBetweenLogins(t *testing.T) {
 		EnableDCR:     true,
 		Scopes:        []string{"mcp"},
 		AllowInsecure: true,
-		OpenBrowser:   followOrFail,
+		OpenBrowser:   client.FollowRedirects(nil),
 	}
 	t.Cleanup(func() { src.Close() })
 	if _, err := src.Token(); err != nil {
@@ -227,5 +212,34 @@ func TestOAuthTokenSource_HoldsItsCallbackPortBetweenLogins(t *testing.T) {
 	src.Invalidate()
 	if _, err := src.Token(); err != nil {
 		t.Fatalf("second login on the held port = %v", err)
+	}
+}
+
+// A CallbackPort something else already holds fails before registration, so
+// the server is not left with a client whose redirect nobody can serve.
+func TestOAuthTokenSource_TakenCallbackPortFailsBeforeRegistering(t *testing.T) {
+	as := newStrictRedirectAS(t)
+	squatter, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer squatter.Close()
+	port := squatter.Addr().(*net.TCPAddr).Port
+	src := &OAuthTokenSource{
+		ServerURL:     as.URL + "/mcp",
+		EnableDCR:     true,
+		CallbackPort:  port,
+		Scopes:        []string{"mcp"},
+		AllowInsecure: true,
+		OpenBrowser:   client.FollowRedirects(nil),
+	}
+	_, err = src.Token()
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprint(port)) {
+		t.Fatalf("Token() = %v, want an error naming port %d", err, port)
+	}
+	as.mu.Lock()
+	defer as.mu.Unlock()
+	if len(as.registered) != 0 {
+		t.Errorf("registered %v for a redirect the source cannot serve", as.registered)
 	}
 }
