@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -190,9 +191,41 @@ func followOrFail(authURL string) error {
 
 func freeLoopbackPortForTest(t *testing.T) int {
 	t.Helper()
-	port, err := freeLoopbackPort()
+	l, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return port
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port
+}
+
+// The chosen callback port stays bound by the source between logins, so a
+// second process asking the kernel for a free port cannot be handed it. Two
+// upstream auth scenarios run as parallel testclient processes; when the
+// source picked a port and released it, one of them sometimes bound the
+// other's port and its login failed (auth/dpop-nonce, CI on Linux).
+func TestOAuthTokenSource_HoldsItsCallbackPortBetweenLogins(t *testing.T) {
+	as := newStrictRedirectAS(t)
+	src := &OAuthTokenSource{
+		ServerURL:     as.URL + "/mcp",
+		EnableDCR:     true,
+		Scopes:        []string{"mcp"},
+		AllowInsecure: true,
+		OpenBrowser:   followOrFail,
+	}
+	t.Cleanup(func() { src.Close() })
+	if _, err := src.Token(); err != nil {
+		t.Fatalf("Token() = %v", err)
+	}
+	src.mu.Lock()
+	port := src.callbackPort
+	src.mu.Unlock()
+	if l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port)); err == nil {
+		l.Close()
+		t.Fatalf("port %d was free after the login; another process could take it before the next one", port)
+	}
+	src.Invalidate()
+	if _, err := src.Token(); err != nil {
+		t.Fatalf("second login on the held port = %v", err)
+	}
 }

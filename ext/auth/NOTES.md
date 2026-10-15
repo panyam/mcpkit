@@ -51,6 +51,15 @@ kept), registers `http://localhost:<port>/callback`, and passes the same port to
 The port is kept so the cached DCR registration still matches on a later login. A caller-supplied
 `DCRMeta` is sent as is, and that caller should set `CallbackPort` to agree with it.
 
+**The source holds that port bound whenever no login is using it** (`portHold`), releasing it just
+before `LoginWithBrowser` binds it and taking it back after. The first version picked a free port
+and let it go, leaving it free across the discovery and DCR round trips. CI's conformance run starts
+`auth/dpop` and `auth/dpop-nonce` as two testclient processes at once, and on Linux the second was
+sometimes handed the port the first had just released. One login then failed to bind, and
+`check-conformance-stale` saw `auth/dpop-nonce` drop from 9 passing checks to 3. It passed on
+re-run, which is what made it look like noise. Before this change oneauth bound port 0, which the
+kernel resolves atomically, so the race is new with the fix rather than old.
+
 Two loose ends, deliberately not fixed here:
 
 - **`Invalidate` keeps the cached DCR registration.** A server that restarts and forgets its clients

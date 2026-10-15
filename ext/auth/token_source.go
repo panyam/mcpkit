@@ -147,6 +147,13 @@ type OAuthTokenSource struct {
 
 	// callbackPort is CallbackPort once resolved by loopbackPort.
 	callbackPort int
+
+	// portHold keeps a chosen callbackPort bound while no login is using it,
+	// so another process asking the kernel for a free port cannot be handed
+	// the same one between the DCR registration and LoginWithBrowser binding
+	// it. Two conformance scenarios logging in at once hit exactly that on
+	// Linux. Released just before each login, taken back after.
+	portHold net.Listener
 }
 
 // Invalidate implements core.InvalidatingTokenSource. It drops cached
@@ -366,7 +373,9 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	// ClientSecret is passed in BrowserLoginRequest above — oneauth's
 	// SelectAuthMethod handles negotiation (basic/post/none) based on AS metadata.
 
+	s.releasePort()
 	cred, err := s.oaClient.LoginWithBrowser(context.Background(), loginReq)
+	s.holdPort()
 	if err != nil {
 		return "", fmt.Errorf("oauth login: %w", err)
 	}
@@ -489,6 +498,7 @@ func (s *OAuthTokenSource) Close() error {
 	// tight coupling to oneauth's concrete types.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.releasePort()
 	if s.oaClient != nil {
 		if closer, ok := any(s.oaClient).(interface{ Close() error }); ok {
 			return closer.Close()
@@ -597,28 +607,42 @@ func (s *OAuthTokenSource) loopbackPort() (int, error) {
 		return s.CallbackPort, nil
 	}
 	if s.callbackPort == 0 {
-		port, err := freeLoopbackPort()
+		l, err := net.Listen("tcp", "localhost:0")
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("pick a loopback port: %w", err)
 		}
-		s.callbackPort = port
+		s.portHold = l
+		s.callbackPort = l.Addr().(*net.TCPAddr).Port
 	}
 	return s.callbackPort, nil
+}
+
+// releasePort frees a held callback port so LoginWithBrowser can bind it.
+// Caller holds s.mu.
+func (s *OAuthTokenSource) releasePort() {
+	if s.portHold != nil {
+		_ = s.portHold.Close()
+		s.portHold = nil
+	}
+}
+
+// holdPort binds the chosen callback port again after a login, keeping it
+// for the next one. A failure is ignored: the next login simply binds it
+// without the guarantee. A caller-set CallbackPort is never held. Caller
+// holds s.mu.
+func (s *OAuthTokenSource) holdPort() {
+	if s.CallbackPort != 0 || s.callbackPort == 0 || s.portHold != nil {
+		return
+	}
+	if l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", s.callbackPort)); err == nil {
+		s.portHold = l
+	}
 }
 
 // loopbackRedirect is the redirect URI oneauth's LoginWithBrowser listens on
 // for a given port. It must match byte for byte what the registration sent.
 func loopbackRedirect(port int) string {
 	return fmt.Sprintf("http://localhost:%d/callback", port)
-}
-
-func freeLoopbackPort() (int, error) {
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return 0, fmt.Errorf("pick a loopback port: %w", err)
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // --- Validation helpers ---
