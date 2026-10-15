@@ -9,6 +9,12 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-15
+
+### Security
+- **`golang.org/x/net` v0.60.0** in all 49 modules that use it, fixing
+  GO-2026-6617, reachable from `examples/mcpskills-walkthrough` (#1550).
+
 ### Added
 - **`experimental/ext/events`: `Registry.ChangeSchema`** replaces an event
   type's `inputSchema` and/or `payloadSchema` in place. An additive change
