@@ -3,11 +3,14 @@
 # Drives examples/events/kitchen-sink via the fork's scenario runner.
 #
 # INFO rather than a gate because MCP Events is SEP-3415, still a draft
-# (modelcontextprotocol/modelcontextprotocol#3415), and the suite's rows still
-# quote the design sketch it was written from while they are re-extracted
-# against the SEP (issue 1502). A red run can mean the text moved rather than
-# that mcpkit regressed. Flip this to a gate once the rows track the SEP and
-# the SEP is accepted.
+# (modelcontextprotocol/modelcontextprotocol#3415). The rows quote the SEP at a
+# pinned commit (#1502), so a red run after the SEP moves can mean the text
+# changed rather than that mcpkit regressed. Flip this to a gate once the SEP
+# is accepted.
+#
+# EVENTS_PORT picks the fixture's port and refuses if it is held. Unset, the
+# script takes the first free port from 18101, so two sessions on one machine
+# can run this at once (#1534).
 #
 # Runner-agnostic: the Makefile + justfile `testconf-events` recipes call this
 # directly. REPO_ROOT + MCPCONFORMANCE_EVENTS_PATH resolve via _common.sh
@@ -22,8 +25,15 @@ build_conf_dist MCPCONFORMANCE_EVENTS_PATH
 
 (cd "${REPO_ROOT}/examples/events/kitchen-sink" && go build -o kitchen-sink-events .)
 
+if [ -n "${EVENTS_PORT:-}" ]; then
+    PORT="${EVENTS_PORT}"
+    require_port_free "${PORT}"
+else
+    PORT=$(first_free_port 18101) || exit 1
+fi
+
 OUT=$(mktemp -d -t conf-events.XXXXXX)
-echo "Spawning fixture on :18101, scratch dir $OUT"
+echo "Spawning fixture on :${PORT}, scratch dir $OUT"
 
 # The synthetic feeders are left at their defaults. They emit on a 2-4s
 # cadence, which is what gives the EventOccurrence checks something real to
@@ -35,12 +45,11 @@ echo "Spawning fixture on :18101, scratch dir $OUT"
 # gap, a delivery mode a type does not offer — and report untestable, which the
 # suite renders red. The flag is off by default because kitchen-sink is a
 # published example first; see examples/CONVENTIONS.md § Conformance fixtures.
-require_port_free 18101
 "${REPO_ROOT}/examples/events/kitchen-sink/kitchen-sink-events" \
-    --serve -addr=:18101 --conformance-events > "$OUT/server.log" 2>&1 &
+    --serve -addr=":${PORT}" --conformance-events > "$OUT/server.log" 2>&1 &
 PID=$!
 for i in 1 2 3 4 5 6 7 8 9 10; do
-    curl -sf -o /dev/null -X OPTIONS http://localhost:18101/mcp && break
+    curl -sf -o /dev/null -X OPTIONS "http://localhost:${PORT}/mcp" && break
     sleep 0.3
 done
 require_fixture_alive "$PID" "$OUT/server.log"
@@ -63,7 +72,7 @@ for S in ${EVENTS_SCENARIOS}; do
     # shellcheck disable=SC2086 # deliberate word-splitting: empty means no flag
     (cd "${MCPCONFORMANCE_EVENTS_PATH}" && \
         node dist/index.js server \
-            --url http://localhost:18101/mcp \
+            --url "http://localhost:${PORT}/mcp" \
             --scenario "${S}" \
             ${TIMEOUT_ARGS} \
             -o "$OUT/checks-${S}" > "$OUT/runner-${S}.log" 2>&1)

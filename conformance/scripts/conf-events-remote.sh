@@ -5,6 +5,12 @@
 #   make conf-events-remote                                   # metronome
 #   EVENTS_REMOTE_URL=https://other.example/mcp make conf-events-remote
 #   EVENTS_REMOTE_SCENARIOS=events-discovery make conf-events-remote
+#   EVENTS_ARGUMENTS='{"metronome.tick":{"periodSeconds":1}}' make conf-events-remote
+#
+# EVENTS_ARGUMENTS (read by the fork's scenarios) overrides the arguments the
+# suite derives from each type's inputSchema; a server that crashes on the
+# derived ones gets that reported on a default run, and graded past it on this
+# one. EVENTS_REMOTE_PORT pins the proxy port; unset, the first free from 18201.
 #
 # The conformance runner cannot send a bearer token, so this starts
 # ext/auth/cmd/mcp-auth-proxy on loopback and points the runner at it. The
@@ -19,7 +25,11 @@ set -u
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 URL="${EVENTS_REMOTE_URL:-https://metronome-mcp.fly.dev/mcp}"
-PORT="${EVENTS_REMOTE_PORT:-18201}"
+if [ -n "${EVENTS_REMOTE_PORT:-}" ]; then
+    PORT="${EVENTS_REMOTE_PORT}"
+else
+    PORT=$(first_free_port 18201) || exit 1
+fi
 SCENARIOS="${EVENTS_REMOTE_SCENARIOS:-events-discovery events-poll events-push events-webhook}"
 
 require_conf_dir MCPCONFORMANCE_EVENTS_PATH \

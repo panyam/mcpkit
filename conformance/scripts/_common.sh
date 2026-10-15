@@ -123,6 +123,28 @@ require_port_free() {
     fi
 }
 
+# first_free_port START
+# Print the first port from START up (at most 50 tried) that nothing answers on.
+#
+# For a fixture whose port nobody asked for: several sessions on one machine
+# now run the same suite, and refusing a busy default makes the second wait
+# for the first (#1534). A port someone set explicitly still goes through
+# require_port_free instead, so an explicit choice is never silently moved.
+# The probe-then-bind gap is a race in principle; require_fixture_alive
+# catches the fixture that lost it.
+first_free_port() {
+    local port="$1" last=$(( $1 + 50 ))
+    while [ "$port" -le "$last" ]; do
+        if ! (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+            echo "$port"
+            return 0
+        fi
+        port=$(( port + 1 ))
+    done
+    echo "No free port in ${1}-${last}." >&2
+    exit 1
+}
+
 # require_fixture_alive PID [LOG]
 # Refuse to grade if the fixture this script spawned has already exited.
 #
