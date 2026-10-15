@@ -335,7 +335,7 @@
 </span></span><span style="display:flex;"><span>go run . --serve -webhook-ttl 5s
 </span></span></code></pre><p>Per spec, the webhook signing secret is <strong>client-supplied only</strong> (<code>whsec_</code> + base64 of 24-64 random bytes). The python <code>just webhook</code> and the Go SDK both auto-generate when the application doesn&rsquo;t supply one. See <a href="https://github.com/panyam/mcpkit/blob/main/experimental/ext/events/README.md"><code>experimental/ext/events/README.md</code></a> for the full configuration reference.</p>
 <h2 id="auth-posture-demo-escape-vs-real-oidc">Auth posture: demo escape vs real OIDC <a class="anchor" href="#auth-posture-demo-escape-vs-real-oidc">¶</a></h2>
-<p>Per spec §&ldquo;Subscription Identity&rdquo; L361 webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:</p>
+<p>Per SEP-3415 §&ldquo;Subscription identity&rdquo; webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Demo posture (default): no env vars set.</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># Server runs anonymous; events.Config.UnsafeAnonymousPrincipal=&#34;demo-user&#34;</span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"># is the escape hatch so just demo works end-to-end without an OIDC provider.</span>
