@@ -12,9 +12,9 @@
 // reads the roster, picks an agent, and only then pulls that agent's
 // instructions and scoped tool schemas:
 //
-//	level 1  capabilities.extensions[io.mcpkit/agents]  "this server has agents"
-//	level 2  agents/list                                  the roster, no tool schemas
-//	level 3  agents/get {name}                            one agent's instructions and tools
+//	level 1  capabilities.extensions[io.modelcontextprotocol/agents]  "this server has agents"
+//	level 2  agents/list                                                the roster, no tool schemas
+//	level 3  agents/get {name}                                          one agent's instructions and tools
 //
 // Invocation is not new wire surface. The host builds a local subagent from
 // the agents/get result and calls the scoped tools through the existing
@@ -28,12 +28,12 @@ package agents
 // speaks the agents discovery primitive. Clients gate agents/list and
 // agents/get behind ServerSupportsExtension(ExtensionID).
 //
-// The identifier stays in mcpkit's namespace until this implementation fully
-// matches agents-wg#22 (tracked in panyam/mcpkit#1393). Advertising
-// io.modelcontextprotocol/agents earlier would let a client that recognises
-// the standard identifier negotiate it and then receive a payload the SEP
-// does not define. See NOTES.md.
-const ExtensionID = "io.mcpkit/agents"
+// It is the identifier agents-wg#22 defines. It sat in mcpkit's namespace,
+// io.mcpkit/agents, until this implementation matched the SEP, so a client
+// recognising the standard identifier never negotiated a payload the SEP does
+// not define. SEP-3392 keeps an identifier fixed through Experimental and
+// Beta, so it should not change again. See NOTES.md.
+const ExtensionID = "io.modelcontextprotocol/agents"
 
 // SpecVersion is the draft the implementation tracks: agents-wg#22 at head
 // 9b16840e, dated by that commit. Bump it when the implementation follows a

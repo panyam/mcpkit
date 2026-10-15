@@ -110,6 +110,7 @@ verify tasks-v2    examples/tasks-v2
 verify mrtr        examples/mrtr
 verify file-inputs examples/file-inputs
 verify list-ttl    examples/list-ttl
+verify agents-discovery examples/agents/discovery
 
 echo
 echo "NOT auto-verified here (see examples/DUAL_MODE_AUDIT.md for the full matrix):"

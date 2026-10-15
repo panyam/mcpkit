@@ -9,7 +9,7 @@
 EXAMPLES_DIR := justfile_directory()
 
 # Run every infra-free example test
-test: test-skills test-tasks-v2 test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server
+test: test-skills test-tasks-v2 test-common test-otel-stdout test-protogen test-events-kitchen-sink test-events-discord test-events-telegram test-whole-enchilada-event-server test-agents-discovery
 
 
 
@@ -32,6 +32,10 @@ test-otel-stdout:
 # protogen/bookservice
 test-protogen:
     cd {{EXAMPLES_DIR}}/protogen/bookservice && go test ./... -count=1 -timeout 60s
+
+# agents/discovery (walkthrough claims, both wires)
+test-agents-discovery:
+    cd {{EXAMPLES_DIR}}/agents/discovery && go test ./... -count=1 -timeout 60s
 
 # events/kitchen-sink
 test-events-kitchen-sink:

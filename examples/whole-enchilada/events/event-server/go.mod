@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/whole-enchilada/events/event-server
 
-go 1.26.6
+go 1.26.9
 
 replace (
 	github.com/panyam/mcpkit => ../../../..
@@ -77,7 +77,7 @@ require (
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
 	github.com/panyam/mcpkit/stores/redis v0.7.2 // indirect
-	github.com/panyam/oneauth v0.1.37 // indirect
+	github.com/panyam/oneauth v0.1.39 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

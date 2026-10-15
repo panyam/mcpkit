@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/auth
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -8,7 +8,7 @@ require (
 	github.com/panyam/mcpkit v0.7.2
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
-	github.com/panyam/oneauth v0.1.37
+	github.com/panyam/oneauth v0.1.39
 	go.opentelemetry.io/otel/trace v1.46.0
 )
 

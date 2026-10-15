@@ -9,6 +9,7 @@
 # `:="${...}"` honors a pre-set env var (per-invocation override) and
 # otherwise falls back to the sibling conf-* worktree default.
 
+: "${MCPCONFORMANCE_AGENTS_PATH:="$REPO_ROOT/../conf-agents"}"
 : "${MCPCONFORMANCE_AUTH_PATH:="$REPO_ROOT/../conf-pending"}"
 : "${MCPCONFORMANCE_CLIENT_PATH:="$REPO_ROOT/../conf-upstream-main"}"
 : "${MCPCONFORMANCE_EVENTS_CLIENT_PATH:="$REPO_ROOT/../conf-events-client"}"

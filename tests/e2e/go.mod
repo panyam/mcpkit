@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/tests/e2e
 
-go 1.26.6
+go 1.26.9
 
 replace (
 	github.com/panyam/mcpkit => ../..
@@ -13,7 +13,7 @@ require (
 	github.com/panyam/mcpkit v0.7.2
 	github.com/panyam/mcpkit/ext/auth v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.0.0
-	github.com/panyam/oneauth v0.1.37
+	github.com/panyam/oneauth v0.1.39
 	github.com/stretchr/testify v1.12.1
 )
 

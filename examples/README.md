@@ -25,6 +25,7 @@ The primary path. Run the demo from the CLI and read the on-disk `WALKTHROUGH.md
 | [host/02-multi-server/](host/02-multi-server/) | `ServerRegistry` with 3 servers, name-collision resolution |
 | [events/discord/](events/discord/) ⚠ experimental | MCP Events extension - events/list, push (SSE), poll (cursor), cursorless typing source (cursor:null), webhook with TTL auto-refresh via the typed Go SDK at `experimental/ext/events/clients/go/` |
 | [events/telegram/](events/telegram/) ⚠ experimental | Same protocol as discord, lighter walkthrough - focuses on the telegram-specific payload shape and the typed `Receiver[TelegramEventData]` |
+| [agents/discovery/](agents/discovery/) ⚠ experimental | Agent discovery (agents-wg#22) - `agents/list` and `agents/get`, scoped tools that match `tools/list`, running an agent through `tools/call`, per-caller filtering with indistinguishable `agent_not_found`, step-up via `AgentDef.ScopeChallenge`, and `notifications/agents/list_changed` on both wires |
 
 ```bash
 cd examples/<name>

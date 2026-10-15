@@ -9,8 +9,9 @@
 // dynamic client registration (RegisterClient), and the authorization-code
 // grant with PKCE (LoginWithBrowser). LoginWithBrowser hands the
 // authorization URL to an OpenBrowser hook. With -headless (the default) that
-// hook is approveHeadless, which plays the user clicking Approve; with
-// -headless=false it opens a real browser, which a real login page needs.
+// hook is oneauth's ApproveConsent, which plays the user clicking Approve on a
+// demo consent page (metronome's); with -headless=false it opens a real
+// browser, which a real login page needs.
 //
 // A 401 from the server triggers a fresh registration and login before the
 // request is retried once. That covers a server that restarted and forgot its
@@ -28,6 +29,7 @@ import (
 	"sync"
 
 	"github.com/panyam/mcpkit/ext/auth"
+	oneauthclient "github.com/panyam/oneauth/client"
 )
 
 type proxy struct {
@@ -42,8 +44,9 @@ type proxy struct {
 func (p *proxy) newSource() *auth.OAuthTokenSource {
 	s := &auth.OAuthTokenSource{ServerURL: p.server, EnableDCR: true, Scopes: p.scopes}
 	if p.headless {
+		approve := oneauthclient.ApproveConsent(nil)
 		s.OpenBrowser = func(authURL string) error {
-			err := approveHeadless(authURL)
+			err := approve(authURL)
 			if err != nil {
 				log.Printf("headless authorization failed: %v", err)
 			}

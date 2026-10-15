@@ -16,7 +16,7 @@ Discovery is the only new wire surface. It comes in three levels:
 
 | Level | Wire | Payload |
 |-------|------|---------|
-| 1 | `capabilities.extensions["io.mcpkit/agents"]` | "this server has agents" |
+| 1 | `capabilities.extensions["io.modelcontextprotocol/agents"]` | "this server has agents" |
 | 2 | `agents/list` | agent cards: `name`, `description`, `capabilities`. Paginated. **No tool schemas.** |
 | 3 | `agents/get {name}` | one agent's `instructions`, optional `modelRoutingHint`, and its `tools[]` |
 
@@ -27,8 +27,9 @@ Both results carry `resultType: "complete"` and the SEP-2549 `ttlMs` /
 the `agents/get` result and calls the scoped tools through the existing
 `tools/call`.
 
-The extension identifier stays `io.mcpkit/agents` until the implementation
-fully matches the SEP. See `NOTES.md`.
+The extension identifier is the SEP's own, `io.modelcontextprotocol/agents`.
+It was `io.mcpkit/agents` until the implementation matched the SEP, and
+`NOTES.md` explains why.
 
 ## Server side
 
@@ -90,7 +91,33 @@ wire:
 | `TTLMs` | nil | SEP-2549 freshness hint on both results. |
 | `CacheScope` | `private` | SEP-2549 scope on both results. The SEP asks for `private` unless every caller gets the same response. |
 | `Visible` | nil (all visible) | `func(ctx, name) bool`. A hidden agent is missing from `agents/list` and answers `agents/get` exactly as a nonexistent one does. |
+| `ResourceMetadataURL` | empty | RFC 9728 metadata URL put in a step-up challenge's `resource_metadata`, below. |
 | `TracerProvider` | no-op | SEP-414 spans, below. |
+
+### Step-up
+
+An agent can be listed for a caller who may not open it yet. Set
+`AgentDef.ScopeChallenge`, built the same way as on a tool:
+
+```go
+agents.AgentDef{
+    Name:           "deploy-agent",
+    Tools:          []string{"deploy_service"},
+    ScopeChallenge: core.RequireScopes("ops:deploy"),
+}
+```
+
+A caller without `ops:deploy` still sees `deploy-agent` in `agents/list`.
+`agents/get` is refused before dispatch with an HTTP 403 and
+`WWW-Authenticate: Bearer error="insufficient_scope", scope="ops:deploy"`, the
+step-up the SEP allows for "a caller permitted to know an agent exists but
+lacking authorization to retrieve it". The challenge applies only to callers
+`Visible` admits, so an agent hidden from a caller still answers
+`agent_not_found` and never reveals itself through a 403. A challenge callback
+that errors refuses the request with no scope named.
+
+Step-up gates *opening* the agent. The tools it returns keep their own
+`ScopeChallenge`, enforced on `tools/call` as usual.
 
 ### Tracing (SEP-414)
 
@@ -119,7 +146,14 @@ if agentsclient.IsAgentNotFound(err) {
 
 `ListAgentsPage(ctx, cursor)` returns one page with its `nextCursor` and cache
 hints, for hosts that cache the roster or page lazily.
-`IsInvalidAgentDefinition(err)` classifies the server-misconfiguration case.
+`IsInvalidAgentDefinition(err)` classifies the server-misconfiguration case,
+and `StepUpScopes(err)` returns the scopes a step-up refusal asks for:
+
+```go
+if scopes, ok := agentsclient.StepUpScopes(err); ok {
+    // obtain a token carrying scopes for the same user, then retry
+}
+```
 
 ### Caching
 
@@ -163,12 +197,20 @@ asks for it), otherwise moves up to a larger role, never down, and falls back
 to `Default` when nothing fits. `how` reports `hinted`, `escalated` or
 `default`. `LargestRole` merges the hints of several agents run together.
 
-## Not yet implemented
+## Example
 
-Tracked in panyam/mcpkit#1393:
+`examples/agents/discovery` runs all of the above against one server as three
+callers: listing, scoped tools, running an agent through `tools/call`,
+per-caller filtering, step-up and `list_changed`, on both wires.
 
-- Step-up authorization for an agent the caller may know about but not use.
-- Switching the identifier to `io.modelcontextprotocol/agents`.
+## Conformance
+
+`make testconf-agents` runs the agents-wg#22 scenarios (`sep-9998-agents-*`, a
+placeholder number until the SEP has one) against
+`examples/agents/discovery --conformance-agents`. They live on the
+`feat/agents-conformance-suite` branch of panyam/mcpconformance, checked out at
+`../conf-agents` by `make conf-agents-setup`. See `conformance/NOTES.md`
+§ Agent discovery suite.
 
 ## Tests
 

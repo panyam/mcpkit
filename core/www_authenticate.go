@@ -9,7 +9,36 @@ package core
 // The auth sub-module's ParseWWWAuthenticate delegates to these functions
 // for backward compatibility.
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+// InsufficientScopeChallenge builds the WWW-Authenticate value for an RFC 6750
+// §3.1 `403 insufficient_scope` refusal: the error, then resource_metadata,
+// scope and error_description when each is non-empty. It is the producing
+// half of ParseWWWAuthenticate, kept here for the same reason, so an extension
+// module can refuse a request with a step-up challenge without depending on
+// ext/auth. ext/auth's WWWAuth403Desc delegates to it.
+//
+// The description is escaped per RFC 7235 quoted-string rules, since a double
+// quote or backslash would otherwise end the parameter early and corrupt the
+// rest of the header.
+func InsufficientScopeChallenge(resourceMetadataURL, description string, scopes ...string) string {
+	parts := []string{`error="insufficient_scope"`}
+	if resourceMetadataURL != "" {
+		parts = append(parts, fmt.Sprintf(`resource_metadata="%s"`, resourceMetadataURL))
+	}
+	if len(scopes) > 0 {
+		parts = append(parts, fmt.Sprintf(`scope="%s"`, strings.Join(scopes, " ")))
+	}
+	if description != "" {
+		desc := strings.ReplaceAll(description, `\`, `\\`)
+		desc = strings.ReplaceAll(desc, `"`, `\"`)
+		parts = append(parts, fmt.Sprintf(`error_description="%s"`, desc))
+	}
+	return "Bearer " + strings.Join(parts, ", ")
+}
 
 // ParseWWWAuthenticate extracts the resource_metadata URL and scopes from a
 // WWW-Authenticate: Bearer header value. Used by MCP clients to discover

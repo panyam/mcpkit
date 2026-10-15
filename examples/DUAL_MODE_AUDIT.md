@@ -25,6 +25,7 @@ just compile?
 | `mrtr` | ✅ | ✅ | dual-clean (MRTR via `ctx.RequestInput`; stateless parity since `0202c926`) |
 | `file-inputs` | ✅ | ✅ | dual-clean (fixed by PR 834 — file-input validation on stateless) |
 | `list-ttl` | ✅ | ✅ | dual-clean (plain tools; SEP-2549 is server-side) |
+| `agents/discovery` | ✅ | ✅ | dual-clean (list_changed arrives on the GET stream on the session wire and through `subscriptions/listen` on the stateless wire; `host.go` handles both) |
 | `tasks` (v1) | ✅ | n/a | deprecated, legacy-only (v1 is being removed; not targeted at stateless) |
 | `skills` | ✅\* | ✅ | works; drives its client wire via an interactive `demokit.Choice`, so `--wire` can't steer it (\*legacy needs the matching client mode) |
 | `auth/*` | ✅ | ✅ | wire-verified by `make smoke-wire`; tool flows are token-gated, not in verify-dual |

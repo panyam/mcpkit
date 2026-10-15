@@ -25,6 +25,27 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   now carries `ttlMs` and `cacheScope`, as `skills/list` and `skills/get`
   already do, following `ext-skills#157`. Defaults to `DefaultListTTLMs` and
   `public`. `WithDirectoryReadCacheHints` overrides both.
+- **`experimental/ext/agents`: step-up.** `AgentDef.ScopeChallenge` keeps an
+  agent in a caller's roster while refusing `agents/get` with a 403
+  `insufficient_scope` challenge until the caller holds the named scopes.
+  Agents hidden by `Visible` still answer `agent_not_found`.
+  `Config.ResourceMetadataURL` fills the challenge's `resource_metadata`, and
+  the Go client's `StepUpScopes` reads the scopes back (#1393).
+- **`core.InsufficientScopeChallenge`** builds a 403 `WWW-Authenticate` value
+  without depending on `ext/auth`, whose `WWWAuth403Desc` now delegates to it.
+- **`examples/agents/discovery`**, a walkthrough of the agents extension:
+  discovery, scoped tools, invocation through `tools/call`, per-caller
+  filtering, step-up and `list_changed`, on both wires (#1393).
+- **`make testconf-agents`**, conformance scenarios for agents-wg#22 graded
+  against `examples/agents/discovery --conformance-agents` (stage 8k, `INFO`).
+  Check IDs use the placeholder `sep-9998` until the SEP is numbered (#1393).
+
+### Changed
+- **`experimental/ext/agents` advertises `io.modelcontextprotocol/agents`**, the
+  identifier agents-wg#22 defines, in place of `io.mcpkit/agents`. The
+  implementation now matches the SEP, which was the condition for switching.
+  **Wire-breaking**: a host that negotiated the old key no longer finds the
+  extension. Hosts using `agents.ExtensionID` follow automatically (#1393).
 
 ## [0.7.2] - 2026-10-14
 
