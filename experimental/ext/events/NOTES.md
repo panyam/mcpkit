@@ -340,3 +340,26 @@ The tutorial's signal table had claimed for months that `YieldTerminated` alread
 Nobody noticed because nothing exercised it; the conformance fixture reached webhooks per
 subscription instead. If a doc describes wiring, check it against the code before relying on it.
 
+## The Go client reconnects a silent stream, and measures the interval to do it (#1503)
+
+SEP-3415 says a client that has heard neither an event nor a heartbeat for more than twice the
+heartbeat interval SHOULD treat the stream as dead and reconnect with its cursor. `eventsclient.Stream`
+used to make one `events/stream` call and wait on it forever, so a stream that died behind a proxy
+that never closed the connection just went quiet. The client conformance scenario caught it
+(`events-client-push` 0/1).
+
+The interval is never announced, which is the awkward part. `Stream` measures it as the largest gap
+between consecutive heartbeats, and assumes the SEP's 30-second maximum until two have arrived, so an
+uncalibrated stream is declared dead after a minute. Largest gap rather than latest, because bursts of
+events can shorten the gaps you happen to see and a reconnect storm is worse than a slow detection.
+
+What a reconnect sends: the last cursor any frame delivered (active, heartbeat or event), and an
+explicit `cursor: null` for a stream whose frames all carried null. Never a cursor from before the
+null, which would replay from a position the server said doesn't exist. What ends the stream instead
+of reconnecting: `Stop`, `notifications/events/terminated`, a normal final result, or a reconnect
+the server answers with a JSON-RPC error (an answer, not an outage, so it surfaces through `Err()`).
+Transport failures back off from 250ms to 30s.
+
+It is on by default, because the SEP makes it a SHOULD and the conformance driver may only call what
+the SDK offers. `StreamOptions.DisableReconnect` restores the single call.
+
