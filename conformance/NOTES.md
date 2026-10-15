@@ -74,6 +74,24 @@ PR-ref worktree like `../conf-481` with no tracking branch, it degrades to just 
 
 This is the gap that let `../conf-pending` drift 45 commits behind without anyone noticing.
 
+**One session, one worktree.** The default paths are shared by every session on the machine, so two
+sessions editing the fork at once edit the *same files*. On 2026-10-15, #1505 and #1529 were both
+working in `../conf-events`, and either session's next `git add` would have swept up the other's work.
+Before editing a fork checkout, look at `git status` there: anything modified that you didn't write
+belongs to someone else, so leave it. Then work in a worktree of your own, and point the suite at it:
+
+```bash
+git -C ../conf-events fetch origin
+git -C ../conf-events worktree add ../conf-events-<ticket> -b <branch> origin/feat/events-conformance-suite
+ln -s ../conf-events/node_modules ../conf-events-<ticket>/node_modules
+MCPCONFORMANCE_EVENTS_PATH=../conf-events-<ticket> make testconf-events
+```
+
+Push with `git push origin <branch>:feat/events-conformance-suite` once it fast-forwards, so the
+fork branch (and the upstream PR it backs) moves without touching anyone's checkout. The fixture
+port is still shared, though: two suite runs at once collide on `:18101`, and `require_port_free`
+refuses the second rather than grading the first one's fixture.
+
 ---
 
 ## Two audit artifacts, grading different things
