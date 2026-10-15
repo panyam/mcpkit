@@ -1084,7 +1084,9 @@ When an example needs that surface, add it behind a **per-surface flag named
   breaks every scenario after it. The webhook envelope controls take a
   subscription id and call `PostGap`/`PostTerminated` on that one target
   (#1463). Where a type-wide control is unavoidable, give it a disposable type
-  (`build.finished`) nothing else subscribes to.
+  (`build.finished`) nothing else subscribes to. A control that changes the
+  catalog goes further and mints its own: `events_conformance_catalog` adds a
+  fresh `catalog.N` per call and removes only names it added (#1505).
 - **Report configuration rather than set it.** When the suite only needs to know
   where a limit is, a read-only control is enough: `events_conformance_quota`
   answers the capped type and its cap, read back from the `Quota`, and the

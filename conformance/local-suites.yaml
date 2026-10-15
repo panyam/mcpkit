@@ -163,7 +163,7 @@ suites:
       85ce513 (hand-recorded from the runner's own summaries, so re-run before
       trusting it): events-discovery 12/12, events-poll 31/31, events-push
       21/21, events-webhook 28/29, events-webhook-delivery 23/23. The fixture is
-      spawned with --conformance-events, which registers twelve diagnostic
+      spawned with --conformance-events, which registers thirteen diagnostic
       controls the scenarios drive, including a restart that rebuilds the
       server over the same subscription store and one that permits the
       harness's loopback receiver past the callback guards after the SSRF rows
