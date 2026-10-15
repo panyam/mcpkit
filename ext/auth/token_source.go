@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -95,6 +96,14 @@ type OAuthTokenSource struct {
 	// OpenBrowser opens the authorization URL (nil = platform default).
 	OpenBrowser func(url string) error
 
+	// CallbackPort is the loopback port the authorization redirect comes back
+	// to, as http://localhost:<port>/callback. Zero picks a free port on first
+	// use and keeps it for the life of the source, so a registration made
+	// through DCR stays valid for every later login. Set it when the redirect
+	// must be known in advance: a pre-registered ClientID, or a DCRMeta that
+	// names its own redirect_uris.
+	CallbackPort int
+
 	// HTTPClient is used for discovery and DCR requests.
 	// If nil, http.DefaultClient is used.
 	HTTPClient *http.Client
@@ -135,6 +144,9 @@ type OAuthTokenSource struct {
 	dcrClientID     string
 	dcrClientSecret string
 	dcrAS           string
+
+	// callbackPort is CallbackPort once resolved by loopbackPort.
+	callbackPort int
 }
 
 // Invalidate implements core.InvalidatingTokenSource. It drops cached
@@ -330,6 +342,10 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	if flag := s.authInfo.ASMetadata.AuthorizationResponseIssParameterSupported; flag != nil && *flag {
 		asAdvertisedSupport = true
 	}
+	port, err := s.loopbackPort()
+	if err != nil {
+		return "", fmt.Errorf("oauth login: %w", err)
+	}
 	loginReq := &client.BrowserLoginRequest{
 		AuthorizationEndpoint:    s.authInfo.ASMetadata.AuthorizationEndpoint,
 		TokenEndpoint:            s.authInfo.ASMetadata.TokenEndpoint,
@@ -339,6 +355,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		Scopes:                   scopes,
 		Resource:                 resourceIndicator(s.authInfo, s.ServerURL), // RFC 8707 §2: bind the token to this MCP server
 		OpenBrowser:              s.OpenBrowser,
+		CallbackPort:             port,
 		OnCallback: func(_ context.Context, p client.CallbackParams) error {
 			return validateIss(p.Iss, expectedIssuer, asAdvertisedSupport)
 		},
@@ -548,6 +565,15 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 		meta := DefaultClientRegistration()
 		if s.DCRMeta != nil {
 			meta = *s.DCRMeta
+		} else {
+			// Register the redirect LoginWithBrowser will listen on. An
+			// authorization server may compare redirect URIs exactly, port
+			// included, whatever RFC 8252 §7.3 suggests.
+			port, err := s.loopbackPort()
+			if err != nil {
+				return "", "", fmt.Errorf("DCR: %w", err)
+			}
+			meta.RedirectURIs = []string{loopbackRedirect(port)}
 		}
 		resp, err := client.RegisterClient(s.authInfo.ASMetadata.RegistrationEndpoint, meta, s.HTTPClient)
 		if err != nil {
@@ -560,6 +586,39 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 	}
 
 	return "", "", errors.New("no client_id: set ClientID, ClientMetadataURL, or EnableDCR")
+}
+
+// loopbackPort returns the port the authorization redirect comes back to:
+// CallbackPort when set, otherwise a free port chosen once and reused, so the
+// redirect a DCR registration recorded still matches on the next login.
+// Caller holds s.mu.
+func (s *OAuthTokenSource) loopbackPort() (int, error) {
+	if s.CallbackPort != 0 {
+		return s.CallbackPort, nil
+	}
+	if s.callbackPort == 0 {
+		port, err := freeLoopbackPort()
+		if err != nil {
+			return 0, err
+		}
+		s.callbackPort = port
+	}
+	return s.callbackPort, nil
+}
+
+// loopbackRedirect is the redirect URI oneauth's LoginWithBrowser listens on
+// for a given port. It must match byte for byte what the registration sent.
+func loopbackRedirect(port int) string {
+	return fmt.Sprintf("http://localhost:%d/callback", port)
+}
+
+func freeLoopbackPort() (int, error) {
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return 0, fmt.Errorf("pick a loopback port: %w", err)
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // --- Validation helpers ---

@@ -37,6 +37,34 @@ set explicit `Scopes`. Documented on the type and on `Token`.
 
 ---
 
+## DCR registers the redirect it will listen on (#1535)
+
+`OAuthTokenSource` used to register `http://127.0.0.1:0/callback` through DCR, the placeholder in
+`DefaultClientRegistration`, and then let oneauth's `LoginWithBrowser` listen on
+`http://localhost:<random>/callback`. Host and port both differed from what was registered. Every
+mock we tested against accepted it, because RFC 8252 §7.3 asks an authorization server to allow
+any port on a loopback redirect. `metronome-mcp.fly.dev`, the SEP-3415 reference server, compares
+redirect URIs exactly and answered `/authorize` with "redirect_uri is not registered".
+
+The source now picks the loopback port once (`CallbackPort`, or a free port chosen on first use and
+kept), registers `http://localhost:<port>/callback`, and passes the same port to `LoginWithBrowser`.
+The port is kept so the cached DCR registration still matches on a later login. A caller-supplied
+`DCRMeta` is sent as is, and that caller should set `CallbackPort` to agree with it.
+
+Two loose ends, deliberately not fixed here:
+
+- **`Invalidate` keeps the cached DCR registration.** A server that restarts and forgets its clients
+  (metronome does, on a crash) then refuses that `client_id` forever. `cmd/mcp-auth-proxy` gets
+  around it by discarding the whole source on a 401.
+- **`FollowRedirects` treats any answered GET as success.** When `/authorize` answers 400, the
+  login waits out its five-minute timeout for a callback that never comes. The proxy's
+  `approveHeadless` fails on a page with no redirect and no approvable form instead.
+
+`cmd/mcp-auth-proxy` exists because the conformance runner cannot send a bearer token. It is how
+`make conf-events-remote` grades another implementation's events server.
+
+---
+
 ## Adaptive/stateless probe must carry `MCP-Protocol-Version` (PR 1113)
 
 The `server/discover` probe runs **before** `useStatelessWire` flips, and the transport only

@@ -27,10 +27,15 @@ var RegisterClient = client.RegisterClient
 //
 // ApplicationType is set to "native" per SEP-837: MCP clients are CLI/SDK
 // (installed) clients, not web-server-hosted clients.
+//
+// The redirect URI is a placeholder. OAuthTokenSource replaces it with
+// http://localhost:<port>/callback for the port it will listen on, since an
+// authorization server may match redirect URIs exactly. A caller sending this
+// request itself should do the same.
 func DefaultClientRegistration() client.ClientRegistrationRequest {
 	return client.ClientRegistrationRequest{
 		ClientName:   "mcpkit-client",
-		RedirectURIs: []string{"http://127.0.0.1:0/callback"},
+		RedirectURIs: []string{"http://localhost:0/callback"},
 		// refresh_token is declared alongside authorization_code per
 		// SEP-2207: clients SHOULD register for refresh tokens so long
 		// sessions survive access-token expiry without re-authorization.
