@@ -6,6 +6,12 @@ import "github.com/panyam/mcpkit/core"
 // occupies under `capabilities.extensions`.
 const ExtensionID = "io.modelcontextprotocol/events"
 
+// ListChangedFilterKey is the subscriptions/listen filter key a client sets
+// to true to receive notifications/events/list_changed. SEP-3415 delivers that
+// notification only on a listen stream that asked for it, and Register makes
+// the server honor the key.
+const ListChangedFilterKey = "eventsListChanged"
+
 // EventsExtension declares MCP Events support through SEP-2133 Extension
 // Negotiation.
 //

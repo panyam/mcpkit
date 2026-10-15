@@ -392,6 +392,14 @@ func Register(cfg Config) *Registry {
 	// registered yet, so a server that starts empty and grows still tells its
 	// clients.
 	srv.RegisterExtension(EventsExtension{ListChanged: true, DeclareTopLevel: cfg.ChatGPTCompat})
+	// SEP-3415 delivers notifications/events/list_changed only on a
+	// subscriptions/listen stream whose filter asked for eventsListChanged,
+	// and the acknowledgement echoes the key when the server declared
+	// listChanged: true, which the line above always does. The legacy session
+	// wire has no listen and still gets the broadcast on its GET stream.
+	// An error means the key is already taken, i.e. Register ran twice on
+	// one server; the first registration is the one that matters.
+	_ = srv.RegisterSubscriptionFilter(server.ListChangedFilterKey(ListChangedFilterKey, "notifications/events/list_changed"))
 
 	leases := cfg.PollLeases
 	if leases == nil {

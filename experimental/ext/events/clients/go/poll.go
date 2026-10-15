@@ -51,8 +51,12 @@ type PollOptions struct {
 	OnTruncated func(cursor *string)
 
 	// OnListChanged fires when notifications/events/list_changed arrives on
-	// a poll response. The spec says the client SHOULD re-call events/list;
-	// the SDK holds no registry, so that is the caller's to do.
+	// a poll response.
+	//
+	// Deprecated: SEP-3415 delivers list_changed only on a
+	// subscriptions/listen stream that opted in, never on a poll response,
+	// so this cannot fire against a conformant server. Use WatchListChanged,
+	// or events.ListChangedFilterKey in your own client.Listen filter.
 	OnListChanged func()
 }
 
