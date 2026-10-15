@@ -72,6 +72,7 @@ examples/fine-grained-auth/fine-grained-auth
 examples/host/01-apphost/01-apphost
 examples/host/02-multi-server/02-multi-server
 examples/list-ttl/list-ttl
+examples/agents/discovery/agents-discovery
 examples/mrtr/mrtr
 examples/tasks/tasks
 examples/tasks-v2/tasks-v2

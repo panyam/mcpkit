@@ -21,6 +21,17 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 - **Agents Go client: `RoleTable`** resolves `modelRoutingHint` to a host's
   own models, escalating to a larger role rather than downgrading, and
   `LargestRole` merges several agents' hints (#1393).
+- **`experimental/ext/agents`: step-up.** `AgentDef.ScopeChallenge` keeps an
+  agent in a caller's roster while refusing `agents/get` with a 403
+  `insufficient_scope` challenge until the caller holds the named scopes.
+  Agents hidden by `Visible` still answer `agent_not_found`.
+  `Config.ResourceMetadataURL` fills the challenge's `resource_metadata`, and
+  the Go client's `StepUpScopes` reads the scopes back (#1393).
+- **`core.InsufficientScopeChallenge`** builds a 403 `WWW-Authenticate` value
+  without depending on `ext/auth`, whose `WWWAuth403Desc` now delegates to it.
+- **`examples/agents/discovery`**, a walkthrough of the agents extension:
+  discovery, scoped tools, invocation through `tools/call`, per-caller
+  filtering, step-up and `list_changed`, on both wires (#1393).
 
 ## [0.7.2] - 2026-10-14
 

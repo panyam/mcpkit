@@ -37,6 +37,21 @@ type AgentDef struct {
 	// Tool names are server-scoped: two agents listing the same name share one
 	// callable tool.
 	Tools []string
+
+	// ScopeChallenge, when set, gates agents/get for a caller who may know
+	// the agent exists but not open it. The agent stays in that caller's
+	// agents/list, and agents/get is refused before dispatch with an HTTP 403
+	// whose WWW-Authenticate carries error="insufficient_scope" and the scopes
+	// the challenge names, so the host can request a broader token and retry.
+	// This is the step-up path agents-wg#22 § Security Implications allows.
+	//
+	// It applies only to callers Config.Visible admits. An agent hidden from
+	// a caller answers agent_not_found as before, so a challenge never
+	// reveals an agent the caller may not know about. Build it with
+	// core.RequireScopes or core.AcceptAnyScope, as for ToolDef. Failure is
+	// closed: an error from the callback, or a challenge with no scopes,
+	// refuses the request with a 403 that names no remedy.
+	ScopeChallenge core.ScopeChallengeFunc
 }
 
 // Card projects an AgentDef onto its roster wire shape, dropping the detail
