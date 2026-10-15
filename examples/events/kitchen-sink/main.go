@@ -238,7 +238,7 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 		sources = append(sources, buildSrc)
 	}
 
-	events.Register(events.Config{
+	eventsRegistry := events.Register(events.Config{
 		Sources:                  sources,
 		Webhooks:                 webhooks,
 		Server:                   srv,
@@ -257,7 +257,7 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	if conformanceEvents {
 		registerConformanceEventControls(srv, conformanceYielders{
 			chat: chatSrc, alert: alertSrc, build: buildSrc, presence: presenceSrc, webhooks: webhooks,
-			quota: quota,
+			quota: quota, registry: eventsRegistry,
 		})
 		registerRestartControls(srv, rt)
 		log.Printf("[conformance] events control tools registered; this is not a demo path")

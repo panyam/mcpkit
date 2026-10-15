@@ -59,6 +59,9 @@ type conformanceYielders struct {
 	// principal. events_conformance_quota reads it so the suite knows where
 	// -32025 is reachable.
 	quota *events.Quota
+	// registry backs the catalog control, which adds and removes event
+	// types while the process runs.
+	registry *events.Registry
 }
 
 // registerConformanceEventControls wires the diagnostic tools. Called only when
@@ -91,6 +94,7 @@ func registerConformanceEventControls(srv *server.Server, y conformanceYielders)
 	registerTenantControls(srv, y.webhooks)
 	registerCallbackOriginControl(srv, y.webhooks)
 	registerQuotaControl(srv, y.quota)
+	registerCatalogControl(srv, y.registry)
 	registerWebhookEnvelopeControls(srv, y.webhooks, func(name string) (string, bool) {
 		switch name {
 		case "chat.message":

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -273,4 +274,45 @@ func TestConformanceEvents_YieldGapAcceptsTheCursorlessType(t *testing.T) {
 	text, err := c.ToolCall(t.Context(), "events_conformance_yield_gap", map[string]any{"name": "presence.changed"})
 	require.NoError(t, err)
 	assert.Equal(t, "ok: presence.changed", text)
+}
+
+// eventNames lists the event types events/list currently advertises.
+func eventNames(t *testing.T, c *client.Client) []string {
+	t.Helper()
+	res, err := c.Call(t.Context(), "events/list", map[string]any{})
+	require.NoError(t, err)
+	var listed struct {
+		Events []struct {
+			Name string `json:"name"`
+		} `json:"events"`
+	}
+	require.NoError(t, json.Unmarshal(res.Raw, &listed))
+	var names []string
+	for _, e := range listed.Events {
+		names = append(names, e.Name)
+	}
+	return names
+}
+
+// events_conformance_catalog changes the catalog at runtime for the
+// list-changed row: add mints a fresh type each call, and remove takes only
+// types it minted, so a scenario can never remove one another relies on.
+func TestConformanceEvents_CatalogAddsAndRemovesFreshTypes(t *testing.T) {
+	c := newConformanceTestClient(t)
+
+	first, err := c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "add"})
+	require.NoError(t, err)
+	second, err := c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "add"})
+	require.NoError(t, err)
+	assert.NotEqual(t, first, second, "each add must mint a new type")
+	name := strings.TrimPrefix(first, "ok: ")
+	assert.Contains(t, eventNames(t, c), name)
+
+	_, err = c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "remove", "name": name})
+	require.NoError(t, err)
+	assert.NotContains(t, eventNames(t, c), name)
+
+	_, err = c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "remove", "name": "chat.message"})
+	assert.Error(t, err, "remove must refuse a type the control did not add")
+	assert.Contains(t, eventNames(t, c), "chat.message")
 }

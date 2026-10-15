@@ -26,6 +26,7 @@ import (
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
@@ -49,11 +50,31 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), runDuration())
 	defer cancel()
 
-	opts := []client.ClientOption{client.WithClientLogging(log.Default())}
-	if statelessVersions[os.Getenv("MCP_CONFORMANCE_PROTOCOL_VERSION")] {
-		opts = append(opts, client.WithClientMode(client.ClientModeStateless))
+	// On notifications/events/list_changed the client SHOULD call events/list
+	// again. Re-listing is the application's part of the rule; the SDK only
+	// delivers the notification.
+	var c *client.Client
+	relist := func() {
+		if _, err := c.Call(ctx, "events/list", map[string]any{}); err != nil {
+			log.Printf("events/list after list_changed: %v", err)
+		}
 	}
-	c := client.NewClient(serverURL,
+
+	stateless := statelessVersions[os.Getenv("MCP_CONFORMANCE_PROTOCOL_VERSION")]
+	opts := []client.ClientOption{client.WithClientLogging(log.Default())}
+	if stateless {
+		opts = append(opts, client.WithClientMode(client.ClientModeStateless))
+	} else {
+		// The legacy session wire has no subscriptions/listen; a broadcast
+		// arrives on the standalone GET stream, which the client only opens
+		// when asked.
+		opts = append(opts, client.WithGetSSEStream(), client.WithNotificationCallback(func(method string, _ any) {
+			if method == "notifications/events/list_changed" {
+				relist()
+			}
+		}))
+	}
+	c = client.NewClient(serverURL,
 		core.ClientInfo{Name: "mcpkit-events-conformance", Version: "0.1.0"}, opts...)
 	if err := c.Connect(context.Background()); err != nil {
 		log.Fatalf("connect: %v", err)
@@ -63,6 +84,17 @@ func main() {
 	if !c.ServerSupportsExtension(eventsExtensionID) {
 		log.Printf("server does not declare %s; nothing to do", eventsExtensionID)
 		return
+	}
+
+	// SEP-3415 delivers list_changed only on a subscriptions/listen stream
+	// that asked for it, so opt in when the server says it sends one.
+	if settings, _ := c.ServerExtensionCapability(eventsExtensionID); stateless && settings["listChanged"] == true {
+		watch, err := eventsclient.WatchListChanged(ctx, c, relist)
+		if err != nil {
+			log.Printf("subscriptions/listen for %s: %v", events.ListChangedFilterKey, err)
+		} else {
+			defer watch.Stop()
+		}
 	}
 
 	res, err := c.Call(ctx, "events/list", map[string]any{})
@@ -105,13 +137,6 @@ func main() {
 		case "poll":
 			poll, err := eventsclient.Poll(ctx, c, eventsclient.PollOptions{
 				EventName: d.Name,
-				// Re-listing is the application's part of the rule; the SDK
-				// only surfaces the notification.
-				OnListChanged: func() {
-					if _, err := c.Call(ctx, "events/list", map[string]any{}); err != nil {
-						log.Printf("events/list after list_changed: %v", err)
-					}
-				},
 			})
 			if err != nil {
 				log.Printf("events/poll %s: %v", d.Name, err)

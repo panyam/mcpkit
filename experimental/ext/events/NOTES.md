@@ -363,3 +363,21 @@ Transport failures back off from 250ms to 30s.
 It is on by default, because the SEP makes it a SHOULD and the conformance driver may only call what
 the SDK offers. `StreamOptions.DisableReconnect` restores the single call.
 
+## `list_changed` moved onto subscriptions/listen (#1505)
+
+SEP-3415 delivers `notifications/events/list_changed` "only on a `subscriptions/listen` stream, and
+only when the client opted in", through the filter key `eventsListChanged`, and the acknowledgement
+echoes the key when the server declared `listChanged: true`. `Register` now registers that key with
+#1524's `server.ListChangedFilterKey`. `broadcastListChanged` did not change: a broadcast reaches a
+listen stream only when the stream's filter matches, and the legacy session wire still gets it on the
+GET stream, so one call serves both.
+
+On the client side, `eventsclient.WatchListChanged` opens a listen stream for just that key, and
+`PollOptions.OnListChanged` is deprecated, since a conformant server never sends the notification on
+a poll response. The conformance driver used to rely on exactly that, because the suite's mock sent
+it there. The suite moved too.
+
+Grading the server half needed the catalog to change during a run, which a healthy server never
+does. `events_conformance_catalog` on kitchen-sink adds and removes types (the add/remove half of
+#1465), minting a fresh `catalog.N` each time for the same reason `build.finished` exists.
+
