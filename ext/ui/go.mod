@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/ext/ui
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/panyam/mcpkit v0.7.2

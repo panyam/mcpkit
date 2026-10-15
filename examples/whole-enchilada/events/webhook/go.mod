@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/whole-enchilada/events/webhook
 
-go 1.26.6
+go 1.26.9
 
 replace (
 	github.com/panyam/mcpkit => ../../../..

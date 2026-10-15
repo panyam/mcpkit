@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/mcpskills-walkthrough
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/panyam/demokit v0.0.32
