@@ -16,7 +16,7 @@ host never eager-loads a flat `tools/list` of every agent's schemas.
 
 **Three-level progressive disclosure**, the same shape as two-tier skills:
 
-1. `capabilities.extensions["io.mcpkit/agents"]`, advertised via the
+1. `capabilities.extensions["io.modelcontextprotocol/agents"]`, advertised via the
    `core.ExtensionProvider` mechanism
 2. `agents/list` → paginated `AgentCard`s (name, description, capabilities), with **no tool
    schemas**
@@ -47,9 +47,12 @@ the parity test. If `tools/list` ever gains another per-caller rewrite or author
 
 ---
 
-## Why the identifier is `io.mcpkit/agents`, not `io.modelcontextprotocol/agents`
+## Why the identifier went to `io.mcpkit/agents` and came back
 
-It used to be the latter. The value tracked the Agents WG's working name, which read as harmless
+It is `io.modelcontextprotocol/agents` now, the SEP's own identifier. It has been that before,
+then `io.mcpkit/agents` for a while, and the reasoning for the detour is worth keeping.
+
+It used to be the SEP's name. The value tracked the Agents WG's working name, which read as harmless
 while the primitive was clearly experimental.
 
 It is not harmless, because the WG has not chosen among the three wire shapes its research doc
@@ -74,7 +77,9 @@ proposes that an identifier is fixed at creation and kept through the Experiment
 stages, with implementations required to validate what they receive. If 3392 lands as written,
 the switch is no longer tied to #22 merging, only to this implementation matching it. The two
 remaining gaps, `listChanged` and step-up, have both landed (#1536, then step-up with the
-`examples/agents/discovery` PR), so nothing in the implementation holds the switch back now.
+`examples/agents/discovery` PR, #1540), so the switch went in on its own right after (#1393).
+`TestAdvertisedExtensionMatchesSEP` decodes the SEP's capability example and checks that a served
+server advertises the same key and settings, so a drift in either direction fails.
 
 ---
 
