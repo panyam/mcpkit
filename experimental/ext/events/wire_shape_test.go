@@ -99,7 +99,7 @@ func TestNotFound_UsesSpecCodeWithKindEvent(t *testing.T) {
 }
 
 // TestPoll_FlatRequestShape pins the spec contract for events/poll
-// REQUEST shape per §"Poll-Based Delivery" → "Request: events/poll"
+// REQUEST shape per SEP-3415 §"Request: events/poll"
 // L139-149: top-level {name, cursor?, maxEvents?, params?} — no
 // subscriptions[] wrapper. Failing this test means a spec-conformant
 // client's request would not parse.
@@ -138,11 +138,11 @@ func TestPoll_RejectsLegacyWrapper(t *testing.T) {
 	assert.Equal(t, core.ErrCodeInvalidParams, resp.Error.Code)
 	assert.Contains(t, resp.Error.Message, "legacy",
 		"error message should explain the wrapper is rejected; got %q", resp.Error.Message)
-	assert.Contains(t, resp.Error.Message, "L139", "error should cite the spec section")
+	assert.Contains(t, resp.Error.Message, `SEP-3415 §"Poll-Based Delivery"`, "error should cite the spec section")
 }
 
 // TestPoll_MaxAgeFiltersOldEvents verifies the spec's maxAgeMs replay
-// floor per §"Cursor Lifecycle" → "Bounding replay with maxAgeMs" L580.
+// floor per SEP-3415 §"Cursor Lifecycle" (bounding replay with maxAgeMs).
 // Server discards events whose timestamp predates `now - maxAge` and
 // signals the gap via Truncated=true. Without filtering, a long-offline
 // client reconnects with a stale cursor and triggers an unbounded
@@ -297,8 +297,8 @@ func buildPollFilterStack(t *testing.T) (*server.Server, *YieldingSource[fakeFil
 }
 
 // TestSubscribe_AcceptsMaxAgeMs verifies the spec's maxAgeMs floor on
-// events/subscribe per §"Cursor Lifecycle" → "Bounding replay with
-// maxAgeMs" L580. Client supplies a per-subscription replay floor that
+// events/subscribe per SEP-3415 §"Cursor Lifecycle" (bounding replay with
+// maxAgeMs). Client supplies a per-subscription replay floor that
 // the server records on the WebhookTarget for use on (future)
 // reconnect-with-replay.
 //

@@ -61,11 +61,11 @@ func ParseHeaderMode(s string) (WebhookHeaderMode, error) {
 // signedDelivery holds the headers and the request body for one webhook POST.
 // applyHeaders writes them onto an outbound *http.Request.
 //
-// Per spec §"Webhook Event Delivery" L390 + §"Webhook Security" →
+// Per SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security" →
 // "Signature scheme" L472: every delivery MUST include
 // X-MCP-Subscription-Id (the subscription's derived id from the
-// canonical-tuple identity at §"Subscription Identity" → "Derived
-// id" L367) so the receiver can select the correct secret without
+// canonical-tuple identity at SEP-3415 §"Subscription identity" (derived
+// id) so the receiver can select the correct secret without
 // parsing the body. This is the only MCP-specific header on a
 // Standard Webhooks delivery; everything else conforms to the
 // Standard Webhooks profile.
@@ -145,7 +145,7 @@ func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery
 // under client-side dedup. Crucially, the msgID is also stable across retries
 // of the same event — if it weren't, a Standard-Webhooks-conformant receiver
 // would treat each retry as a distinct delivery and dedup would silently
-// break. Control envelopes (per spec §"Non-event webhook bodies"
+// break. Control envelopes (per SEP-3415 §"Non-event webhook bodies"
 // L415-423) supply their own msgID of the form msg_<type>_<random>;
 // see newMessageID.
 func signStandardWebhooks(msgID string, body []byte, secret string, now time.Time) signedDelivery {
@@ -181,7 +181,7 @@ func signFor(mode WebhookHeaderMode, msgID string, body []byte, secret string, n
 // newMessageID returns a Standard-Webhooks-shaped message ID. Uses the
 // "msg_" prefix Stripe / Standard Webhooks examples use, with 16 random
 // bytes as URL-safe base64. Reserved for non-event POSTs (control
-// envelopes per spec §"Non-event webhook bodies" L415-423) — event
+// envelopes per SEP-3415 §"Non-event webhook bodies" — event
 // deliveries use the event's own eventId so that retries dedup
 // correctly at the receiver.
 func newMessageID() string {
@@ -196,13 +196,12 @@ func newMessageID() string {
 
 // newControlMessageID mints a Standard-Webhooks-shaped message ID with
 // the type-tagged form msg_<typ>_<random>, used for non-event control
-// envelope POSTs (type:gap, type:terminated per spec §"Non-event
-// webhook bodies" L415-423). The type tag lets receivers and
+// envelope POSTs (type:gap, type:terminated per SEP-3415 §"Non-event webhook bodies". The type tag lets receivers and
 // operators distinguish control deliveries from event deliveries
 // (which use the event's eventId as webhook-id) without parsing the
 // body.
 //
-// Per spec §"Non-event webhook bodies" L417: control envelopes use the
+// Per SEP-3415 §"Non-event webhook bodies": control envelopes use the
 // pattern msg_<type>_<random> for webhook-id.
 func newControlMessageID(typ string) string {
 	var buf [12]byte // shorter random suffix; the type prefix carries info

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Spec §"Gaps and truncated": for event types that do not support replay,
+// SEP-3415 §"Cursor Lifecycle" (gaps and truncated): for event types that do not support replay,
 // truncated SHOULD be false, since there is no position to have advanced past.
 // A source that can name no position (cursorless, or with cursors but nothing
 // yielded) gets no fresh active{truncated:true} on push, matching what

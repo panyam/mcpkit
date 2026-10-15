@@ -259,7 +259,7 @@ fmt.Printf("events/poll response:\n%s\n", string(res.Raw))`),
 			if messageCursor != nil {
 				cursor = *messageCursor
 			}
-			// Flat top-level shape per spec §"Poll-Based Delivery"
+			// Flat top-level shape per SEP-3415 §"Poll-Based Delivery"
 			// → "Request: events/poll" L139-149.
 			res, err := c.Call(context.Background(), "events/poll", map[string]any{
 				"name":   "discord.message",
@@ -481,8 +481,8 @@ defer c.Call("events/unsubscribe", map[string]any{
 				RefreshFactor: 0.5,
 				OnRefresh:     func() { atomic.AddInt32(&refreshes, 1) },
 				// Bound worst-case replay on reconnect to 5 minutes
-				// per spec §"Cursor Lifecycle" → "Bounding replay
-				// with maxAgeMs" L580. Stored on WebhookTarget for
+				// per SEP-3415 §"Cursor Lifecycle" (bounding replay
+				// with maxAgeMs). Stored on WebhookTarget for
 				// future reconnect-with-replay logic.
 				MaxAge: 5 * time.Minute,
 			})
@@ -497,8 +497,7 @@ defer c.Call("events/unsubscribe", map[string]any{
 			// refused" retry log on the server side after the demo ends.
 			defer func() {
 				sub.Stop()
-				// Unsubscribe by tuple (spec §"Unsubscribing:
-				// events/unsubscribe" L509) — (name, arguments,
+				// Unsubscribe by tuple (SEP-3415 §"Unsubscribing: events/unsubscribe" — (name, arguments,
 				// delivery.url). The derived id is not accepted
 				// as input.
 				_, _ = c.Call(ctx, "events/unsubscribe", map[string]any{
@@ -1059,7 +1058,7 @@ c.Call("events/unsubscribe", map[string]any{
 			fmt.Printf("    events/subscribe response (server-derived id, no secret echo per spec):\n%s\n", string(pretty))
 
 			// Eagerly unsubscribe (tuple form per spec
-			// §"Unsubscribing: events/unsubscribe" L509, no id) so
+			// SEP-3415 §"Unsubscribing: events/unsubscribe", no id) so
 			// the subscription doesn't tie up a delivery target
 			// for a TTL window after the demo ends.
 			_, _ = c.Call(context.Background(), "events/unsubscribe", map[string]any{

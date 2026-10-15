@@ -1,6 +1,6 @@
 package eventsclient
 
-// Stream — events/stream client helper. Spec §"Push-Based Delivery"
+// Stream — events/stream client helper. SEP-3415 §"Push-Based Delivery"
 // L223+.
 //
 // One Stream holds one events/stream subscription, reopening the call when it
@@ -45,7 +45,7 @@ type StreamOptions struct {
 	Cursor *string
 
 	// MaxAge is the per-stream replay floor sent on every events/stream
-	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAgeMs" L580.
+	// per SEP-3415 §"Cursor Lifecycle" (bounding replay with maxAgeMs).
 	// Zero means no floor. Sent as the `maxAgeMs` integer; resolution is
 	// milliseconds, and sub-millisecond precision is dropped on the wire.
 	MaxAge time.Duration

@@ -1,6 +1,6 @@
 package events
 
-// Path (d) of spec §"Webhook Security" → "Endpoint verification": the
+// Path (d) of SEP-3415 §"Webhook security" (endpoint verification): the
 // callback URL's https origin serves a document listing the path prefixes
 // that accept MCP webhook deliveries, and a URL it covers is verified without
 // a challenge POST, since control of the origin stands in for proof of intent.

@@ -34,7 +34,7 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(c
 
 	// SDK tests subscribe to httptest URLs (127.0.0.1:N). Prepend
 	// the loopback escape so the dial-time SSRF guard (spec
-	// §"Webhook Security" → "SSRF prevention" L464) doesn't block
+	// SEP-3415 §"Webhook security" (SSRF prevention) doesn't block
 	// the test deliveries. Per-test whOpts can still override.
 	// The "http://localhost:1/sink" callbacks exercise only the subscribe
 	// wire and never answer; the allowlist covers them and nothing else,
@@ -59,7 +59,7 @@ func stack(t *testing.T, whOpts ...events.WebhookOption) (*client.Client, func(c
 		Sources:                  []events.EventSource{src},
 		Webhooks:                 webhooks,
 		Server:                   srv,
-		UnsafeAnonymousPrincipal: "test-principal", // SDK tests don't wire auth; spec gate at §"Subscription Identity" L361 would reject otherwise
+		UnsafeAnonymousPrincipal: "test-principal", // SDK tests don't wire auth; spec gate at SEP-3415 §"Subscription identity" would reject otherwise
 	})
 
 	handler := srv.Handler(server.WithStreamableHTTP(true))

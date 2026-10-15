@@ -127,8 +127,7 @@ func TestWebhookStore_ListReturnsSnapshot(t *testing.T) {
 }
 
 // TestWebhookStore_NoExpiryRoundTrip verifies that a target with nil
-// ExpiresAt (no-expiry per spec PR1 commit 99f3589c §"Subscription
-// TTL") survives a Save → Get round-trip without the nullable column
+// ExpiresAt (no-expiry per spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL") survives a Save → Get round-trip without the nullable column
 // silently rehydrating as the zero time.Time. Operators relying on
 // failure-based GC for no-expiry subs need the nil sentinel preserved
 // across persistence — a zero-time rehydrate would look like "expired
@@ -158,7 +157,7 @@ func TestWebhookStore_NoExpiryRoundTrip(t *testing.T) {
 }
 
 // A no-expiry subscription resumes after a restart on the strength of
-// its stored verification (spec §"Endpoint verification"), so the store
+// its stored verification (SEP-3415 §"Webhook security" (endpoint verification)), so the store
 // must round-trip VerifiedAt, including its absence.
 func TestWebhookStore_VerifiedAtRoundTrip(t *testing.T) {
 	for _, bk := range backends(t) {

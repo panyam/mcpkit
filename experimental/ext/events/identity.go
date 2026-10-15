@@ -9,7 +9,7 @@ import (
 )
 
 // canonicalKey returns the canonical-bytes encoding of a webhook subscription
-// identity tuple per spec §"Subscription Identity" → "Key composition" L363:
+// identity tuple per SEP-3415 §"Subscription identity" (key composition):
 //
 //	(principal, delivery.url, name, params)
 //
@@ -18,8 +18,7 @@ import (
 // resulting object so map iteration order doesn't affect the bytes.
 //
 // Two subscribe calls produce identical canonical bytes if and only if all
-// four components match — which is the spec's idempotency rule (§"Subscription
-// Identity" → "Key composition" L363: "There is no client-generated id —
+// four components match — which is the spec's idempotency rule (SEP-3415 §"Subscription identity" (key composition): "There is no client-generated id —
 // a subscription is fully determined by what it listens for, where it
 // delivers, and who asked").
 //
@@ -57,7 +56,7 @@ func canonicalKey(principal, deliveryURL, name string, params map[string]any) []
 // the byte output is stable regardless of map iteration order. Nested
 // maps and slices are JSON-marshaled with their natural ordering — this
 // is sufficient for the spec's "params is compared by canonical-JSON
-// equality" requirement (§"Subscription Identity" → "Key composition"
+// equality" requirement (SEP-3415 §"Subscription identity" (key composition)
 // L363) because subscription params are flat key-value by convention;
 // servers that accept nested params should document the canonicalization
 // they apply.
@@ -87,8 +86,8 @@ func canonicalJSON(m map[string]any) []byte {
 // "sub_<base64-of-16-bytes>" derived from the canonical tuple bytes via
 // SHA-256 truncated to 128 bits. Surfaced on the wire as the
 // X-MCP-Subscription-Id header on every webhook delivery POST per
-// spec §"Webhook Event Delivery" L390 and §"Webhook Security" → "Signature
-// scheme" L472.
+// SEP-3415 §"Webhook event delivery" and SEP-3415 §"Webhook security" (signature
+// scheme).
 //
 // Collision analysis:
 //
@@ -100,7 +99,7 @@ func canonicalJSON(m map[string]any) []byte {
 //     infeasible for anyone.
 //
 // The id is intentionally non-load-bearing for security per spec
-// §"Subscription Identity" → "Cross-tenant isolation" L378: "A caller who
+// SEP-3415 §"Subscription identity" (cross-tenant isolation): "A caller who
 // learns another tenant's derived id gains nothing — id is not accepted
 // as input to any method." Even a successful collision lets an attacker
 // only cause routing weirdness on the receiver side, where HMAC

@@ -8,7 +8,7 @@ import (
 // EmitToSubscription delivers an event to exactly one subscription
 // identified by sub id, bypassing the broadcast fanout.
 //
-// Spec §"Server SDK Guidance" L630: targeted emit is appropriate when
+// SEP-3415 §"Server SDK guidance": targeted emit is appropriate when
 // the server has set up a per-subscription upstream listener and
 // already knows which subscription this event belongs to — the
 // canonical example is on_subscribe joining a chat room and tagging

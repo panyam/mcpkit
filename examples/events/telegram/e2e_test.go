@@ -30,7 +30,7 @@ import (
 // cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[TelegramEventData], func(context.Context, TelegramEventData) error, *events.WebhookRegistry) {
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
-	// production-default SSRF dial guard (spec §"Webhook Security"
+	// production-default SSRF dial guard (SEP-3415 §"Webhook security"
 	// → "SSRF prevention" L464).
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
@@ -104,7 +104,7 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yieldText(yield, 100, "bob", "world"))
 	require.NoError(t, yieldText(yield, 100, "carol", "!"))
 
-	// Flat events/poll request shape per spec §"Poll-Based Delivery"
+	// Flat events/poll request shape per SEP-3415 §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
 	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
@@ -264,11 +264,10 @@ func TestE2EWebhookDelivery(t *testing.T) {
 	require.NoError(t, err)
 
 	// Spec: subscribe response carries id (server-derived per
-	// §"Subscription Identity" → "Derived id" L367) but does NOT
+	// SEP-3415 §"Subscription identity" (derived id) but does NOT
 	// echo the secret. The client already supplied the secret;
 	// receiver verifies with that value. The id is the
-	// X-MCP-Subscription-Id routing handle (spec §"Webhook Event
-	// Delivery" L390 + §"Webhook Security" L472).
+	// X-MCP-Subscription-Id routing handle (SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security".
 	var subResp struct {
 		ID     string `json:"id"`
 		Secret string `json:"secret"`
@@ -513,8 +512,7 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	require.NoError(t, c.Connect(t.Context()))
 
 	// The legacy {subscriptions: [...]} wrapper is rejected with a
-	// helpful error pointing at the spec change (§"Poll-Based
-	// Delivery" → "Request: events/poll" L139-149).
+	// helpful error pointing at the spec change (SEP-3415 §"Request: events/poll".
 	_, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"subscriptions": []map[string]any{
 			{"name": "telegram.message", "cursor": "0"},

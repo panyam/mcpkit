@@ -59,7 +59,7 @@ type PresenceChangedData struct {
 // EmitToSubscription (one frame per matched (sub, transition) pair)
 // instead of fanning out to every subscriber and Match-filtering.
 //
-// Spec §"Server SDK Guidance" L630 describes this pattern: the author
+// SEP-3415 §"Server SDK guidance" describes this pattern: the author
 // has already shaped the event for the specific subscription, so
 // Match / Transform are NOT applied on the targeted emit path.
 type watchListRegistry struct {

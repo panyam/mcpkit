@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Endpoint verification, spec §"Webhook Security" → "Endpoint
-// verification (anti-flooding)": a server MUST NOT deliver to a callback
+// Endpoint verification, SEP-3415 §"Webhook security" (endpoint
+// verification (anti-flooding)): a server MUST NOT deliver to a callback
 // until the endpoint has confirmed it wants deliveries. Issue 490.
 
 // recordedPost is one POST a verificationReceiver saw, in arrival order.

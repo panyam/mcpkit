@@ -21,7 +21,7 @@ import (
 // TestNoExpirySurvival_RestartSurvivalThroughGORMSQLite is the
 // load-bearing integration test for issue 764. It exercises the
 // end-to-end durability contract spec PR1 commit 99f3589c
-// §"Subscription TTL" attaches to no-expiry grants: persistence
+// SEP-3415 §"Subscription TTL" attaches to no-expiry grants: persistence
 // across process restart.
 //
 // The shape of this test is deliberately designed to be the

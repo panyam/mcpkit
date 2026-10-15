@@ -17,9 +17,9 @@ import (
 )
 
 // A source's gap and terminal signals reach its webhook subscribers, not
-// only its push streams (#1466). Spec §"Gaps and truncated", webhook row:
+// only its push streams (#1466). SEP-3415 §"Cursor Lifecycle" (gaps and truncated), webhook row:
 // a gap detected between refreshes is POSTed as {type:gap, cursor:<fresh>};
-// §"Event Type Removal": subscriptions are ended with each mode's
+// SEP-3415 §"Event type removal and breaking changes": subscriptions are ended with each mode's
 // termination signal, which for webhooks is a terminated envelope.
 
 type envelopeSink struct {

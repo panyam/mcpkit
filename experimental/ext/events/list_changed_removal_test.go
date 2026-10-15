@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Tests for spec commit 28ec35e9 (2026-09-04), §"Dynamic Event Types" and
-// §"Event Type Removal and Breaking Changes":
+// Tests for spec commit 28ec35e9 (2026-09-04), SEP-3415 §"Dynamic event types" and
+// SEP-3415 §"Event type removal and breaking changes":
 //
 //   - notifications/events/list_changed on AddSource / RemoveSource
 //   - live subscriptions terminated when their event type goes away,
@@ -74,7 +74,7 @@ func buildRemovalStack(t *testing.T) (*Registry, *WebhookRegistry, *captureBroad
 	return reg, webhooks, cap
 }
 
-// TestAddSource_BroadcastsListChanged covers §"Dynamic Event Types": a
+// TestAddSource_BroadcastsListChanged covers SEP-3415 §"Dynamic event types": a
 // client whose registry is stale has no way to learn a new event type
 // exists without this ping.
 func TestAddSource_BroadcastsListChanged(t *testing.T) {
@@ -114,7 +114,7 @@ func TestFailedRemoveSource_DoesNotBroadcast(t *testing.T) {
 }
 
 // TestRemoveSource_TerminatesWebhookSubscriptions is the core of
-// §"Event Type Removal and Breaking Changes". The receiver must get a
+// SEP-3415 §"Event type removal and breaking changes". The receiver must get a
 // terminated envelope, and the registry must drop the subscription, or the
 // client keeps refreshing a subscription that can never fire again.
 func TestRemoveSource_TerminatesWebhookSubscriptions(t *testing.T) {
@@ -237,7 +237,7 @@ func TestRemoveSource_NonTerminatableSourceStillSucceeds(t *testing.T) {
 }
 
 // TestUnsupportedData_CarriesSchemaChangedReason pins the -32026 payload
-// shape from §"Event Type Removal and Breaking Changes". Registry.ChangeSchema
+// shape from SEP-3415 §"Event type removal and breaking changes". Registry.ChangeSchema
 // emits it on a breaking change; schema_change_test.go covers that path.
 func TestUnsupportedData_CarriesSchemaChangedReason(t *testing.T) {
 	raw, err := json.Marshal(UnsupportedData{

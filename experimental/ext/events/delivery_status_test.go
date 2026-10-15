@@ -18,7 +18,7 @@ import (
 )
 
 // deliveryStatus on events/subscribe refresh response. Spec
-// §"Webhook Delivery Status" L425-460: the registry tracks per-target
+// SEP-3415 §"Webhook delivery status": the registry tracks per-target
 // delivery health. Subscribe refresh response includes:
 //
 //   deliveryStatus: {
@@ -184,8 +184,7 @@ func TestDeliveryStatus_LastErrorIsCategorical(t *testing.T) {
 }
 
 // TestSuspend_AfterThresholdConsecutiveFailures verifies the spec
-// suspend rule (§"Webhook Event Delivery" L413 + §"Webhook Delivery
-// Status" L460): after N consecutive delivery failures within a sliding
+// suspend rule (SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook delivery status": after N consecutive delivery failures within a sliding
 // window W, the registry sets Active=false on the target. Subsequent
 // yields don't attempt delivery (covered by separate test below).
 //
@@ -302,7 +301,7 @@ func TestSuspend_SuccessfulRefreshReactivates(t *testing.T) {
 //
 // Note: the receiver counts EVENT deliveries only — the suspend
 // transition auto-POSTs a {type:terminated} control envelope (spec
-// §"Non-event webhook bodies" L420), which also hits the receiver
+// SEP-3415 §"Non-event webhook bodies", which also hits the receiver
 // but is a control body, not an event. The discriminator is the
 // body's top-level `type` field.
 func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
@@ -312,7 +311,7 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 		var env map[string]any
 		_ = json.Unmarshal(body, &env)
 		// Distinguish event deliveries from the auto-Post terminated
-		// control envelope (spec §"Non-event webhook bodies" L420).
+		// control envelope (SEP-3415 §"Non-event webhook bodies".
 		// Only count events for this test's "suspended target gets
 		// no new event deliveries" claim.
 		if env["type"] == "terminated" {
@@ -349,10 +348,9 @@ func TestSuspend_SuspendedTargetSkippedInDeliver(t *testing.T) {
 }
 
 // TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension verifies that
-// when the suspend transition flips Active=true→false (spec §"Webhook
-// Delivery Status" L460), the registry automatically POSTs a
+// when the suspend transition flips Active=true→false (SEP-3415 §"Webhook delivery status", the registry automatically POSTs a
 // {type:"terminated", error:{...}} control envelope to the receiver
-// as a courtesy notification (spec §"Non-event webhook bodies" L420).
+// as a courtesy notification (SEP-3415 §"Non-event webhook bodies".
 //
 // Important behavior: the target is NOT removed from the registry
 // (distinct from explicit PostTerminated which removes). The

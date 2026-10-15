@@ -83,7 +83,7 @@ func TestEventsPollCursorPagination(t *testing.T) {
 	source, _ := preloadedSource(10)
 	c, _ := newConnectedClient(t, source, events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()))
 
-	// Flat events/poll request shape per spec §"Poll-Based Delivery"
+	// Flat events/poll request shape per SEP-3415 §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
 	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":      "telegram.message",
@@ -213,8 +213,7 @@ func TestWebhookHMACSignature_MCPHeaders(t *testing.T) {
 		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(), // httptest is loopback; bypass SSRF dial guard
 	)
 	// Direct registry poke (skip the JSON-RPC subscribe handler).
-	// Register is keyed on canonical-tuple bytes (spec §"Subscription
-	// Identity" → "Key composition" L363); the contents don't matter
+	// Register is keyed on canonical-tuple bytes (SEP-3415 §"Subscription identity" (key composition); the contents don't matter
 	// for this HMAC delivery test, so we use a stub key.
 	webhooks.Register(events.RegisterParams{CanonicalKey: []byte("hmac-test"), DerivedID: "sub_hmac_test", URL: srv.URL, Secret: secret, MaxAgeMs: 0})
 
@@ -294,7 +293,7 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(result.Raw, &resp))
 	// Server-derived id replaces client-supplied id per spec
-	// §"Subscription Identity" → "Derived id" L367.
+	// SEP-3415 §"Subscription identity" (derived id).
 	assert.True(t, strings.HasPrefix(resp.ID, "sub_"), "id must be server-derived sub_<base64>; got %q", resp.ID)
 	assert.NotEmpty(t, resp.RefreshBefore)
 
@@ -304,12 +303,12 @@ func TestSubscribeReturnsRefreshBefore(t *testing.T) {
 }
 
 // TestWebhookKeyedByCanonicalTuple verifies the registry's
-// canonical-tuple keying (spec §"Subscription Identity" → "Key
-// composition" L363): two distinct canonical keys (different
+// canonical-tuple keying (SEP-3415 §"Subscription identity" (key
+// composition): two distinct canonical keys (different
 // principals subscribing to the same URL) coexist as distinct
 // entries; Unregister by canonical key removes only the matching
 // entry. This is the spec's cross-tenant isolation property
-// (§"Subscription Identity" → "Cross-tenant isolation" L378) at
+// (SEP-3415 §"Subscription identity" (cross-tenant isolation) at
 // the registry level.
 func TestWebhookKeyedByCanonicalTuple(t *testing.T) {
 	webhooks := events.NewWebhookRegistry(events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks())

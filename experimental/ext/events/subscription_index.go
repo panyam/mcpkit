@@ -12,7 +12,7 @@ import (
 // where the cross-replica fanout layer (issue 629) handles non-local
 // subscriptions.
 //
-// Spec §"Server SDK Guidance" L630 names the use case: targeted
+// SEP-3415 §"Server SDK guidance" names the use case: targeted
 // delivery via EmitToSubscription depends on a fast subID → destination
 // lookup. The index is maintained by the lifecycle wiring in
 // events.Register — per-mode registration sites call AddSubscription
@@ -117,8 +117,7 @@ func NewInMemorySubscriptionIndex() SubscriptionIndexStore {
 
 // SubscriptionIndex maps a server-derived subscription id to the
 // callback that delivers an event to that specific subscription. It
-// is the routing table consulted by EmitToSubscription (spec §"Server
-// SDK Guidance" L630) so an author who knows the target sub id can
+// is the routing table consulted by EmitToSubscription (SEP-3415 §"Server SDK guidance" so an author who knows the target sub id can
 // bypass broadcast fanout.
 //
 // SubscriptionIndex is the default in-memory implementation of the
@@ -132,11 +131,11 @@ func NewInMemorySubscriptionIndex() SubscriptionIndexStore {
 // sub id — concurrent streams from the same principal/name/params
 // are distinct entries in the index. Webhook subscriptions: the
 // spec's derived id (deriveSubscriptionID over the canonical tuple,
-// §"Subscription Identity" → "Derived id" L367) is reused — refresh
+// SEP-3415 §"Subscription identity" (derived id) is reused — refresh
 // keeps the same id, so the index entry also stays put. Poll
 // subscriptions are NOT indexed (no sub id; the lease tuple is the
-// routing identity per spec §"Server SDK Guidance" → "Unsubscribe
-// timing by mode" L707).
+// routing identity per SEP-3415 §"Server SDK guidance" (unsubscribe
+// timing by mode).
 type SubscriptionIndex struct {
 	mu      sync.RWMutex
 	entries map[string]subscriptionEntry

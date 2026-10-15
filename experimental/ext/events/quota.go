@@ -1,7 +1,6 @@
 package events
 
-// Per-principal-per-event-type subscription quota. Spec §"Server SDK
-// Guidance" → "Subscription lifecycle hooks" L705: "Servers SHOULD
+// Per-principal-per-event-type subscription quota. SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks): "Servers SHOULD
 // enforce TooManySubscriptions before invoking on_subscribe."
 //
 // Why per-principal-per-event-type:

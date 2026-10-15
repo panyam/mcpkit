@@ -6,7 +6,7 @@ package events
 // identity poll otherwise lacks, so on_subscribe / on_unsubscribe
 // can fire consistently with webhook + push.
 //
-// Spec §"Server SDK Guidance" → "Unsubscribe timing by mode" L707-715:
+// SEP-3415 §"Server SDK guidance" (unsubscribe timing by mode):
 // "the SDK treats poll subscriptions as leased. The lease is keyed on
 // `(principal-or-null, eventName, canonicalHash(params))`... The lease
 // window is SDK-configurable and SHOULD default to a small multiple of
@@ -33,7 +33,7 @@ const (
 // PollLeaseHook is the callback signature for OnCreate / OnExpire. The
 // SDK invokes it with the lease's identity tuple; events.Register
 // chains an internal hook that turns these into on_subscribe /
-// on_unsubscribe calls per spec §"Server SDK Guidance" →
+// on_unsubscribe calls per SEP-3415 §"Server SDK guidance" →
 // "Subscription lifecycle hooks" L691.
 //
 // Hooks fire from the goroutine that called Touch (OnCreate) or the
@@ -191,7 +191,7 @@ func (t *PollLeaseTable) Touch(principal, eventName string, params map[string]an
 
 // Remove drops a lease for (principal, eventName, params) immediately,
 // without firing OnExpire. Returns true when an entry actually went
-// away. Used by the quota wiring (spec §"Server SDK Guidance" →
+// away. Used by the quota wiring (SEP-3415 §"Server SDK guidance" →
 // "Subscription lifecycle hooks" L705) to roll back a Touch when
 // Reserve fails — the lease was just created but the principal is
 // over their cap, so the lease should never have been there.

@@ -131,7 +131,7 @@ Per spec, the webhook signing secret is **client-supplied only** (`whsec_` + bas
 
 ## Auth posture: demo escape vs real OIDC
 
-Per spec §"Subscription Identity" L361 webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:
+Per SEP-3415 §"Subscription identity" webhook subscribe MUST require an authenticated principal. The demo auto-detects which posture to run in based on environment variables:
 
 ```bash
 # Demo posture (default): no env vars set.

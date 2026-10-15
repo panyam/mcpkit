@@ -248,7 +248,7 @@ func (r *Registry) RemoveSource(name string) error {
 	delete(r.schemaOverrides, name)
 	r.mu.Unlock()
 
-	// Spec §"Event Type Removal and Breaking Changes" (commit 28ec35e9):
+	// SEP-3415 §"Event type removal and breaking changes" (commit 28ec35e9):
 	// subscriptions to a removed type no longer hold a valid contract, so
 	// the server SHOULD end them with each mode's termination signal
 	// rather than leaving subscribers waiting on a name that is gone.
@@ -265,7 +265,7 @@ func (r *Registry) RemoveSource(name string) error {
 }
 
 // terminateSubscriptions ends every live subscription to a removed event
-// type, per spec §"Event Type Removal and Breaking Changes". Both modes
+// type, per SEP-3415 §"Event type removal and breaking changes". Both modes
 // carry the same error, -32023 NotFound with data.kind "event", which is
 // what tells a client SDK to re-fetch events/list rather than treat the
 // close as an auth failure or a transport blip.
@@ -305,7 +305,7 @@ type sourceTerminator interface {
 }
 
 // broadcastListChanged emits the spec's `notifications/events/list_changed`
-// (§"Dynamic Event Types") so clients know to re-read events/list. The
+// (SEP-3415 §"Dynamic event types") so clients know to re-read events/list. The
 // notification carries no payload by design: it is a ping, and the client
 // re-fetches to learn what actually changed.
 //

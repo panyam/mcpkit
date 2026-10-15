@@ -56,14 +56,14 @@ type SubscribeOptions struct {
 	Arguments map[string]any
 
 	// MaxAge is the per-subscription replay floor sent on every subscribe
-	// per spec §"Cursor Lifecycle" → "Bounding replay with maxAgeMs" L580.
+	// per SEP-3415 §"Cursor Lifecycle" (bounding replay with maxAgeMs).
 	// Zero means no floor (server defaults to no floor). Sent as the
 	// `maxAgeMs` integer; resolution is milliseconds, and sub-millisecond
 	// precision is dropped on the wire.
 	MaxAge time.Duration
 
 	// TTLMs is the client's suggested subscription lifetime in
-	// milliseconds (spec PR1 commit 99f3589c §"Subscription TTL").
+	// milliseconds (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL").
 	// - nil: omit from the wire — server picks its default
 	// - non-nil: emit on the wire as a JSON number — server SHOULD
 	//   grant ≤ this value (with one exception: clamp UP to server min)
@@ -146,7 +146,7 @@ func Subscribe(parent context.Context, sess *client.Client, opts SubscribeOption
 
 // ID returns the subscription id the SDK supplied (echoed by the
 // server). The spec replaces id-keyed subscription identity with the
-// (principal, name, params, url) tuple per §"Subscription Identity"
+// (principal, name, params, url) tuple per SEP-3415 §"Subscription identity"
 // → "Key composition" L363; this id is the server-derived routing
 // handle, not the canonical key.
 func (s *Subscription) ID() string {
@@ -210,7 +210,7 @@ func (s *Subscription) Stop() {
 // Caller is responsible for firing OnRefresh / OnRecover; this method
 // only handles the network call and state update.
 //
-// Per spec §"Subscription Identity" → "Derived id" L367, the server
+// Per SEP-3415 §"Subscription identity" (derived id), the server
 // derives the subscription id from (principal, name, params, url) — the
 // SDK does not send an id; it reads the derived id back from the
 // response (Subscription.ID()).

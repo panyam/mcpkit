@@ -30,7 +30,7 @@ type webhookRow struct {
 	// future hardening in README.md).
 	Secret string `gorm:"not null"`
 	// ExpiresAt is nullable: NULL means no-expiry per spec PR1 commit
-	// 99f3589c §"Subscription TTL". The events package's
+	// 99f3589c SEP-3415 §"Subscription TTL". The events package's
 	// WebhookTarget.ExpiresAt mirrors this with *time.Time.
 	ExpiresAt *time.Time
 	MaxAgeMs  int            `gorm:"not null"`
@@ -52,7 +52,7 @@ type webhookRow struct {
 	// StatusThrottled + StatusRetryAfterMs added with spec PR1 commit
 	// 21be9c31 (deliveryStatus throttled + retryAfterMs).
 	// StatusFailingContinuouslySince added for the failure-GC anchor
-	// (spec PR1 commit 99f3589c §"Subscription TTL").
+	// (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL").
 	StatusActive                   bool `gorm:"not null"`
 	StatusLastDeliveryAt           *time.Time
 	StatusLastError                string `gorm:"not null"`

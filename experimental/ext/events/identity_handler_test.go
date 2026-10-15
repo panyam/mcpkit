@@ -15,8 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Handler-level tests for the spec auth gate (§"Subscription
-// Identity" → "Authentication required" L361) + tuple-keyed
+// Handler-level tests for the spec auth gate (SEP-3415 §"Subscription identity" (authentication required) + tuple-keyed
 // registry. Tests here build a server WITHOUT
 // UnsafeAnonymousPrincipal so they exercise the strict rejection
 // path. The shared fixture in secret_validation_test.go uses
@@ -27,7 +26,7 @@ import (
 // buildAuthGateStack returns a server with the events handlers registered
 // + a reference to the registry so tests can inspect target state.
 // unsafeAnon controls whether the strict spec auth gate fires:
-//   - "" → strict (§"Subscription Identity" → "Authentication required" L361)
+//   - "" → strict (SEP-3415 §"Subscription identity" (authentication required)
 //   - non-empty → escape hatch (events.Config.UnsafeAnonymousPrincipal docs)
 func buildAuthGateStack(t *testing.T, unsafeAnon string) (*server.Server, *WebhookRegistry) {
 	return buildAuthGateStackWithOpts(t, unsafeAnon)
@@ -90,7 +89,7 @@ func validSubscribeParams() map[string]any {
 // TestSubscribe_RejectsAnonymousUnderStrictSpec verifies the spec-strict
 // path: when the server has no auth wired AND no UnsafeAnonymousPrincipal
 // configured, anonymous webhook subscribes are rejected with -32024
-// per §"Subscription Identity" → "Authentication required" L361.
+// per SEP-3415 §"Subscription identity" (authentication required).
 //
 // Without this rejection, a misconfigured deployment would silently
 // accept anonymous subscribes — the failure mode the spec is preventing.
@@ -116,7 +115,7 @@ func TestSubscribe_AcceptsAnonymousWithEscape(t *testing.T) {
 }
 
 // TestSubscribe_TupleIdempotence verifies the spec's idempotent-subscribe
-// rule (§"Subscription Identity" → "Key composition" L363): two subscribe
+// rule (SEP-3415 §"Subscription identity" (key composition): two subscribe
 // calls with identical (name, params, delivery.url) AND same principal
 // are the SAME subscription — the second is a TTL refresh, not a new
 // registry entry.
@@ -139,7 +138,7 @@ func TestSubscribe_TupleIdempotence(t *testing.T) {
 }
 
 // TestSubscribe_TupleIsolationCrossPrincipal verifies the spec's
-// cross-tenant isolation property (§"Subscription Identity" L378): two
+// cross-tenant isolation property (SEP-3415 §"Subscription identity": two
 // subscribes with same (name, params, delivery.url) but DIFFERENT
 // principals are DIFFERENT subscriptions. We can't easily set different
 // principals on Dispatch (no auth middleware in test fixture), so this
@@ -168,7 +167,7 @@ func TestSubscribe_TupleIsolationCrossPrincipal(t *testing.T) {
 
 // TestSubscribe_RejectsClientSuppliedID verifies the wire-strict
 // rejection of legacy id-bearing subscribe requests. Per spec
-// §"Subscription Identity" → "Key composition" L363: "There is no
+// SEP-3415 §"Subscription identity" (key composition): "There is no
 // client-generated id — a subscription is fully determined by what it
 // listens for, where it delivers, and who asked." Old SDKs sending an
 // id field get a loud -32602 instead of a silent mis-keying that
@@ -186,7 +185,7 @@ func TestSubscribe_RejectsClientSuppliedID(t *testing.T) {
 }
 
 // TestUnsubscribe_ByTuple verifies the spec's unsubscribe-by-tuple
-// behavior (§"Unsubscribing: events/unsubscribe" L509): client supplies
+// behavior (SEP-3415 §"Unsubscribing: events/unsubscribe": client supplies
 // (name, params, delivery.url); server resolves via canonical key,
 // removes the entry. No id required in the request.
 func TestUnsubscribe_ByTuple(t *testing.T) {
@@ -213,8 +212,7 @@ func TestUnsubscribe_ByTuple(t *testing.T) {
 }
 
 // TestDelivery_EmitsXMCPSubscriptionIDHeader verifies the end-to-end
-// header wiring per spec §"Webhook Event Delivery" L390 + §"Webhook
-// Security" L472: a real subscribe → yield → POST round-trip carries
+// header wiring per SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security": a real subscribe → yield → POST round-trip carries
 // the X-MCP-Subscription-Id header on the outbound delivery, and the
 // header value matches the server-derived id returned in the
 // subscribe response.
@@ -236,8 +234,8 @@ func TestDelivery_EmitsXMCPSubscriptionIDHeader(t *testing.T) {
 
 	// httptest binds to 127.0.0.1; tests that drive an actual
 	// delivery need WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks() to bypass
-	// the dial-time SSRF guard (spec §"Webhook Security" → "SSRF
-	// prevention" L464).
+	// the dial-time SSRF guard (SEP-3415 §"Webhook security" (sSRF
+	// prevention).
 	webhooks := NewWebhookRegistry(WithWebhookAllowPrivateNetworks(true), WithUnsafeWebhookAllowPlaintextCallbacks(), WithUnsafeSkipEndpointVerification())
 	canonical := canonicalKey("test-principal", callback.URL, "fake.event", nil)
 	subID := deriveSubscriptionID(canonical)

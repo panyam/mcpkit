@@ -182,7 +182,7 @@ secret = generate_webhook_secret()
 
 ### Subscription identity and auth gate
 
-Per spec §"Subscription Identity" L361-378, webhook subscribe and unsubscribe MUST require an authenticated principal; the registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)` and derives a routing handle (`X-MCP-Subscription-Id`) over the same canonical bytes. Two distinct tenants subscribing to the same `(name, params, url)` get distinct subscriptions, which is cross-tenant isolation by construction.
+Per SEP-3415 §"Subscription identity", webhook subscribe and unsubscribe MUST require an authenticated principal; the registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)` and derives a routing handle (`X-MCP-Subscription-Id`) over the same canonical bytes. Two distinct tenants subscribing to the same `(name, params, url)` get distinct subscriptions, which is cross-tenant isolation by construction.
 
 The handler reads the principal via mcpkit's core auth abstraction (`core.MethodContext.AuthClaims().Subject`), so **any** auth provider that populates `core.Claims` works, whether that is JWT/OIDC via mcpkit's `ext/auth`, mTLS-derived principals, session cookies, custom validators, etc. Events depends on the `core.Claims` interface, **not** on `ext/auth` or any specific implementation. See "Auth + extension composition" below.
 
@@ -250,7 +250,7 @@ Operators can waive the handshake for known URLs with `WithWebhookDeliveryAllowl
 
 ### Unsubscribe
 
-Today: keyed on the canonical tuple `(principal, name, params, url)` per spec §"Subscription Identity" → "Key composition" L363. The derived id is NOT accepted as input on `events/unsubscribe`. Callers resolve via the same tuple they used to subscribe.
+Today: keyed on the canonical tuple `(principal, name, params, url)` per SEP-3415 §"Subscription identity" (key composition). The derived id is NOT accepted as input on `events/unsubscribe`. Callers resolve via the same tuple they used to subscribe.
 
 ```jsonc
 {"id": "sub-1", "delivery": {"url": "https://..."}}

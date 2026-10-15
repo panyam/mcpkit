@@ -16,8 +16,7 @@ import (
 // auto-detecting whether the request carries X-MCP-* (default) or
 // webhook-* (Standard Webhooks) headers per the server's WebhookHeaderMode.
 //
-// Answers the server's endpoint-verification challenge (spec §"Endpoint
-// verification") by echoing the nonce, but only when the challenge's
+// Answers the server's endpoint-verification challenge (SEP-3415 §"Webhook security" (endpoint verification)) by echoing the nonce, but only when the challenge's
 // signature verifies. That arrives while Subscribe is still in flight,
 // so the secret must already be set, or empty, by then; a receiver
 // holding the wrong secret refuses the challenge and Subscribe fails
@@ -32,7 +31,7 @@ type Receiver[Data any] struct {
 	closed   bool
 	rejected uint64
 
-	// Control envelope callbacks per spec §"Non-event webhook bodies"
+	// Control envelope callbacks per SEP-3415 §"Non-event webhook bodies"
 	// L415-423. Both are optional. The discriminator is the top-level
 	// `type` field: "gap" carries a fresh cursor; "terminated"
 	// carries an error.
@@ -134,7 +133,7 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	// Top-level `type` field discriminates control envelopes from
-	// event deliveries (spec §"Non-event webhook bodies" L415-423).
+	// event deliveries (SEP-3415 §"Non-event webhook bodies".
 	// Probe with a minimal struct before unmarshaling as Event so we
 	// don't double-decode the common case (no `type` → event).
 	var probe struct {

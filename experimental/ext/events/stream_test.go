@@ -175,7 +175,7 @@ func validStreamParams() map[string]any {
 
 // TestStream_RejectsUnknownEvent verifies the spec contract that an
 // events/stream against an unknown event name fails with -32023 NotFound
-// before any stream is opened (§"Push-Based Delivery" → "Request: events/stream"
+// before any stream is opened (SEP-3415 §"Request: events/stream"
 // L269: "If the subscription is invalid, the server responds immediately with
 // a JSON-RPC error and no stream is opened").
 func TestStream_RejectsUnknownEvent(t *testing.T) {
@@ -188,7 +188,7 @@ func TestStream_RejectsUnknownEvent(t *testing.T) {
 }
 
 // TestStream_RejectsAnonymousUnderStrictSpec verifies events/stream enforces
-// the same authentication gate as events/subscribe per §"Subscription Identity"
+// the same authentication gate as events/subscribe per SEP-3415 §"Subscription identity"
 // → "Authentication required" L361 — the spec L267 lists Unauthorized among
 // the immediate-error responses.
 //
@@ -269,7 +269,7 @@ func TestStream_FinalFrameIsStreamEventsResult(t *testing.T) {
 }
 
 // TestStream_HeartbeatFiresOnInterval verifies the spec heartbeat contract
-// (§"Lifecycle" → "Heartbeat" L294): periodic notifications/events/heartbeat
+// (SEP-3415 §"Lifecycle" (heartbeat): periodic notifications/events/heartbeat
 // with the source's current cursor. We use a 50ms interval to keep the
 // test fast; production default is ≥30s.
 //
@@ -294,7 +294,7 @@ func TestStream_HeartbeatFiresOnInterval(t *testing.T) {
 }
 
 // TestStream_HeartbeatCursorIsNullForCursorless verifies the cursorless
-// branch of the heartbeat: §"Heartbeat" L294 says cursor "is null for event
+// branch of the heartbeat: SEP-3415 §"Lifecycle" (heartbeat) says cursor "is null for event
 // types that do not support replay." A cursorless source's heartbeat must
 // JSON-encode cursor as null, not as an empty string or absent key.
 func TestStream_HeartbeatCursorIsNullForCursorless(t *testing.T) {

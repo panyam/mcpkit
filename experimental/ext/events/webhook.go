@@ -72,7 +72,7 @@ const (
 	// with a code change.
 	MaxWebhookTTL = 24 * time.Hour
 
-	defaultWebhookMaxBodyBytes     = 256 * 1024       // spec §"Webhook Security" → "Delivery profile" L487
+	defaultWebhookMaxBodyBytes     = 256 * 1024       // SEP-3415 §"Webhook security" (delivery profile)
 	defaultWebhookSuspendThreshold = 5                // N consecutive failures before Active=false
 	defaultWebhookSuspendWindow    = 10 * time.Minute // sliding window over which failures accumulate
 )
@@ -81,7 +81,7 @@ const (
 // may remain in FailingContinuouslySince state (no successful delivery
 // since the first failure of the current run) before the failure-based
 // GC drops it and posts a `terminated` envelope per spec PR1 commit
-// 99f3589c §"Subscription TTL".
+// 99f3589c SEP-3415 §"Subscription TTL".
 //
 // 72 hours by default — long enough to ride out a long-weekend
 // receiver outage without losing the subscription; short enough that
@@ -91,7 +91,7 @@ const DefaultNoExpiryFailureGCWindow = 72 * time.Hour
 
 // DefaultWebhookAckTimeout is the per-delivery ack timeout the registry
 // applies to both the http.Client and the underlying net.Dialer. Aligned
-// with spec PR1 commit b506e347 (§"Webhook Event Delivery" →
+// with spec PR1 commit b506e347 (SEP-3415 §"Webhook event delivery" →
 // "Acknowledgement semantics"): "a timeout on the order of 5 seconds is
 // common." Endpoints SHOULD durably accept, ack fast, and process async
 // so this stays sufficient.
@@ -109,7 +109,7 @@ type WebhookOption func(*WebhookRegistry)
 // Does NOT fire on the suspend transition (Active=true→false), which
 // keeps the target in the registry as paused — suspend ≠ unsubscribe;
 // refresh reactivates without re-firing on_subscribe per spec
-// §"Webhook Delivery Status" L460.
+// SEP-3415 §"Webhook delivery status".
 //
 // Hooks fire OUTSIDE the registry's lock so a slow listener can't
 // serialize Register/Unregister/PostTerminated.
@@ -168,7 +168,7 @@ func WithUnsafeWebhookTTLBypass() WebhookOption {
 
 // WithAllowInfiniteWebhookTTL gates the events/subscribe handler's
 // acceptance of `ttlMs: null` requests. Per spec PR1 commit 99f3589c
-// §"Subscription TTL": a client suggesting `ttlMs: null` is asking for
+// SEP-3415 §"Subscription TTL": a client suggesting `ttlMs: null` is asking for
 // a no-expiry subscription, and the server's grant of `refreshBefore:
 // null` is the acceptance signal. Default is OFF — handlers translate
 // `ttlMs: null` into the server's default TTL grant ("A server
@@ -202,7 +202,7 @@ func WithAllowInfiniteWebhookTTL() WebhookOption {
 
 // WithNoExpiryFailureGCWindow overrides how long a no-expiry subscription
 // may remain continuously failing before the failure-based GC drops it
-// (spec PR1 commit 99f3589c §"Subscription TTL": "the server MAY drop
+// (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL": "the server MAY drop
 // it after sustained delivery failure"). Default is
 // DefaultNoExpiryFailureGCWindow (72h).
 //
@@ -238,7 +238,7 @@ func (r *WebhookRegistry) AllowsInfiniteWebhookTTL() bool {
 }
 
 // NegotiateExpiry computes the granted ExpiresAt from a client-supplied
-// ttlMs suggestion per spec PR1 commit 99f3589c §"Subscription TTL".
+// ttlMs suggestion per spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL".
 // Returns (noExpiry=true, expiresAt=nil) when the client suggested
 // `ttlMs: null` AND the registry was opted into infinite TTL via
 // WithAllowInfiniteWebhookTTL. Otherwise returns (false, finite time)
@@ -315,7 +315,7 @@ func WithWebhookHeaderMode(mode WebhookHeaderMode) WebhookOption {
 // delivery failures (within the suspend window) that trips a target
 // into Active=false. Default 5. Pass <=0 to keep the default.
 //
-// Per spec §"Webhook Event Delivery" L413 + §"Webhook Delivery Status"
+// Per SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook delivery status"
 // L460: "after repeated failures the server SHOULD set active: false."
 // The spec doesn't fix a number; this option lets deployments tune
 // hysteresis.
@@ -343,7 +343,7 @@ func WithWebhookSuspendWindow(d time.Duration) WebhookOption {
 }
 
 // WithWebhookMaxBodyBytes overrides the outbound delivery body cap.
-// Default is 256 KiB per spec §"Webhook Security" → "Delivery profile"
+// Default is 256 KiB per SEP-3415 §"Webhook security" (delivery profile)
 // L487. Pass <=0 to keep the default.
 //
 // Cap mode is REJECT, not TRUNCATE — truncation would corrupt the
@@ -363,7 +363,7 @@ func WithWebhookMaxBodyBytes(n int) WebhookOption {
 // turn this ON for demo and test setups that deliver to local httptest
 // servers, NEVER in production.
 //
-// Per spec §"Webhook Security" → "SSRF prevention" L464, deployments MUST
+// Per SEP-3415 §"Webhook security" (SSRF prevention), deployments MUST
 // guard against DNS rebinding by checking the resolved IP at dial time.
 // The net.Dialer.Control callback installed by NewWebhookRegistry rejects:
 //   - 127.0.0.0/8, ::1 (loopback)
@@ -455,16 +455,16 @@ func WithWebhookTracerProvider(tp core.TracerProvider) WebhookOption {
 // WebhookTarget is a registered outbound webhook callback with TTL-based expiry.
 //
 // The CanonicalKey is the spec's identity tuple bytes
-// (§"Subscription Identity" → "Key composition" L363) and serves as the
+// (SEP-3415 §"Subscription identity" (key composition) and serves as the
 // registry's primary key. The ID is the spec's derived routing handle
-// (§"Subscription Identity" → "Derived id" L367), surfaced on the wire
+// (SEP-3415 §"Subscription identity" (derived id), surfaced on the wire
 // as the X-MCP-Subscription-Id header on every delivery POST per
-// §"Webhook Event Delivery" L390.
+// SEP-3415 §"Webhook event delivery".
 //
 // EventName, Principal, Arguments: copies of the identity components
 // stored separately so OnRemove hooks (and Match / Transform on
 // fanout) can construct a HookContext + arguments payload per spec
-// §"Server SDK Guidance" L623-629 without re-parsing canonical
+// SEP-3415 §"Server SDK guidance" without re-parsing canonical
 // bytes. Redundant with CanonicalKey; cheap to store, and the
 // registry already owns the only writer.
 type WebhookTarget struct {
@@ -474,11 +474,11 @@ type WebhookTarget struct {
 	Secret       string // client-supplied HMAC signing secret (whsec_...)
 	// ExpiresAt is the soft-state TTL expiry. nil means no expiry — the
 	// subscription persists until events/unsubscribe or server-initiated
-	// termination per spec PR1 commit 99f3589c §"Subscription TTL". The
+	// termination per spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL". The
 	// prune loop and DeliverToTarget MUST guard the nil case; a missing
 	// guard would silently drop no-expiry subs on the first sweep.
 	ExpiresAt *time.Time
-	MaxAgeMs  int // per-spec replay floor (§"Cursor Lifecycle" L529); 0 = no floor
+	MaxAgeMs  int // per-spec replay floor (SEP-3415 §"Cursor Lifecycle"; 0 = no floor
 
 	EventName string         // event-type name (used by Match / Transform / OnRemove lookup)
 	Principal string         // resolved subscription principal (used by HookContext)
@@ -502,13 +502,13 @@ type WebhookTarget struct {
 	SessionID string
 
 	// Status is per-target delivery health, surfaced on subscribe refresh
-	// response per spec §"Webhook Delivery Status" L425-460.
+	// response per SEP-3415 §"Webhook delivery status".
 	// Mutated only via *WebhookRegistry methods under r.mu so the
 	// snapshot returned by Targets()/DeliveryStatus() is consistent.
 	Status DeliveryStatus
 
 	// VerifiedAt records when the endpoint confirmed it wants deliveries
-	// for this principal (spec §"Endpoint verification"). nil when
+	// for this principal (SEP-3415 §"Webhook security" (endpoint verification)). nil when
 	// verification was skipped via WithUnsafeSkipEndpointVerification.
 	// Persistent WebhookStore implementations MUST round-trip it: a
 	// no-expiry subscription restored after a restart resumes delivery
@@ -525,8 +525,7 @@ type WebhookTarget struct {
 }
 
 // DeliveryStatus is the per-target delivery-health summary surfaced on
-// the events/subscribe refresh response per spec §"Webhook Delivery
-// Status" L425-460. Subscribers use it to decide whether to back off,
+// the events/subscribe refresh response per SEP-3415 §"Webhook delivery status". Subscribers use it to decide whether to back off,
 // re-create the subscription with a fresh secret, or alert.
 //
 // LastError is a CATEGORICAL string from a fixed set; the spec
@@ -557,8 +556,7 @@ type DeliveryStatus struct {
 	RetryAfterMs   *int64
 
 	// FailingContinuouslySince anchors the failure-based GC clock for
-	// no-expiry subscriptions (spec PR1 commit 99f3589c §"Subscription
-	// TTL" — "the server MAY drop it after sustained delivery failure").
+	// no-expiry subscriptions (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL" — "the server MAY drop it after sustained delivery failure").
 	// Distinct from FailedSince: this field is NEVER reset by the
 	// sliding suspendWindow, only by a successful delivery. Set on the
 	// first failure since the last success (or first ever); cleared by
@@ -597,7 +595,7 @@ const (
 // outbound deliveries.
 //
 // The registry is keyed on the spec's canonical-tuple bytes
-// (§"Subscription Identity" L363) — two subscribes with the same
+// (SEP-3415 §"Subscription identity" — two subscribes with the same
 // canonical key (same principal, url, name, params) refer to the same
 // subscription. Cross-tenant isolation is by construction since
 // principal is part of the key.
@@ -608,18 +606,17 @@ type WebhookRegistry struct {
 	ttl                     time.Duration
 	ttlExplicit             bool // operator passed WithWebhookTTL (drives clamp decision)
 	ttlClampBypass          bool // WithUnsafeWebhookTTLBypass — disables clamp
-	allowInfiniteWebhookTTL bool // WithAllowInfiniteWebhookTTL — gates ttlMs:null acceptance in events/subscribe handler (spec PR1 commit 99f3589c §"Subscription TTL")
+	allowInfiniteWebhookTTL bool // WithAllowInfiniteWebhookTTL — gates ttlMs:null acceptance in events/subscribe handler (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL")
 	// noExpiryFailureGCWindow is how long a no-expiry subscription
 	// may remain FailingContinuouslySince a previous success before
-	// the failure-GC drops it (spec PR1 commit 99f3589c §"Subscription
-	// TTL"). Default is 72h; tune via WithNoExpiryFailureGCWindow.
+	// the failure-GC drops it (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL"). Default is 72h; tune via WithNoExpiryFailureGCWindow.
 	noExpiryFailureGCWindow time.Duration
 	headerMode              WebhookHeaderMode
-	allowPlaintextCallbacks bool              // when true, http:// callbacks are accepted; the spec requires https (§"Webhook Security")
-	allowPrivateNetworks    bool              // when false (default), Dialer.Control rejects private/loopback IPs (spec §"Webhook Security" → "SSRF prevention" L464)
+	allowPlaintextCallbacks bool              // when true, http:// callbacks are accepted; the spec requires https (SEP-3415 §"Webhook security")
+	allowPrivateNetworks    bool              // when false (default), Dialer.Control rejects private/loopback IPs (SEP-3415 §"Webhook security" (SSRF prevention)
 	extraHeaders            map[string]string // caller-supplied headers (WithWebhookExtraHeaders); applied BEFORE signature/MCP/trace headers so spec-mandated keys always win
-	maxBodyBytes            int               // outbound POST body cap (spec §"Webhook Security" → "Delivery profile" L487); default 256 KiB
-	suspendThreshold        int               // consecutive failures → Active=false (spec §"Webhook Delivery Status" L460); default 5
+	maxBodyBytes            int               // outbound POST body cap (SEP-3415 §"Webhook security" (delivery profile); default 256 KiB
+	suspendThreshold        int               // consecutive failures → Active=false (SEP-3415 §"Webhook delivery status"; default 5
 	suspendWindow           time.Duration     // sliding window over which failures accumulate; default 10min
 
 	// callbackOrigins holds origins permitted past both guards at run time
@@ -633,14 +630,14 @@ type WebhookRegistry struct {
 	// onRemoveHooks fire when a target is actually removed from the
 	// registry (Unregister, TTL prune, PostTerminated). The SDK uses
 	// these to drive on_unsubscribe and quota release per spec
-	// §"Server SDK Guidance" → "Subscription lifecycle hooks" L691.
+	// SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks).
 	// Mutated only at construction (WithWebhookOnRemove) and via
 	// AddOnRemoveHook; reads under mu.RLock. Hooks fire OUTSIDE the
 	// lock to keep a slow listener from serializing the registry.
 	onRemoveHooks []WebhookOnRemoveHook
 
 	// defResolver lets Deliver look up an event-type's Match /
-	// Transform hooks (spec §"Server SDK Guidance" L623-629) at
+	// Transform hooks (SEP-3415 §"Server SDK guidance" at
 	// fanout time without WebhookRegistry needing to know about
 	// EventDef directly. events.Register installs this; callers that
 	// hand-deliver events (e.g., TypedSource authors reaching for
@@ -723,7 +720,7 @@ func (r *WebhookRegistry) SetDefResolver(fn func(eventName string) EventDef) {
 // semantically broken: no-expiry subscriptions are promised to
 // outlive everything except an explicit events/unsubscribe, but the
 // in-memory store loses them on the first restart. Per spec PR1
-// commit 99f3589c §"Subscription TTL", a server granting no-expiry
+// commit 99f3589c SEP-3415 §"Subscription TTL", a server granting no-expiry
 // MUST persist subscriptions across restarts.
 //
 // We warn rather than reject because dev / test setups may
@@ -817,7 +814,7 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 	r.warnIfInfiniteTTLWithDefaultStore()
 	// http.Client wired AFTER options apply so the Dialer.Control callback
 	// can read the resolved allowPrivateNetworks setting. Spec
-	// §"Webhook Security" → "SSRF prevention" L464.
+	// SEP-3415 §"Webhook security" (SSRF prevention).
 	//
 	// CheckRedirect: explicitly disable the default 10-redirect follow.
 	// A receiver returning 3xx to an internal address would otherwise
@@ -839,8 +836,8 @@ func NewWebhookRegistry(opts ...WebhookOption) *WebhookRegistry {
 // http.Client. The Dialer's Control callback inspects the resolved
 // IP:port AFTER DNS resolution but BEFORE the connect syscall, rejecting
 // any address that falls in the SSRF blocklist (unless
-// allowPrivateNetworks is set). Per spec §"Webhook Security" → "SSRF
-// prevention" L464.
+// allowPrivateNetworks is set). Per SEP-3415 §"Webhook security" (sSRF
+// prevention).
 //
 // Inspecting at Control rather than resolving manually avoids a TOCTOU
 // where the resolver and the dialer could see different addresses (DNS
@@ -942,8 +939,7 @@ type RegisterParams struct {
 
 	// EventName / Principal / Arguments: copies of the identity
 	// components the registry stores so OnRemove hooks have full
-	// HookContext + payload available (per spec §"Server SDK
-	// Guidance" → "Subscription lifecycle hooks" L691) without
+	// HookContext + payload available (per SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks) without
 	// re-parsing canonical bytes. Fed by the same canonical-tuple
 	// inputs the caller already used to compute CanonicalKey.
 	//
@@ -964,7 +960,7 @@ type RegisterParams struct {
 	// backstop. WebhookTarget.ExpiresAt becomes nil, the prune loop
 	// skips it, and the events/subscribe handler emits
 	// refreshBefore: null on the response. Spec PR1 commit 99f3589c
-	// §"Subscription TTL": this maps to a `ttlMs: null` client
+	// SEP-3415 §"Subscription TTL": this maps to a `ttlMs: null` client
 	// suggestion that the server has chosen to grant.
 	//
 	// Callers using the registry directly (tests, low-level hand-built
@@ -988,15 +984,15 @@ type RegisterParams struct {
 }
 
 // Register adds or refreshes a webhook subscription keyed on the spec's
-// canonical tuple (§"Subscription Identity" → "Key composition" L363).
+// canonical tuple (SEP-3415 §"Subscription identity" (key composition).
 // Two calls with the same CanonicalKey refer to the same subscription
 // — second call refreshes TTL + replaces secret.
 //
 // Returns (expiresAt, isNew). expiresAt is nil when the registration
 // is no-expiry (RegisterParams.NoExpiry true) — the caller's response
 // emitter then sends `refreshBefore: null` per spec PR1 commit
-// 99f3589c §"Subscription TTL". isNew is true on first registration
-// (caller fires safeOnSubscribe per spec §"Server SDK Guidance" L691)
+// 99f3589c SEP-3415 §"Subscription TTL". isNew is true on first registration
+// (caller fires safeOnSubscribe per SEP-3415 §"Server SDK guidance"
 // and false on refresh — refresh ≠ subscribe, so on_subscribe MUST
 // NOT re-fire. Caller resolves the distinction; the registry just
 // reports it.
@@ -1008,7 +1004,7 @@ type RegisterParams struct {
 // subscribe-response body.
 //
 // MaxAgeMs is the per-subscription replay floor per spec
-// §"Cursor Lifecycle" → "Bounding replay with maxAge" L529. Stored on
+// SEP-3415 §"Cursor Lifecycle" (bounding replay with maxAge). Stored on
 // the target for use on (future) reconnect-with-replay; 0 means no
 // floor. On refresh, an explicit non-zero value replaces the prior
 // stored floor; 0 leaves the existing value untouched (treats omission
@@ -1016,13 +1012,12 @@ type RegisterParams struct {
 //
 // Side effect: prunes expired targets before registering. Each pruned
 // target fires the onRemove hooks — TTL expiry counts as an
-// unsubscribe (spec §"Server SDK Guidance" → "Unsubscribe timing by
-// mode" L707).
+// unsubscribe (SEP-3415 §"Server SDK guidance" (unsubscribe timing by
+// mode).
 func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNew bool) {
 	r.mu.Lock()
 	pruned, gcDue := r.pruneExpiredLocked()
-	// Negotiated expiry per spec PR1 commit 99f3589c §"Subscription
-	// TTL". Precedence: NoExpiry > ExpiresAtOverride > registry default.
+	// Negotiated expiry per spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL". Precedence: NoExpiry > ExpiresAtOverride > registry default.
 	switch {
 	case p.NoExpiry:
 		expiresAt = nil
@@ -1053,7 +1048,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 			existing.VerifiedAt = p.VerifiedAt
 		}
 		// A successful refresh reactivates a suspended target per spec
-		// §"Webhook Delivery Status" L460. Clear the failure run so
+		// SEP-3415 §"Webhook delivery status". Clear the failure run so
 		// deliveries can resume. Pending events do NOT replay
 		// automatically (would re-flood a recovering receiver); the
 		// client signals replay intent via the next events/poll or by
@@ -1082,7 +1077,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 			VerifiedAt:   p.VerifiedAt,
 			// Active defaults to true on first registration. The
 			// suspend state machine flips this to false after
-			// repeated failures (spec §"Webhook Delivery Status"
+			// repeated failures (SEP-3415 §"Webhook delivery status"
 			// L460); a successful refresh resets it.
 			Status: DeliveryStatus{Active: true},
 		}})
@@ -1099,7 +1094,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 }
 
 // Unregister removes a webhook subscription by canonical-tuple key and
-// reports whether one matched. Per spec §"Unsubscribing: events/unsubscribe"
+// reports whether one matched. Per SEP-3415 §"Unsubscribing: events/unsubscribe"
 // L509, the derived id is not accepted as input — callers resolve via
 // the same canonical tuple they would for a subscribe.
 //
@@ -1108,8 +1103,7 @@ func (r *WebhookRegistry) Register(p RegisterParams) (expiresAt *time.Time, isNe
 // no-op, and a typo in the tuple reads as success.
 //
 // Fires onRemove hooks for the deleted target — explicit Unregister
-// gets the same on_unsubscribe lifecycle (spec §"Server SDK
-// Guidance" → "Unsubscribe timing by mode" L707) as TTL prune and
+// gets the same on_unsubscribe lifecycle (SEP-3415 §"Server SDK guidance" (unsubscribe timing by mode) as TTL prune and
 // PostTerminated.
 func (r *WebhookRegistry) Unregister(canonicalKey []byte) bool {
 	r.mu.Lock()
@@ -1124,7 +1118,7 @@ func (r *WebhookRegistry) Unregister(canonicalKey []byte) bool {
 // Targets returns a snapshot of all non-expired AND non-suspended
 // webhook targets. Used by Deliver to fan out an event; suspended
 // targets (Active=false after N consecutive failures, per spec
-// §"Webhook Delivery Status" L460) are excluded so dead receivers
+// SEP-3415 §"Webhook delivery status" are excluded so dead receivers
 // don't keep getting retry traffic.
 //
 // Lookup-by-canonical-key paths (PostGap, PostTerminated) bypass this
@@ -1163,7 +1157,7 @@ func (r *WebhookRegistry) lookupTarget(canonicalKey []byte) (WebhookTarget, bool
 
 // pruneExpiredLocked removes expired subscriptions and returns the
 // removed targets so the caller can fire onRemove hooks OUTSIDE the
-// lock — TTL prune is an unsubscribe per spec §"Server SDK Guidance"
+// lock — TTL prune is an unsubscribe per SEP-3415 §"Server SDK guidance"
 // → "Unsubscribe timing by mode" L707. Must hold r.mu write lock.
 func (r *WebhookRegistry) pruneExpiredLocked() (removed []WebhookTarget, gcDue [][]byte) {
 	now := time.Now()
@@ -1178,7 +1172,7 @@ func (r *WebhookRegistry) pruneExpiredLocked() (removed []WebhookTarget, gcDue [
 	for _, t := range listResp.Targets {
 		// No-expiry targets have nil ExpiresAt — they are explicitly
 		// exempted from TTL-based GC per spec PR1 commit 99f3589c
-		// §"Subscription TTL": "TTL expiry no longer garbage-collects
+		// SEP-3415 §"Subscription TTL": "TTL expiry no longer garbage-collects
 		// orphans or dead endpoints." Their cleanup is failure-based
 		// GC. recordDeliveryFailure makes that call for an active
 		// target, but a suspended one gets no deliveries and so no
@@ -1240,7 +1234,7 @@ func (r *WebhookRegistry) finishSweep(removed []WebhookTarget, gcDue [][]byte) {
 // DeliverToTarget POSTs an event to a single target identified by
 // canonical key, bypassing the broadcast fanout (and thus skipping
 // Match / Transform). Used by EmitToSubscription for targeted delivery
-// per spec §"Server SDK Guidance" L630 — the "the author has already
+// per SEP-3415 §"Server SDK guidance" — the "the author has already
 // shaped this event for this specific subscription" model means
 // hooks are deliberately not applied here.
 //
@@ -1264,7 +1258,7 @@ func (r *WebhookRegistry) DeliverToTarget(ctx context.Context, canonicalKey []by
 		return false
 	}
 	// nil ExpiresAt = no-expiry subscription, always live (spec PR1
-	// commit 99f3589c §"Subscription TTL"). Only finite expiry can
+	// commit 99f3589c SEP-3415 §"Subscription TTL"). Only finite expiry can
 	// disqualify a target from delivery.
 	if target.ExpiresAt != nil && time.Now().After(*target.ExpiresAt) {
 		return false
@@ -1305,7 +1299,7 @@ func (r *WebhookRegistry) ExpireAll() {
 
 // Deliver sends an event to webhook subscribers of that event name.
 //
-// Per-target processing (spec §"Server SDK Guidance" L623-629):
+// Per-target processing (SEP-3415 §"Server SDK guidance":
 //  1. Filter by event name — only targets whose EventName matches the
 //     event are considered.
 //  2. safeMatch with the EventDef's Match — skip target if false.
@@ -1342,7 +1336,7 @@ func (r *WebhookRegistry) Deliver(ctx context.Context, event Event) {
 		return
 	}
 	if len(originalBody) > r.maxBodyBytes {
-		// Spec §"Webhook Security" → "Delivery profile" L487 caps
+		// SEP-3415 §"Webhook security" (delivery profile) caps
 		// outbound delivery bodies at 256 KiB (configurable via
 		// WithWebhookMaxBodyBytes). Reject oversized — truncation
 		// would corrupt the HMAC signature and silently drop event
@@ -1408,7 +1402,7 @@ const (
 
 // recordDeliverySuccess updates the target's DeliveryStatus after a
 // successful delivery attempt. Active stays/becomes true (clears any
-// prior suspension per spec §"Webhook Delivery Status" L460);
+// prior suspension per SEP-3415 §"Webhook delivery status";
 // LastDeliveryAt advances; LastError + FailedSince clear (the current
 // failure run, if any, is over); failure counter resets to 0.
 func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Time) {
@@ -1440,12 +1434,12 @@ func (r *WebhookRegistry) recordDeliverySuccess(canonicalKey []byte, at time.Tim
 // across subsequent failures so subscribers can see how long the
 // receiver has been unreachable.
 //
-// Suspend rule (spec §"Webhook Delivery Status" L460): if FailedSince
+// Suspend rule (SEP-3415 §"Webhook delivery status": if FailedSince
 // is older than suspendWindow, reset the run (this failure starts a
 // new run). Otherwise, count consecutive failures within the run; on
 // hitting suspendThreshold, flip Active=false.
 //
-// Failure-GC rule (spec PR1 commit 99f3589c §"Subscription TTL"): on
+// Failure-GC rule (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL"): on
 // every failure, also track FailingContinuouslySince — a "true" first-
 // failure-since-last-success anchor that is NEVER reset by the sliding
 // suspend window. For no-expiry subscriptions (target.ExpiresAt == nil)
@@ -1505,7 +1499,7 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 	// Suspend transition (existing semantics): receiver gets a
 	// `terminated` envelope but the target stays in the registry as
 	// paused (Active=false observable; reactivate via refresh per
-	// §"Webhook Delivery Status" L460). Skipped when the failure-GC
+	// SEP-3415 §"Webhook delivery status". Skipped when the failure-GC
 	// path is firing too — the GC drop supersedes a same-call suspend.
 	if suspendTransitionFire {
 		r.postTerminatedSilent(t, ControlError{
@@ -1516,7 +1510,7 @@ func (r *WebhookRegistry) recordDeliveryFailure(canonicalKey []byte, bucket Deli
 
 	// Failure-GC drop (new for no-expiry subs): delete the
 	// subscription + post a `terminated` envelope per spec PR1 commit
-	// 99f3589c §"Subscription TTL". Distinguishable message from the
+	// 99f3589c SEP-3415 §"Subscription TTL". Distinguishable message from the
 	// suspend-transition envelope so receivers can branch.
 	if noExpiryGCFire {
 		r.PostTerminated(t.CanonicalKey, ControlError{
@@ -1636,10 +1630,9 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 		// under the receiver's eventId-keyed dedup).
 		//
 		// X-MCP-Subscription-Id carries target.ID (the spec's derived
-		// id over the canonical tuple, §"Subscription Identity" →
+		// id over the canonical tuple, SEP-3415 §"Subscription identity" →
 		// "Derived id" L367) so the receiver can select the correct
-		// secret without parsing the body. Per spec §"Webhook Event
-		// Delivery" L390 + §"Webhook Security" L472: this is the only
+		// secret without parsing the body. Per SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security": this is the only
 		// MCP-specific header on a Standard Webhooks delivery.
 		signed := signFor(r.headerMode, eventID, body, target.Secret, time.Now()).
 			withSubscriptionID(target.ID)
@@ -1684,13 +1677,12 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 		case resp.StatusCode >= 300 && resp.StatusCode < 400:
 			// 3xx is non-retryable. We disabled redirect-following
 			// via CheckRedirect; a receiver returning 3xx is signalling
-			// "go elsewhere" but we're not allowed to (spec §"Webhook
-			// Security" → "SSRF prevention" L464). Re-trying won't
+			// "go elsewhere" but we're not allowed to (SEP-3415 §"Webhook security" (SSRF prevention). Re-trying won't
 			// change the response; treat as terminal.
 			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError3xxRedirect)
 			return
 		case resp.StatusCode == http.StatusGone:
-			// Spec PR1 commit 905ade36 (§"Webhook Event Delivery" →
+			// Spec PR1 commit 905ade36 (SEP-3415 §"Webhook event delivery" →
 			// "Delivery model"): a receiver that intentionally rejects
 			// a delivery and does not want it retried responds 410
 			// Gone; the server MUST treat 410 as non-retryable for
@@ -1703,7 +1695,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 			r.logf("[webhook] delivery to %s abandoned per receiver 410 Gone (subscription unaffected)", target.URL)
 			return
 		case resp.StatusCode == http.StatusRequestEntityTooLarge:
-			// Spec §"Webhook Security" → "Delivery profile" L487:
+			// SEP-3415 §"Webhook security" (delivery profile):
 			// 413 MUST be non-retryable. Receiver rejects our
 			// payload size; retrying won't change that.
 			r.recordDeliveryFailure(target.CanonicalKey, DeliveryError4xx)
@@ -1728,7 +1720,7 @@ func (r *WebhookRegistry) deliver(target WebhookTarget, eventID, eventName strin
 //
 // This is the SUBSCRIBE-time check, not the load-bearing one. The
 // authoritative SSRF guard is the dial-time check in dialContext, which
-// is TOCTOU-safe under DNS rebinding (per spec §"Webhook Security" →
+// is TOCTOU-safe under DNS rebinding (per SEP-3415 §"Webhook security" →
 // "SSRF prevention" L464). ValidateWebhookURL is a UX aid: catches
 // obvious mistakes at subscribe so the client gets -32027
 // CallbackEndpointError immediately rather than a delayed delivery failure.

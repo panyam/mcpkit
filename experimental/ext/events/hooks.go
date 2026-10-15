@@ -1,9 +1,8 @@
 package events
 
 // Hook surface for per-event-type author behavior — match / transform on
-// broadcast emit (spec §"Server SDK Guidance" L623-629) and
-// on_subscribe / on_unsubscribe on lifecycle (spec §"Server SDK
-// Guidance" → "Subscription lifecycle hooks" L691-705).
+// broadcast emit (SEP-3415 §"Server SDK guidance" and
+// on_subscribe / on_unsubscribe on lifecycle (SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks).
 //
 // Design context:
 //
@@ -160,7 +159,7 @@ func newHookContext(ctx context.Context, principal, subID string, mode DeliveryM
 // hooks are per-event-type, EventDef is per-event-type, so they live
 // together (Q1).
 //
-// Spec §"Server SDK Guidance" L623-629. Hot path: invoked once per
+// SEP-3415 §"Server SDK guidance". Hot path: invoked once per
 // (event, subscriber) pair on broadcast emit; authors should avoid
 // I/O. Use HookContext.Context() for cancellation if a downstream
 // lookup needs it.
@@ -205,8 +204,7 @@ type TransformFunc func(ctx HookContext, event Event, params map[string]any) (Ev
 // has `subscription_id` as a third positional argument; Go folds it
 // onto HookContext.SubscriptionID() so the call site stays uniform
 // across delivery modes (poll has no sub id and the field is empty —
-// the lease tuple is the routing identity per spec §"Server SDK
-// Guidance" → "Unsubscribe timing by mode" L707). Stored as a field
+// the lease tuple is the routing identity per SEP-3415 §"Server SDK guidance" (unsubscribe timing by mode). Stored as a field
 // on EventDef rather than a separate `@server.on_subscribe(name)`
 // decorator — same answer as match/transform, since it's still
 // per-event-type state.

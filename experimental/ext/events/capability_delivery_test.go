@@ -59,9 +59,10 @@ func pollRaw(t *testing.T, srv *server.Server, params string) *core.Response {
 // that reads capabilities first, which is what the spec tells clients to do.
 //
 // The declaration goes through the SEP-2133 extensions map. #1416 put it at the
-// top level of capabilities, following the design sketch as it read then;
-// upstream PR 7 moved the sketch to the extensions map after mcpkit and the
-// reference server disagreed, so this asserts the opposite of what it did.
+// top level of capabilities, following the design sketch as it read then.
+// SEP-3415 § Capability Negotiation puts it in the extensions map (the sketch
+// fix, upstream PR 7, closed unmerged), so this asserts the opposite of what
+// #1416 did.
 func TestInitialize_DeclaresEventsCapability(t *testing.T) {
 	src, _ := NewYieldingSource[fakeFilterPayload](EventDef{Name: "fake.event"})
 	srv := server.NewServer(core.ServerInfo{Name: "test", Version: "1.0"})

@@ -189,7 +189,7 @@ func TestSubscribe_ResponseDoesNotEchoSecret(t *testing.T) {
 // TestUnsubscribe_RequiresTupleNotSecret verifies the handler ignores
 // the legacy proof-of-possession secret-form unsubscribe — the spec
 // keys unsubscribe on the (principal, name, params, delivery.url)
-// tuple per §"Unsubscribing: events/unsubscribe" L509. A request that
+// tuple per SEP-3415 §"Unsubscribing: events/unsubscribe". A request that
 // supplies only delivery.url + delivery.secret (no name) is rejected
 // with name-required because the secret field is no longer part of the
 // unsubscribe surface.
@@ -221,7 +221,7 @@ func (fakeSecretValidationSource) Latest() string                  { return "" }
 // buildSecretValidationStack returns a server with the events handlers
 // registered (with UnsafeAnonymousPrincipal: "test-principal" so the
 // handlers don't reject every test request with -32024 Forbidden
-// per spec §"Subscription Identity" → "Authentication required" L361.
+// per SEP-3415 §"Subscription identity" (authentication required).
 // The secret-validation tests here are concerned with the validator
 // and unsubscribe shape, not the auth gate; auth-specific tests live
 // in identity_handler_test.go.) The initialize handshake is completed

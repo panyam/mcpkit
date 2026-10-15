@@ -85,8 +85,7 @@ type ResourceExhaustedData struct {
 // rejected input ("push", "webhook") when one applies.
 //
 // Reason distinguishes WHY the feature is unsupported when the feature
-// name alone is ambiguous. Spec §"Event Type Removal and Breaking
-// Changes" (commit 28ec35e9) defines one value today,
+// name alone is ambiguous. SEP-3415 §"Event type removal and breaking changes" (commit 28ec35e9) defines one value today,
 // reason "schema_changed" with feature "payloadSchema" or "inputSchema",
 // which tells a client SDK to re-fetch events/list and resubscribe
 // against the current descriptor rather than treat the termination as an
@@ -100,7 +99,7 @@ type UnsupportedData struct {
 // ReasonSchemaChanged is the UnsupportedData.Reason value for a
 // subscription ended because its event type's inputSchema or
 // payloadSchema changed incompatibly in place, per spec
-// §"Event Type Removal and Breaking Changes".
+// SEP-3415 §"Event type removal and breaking changes".
 const ReasonSchemaChanged = "schema_changed"
 
 // CallbackEndpointErrorData is the typed `data` payload attached to
@@ -154,7 +153,7 @@ func newCallbackEndpointError(id json.RawMessage, reason, message string) *core.
 }
 
 // newSchemaValidationError returns a -32602 InvalidParams response whose
-// data carries the per-field violations, per spec §"Error Codes" L115:
+// data carries the per-field violations, per SEP-3415 §"Error Handling":
 // "arguments don't match the event's inputSchema".
 //
 // The typed payload is the difference between a client that can fix its

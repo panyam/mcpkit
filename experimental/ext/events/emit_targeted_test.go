@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// EmitToSubscription targeted delivery. Spec §"Server SDK Guidance"
+// EmitToSubscription targeted delivery. SEP-3415 §"Server SDK guidance"
 // L630.
 //
 // Coverage targets:

@@ -13,7 +13,7 @@ import (
 )
 
 // DefaultPollFloor is the shortest wait between polls when the server asks
-// for less, per spec §"Poll" ("Clients SHOULD apply a configurable floor
+// for less, per SEP-3415 §"Poll-Based Delivery" ("Clients SHOULD apply a configurable floor
 // (default 1000 ms)").
 const DefaultPollFloor = time.Second
 
@@ -83,7 +83,7 @@ type pollResult struct {
 // (-32023 NotFound, -32024 Forbidden, -32026 Unsupported) surfaces here
 // rather than inside the loop.
 //
-// Cursor handling follows §"Cursor Lifecycle": the loop persists every
+// Cursor handling follows SEP-3415 §"Cursor Lifecycle": the loop persists every
 // string cursor the server returns, including the fresh one that comes with
 // `truncated: true`, and treats `cursor: null` or an absent `cursor` as
 // "nothing to persist", polling with null from then on. It never invents a

@@ -156,9 +156,10 @@ type ToolsCap struct {
 // extension here, so this is a settings object rather than a top-level
 // capability. It did not always: the design sketch originally put `events`
 // at the top level of `capabilities`, mcpkit implemented that in #1416, and
-// the WG corrected the sketch in upstream PR 7 after two implementations
-// disagreed about it. See experimental/ext/events for the provider that
-// registers it.
+// the sketch's author confirmed the extensions map after two implementations
+// disagreed. The PR that would have fixed the sketch (upstream PR 7) closed
+// unmerged; SEP-3415 § Capability Negotiation is the authority now. See
+// experimental/ext/events for the provider that registers it.
 type EventsCap struct {
 	// ListChanged reports whether the server sends
 	// notifications/events/list_changed when its set of event types changes.

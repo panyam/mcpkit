@@ -11,7 +11,7 @@ import (
 // idempotency property: two subscribe calls with identical
 // (principal, url, name, params) MUST produce identical canonical bytes
 // — that's how the registry knows "this is the same subscription, refresh
-// it" instead of creating a duplicate. (§"Subscription Identity" →
+// it" instead of creating a duplicate. (SEP-3415 §"Subscription identity" →
 // "Key composition" L363).
 func TestCanonicalKey_DeterministicForSameInputs(t *testing.T) {
 	a := canonicalKey("alice", "https://example.com/hook", "incident.created",
@@ -40,7 +40,7 @@ func TestCanonicalKey_ParamMapOrderInvariant(t *testing.T) {
 }
 
 // TestCanonicalKey_DifferentPrincipalDifferentKey is the spec's
-// cross-tenant isolation property in test form (§"Subscription Identity" →
+// cross-tenant isolation property in test form (SEP-3415 §"Subscription identity" →
 // "Cross-tenant isolation" L378): two distinct tenants subscribing to the
 // same (name, params, url) MUST get distinct subscriptions. Without
 // principal in the key the tuple would be guessable across tenants.

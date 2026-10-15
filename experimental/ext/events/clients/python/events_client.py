@@ -318,7 +318,7 @@ def cmd_stream(session: MCPSession, args):
     """Open events/stream for one event type and print every notification
     arriving on the call's response stream until Ctrl-C.
 
-    Per spec §"Push-Based Delivery" L223-296: events/stream is a
+    Per SEP-3415 §"Push-Based Delivery": events/stream is a
     long-lived JSON-RPC request — POST returns SSE, the server delivers
     notifications/events/* on that response. Per-call notification
     routing comes from the spec's requestId (echoed in every
@@ -428,8 +428,7 @@ class WebhookSubscription:
                 auto-generates a spec-conformant value via
                 generate_webhook_secret().
 
-        Note: there is no sub_id parameter. Per spec §"Subscription
-        Identity" → "Key composition" L363, the server derives the
+        Note: there is no sub_id parameter. Per SEP-3415 §"Subscription identity" (key composition), the server derives the
         subscription id from (principal, name, params, url); clients
         do not supply one. The derived id is read back from the
         subscribe response (self.id after start()).
@@ -440,8 +439,8 @@ class WebhookSubscription:
                     fresh subscribe succeeds. Receives no args. Both may fire
                     in the same cycle if the recovery succeeds.
         max_age: per-subscription replay floor in SECONDS, sent on every
-                 subscribe per spec §"Cursor Lifecycle" → "Bounding replay
-                 with maxAgeMs" L580 as `maxAgeMs`, converted to milliseconds
+                 subscribe per SEP-3415 §"Cursor Lifecycle" (bounding replay
+                 with maxAgeMs) as `maxAgeMs`, converted to milliseconds
                  on the wire. 0 means no floor. Bounds the worst-case
                  replay on reconnect.
         """
@@ -462,7 +461,7 @@ class WebhookSubscription:
     def _subscribe(self):
         """Send events/subscribe and capture refreshBefore. Per spec the
         request does NOT carry id; server derives it over the canonical
-        tuple (§"Subscription Identity" → "Key composition" L363)."""
+        tuple (SEP-3415 §"Subscription identity" (key composition)."""
         params = {
             "name": self.event_name,
             "delivery": {
@@ -607,7 +606,7 @@ def _make_webhook_handler(secret_holder):
 
             # ζ-4: top-level `type` discriminator distinguishes control
             # envelopes (gap, terminated) from event deliveries.
-            # Spec §"Non-event webhook bodies" L415-423.
+            # SEP-3415 §"Non-event webhook bodies".
             try:
                 payload = json.loads(body)
             except Exception:
@@ -622,7 +621,7 @@ def _make_webhook_handler(secret_holder):
 
             envelope_type = payload.get("type")
             if envelope_type == "verification":
-                # Spec §"Endpoint verification": echo the nonce in a 2xx
+                # SEP-3415 §"Webhook security" (endpoint verification): echo the nonce in a 2xx
                 # body to consent to deliveries. Only when the signature
                 # verifies, so we never consent for a secret we don't hold.
                 print(f"── WEBHOOK VERIFICATION ({label}) " + "─" * 24, flush=True)

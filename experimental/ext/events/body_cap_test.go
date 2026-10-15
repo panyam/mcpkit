@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Body size cap + 413 non-retryable. Spec §"Webhook Security" →
+// Body size cap + 413 non-retryable. SEP-3415 §"Webhook security" →
 // "Delivery profile (for WAF / private-cloud deployments)" L487:
 //   - Servers SHOULD cap outbound delivery bodies at 256 KiB.
 //   - Servers MUST treat a 413 Payload Too Large from the receiver as
