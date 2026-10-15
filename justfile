@@ -151,6 +151,10 @@ conf-events-setup:
 exercise-events:
     @bash scripts/exercise-events.sh
 
+# Grade another events server (EVENTS_REMOTE_URL, default metronome) through an OAuth proxy, informational
+conf-events-remote:
+    @bash conformance/scripts/conf-events-remote.sh
+
 # Audit mcpkit against modelcontextprotocol/conformance@main → conformance/UPSTREAM_AUDIT.md (informational; delegates to conformance/justfile)
 testconf-upstream-audit:
     just -f conformance/justfile testconf-upstream-audit

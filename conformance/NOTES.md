@@ -659,6 +659,19 @@ tools they are missing and which checks each would unblock.
 
 Flip to a gate once the spec text stabilises. The numbers no longer block it.
 
+**Grading someone else's server: `make conf-events-remote`** (#1535). The mission needs the suites
+green against a second implementation, and the one to hand, `metronome-mcp.fly.dev`, sits behind
+OAuth while the runner has no way to send a token. The target builds `ext/auth/cmd/mcp-auth-proxy`
+into a scratch dir, which logs in (DCR, PKCE, and a headless click through metronome's demo consent
+page) and forwards loopback requests with the token added. `EVENTS_REMOTE_URL` points it elsewhere.
+It runs four scenarios: `events-webhook-delivery` needs the server to reach the harness's loopback
+receiver, which a remote server cannot. Rows that need the `events_conformance_*` controls report
+untestable against anything but kitchen-sink; that is the fixture-prerequisite gap above, seen from
+the other side. Two things metronome taught that the proxy now absorbs: it matches redirect URIs
+exactly (fixed in `OAuthTokenSource`, `ext/auth/NOTES.md`), and a crash restarts it with every
+client and token forgotten, so the proxy logs in from scratch on any 401 and the script reports
+how many times it had to.
+
 ---
 
 ## `traceability.json` is generated against the reference SDK, not against us
