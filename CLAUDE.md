@@ -299,9 +299,9 @@ branch.
 `modelcontextprotocol/conformance` PR 521. MCP Events is **SEP-3415**
 (`modelcontextprotocol/modelcontextprotocol` PR 3415, draft), so check ids carry `sep-3415-`. They
 carried a `sep-9999-` placeholder until #1502, because SEP numbers are PR numbers and no PR existed.
-The rows still quote the design sketch that merged 2026-09-08 in
-`modelcontextprotocol/experimental-ext-triggers-events` until they are re-extracted against the SEP,
-which rewords nearly every sentence. `testconf-events` drives
+Every row quotes SEP-3415 at `c47fd245` with a per-row section url; they quoted the design sketch
+until #1502, and the SEP rewords nearly every sentence, so expect another re-extraction when its
+head moves. `testconf-events` drives
 all five of the suite's scenarios; take the counts from its note in `conformance/local-suites.yaml`.
 The fixture is spawned with `--conformance-events`, which registers the diagnostic controls the
 scenarios drive; see `examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery`
