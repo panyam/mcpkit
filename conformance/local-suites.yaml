@@ -242,5 +242,7 @@ suites:
       fixtures). Check IDs carry the sep-9998 placeholder because the SEP lives
       in the Agents WG repository and has no spec PR number yet. INFO for that
       reason and because the SEP is a draft. Runs with --force, since the
-      extension is not on the spec timeline.
+      extension is not on the spec timeline. Proposed upstream as a draft,
+      modelcontextprotocol/conformance 556, held in draft until the issue
+      AGENTS.md asks for is opened after the Agents WG vote on 2026-10-16.
     tracking: "mcpkit 1393"
