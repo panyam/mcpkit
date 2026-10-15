@@ -128,18 +128,22 @@ Full detail in `docs/SEP_414_OTEL.md`.
 
 ---
 
-## Bumping oneauth: sweep all 8 modules in lock-step
+## Bumping oneauth: sweep all 9 modules in lock-step
 
-The operational rider that keeps biting. oneauth is a direct dependency of eight modules:
+The operational rider that keeps biting. oneauth appears in nine modules' `go.mod`, six directly
+and three as indirect:
 
 `cmd/testclient`, `ext/auth`, `tests/keycloak`, `tests/e2e`, `examples/auth`,
-`examples/fine-grained-auth`, `examples/events/discord`, `examples/events/telegram`.
+`examples/fine-grained-auth`, `examples/events/discord`, `examples/events/telegram`,
+`examples/whole-enchilada/events/event-server`.
+
+`grep -rl 'panyam/oneauth v' --include=go.mod .` finds them, and is the list to trust over this one.
 
 Bump all of them together and run `make tidy-all`. **Leaving even one behind fails CI's
 `test-auth` job** via `tests/e2e` MVS resolution, and the error points at e2e rather than at the
 module you missed.
 
-Current pin: v0.1.19. Version-specific fixes worth knowing:
+Current pin: v0.1.39. Version-specific fixes worth knowing:
 - **v0.1.14** — required for the two-TP pattern.
 - **v0.1.18** — fixed `client.NewAuthClient` stripping the path from the issuer URL, which broke
   browser auth against Keycloak realms. `LoginWithBrowser` now prefers `c.cachedASMeta` over
@@ -148,6 +152,11 @@ Current pin: v0.1.19. Version-specific fixes worth knowing:
   the discovered `token_endpoint` with `client_secret_basic`) when AS metadata is cached; the
   legacy `/auth/cli/token` JSON path remains the no-metadata fallback. `LoginRequest` gained
   `ClientSecret`, and `oneauth token password` gained `--client-secret`.
+- **v0.1.39** — oneauth#387, the pushdown from #1538. `BrowserLoginRequest.Listener` lets the caller
+  own the loopback listener (no release/rebind window), `LoopbackRedirectURI` gives the exact string
+  to register, `FollowRedirects` fails on an authorization-server error instead of returning nil,
+  and a headless consent opener sits beside it. mcpkit still uses its own `portHold` and
+  `approveHeadless` until #1539 switches over.
 
-Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.36`. Use it from
+Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.39`. Use it from
 PATH, since `go run @ver` gets confused by oneauth's own replace directives.

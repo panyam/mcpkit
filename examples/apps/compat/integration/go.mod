@@ -1,6 +1,6 @@
 module github.com/panyam/mcpkit/examples/apps/compat/integration
 
-go 1.26.6
+go 1.26.9
 
 replace (
 	github.com/panyam/mcpkit => ../../../..
