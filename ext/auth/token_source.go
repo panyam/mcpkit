@@ -101,7 +101,9 @@ type OAuthTokenSource struct {
 	// use and keeps it for the life of the source, so a registration made
 	// through DCR stays valid for every later login. Set it when the redirect
 	// must be known in advance: a pre-registered ClientID, or a DCRMeta that
-	// names its own redirect_uris.
+	// names its own redirect_uris. The port is bound before any DCR
+	// registration, so a port something else holds fails Token at once
+	// rather than after registering a client nobody can serve.
 	CallbackPort int
 
 	// HTTPClient is used for discovery and DCR requests.
@@ -145,14 +147,16 @@ type OAuthTokenSource struct {
 	dcrClientSecret string
 	dcrAS           string
 
-	// callbackPort is CallbackPort once resolved by loopbackPort.
+	// callbackPort is CallbackPort once resolved by loopbackListener.
 	callbackPort int
 
-	// portHold keeps a chosen callbackPort bound while no login is using it,
-	// so another process asking the kernel for a free port cannot be handed
-	// the same one between the DCR registration and LoginWithBrowser binding
-	// it. Two conformance scenarios logging in at once hit exactly that on
-	// Linux. Released just before each login, taken back after.
+	// portHold is the callback listener while no login is using it. It is
+	// bound before the DCR registration names its address and handed to
+	// LoginWithBrowser as its Listener, so the port registered is the port
+	// served with nothing in between for another process to take. Two
+	// conformance scenarios logging in at once took each other's port on
+	// Linux when the source picked a port and released it. Rebound after
+	// each login to keep the port for the next one.
 	portHold net.Listener
 }
 
@@ -169,7 +173,10 @@ type OAuthTokenSource struct {
 // against the cached dcrAS and dropping the cache only on mismatch.
 // This keeps Invalidate cheap for the common case (same AS, fresh
 // token needed) while still meeting SEP-2352 when the AS truly
-// changes.
+// changes. The cost: an AS that forgets its registered clients (an
+// in-memory demo server after a restart) refuses the cached client_id
+// on every later login, and Invalidate does not recover from that.
+// Replace the OAuthTokenSource instead, as cmd/mcp-auth-proxy does.
 //
 // The armed flag (Token's lazy gate) is intentionally NOT reset: the
 // transport calls Invalidate then TokenForScopes on a 401, and re-arming
@@ -349,10 +356,11 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	if flag := s.authInfo.ASMetadata.AuthorizationResponseIssParameterSupported; flag != nil && *flag {
 		asAdvertisedSupport = true
 	}
-	port, err := s.loopbackPort()
+	listener, err := s.loopbackListener()
 	if err != nil {
 		return "", fmt.Errorf("oauth login: %w", err)
 	}
+	s.portHold = nil // LoginWithBrowser owns and closes it now
 	loginReq := &client.BrowserLoginRequest{
 		AuthorizationEndpoint:    s.authInfo.ASMetadata.AuthorizationEndpoint,
 		TokenEndpoint:            s.authInfo.ASMetadata.TokenEndpoint,
@@ -362,7 +370,7 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		Scopes:                   scopes,
 		Resource:                 resourceIndicator(s.authInfo, s.ServerURL), // RFC 8707 §2: bind the token to this MCP server
 		OpenBrowser:              s.OpenBrowser,
-		CallbackPort:             port,
+		Listener:                 listener,
 		OnCallback: func(_ context.Context, p client.CallbackParams) error {
 			return validateIss(p.Iss, expectedIssuer, asAdvertisedSupport)
 		},
@@ -373,7 +381,6 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	// ClientSecret is passed in BrowserLoginRequest above — oneauth's
 	// SelectAuthMethod handles negotiation (basic/post/none) based on AS metadata.
 
-	s.releasePort()
 	cred, err := s.oaClient.LoginWithBrowser(context.Background(), loginReq)
 	s.holdPort()
 	if err != nil {
@@ -579,11 +586,11 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 			// Register the redirect LoginWithBrowser will listen on. An
 			// authorization server may compare redirect URIs exactly, port
 			// included, whatever RFC 8252 §7.3 suggests.
-			port, err := s.loopbackPort()
+			l, err := s.loopbackListener()
 			if err != nil {
 				return "", "", fmt.Errorf("DCR: %w", err)
 			}
-			meta.RedirectURIs = []string{loopbackRedirect(port)}
+			meta.RedirectURIs = []string{client.LoopbackRedirectURI(l.Addr())}
 		}
 		resp, err := client.RegisterClient(s.authInfo.ASMetadata.RegistrationEndpoint, meta, s.HTTPClient)
 		if err != nil {
@@ -598,27 +605,31 @@ func (s *OAuthTokenSource) resolveClientID() (clientID, clientSecret string, err
 	return "", "", errors.New("no client_id: set ClientID, ClientMetadataURL, or EnableDCR")
 }
 
-// loopbackPort returns the port the authorization redirect comes back to:
-// CallbackPort when set, otherwise a free port chosen once and reused, so the
-// redirect a DCR registration recorded still matches on the next login.
-// Caller holds s.mu.
-func (s *OAuthTokenSource) loopbackPort() (int, error) {
+// loopbackListener returns the listener the authorization redirect comes
+// back to, binding it when none is held: on CallbackPort when set, otherwise
+// on the port chosen for this source, or on a free one the first time. The
+// port is kept for the life of the source so the redirect a DCR registration
+// recorded still matches on the next login. Binding before registering means
+// a taken CallbackPort fails here, before a client the source could never use
+// is registered. Caller holds s.mu.
+func (s *OAuthTokenSource) loopbackListener() (net.Listener, error) {
+	if s.portHold != nil {
+		return s.portHold, nil
+	}
+	port := s.callbackPort
 	if s.CallbackPort != 0 {
-		return s.CallbackPort, nil
+		port = s.CallbackPort
 	}
-	if s.callbackPort == 0 {
-		l, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			return 0, fmt.Errorf("pick a loopback port: %w", err)
-		}
-		s.portHold = l
-		s.callbackPort = l.Addr().(*net.TCPAddr).Port
+	l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	if err != nil {
+		return nil, fmt.Errorf("bind the OAuth callback port %d: %w", port, err)
 	}
-	return s.callbackPort, nil
+	s.portHold = l
+	s.callbackPort = l.Addr().(*net.TCPAddr).Port
+	return l, nil
 }
 
-// releasePort frees a held callback port so LoginWithBrowser can bind it.
-// Caller holds s.mu.
+// releasePort closes a held callback listener. Caller holds s.mu.
 func (s *OAuthTokenSource) releasePort() {
 	if s.portHold != nil {
 		_ = s.portHold.Close()
@@ -626,23 +637,16 @@ func (s *OAuthTokenSource) releasePort() {
 	}
 }
 
-// holdPort binds the chosen callback port again after a login, keeping it
-// for the next one. A failure is ignored: the next login simply binds it
-// without the guarantee. A caller-set CallbackPort is never held. Caller
-// holds s.mu.
+// holdPort binds the callback port again after a login, keeping it for the
+// next one. A failure is ignored: the next login binds it again and reports
+// the error then. Caller holds s.mu.
 func (s *OAuthTokenSource) holdPort() {
-	if s.CallbackPort != 0 || s.callbackPort == 0 || s.portHold != nil {
+	if s.callbackPort == 0 || s.portHold != nil {
 		return
 	}
 	if l, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", s.callbackPort)); err == nil {
 		s.portHold = l
 	}
-}
-
-// loopbackRedirect is the redirect URI oneauth's LoginWithBrowser listens on
-// for a given port. It must match byte for byte what the registration sent.
-func loopbackRedirect(port int) string {
-	return fmt.Sprintf("http://localhost:%d/callback", port)
 }
 
 // --- Validation helpers ---
