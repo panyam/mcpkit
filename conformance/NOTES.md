@@ -88,9 +88,14 @@ MCPCONFORMANCE_EVENTS_PATH=../conf-events-<ticket> make testconf-events
 ```
 
 Push with `git push origin <branch>:feat/events-conformance-suite` once it fast-forwards, so the
-fork branch (and the upstream PR it backs) moves without touching anyone's checkout. The fixture
-port is still shared, though: two suite runs at once collide on `:18101`, and `require_port_free`
-refuses the second rather than grading the first one's fixture.
+fork branch (and the upstream PR it backs) moves without touching anyone's checkout.
+
+Ports no longer collide (#1534). `testconf-events` takes the first free port from `:18101` and
+`conf-events-remote` from `:18201`, so a second run beside a first lands on the next port instead of
+waiting. Set `EVENTS_PORT` / `EVENTS_REMOTE_PORT` to pin one, and a pinned port that is held still
+refuses through `require_port_free`, so an explicit choice is never silently moved. Two runs from
+the *same* checkout still race on building `kitchen-sink-events`, which is one more reason for a
+worktree per session.
 
 ---
 
@@ -671,6 +676,16 @@ the other side. Two things metronome taught that the proxy now absorbs: it match
 exactly (fixed in `OAuthTokenSource`, `ext/auth/NOTES.md`), and a crash restarts it with every
 client and token forgotten, so the proxy logs in from scratch on any 401 and the script reports
 how many times it had to.
+
+**metronome, 2026-10-15** (#1535). It crashes on `events/poll`, `events/stream` and
+`events/subscribe` for `metronome.tick` when `arguments` omits `periodSeconds`, which its schema
+does not require, and that crash is the restart the re-logins were absorbing. Grade it in two
+passes: the default run reports the crash as red rows, then
+`EVENTS_ARGUMENTS='{"metronome.tick":{"periodSeconds":1}}' make conf-events-remote` grades the rest
+(discovery 10/13, poll 29/31, push 12/19, webhook 22/25). Two more divergences account for every
+other violated row: the sketch's `-32011` where SEP-3415 says `-32023`, and no `eventsListChanged`
+on `subscriptions/listen`. The per-row causes are in the fork yaml's header. Before the fork's
+`guardScenario`, a crash mid-scenario printed "runner exited 1" and nothing else.
 
 ---
 
