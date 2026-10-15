@@ -20,12 +20,12 @@ EXAMPLES_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
   test-skills test-tasks-v2 \
   test-common test-otel-stdout test-protogen \
   test-events-kitchen-sink test-events-discord test-events-telegram \
-  test-whole-enchilada-event-server
+  test-whole-enchilada-event-server test-agents-discovery
 
 test: test-skills test-tasks-v2 \
       test-common test-otel-stdout test-protogen \
       test-events-kitchen-sink test-events-discord test-events-telegram \
-      test-whole-enchilada-event-server ## Run every infra-free example test
+      test-whole-enchilada-event-server test-agents-discovery ## Run every infra-free example test
 
 
 
@@ -43,6 +43,9 @@ test-otel-stdout: ## otel/stdout smoke
 
 test-protogen: ## protogen/bookservice
 	cd $(EXAMPLES_DIR)/protogen/bookservice && go test ./... -count=1 -timeout 60s
+
+test-agents-discovery: ## agents/discovery (walkthrough claims, both wires)
+	cd $(EXAMPLES_DIR)/agents/discovery && go test ./... -count=1 -timeout 60s
 
 test-events-kitchen-sink: ## events/kitchen-sink
 	cd $(EXAMPLES_DIR)/events/kitchen-sink && go test ./... -count=1 -timeout 60s

@@ -152,6 +152,11 @@ jobs:
       - name: Run experimental agents Go client tests
         run: bash experimental/scripts/test-agents-clients-go.sh
 
+      # make test-examples runs in no workflow yet (issue 1431), so the agents
+      # example would otherwise ship with its walkthrough test unrun.
+      - name: Run the agents discovery example test
+        run: make -C examples test-agents-discovery
+
       # The bridge JS tests and the stale-build check ran in no workflow, so
       # fixtures that matched a wrong wire shape stayed green (issue 1452).
       - uses: pnpm/action-setup@v6

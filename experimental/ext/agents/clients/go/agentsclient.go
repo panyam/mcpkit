@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -123,6 +124,23 @@ func IsAgentNotFound(err error) bool {
 // discovery state expires or the roster changes.
 func IsInvalidAgentDefinition(err error) bool {
 	return hasReason(err, core.ErrCodeInternal, agents.ReasonInvalidAgentDefinition)
+}
+
+// StepUpScopes reports whether err is agents/get refusing an agent the caller
+// may see but not open (an AgentDef.ScopeChallenge on the server), and returns
+// the scopes the challenge asks for. The server answers with an HTTP 403
+// carrying WWW-Authenticate error="insufficient_scope", which the client
+// surfaces as *client.ClientAuthError. A host that can obtain a token with
+// those scopes, for example the union of them with what it already holds, may
+// retry with it. ok is true with no scopes when the server refused without
+// naming a remedy. A Cache never stores the refusal, so the retry reaches the
+// server.
+func StepUpScopes(err error) (scopes []string, ok bool) {
+	var ae *client.ClientAuthError
+	if !errors.As(err, &ae) || ae.StatusCode != http.StatusForbidden {
+		return nil, false
+	}
+	return ae.RequiredScopes, true
 }
 
 func hasReason(err error, code int, reason string) bool {

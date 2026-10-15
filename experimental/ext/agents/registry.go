@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
 
@@ -45,6 +46,12 @@ type Config struct {
 	// and answers agents/get exactly as a nonexistent name does, so callers
 	// cannot probe for hidden agents.
 	Visible func(ctx core.MethodContext, name string) bool
+
+	// ResourceMetadataURL is the RFC 9728 protected-resource metadata URL put
+	// in the resource_metadata parameter of an AgentDef.ScopeChallenge
+	// refusal, so a host can find the authorization server to step up with.
+	// Empty omits the parameter. Use the same URL the server's own 401s carry.
+	ResourceMetadataURL string
 
 	// TracerProvider opts the discovery handlers into SEP-414 spans
 	// (agents.list / agents.get). Nil or core.NoopTracerProvider{}, the
@@ -129,6 +136,10 @@ func Register(cfg Config) (*Registry, error) {
 	_ = cfg.Server.RegisterSubscriptionFilter(server.ListChangedFilterKey(ListChangedFilterKey, NotificationListChanged))
 	cfg.Server.HandleMethod(MethodList, r.handleList)
 	cfg.Server.HandleMethod(MethodGet, r.handleGet)
+	// The step-up gate is middleware because only a refusal raised before
+	// dispatch becomes a real HTTP 403 with a WWW-Authenticate header. The
+	// stateless wire routes extension methods through the same chain.
+	cfg.Server.UseMiddleware(r.stepUp)
 
 	return r, errors.Join(errs...)
 }
@@ -198,6 +209,40 @@ func (r *Registry) checkTools(def AgentDef) error {
 		return fmt.Errorf("agents: agent %q names unregistered tool(s): %v", def.Name, missing)
 	}
 	return nil
+}
+
+// stepUp refuses agents/get with a 403 insufficient_scope challenge when the
+// named agent is visible to the caller and its ScopeChallenge is unmet.
+// Everything else, including a hidden or unknown agent, passes through to the
+// handler, which answers agent_not_found for both.
+func (r *Registry) stepUp(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
+	if req.Method != MethodGet {
+		return next(ctx, req)
+	}
+	var p GetAgentParams
+	if err := req.Params.Bind(&p); err != nil {
+		return next(ctx, req)
+	}
+	r.mu.RLock()
+	def, ok := r.byName[p.Name]
+	r.mu.RUnlock()
+	if !ok || def.ScopeChallenge == nil || !r.visible(core.NewMethodContext(ctx), p.Name) {
+		return next(ctx, req)
+	}
+	challenge, err := def.ScopeChallenge(ctx, req)
+	if err == nil && challenge == nil {
+		return next(ctx, req)
+	}
+	var scopes []string
+	var desc string
+	if err == nil {
+		scopes, desc = challenge.Scopes, challenge.ErrorDescription
+	}
+	return nil, &core.AuthError{
+		Code:            http.StatusForbidden,
+		Message:         "insufficient scope",
+		WWWAuthenticate: core.InsufficientScopeChallenge(r.cfg.ResourceMetadataURL, desc, scopes...),
+	}
 }
 
 func (r *Registry) visible(ctx core.MethodContext, name string) bool {
