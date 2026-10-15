@@ -21,6 +21,10 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 - **Agents Go client: `RoleTable`** resolves `modelRoutingHint` to a host's
   own models, escalating to a larger role rather than downgrading, and
   `LargestRole` merges several agents' hints (#1393).
+- **`ext/skills`: cache attributes on `resources/directory/read`.** The result
+  now carries `ttlMs` and `cacheScope`, as `skills/list` and `skills/get`
+  already do, following `ext-skills#157`. Defaults to `DefaultListTTLMs` and
+  `public`. `WithDirectoryReadCacheHints` overrides both.
 
 ## [0.7.2] - 2026-10-14
 

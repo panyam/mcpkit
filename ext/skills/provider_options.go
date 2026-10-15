@@ -27,6 +27,12 @@ type providerConfig struct {
 	supportingDigests     SupportingDigestMode
 	skillsListPageSize    int
 	directoryReadPageSize int
+
+	// directoryReadTTLMs and directoryReadCacheScope are the SEP-2549
+	// attributes on resources/directory/read results. Zero ttl means
+	// DefaultListTTLMs. NewProvider defaults the scope to CacheScopePublic.
+	directoryReadTTLMs      int
+	directoryReadCacheScope string
 }
 
 // SupportingDigestMode selected how a Provider pinned the integrity of a
@@ -136,6 +142,20 @@ func WithSkillsListPageSize(n int) ProviderOption {
 // every child in one page. Same rationale as WithSkillsListPageSize.
 func WithDirectoryReadPageSize(n int) ProviderOption {
 	return func(c *providerConfig) { c.directoryReadPageSize = n }
+}
+
+// WithDirectoryReadCacheHints sets the ttlMs and cacheScope carried on
+// resources/directory/read results (ext-skills#157). Same meaning as
+// WithListCacheHints on the Indexer: a ttlMs <= 0 selects DefaultListTTLMs,
+// and an empty cacheScope omits the field.
+//
+// The default scope is CacheScopePublic, because a Provider's directory
+// listing comes from one fs.FS and does not vary by caller.
+func WithDirectoryReadCacheHints(ttlMs int, cacheScope string) ProviderOption {
+	return func(c *providerConfig) {
+		c.directoryReadTTLMs = ttlMs
+		c.directoryReadCacheScope = cacheScope
+	}
 }
 
 // WithArchiveMode publishes every skill as a single archive resource at
