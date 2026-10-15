@@ -21,7 +21,7 @@ func TestWalkthrough(t *testing.T) {
 	for _, wire := range []string{"session", "stateless"} {
 		t.Run(wire, func(t *testing.T) {
 			srv := server.NewServer(core.ServerInfo{Name: "agents-discovery", Version: "0.1.0"}, server.WithAuth(tokenAuth{}))
-			buildServer(srv)
+			buildServer(srv, false)
 			topts := []server.TransportOption{server.WithStreamableHTTP(true)}
 			var copts []client.ClientOption
 			if wire == "stateless" {

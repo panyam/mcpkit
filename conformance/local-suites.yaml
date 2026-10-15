@@ -215,3 +215,32 @@ suites:
       is still a draft. `make conf-events-setup`
       creates this checkout as a worktree of the server one.
     tracking: "mcpkit 1500"
+
+  - suite: testconf-agents
+    sep: Agent discovery, agents-wg#22 (draft, placeholder sep-9998)
+    stage: 8k
+    status: INFO
+    source:
+      repo: panyam/mcpconformance
+      branch: feat/agents-conformance-suite
+      path_var: MCPCONFORMANCE_AGENTS_PATH
+      default_path: ../conf-agents
+    note: >-
+      Two scenarios, measured 2026-10-15 against examples/agents/discovery
+      --conformance-agents with the fork at 4661c43: sep-9998-agents-discovery
+      28/28 and sep-9998-agents-list-changed 4/4. Rows quote agents-wg#22 at
+      9b16840e, checked by script. The yaml declares 49 rows, 31 graded and 18
+      excluded (host obligations, rules needing two authorization contexts,
+      and step-up, a MAY needing a credential the harness can raise). Breaking
+      the fixture turns the matching rows red: a visible hidden agent fails two
+      discovery rows, an unsent list_changed fails one list-changed row, a wrong
+      agent_not_found reason fails one, and an omitted ttlMs fails two, since
+      the draft CacheableResult requires it. The fixture flag serves
+      anonymously, pages one agent at a time, adds an agent naming a missing
+      tool, and registers agents_conformance_fixture and
+      agents_conformance_add_agent (see examples/CONVENTIONS.md § Conformance
+      fixtures). Check IDs carry the sep-9998 placeholder because the SEP lives
+      in the Agents WG repository and has no spec PR number yet. INFO for that
+      reason and because the SEP is a draft. Runs with --force, since the
+      extension is not on the spec timeline.
+    tracking: "mcpkit 1393"

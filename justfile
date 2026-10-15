@@ -143,6 +143,14 @@ testconf-events:
 testconf-events-client:
     just -f conformance/justfile testconf-events-client
 
+# Run agent discovery conformance (agents-wg#22), fork-based, informational
+testconf-agents:
+    just -f conformance/justfile testconf-agents
+
+# Create the agents suite checkout if missing
+conf-agents-setup:
+    just -f conformance/justfile conf-agents-setup
+
 # Create the two events suite checkouts if missing (delegates to conformance/justfile)
 conf-events-setup:
     just -f conformance/justfile conf-events-setup
