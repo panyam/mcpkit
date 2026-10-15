@@ -9,6 +9,19 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **`experimental/ext/agents`: `notifications/agents/list_changed`.** The
+  extension declares `listChanged: true`, registers the `agentsListChanged`
+  filter key, and `AddAgent` / `RemoveAgent` broadcast. `NotifyListChanged`
+  covers changes the registry cannot see (#1393).
+- **Agents Go client: `Cache`** keeps the roster and each agent's details for
+  their `ttlMs`, drops entries on `agent_not_found`, never caches
+  `invalid_agent_definition`, and re-lists after `Invalidate`.
+  `WatchListChanged` wires the notification to it (#1393).
+- **Agents Go client: `RoleTable`** resolves `modelRoutingHint` to a host's
+  own models, escalating to a larger role rather than downgrading, and
+  `LargestRole` merges several agents' hints (#1393).
+
 ## [0.7.2] - 2026-10-14
 
 A patch release whose main fix is stdio: mcpkit now speaks MCP's

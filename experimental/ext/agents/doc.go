@@ -48,3 +48,13 @@ const (
 	MethodList = "agents/list"
 	MethodGet  = "agents/get"
 )
+
+// NotificationListChanged tells a client the roster may have changed. It is
+// delivered only on a subscriptions/listen stream whose filter set
+// ListChangedFilterKey, and on the legacy session wire's GET stream.
+const NotificationListChanged = "notifications/agents/list_changed"
+
+// ListChangedFilterKey is the subscriptions/listen filter key a client sets
+// to true to receive NotificationListChanged. Register makes the server
+// honor it.
+const ListChangedFilterKey = "agentsListChanged"

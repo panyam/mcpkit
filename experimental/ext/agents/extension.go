@@ -12,16 +12,21 @@ import "github.com/panyam/mcpkit/core"
 // Register do not need to add it explicitly; RegisterExtension is idempotent
 // (keyed by extension ID), so combining the two is safe.
 //
-// The extension carries no Config yet, so the wire value is the empty object
-// {}. agents-wg#22 defines one setting, listChanged, which this package will
-// advertise once it can deliver notifications/agents/list_changed over
-// subscriptions/listen, by registering an agentsListChanged filter key
-// (server.RegisterSubscriptionFilter, panyam/mcpkit#1504).
-type AgentsExtension struct{}
+// ListChanged reports whether the server sends
+// notifications/agents/list_changed, the one setting agents-wg#22 defines.
+// Register sets it true, because AddAgent and RemoveAgent always broadcast.
+// False yields the empty settings object {}.
+type AgentsExtension struct {
+	ListChanged bool
+}
 
 // Extension implements core.ExtensionProvider. It returns the agents
-// extension metadata at Experimental stability. Config stays nil (empty {} on
-// the wire) — discovery happens through agents/list, not the capability body.
-func (AgentsExtension) Extension() core.Extension {
-	return core.Extension{ID: ExtensionID}
+// extension metadata at Experimental stability. Discovery happens through
+// agents/list, so the settings carry only listChanged.
+func (e AgentsExtension) Extension() core.Extension {
+	ext := core.Extension{ID: ExtensionID}
+	if e.ListChanged {
+		ext.Settings = map[string]any{"listChanged": true}
+	}
+	return ext
 }
