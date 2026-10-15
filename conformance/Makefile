@@ -38,7 +38,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
         testconf-tasks testconf-tasks-v2 testconf-mrtr \
         testconf-file-inputs testconf-auth-server \
         testconf-stateless testconf-skills testconf-events \
-        testconf-events-client conf-events-setup \
+        testconf-events-client conf-events-setup testconf-agents conf-agents-setup \
         testconf-elicitation testconf-upstream-audit \
         testconf-external-checker \
         refresh-conformance check-conformance-stale \
@@ -49,7 +49,7 @@ MCPCONFORMANCE_BASE_PATH        ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 # exist (each target fail-fasts with a remediation message if missing). Fair
 # game: contributors should have all conf-* sibling clones before pushing
 # anything that touches conformance surfaces.
-test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-events-client testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-events-client testconf-agents testconf-upstream-audit refresh-conformance ## Run all conformance suites (needs fork worktrees + conf-upstream-main)
 
 testconf: ## Run MCP conformance test suite (requires Node.js/npx)
 	cd $(REPO_ROOT) && bash scripts/conformance-test.sh
@@ -94,6 +94,12 @@ testconf-events: ## Run MCP Events conformance — informational (exit 0 regardl
 
 testconf-events-client: ## Run MCP Events client conformance — informational (exit 0 regardless of check results). Drives the Go events client SDK through the four events-client-* scenarios (conformance PR 541) via its conformance-client driver.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-events-client.sh
+
+testconf-agents: ## Run agent discovery conformance (agents-wg#22), informational (exit 0 regardless of check results). Drives examples/agents/discovery --conformance-agents via the fork's scenario runner. Check IDs carry the sep-9998 placeholder until the SEP is numbered.
+	@bash $(CONFORMANCE_DIR)/scripts/conf-agents.sh
+
+conf-agents-setup: ## Create the agents suite checkout (MCPCONFORMANCE_AGENTS_PATH) if missing. Safe to re-run.
+	@bash $(CONFORMANCE_DIR)/scripts/conf-agents-setup.sh
 
 conf-events-setup: ## Create the events suite checkouts (MCPCONFORMANCE_EVENTS_PATH, MCPCONFORMANCE_EVENTS_CLIENT_PATH) if missing. Safe to re-run.
 	@bash $(CONFORMANCE_DIR)/scripts/conf-events-setup.sh

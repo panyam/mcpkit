@@ -674,6 +674,37 @@ how many times it had to.
 
 ---
 
+## Agent discovery suite
+
+`testconf-agents`, stage 8k, `INFO`. Drives `examples/agents/discovery --conformance-agents` against
+`feat/agents-conformance-suite` on the fork, checked out at `../conf-agents` (`make
+conf-agents-setup`). The scenarios are `sep-9998-agents-discovery` and
+`sep-9998-agents-list-changed`. Take the counts from the suite's note in `local-suites.yaml`.
+
+**The number is a placeholder, and on purpose.** agents-wg#22 is a proposal in the Agents WG
+repository, so it has no PR in `modelcontextprotocol/modelcontextprotocol` and therefore no SEP
+number. The traceability gates only accept numeric ids, as the MCP Events suite found out with its
+`sep-9999` placeholder, so this suite uses `sep-9998` (9999 is taken by that history). Rename by
+script when the proposal gets a spec PR, the way #1502 renamed the events ids.
+
+**It runs with `--force`.** The runner picks scenarios by spec version, and an extension that isn't
+on the spec timeline is selected for none of them, so without `--force` the runner quietly runs
+nothing.
+
+**One run per credential limits what it can grade.** The harness holds a single identity, so the
+rules that compare two authorization contexts (the per-caller intersection, "membership grants no
+extra permission", `cacheScope: private` unless safe for everyone) and step-up are declared and
+excluded rather than graded. The hidden-agent rows still work with one caller, because the fixture
+reports which agent is hidden from an anonymous one (`billing-agent`, already gated on
+`billing:read`), so nothing is added just for the suite.
+
+**It treats `ttlMs` as required**, because both results are `CacheableResult` and the draft schema
+makes `ttlMs` a required number. The fixture sets `TTLMs`, so it passes. An mcpkit server that leaves
+`Config.TTLMs` nil omits the field and fails those two rows, and so do the core list methods by
+default. That is tracked separately rather than worked around here.
+
+---
+
 ## `traceability.json` is generated against the reference SDK, not against us
 
 `src/seps/traceability.json` upstream maps, per SEP, which declared check IDs are emitted when the

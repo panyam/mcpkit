@@ -203,11 +203,14 @@ to `Default` when nothing fits. `how` reports `hinted`, `escalated` or
 callers: listing, scoped tools, running an agent through `tools/call`,
 per-caller filtering, step-up and `list_changed`, on both wires.
 
-## Not yet implemented
+## Conformance
 
-Tracked in panyam/mcpkit#1393:
-
-- Conformance scenarios for the SEP.
+`make testconf-agents` runs the agents-wg#22 scenarios (`sep-9998-agents-*`, a
+placeholder number until the SEP has one) against
+`examples/agents/discovery --conformance-agents`. They live on the
+`feat/agents-conformance-suite` branch of panyam/mcpconformance, checked out at
+`../conf-agents` by `make conf-agents-setup`. See `conformance/NOTES.md`
+§ Agent discovery suite.
 
 ## Tests
 

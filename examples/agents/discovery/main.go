@@ -131,8 +131,9 @@ type deployArgs struct {
 
 // buildServer registers the tools, then the agents over them, and returns the
 // registry so tests can change the roster. Tools come first so Register can
-// check every agent's tool names against the catalog.
-func buildServer(srv *server.Server) *agents.Registry {
+// check every agent's tool names against the catalog. conformance adds the
+// diagnostic surface conformance_agents.go describes.
+func buildServer(srv *server.Server, conformance bool) *agents.Registry {
 	srv.Register(core.TextTool[struct{}]("list_failed_pipelines", "List pipelines that failed in the last day",
 		func(ctx core.ToolContext, _ struct{}) (string, error) {
 			return "build-1841 (main, red), build-1838 (release/2.4, red)", nil
@@ -151,12 +152,16 @@ func buildServer(srv *server.Server) *agents.Registry {
 		}))
 
 	ttl := 60_000
-	reg, err := agents.Register(agents.Config{
+	cfg := agents.Config{
 		Server:  srv,
 		Agents:  roster(),
 		TTLMs:   &ttl,
 		Visible: visible,
-	})
+	}
+	if conformance {
+		applyConformance(&cfg)
+	}
+	reg, err := agents.Register(cfg)
 	if err != nil {
 		log.Printf("[agents-discovery] agents.Register: %v", err)
 	}
@@ -168,11 +173,15 @@ func buildServer(srv *server.Server) *agents.Registry {
 			}
 			return "release-agent published", nil
 		}))
+	if conformance {
+		registerConformanceControls(srv, reg)
+	}
 	return reg
 }
 
 func serve() {
 	addr := flag.String("addr", ":8080", "listen address")
+	conformance := flag.Bool("conformance-agents", false, "serve the agents conformance fixture: no auth, one agent per page, and the agents_conformance_* controls")
 	tel := common.RegisterTelemetryFlags(flag.CommandLine)
 	wire := common.RegisterWireFlags(flag.CommandLine)
 	flag.CommandLine.Parse(demokit.FilterArgs(os.Args[1:],
@@ -190,13 +199,20 @@ func serve() {
 	}
 	defer shutdown(context.Background())
 
+	// The conformance harness holds no bearer token, so the fixture serves
+	// anonymously. Every caller then lacks billing:read, which is what makes
+	// billing-agent the hidden agent the suite grades.
+	var opts []server.Option
+	if !*conformance {
+		opts = append(opts, server.WithAuth(tokenAuth{}))
+	}
 	if err := common.RunServer(common.ServerConfig{
 		Name:           "agents-discovery",
 		Addr:           *addr,
 		TracerProvider: tp,
-		Options:        []server.Option{server.WithAuth(tokenAuth{})},
+		Options:        opts,
 		Wire:           wire,
-		Register:       func(srv *server.Server) { buildServer(srv) },
+		Register:       func(srv *server.Server) { buildServer(srv, *conformance) },
 	}); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
