@@ -237,10 +237,8 @@ func TestRemoveSource_NonTerminatableSourceStillSucceeds(t *testing.T) {
 }
 
 // TestUnsupportedData_CarriesSchemaChangedReason pins the -32026 payload
-// shape from §"Event Type Removal and Breaking Changes". mcpkit has no
-// in-place descriptor mutation API yet, so nothing in the library emits
-// this today; the shape is here so an author terminating a subscription by
-// hand can express it, and so the conformance suite has something to check.
+// shape from §"Event Type Removal and Breaking Changes". Registry.ChangeSchema
+// emits it on a breaking change; schema_change_test.go covers that path.
 func TestUnsupportedData_CarriesSchemaChangedReason(t *testing.T) {
 	raw, err := json.Marshal(UnsupportedData{
 		Feature: "payloadSchema",
