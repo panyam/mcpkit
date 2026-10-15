@@ -2,6 +2,7 @@ package skills_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -155,6 +156,58 @@ func TestDirectoryRead_RejectsDotSegment(t *testing.T) {
 func TestDirectoryRead_RejectsDeepTraversal(t *testing.T) {
 	_, _, c := boot(t, "testdata/valid")
 	assertCallError(t, callDirectoryReadErr(c, "skill://acme/billing/refunds/../../../etc/passwd", ""), "traversal segment")
+}
+
+// TestDirectoryRead_RejectsPercentEncodedTraversal pins the decoded form of
+// the same attack. `%2E%2E` decodes to `..` in ParseURI, so it has to hit the
+// same per-segment guard rather than slip past it as an opaque name.
+// python-sdk#3703 fixed exactly this in another SDK.
+func TestDirectoryRead_RejectsPercentEncodedTraversal(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
+	if err := callDirectoryReadErr(c, "skill://pdf-processing/%2E%2E", ""); err == nil {
+		t.Fatal("percent-encoded `..` was accepted; want an error")
+	}
+}
+
+// TestDirectoryRead_CacheAttributes pins ext-skills#157, which makes the
+// directory-read result extend CacheableResult like skills/list and
+// skills/get. The fields sit at the result's top level, not under _meta.
+func TestDirectoryRead_CacheAttributes(t *testing.T) {
+	_, _, c := boot(t, "testdata/valid")
+	res := callDirectoryRead(t, c, "skill://pdf-processing", "")
+	if res.TTLMs == nil || *res.TTLMs != skills.DefaultListTTLMs {
+		t.Errorf("ttlMs = %v, want %d", res.TTLMs, skills.DefaultListTTLMs)
+	}
+	if res.CacheScope != skills.CacheScopePublic {
+		t.Errorf("cacheScope = %q, want %q", res.CacheScope, skills.CacheScopePublic)
+	}
+
+	raw, err := c.Call(t.Context(), skills.MethodResourcesDirectoryRead, skills.DirectoryReadRequest{URI: "skill://pdf-processing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var generic map[string]json.RawMessage
+	if err := raw.Unmarshal(&generic); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"ttlMs", "cacheScope"} {
+		if _, ok := generic[k]; !ok {
+			t.Errorf("%q absent from the result's top level; got %v", k, genericKeys(generic))
+		}
+	}
+}
+
+// TestDirectoryRead_CacheHintsOverride covers WithDirectoryReadCacheHints,
+// including an empty scope, which drops cacheScope from the result.
+func TestDirectoryRead_CacheHintsOverride(t *testing.T) {
+	_, c := connectSkillsClient(t, "testdata/valid", skills.WithDirectoryReadCacheHints(5_000, ""))
+	res := callDirectoryRead(t, c, "skill://pdf-processing", "")
+	if res.TTLMs == nil || *res.TTLMs != 5_000 {
+		t.Errorf("ttlMs = %v, want 5000", res.TTLMs)
+	}
+	if res.CacheScope != "" {
+		t.Errorf("cacheScope = %q, want omitted", res.CacheScope)
+	}
 }
 
 // TestDirectoryRead_StableOrdering verifies the result is URI-sorted so

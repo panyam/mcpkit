@@ -58,7 +58,16 @@ func (p *Provider) handleDirectoryRead(ctx core.MethodContext, id, params json.R
 	}
 
 	page, next := paginateDirectoryRead(children, req.Cursor, p.cfg.directoryReadPageSize)
-	return core.NewResponse(id, DirectoryReadResult{Resources: page, NextCursor: next})
+	ttl := p.cfg.directoryReadTTLMs
+	if ttl <= 0 {
+		ttl = DefaultListTTLMs
+	}
+	return core.NewResponse(id, DirectoryReadResult{
+		Resources:  page,
+		NextCursor: next,
+		TTLMs:      &ttl,
+		CacheScope: p.cfg.directoryReadCacheScope,
+	})
 }
 
 // resolveDirectoryURI maps a skill:// URI to (owning skill, relative

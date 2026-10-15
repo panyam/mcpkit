@@ -80,7 +80,7 @@ type resourceEntry struct {
 //     Agent Skills naming rules (the directory name and the matching
 //     frontmatter name must both satisfy them).
 func NewProvider(opts ...ProviderOption) (*Provider, error) {
-	cfg := providerConfig{metaPrefix: MetaPrefix}
+	cfg := providerConfig{metaPrefix: MetaPrefix, directoryReadCacheScope: CacheScopePublic}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
