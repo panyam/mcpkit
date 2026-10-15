@@ -194,9 +194,9 @@ suites:
     note: >-
       Four client scenarios graded against the Go events client SDK through
       experimental/ext/events/clients/go/cmd/conformance-client, measured
-      2026-10-13: events-client-poll 7/7, events-client-push 0/1 (the client
-      never reconnects a silent stream, 1503), events-client-webhook 2/2,
-      events-client-no-extension 1/1. The harness plays the events server and
+      2026-10-15: events-client-poll 7/7, events-client-push 2/2 (dead-stream
+      reconnect and null-cursor handling since 1503), events-client-webhook
+      2/2, events-client-no-extension 1/1. The harness plays the events server and
       grades what the client sends. The driver only calls what the SDK offers,
       so a red row is an SDK gap. Proposed upstream as a draft in
       modelcontextprotocol/conformance 541, stacked on 521. Re-measured
