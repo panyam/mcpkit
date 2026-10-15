@@ -74,7 +74,7 @@ The cheapest place to add this is by wrapping `ValidateWebhookURL` and configuri
 
 ## Endpoint verification
 
-A subscriber authenticates to the MCP server, but nothing about that tells the server whether the receiver at `delivery.url` wants the traffic. Without a check, any authenticated caller can point deliveries at a third party. The HMAC signature stops that third party being fooled by forged events; it does nothing to stop the POSTs arriving. So the server confirms the endpoint's intent before it activates a subscription (spec §"Webhook Security" → "Endpoint verification"). This is **on by default**.
+A subscriber authenticates to the MCP server, but nothing about that tells the server whether the receiver at `delivery.url` wants the traffic. Without a check, any authenticated caller can point deliveries at a third party. The HMAC signature stops that third party being fooled by forged events; it does nothing to stop the POSTs arriving. So the server confirms the endpoint's intent before it activates a subscription (SEP-3415 §"Webhook security" (endpoint verification)). This is **on by default**.
 
 The check runs inside `events/subscribe`, before the subscription is created, and takes the first of these that applies:
 
@@ -123,7 +123,7 @@ Worst-case wall clock for a fully-failing delivery: roughly `5s + 0.5s + 5s + 1s
 
 ## TTL negotiation and refresh
 
-Per spec PR1 commit `99f3589c` §"Subscription TTL", the wire shape is a client-suggested TTL the server grants or clamps:
+Per spec PR1 commit `99f3589c` SEP-3415 §"Subscription TTL", the wire shape is a client-suggested TTL the server grants or clamps:
 
 - Request: `ttlMs` is optional and tristate. Absent → server picks. Numeric → suggested ms. Explicit `null` → request no-expiry.
 - Response: `refreshBefore` is always present and nullable. An ISO 8601 string is a finite grant; JSON `null` is a no-expiry grant.
@@ -176,7 +176,7 @@ Operational notes:
 
 ## Auth and tuple subscription identity
 
-Per spec §"Subscription Identity" → "Authentication required" L361, webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32024 Forbidden`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
+Per SEP-3415 §"Subscription identity" (authentication required), webhook `events/subscribe` and `events/unsubscribe` MUST require an authenticated principal — servers reject unauthenticated calls with `-32024 Forbidden`. The registry keys subscriptions on the canonical tuple `(principal, delivery.url, name, params)`; cross-tenant isolation is by construction since the principal is part of the key.
 
 Production wiring (the spec-strict path):
 

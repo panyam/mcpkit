@@ -18,7 +18,7 @@ import (
 // to compute exactly which subscriptions care about it, and calls
 // EmitToSubscription per matched sub.
 //
-// Spec §"Server SDK Guidance" L630 frames the canonical example as
+// SEP-3415 §"Server SDK guidance" frames the canonical example as
 // on_subscribe joining a chat room and tagging upstream events with
 // the originating sub id. Our demo collapses the "tagging" into a
 // per-event lookup against the watch list registry, which is simpler

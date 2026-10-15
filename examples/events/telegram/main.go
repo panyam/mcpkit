@@ -64,7 +64,7 @@ func serve() {
 		// httptest receivers (127.0.0.1:N). Production-default
 		// dial-time SSRF guard would block these. Production
 		// deployments leave this OFF so loopback/private-IP webhook
-		// URLs are rejected at dial per spec §"Webhook Security" →
+		// URLs are rejected at dial per SEP-3415 §"Webhook security" →
 		// "SSRF prevention" L464.
 		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 	}
@@ -89,7 +89,7 @@ func serve() {
 	// Auto-detect auth posture. Identical pattern to discord's
 	// main.go — if OAUTH_ISSUER is set, wire real OIDC auth and
 	// follow the spec strictly (anonymous webhook subscribes
-	// rejected with -32024 per §"Subscription Identity" L361).
+	// rejected with -32024 per SEP-3415 §"Subscription identity".
 	// Otherwise fall back to the demo escape hatch so `just demo`
 	// works without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")

@@ -1,15 +1,15 @@
 package events
 
 // events/stream — push delivery for the MCP Events extension. Spec
-// §"Push-Based Delivery" → "Request: events/stream" L240-294.
+// SEP-3415 §"Request: events/stream".
 //
 // One open events/stream call holds a single subscription's per-stream
 // goroutine. The handler:
 //
 //  1. Validates the subscription (event name exists, principal authorized,
 //     source supports push).
-//  2. Sends notifications/events/active with the resolved cursor (§"Push-
-//     Based Delivery" → "Request: events/stream" L240).
+//  2. Sends notifications/events/active with the resolved cursor (SEP-3415
+//     §"Request: events/stream").
 //  3. Subscribes to the source's live channel.
 //  4. Loops on (event arrival, heartbeat tick, ctx.Done):
 //     - Event arrival → notifications/events/event (L243-271). If the source
@@ -55,12 +55,12 @@ type StreamEventsResult struct {
 // SubscribeOpts: the SDK passes the resolved subscriber identity
 // (Principal / SubscriptionID / Params) at Subscribe time so the
 // source can stash it on its subscriberSlot and apply the EventDef's
-// Match / Transform (spec §"Server SDK Guidance" L623-629) on fanout.
+// Match / Transform (SEP-3415 §"Server SDK guidance" on fanout.
 // Implementations that don't care can ignore the opts.
 //
 // Returns (chan, sender). The sender delivers a single event to THIS
 // specific subscription, bypassing Match / Transform — used by
-// EmitToSubscription (spec §"Server SDK Guidance" L630) to route by
+// EmitToSubscription (SEP-3415 §"Server SDK guidance" to route by
 // sub id. Sources that don't support targeted delivery can return a
 // no-op sender.
 type streamSubscribable interface {
@@ -199,7 +199,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			return errResp
 		}
 
-		// Spec §"Subscription Identity" → "Authentication required" L361:
+		// SEP-3415 §"Subscription identity" (authentication required):
 		// events/stream MUST be called with an authenticated principal —
 		// the spec lists -32024 Forbidden among events/stream's immediate
 		// errors at L267. Same auth gate as events/subscribe.
@@ -230,9 +230,16 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				"Unsupported: stateless wire does not support push delivery without text/event-stream Accept")
 		}
 
+		// The `delivery` array is a contract, the same gate poll and
+		// subscribe apply: a source that can stream but declares no push is
+		// not served one (#1417). Then the capability check, since an author
+		// cannot declare push into existence either.
+		if def, ok := reg.Def(req.Name); ok && !supportsDeliveryMode(def.Delivery, DeliveryModePush) {
+			return newUnsupportedError(id, "deliveryMode", DeliveryModePush.String(),
+				"Unsupported: event type "+req.Name+" does not offer push delivery")
+		}
 		// Sources that don't expose a Subscribe channel (TypedSource today)
-		// can't be served via push. Spec lists -32026 Unsupported among
-		// events/stream's immediate errors at L267.
+		// can't be served via push either.
 		sub, ok := source.(streamSubscribable)
 		if !ok {
 			return newUnsupportedError(id, "deliveryMode", "push",
@@ -240,7 +247,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		}
 
 		// Enforce quota BEFORE Subscribe + on_subscribe per spec
-		// §"Server SDK Guidance" → "Subscription lifecycle hooks"
+		// SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks)
 		// L705. Done early so a rejected stream never registers a
 		// slot or fires any author hooks. Defer the Release on every
 		// return path below — pairs 1:1 with this Reserve regardless
@@ -296,7 +303,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 
 		// Register this stream's sender in the SubscriptionIndex so
 		// EmitToSubscription(idx, event, streamSubID) routes here
-		// (spec §"Server SDK Guidance" L630). Removed on every
+		// (SEP-3415 §"Server SDK guidance". Removed on every
 		// return path so a closed stream's id can't match a stale
 		// entry.
 		_, _ = idx.AddSubscription(ctx, AddSubscriptionRequest{
@@ -327,7 +334,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			Meta:      streamMeta(id),
 		})
 
-		// Lifecycle hooks for push (spec §"Server SDK Guidance" →
+		// Lifecycle hooks for push (SEP-3415 §"Server SDK guidance" →
 		// "Subscription lifecycle hooks" L691). on_subscribe fires
 		// after the channel is acquired (the subscription is now
 		// live and would receive events); on_unsubscribe fires on
@@ -394,8 +401,7 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 					// notifications/events/active {requestId, cursor:<fresh>,
 					// truncated:true} and continues delivering." Only when
 					// there is a fresh position to send: for a type without
-					// replay truncated SHOULD be false (§"Gaps and
-					// truncated"), and a source with cursors that has yielded
+					// replay truncated SHOULD be false (SEP-3415 §"Cursor Lifecycle" (gaps and truncated)), and a source with cursors that has yielded
 					// nothing has no position either. Webhook skips the same
 					// cases in PostGap.
 					latest := ""

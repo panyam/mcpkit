@@ -115,10 +115,15 @@ type Registry struct {
 	// none. Kept here rather than written back onto the source because
 	// EventSource is an interface: Def() may build a fresh EventDef on
 	// every call, so there is nothing stable to mutate.
-	delivery  map[string][]string
-	emitter   Emitter
-	tp        core.TracerProvider
-	metaYield func(context.Context, TopologyEvent) error
+	delivery map[string][]string
+	// schemaOverrides holds schemas replaced in place by ChangeSchema,
+	// keyed by source name. Kept beside the source rather than swapping
+	// the source, because live push streams hang off the source object's
+	// channels and an additive change must leave them flowing.
+	schemaOverrides map[string]schemaOverride
+	emitter         Emitter
+	tp              core.TracerProvider
+	metaYield       func(context.Context, TopologyEvent) error
 }
 
 // newRegistry constructs a Registry from the resolved Config values.
@@ -128,13 +133,14 @@ type Registry struct {
 // would have no dispatchers attached.
 func newRegistry(srv *server.Server, webhooks *WebhookRegistry, emitter Emitter, tp core.TracerProvider) *Registry {
 	r := &Registry{
-		srv:      srv,
-		webhooks: webhooks,
-		sources:  make(map[string]EventSource),
-		schemas:  make(map[string]*core.CompiledSchema),
-		delivery: make(map[string][]string),
-		emitter:  emitter,
-		tp:       tp,
+		srv:             srv,
+		webhooks:        webhooks,
+		sources:         make(map[string]EventSource),
+		schemas:         make(map[string]*core.CompiledSchema),
+		delivery:        make(map[string][]string),
+		schemaOverrides: make(map[string]schemaOverride),
+		emitter:         emitter,
+		tp:              tp,
 	}
 	// Self-register the topology meta-source. Bypasses AddSource so the
 	// meta-source itself doesn't yield a "source.added" event for its
@@ -239,9 +245,10 @@ func (r *Registry) RemoveSource(name string) error {
 	delete(r.sources, name)
 	delete(r.schemas, name)
 	delete(r.delivery, name)
+	delete(r.schemaOverrides, name)
 	r.mu.Unlock()
 
-	// Spec §"Event Type Removal and Breaking Changes" (commit 28ec35e9):
+	// SEP-3415 §"Event type removal and breaking changes" (commit 28ec35e9):
 	// subscriptions to a removed type no longer hold a valid contract, so
 	// the server SHOULD end them with each mode's termination signal
 	// rather than leaving subscribers waiting on a name that is gone.
@@ -258,7 +265,7 @@ func (r *Registry) RemoveSource(name string) error {
 }
 
 // terminateSubscriptions ends every live subscription to a removed event
-// type, per spec §"Event Type Removal and Breaking Changes". Both modes
+// type, per SEP-3415 §"Event type removal and breaking changes". Both modes
 // carry the same error, -32023 NotFound with data.kind "event", which is
 // what tells a client SDK to re-fetch events/list rather than treat the
 // close as an auth failure or a transport blip.
@@ -267,14 +274,16 @@ func (r *Registry) RemoveSource(name string) error {
 // poll against a removed name already answers -32023 from the handler's
 // own lookup miss.
 func (r *Registry) terminateSubscriptions(name string, src EventSource) {
+	r.terminateWith(name, src, ErrCodeNotFound, "event type "+name+" was removed", NotFoundData{Kind: "event"})
+}
+
+// terminateWith ends every live subscription to name, push and webhook, with
+// one error. Removal and a breaking schema change differ only in the error.
+func (r *Registry) terminateWith(name string, src EventSource, code int, message string, data any) {
 	// Webhook subscriptions live in the WebhookRegistry, keyed by event
 	// name among other things.
 	if r.webhooks != nil {
-		r.webhooks.TerminateByEventName(name, ControlError{
-			Code:    ErrCodeNotFound,
-			Message: "event type " + name + " was removed",
-			Data:    NotFoundData{Kind: "event"},
-		})
+		r.webhooks.TerminateByEventName(name, ControlError{Code: code, Message: message, Data: data})
 	}
 	// Push subscribers hold a channel handed out by the source itself, so
 	// only the source can signal them. YieldTerminated also relays to
@@ -283,11 +292,7 @@ func (r *Registry) terminateSubscriptions(name string, src EventSource) {
 	// cannot implement the terminal signal simply closes its subscriber
 	// channels when it shuts down, which streams already treat as an end.
 	if t, ok := src.(sourceTerminator); ok {
-		_ = t.YieldTerminated(EventDeliveryError{
-			Code:    ErrCodeNotFound,
-			Message: "event type " + name + " was removed",
-			Data:    NotFoundData{Kind: "event"},
-		})
+		_ = t.YieldTerminated(EventDeliveryError{Code: code, Message: message, Data: data})
 	}
 }
 
@@ -300,7 +305,7 @@ type sourceTerminator interface {
 }
 
 // broadcastListChanged emits the spec's `notifications/events/list_changed`
-// (§"Dynamic Event Types") so clients know to re-read events/list. The
+// (SEP-3415 §"Dynamic event types") so clients know to re-read events/list. The
 // notification carries no payload by design: it is a ping, and the client
 // re-fetches to learn what actually changed.
 //
@@ -367,7 +372,98 @@ func (r *Registry) Def(name string) (EventDef, bool) {
 	if d, ok := r.delivery[name]; ok {
 		def.Delivery = d
 	}
+	if o, ok := r.schemaOverrides[name]; ok {
+		if o.input != nil {
+			def.InputSchema = o.input
+		}
+		if o.payload != nil {
+			def.PayloadSchema = o.payload
+		}
+	}
 	return def, true
+}
+
+// schemaOverride is what ChangeSchema replaced; nil leaves the source's own.
+type schemaOverride struct {
+	input, payload any
+}
+
+// SchemaChange replaces an event type's advertised inputSchema and/or
+// payloadSchema in place. Nil leaves that schema as it is.
+//
+// Breaking says the change is incompatible: live subscriptions end with
+// -32026 Unsupported {feature, reason: "schema_changed"}, feature being
+// "inputSchema" when it changed and "payloadSchema" otherwise. An additive
+// change (Breaking false) MUST NOT terminate anything, per SEP-3415 § Event
+// type removal and breaking changes. The caller says which it is, rather
+// than the library diffing two JSON Schemas to guess, because a classifier
+// would be wrong at exactly the edges that matter. The SEP's own advice is
+// to publish a breaking change under a new name instead; this is for when a
+// server changes one in place anyway.
+type SchemaChange struct {
+	InputSchema   any
+	PayloadSchema any
+	Breaking      bool
+}
+
+// ChangeSchema applies change to the named event type and announces it with
+// notifications/events/list_changed. Argument validation uses the new
+// inputSchema from the next request on. Live streams keep their source, so
+// an additive change leaves them delivering; a breaking one terminates push
+// and webhook subscriptions first and announces second, the same order
+// RemoveSource uses.
+//
+// Errors, with nothing changed and nothing announced: an unknown or reserved
+// name, a change carrying neither schema, or an inputSchema that does not
+// compile.
+func (r *Registry) ChangeSchema(name string, change SchemaChange) error {
+	if strings.HasPrefix(name, reservedSourceNamePrefix) {
+		return fmt.Errorf("events: ChangeSchema: %q uses the reserved %q prefix", name, reservedSourceNamePrefix)
+	}
+	if change.InputSchema == nil && change.PayloadSchema == nil {
+		return errors.New("events: ChangeSchema: no schema to change")
+	}
+	var compiled *core.CompiledSchema
+	if change.InputSchema != nil {
+		c, err := core.CompileSchema(change.InputSchema)
+		if err != nil {
+			return fmt.Errorf("events: ChangeSchema %q: inputSchema: %w", name, err)
+		}
+		compiled = c
+	}
+
+	r.mu.Lock()
+	src, ok := r.sources[name]
+	if !ok {
+		r.mu.Unlock()
+		return fmt.Errorf("events: source %q not registered", name)
+	}
+	o := r.schemaOverrides[name]
+	if change.InputSchema != nil {
+		o.input = change.InputSchema
+		if compiled != nil {
+			r.schemas[name] = compiled
+		} else {
+			delete(r.schemas, name)
+		}
+	}
+	if change.PayloadSchema != nil {
+		o.payload = change.PayloadSchema
+	}
+	r.schemaOverrides[name] = o
+	r.mu.Unlock()
+
+	if change.Breaking {
+		feature := "payloadSchema"
+		if change.InputSchema != nil {
+			feature = "inputSchema"
+		}
+		r.terminateWith(name, src, ErrCodeUnsupported,
+			"event type "+name+" changed its "+feature+" in place",
+			UnsupportedData{Feature: feature, Reason: ReasonSchemaChanged})
+	}
+	r.broadcastListChanged()
+	return nil
 }
 
 // normalizeDelivery resolves what a source advertises. A declared set is

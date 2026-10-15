@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Path (d) of spec §"Endpoint verification": the callback URL's https origin
+// Path (d) of SEP-3415 §"Webhook security" (endpoint verification): the callback URL's https origin
 // serves /.well-known/mcp-webhook-receiver.json listing the path prefixes that
 // accept deliveries, and a covered URL is verified without a challenge.
 // Issue 1436.

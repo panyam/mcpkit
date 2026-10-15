@@ -288,7 +288,7 @@ func TestWebhookDelivery_410GoneIsTerminalWithoutSubscriptionEffect(t *testing.T
 }
 
 // TestDefaultWebhookAckTimeout pins the spec-aligned ack timeout
-// constant. Spec PR1 commit b506e347 (§"Webhook Event Delivery" →
+// constant. Spec PR1 commit b506e347 (SEP-3415 §"Webhook event delivery" →
 // "Acknowledgement semantics"): "a timeout on the order of 5 seconds
 // is common." mcpkit ships 5s as the registry-wide default; both the
 // http.Client and the underlying net.Dialer read from this constant.

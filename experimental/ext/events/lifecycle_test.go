@@ -17,7 +17,7 @@ import (
 )
 
 // Lifecycle hook firings across all three delivery modes. Spec
-// §"Server SDK Guidance" → "Subscription lifecycle hooks" L691-715.
+// SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks).
 //
 // Acceptance:
 //   - Hooks fire exactly once per subscription lifecycle in each mode.
@@ -327,7 +327,7 @@ func TestLifecycle_Webhook_PostTerminatedFiresOnUnsubscribe(t *testing.T) {
 
 // TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe verifies that
 // the suspend transition (Active=true→false from repeated delivery
-// failures, spec §"Webhook Delivery Status" L460) does NOT fire
+// failures, SEP-3415 §"Webhook delivery status" does NOT fire
 // on_unsubscribe — the subscription is paused, not removed; refresh
 // reactivates without re-firing on_subscribe.
 func TestLifecycle_Webhook_SuspendDoesNotFireOnUnsubscribe(t *testing.T) {

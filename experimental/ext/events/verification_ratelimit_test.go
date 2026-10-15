@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Spec §"Endpoint verification": the verification POST "SHOULD be
+// SEP-3415 §"Webhook security" (endpoint verification): the verification POST "SHOULD be
 // rate-limited per destination host". The (principal, url) cache caps what one
 // principal can aim at one URL; it does nothing about many paths, or many
 // principals, on one host. Issue 1438.

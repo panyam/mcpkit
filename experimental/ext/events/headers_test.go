@@ -132,7 +132,7 @@ func TestStandardWebhooks_WebhookIDIsStableAcrossRetries(t *testing.T) {
 }
 
 // TestStandardWebhooks_EmitsSubscriptionIDHeader verifies the spec
-// contract at §"Webhook Event Delivery" L390 + §"Webhook Security" →
+// contract at SEP-3415 §"Webhook event delivery" + SEP-3415 §"Webhook security" →
 // "Signature scheme" L472: every delivery MUST include
 // X-MCP-Subscription-Id carrying the spec's derived subscription id
 // so the receiver can select the correct secret without parsing the

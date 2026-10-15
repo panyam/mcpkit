@@ -18,7 +18,7 @@ import (
 )
 
 // Per-subscription Match / Transform on broadcast emit. Spec
-// §"Server SDK Guidance" L623-629.
+// SEP-3415 §"Server SDK guidance".
 //
 // Coverage targets:
 //   - Match returning false filters that subscriber out.

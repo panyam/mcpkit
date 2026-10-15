@@ -15,7 +15,7 @@ import (
 )
 
 // Tests for issue 764 — failure-based GC of no-expiry subscriptions.
-// Spec PR1 commit 99f3589c §"Subscription TTL": a server granting
+// Spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL": a server granting
 // no-expiry MAY drop the subscription after sustained delivery
 // failure (server-defined window) and SHOULD attempt a `terminated`
 // envelope.

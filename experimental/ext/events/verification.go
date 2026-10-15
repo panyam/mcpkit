@@ -1,7 +1,7 @@
 package events
 
-// Endpoint verification, spec §"Webhook Security" → "Endpoint
-// verification (anti-flooding)". HMAC stops a third party being
+// Endpoint verification, SEP-3415 §"Webhook security" (endpoint
+// verification (anti-flooding)). HMAC stops a third party being
 // deceived by forged deliveries; it does not stop one being flooded by
 // real ones, since anyone can subscribe a victim's URL with a secret of
 // their own. So the server confirms the endpoint wants deliveries before
@@ -323,7 +323,7 @@ const (
 
 // WithVerificationRateLimit caps challenge POSTs to any one destination
 // hostname at max per window, as a token bucket that refills continuously and
-// holds at most max (spec §"Endpoint verification": the verification POST
+// holds at most max (SEP-3415 §"Webhook security" (endpoint verification): the verification POST
 // "SHOULD be rate-limited per destination host"). Only real challenges count:
 // cache hits, allowlist matches and pre-verified URLs are free. A subscribe
 // over budget fails with -32025 ResourceExhausted, data.limit

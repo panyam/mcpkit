@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Delivery-time SSRF guard. Spec §"Webhook Security" → "SSRF
-// prevention" L464.
+// Delivery-time SSRF guard. SEP-3415 §"Webhook security" (sSRF
+// prevention).
 //
 // A subscribe-time hostname check would be unsafe under DNS rebinding:
 // an attacker registers a public hostname, then changes its DNS to
@@ -88,7 +88,7 @@ func (c *captureLog) containsSSRFBlock() bool {
 // TestDelivery_RejectsLoopbackAtDialTime verifies the dial-time guard
 // rejects 127.0.0.1 — the canonical SSRF target — when the demo escape
 // hatch (WithWebhookAllowPrivateNetworks) is OFF. The spec
-// (§"Webhook Security" → "SSRF prevention" L464) requires hard
+// (SEP-3415 §"Webhook security" (SSRF prevention) requires hard
 // rejection in production.
 func TestDelivery_RejectsLoopbackAtDialTime(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -202,7 +202,7 @@ var _ = io.EOF // keep io import alive for potential future error checks
 // and bypass the dial-time SSRF guard via Go's default 10-redirect
 // follow behavior.
 //
-// Per spec §"Webhook Security" → "SSRF prevention" L464: redirects
+// Per SEP-3415 §"Webhook security" (SSRF prevention): redirects
 // MUST be explicitly disabled for outbound delivery POSTs.
 func TestDelivery_DoesNotFollowRedirects(t *testing.T) {
 	var hits, redirectHits atomic.Int32

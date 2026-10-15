@@ -37,7 +37,7 @@ type yieldingConfig struct {
 //   - Event delivery: Event populated; Error and Terminated nil.
 //     Truncated=true signals "one or more events were dropped before this
 //     one" — consumers SHOULD treat as a possible state gap and re-fetch
-//     authoritative state if it matters. Per spec §"Push-Based Delivery"
+//     authoritative state if it matters. Per SEP-3415 §"Push-Based Delivery"
 //     → "Event Delivery" L285, the stream handler maps Truncated=true
 //     onto a fresh notifications/events/active{truncated:true} that
 //     precedes the event.
@@ -86,7 +86,7 @@ type EventDeliveryError struct {
 // principal / subscriptionID / arguments: per-subscriber identity
 // captured at Subscribe time so the per-yield fanout can build a
 // HookContext + apply the EventDef's Match / Transform per subscriber
-// per spec §"Server SDK Guidance" L623-629.
+// per SEP-3415 §"Server SDK guidance".
 type subscriberSlot struct {
 	ch               chan SubscriberEvent
 	principal        string
@@ -132,8 +132,7 @@ func (s *subscriberSlot) closeChan() {
 // deliverEvent sends one event to the slot's channel non-blocking,
 // honoring the existing pendingTruncated bookkeeping. Used by both
 // the per-yield fanout (after match/transform) and the targeted-
-// deliver path used by EmitToSubscription (spec §"Server SDK
-// Guidance" L630), which bypasses match/transform.
+// deliver path used by EmitToSubscription (SEP-3415 §"Server SDK guidance", which bypasses match/transform.
 //
 // Tolerates a closed-channel race: if Subscribe's cleanup goroutine
 // has raced ahead and close()-d the channel between our read of
@@ -415,7 +414,7 @@ func (s *YieldingSource[Data]) SetTracerProvider(tp core.TracerProvider) {
 
 // YieldError emits a transient-failure signal to all live subscribers.
 // Stream subscribers map this onto a notifications/events/error frame
-// per spec §"Push-Based Delivery" L255+L261; the subscription stays
+// per SEP-3415 §"Push-Based Delivery"+L261; the subscription stays
 // open. Webhook delivery is unaffected (errors are upstream-side, not
 // delivery-side).
 //
@@ -441,7 +440,7 @@ func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
 // A gap is not an error. Stream subscribers map this onto a fresh
 // notifications/events/active carrying the source's current cursor and
 // truncated:true, after which delivery continues on the same subscription
-// (spec §"Push-Based Delivery" L285). A cursorless or still-empty source has
+// (SEP-3415 §"Push-Based Delivery". A cursorless or still-empty source has
 // no cursor to send, so its stream subscribers get no frame, the same as its
 // webhook subscribers: for a type without replay truncated SHOULD be false. Use YieldError for a transient upstream
 // failure the subscriber can recover from, and YieldTerminated for a
@@ -449,8 +448,7 @@ func (s *YieldingSource[Data]) YieldError(err EventDeliveryError) error {
 //
 // Webhook subscribers of the same type get a {type:gap, cursor:<fresh>}
 // envelope carrying Latest(), through WebhookRegistry.PostGapByEventName, when
-// the source is registered with a WebhookRegistry (spec §"Gaps and
-// truncated", webhook row). A cursorless or still-empty source has no position
+// the source is registered with a WebhookRegistry (SEP-3415 §"Cursor Lifecycle" (gaps and truncated), webhook row). A cursorless or still-empty source has no position
 // to send, so webhooks hear nothing in that case.
 //
 // It exists because a source wrapping a lossy upstream — a gateway that
@@ -484,7 +482,7 @@ func (s *YieldingSource[Data]) YieldGap() error {
 
 // YieldTerminated emits a terminal signal to all live subscribers and
 // closes their channels. Stream subscribers map this onto a
-// notifications/events/terminated frame per spec §"Authorization"
+// notifications/events/terminated frame per SEP-3415 §"Authorization"
 // L783-795 and the stream returns. After this call, the source is
 // terminated: subsequent yield / YieldError / YieldTerminated calls
 // are silently dropped, and Poll returns empty.
@@ -492,7 +490,7 @@ func (s *YieldingSource[Data]) YieldGap() error {
 // Webhook subscriptions to the same type are ended too, with a
 // {type:terminated} envelope carrying err, through
 // WebhookRegistry.TerminateByEventName, when the source is registered with a
-// WebhookRegistry (spec §"Event Type Removal and Breaking Changes": each
+// WebhookRegistry (SEP-3415 §"Event type removal and breaking changes": each
 // mode's termination signal).
 //
 // One-shot. Receivers seeing the terminal signal SHOULD remove their
@@ -628,7 +626,7 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 }
 
 // Subscribe registers a per-call live-event channel for push delivery
-// (the foundation for events/stream, spec §"Push-Based Delivery"
+// (the foundation for events/stream, SEP-3415 §"Push-Based Delivery"
 // L223+). The returned channel receives a SubscriberEvent for every
 // yield() until ctx is Done; on cancellation the slot is removed from
 // the source and the channel is closed (range loops exit cleanly,
@@ -637,7 +635,7 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 // SubscribeOpts carries per-subscriber identity (Principal,
 // SubscriptionID, Arguments) onto the slot so fanout can build a
 // HookContext and apply the EventDef's Match / Transform (spec
-// §"Server SDK Guidance" L623-629) per subscriber. Pass the zero
+// SEP-3415 §"Server SDK guidance" per subscriber. Pass the zero
 // value for hook-less callers; the safe wrappers tolerate empty
 // fields.
 //
@@ -645,14 +643,14 @@ func (s *YieldingSource[Data]) fanoutLocked(se SubscriberEvent) {
 // is dropped for that subscriber and a Truncated marker is sent on the
 // next successful send. Stream handlers map Truncated=true onto a fresh
 // notifications/events/active{truncated:true, cursor:source.Latest()}
-// per spec §"Push-Based Delivery" → "Event Delivery" L285.
+// per SEP-3415 §"Event delivery".
 //
 // Cursorless sources still buffer-and-fanout to subscribers (push
 // delivery works fine without replay); only Poll returns empty on
 // cursorless. Returns (chan, sender). The sender closure delivers a
 // single event to THIS specific slot, bypassing the per-yield
 // fanout's Match / Transform — used by EmitToSubscription (spec
-// §"Server SDK Guidance" L630) so an author who has the sub id can
+// SEP-3415 §"Server SDK guidance" so an author who has the sub id can
 // route directly to one subscriber. Callers that only want broadcast
 // delivery can ignore the second return.
 func (s *YieldingSource[Data]) Subscribe(ctx context.Context, opts SubscribeOpts) (<-chan SubscriberEvent, func(Event)) {
@@ -943,8 +941,7 @@ func (s *YieldingSource[Data]) yield(ctx context.Context, data Data) error {
 		}
 	}
 	// Snapshot subscribers under the lock, then drop the lock before
-	// invoking author hooks. Match / Transform (spec §"Server SDK
-	// Guidance" L623-629) fire on the hot path — running them while
+	// invoking author hooks. Match / Transform (SEP-3415 §"Server SDK guidance" fire on the hot path — running them while
 	// holding s.mu would serialize the whole source on a slow author
 	// callback. The cleanup goroutine in Subscribe also takes s.mu
 	// before close()-ing the chan, so snapshotting + sending later
@@ -1027,7 +1024,7 @@ func (noopFanoutSpan) AddLink(_ core.Link)      {}
 //   - subscriberSlot.deliverEvent owns the close-vs-send race recovery
 //     and the non-blocking + drop-with-Truncated semantics; same
 //     codepath as the targeted-deliver closure used by
-//     EmitToSubscription (spec §"Server SDK Guidance" L630).
+//     EmitToSubscription (SEP-3415 §"Server SDK guidance".
 //
 // deliverEventToSlot returns (matched, transformed) so yield()'s fanout
 // span can stamp accurate counts. matched=false means Match returned

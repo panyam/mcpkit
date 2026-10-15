@@ -316,3 +316,57 @@ func TestConformanceEvents_CatalogAddsAndRemovesFreshTypes(t *testing.T) {
 	assert.Error(t, err, "remove must refuse a type the control did not add")
 	assert.Contains(t, eventNames(t, c), "chat.message")
 }
+
+// inputSchemaOf returns the inputSchema events/list advertises for name.
+func inputSchemaOf(t *testing.T, c *client.Client, name string) map[string]any {
+	t.Helper()
+	res, err := c.Call(t.Context(), "events/list", map[string]any{})
+	require.NoError(t, err)
+	var listed struct {
+		Events []struct {
+			Name        string         `json:"name"`
+			InputSchema map[string]any `json:"inputSchema"`
+		} `json:"events"`
+	}
+	require.NoError(t, json.Unmarshal(res.Raw, &listed))
+	for _, e := range listed.Events {
+		if e.Name == name {
+			return e.InputSchema
+		}
+	}
+	t.Fatalf("%s not listed", name)
+	return nil
+}
+
+// extend is the additive change and retype the breaking one (#1465): after
+// extend the old arguments still validate; after retype they do not.
+func TestConformanceEvents_CatalogExtendsAndRetypesInPlace(t *testing.T) {
+	c := newConformanceTestClient(t)
+	added, err := c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "add"})
+	require.NoError(t, err)
+	name := strings.TrimPrefix(added, "ok: ")
+	poll := func() error {
+		_, err := c.Call(t.Context(), "events/poll", map[string]any{
+			"name": name, "arguments": map[string]any{"value": "x"}, "cursor": nil,
+		})
+		return err
+	}
+	require.NoError(t, poll())
+
+	_, err = c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "extend", "name": name})
+	require.NoError(t, err)
+	props := inputSchemaOf(t, c, name)["properties"].(map[string]any)
+	assert.Contains(t, props, "team", "extend adds an optional property")
+	assert.NoError(t, poll(), "an additive change keeps previously valid arguments valid")
+
+	_, err = c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": "retype", "name": name})
+	require.NoError(t, err)
+	props = inputSchemaOf(t, c, name)["properties"].(map[string]any)
+	assert.Equal(t, "integer", props["value"].(map[string]any)["type"], "retype changes value's type in place")
+	assert.Error(t, poll(), "after the retype a string value no longer validates")
+
+	for _, op := range []string{"extend", "retype"} {
+		_, err = c.ToolCall(t.Context(), "events_conformance_catalog", map[string]any{"op": op, "name": "chat.message"})
+		assert.Error(t, err, "%s must refuse a type the control did not add", op)
+	}
+}

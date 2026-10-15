@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TooManySubscriptions enforcement per spec §"Server SDK Guidance" →
+// TooManySubscriptions enforcement per SEP-3415 §"Server SDK guidance" →
 // "Subscription lifecycle hooks" L705. Acceptance:
 //   - Cap of N per-event-type per-principal: (N+1)th subscribe
 //     returns -32025.

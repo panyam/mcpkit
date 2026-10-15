@@ -91,7 +91,7 @@ func requestIDOf(t *testing.T, n capturedNotif) string {
 }
 
 // TestStream_TwoConcurrentStreamsIsolated verifies the spec's per-stream
-// independence guarantee (§"Push-Based Delivery" L271): two events/stream
+// independence guarantee (SEP-3415 §"Push-Based Delivery": two events/stream
 // calls against DIFFERENT sources must not cross-contaminate. Yields on
 // source A must surface only on the stream subscribed to A, never on the
 // stream subscribed to B.
@@ -267,7 +267,7 @@ func TestStream_GapRecoveryEmitsFreshActive(t *testing.T) {
 // TestStream_EmitsNotificationsEventsError verifies that when a
 // SubscriberEvent.Error arrives on the stream's source channel, the
 // handler emits notifications/events/error{requestId, error} per
-// spec §"Push-Based Delivery" L255+L261. Stream stays open — the
+// SEP-3415 §"Push-Based Delivery"+L261. Stream stays open — the
 // error variant is transient.
 //
 // The fake source lets us inject the Error variant directly without
@@ -309,7 +309,7 @@ func TestStream_EmitsNotificationsEventsError(t *testing.T) {
 // TestStream_EmitsNotificationsEventsTerminated verifies the
 // terminal dispatch: SubscriberEvent.Terminated →
 // notifications/events/terminated{requestId, error} per spec
-// §"Authorization" L783-795, AND the stream returns (closes). The
+// SEP-3415 §"Authorization", AND the stream returns (closes). The
 // handler returns the empty StreamEventsResult after emitting the
 // notification, so the SDK call's Done channel closes shortly after.
 func TestStream_EmitsNotificationsEventsTerminated(t *testing.T) {

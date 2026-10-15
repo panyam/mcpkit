@@ -70,7 +70,7 @@ type EventDef struct {
 	Delivery    []string `json:"delivery"`
 	// InputSchema is a JSON Schema describing valid subscription
 	// arguments, mirroring the inputSchema/arguments pairing on tools
-	// (spec §"Listing Available Events" L91). Optional: a source that
+	// (SEP-3415 §"Listing Available Events". Optional: a source that
 	// takes no arguments leaves it nil and the key is omitted from
 	// events/list.
 	//
@@ -88,7 +88,7 @@ type EventDef struct {
 	// and the library surfaces it on events/list.
 	Meta map[string]any `json:"_meta,omitempty"`
 
-	// Per-subscription author hooks per spec §"Server SDK Guidance"
+	// Per-subscription author hooks per SEP-3415 §"Server SDK guidance"
 	// L623-705. All four are zero-value-friendly — nil means baseline
 	// behavior (deliver to all, passthrough, no lifecycle work).
 	// Tagged json:"-" because EventDef is JSON-serialized for
@@ -208,8 +208,7 @@ type Config struct {
 	// request has no authenticated principal — i.e. the server has no
 	// auth middleware wired and ctx.AuthClaims() returns nil.
 	//
-	// This is a deliberate spec deviation. Per spec §"Subscription
-	// Identity" → "Authentication required" L361, servers MUST reject
+	// This is a deliberate spec deviation. Per SEP-3415 §"Subscription identity" (authentication required), servers MUST reject
 	// unauthenticated webhook subscribes with -32024 Forbidden. The
 	// escape hatch exists so demos and unauthenticated mcpkit servers
 	// can exercise webhook delivery end-to-end without standing up an
@@ -220,7 +219,7 @@ type Config struct {
 	// Empty (default) keeps the spec-strict behavior. Production
 	// deployments wire auth via server.WithAuth(...) and leave this
 	// empty; ctx.AuthClaims().Subject becomes the principal in the
-	// canonical tuple per spec §"Subscription Identity" L361.
+	// canonical tuple per SEP-3415 §"Subscription identity".
 	UnsafeAnonymousPrincipal string
 
 	// ChatGPTCompat also declares the capability as top-level
@@ -239,7 +238,7 @@ type Config struct {
 	ChatGPTCompat bool
 
 	// StreamHeartbeatInterval is how often events/stream emits
-	// notifications/events/heartbeat (per spec §"Push-Based Delivery"
+	// notifications/events/heartbeat (per SEP-3415 §"Push-Based Delivery"
 	// → "Lifecycle" → "Heartbeat" L294). Zero or negative defaults to
 	// the spec-recommended 30s. Override to a smaller value in tests
 	// that need to observe heartbeats quickly.
@@ -247,8 +246,8 @@ type Config struct {
 
 	// PollLeases tracks poll-mode subscriptions as ephemeral leases
 	// so on_subscribe / on_unsubscribe can fire consistently across
-	// delivery modes per spec §"Server SDK Guidance" → "Unsubscribe
-	// timing by mode" L707-715.
+	// delivery modes per SEP-3415 §"Server SDK guidance" (unsubscribe
+	// timing by mode).
 	//
 	// nil leaves Register to construct a default table (5 minute
 	// TTL, no hooks) — equivalent to "infrastructure present, no
@@ -259,7 +258,7 @@ type Config struct {
 
 	// SubscriptionIndex maps server-derived sub ids to per-
 	// subscription deliver closures so EmitToSubscription (spec
-	// §"Server SDK Guidance" L630) can route by id without scanning
+	// SEP-3415 §"Server SDK guidance" can route by id without scanning
 	// every source / target. Populated by the lifecycle wiring
 	// inside Register (registerStream Add/Remove on stream
 	// open/close, webhook subscribe Add + onRemove Remove). Poll
@@ -280,8 +279,8 @@ type Config struct {
 	SubscriptionIndex SubscriptionIndexStore
 
 	// Quota enforces per-principal-per-event-type subscription caps
-	// per spec §"Server SDK Guidance" → "Subscription lifecycle
-	// hooks" L705 ("Servers SHOULD enforce TooManySubscriptions
+	// per SEP-3415 §"Server SDK guidance" (subscription lifecycle
+	// hooks) ("Servers SHOULD enforce TooManySubscriptions
 	// before invoking on_subscribe"). If the principal is at cap,
 	// the request is rejected with -32025 ResourceExhausted (data.
 	// limit="subscriptions") and on_subscribe never runs (no upstream
@@ -414,7 +413,7 @@ func Register(cfg Config) *Registry {
 		quota = NewQuota() // no caps configured → every Reserve succeeds
 	}
 
-	// Lifecycle hook wiring per spec §"Server SDK Guidance" →
+	// Lifecycle hook wiring per SEP-3415 §"Server SDK guidance" →
 	// "Subscription lifecycle hooks" L691-705. The SDK installs
 	// onRemove on the webhook registry (fires safeOnUnsubscribe
 	// for explicit Unregister, TTL prune, PostTerminated) and
@@ -435,8 +434,7 @@ func Register(cfg Config) *Registry {
 			// Release the quota slot. Pairs with the Reserve in
 			// registerSubscribe — fires once per actual removal
 			// (Unregister, prune, PostTerminated; NOT suspend —
-			// suspend ≠ unsubscribe per spec §"Webhook Delivery
-			// Status" L460). Safe for uncapped event-types
+			// suspend ≠ unsubscribe per SEP-3415 §"Webhook delivery status". Safe for uncapped event-types
 			// (no-op).
 			quota.Release(t.Principal, t.EventName)
 			source, ok := reg.Source(t.EventName)
@@ -447,7 +445,7 @@ func Register(cfg Config) *Registry {
 			safeOnUnsubscribe(source.Def().OnUnsubscribe, hc, t.Arguments)
 		})
 		// Let Deliver look up Match / Transform per event name
-		// (spec §"Server SDK Guidance" L623-629) without leaking the
+		// (SEP-3415 §"Server SDK guidance" without leaking the
 		// source registry onto WebhookRegistry. Lookup is per-Deliver
 		// so runtime-added sources are immediately discoverable.
 		webhooks.SetDefResolver(func(eventName string) EventDef {
@@ -474,7 +472,7 @@ func Register(cfg Config) *Registry {
 			return
 		}
 		// Poll has no subscription id — the lease tuple IS the
-		// routing identity per spec §"Server SDK Guidance" →
+		// routing identity per SEP-3415 §"Server SDK guidance" →
 		// "Unsubscribe timing by mode" L707. SubscriptionID()
 		// returns empty.
 		hc := newHookContext(context.Background(), principal, "", DeliveryModePoll)
@@ -604,9 +602,9 @@ func registerList(srv *server.Server, reg *Registry) {
 
 func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *PollLeaseTable, quota *Quota) {
 	srv.HandleMethod("events/poll", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
-		// Spec §"Poll-Based Delivery" → "Request: events/poll"
+		// SEP-3415 §"Request: events/poll"
 		// L139-149: flat top-level shape — no subscriptions[]
-		// wrapper. MaxAgeMs per spec §"Cursor Lifecycle" →
+		// wrapper. MaxAgeMs per SEP-3415 §"Cursor Lifecycle" →
 		// "Bounding replay with maxAgeMs" L580.
 		var req struct {
 			Name      string         `json:"name"`
@@ -628,7 +626,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			}
 			if err := json.Unmarshal(params, &legacyProbe); err == nil && legacyProbe.Subscriptions != nil {
 				return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-					`events/poll: legacy {subscriptions: [...]} wrapper rejected — send top-level {name, cursor, maxEvents} per spec §"Poll-Based Delivery" L139-149`)
+					`events/poll: legacy {subscriptions: [...]} wrapper rejected — send top-level {name, cursor, maxEvents} per SEP-3415 §"Poll-Based Delivery"`)
 			}
 			return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
 				"events/poll: name is required")
@@ -645,8 +643,8 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		// The `delivery` array is a contract, not a description. Answering a
 		// poll for a type that advertises push and webhook only would make it
 		// unreliable in the direction that matters, since a client reads it to
-		// decide what to call. registerStream has gated on the same error for
-		// its own mode since it was written; this is the poll half.
+		// decide what to call. registerStream and subscribe apply the same
+		// gate to their own modes.
 		if def, ok := reg.Def(req.Name); ok && !supportsDeliveryMode(def.Delivery, DeliveryModePoll) {
 			return newUnsupportedError(id, "deliveryMode", DeliveryModePoll.String(),
 				"Unsupported: event type "+req.Name+" does not offer poll delivery")
@@ -656,7 +654,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			return errResp
 		}
 
-		// Poll-lease bookkeeping per spec §"Server SDK Guidance" →
+		// Poll-lease bookkeeping per SEP-3415 §"Server SDK guidance" →
 		// "Unsubscribe timing by mode" L707. The lease keys on
 		// (principal-or-anon, name, paramsHash). resolvePrincipal
 		// returns "" when there's no auth claim AND no
@@ -675,8 +673,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		// sweep goroutine.
 		principal, _ := resolvePrincipal(ctx, unsafeAnon)
 		if leases.Touch(principal, req.Name, req.Arguments) {
-			// Enforce quota BEFORE on_subscribe per spec §"Server
-			// SDK Guidance" → "Subscription lifecycle hooks" L705.
+			// Enforce quota BEFORE on_subscribe per SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks).
 			// Touch already created the lease; if Reserve fails,
 			// roll back the lease so a rejected subscription
 			// doesn't sit in the table holding a slot it never
@@ -725,8 +722,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 
 		// Per-call match/transform on the events the source returned.
 		// Match drops events the caller's params don't want; Transform
-		// shapes the event for this caller. Spec §"Server SDK
-		// Guidance" L629: "Poll subscribers see the same filtering and
+		// shapes the event for this caller. SEP-3415 §"Server SDK guidance": "Poll subscribers see the same filtering and
 		// shaping as push/webhook subscribers." Applied BEFORE the
 		// maxAge floor so authors who use Transform to backdate
 		// timestamps still get a consistent floor.
@@ -744,7 +740,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 			events = kept
 		}
 
-		// maxAgeMs replay floor per spec §"Cursor Lifecycle" →
+		// maxAgeMs replay floor per SEP-3415 §"Cursor Lifecycle" →
 		// "Bounding replay with maxAgeMs" L580. Drop events whose
 		// timestamp predates now - maxAgeMs. If filtering removes any,
 		// set Truncated=true (signals the gap to the client). When
@@ -813,7 +809,7 @@ func supportsDeliveryMode(advertised []string, mode DeliveryMode) bool {
 
 // resolvePrincipal returns the principal to use for the canonical
 // subscription key, applying the spec's auth-required rule
-// (§"Subscription Identity" → "Authentication required" L361) with the
+// (SEP-3415 §"Subscription identity" (authentication required) with the
 // UnsafeAnonymousPrincipal escape hatch (events.Config field).
 //
 // Returns: (principal, ok). When ok is false, the handler MUST reject
@@ -845,7 +841,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 	srv.HandleMethod("events/subscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
 		var req struct {
 			// ID is parsed only to surface a helpful error if a client
-			// sends the legacy field. Per spec §"Subscription Identity"
+			// sends the legacy field. Per SEP-3415 §"Subscription identity"
 			// → "Key composition" L363: "There is no client-generated id
 			// — a subscription is fully determined by what it listens
 			// for, where it delivers, and who asked." Rejecting a
@@ -860,9 +856,9 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 				Secret string `json:"secret,omitempty"`
 			} `json:"delivery"`
 			Cursor   *string `json:"cursor"`
-			MaxAgeMs int     `json:"maxAgeMs,omitempty"` // spec §"Cursor Lifecycle" L580; milliseconds, 0 = no floor
+			MaxAgeMs int     `json:"maxAgeMs,omitempty"` // SEP-3415 §"Cursor Lifecycle"; milliseconds, 0 = no floor
 			// TTLMs is the client's suggested subscription lifetime
-			// (spec PR1 commit 99f3589c §"Subscription TTL"). Tristate:
+			// (spec PR1 commit 99f3589c SEP-3415 §"Subscription TTL"). Tristate:
 			// absent (server default), `null` (request no-expiry), or
 			// a non-negative integer (suggest N ms). Decoded as
 			// json.RawMessage because Go's *int64 collapses absent
@@ -929,7 +925,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 				"delivery.secret invalid: "+err.Error())
 		}
 
-		// Spec §"Subscription Identity" → "Authentication required" L361:
+		// SEP-3415 §"Subscription identity" (authentication required):
 		// events/subscribe MUST be called with an authenticated principal;
 		// servers MUST reject unauthenticated calls with -32024 Forbidden. The
 		// UnsafeAnonymousPrincipal escape hatch (Config field) lets demos
@@ -950,7 +946,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			subSessionID = claims.SessionID
 		}
 
-		// Spec §"Subscription Identity" → "Key composition" L363: the
+		// SEP-3415 §"Subscription identity" (key composition): the
 		// subscription is identified by (principal, delivery.url, name,
 		// params). Two subscribes producing identical canonical bytes
 		// refer to the same subscription (idempotent refresh). Different
@@ -959,7 +955,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		canonical := canonicalKey(principal, req.Delivery.URL, req.Name, req.Arguments)
 		derivedID := deriveSubscriptionID(canonical)
 
-		// Spec §"Endpoint verification": no delivery until the endpoint
+		// SEP-3415 §"Webhook security" (endpoint verification): no delivery until the endpoint
 		// confirms it wants them. Runs synchronously so a failure comes
 		// back from this call as -32027 carrying only the category.
 		if bucket := webhooks.verifyEndpoint(ctx, verifyEndpointParams{
@@ -1000,13 +996,12 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		// On first registration only, enforce the quota then fire
 		// on_subscribe. Refresh of an existing subscription is
 		// renewal, not subscribe — neither hook re-fires (per spec
-		// §"Webhook Delivery Status" L460 + §"Server SDK Guidance"
+		// SEP-3415 §"Webhook delivery status" + SEP-3415 §"Server SDK guidance"
 		// L691). The webhook on_unsubscribe path + the quota Release
 		// run from the registry's onRemove hook (installed in
 		// Register above).
 		if isNew {
-			// Enforce cap BEFORE on_subscribe per spec §"Server SDK
-			// Guidance" → "Subscription lifecycle hooks" L705. If
+			// Enforce cap BEFORE on_subscribe per SEP-3415 §"Server SDK guidance" (subscription lifecycle hooks). If
 			// Reserve fails, roll back the registration so a
 			// rejected sub doesn't sit in the registry holding a
 			// slot it never got. Unregister fires onRemove →
@@ -1064,13 +1059,13 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 		// client supplied it, so the client already knows it.
 		//
 		// The id field is the SERVER-DERIVED routing handle per spec
-		// §"Subscription Identity" → "Derived id" L367 —
+		// SEP-3415 §"Subscription identity" (derived id) —
 		// non-load-bearing for security, used only as the
 		// X-MCP-Subscription-Id header value on delivery POSTs (per
-		// §"Webhook Event Delivery" L390). Knowing the id grants no
+		// SEP-3415 §"Webhook event delivery". Knowing the id grants no
 		// operations on the subscription (L378).
 		// refreshBefore is always present per spec PR1 commit 99f3589c
-		// §"Subscription TTL". Nullable: a finite grant serializes as
+		// SEP-3415 §"Subscription TTL". Nullable: a finite grant serializes as
 		// an RFC3339 string; a no-expiry grant (nil expiresAt) serializes
 		// as JSON null. The map[string]any entry MUST stay present in
 		// the no-expiry case — omitting the field would falsely look
@@ -1085,8 +1080,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 			"refreshBefore": refreshBefore,
 		}
 		// Include deliveryStatus on refresh response when the target
-		// has prior delivery attempts (spec §"Webhook Delivery
-		// Status" L425-460). Omitted on first subscribe — there's
+		// has prior delivery attempts (SEP-3415 §"Webhook delivery status". Omitted on first subscribe — there's
 		// nothing to report and an empty object would just be wire
 		// bloat.
 		if status, ok := deliveryStatusForResponse(webhooks.DeliveryStatus(canonical)); ok {
@@ -1097,7 +1091,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 }
 
 // deliveryStatusForResponse projects an internal DeliveryStatus into
-// the spec wire shape (§"Webhook Delivery Status" L425-460). Returns
+// the spec wire shape (SEP-3415 §"Webhook delivery status". Returns
 // (nil, false) when there's nothing to report (no prior attempts).
 //
 // Wire shape:
@@ -1111,7 +1105,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 //	  "retryAfterMs":              int        (omitted if nil — spec PR1 commit 21be9c31),
 //	  "failingContinuouslySince":  "RFC3339" (omitted if nil — diagnostic, drives
 //	                                          no-expiry failure-GC per spec PR1
-//	                                          commit 99f3589c §"Subscription TTL")
+//	                                          commit 99f3589c SEP-3415 §"Subscription TTL")
 //	}
 func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
 	// "Nothing to report" = no successes AND no failures AND not throttled.
@@ -1146,7 +1140,7 @@ func deliveryStatusForResponse(s DeliveryStatus) (map[string]any, bool) {
 
 func registerUnsubscribe(srv *server.Server, webhooks *WebhookRegistry, unsafeAnon string) {
 	srv.HandleMethod("events/unsubscribe", func(ctx core.MethodContext, id json.RawMessage, params json.RawMessage) *core.Response {
-		// Spec §"Unsubscribing: events/unsubscribe" L509: resolves on the
+		// SEP-3415 §"Unsubscribing: events/unsubscribe": resolves on the
 		// same canonical tuple as subscribe — (principal, name, params,
 		// delivery.url). The derived id is NOT accepted as input.
 		var req struct {

@@ -1,7 +1,6 @@
 package events
 
-// Control envelopes for non-event webhook bodies. Spec §"Non-event
-// webhook bodies" L415-423: the server POSTs signed envelopes to
+// Control envelopes for non-event webhook bodies. SEP-3415 §"Non-event webhook bodies": the server POSTs signed envelopes to
 // webhook receivers when the event-delivery channel can't carry the
 // signal:
 //
@@ -14,7 +13,7 @@ package events
 //
 // Both use Standard Webhooks signature headers (webhook-id /
 // webhook-timestamp / webhook-signature) plus the X-MCP-Subscription-Id
-// header (spec §"Webhook Event Delivery" L390). webhook-id format is
+// header (SEP-3415 §"Webhook event delivery". webhook-id format is
 // msg_<type>_<random> per spec L417, distinguishing control POSTs from
 // event deliveries (which use the event's eventId so retries dedup
 // correctly).
@@ -35,8 +34,7 @@ type ControlError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	// Data carries the code's typed discriminator, mirroring the `data`
-	// field of a JSON-RPC error. Spec §"Event Type Removal and Breaking
-	// Changes" requires it on both termination shapes: NotFoundData
+	// field of a JSON-RPC error. SEP-3415 §"Event type removal and breaking changes" requires it on both termination shapes: NotFoundData
 	// {kind:"event"} for a removed type, UnsupportedData
 	// {feature, reason:"schema_changed"} for one changed in place.
 	// Without it a receiver sees -32023 and cannot tell a removed event
@@ -59,7 +57,7 @@ type controlEnvelope struct {
 // PostGap delivers a {type:gap, cursor:<fresh>} envelope to the
 // webhook target identified by canonicalKey. The receiver should reset
 // its persisted cursor to the provided fresh value and resume from
-// there. Per spec §"Non-event webhook bodies" L415.
+// there. Per SEP-3415 §"Non-event webhook bodies".
 //
 // No-op if no target matches canonicalKey (e.g., the subscription has
 // already expired or been unregistered). Logged via the registry's
@@ -70,7 +68,7 @@ type controlEnvelope struct {
 // the position the client persists and resumes from; a cursorless source or
 // one that has yielded nothing has no position, and the spec's shape has no
 // cursor-less gap. For a type without replay there is nothing to have
-// skipped past (§"Replay is optional per event type").
+// skipped past (SEP-3415 §"Cursor Lifecycle" (replay is optional per event type)).
 func (r *WebhookRegistry) PostGap(canonicalKey []byte, freshCursor string) {
 	if freshCursor == "" {
 		r.logf("[webhook] PostGap: no cursor to send, skipping the gap envelope")
@@ -126,7 +124,7 @@ func (r *WebhookRegistry) PostGapByEventName(name, freshCursor string) int {
 // the webhook target and then removes the target from the registry —
 // the receiver is being told the subscription is dead, so subsequent
 // event yields shouldn't try to deliver to it anyway. Per spec
-// §"Non-event webhook bodies" L420 + §"Authorization" L783-795.
+// SEP-3415 §"Non-event webhook bodies" + SEP-3415 §"Authorization".
 //
 // No-op if no target matches canonicalKey. The target removal happens
 // regardless of whether the POST succeeded; if the receiver was
@@ -141,8 +139,7 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 	}
 	target := resp.Removed
 	// PostTerminated is server-initiated subscription death;
-	// onRemove fires on actual registry deletion (per spec §"Server
-	// SDK Guidance" → "Unsubscribe timing by mode" L707). Suspend
+	// onRemove fires on actual registry deletion (per SEP-3415 §"Server SDK guidance" (unsubscribe timing by mode). Suspend
 	// (handled via postTerminatedSilent) deliberately does NOT fire
 	// — the target stays in the registry as paused.
 	r.fireOnRemove(target)
@@ -159,7 +156,7 @@ func (r *WebhookRegistry) PostTerminated(canonicalKey []byte, controlErr Control
 // subscriptions from the registry, and fires onRemove per match.
 // Returns the count of subscriptions terminated.
 //
-// Spec §"Authorization" L783-795 designates this exact shape — when
+// SEP-3415 §"Authorization" designates this exact shape — when
 // the AS revokes a session, the server SHOULD terminate every
 // subscription that the session authorized. The trigger comes from an
 // OIDC Back-Channel Logout 1.0 receiver (ext/auth.BackChannelLogoutHandler);
@@ -222,7 +219,7 @@ func (r *WebhookRegistry) TerminateBySubject(sub string, controlErr ControlError
 // subscription for a given event name, removes them from the registry,
 // and fires onRemove per match. Returns the count terminated.
 //
-// Spec §"Event Type Removal and Breaking Changes" (commit 28ec35e9)
+// SEP-3415 §"Event type removal and breaking changes" (commit 28ec35e9)
 // designates this shape: when a server stops offering an event type, the
 // subscriptions to it no longer hold a valid contract and SHOULD be ended
 // rather than left waiting on a name the server will never emit again.
@@ -253,7 +250,7 @@ func (r *WebhookRegistry) TerminateByEventName(name string, controlErr ControlEr
 // postTerminatedSilent POSTs a {type:terminated} envelope to a target
 // WITHOUT removing it from the registry. Distinct from the public
 // PostTerminated which removes — the suspend transition (per spec
-// §"Webhook Delivery Status" L460) needs the target to remain
+// SEP-3415 §"Webhook delivery status" needs the target to remain
 // observable as Active=false so the spec's "successful refresh
 // reactivates" path stays available.
 //

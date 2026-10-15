@@ -16,7 +16,7 @@ import (
 // httptest receiver (the eventsclient.Receiver), point a server-side
 // WebhookRegistry at it, and trigger PostGap / PostTerminated. They
 // verify the receiver's top-level `type` discriminator (spec
-// §"Non-event webhook bodies" L415-423) routes the body to the right
+// SEP-3415 §"Non-event webhook bodies" routes the body to the right
 // typed callback (OnGap / OnTerminated) instead of falling through
 // to the Event[Data] channel.
 //

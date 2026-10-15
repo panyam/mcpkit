@@ -313,7 +313,7 @@ func TestYieldingSource_MetaFuncReturningNilOmits(t *testing.T) {
 // TestYieldingSource_SubscribeReceivesYieldedEvents verifies the
 // per-call subscription channel: Subscribe(ctx) returns a chan that
 // receives a SubscriberEvent for every subsequent yield. The push
-// delivery model (events/stream, spec §"Push-Based Delivery" L223+)
+// delivery model (events/stream, SEP-3415 §"Push-Based Delivery"+)
 // sits on top of this primitive — each open stream handler holds
 // one subscription chan.
 //
@@ -346,8 +346,7 @@ func TestYieldingSource_SubscribeReceivesYieldedEvents(t *testing.T) {
 // TestYieldingSource_MultipleSubscribersAllReceive verifies fanout:
 // N concurrent subscribers each get every yielded event independently.
 // Without this, two open events/stream connections would compete for
-// the same delivery channel and miss events. Per-spec §"Push-Based
-// Delivery" L271, every stream is independent.
+// the same delivery channel and miss events. Per-SEP-3415 §"Push-Based Delivery", every stream is independent.
 func TestYieldingSource_MultipleSubscribersAllReceive(t *testing.T) {
 	src, yield := NewYieldingSource[fakePayload](EventDef{Name: "fake"})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -445,7 +444,7 @@ func readSubscriberEvent(t *testing.T, ch <-chan SubscriberEvent, d time.Duratio
 // source-side health signal: YieldError emits a SubscriberEvent with
 // Error set (no Event payload, not Truncated). Stream subscribers
 // map this onto a notifications/events/error frame; the subscription
-// stays open per spec §"Push-Based Delivery" L255+L261 (transient
+// stays open per SEP-3415 §"Push-Based Delivery"+L261 (transient
 // upstream failure).
 //
 // Without this primitive, sources would have no way to signal "I

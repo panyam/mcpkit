@@ -29,7 +29,7 @@ import (
 // cursor-shape tests can exercise both modes against the same server.
 func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.YieldingSource[DiscordEventData], func(context.Context, DiscordEventData) error, *events.WebhookRegistry) {
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
-	// production-default SSRF dial guard (spec §"Webhook Security"
+	// production-default SSRF dial guard (SEP-3415 §"Webhook security"
 	// → "SSRF prevention" L464).
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
@@ -46,7 +46,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 		Sources:                  []events.EventSource{source, typingSource},
 		Webhooks:                 webhooks,
 		Server:                   srv,
-		UnsafeAnonymousPrincipal: "test-principal", // tests don't wire auth; spec gate at §"Subscription Identity" L361 would reject otherwise
+		UnsafeAnonymousPrincipal: "test-principal", // tests don't wire auth; spec gate at SEP-3415 §"Subscription identity" would reject otherwise
 	})
 
 	return srv, source, yield, webhooks
@@ -56,7 +56,7 @@ func buildTestStack(whOpts ...events.WebhookOption) (*server.Server, *events.Yie
 // cursorless typing yield function too. Used by the cursorless e2e tests.
 func buildTestStackWithTyping(whOpts ...events.WebhookOption) (*server.Server, func(context.Context, DiscordEventData) error, func(context.Context, DiscordTypingData) error, *events.WebhookRegistry) {
 	// Tests subscribe to httptest URLs (127.0.0.1:N); bypass the
-	// production-default SSRF dial guard (spec §"Webhook Security"
+	// production-default SSRF dial guard (SEP-3415 §"Webhook security"
 	// → "SSRF prevention" L464).
 	whOpts = append([]events.WebhookOption{events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks()}, whOpts...)
 	webhooks := events.NewWebhookRegistry(whOpts...)
@@ -109,7 +109,7 @@ func TestE2EPollDelivery(t *testing.T) {
 	require.NoError(t, yield(context.Background(), newDiscordEvent("guild-1", "channel-1", "alice", "hello", time.Now())))
 	require.NoError(t, yield(context.Background(), newDiscordEvent("guild-1", "channel-1", "bob", "world", time.Now())))
 
-	// Flat events/poll request shape per spec §"Poll-Based Delivery"
+	// Flat events/poll request shape per SEP-3415 §"Poll-Based Delivery"
 	// → "Request: events/poll" L139-149.
 	result, err := c.Call(t.Context(), "events/poll", map[string]any{
 		"name":   "discord.message",
@@ -180,8 +180,8 @@ func TestE2EStreamDelivery(t *testing.T) {
 // TestE2EHealthSignalsEndToEnd is the end-to-end source-health
 // verification: source-side YieldError / YieldTerminated bubble
 // through to BOTH stream subscribers (notifications/events/error
-// and /terminated per spec §"Push-Based Delivery" L255+L261 and
-// §"Authorization" L783-795) AND webhook subscribers
+// and /terminated per SEP-3415 §"Push-Based Delivery"+L261 and
+// SEP-3415 §"Authorization" AND webhook subscribers
 // (auto-PostTerminated control envelope on the suspend /
 // source-terminate path).
 //
@@ -240,7 +240,7 @@ func TestE2EHealthSignalsEndToEnd(t *testing.T) {
 	// internal goroutine returns (Done unblocks). Webhook subscriber
 	// is unaffected by source termination directly — it gets a
 	// type:terminated envelope only when the suspend state machine
-	// flips Active=false (spec §"Webhook Delivery Status" L460;
+	// flips Active=false (SEP-3415 §"Webhook delivery status";
 	// covered by TestSuspend_AutoPostsTerminatedEnvelopeOnSuspension
 	// in the events module). This test exercises the source-side
 	// terminate flow on the stream side.
@@ -666,7 +666,7 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 
 	// The legacy {subscriptions: [...]} wrapper itself is rejected
 	// with a helpful error — multi-sub vs single-sub no longer
-	// matters since the spec's flat shape (§"Poll-Based Delivery" →
+	// matters since the spec's flat shape (SEP-3415 §"Poll-Based Delivery" →
 	// "Request: events/poll" L139-149) doesn't have an array at all.
 	// The TestPoll_RejectsLegacyWrapper test in wire_shape_test.go
 	// covers the
@@ -679,7 +679,7 @@ func TestE2EPollMultiSubRejected(t *testing.T) {
 	})
 	require.Error(t, err, "legacy {subscriptions: [...]} wrapper must be rejected")
 	assert.Contains(t, err.Error(), "legacy", "error message must explain the wrapper rejection")
-	assert.Contains(t, err.Error(), "L139", "error must cite the spec section")
+	assert.Contains(t, err.Error(), `SEP-3415 §"Poll-Based Delivery"`, "error must cite the spec section")
 }
 
 // TestE2EResourceByCursor verifies the per-message resource template resolves

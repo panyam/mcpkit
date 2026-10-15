@@ -135,8 +135,10 @@ It spent a week at the top level of `capabilities` instead. The merged design sk
 #1416 implemented it, and `metronome-mcp.fly.dev` — written by the sketch's author — used the
 extensions map. The conformance suite therefore graded one of the two wrong whichever way it read.
 Rather than pick, or declare in both places and make everyone pass, the disagreement went to the
-author on 2026-09-22. His answer: the extensions map is correct and the sketch needed fixing, which
-is upstream PR 7. #1421 moved the implementation and the suite's rows together.
+author on 2026-09-22. His answer: the extensions map is correct and the sketch needed fixing. He
+opened upstream PR 7 to fix it, and #1421 moved the implementation and the suite's rows together.
+PR 7 closed unmerged on 2026-09-28, so the sketch's `main` still says top-level; SEP-3415
+§ Capability Negotiation carries the rule now.
 
 Worth keeping for the next time a document and a reference implementation disagree: following the
 document is what made the question visible. Declaring in both places would have been the

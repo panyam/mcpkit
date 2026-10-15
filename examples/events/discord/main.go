@@ -73,7 +73,7 @@ func serve() {
 		// httptest receivers (127.0.0.1:N), which the production-default
 		// dial-time SSRF guard would block. Production deployments leave
 		// this OFF so loopback/private-IP webhook URLs are rejected at
-		// dial per spec §"Webhook Security" → "SSRF prevention" L464.
+		// dial per SEP-3415 §"Webhook security" (SSRF prevention).
 		events.WithWebhookAllowPrivateNetworks(true), events.WithUnsafeWebhookAllowPlaintextCallbacks(),
 	}
 	if *whTTL > 0 {
@@ -146,8 +146,8 @@ func serve() {
 	//
 	// If OAUTH_ISSUER is set, wire real OIDC auth via server.WithAuth(...)
 	// and follow the spec strictly — anonymous webhook subscribes are
-	// rejected with -32024 per §"Subscription Identity" → "Authentication
-	// required" L361. Otherwise fall back to the demo escape hatch so
+	// rejected with -32024 per SEP-3415 §"Subscription identity" (authentication
+	// required). Otherwise fall back to the demo escape hatch so
 	// `just demo` works end-to-end without an auth provider.
 	srvOpts := common.MCPServerOptions(*addr, "[mcp] ")
 	srvOpts = append(srvOpts, server.WithSubscriptions())
@@ -188,8 +188,8 @@ func serve() {
 		// Source-side health-signal injection. Demo's stand-in for a
 		// real source bubbling upstream errors. Triggers
 		// notifications/events/error or /terminated on push
-		// subscribers per spec §"Push-Based Delivery" → "Event
-		// Delivery" L255-271.
+		// subscribers per SEP-3415 §"Push-Based Delivery" (event
+		// Delivery).
 		// `?action=error` is transient (stream stays); `?action=terminate`
 		// is one-shot terminal (stream closes; webhook subscribers get a
 		// type:terminated control envelope).
