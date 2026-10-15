@@ -24,7 +24,7 @@ CLIENT_RC=${PIPESTATUS[0]}
 
 echo ""
 echo "=== exercise-events @ $(git -C "$ROOT" rev-parse --short HEAD) ==="
-grep -hE '^  events-[a-z-]+: ' "$LOG/server.log" "$LOG/client.log"
+grep -hE '^  events-[a-z-]+( \([0-9-]+\))?: ' "$LOG/server.log" "$LOG/client.log"
 # Both suites exit 0 whatever they grade, so a non-zero exit means one refused
 # to grade at all (a held port, a fixture that died; see _common.sh).
 [ "$SERVER_RC" -ne 0 ] && echo "  server suite REFUSED to grade (exit $SERVER_RC), see above"

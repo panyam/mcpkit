@@ -66,8 +66,9 @@ func main() {
 		opts = append(opts, client.WithClientMode(client.ClientModeStateless))
 	} else {
 		// The legacy session wire has no subscriptions/listen; a broadcast
-		// arrives on the GET stream instead.
-		opts = append(opts, client.WithNotificationCallback(func(method string, _ any) {
+		// arrives on the standalone GET stream, which the client only opens
+		// when asked.
+		opts = append(opts, client.WithGetSSEStream(), client.WithNotificationCallback(func(method string, _ any) {
 			if method == "notifications/events/list_changed" {
 				relist()
 			}

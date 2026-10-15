@@ -34,16 +34,27 @@ if [ -z "${DRIVER}" ]; then
 fi
 echo "Driver ${DRIVER}, scratch dir $OUT"
 
+# Each scenario runs on both lifecycles. SEP-3415 defines Events for
+# 2026-07-28 and later, so that is the run that grades the SEP (list_changed
+# over subscriptions/listen, say); the legacy run keeps the session-wire path
+# honest. The runner skips extension scenarios when given a spec version
+# unless --force is passed, and --spec-version is what sets
+# MCP_CONFORMANCE_PROTOCOL_VERSION for the driver.
 SCENARIOS="events-client-poll events-client-push events-client-webhook events-client-no-extension"
-for S in ${SCENARIOS}; do
-    (cd "${MCPCONFORMANCE_EVENTS_CLIENT_PATH}" && \
-        node dist/index.js client \
-            --command "${DRIVER}" \
-            --scenario "${S}" \
-            -o "$OUT/checks-${S}" > "$OUT/runner-${S}.log" 2>&1)
-    SRC=$?
-    SUMMARY=$(grep -E "Passed:" "$OUT/runner-${S}.log" | tail -1 | sed 's/\x1b\[[0-9;]*m//g')
-    echo "  ${S}: ${SUMMARY:-runner exited ${SRC} (see $OUT/runner-${S}.log)}"
+VERSIONS="2026-07-28 2025-11-25"
+for V in ${VERSIONS}; do
+    for S in ${SCENARIOS}; do
+        LOG="$OUT/runner-${S}-${V}.log"
+        (cd "${MCPCONFORMANCE_EVENTS_CLIENT_PATH}" && \
+            node dist/index.js client \
+                --command "${DRIVER}" \
+                --scenario "${S}" \
+                --spec-version "${V}" --force \
+                -o "$OUT/checks-${S}-${V}" > "${LOG}" 2>&1)
+        SRC=$?
+        SUMMARY=$(grep -E "Passed:" "${LOG}" | tail -1 | sed 's/\x1b\[[0-9;]*m//g')
+        echo "  ${S} (${V}): ${SUMMARY:-runner exited ${SRC} (see ${LOG})}"
+    done
 done
 
 echo "testconf-events-client: INFORMATIONAL, exiting 0. Runner logs in $OUT"
