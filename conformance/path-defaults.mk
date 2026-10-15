@@ -7,6 +7,7 @@
 # REPO_ROOT must be defined by the including Makefile before this file is
 # included. conformance/Makefile sets it as $(abspath $(CONFORMANCE_DIR)/..).
 
+MCPCONFORMANCE_AGENTS_PATH          ?= $(abspath $(REPO_ROOT)/../conf-agents)
 MCPCONFORMANCE_AUTH_PATH            ?= $(abspath $(REPO_ROOT)/../conf-pending)
 MCPCONFORMANCE_CLIENT_PATH          ?= $(abspath $(REPO_ROOT)/../conf-upstream-main)
 MCPCONFORMANCE_EVENTS_CLIENT_PATH   ?= $(abspath $(REPO_ROOT)/../conf-events-client)

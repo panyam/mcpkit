@@ -187,7 +187,13 @@ type DirectoryReadRequest struct {
 //
 // NextCursor follows the resources/list contract: present and non-empty
 // when more entries remain, omitted when the listing is complete.
+//
+// TTLMs and CacheScope are the SEP-2549 caching attributes. ext-skills#157
+// makes the result extend CacheableResult, matching skills/list and
+// skills/get.
 type DirectoryReadResult struct {
 	Resources  []core.ResourceDef `json:"resources"`
 	NextCursor string             `json:"nextCursor,omitempty"`
+	TTLMs      *int               `json:"ttlMs,omitempty"`
+	CacheScope string             `json:"cacheScope,omitempty"`
 }

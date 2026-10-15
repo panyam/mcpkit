@@ -7,6 +7,7 @@
 # REPO_ROOT must be defined by the importing justfile before this file is
 # imported. conformance/justfile sets it as absolute_path(justfile_directory() / "..").
 
+MCPCONFORMANCE_AGENTS_PATH := env('MCPCONFORMANCE_AGENTS_PATH', absolute_path(REPO_ROOT / '../conf-agents'))
 MCPCONFORMANCE_AUTH_PATH := env('MCPCONFORMANCE_AUTH_PATH', absolute_path(REPO_ROOT / '../conf-pending'))
 MCPCONFORMANCE_CLIENT_PATH := env('MCPCONFORMANCE_CLIENT_PATH', absolute_path(REPO_ROOT / '../conf-upstream-main'))
 MCPCONFORMANCE_EVENTS_CLIENT_PATH := env('MCPCONFORMANCE_EVENTS_CLIENT_PATH', absolute_path(REPO_ROOT / '../conf-events-client'))

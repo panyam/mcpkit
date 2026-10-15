@@ -46,7 +46,7 @@ default:
 # surfaces.
 
 # Run all conformance suites (needs fork worktrees + conf-upstream-main)
-test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-upstream-audit refresh-conformance
+test: testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-stateless testconf-skills testconf-events testconf-agents testconf-upstream-audit refresh-conformance
 
 # Run MCP conformance test suite (requires Node.js/npx)
 testconf:
@@ -107,6 +107,14 @@ testconf-skills:
 # mcpkit#1374.
 testconf-events:
     @bash {{CONFORMANCE_DIR}}/scripts/conf-events.sh
+
+# Run agent discovery conformance (agents-wg#22), informational
+testconf-agents:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-agents.sh
+
+# Create the agents suite checkout if missing
+conf-agents-setup:
+    @bash {{CONFORMANCE_DIR}}/scripts/conf-agents-setup.sh
 
 # Run MCP Events client conformance — informational (exit 0 regardless of
 # check results). Drives the Go events client SDK through the four

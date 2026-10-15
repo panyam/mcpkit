@@ -51,23 +51,35 @@ kept), registers `http://localhost:<port>/callback`, and passes the same port to
 The port is kept so the cached DCR registration still matches on a later login. A caller-supplied
 `DCRMeta` is sent as is, and that caller should set `CallbackPort` to agree with it.
 
-**The source holds that port bound whenever no login is using it** (`portHold`), releasing it just
-before `LoginWithBrowser` binds it and taking it back after. The first version picked a free port
-and let it go, leaving it free across the discovery and DCR round trips. CI's conformance run starts
-`auth/dpop` and `auth/dpop-nonce` as two testclient processes at once, and on Linux the second was
-sometimes handed the port the first had just released. One login then failed to bind, and
-`check-conformance-stale` saw `auth/dpop-nonce` drop from 9 passing checks to 3. It passed on
-re-run, which is what made it look like noise. Before this change oneauth bound port 0, which the
-kernel resolves atomically, so the race is new with the fix rather than old.
+**The source binds the callback listener before it registers, and hands that socket to oneauth**
+(`BrowserLoginRequest.Listener`, oneauth v0.1.39). The redirect it registers comes from
+`client.LoopbackRedirectURI` on that listener's address, so the port registered is the port served
+with nothing in between. Between logins the source keeps the port bound (`portHold`) and rebinds it
+after each login. A `CallbackPort` that something else holds fails at the bind, before a client is
+registered for a redirect nobody could serve.
 
-Two loose ends, deliberately not fixed here:
+The first version of the fix picked a free port and let it go, leaving it free across the discovery
+and DCR round trips. CI's conformance run starts `auth/dpop` and `auth/dpop-nonce` as two testclient
+processes at once, and on Linux the second was sometimes handed the port the first had just
+released. One login then failed to bind, and `check-conformance-stale` saw `auth/dpop-nonce` drop
+from 9 passing checks to 3. It passed on re-run, which is what made it look like noise. The second
+version held the port and closed it a moment before oneauth bound it, which shrank the window
+without closing it. The listener handover (#1539) closes it, and needed oneauth#387 to exist.
 
-- **`Invalidate` keeps the cached DCR registration.** A server that restarts and forgets its clients
-  (metronome does, on a crash) then refuses that `client_id` forever. `cmd/mcp-auth-proxy` gets
-  around it by discarding the whole source on a 401.
-- **`FollowRedirects` treats any answered GET as success.** When `/authorize` answers 400, the
-  login waits out its five-minute timeout for a callback that never comes. The proxy's
-  `approveHeadless` fails on a page with no redirect and no approvable form instead.
+**A server that forgets its registered clients is not recovered from here** (#1539, option C).
+`Invalidate` runs on every 401 and deliberately keeps the cached DCR registration (see its doc
+comment), so a server that restarts and forgets its clients, as metronome does after a crash, then
+refuses that `client_id` on every later login. Clearing the cache in `Invalidate` would register a
+new client on every 401. Re-registering when a login fails cannot be aimed at that one case,
+because `LoginWithBrowser` reports every failure as a string: a user who clicked Deny would be asked
+twice. The recovery is to replace the `OAuthTokenSource`, which is what `cmd/mcp-auth-proxy` does
+on a 401. oneauth#392 asks for typed login errors; with them, the source could re-register only
+when the server rejected the client.
+
+oneauth's `FollowRedirects` used to return nil for any answered GET, so a 400 from `/authorize`
+became a five-minute wait for a callback. Since v0.1.39 it fails at once with the server's error,
+and `ApproveConsent` does the same while clicking through a demo consent page. The proxy uses
+`ApproveConsent`; its own copy went to oneauth in #387.
 
 `cmd/mcp-auth-proxy` exists because the conformance runner cannot send a bearer token. It is how
 `make conf-events-remote` grades another implementation's events server.
@@ -143,7 +155,7 @@ Bump all of them together and run `make tidy-all`. **Leaving even one behind fai
 `test-auth` job** via `tests/e2e` MVS resolution, and the error points at e2e rather than at the
 module you missed.
 
-Current pin: v0.1.39. Version-specific fixes worth knowing:
+Current pin: v0.1.40. Version-specific fixes worth knowing:
 - **v0.1.14** — required for the two-TP pattern.
 - **v0.1.18** — fixed `client.NewAuthClient` stripping the path from the issuer URL, which broke
   browser auth against Keycloak realms. `LoginWithBrowser` now prefers `c.cachedASMeta` over
@@ -155,8 +167,12 @@ Current pin: v0.1.39. Version-specific fixes worth knowing:
 - **v0.1.39** — oneauth#387, the pushdown from #1538. `BrowserLoginRequest.Listener` lets the caller
   own the loopback listener (no release/rebind window), `LoopbackRedirectURI` gives the exact string
   to register, `FollowRedirects` fails on an authorization-server error instead of returning nil,
-  and a headless consent opener sits beside it. mcpkit still uses its own `portHold` and
-  `approveHeadless` until #1539 switches over.
+  and a headless consent opener sits beside it. #1539 switched `OAuthTokenSource` to `Listener`
+  and the proxy to `ApproveConsent`.
+- **v0.1.40** — oneauth#392: typed errors from `LoginWithBrowser`, so a caller can tell an
+  authorization server's rejection from a declined consent, a failed token exchange or a timeout.
+  mcpkit does not branch on them yet; they are what an aimed re-registration in `OAuthTokenSource`
+  would need (§ DCR registers the redirect it will listen on).
 
-Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.39`. Use it from
+Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.40`. Use it from
 PATH, since `go run @ver` gets confused by oneauth's own replace directives.
