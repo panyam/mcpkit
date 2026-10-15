@@ -428,12 +428,17 @@ check-recipe-complexity: ## CI gate — fail if a Makefile/justfile recipe holds
 	@./scripts/check_recipe_complexity.py --selftest
 	@./scripts/check_recipe_complexity.py
 
+# The release-workflow checker imports PyYAML. uv installs it from
+# pyproject.toml; CI's test job has no uv step, and its runner's python3
+# already ships PyYAML, so fall back to that.
+RELEASE_WF_PY := $(if $(shell command -v uv 2>/dev/null),uv run,python3)
+
 check-release-workflows: ## Release step — fail if a tag-triggered workflow never ran for V (usage: make check-release-workflows V=v0.6.0)
-	@./scripts/check_release_workflows.py --selftest
-	@./scripts/check_release_workflows.py $(V)
+	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
+	@$(RELEASE_WF_PY) scripts/check_release_workflows.py $(V)
 
 check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
-	@./scripts/check_release_workflows.py --selftest
+	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
 
 check-conf-fixture-guards: ## CI gate — self-test the conformance fixture guards (held port, dead fixture) in conformance/scripts/_common.sh
 	@bash conformance/scripts/_common_selftest.sh
