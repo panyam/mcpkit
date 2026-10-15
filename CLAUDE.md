@@ -207,9 +207,9 @@ These span packages and will bite on a task that never opens a routed doc.
   throughout: a published tag and nothing red reads identically either way. #1411 split the push and
   #1413 added `make check-release-workflows V=<tag>`, now a step in `RELEASING.md`. The checker
   derives its list from `on.push.tags` across `.github/workflows/`, so a third tag-triggered
-  workflow is covered the day it lands. Its OK path has still never been seen live, since no tag in
-  this repo's history has had a workflow fire against it; the next release is the first real
-  exercise. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
+  workflow is covered the day it lands. v0.8.0 was the first tag both workflows fired against, and
+  the checker reports them `pending` until `publish-images` finishes (several minutes), so rerun it
+  rather than read the first result as a miss. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
   because for five releases it did not.
 - **Capability checks must read the per-request envelope too.** On the 2026-07-28 stateless wire
   there is no `initialize`, so client capabilities arrive only in each request's `_meta`
