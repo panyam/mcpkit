@@ -33,6 +33,13 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   discovery, scoped tools, invocation through `tools/call`, per-caller
   filtering, step-up and `list_changed`, on both wires (#1393).
 
+### Changed
+- **`experimental/ext/agents` advertises `io.modelcontextprotocol/agents`**, the
+  identifier agents-wg#22 defines, in place of `io.mcpkit/agents`. The
+  implementation now matches the SEP, which was the condition for switching.
+  **Wire-breaking**: a host that negotiated the old key no longer finds the
+  extension. Hosts using `agents.ExtensionID` follow automatically (#1393).
+
 ## [0.7.2] - 2026-10-14
 
 A patch release whose main fix is stdio: mcpkit now speaks MCP's

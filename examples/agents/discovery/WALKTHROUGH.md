@@ -21,7 +21,7 @@ sequenceDiagram
 
     Note over Host,Server: Step 1: Connect as Alice and check the extension
     Host->>Server: initialize (Bearer alice-read)
-    Server-->>Host: capabilities.extensions["io.mcpkit/agents"] = {listChanged: true}
+    Server-->>Host: capabilities.extensions["io.modelcontextprotocol/agents"] = {listChanged: true}
 
     Note over Host,Server: Step 2: List the agents Alice can see
     Host->>Server: agents/list

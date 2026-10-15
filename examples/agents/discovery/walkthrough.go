@@ -67,7 +67,7 @@ func runDemo() {
 
 	demo.Step("Connect as Alice and check the extension").
 		Arrow("Host", "Server", "initialize (Bearer alice-read)").
-		DashedArrow("Server", "Host", "capabilities.extensions[\"io.mcpkit/agents\"] = {listChanged: true}").
+		DashedArrow("Server", "Host", "capabilities.extensions[\"io.modelcontextprotocol/agents\"] = {listChanged: true}").
 		Note("A host must not assume agent discovery unless the server advertises it. `listChanged: true` says the server will announce roster changes.").
 		Run(func(sc demokit.StepContext) (result *demokit.StepResult) {
 			alice, err = connect(sc.Ctx, url, "alice-read", opts...)

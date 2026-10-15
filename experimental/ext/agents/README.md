@@ -16,7 +16,7 @@ Discovery is the only new wire surface. It comes in three levels:
 
 | Level | Wire | Payload |
 |-------|------|---------|
-| 1 | `capabilities.extensions["io.mcpkit/agents"]` | "this server has agents" |
+| 1 | `capabilities.extensions["io.modelcontextprotocol/agents"]` | "this server has agents" |
 | 2 | `agents/list` | agent cards: `name`, `description`, `capabilities`. Paginated. **No tool schemas.** |
 | 3 | `agents/get {name}` | one agent's `instructions`, optional `modelRoutingHint`, and its `tools[]` |
 
@@ -27,8 +27,9 @@ Both results carry `resultType: "complete"` and the SEP-2549 `ttlMs` /
 the `agents/get` result and calls the scoped tools through the existing
 `tools/call`.
 
-The extension identifier stays `io.mcpkit/agents` until the implementation
-fully matches the SEP. See `NOTES.md`.
+The extension identifier is the SEP's own, `io.modelcontextprotocol/agents`.
+It was `io.mcpkit/agents` until the implementation matched the SEP, and
+`NOTES.md` explains why.
 
 ## Server side
 
@@ -206,7 +207,6 @@ per-caller filtering, step-up and `list_changed`, on both wires.
 
 Tracked in panyam/mcpkit#1393:
 
-- Switching the identifier to `io.modelcontextprotocol/agents`.
 - Conformance scenarios for the SEP.
 
 ## Tests

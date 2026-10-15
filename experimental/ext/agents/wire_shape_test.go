@@ -107,3 +107,38 @@ func TestRoutingHintAlwaysCarriesVision(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"role":"small","vision":false}`, string(got))
 }
+
+// The server's discovery response, from agents-wg#22 § Capability
+// Negotiation at 9b16840e.
+const sepServerCapabilities = `{
+  "result": {
+    "capabilities": {
+      "extensions": {
+        "io.modelcontextprotocol/agents": {
+          "listChanged": true
+        }
+      }
+    }
+  }
+}`
+
+// A served server advertises exactly the SEP's extension entry, identifier
+// and settings both. SEP-3392 fixes an identifier at creation, so a client
+// matching the SEP's key must find ours.
+func TestAdvertisedExtensionMatchesSEP(t *testing.T) {
+	var sep struct {
+		Result struct {
+			Capabilities struct {
+				Extensions map[string]map[string]any `json:"extensions"`
+			} `json:"capabilities"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(sepServerCapabilities), &sep))
+	want, ok := sep.Result.Capabilities.Extensions[agents.ExtensionID]
+	require.True(t, ok, "the SEP advertises no extension named %q", agents.ExtensionID)
+
+	tc, _ := newAgentsServer(t, sepWorkflowAgent())
+	got, ok := tc.ServerExtensionCapability(agents.ExtensionID)
+	require.True(t, ok)
+	assert.Equal(t, want, map[string]any(got))
+}
