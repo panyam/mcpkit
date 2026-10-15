@@ -235,7 +235,8 @@ func buildServerWith(addr string, tp core.TracerProvider, conformanceEvents bool
 	var buildSrc *events.YieldingSource[BuildFinishedData]
 	if conformanceEvents {
 		buildSrc, _ = events.NewYieldingSource[BuildFinishedData](buildEventDef(), events.WithMaxSize(eventStoreCap))
-		sources = append(sources, buildSrc)
+		digestSrc, _ := events.NewYieldingSource[DigestReadyData](digestEventDef(), events.WithMaxSize(eventStoreCap))
+		sources = append(sources, buildSrc, digestSrc)
 	}
 
 	eventsRegistry := events.Register(events.Config{

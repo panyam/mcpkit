@@ -315,3 +315,21 @@ func TestStream_HeartbeatCursorIsNullForCursorless(t *testing.T) {
 		"cursorless heartbeat MUST emit cursor as JSON null per spec L294; got %s", body)
 }
 
+// TestStream_RejectsUndeclaredPush is #1417: a source that can stream but
+// declares `delivery: ["poll"]` is refused with -32026, as poll and subscribe
+// already refuse the modes a descriptor omits. The stream gate used to ask only
+// whether the source implemented Subscribe, so it served a mode the descriptor
+// disclaimed.
+func TestStream_RejectsUndeclaredPush(t *testing.T) {
+	st := newStreamTestStack(t, "test-principal",
+		withStreamSourceDef(EventDef{Name: "fake.event", Description: "test", Delivery: []string{"poll"}}))
+	rs := st.startStream(t, validStreamParams())
+	r := rs.endAndAwait(t, time.Second)
+	require.NoError(t, r.err)
+	require.NotNil(t, r.resp.Error, "streaming a source that does not declare push must fail")
+	assert.Equal(t, ErrCodeUnsupported, r.resp.Error.Code)
+	data, ok := r.resp.Error.Data.(UnsupportedData)
+	require.True(t, ok, "error data should name the unsupported mode, got %T", r.resp.Error.Data)
+	assert.Equal(t, "deliveryMode", data.Feature)
+	assert.Equal(t, "push", data.Value)
+}

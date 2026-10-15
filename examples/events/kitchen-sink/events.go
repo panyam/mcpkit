@@ -255,6 +255,30 @@ func stringSlice(v any) []string {
 	return out
 }
 
+// DigestReadyData is the payload of the digest.ready event type, which exists
+// only under --conformance-events.
+type DigestReadyData struct {
+	Period string `json:"period"`
+}
+
+// digestEventDef declares a poll-only event type backed by a source that could
+// stream. The narrow array is the point: events/stream used to serve any source
+// that implemented Subscribe, whatever its descriptor said (#1417), and no type
+// in the demo let the suite see it.
+func digestEventDef() events.EventDef {
+	return events.EventDef{
+		Name:        "digest.ready",
+		Description: "Conformance fixture: a poll-only type whose source could stream, so the suite can check events/stream refuses it.",
+		Delivery:    []string{"poll"},
+		Meta:        map[string]any{"category": "conformance"},
+		InputSchema: map[string]any{
+			"type":                 "object",
+			"properties":           map[string]any{},
+			"additionalProperties": false,
+		},
+	}
+}
+
 // BuildFinishedData is the payload of the build.finished event type, which
 // exists only under --conformance-events.
 type BuildFinishedData struct {

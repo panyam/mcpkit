@@ -230,9 +230,16 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 				"Unsupported: stateless wire does not support push delivery without text/event-stream Accept")
 		}
 
+		// The `delivery` array is a contract, the same gate poll and
+		// subscribe apply: a source that can stream but declares no push is
+		// not served one (#1417). Then the capability check, since an author
+		// cannot declare push into existence either.
+		if def, ok := reg.Def(req.Name); ok && !supportsDeliveryMode(def.Delivery, DeliveryModePush) {
+			return newUnsupportedError(id, "deliveryMode", DeliveryModePush.String(),
+				"Unsupported: event type "+req.Name+" does not offer push delivery")
+		}
 		// Sources that don't expose a Subscribe channel (TypedSource today)
-		// can't be served via push. Spec lists -32026 Unsupported among
-		// events/stream's immediate errors at L267.
+		// can't be served via push either.
 		sub, ok := source.(streamSubscribable)
 		if !ok {
 			return newUnsupportedError(id, "deliveryMode", "push",

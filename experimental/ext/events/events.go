@@ -645,8 +645,8 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 		// The `delivery` array is a contract, not a description. Answering a
 		// poll for a type that advertises push and webhook only would make it
 		// unreliable in the direction that matters, since a client reads it to
-		// decide what to call. registerStream has gated on the same error for
-		// its own mode since it was written; this is the poll half.
+		// decide what to call. registerStream and subscribe apply the same
+		// gate to their own modes.
 		if def, ok := reg.Def(req.Name); ok && !supportsDeliveryMode(def.Delivery, DeliveryModePoll) {
 			return newUnsupportedError(id, "deliveryMode", DeliveryModePoll.String(),
 				"Unsupported: event type "+req.Name+" does not offer poll delivery")
