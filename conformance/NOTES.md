@@ -329,11 +329,15 @@ Pushing to our own fork branches is unaffected, that is SSH — via the agent so
 `conf-events` (and any clone of `panyam/mcpconformance`) has a lefthook `pre-push` that runs prettier
 and all ~736 vitest tests, plus the browser tests, about 4.5 minutes. Wrapping the push in
 `timeout 90` killed the hook partway through three times in one session and left the branch
-unpushed with nothing on screen saying so, since the push is what prints and the push never ran. An
-HTTPS push to the fork also hangs on a credential prompt instead of failing. So push over SSH with no
-timeout, in the background if needed, and confirm with
-`git ls-remote git@github.com:panyam/mcpconformance.git refs/heads/<branch>` rather than trusting the
-exit status of a command that may have been killed.
+unpushed with nothing on screen saying so, since the push is what prints and the push never ran.
+
+The hook is now about six minutes, and that breaks SSH too. Git opens the SSH connection *before* the
+hook runs, and GitHub drops it after a few idle minutes, so the hook passes and the push then fails
+with `send-pack: unexpected disconnect` / `the remote end hung up`. Twice on 2026-10-15 the only
+visible output was the hook's green summary. Push over HTTPS with the `gho_` login instead, which
+opens its connection after the hook and does not prompt:
+`env -u GH_TOKEN git -c credential.helper='!gh auth git-credential' push https://github.com/panyam/mcpconformance.git <local>:<branch>`.
+Either way, confirm with `git ls-remote origin <branch>` rather than trusting the exit status.
 
 **`modelcontextprotocol/conformance` dismisses stale reviews on push.** A commit landed after an
 approval flips that review to `DISMISSED` and `reviewDecision` back to `REVIEW_REQUIRED`. This cost
