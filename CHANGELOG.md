@@ -10,6 +10,23 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 ## [Unreleased]
 
 ### Added
+- **`experimental/ext/events`: `Registry.ChangeSchema`** replaces an event
+  type's `inputSchema` and/or `payloadSchema` in place. An additive change
+  keeps every subscription; a breaking one ends push and webhook subscriptions
+  with `-32026 {feature, reason: "schema_changed"}`, then announces
+  `list_changed`. The caller says which (#1465).
+- **`experimental/ext/events`: `list_changed` over `subscriptions/listen`.**
+  The server registers `eventsListChanged` and echoes it only when it declared
+  `listChanged: true`; the Go client gains the listen API, and the client
+  conformance suite runs on both lifecycles (#1505).
+- **`ext/auth/cmd/mcp-auth-proxy`** fronts an OAuth-protected MCP server with a
+  loopback endpoint that adds the bearer token, logging in headlessly and again
+  on any 401. **`make conf-events-remote`** uses it to grade another
+  implementation's events server, `metronome-mcp.fly.dev` by default (#1535).
+- **Events conformance** now quotes SEP-3415 on every row (#1502) and grades
+  stream-mode refusal, the catalog-change rows, 410 survival, `lastError` and a
+  cross-tenant check that can now fail (#1417, #1465, #1529). `make
+  testconf-events` is 122 / 1 / 12 against kitchen-sink.
 - **`experimental/ext/agents`: `notifications/agents/list_changed`.** The
   extension declares `listChanged: true`, registers the `agentsListChanged`
   filter key, and `AddAgent` / `RemoveAgent` broadcast. `NotifyListChanged`
@@ -41,11 +58,30 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   Check IDs use the placeholder `sep-9998` until the SEP is numbered (#1393).
 
 ### Changed
+- **`experimental/ext/events`: `events/stream` honours the declared
+  `delivery`.** A source that can stream but declares no `push` is refused with
+  `-32026 {feature: deliveryMode, value: push}`, as poll and subscribe already
+  refused their modes. A source that declares nothing still derives push from
+  its capability (#1417).
+- **`ext/auth`: `OAuthTokenSource` binds its callback listener before client
+  registration** and hands that socket to oneauth, so the port registered is
+  the port served. A `CallbackPort` something else holds now fails before a
+  client is registered (#1539, #1538).
+- **Go toolchain floor 1.26.9** across all modules, and oneauth v0.1.40
+  (typed login errors, not yet branched on).
+- **`testconf-events` / `conf-events-remote` take a free port** when
+  `EVENTS_PORT` / `EVENTS_REMOTE_PORT` is unset, so two sessions can run them at
+  once; a pinned port that is held still refuses (#1534).
 - **`experimental/ext/agents` advertises `io.modelcontextprotocol/agents`**, the
   identifier agents-wg#22 defines, in place of `io.mcpkit/agents`. The
   implementation now matches the SEP, which was the condition for switching.
   **Wire-breaking**: a host that negotiated the old key no longer finds the
   extension. Hosts using `agents.ExtensionID` follow automatically (#1393).
+
+### Fixed
+- **`make check-release-workflows`** runs its PyYAML-importing checker under
+  `uv run` when available, which failed with `ModuleNotFoundError` at the
+  v0.7.2 release step (#1533).
 
 ## [0.7.2] - 2026-10-14
 

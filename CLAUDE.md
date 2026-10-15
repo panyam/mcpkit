@@ -178,8 +178,9 @@ These span packages and will bite on a task that never opens a routed doc.
   conformance#504. An earlier version of this note said upstream edits need the web UI or a classic
   PAT; that is only true of the fine-grained token.
   Pushing to our fork branches is unaffected. See `conformance/NOTES.md`, which also covers the
-  `panyam/mcpconformance` pre-push hook: it runs the full suite (~4.5 min), so never wrap that
-  push in `timeout`.
+  `panyam/mcpconformance` pre-push hook: it runs the full suite (~6 min), so never wrap that
+  push in `timeout`, and push it over HTTPS with the `gho_` login, because an SSH connection idles
+  out during the hook and the push fails after the hook passes.
   **The fine-grained PAT cannot create a branch carrying workflow files**, even when no commit on
   it touches `.github/`. Creating a ref counts every workflow present on that ref as "created", so
   the push is rejected with "refusing to allow a Personal Access Token to create or update workflow
@@ -227,6 +228,12 @@ These span packages and will bite on a task that never opens a routed doc.
   `inputSchema` enum invented from a field name rather than read off the fixture that feeds it, and
   two tests polling event types whose descriptors decline poll. Tracked as #1431. Until it is
   wired, run the affected example's own `go test` by hand after touching anything it uses.
+- **One session, one worktree of the conformance fork.** `../conf-events` and the other
+  `MCPCONFORMANCE_*_PATH` defaults are shared by every session on the machine, and two sessions
+  once had uncommitted work in the same one, where either's next `git add` takes both. Check
+  `git status` there before editing; work in `git worktree add ../conf-events-<ticket>` and point
+  the suite at it with the path variable. Detail in `conformance/NOTES.md` § One session, one
+  worktree.
 - **Never `gofmt -w` a glob in this repo.** The tree is not gofmt-clean, so `gofmt -w pkg/*.go`
   rewrites pre-existing drift alongside your file and `git add -A` sweeps it into the commit. It
   happened twice in one session, 36 files then 9, both caught only by reading `git status` before
