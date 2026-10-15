@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    
+    <script>
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Agent discovery extension: listing, scoped tools, per-caller filtering, step-up and roster changes. Experimental.">
+    <title>Agent discovery · mcpkit</title>
+
+    <link rel="stylesheet" href="/mcpkit/static/css/main.css">
+</head>
+<body>
+    
+<header class="site-header">
+    <div class="site-header-inner">
+        
+        <a class="brand" href="/mcpkit/">
+            <span class="brand-name">mcpkit</span>
+        </a>
+        <nav class="top-nav">
+            
+            
+            <a class="top-nav-link" href="/mcpkit/get-started/">Get Started</a>
+            
+            <a class="top-nav-link" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <a class="top-nav-link" href="/mcpkit/examples/">Examples</a>
+            
+            <a class="top-nav-link" href="/mcpkit/concepts/">Concepts</a>
+            
+            <a class="top-nav-link" href="/mcpkit/conformance/">Conformance</a>
+            
+            <a class="top-nav-link" href="/mcpkit/packages/core/">Packages</a>
+            
+            <a class="top-nav-link" href="/mcpkit/design/apps/">Reference</a>
+            
+            <a class="top-nav-link external" href="https://github.com/panyam/mcpkit">GitHub</a>
+            <button type="button" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-toggle-light">☀</span>
+                <span class="theme-toggle-dark">☾</span>
+            </button>
+        </nav>
+    </div>
+</header>
+
+
+    <div class="page">
+        
+<aside class="sidebar">
+    
+    
+    <nav class="sidebar-nav">
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/get-started/">Get Started</a>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/guides/transports/">Guides</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/guides/transports/">Transports</a></li>
+                
+                <li><a href="/mcpkit/guides/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/guides/tasks/">Long-running tasks</a></li>
+                
+                <li><a href="/mcpkit/guides/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/guides/prompts/">Prompts</a></li>
+                
+                <li><a href="/mcpkit/guides/elicitation/">Elicitation</a></li>
+                
+                <li><a href="/mcpkit/guides/completions/">Argument completion</a></li>
+                
+                <li><a href="/mcpkit/guides/observability/">Observability</a></li>
+                
+                <li><a href="/mcpkit/guides/mrtr/">MRTR input-gathering</a></li>
+                
+                <li><a href="/mcpkit/guides/deployment/">Deployment</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/examples/">Examples</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/examples/">All examples</a></li>
+                
+                <li><a href="/mcpkit/examples/auth/">Auth</a></li>
+                
+                <li><a href="/mcpkit/examples/tasks-v2/">Tasks v2</a></li>
+                
+                <li><a href="/mcpkit/examples/mrtr/">MRTR</a></li>
+                
+                <li><a href="/mcpkit/examples/apps/">MCP Apps</a></li>
+                
+                <li><a href="/mcpkit/examples/events/discord/">Events</a></li>
+                
+                <li><a href="/mcpkit/examples/skills-core/">Skills</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/concepts/">Concepts</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/concepts/">Overview</a></li>
+                
+                <li><a href="/mcpkit/concepts/bringup/">Bring-up</a></li>
+                
+                <li><a href="/mcpkit/concepts/transport-mechanics/">Transport mechanics</a></li>
+                
+                <li><a href="/mcpkit/concepts/notifications/">Notifications</a></li>
+                
+                <li><a href="/mcpkit/concepts/request-anatomy/">Anatomy of a request</a></li>
+                
+                <li><a href="/mcpkit/concepts/extension-mechanisms/">Extension mechanisms</a></li>
+                
+                <li><a href="/mcpkit/concepts/reverse-call/">Reverse calls</a></li>
+                
+                <li><a href="/mcpkit/concepts/mrtr/">MRTR internals</a></li>
+                
+                <li><a href="/mcpkit/concepts/tracing/">Tracing</a></li>
+                
+                <li><a href="/mcpkit/concepts/events/">Events</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/conformance/">Conformance</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/conformance/">Coverage matrix</a></li>
+                
+                <li><a href="/mcpkit/conformance/upstream-audit/">Upstream audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/fixture-audit/">Fixture audit</a></li>
+                
+                <li><a href="/mcpkit/conformance/external-checker/">External checker</a></li>
+                
+                <li><a href="/mcpkit/conformance/apps/compat/">Apps compat</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/packages/core/">Packages</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/packages/core/">core</a></li>
+                
+                <li><a href="/mcpkit/packages/server/">server</a></li>
+                
+                <li><a href="/mcpkit/packages/client/">client</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-auth/">ext/auth</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-tasks/">ext/tasks</a></li>
+                
+                <li><a href="/mcpkit/packages/ext-ui/">ext/ui</a></li>
+                
+            </ul>
+            
+        </div>
+        
+        <div class="sidebar-section">
+            <a class="sidebar-section-title" href="/mcpkit/design/apps/">Reference</a>
+            
+            <ul class="sidebar-list">
+                
+                <li><a href="/mcpkit/design/apps/">MCP Apps — design</a></li>
+                
+                <li><a href="/mcpkit/design/apps-host/">MCP Apps — host model</a></li>
+                
+                <li><a href="/mcpkit/design/apps-onboarding/">MCP Apps — onboarding</a></li>
+                
+                <li><a href="/mcpkit/design/tasks-v2-migration/">Tasks v2 migration</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2567-handles/">SEP-2567 handles</a></li>
+                
+                <li><a href="/mcpkit/design/sep-2577-deprecations/">SEP-2577 deprecations</a></li>
+                
+                <li><a href="/mcpkit/design/list-ttl-migration/">List TTL migration</a></li>
+                
+            </ul>
+            
+        </div>
+        
+    </nav>
+</aside>
+
+        <main class="main">
+            
+<article class="content">
+    
+    <header class="content-header">
+        <h1>Agent discovery</h1>
+        
+        <p class="lead">Agent discovery extension: listing, scoped tools, per-caller filtering, step-up and roster changes. Experimental.</p>
+        
+        
+        <p class="source-link">
+            Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/agents/discovery/README.md"><code>examples/agents/discovery/README.md</code></a>
+        </p>
+        
+    </header>
+    
+
+    <div class="content-body">
+        
+<h1 id="agent-discovery-listing-scoping-per-caller-filtering-and-step-up">Agent discovery: listing, scoping, per-caller filtering and step-up <a class="anchor" href="#agent-discovery-listing-scoping-per-caller-filtering-and-step-up">¶</a></h1>
+<blockquote>
+<p>⚠ <strong>Experimental.</strong> Implements the agent discovery extension proposed in <a href="https://github.com/modelcontextprotocol/agents-wg/pull/22">agents-wg#22</a>, which is still a draft. The wire shape may change before it merges.</p>
+</blockquote>
+<p>An MCP server can group its tools into <strong>agents</strong>. Each agent has a name, a short description, some instructions and a list of the server&rsquo;s own tools. A host asks for the roster with <code>agents/list</code>, opens the agent it wants with <code>agents/get</code>, and then runs that agent itself, with its own model, calling the agent&rsquo;s tools through the ordinary <code>tools/call</code>. There is no &ldquo;invoke agent&rdquo; method. The server only describes the grouping, and the host does the work.</p>
+<p>This example runs one such server with three agents and walks a scripted host through it as three different callers, so you can see what each one is allowed to see and open.</p>
+<h2 id="quick-start">Quick start <a class="anchor" href="#quick-start">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>just serve   <span style="color:#998;font-style:italic"># terminal 1, the agents server on :8080</span>
+</span></span><span style="display:flex;"><span>just demo    <span style="color:#998;font-style:italic"># terminal 2, the scripted walkthrough</span>
+</span></span></code></pre><p>Add <code>--wire=stateless</code> to both commands to run the same walkthrough over the 2026-07-28 stateless wire. Everything in it works on both.</p>
+<h2 id="the-roster">The roster <a class="anchor" href="#the-roster">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Tools</th>
+<th>Who sees it</th>
+<th>Who can open it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pipeline-agent</code></td>
+<td><code>list_failed_pipelines</code>, <code>get_pipeline_log</code></td>
+<td>everyone</td>
+<td>everyone</td>
+</tr>
+<tr>
+<td><code>billing-agent</code></td>
+<td><code>list_invoices</code></td>
+<td>callers with <code>billing:read</code></td>
+<td>callers with <code>billing:read</code></td>
+</tr>
+<tr>
+<td><code>deploy-agent</code></td>
+<td><code>list_failed_pipelines</code>, <code>deploy_service</code></td>
+<td>everyone</td>
+<td>callers with <code>ops:deploy</code></td>
+</tr>
+</tbody>
+</table>
+<p>The server takes three demo bearer tokens in place of an authorization server. <code>alice-read</code> grants <code>ops:read</code>, <code>alice-deploy</code> grants <code>ops:read ops:deploy</code> (Alice after stepping up), and <code>bob-billing</code> grants <code>ops:read billing:read</code>. <a href="/mcpkit/examples/fine-grained-auth/">fine-grained-auth</a> shows step-up against a real authorization server, if you want that half.</p>
+<h2 id="what-the-walkthrough-shows">What the walkthrough shows <a class="anchor" href="#what-the-walkthrough-shows">¶</a></h2>
+<ul>
+<li><strong>Discovery.</strong> The server advertises the extension with <code>listChanged: true</code>, and <code>agents/list</code> returns routing fields only, so even a large roster is cheap to fetch.</li>
+<li><strong>Scoping.</strong> <code>agents/get</code> returns the instructions, an advisory <code>modelRoutingHint</code>, and the full schemas of the agent&rsquo;s tools. Each schema matches the caller&rsquo;s <code>tools/list</code> entry field for field, which the walkthrough checks.</li>
+<li><strong>Running an agent.</strong> The host calls the scoped tools through <code>tools/call</code>. The walkthrough stands in for the model and calls each tool once.</li>
+<li><strong>Per-caller filtering.</strong> Bob sees <code>billing-agent</code> and Alice does not. When Alice asks for it by name she gets <code>agent_not_found</code>, the same answer as for a name that was never registered, so she can&rsquo;t probe for it.</li>
+<li><strong>Step-up.</strong> Alice can see <code>deploy-agent</code> but can&rsquo;t open it with her first token. <code>agents/get</code> answers with an HTTP 403 and <code>WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;ops:deploy&quot;</code>, the host swaps in a broader token for the same user, and the retry succeeds.</li>
+<li><strong>Roster changes.</strong> A demo tool publishes a fourth agent, the server sends <code>notifications/agents/list_changed</code>, and the host&rsquo;s cache drops its 60-second roster early and picks up the new agent.</li>
+</ul>
+<h2 id="server-side">Server side <a class="anchor" href="#server-side">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>reg, err <span style="color:#000;font-weight:bold">:=</span> agents.<span style="color:#900;font-weight:bold">Register</span>(agents.Config{
+</span></span><span style="display:flex;"><span>    Server:  srv,
+</span></span><span style="display:flex;"><span>    Agents:  []agents.AgentDef{{
+</span></span><span style="display:flex;"><span>        Name:           <span style="color:#d14">&#34;deploy-agent&#34;</span>,
+</span></span><span style="display:flex;"><span>        Description:    <span style="color:#d14">&#34;Ships a service to production&#34;</span>,
+</span></span><span style="display:flex;"><span>        Tools:          []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;list_failed_pipelines&#34;</span>, <span style="color:#d14">&#34;deploy_service&#34;</span>},
+</span></span><span style="display:flex;"><span>        ScopeChallenge: core.<span style="color:#900;font-weight:bold">RequireScopes</span>(<span style="color:#d14">&#34;ops:deploy&#34;</span>), <span style="color:#998;font-style:italic">// step-up on agents/get
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    }},
+</span></span><span style="display:flex;"><span>    TTLMs:   <span style="color:#000;font-weight:bold">&amp;</span>ttl,
+</span></span><span style="display:flex;"><span>    Visible: <span style="color:#000;font-weight:bold">func</span>(ctx core.MethodContext, name <span style="color:#458;font-weight:bold">string</span>) <span style="color:#458;font-weight:bold">bool</span> {
+</span></span><span style="display:flex;"><span>        <span style="color:#000;font-weight:bold">return</span> name <span style="color:#000;font-weight:bold">!=</span> <span style="color:#d14">&#34;billing-agent&#34;</span> <span style="color:#000;font-weight:bold">||</span> core.<span style="color:#900;font-weight:bold">HasScope</span>(ctx, <span style="color:#d14">&#34;billing:read&#34;</span>)
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p><code>Visible</code> hides an agent from a caller entirely. <code>ScopeChallenge</code> keeps it listed but asks for more authorization before it can be opened. An agent the caller can&rsquo;t see never produces a challenge, so the challenge can&rsquo;t leak its existence.</p>
+<h2 id="host-side">Host side <a class="anchor" href="#host-side">¶</a></h2>
+<p><code>experimental/ext/agents/clients/go</code> carries the host helpers the walkthrough uses:</p>
+<ul>
+<li><code>agentsclient.Cache</code> keeps the roster and each agent&rsquo;s details for the server&rsquo;s <code>ttlMs</code>, and drops them on <code>agent_not_found</code>.</li>
+<li><code>agentsclient.WatchListChanged</code> opens a <code>subscriptions/listen</code> stream on the stateless wire. On the session wire the notification arrives on the GET stream instead, through <code>client.WithNotificationCallback</code>, which is how <a href="https://github.com/panyam/mcpkit/blob/main/examples/agents/discovery/host.go"><code>host.go</code></a> handles both.</li>
+<li><code>agentsclient.RoleTable</code> maps a <code>modelRoutingHint</code> role to one of the host&rsquo;s own models.</li>
+<li><code>agentsclient.StepUpScopes</code> reads the scopes out of a step-up refusal.</li>
+</ul>
+<p>See <a href="https://github.com/panyam/mcpkit/blob/main/examples/agents/discovery/WALKTHROUGH.md">WALKTHROUGH.md</a> for the step-by-step sequence (regenerate it with <code>just readme</code>).</p>
+
+
+<hr/>
+
+<h2 id="walkthrough">Walkthrough</h2>
+<p class="source-link">Generated from the scripted demo. Run it with <code>make serve</code> + <code>make demo</code>. Source: <a href="https://github.com/panyam/mcpkit/blob/main/examples/agents/discovery/WALKTHROUGH.md"><code>examples/agents/discovery/WALKTHROUGH.md</code></a></p>
+
+<h1 id="mcp-agents-discovery-scoping-per-caller-filtering-and-step-up">MCP agents: discovery, scoping, per-caller filtering and step-up <a class="anchor" href="#mcp-agents-discovery-scoping-per-caller-filtering-and-step-up">¶</a></h1>
+<p>Walks through the agent discovery extension (agents-wg#22, implemented in <code>experimental/ext/agents</code>). A server advertises agents, each a named group of its own tools with instructions. A host lists them with <code>agents/list</code>, opens one with <code>agents/get</code>, and runs it locally, calling the scoped tools through the ordinary <code>tools/call</code>. Three callers with different scopes show what each one is allowed to see and open.</p>
+<h2 id="what-youll-learn">What you&rsquo;ll learn <a class="anchor" href="#what-youll-learn">¶</a></h2>
+<ul>
+<li><strong>Connect as Alice and check the extension</strong> - A host must not assume agent discovery unless the server advertises it. <code>listChanged: true</code> says the server will announce roster changes.</li>
+<li><strong>List the agents Alice can see</strong> - The roster carries routing fields only, never instructions or tool schemas, so a large roster stays cheap. <code>billing-agent</code> is missing because Alice lacks <code>billing:read</code>. <code>cacheScope</code> is <code>private</code> because the answer depends on who asks.</li>
+<li><strong>Open pipeline-agent</strong> - <code>agents/get</code> returns the instructions, an advisory model hint and the full schemas of the agent&rsquo;s tools. Every tool it returns also appears in <code>tools/list</code>, field for field. The host maps the hint onto its own models with <code>agentsclient.RoleTable</code>.</li>
+<li><strong>Run it, through tools/call</strong> - There is no agent-invocation method. The host runs the agent locally with its own model and calls the scoped tools like any other tool. This step stands in for the model and calls each one once.</li>
+<li><strong>Per-caller filtering: Bob sees a different roster</strong> - Bob holds <code>billing:read</code>, so his roster includes <code>billing-agent</code>. When Alice asks for it by name she gets <code>agent_not_found</code>, exactly what a name that was never registered returns, so she cannot probe for agents she is not meant to know about.</li>
+<li><strong>Step-up: Alice may see deploy-agent but not open it yet</strong> - <code>deploy-agent</code> is in Alice&rsquo;s roster, so she is allowed to know it exists, but <code>agents/get</code> asks for <code>ops:deploy</code>. The server answers with the standard step-up challenge, <code>agentsclient.StepUpScopes</code> reads the scopes out of it, and the host retries with a broader token for the same user. The refusal is never cached, so the retry reaches the server.</li>
+<li><strong>The roster changes, and the host hears about it</strong> - The roster was cached for its 60 s <code>ttlMs</code>, so only the notification can make the host see <code>release-agent</code> sooner. On the session wire it arrives on the GET stream; on the stateless wire <code>agentsclient.WatchListChanged</code> opens a <code>subscriptions/listen</code> stream for it. Either way the handler calls <code>Cache.Invalidate</code>.</li>
+</ul>
+<h2 id="flow">Flow <a class="anchor" href="#flow">¶</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Host as MCP Host (this walkthrough)
+    participant Server as MCP Server (just serve)
+
+    Note over Host,Server: Step 1: Connect as Alice and check the extension
+    Host-&gt;&gt;Server: initialize (Bearer alice-read)
+    Server--&gt;&gt;Host: capabilities.extensions[&quot;io.mcpkit/agents&quot;] = {listChanged: true}
+
+    Note over Host,Server: Step 2: List the agents Alice can see
+    Host-&gt;&gt;Server: agents/list
+    Server--&gt;&gt;Host: {agents: [cards], ttlMs: 60000, cacheScope: &quot;private&quot;}
+
+    Note over Host,Server: Step 3: Open pipeline-agent
+    Host-&gt;&gt;Server: agents/get {name: &quot;pipeline-agent&quot;}
+    Server--&gt;&gt;Host: {agent, instructions, modelRoutingHint, tools: [...]}
+
+    Note over Host,Server: Step 4: Run it, through tools/call
+    Host-&gt;&gt;Server: tools/call list_failed_pipelines
+    Host-&gt;&gt;Server: tools/call get_pipeline_log {id}
+
+    Note over Host,Server: Step 5: Per-caller filtering: Bob sees a different roster
+    Host-&gt;&gt;Server: agents/list (Bearer bob-billing)
+    Host-&gt;&gt;Server: agents/get billing-agent (Bearer alice-read)
+    Server--&gt;&gt;Host: -32602 {reason: &quot;agent_not_found&quot;}
+
+    Note over Host,Server: Step 6: Step-up: Alice may see deploy-agent but not open it yet
+    Host-&gt;&gt;Server: agents/get deploy-agent (Bearer alice-read)
+    Server--&gt;&gt;Host: HTTP 403, WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;ops:deploy&quot;
+    Host-&gt;&gt;Server: agents/get deploy-agent (Bearer alice-deploy)
+    Server--&gt;&gt;Host: {agent, instructions, tools}
+
+    Note over Host,Server: Step 7: The roster changes, and the host hears about it
+    Host-&gt;&gt;Server: tools/call publish_release_agent
+    Server--&gt;&gt;Host: notifications/agents/list_changed
+    Host-&gt;&gt;Server: agents/list
+</code></pre>
+<h2 id="steps">Steps <a class="anchor" href="#steps">¶</a></h2>
+<h3 id="setup">Setup <a class="anchor" href="#setup">¶</a></h3>
+<p>Start the server in a separate terminal first:</p>
+<pre><code>Terminal 1:  just serve         # agents server on :8080
+Terminal 2:  just demo          # this walkthrough (--tui for the interactive TUI)
+</code></pre>
+<p>The server accepts three demo bearer tokens in place of an authorization server: <code>alice-read</code> (<code>ops:read</code>), <code>alice-deploy</code> (<code>ops:read ops:deploy</code>) and <code>bob-billing</code> (<code>ops:read billing:read</code>). <code>examples/fine-grained-auth</code> shows the same step-up flow against a real one.</p>
+<h3 id="the-roster">The roster <a class="anchor" href="#the-roster">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Tools</th>
+<th>Who sees it</th>
+<th>Who can open it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pipeline-agent</code></td>
+<td><code>list_failed_pipelines</code>, <code>get_pipeline_log</code></td>
+<td>everyone</td>
+<td>everyone</td>
+</tr>
+<tr>
+<td><code>billing-agent</code></td>
+<td><code>list_invoices</code></td>
+<td><code>billing:read</code> only</td>
+<td><code>billing:read</code> only</td>
+</tr>
+<tr>
+<td><code>deploy-agent</code></td>
+<td><code>list_failed_pipelines</code>, <code>deploy_service</code></td>
+<td>everyone</td>
+<td><code>ops:deploy</code> only (step-up)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="step-1-connect-as-alice-and-check-the-extension">Step 1: Connect as Alice and check the extension <a class="anchor" href="#step-1-connect-as-alice-and-check-the-extension">¶</a></h3>
+<p>A host must not assume agent discovery unless the server advertises it. <code>listChanged: true</code> says the server will announce roster changes.</p>
+<h3 id="step-2-list-the-agents-alice-can-see">Step 2: List the agents Alice can see <a class="anchor" href="#step-2-list-the-agents-alice-can-see">¶</a></h3>
+<p>The roster carries routing fields only, never instructions or tool schemas, so a large roster stays cheap. <code>billing-agent</code> is missing because Alice lacks <code>billing:read</code>. <code>cacheScope</code> is <code>private</code> because the answer depends on who asks.</p>
+<h3 id="step-3-open-pipeline-agent">Step 3: Open pipeline-agent <a class="anchor" href="#step-3-open-pipeline-agent">¶</a></h3>
+<p><code>agents/get</code> returns the instructions, an advisory model hint and the full schemas of the agent&rsquo;s tools. Every tool it returns also appears in <code>tools/list</code>, field for field. The host maps the hint onto its own models with <code>agentsclient.RoleTable</code>.</p>
+<h3 id="step-4-run-it-through-toolscall">Step 4: Run it, through tools/call <a class="anchor" href="#step-4-run-it-through-toolscall">¶</a></h3>
+<p>There is no agent-invocation method. The host runs the agent locally with its own model and calls the scoped tools like any other tool. This step stands in for the model and calls each one once.</p>
+<h3 id="step-5-per-caller-filtering-bob-sees-a-different-roster">Step 5: Per-caller filtering: Bob sees a different roster <a class="anchor" href="#step-5-per-caller-filtering-bob-sees-a-different-roster">¶</a></h3>
+<p>Bob holds <code>billing:read</code>, so his roster includes <code>billing-agent</code>. When Alice asks for it by name she gets <code>agent_not_found</code>, exactly what a name that was never registered returns, so she cannot probe for agents she is not meant to know about.</p>
+<h3 id="step-6-step-up-alice-may-see-deploy-agent-but-not-open-it-yet">Step 6: Step-up: Alice may see deploy-agent but not open it yet <a class="anchor" href="#step-6-step-up-alice-may-see-deploy-agent-but-not-open-it-yet">¶</a></h3>
+<p><code>deploy-agent</code> is in Alice&rsquo;s roster, so she is allowed to know it exists, but <code>agents/get</code> asks for <code>ops:deploy</code>. The server answers with the standard step-up challenge, <code>agentsclient.StepUpScopes</code> reads the scopes out of it, and the host retries with a broader token for the same user. The refusal is never cached, so the retry reaches the server.</p>
+<h3 id="step-7-the-roster-changes-and-the-host-hears-about-it">Step 7: The roster changes, and the host hears about it <a class="anchor" href="#step-7-the-roster-changes-and-the-host-hears-about-it">¶</a></h3>
+<p>The roster was cached for its 60 s <code>ttlMs</code>, so only the notification can make the host see <code>release-agent</code> sooner. On the session wire it arrives on the GET stream; on the stateless wire <code>agentsclient.WatchListChanged</code> opens a <code>subscriptions/listen</code> stream for it. Either way the handler calls <code>Cache.Invalidate</code>.</p>
+<h3 id="where-to-look-in-the-code">Where to look in the code <a class="anchor" href="#where-to-look-in-the-code">¶</a></h3>
+<ul>
+<li>Server: <code>agents.Register</code>, <code>AgentDef</code> (including <code>ScopeChallenge</code>) and <code>Config.Visible</code>, in <code>experimental/ext/agents/</code></li>
+<li>Host helpers: <code>agentsclient.Cache</code>, <code>WatchListChanged</code>, <code>RoleTable</code>, <code>StepUpScopes</code>, in <code>experimental/ext/agents/clients/go/</code></li>
+<li>This example&rsquo;s host: <code>host.go</code>. Its server: <code>buildServer</code> in <code>main.go</code></li>
+<li>Spec: <a href="https://github.com/modelcontextprotocol/agents-wg/pull/22">https://github.com/modelcontextprotocol/agents-wg/pull/22</a></li>
+</ul>
+<h2 id="run-it">Run it <a class="anchor" href="#run-it">¶</a></h2>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/agents/discovery/
+</span></span></code></pre><p>Pass <code>--non-interactive</code> to skip pauses:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>go run ./examples/agents/discovery/ --non-interactive
+</span></span></code></pre>
+
+    </div>
+</article>
+
+        </main>
+    </div>
+
+    
+<footer class="site-footer">
+    <div class="site-footer-inner">
+        <p>
+            <a href="https://github.com/panyam/mcpkit">https://github.com/panyam/mcpkit</a> ·
+            Licensed under Apache-2.0 ·
+            Source rendered by <a href="https://github.com/panyam/s3gen">s3gen</a>.
+        </p>
+    </div>
+</footer>
+
+
+    
+    <script type="module">
+      const blocks = document.querySelectorAll('pre > code.language-mermaid');
+      if (blocks.length) {
+        const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+        blocks.forEach((code) => {
+          const pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.run();
+      }
+    </script>
+
+    
+    <script>
+      document.querySelectorAll('pre > code:not(.language-mermaid)').forEach((code) => {
+        const pre = code.parentElement;
+        pre.classList.add('has-copy');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'copy-btn';
+        btn.textContent = 'Copy';
+        btn.setAttribute('aria-label', 'Copy code to clipboard');
+        btn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(code.textContent);
+            btn.textContent = 'Copied';
+          } catch {
+            btn.textContent = 'Failed';
+          }
+          setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+        });
+        pre.appendChild(btn);
+      });
+    </script>
+
+    
+    <script>
+      (function () {
+        const btn = document.querySelector('.theme-toggle');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const root = document.documentElement;
+          const current = root.dataset.theme ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          const next = current === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          try { localStorage.setItem('theme', next); } catch {}
+        });
+      })();
+    </script>
+</body>
+</html>
