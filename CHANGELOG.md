@@ -9,6 +9,16 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-14
+
+A patch release whose main fix is stdio: mcpkit now speaks MCP's
+newline-delimited framing, so an mcpkit stdio server answers spec-following
+hosts. It also brings `subscriptions/listen` to the 2026-07-28 schema with
+filter keys extensions can define, moves `experimental/ext/agents` to the
+agents-wg#22 wire shape, and renumbers the Events error codes to SEP-3415.
+Some of this is wire-breaking (pre-1.0, per `RELEASING.md`). Full write-up:
+[`docs/releases/v0.7.2.md`](docs/releases/v0.7.2.md).
+
 ### Added
 - **Extensions can add `subscriptions/listen` filter keys.**
   `Server.RegisterSubscriptionFilter` takes a key and an `Accept` hook that
@@ -17,8 +27,34 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 - **`Client.Listen`** opens a `subscriptions/listen` stream, returns after the
   acknowledgement with the honored filter, and routes notifications by method
   (#1504).
+- **Protocol version `2025-06-18`** is supported. It was missing, so a client
+  pinned to it was negotiated up to `2026-07-28` and failed (#1519).
+- **`experimental/ext/events`: `Config.ChatGPTCompat`** also declares the
+  capability at top-level `capabilities.events`, which is where ChatGPT reads
+  it. Off by default, through a generic `core.Extension.TopLevel` hook (#1501).
+- **`experimental/ext/events/clients/go`: `Stream` reconnects a silent
+  stream** with its last cursor after twice the heartbeat interval, as
+  SEP-3415 asks. `StreamOptions.DisableReconnect` keeps the single call
+  (#1503). The client also gained a poll loop and a conformance driver.
+- **`make exercise-events`** runs both events conformance suites into one
+  table, and `make conf-events-setup` creates their checkouts (#1500).
 
 ### Changed
+- **stdio is newline-delimited (wire-breaking for the client).** The server
+  detects the framing from the client's first byte and answers in kind, so
+  older mcpkit clients keep working. The client now defaults to
+  newline-delimited; `client.WithStdioFraming` and `client.WithCommandFraming`
+  select `Content-Length` for a server built before this release (#1517).
+- **JSON-RPC batches are refused on 2025-06-18 and later**, which removed
+  them. Streamable HTTP answers 400 with one `-32600`, and nothing in the
+  batch runs. Earlier versions are unchanged (#1519).
+- **`experimental/ext/agents` follows agents-wg#22 at `9b16840e`
+  (breaking).** Cards are `{name, description, capabilities}`, `agents/get
+  {name}` returns a flat result with `modelRoutingHint`, both results carry
+  `resultType`, `ttlMs` and `cacheScope` (private by default), and errors carry
+  `data.reason`. `AgentDef.Tools` is a list of tool names resolved against the
+  registry per request, and `delegateTool`, `exampleTasks`, `tasksEnabled`
+  and `skillUri` are gone (#1393).
 - **`experimental/ext/events`: error codes follow SEP-3415 (wire-breaking).**
   The five Events codes move from `-32011..-32015` to `-32023..-32027`
   (`NotFound`, `Forbidden`, `ResourceExhausted`, `Unsupported`,
@@ -41,6 +77,10 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 - **Typed notification params reach listen streams intact.** A struct passed
   to `Broadcast` was nested under `"data"` on a `subscriptions/listen` frame,
   and any `_meta` it carried was dropped (#1504).
+- **`experimental/ext/events`: the final `events/stream` result carries the
+  subscription ID** in `_meta`, as SEP-3415 says (#1501).
+- **Conformance suites refuse to grade a fixture they did not start**, when
+  its port is already held or it died during startup (#1513).
 
 ## [0.7.1] - 2026-09-25
 
