@@ -155,7 +155,7 @@ Bump all of them together and run `make tidy-all`. **Leaving even one behind fai
 `test-auth` job** via `tests/e2e` MVS resolution, and the error points at e2e rather than at the
 module you missed.
 
-Current pin: v0.1.39. Version-specific fixes worth knowing:
+Current pin: v0.1.40. Version-specific fixes worth knowing:
 - **v0.1.14** — required for the two-TP pattern.
 - **v0.1.18** — fixed `client.NewAuthClient` stripping the path from the issuer URL, which broke
   browser auth against Keycloak realms. `LoginWithBrowser` now prefers `c.cachedASMeta` over
@@ -167,8 +167,12 @@ Current pin: v0.1.39. Version-specific fixes worth knowing:
 - **v0.1.39** — oneauth#387, the pushdown from #1538. `BrowserLoginRequest.Listener` lets the caller
   own the loopback listener (no release/rebind window), `LoopbackRedirectURI` gives the exact string
   to register, `FollowRedirects` fails on an authorization-server error instead of returning nil,
-  and a headless consent opener sits beside it. mcpkit still uses its own `portHold` and
-  `approveHeadless` until #1539 switches over.
+  and a headless consent opener sits beside it. #1539 switched `OAuthTokenSource` to `Listener`
+  and the proxy to `ApproveConsent`.
+- **v0.1.40** — oneauth#392: typed errors from `LoginWithBrowser`, so a caller can tell an
+  authorization server's rejection from a declined consent, a failed token exchange or a timeout.
+  mcpkit does not branch on them yet; they are what an aimed re-registration in `OAuthTokenSource`
+  would need (§ DCR registers the redirect it will listen on).
 
-Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.39`. Use it from
+Install the CLI once with `go install github.com/panyam/oneauth/cmd/oneauth@v0.1.40`. Use it from
 PATH, since `go run @ver` gets confused by oneauth's own replace directives.

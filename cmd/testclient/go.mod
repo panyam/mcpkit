@@ -5,7 +5,7 @@ go 1.26.9
 require (
 	github.com/panyam/mcpkit v0.7.2
 	github.com/panyam/mcpkit/ext/auth v0.7.2
-	github.com/panyam/oneauth v0.1.39
+	github.com/panyam/oneauth v0.1.40
 )
 
 require (
