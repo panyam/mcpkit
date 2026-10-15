@@ -129,3 +129,26 @@ here.
 `clients/go`: `agentsclient.New(mcp)` → `SupportsAgents` / `ListAgentsPage` / `ListAgents` (walks
 every page) / `GetAgent`, plus `IsAgentNotFound` and `IsInvalidAgentDefinition` for the two
 `data.reason` errors. Tested via the experimental umbrella; wired into `SUB_MODS_TO_TAG`.
+
+The cache and the routing helper live here too. Two choices in them that are not obvious from the
+code:
+
+- **The cache keeps a generation counter.** A fetch records the generation when it starts and
+  stores its result only if no invalidation happened meanwhile. Without it, an `agents/get` that
+  was in flight when `notifications/agents/list_changed` arrived would store pre-change details
+  for a whole TTL. `TestCacheInFlightFetchAcrossInvalidateIsNotStored` pins it.
+- **`RoleTable.Resolve` escalates and never downgrades.** The SEP leaves resolution to the host
+  and says only that an unsatisfiable hint may fall back to the default model. Moving up a role
+  when the hinted one is missing (or lacks vision) keeps the agent at least as capable as the
+  server asked. Moving down would quietly run it on less. When nothing larger fits, `Default`
+  wins, which is usually the supervisor's own model. The reference Python branch has no
+  equivalent to compare against, at least as of its `feat/mcp-agents-exp` head on 2026-10-14.
+
+## `list_changed`
+
+`Register` declares `listChanged: true` and registers the `agentsListChanged` filter key, the
+same way `events.Register` handles `eventsListChanged` (#1531). Declaring it unconditionally is
+deliberate, since a server that starts with no agents and adds them later still owes its clients
+the notification. Changes the registry cannot see, such as a `Visible` policy that starts
+answering differently, need an explicit `NotifyListChanged`.
+

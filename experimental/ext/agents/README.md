@@ -60,6 +60,13 @@ reg, err := agents.Register(agents.Config{
 handlers. The returned `Registry` supports runtime `AddAgent` and
 `RemoveAgent`. `agents/list` preserves insertion order.
 
+**Roster changes.** The extension declares `listChanged: true`. `AddAgent` and
+`RemoveAgent` broadcast `notifications/agents/list_changed`, which reaches a
+2026-07-28 client only on a `subscriptions/listen` stream that set
+`agentsListChanged`. A no-op change sends nothing. When what callers see
+changes some other way (the `Visible` policy, or a tool an agent names
+appearing), call `NotifyListChanged`.
+
 **Tools are names, not copies.** `agents/get` looks each name up in the
 server's tool registry on every request and applies the same per-client
 rewrite `tools/list` does, so every tool it returns matches that caller's
@@ -114,11 +121,52 @@ if agentsclient.IsAgentNotFound(err) {
 hints, for hosts that cache the roster or page lazily.
 `IsInvalidAgentDefinition(err)` classifies the server-misconfiguration case.
 
+### Caching
+
+`Cache` keeps the roster and each agent's details for their `ttlMs`, as the
+SEP's caching rules describe, and `WatchListChanged` invalidates it when the
+roster changes:
+
+```go
+cache := agentsclient.NewCache(ac)
+l, _ := agentsclient.WatchListChanged(ctx, mcp, cache.Invalidate)
+defer l.Stop()
+
+roster, _ := cache.ListAgents(ctx)       // fresh from cache, or re-listed
+details, _ := cache.GetAgent(ctx, name)  // likewise, per agent
+```
+
+A result without a positive `ttlMs` is fetched again on every call, which is
+what SEP-2549 says. `WithFallbackTTL(d)` keeps such results for `d` instead.
+`agent_not_found` drops that agent and the roster, and
+`invalid_agent_definition` is never cached. Use one `Cache` per client, since a
+client is one authorization context.
+
+### Model routing hints
+
+`RoleTable` maps `modelRoutingHint` roles to the host's own models. It is
+generic, so `M` is whatever the host runs (a provider, a model name):
+
+```go
+table := agentsclient.RoleTable[string]{
+    Roles: map[agents.ModelRole]agentsclient.RoleModel[string]{
+        agents.ModelRoleSmall: {Model: "small-model"},
+        agents.ModelRoleLarge: {Model: "large-model", Vision: true},
+    },
+    Default: "supervisor-model",
+}
+model, how := table.Resolve(details.ModelRoutingHint)
+```
+
+`Resolve` uses the hinted role when it has a model (and vision, if the hint
+asks for it), otherwise moves up to a larger role, never down, and falls back
+to `Default` when nothing fits. `how` reports `hinted`, `escalated` or
+`default`. `LargestRole` merges the hints of several agents run together.
+
 ## Not yet implemented
 
 Tracked in panyam/mcpkit#1393:
 
-- `notifications/agents/list_changed` via `subscriptions/listen`. The filter key it needs can be registered since #1504.
 - Step-up authorization for an agent the caller may know about but not use.
 - Switching the identifier to `io.modelcontextprotocol/agents`.
 

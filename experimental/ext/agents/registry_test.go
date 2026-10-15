@@ -118,7 +118,8 @@ func TestExtensionAdvertised(t *testing.T) {
 
 	cap, ok := tc.ServerExtensionCapability(agents.ExtensionID)
 	require.True(t, ok)
-	assert.Empty(t, cap, "listChanged is not advertised until notifications can be delivered")
+	assert.Equal(t, core.ExtensionCapability{"listChanged": true}, cap,
+		"Register promises list_changed, since AddAgent and RemoveAgent always broadcast")
 }
 
 // agents/list carries routing cards only. If instructions or schemas leak

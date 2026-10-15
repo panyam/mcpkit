@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -119,7 +120,13 @@ func Register(cfg Config) (*Registry, error) {
 		errs = append([]error{fmt.Errorf("agents: dropped duplicate name(s): %v", dupes)}, errs...)
 	}
 
-	cfg.Server.RegisterExtension(AgentsExtension{})
+	// listChanged is declared true unconditionally: AddAgent and RemoveAgent
+	// broadcast whether or not the roster started empty. The filter key is
+	// what lets the broadcast reach a 2026-07-28 subscriptions/listen
+	// stream. An error means Register ran twice on one server, and the
+	// first registration is the one that matters.
+	cfg.Server.RegisterExtension(AgentsExtension{ListChanged: true})
+	_ = cfg.Server.RegisterSubscriptionFilter(server.ListChangedFilterKey(ListChangedFilterKey, NotificationListChanged))
 	cfg.Server.HandleMethod(MethodList, r.handleList)
 	cfg.Server.HandleMethod(MethodGet, r.handleGet)
 
@@ -130,25 +137,29 @@ func Register(cfg Config) (*Registry, error) {
 // rejected and the existing agent is left untouched. An agent naming an
 // unregistered tool is added anyway and reported in the returned error, the
 // same advisory contract as Register. New agents appear at the end of the
-// agents/list order.
+// agents/list order, and every client listening for agentsListChanged is
+// told.
 func (r *Registry) AddAgent(def AgentDef) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if _, exists := r.byName[def.Name]; exists {
+		r.mu.Unlock()
 		return fmt.Errorf("agents: agent %q already registered", def.Name)
 	}
 	r.byName[def.Name] = def
 	r.order = append(r.order, def.Name)
-	return r.checkTools(def)
+	err := r.checkTools(def)
+	r.mu.Unlock()
+	r.broadcastListChanged()
+	return err
 }
 
-// RemoveAgent drops an agent from the roster. Removing an unknown name is a
-// no-op, so a caller reconciling a desired roster need not guard every
-// delete.
+// RemoveAgent drops an agent from the roster and tells listening clients.
+// Removing an unknown name is a no-op that sends nothing, so a caller
+// reconciling a desired roster need not guard every delete.
 func (r *Registry) RemoveAgent(name string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if _, exists := r.byName[name]; !exists {
+		r.mu.Unlock()
 		return
 	}
 	delete(r.byName, name)
@@ -158,6 +169,20 @@ func (r *Registry) RemoveAgent(name string) {
 			break
 		}
 	}
+	r.mu.Unlock()
+	r.broadcastListChanged()
+}
+
+// NotifyListChanged sends notifications/agents/list_changed without changing
+// the roster. Call it when what a caller sees changed some other way: the
+// Visible policy started answering differently, or a tool an agent names was
+// registered or removed.
+func (r *Registry) NotifyListChanged() { r.broadcastListChanged() }
+
+// broadcastListChanged runs outside r.mu, because Broadcast fans out to
+// every open stream and must not hold up per-request lookups.
+func (r *Registry) broadcastListChanged() {
+	r.srv.Broadcast(context.Background(), NotificationListChanged, map[string]any{})
 }
 
 // checkTools reports the tool names in def that the server catalog does not
