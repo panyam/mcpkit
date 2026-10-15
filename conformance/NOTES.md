@@ -440,9 +440,15 @@ built. Three consequences worth knowing before touching any of it:
   filename is *silently dropped* from the manifest rather than rejected, so no honest name worked.
   It became `sep-3415` in #1502. The rename left 160 ids and the 135 / 122 / 13
   declared / tested / untested traceability counts unchanged.
-- **The rows still quote the sketch, not the SEP.** The SEP restates the sketch rather than quoting
-  it, so only 11 of 165 row texts appear in it verbatim even where the rule is unchanged. Re-extracting
-  against the SEP is the rest of #1502, and until then `spec_url` names the sketch text.
+- **Every row was re-quoted, because the SEP rewords the sketch.** Only 11 of 165 row texts appeared
+  in the SEP verbatim, even where the rule was unchanged, so #1502 re-quoted all of them against the
+  SEP pinned at `c47fd245`. Each `text` is an exact span of the SEP and each `url` the section it sits
+  under, both checked by script against the pinned file, which is what made 166 rows reviewable at
+  all: a quote that is a paraphrase fails the check instead of reading plausibly. One row went
+  (`descriptor-description`, a rule the SEP never states), two came in (`refreshBefore` always
+  present, the empty unsubscribe `Result`), and five graded rows now quote a rule the SEP states
+  differently from the sketch; the yaml header lists them. Traceability after: 137 / 124 / 13.
+  Re-extract when the SEP's head moves past `c47fd245`.
 - **`new-sep` does not apply cleanly.** It expects a PR in
   `modelcontextprotocol/modelcontextprotocol` touching `docs/specification/draft/*.mdx`, and
   `specPathToUrl` hard-requires that prefix, so `--spec-path` fails too. Scaffold with `--spec-url`.
@@ -563,13 +569,15 @@ Two implementations and a suite, and the suite found a defect in each plus one i
 is the case for running a suite against something you did not write, and it only worked because the
 rows were not softened to make both sides pass.
 
-**The capability rows agree with the SEP and not with the sketch's `main`.** They quote PR 7's head,
-which never merged. SEP-3415 states the same rule, so re-extracting them against the SEP changes
-their citation, not their verdict.
+**The capability rows agree with the SEP and not with the sketch's `main`.** They quoted PR 7's head,
+which never merged, until #1502 re-quoted them from SEP-3415's Capability Negotiation. The citation
+changed and the verdicts did not.
 
-**Four rows are declared and not yet emitted** by any scenario, from the same PR: the client
-declaration, the empty-settings case, `listChanged` gating the notification, and the `-32601`
-fallback. They report untested, which is the manifest working.
+**Two capability rows are declared and not yet emitted** by any scenario: the client declaration
+and `listChanged` gating the notification. Both moved in the SEP, the declaration to per-request
+`_meta` and the notification to `subscriptions/listen`, so a scenario for either needs the
+2026-07-28 wire (#1505). They report untested, which is the manifest working. The empty-settings
+and `-32601` fallback rows that used to sit beside them are emitted now.
 
 **Thirteen divergences, and the shape of what the suite catches.** Six closed by #1379/#1381/#1416,
 five by #1432/#1433/#1434, endpoint verification by #1444, and one a fixture question. Current:

@@ -158,11 +158,11 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      110 pass / 1 fail / 13 warn across five scenarios, measured 2026-09-24
-      against examples/events/kitchen-sink on the 1468 branch (hand-recorded
-      from the runner's own summaries, so re-run before trusting it):
-      events-discovery 12/12, events-poll 30/30, events-push 20/20,
-      events-webhook 25/26, events-webhook-delivery 23/23. The fixture is
+      115 pass / 1 fail / 13 warn across five scenarios, measured 2026-10-14
+      against examples/events/kitchen-sink at e631f493 with the fork at
+      85ce513 (hand-recorded from the runner's own summaries, so re-run before
+      trusting it): events-discovery 12/12, events-poll 31/31, events-push
+      21/21, events-webhook 28/29, events-webhook-delivery 23/23. The fixture is
       spawned with --conformance-events, which registers twelve diagnostic
       controls the scenarios drive, including a restart that rebuilds the
       server over the same subscription store and one that permits the
@@ -173,9 +173,8 @@ suites:
       Proposed upstream as a draft in modelcontextprotocol/conformance 521 and
       tracked on the fork branch until it lands. Check IDs are sep-3415-*:
       MCP Events is SEP-3415, a draft in modelcontextprotocol/modelcontextprotocol.
-      INFO because the rows still quote the design sketch in
-      modelcontextprotocol/experimental-ext-triggers-events and are being
-      re-extracted against the SEP (1502). The one remaining red row,
+      Every row quotes SEP-3415 at c47fd245 with a per-row section url (1502).
+      INFO because the SEP is still a draft and its text can move. The one remaining red row,
       subscribe-auth-required, is untestable rather than a defect: the harness
       holds one credential for a run and kitchen-sink sets
       UnsafeAnonymousPrincipal by design. Thirteen divergences found in total,
@@ -200,8 +199,9 @@ suites:
       2/2, events-client-no-extension 1/1. The harness plays the events server and
       grades what the client sends. The driver only calls what the SDK offers,
       so a red row is an SDK gap. Proposed upstream as a draft in
-      modelcontextprotocol/conformance 541, stacked on 521. INFO for the same
-      reason as testconf-events: the rows still quote the design sketch while
-      they are re-extracted against SEP-3415 (1502). `make conf-events-setup`
+      modelcontextprotocol/conformance 541, stacked on 521. Re-measured
+      2026-10-14 after the rows were re-quoted against SEP-3415 (1502), with
+      the same results. INFO for the same reason as testconf-events: the SEP
+      is still a draft. `make conf-events-setup`
       creates this checkout as a worktree of the server one.
     tracking: "mcpkit 1500"
