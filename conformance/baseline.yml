@@ -22,7 +22,7 @@ server: []
 #
 # Remove entries as the client OAuth flow is implemented.
 
-client:
+client: []
   # ALL 14/14 required scenarios passing (210/210 checks)!
   # ✓ auth/metadata-default, metadata-var1, metadata-var2, metadata-var3
   # ✓ auth/scope-from-www-authenticate, scope-from-scopes-supported, scope-omitted-when-undefined
@@ -39,11 +39,6 @@ client:
   # the no-downgrade rule.
 
   # --- Full client suite (testconf-client, --suite all) ---
-  # Everything below is extension or draft category upstream — none of these
-  # count toward tier scoring (tier-check excludes 'extension' and draft tags).
-
-  # Extension — SEP-1932 DPoP, deferred until the spec exits draft (issue 803)
-  - auth/dpop                               # DPoP proof on token request + resource calls
-  - auth/dpop-nonce                         # DPoP with server-required nonce
-
-
+  # No expected failures. The last two, the SEP-1932 DPoP scenarios
+  # auth/dpop and auth/dpop-nonce, pass since OAuthTokenSource.DPoPKey
+  # landed (issue 803).

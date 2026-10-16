@@ -5,6 +5,8 @@
   "auth/basic-cimd": 49,
   "auth/client-credentials-basic": 48,
   "auth/client-credentials-jwt": 40,
+  "auth/dpop": 46,
+  "auth/dpop-nonce": 52,
   "auth/enterprise-managed-authorization": 41,
   "auth/iss-normalized": 22,
   "auth/iss-not-advertised": 30,
@@ -39,6 +41,10 @@
   "json-schema-ref-no-deref": 1,
   "request-metadata": 8,
   "sep-2322-client-request-state": 5,
+  "sep-2640-client-no-prefetch": 1,
+  "sep-2640-client-verify-digest": 1,
+  "sep-2640-client-verify-frontmatter": 1,
+  "sep-2640-client-verify-size": 1,
   "sse-retry": 20,
   "tools_call": 2
 }

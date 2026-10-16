@@ -37,7 +37,7 @@ Needs Node.js 22+ and a clone of `modelcontextprotocol/conformance` at `../conf-
 | Surface | Scenarios pass/total | Checks pass/fail |
 |---|---:|---:|
 | Server | 31/31 | 73/0 |
-| Client | 21/21 | 573/8 |
+| Client | 21/21 | 581/0 |
 
 ## mcpkit-local Conformance Suites
 
@@ -522,13 +522,6 @@ _None._
 
 
 ## Open Gaps
-
-### Failing scenarios
-
-| Scenario | Surface | Checks fail/pass | Tracking |
-|---|---|---:|---|
-| `auth/dpop` | client | 3/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft. |
-| `auth/dpop-nonce` | client | 5/9 | https://github.com/panyam/mcpkit/issues/803 — Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant. |
 
 ### Declared requirements with no emitted check
 

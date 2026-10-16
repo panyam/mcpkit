@@ -30,12 +30,6 @@ scenarios:
   "server-stateless":
     issue: "upstream conformance test bug"
     note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."
-  "auth/dpop":
-    issue: "https://github.com/panyam/mcpkit/issues/803"
-    note: "Extension category, not tier-scored. SEP-1932 DPoP deferred until the spec exits draft."
-  "auth/dpop-nonce":
-    issue: "https://github.com/panyam/mcpkit/issues/803"
-    note: "Extension category, not tier-scored. SEP-1932 DPoP server-required-nonce variant."
 
 checks:
   "sep-2243-server-not-expect-null":

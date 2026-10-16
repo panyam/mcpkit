@@ -283,9 +283,9 @@ These span packages and will bite on a task that never opens a routed doc.
 ## Conformance
 
 All tier-scored surfaces are at 100% on upstream tier-check: **Server 31/31** (checks 73/0) and
-**Client 21/21** (573/8), per the generated block in `CONFORMANCE.md`. Full client suite **41/43**,
-the two failures being `auth/dpop` and `auth/dpop-nonce`, both gated on SEP-1932 leaving draft
-(#803). Take the numbers from `CONFORMANCE.md` rather than this paragraph — the prose here went
+**Client 21/21** (581/0), per the generated block in `CONFORMANCE.md`. Full client suite **43/43**
+since the SEP-1932 DPoP pair went green (#803), so `conformance/baseline.yml` lists no expected
+failures and any red scenario now fails `testconf-client`. Take the numbers from `CONFORMANCE.md` rather than this paragraph — the prose here went
 stale by a whole server scenario once already.
 
 `CONFORMANCE.md` is generated and CI-gated for staleness; `conformance/UPSTREAM_AUDIT.md` grades

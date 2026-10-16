@@ -245,6 +245,15 @@ func setupTestJWKS(t *testing.T, subject string, scopes []string) (jwksURL, issu
 // format (scopes/scp array, scope/scp string) against a real JWKS.
 func setupTestJWKSClaims(t *testing.T, mutate func(jwt.MapClaims)) (jwksURL, issuer, token string, cleanup func()) {
 	t.Helper()
+	jwksURL, issuer, mint, cleanup := setupTestJWKSMinter(t)
+	return jwksURL, issuer, mint(mutate), cleanup
+}
+
+// setupTestJWKSMinter is setupTestJWKSClaims for tests that need several
+// tokens signed by the same key: it returns a mint function rather than one
+// token.
+func setupTestJWKSMinter(t *testing.T) (jwksURL, issuer string, mint func(func(jwt.MapClaims)) string, cleanup func()) {
+	t.Helper()
 
 	privPEM, pubPEM, err := utils.GenerateRSAKeyPair(2048)
 	require.NoError(t, err)
@@ -282,17 +291,21 @@ func setupTestJWKSClaims(t *testing.T, mutate func(jwt.MapClaims)) (jwksURL, iss
 	jwksURL = ts.URL + "/.well-known/jwks.json"
 	issuer = "https://test.example.com"
 
-	claims := jwt.MapClaims{
-		"iss": issuer,
-		"aud": "https://mcp.test",
-		"exp": time.Now().Add(time.Hour).Unix(),
-		"iat": time.Now().Unix(),
+	mint = func(mutate func(jwt.MapClaims)) string {
+		t.Helper()
+		claims := jwt.MapClaims{
+			"iss": issuer,
+			"aud": "https://mcp.test",
+			"exp": time.Now().Add(time.Hour).Unix(),
+			"iat": time.Now().Unix(),
+		}
+		mutate(claims)
+		jwtTok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+		jwtTok.Header["kid"] = kid
+		token, err := jwtTok.SignedString(privKey)
+		require.NoError(t, err)
+		return token
 	}
-	mutate(claims)
-	jwtTok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	jwtTok.Header["kid"] = kid
-	token, err = jwtTok.SignedString(privKey)
-	require.NoError(t, err)
 
 	// Sanity — confirm the public PEM is what we expect oneauth to
 	// publish. Catches a future PEM-format drift before the test
