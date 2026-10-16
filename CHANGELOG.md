@@ -9,8 +9,24 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-16
+
+A patch release that adds opt-in DPoP (RFC 9449, SEP-1932) on the client and
+server and moves oneauth to v0.2.2, which fixes two security issues. No
+breaking changes. Full write-up:
+[`docs/releases/v0.8.1.md`](docs/releases/v0.8.1.md).
+
+### Security
+- **oneauth v0.2.2** in every module that uses it (#1559). Its HTTP
+  introspection endpoint omitted `cnf`, so a resource server introspecting
+  through it accepted a DPoP-bound token presented as Bearer. Its `FAPI2`
+  mode let jwt-bearer and token-exchange grants skip client authentication.
+  Both are fixed in oneauth (its issue 434). mcpkit's own validators were
+  not affected: `JWTValidator` reads `cnf` from the JWT, and
+  `IntrospectionValidator` does not do DPoP yet.
+
 ### Added
-- **DPoP (RFC 9449, SEP-1932), opt-in on both sides** (#803). SEP-1932 is
+- **DPoP (RFC 9449, SEP-1932), opt-in on both sides** (#803, #1557). SEP-1932 is
   still draft, so nothing changes unless configured.
   - Client: `ext/auth` `OAuthTokenSource.DPoPKey` binds every token to the
     key (`dpop_jkt`, proofs on the token and refresh requests) and presents
@@ -27,7 +43,9 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
     `auth/dpop-nonce` passing.
 
 ### Changed
-- **oneauth v0.2.0** in every module that uses it (#1556).
+- **oneauth v0.2.0, then v0.2.1** (#1556, #1557). v0.2.0 brings the DPoP,
+  FAPI 2.0 and security-audit work. v0.2.1 adds `DPoPKey.ProofWithNonce`,
+  which the client's nonce retry uses.
 
 ## [0.8.0] - 2026-10-15
 

@@ -8,7 +8,7 @@ require (
 	github.com/panyam/mcpkit v0.8.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
-	github.com/panyam/oneauth v0.2.1
+	github.com/panyam/oneauth v0.2.2
 	go.opentelemetry.io/otel/trace v1.46.0
 )
 
