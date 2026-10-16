@@ -18,6 +18,5 @@ Maintained by /checkpoint: one thread per branch, pruned when the branch merges.
 - **Last touched**: 2026-10-15 (Srirams-MBP:~/newstack/mcpkit/main)
 - **Ticket**: #1535 (implementation in #1538 and #1549, both merged)
 - **Why**: the mission's done-when needs results posted in `#triggers-events-wg` and the upstream suites out of draft or blocked by name.
-- **Where it stopped**: metronome graded in two passes, TS reference client green. The post is drafted on #1535 (https://github.com/panyam/mcpkit/issues/1535#issuecomment-6187461576), unposted.
-- **Next action**: post the draft (the author does; it @-mentions Peter Alexander and asks SEP-3415 to cite #521/#541 instead of #504).
-- **Open questions**: undraft conformance #521/#541 now, or wait for the WG's answer to the metronome findings? Leaning: wait for one reply, then undraft.
+- **Where it stopped**: metronome re-run 2026-10-16: its three findings are fixed and nothing fails outright, TS reference client green. Five untraceable rows excluded on the fork (`4a73fc6`). The post is drafted locally in `drafts/wg-events-1535.md` (untracked, excluded via `.git/info/exclude`), unposted.
+- **Next action**: the author posts the draft; then undraft #521/#541 and close #1535.
