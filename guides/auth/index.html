@@ -403,6 +403,50 @@
     S--&gt;&gt;C: JSON-RPC result with isError:true&lt;br/&gt;ErrorResult(&quot;insufficient_scope: admin:write&quot;)
     Note left of C: Client re-authenticates with&lt;br/&gt;scope=read+admin:write&lt;br/&gt;Retries with broader-scoped token
 </code></pre>
+<h3 id="flow-f-dpop-sender-constrained-tokens-rfc-9449-sep-1932">Flow F: DPoP sender-constrained tokens (RFC 9449, SEP-1932) <a class="anchor" href="#flow-f-dpop-sender-constrained-tokens-rfc-9449-sep-1932">¶</a></h3>
+<p>Opt-in on both sides, because SEP-1932 is still draft and the auth WG has not yet chosen among<br />
+DPoP, mTLS and HTTP message signatures (#803). Without configuration every path above is<br />
+unchanged.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant C as Client (OAuthTokenSource + DPoPKey)
+    participant AS as Authorization Server
+    participant S as MCP Server (JWTValidator + DPoP)
+
+    C-&gt;&gt;S: POST /mcp (no token yet, lazy source)
+    S--&gt;&gt;C: 401 WWW-Authenticate: Bearer ..., DPoP algs=&quot;ES256 ...&quot;, resource_metadata=...
+    C-&gt;&gt;AS: /authorize with dpop_jkt, then /token with DPoP proof
+    AS--&gt;&gt;C: access token with cnf.jkt = key thumbprint
+    C-&gt;&gt;S: POST /mcp&lt;br/&gt;Authorization: DPoP &lt;token&gt;&lt;br/&gt;DPoP: proof(htm, htu, ath, jti)
+    S--&gt;&gt;C: 401 DPoP error=&quot;use_dpop_nonce&quot; + DPoP-Nonce (only if a NoncePolicy asks)
+    C-&gt;&gt;S: same request, fresh proof carrying the nonce
+    Note right of S: proof verified, key matches cnf.jkt
+    S--&gt;&gt;C: 200
+</code></pre>
+<p><strong>Where the work lives.</strong> oneauth does the cryptography: <code>client.DPoPKey</code> mints proofs,<br />
+<code>client.WithDPoPKey</code> binds the token and refresh requests (and answers the authorization server&rsquo;s<br />
+nonce), and <code>apiauth.DPoPProofValidator.ConfirmResource</code> checks a resource proof. mcpkit wires<br />
+them in:</p>
+<ul>
+<li><code>OAuthTokenSource.DPoPKey</code> hands the key to the AuthClient and implements<br />
+<code>core.ProofTokenSource</code>. The transport&rsquo;s <code>DoWithAuthRetry</code> calls <code>AuthorizeRequest</code> in place of<br />
+writing <code>Bearer</code>, and answers a <code>use_dpop_nonce</code> from the MCP server once, below the 401 budget.<br />
+It sits below because a lazy source spends that budget on the discovery 401, and the very next<br />
+attempt is the one a nonce-requiring server challenges.</li>
+<li><code>JWTConfig.DPoP</code> / <code>RequireDPoP</code> make <code>JWTValidator</code> accept the <code>DPoP</code> scheme, check the proof<br />
+against <code>cnf.jkt</code> on every request (the token cache does not skip it), and refuse a bound token<br />
+presented as <code>Bearer</code>. Errors come back as <code>DPoP</code> challenges, and an insufficient-scope 403 uses<br />
+the scheme the client presented. The <code>DPoP-Nonce</code> header rides on the error through<br />
+<code>core.AuthResponseHeaders</code>, which <code>ext/auth</code> satisfies by method set so it builds against an<br />
+older core.</li>
+<li><code>MountAuth</code> adds <code>dpop_signing_alg_values_supported</code> (and <code>dpop_bound_access_tokens_required</code><br />
+with <code>RequireDPoP</code>) to PRM.</li>
+</ul>
+<p><code>JWTValidator</code> repeats the binding rules of oneauth&rsquo;s <code>APIMiddleware.enforceBinding</code> rather than<br />
+calling it, because the JWT path here does its own kid-based JWKS validation.</p>
+<p><strong>Not covered yet.</strong> <code>IntrospectionValidator</code> and <code>RequireScope</code> / the scope middleware still speak<br />
+<code>Bearer</code> only. <code>ClientCredentialsTokenSource</code>, <code>JWTBearerTokenSource</code> and<br />
+<code>EnterpriseManagedTokenSource</code> have no DPoP key. Upstream&rsquo;s server-leg suite (conformance PR 395)<br />
+is not merged, so the server side is graded by this module&rsquo;s unit tests alone.</p>
 <h2 id="extension-and-experimental-marking">Extension and Experimental Marking <a class="anchor" href="#extension-and-experimental-marking">¶</a></h2>
 <p>MCPKit uses a dual-layer system for marking feature maturity:</p>
 <h3 id="extension-level-in-initialize-response">Extension-level (in initialize response) <a class="anchor" href="#extension-level-in-initialize-response">¶</a></h3>
@@ -542,6 +586,14 @@
 </span></span><span style="display:flex;"><span>    ScopesSupported:      []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;tools:read&#34;</span>, <span style="color:#d14">&#34;tools:call&#34;</span>, <span style="color:#d14">&#34;admin:write&#34;</span>},
 </span></span><span style="display:flex;"><span>    MCPPath:              <span style="color:#d14">&#34;/mcp&#34;</span>,
 </span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>To accept DPoP-bound tokens (Flow F), give the validator a proof validator and pass it to<br />
+<code>MountAuth</code> as <code>AuthConfig.Validator</code> so PRM advertises it. <code>BaseURL</code> is the scheme and host<br />
+clients call, which the proof&rsquo;s <code>htu</code> is checked against:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>validator <span style="color:#000;font-weight:bold">:=</span> auth.<span style="color:#900;font-weight:bold">NewJWTValidator</span>(auth.JWTConfig{
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// ...JWKSURL, Issuer, Audience, ResourceMetadataURL as above...
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    DPoP: apiauth.<span style="color:#900;font-weight:bold">NewDPoPProofValidator</span>(apiauth.DPoPConfig{BaseURL: <span style="color:#d14">&#34;https://mcp.example.com&#34;</span>}),
+</span></span><span style="display:flex;"><span>    <span style="color:#998;font-style:italic">// RequireDPoP: true, // refuse Bearer presentations outright
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
 </span></span></code></pre><h2 id="client-usage">Client Usage <a class="anchor" href="#client-usage">¶</a></h2>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Static bearer token (simple)
 </span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>client <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewClient</span>(serverURL, info,
@@ -555,6 +607,12 @@
 </span></span><span style="display:flex;"><span>        ClientID:  <span style="color:#d14">&#34;my-client&#34;</span>,
 </span></span><span style="display:flex;"><span>        Scopes:    []<span style="color:#458;font-weight:bold">string</span>{<span style="color:#d14">&#34;tools:call&#34;</span>},
 </span></span><span style="display:flex;"><span>    })),
+</span></span><span style="display:flex;"><span>)
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// DPoP-bound OAuth (RFC 9449). The key must outlive the tokens bound to it.
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>key, _ <span style="color:#000;font-weight:bold">:=</span> oneauthclient.<span style="color:#900;font-weight:bold">NewDPoPKey</span>()
+</span></span><span style="display:flex;"><span>client <span style="color:#000;font-weight:bold">:=</span> mcpkit.<span style="color:#900;font-weight:bold">NewClient</span>(serverURL, info,
+</span></span><span style="display:flex;"><span>    mcpkit.<span style="color:#900;font-weight:bold">WithTokenSource</span>(<span style="color:#000;font-weight:bold">&amp;</span>auth.OAuthTokenSource{ServerURL: serverURL, DPoPKey: key}),
 </span></span><span style="display:flex;"><span>)
 </span></span><span style="display:flex;"><span>
 </span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic">// Machine-to-machine (client credentials)
