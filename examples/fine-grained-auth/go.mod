@@ -7,12 +7,13 @@ require (
 	github.com/panyam/mcpkit v0.8.0
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/auth v0.6.0
-	github.com/panyam/oneauth v0.1.40
+	github.com/panyam/oneauth v0.2.0
 	github.com/panyam/servicekit v0.1.5
 )
 
 require (
 	charm.land/lipgloss/v2 v2.0.6 // indirect
+	github.com/alexedwards/scs/v2 v2.9.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect

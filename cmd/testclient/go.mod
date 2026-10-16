@@ -5,10 +5,11 @@ go 1.26.9
 require (
 	github.com/panyam/mcpkit v0.8.0
 	github.com/panyam/mcpkit/ext/auth v0.8.0
-	github.com/panyam/oneauth v0.1.40
+	github.com/panyam/oneauth v0.2.0
 )
 
 require (
+	github.com/alexedwards/scs/v2 v2.9.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
