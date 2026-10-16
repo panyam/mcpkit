@@ -809,8 +809,12 @@ only warns that coverage grew.
 - **Fail-closed on missing Mcp-Method** is disputed in upstream issue 323. mcpkit and the TS SDK
   are both fail-open. **Do not implement until it resolves.** Disputed tests are excluded from
   tier scoring.
-- **DPoP** server/AS scenarios are incoming via upstream PRs 395/396. mcpkit defers until SEP-1932
-  leaves draft (#803).
+- **DPoP** (SEP-1932, still draft): the client leg passes (`auth/dpop`, `auth/dpop-nonce`), since
+  `cmd/testclient` gives those two scenarios an `OAuthTokenSource.DPoPKey`. The server leg, upstream
+  PR 395 with 527 to 529 stacked on it, is not merged and not wired yet. `JWTValidator` has the
+  validation it grades (`JWTConfig.DPoP`), so wire it as an `INFO` suite against `cmd/testserver`
+  once it lands. The AS leg (merged PR 396) grades authorization servers, which is oneauth's
+  surface, not mcpkit's (#803).
 - **SEP-2350 server scope-challenge** (upstream PR 481) was `CONFLICTING` as of 2026-09-07, waiting
   on its author. `testconf-scope-challenge` tracks its head `992406b` and is green at 17/17. Flip
   the target from INFO to gating once it lands on upstream `main`.

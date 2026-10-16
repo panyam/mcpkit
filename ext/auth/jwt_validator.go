@@ -12,6 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	conc "github.com/panyam/gocurrent"
 	mcpcore "github.com/panyam/mcpkit/core"
+	"github.com/panyam/oneauth/apiauth"
 	oacore "github.com/panyam/oneauth/core"
 	"github.com/panyam/oneauth/keys"
 	"github.com/panyam/oneauth/utils"
@@ -53,6 +54,14 @@ type JWTValidator struct {
 	// AllScopes is included in WWW-Authenticate 401 headers to guide client scope selection.
 	// Per spec: clients use this to request scopes upfront, reducing step-up round-trips.
 	AllScopes []string
+
+	// DPoP opts this server into sender-constrained tokens (RFC 9449,
+	// SEP-1932). See JWTConfig.DPoP.
+	DPoP *apiauth.DPoPProofValidator
+
+	// RequireDPoP refuses tokens presented under the Bearer scheme. See
+	// JWTConfig.RequireDPoP.
+	RequireDPoP bool
 
 	// ScopeExtractor overrides how scopes are read out of the verified claims.
 	// Nil (default) uses DefaultScopeExtractor, which covers the shapes every
@@ -141,6 +150,26 @@ type JWTConfig struct {
 	// Included in WWW-Authenticate 401 headers for client scope selection.
 	AllScopes []string
 
+	// DPoP, when non-nil, accepts DPoP-bound tokens (RFC 9449, SEP-1932):
+	// `Authorization: DPoP <token>` with a proof in the DPoP header, whose
+	// key must match the token's cnf.jkt. A token carrying cnf is then
+	// refused under the Bearer scheme, since dropping the proof is exactly
+	// the downgrade §7.2 closes. Bearer tokens without cnf still pass
+	// unless RequireDPoP is set. Nil (the default) leaves the validator
+	// bearer-only and its behaviour unchanged.
+	//
+	// Build it with apiauth.NewDPoPProofValidator. Set DPoPConfig.BaseURL
+	// to the scheme and host clients call whenever a proxy terminates TLS
+	// or rewrites Host, or every proof fails its htu check. A NonceSource
+	// plus NoncePolicy turns on the §9 nonce challenge. MountAuth
+	// advertises the accepted algorithms in PRM.
+	DPoP *apiauth.DPoPProofValidator
+
+	// RequireDPoP refuses every Bearer presentation, so each request must
+	// carry a DPoP-bound token and a proof. MountAuth advertises it as
+	// dpop_bound_access_tokens_required. Ignored when DPoP is nil.
+	RequireDPoP bool
+
 	// TracerProvider optionally enables SEP-414 instrumentation of
 	// token validation: a sub-span per JWKS key lookup plus
 	// mcp.auth.* attributes (method / subject / issuer / scopes /
@@ -192,6 +221,8 @@ func NewJWTValidator(cfg JWTConfig) *JWTValidator {
 		ResourceMetadataURL: cfg.ResourceMetadataURL,
 		RequiredScopes:      cfg.RequiredScopes,
 		AllScopes:           cfg.AllScopes,
+		DPoP:                cfg.DPoP,
+		RequireDPoP:         cfg.RequireDPoP,
 		tp:                  tp,
 	}
 }
@@ -209,19 +240,23 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	// is a no-op when there's no active span; no nil-check needed.
 	mcpcore.SpanFromContext(ctx).SetAttribute("mcp.auth.method", "jwt")
 
-	// Extract Bearer token
-	authHeader := r.Header.Get("Authorization")
-	const prefix = "Bearer "
-	if !strings.HasPrefix(authHeader, prefix) {
+	// Extract the token, under the Bearer scheme or, when DPoP is wired,
+	// the DPoP scheme.
+	scheme, token := v.credentials(r)
+	if token == "" {
 		return v.unauthorized("missing or invalid Authorization header")
 	}
-	token := authHeader[len(prefix):]
 
 	// Check token cache for a previously validated result (avoids redundant crypto).
+	// The DPoP binding is checked on every request, cache hit or not: the
+	// proof is per request, so a cached token says nothing about this one.
 	if v.CacheTTL > 0 {
 		tokenHash := hashToken(token)
 		if cached, ok := v.tokenCache.Load(tokenHash); ok {
 			if time.Now().Before(cached.expiry) {
+				if err := v.enforceBinding(r, scheme, token, cnfJKT(cached.claims.Extra)); err != nil {
+					return err
+				}
 				// Cache hit — stash claims for Claims() and return
 				v.recentClaims.Store(token, cached.claims)
 				v.stampClaimsAttrs(ctx, cached.claims, true)
@@ -290,12 +325,20 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 	}
 	scopes := extract(mapClaims)
 
+	// RFC 9449 §7: a DPoP presentation needs a proof whose key matches
+	// cnf.jkt, and a bound token is refused as a bearer token. This runs
+	// before the scope check so a request with a bad proof learns nothing
+	// about what its token could do.
+	if err := v.enforceBinding(r, scheme, token, cnfJKT(mapClaims)); err != nil {
+		return err
+	}
+
 	// Check required scopes
 	if len(v.RequiredScopes) > 0 && !oacore.ContainsAllScopes(scopes, v.RequiredScopes) {
 		return &mcpcore.AuthError{
 			Code:            http.StatusForbidden,
 			Message:         "insufficient scope",
-			WWWAuthenticate: WWWAuth403(v.ResourceMetadataURL, v.RequiredScopes...),
+			WWWAuthenticate: inScheme(scheme, WWWAuth403(v.ResourceMetadataURL, v.RequiredScopes...)),
 		}
 	}
 
@@ -375,12 +418,10 @@ func hashToken(token string) string {
 // Claims implements mcpmcpcore.ClaimsProvider.
 // Returns the claims parsed during the most recent Validate call for the same token.
 func (v *JWTValidator) Claims(r *http.Request) *mcpcore.Claims {
-	authHeader := r.Header.Get("Authorization")
-	const prefix = "Bearer "
-	if !strings.HasPrefix(authHeader, prefix) {
+	_, token := v.credentials(r)
+	if token == "" {
 		return nil
 	}
-	token := authHeader[len(prefix):]
 	if claims, ok := v.recentClaims.LoadAndDelete(token); ok {
 		return claims
 	}
@@ -459,7 +500,7 @@ func (v *JWTValidator) unauthorized(msg string) *mcpcore.AuthError {
 	return &mcpcore.AuthError{
 		Code:            http.StatusUnauthorized,
 		Message:         msg,
-		WWWAuthenticate: WWWAuth401(v.ResourceMetadataURL, v.AllScopes...),
+		WWWAuthenticate: v.challenge401(),
 	}
 }
 

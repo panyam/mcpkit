@@ -2721,8 +2721,18 @@ func DoWithAuthRetry(
 		return ssehttp.DoWithAuthRetry(nil, buildReq, do)
 	}
 
+	// A sender-constrained source (DPoP) presents its own token and proof,
+	// and may answer a nonce challenge. lastToken is the token SetAuth last
+	// presented, which the nonce retry re-presents with a fresh proof.
+	pts, _ := ts.(core.ProofTokenSource)
+	var lastToken string
+	if pts != nil {
+		do = proofNonceRetry(pts, &lastToken, buildReq, do)
+	}
+
 	cfg := &ssehttp.AuthRetryConfig{
 		SetAuth: func(req *http.Request) error {
+			lastToken = ""
 			token, err := ts.Token()
 			// A lazy source defers acquisition until a challenge selects the
 			// scope: send this request unauthenticated and let the server's
@@ -2732,6 +2742,10 @@ func DoWithAuthRetry(
 			}
 			if err != nil {
 				return err
+			}
+			if pts != nil {
+				lastToken = token
+				return pts.AuthorizeRequest(req, token)
 			}
 			req.Header.Set("Authorization", "Bearer "+token)
 			return nil
@@ -2790,6 +2804,48 @@ func DoWithAuthRetry(
 	}
 
 	return ssehttp.DoWithAuthRetry(cfg, buildReq, do)
+}
+
+// proofNonceRetry wraps do so that an RFC 9449 §9 nonce challenge from the
+// MCP server is answered in place: the source records the nonce, the request
+// is rebuilt, and it goes out once more with a fresh proof carrying it.
+//
+// This sits under DoWithAuthRetry rather than in its OnUnauthorized hook
+// because that hook has a budget of one 401 per request. A lazy source's
+// first request spends it on the unauthenticated challenge that selects the
+// scope, and the very next, now-authenticated, attempt is the one a nonce-
+// requiring server answers with use_dpop_nonce. Counting both against one
+// budget would fail every first request to such a server.
+//
+// Only one nonce retry is made per attempt. A server that challenges the
+// retry too gets its 401 passed up to the ordinary refresh path.
+func proofNonceRetry(
+	pts core.ProofTokenSource,
+	lastToken *string,
+	buildReq func() (*http.Request, error),
+	do func(*http.Request) (*http.Response, error),
+) func(*http.Request) (*http.Response, error) {
+	return func(req *http.Request) (*http.Response, error) {
+		resp, err := do(req)
+		if err != nil || !pts.ObserveResponse(req, resp) || *lastToken == "" {
+			return resp, err
+		}
+		retry, rerr := buildReq()
+		if rerr != nil {
+			return resp, nil
+		}
+		if aerr := pts.AuthorizeRequest(retry, *lastToken); aerr != nil {
+			return resp, nil
+		}
+		resp.Body.Close()
+		resp, err = do(retry)
+		if err == nil {
+			// Keep any nonce the retry's response carries. Its retry
+			// verdict is ignored: one nonce retry per attempt.
+			pts.ObserveResponse(retry, resp)
+		}
+		return resp, err
+	}
 }
 
 // ResolveEndpointURL resolves an SSE endpoint event URL against the base SSE

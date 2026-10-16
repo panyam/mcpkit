@@ -114,6 +114,27 @@ type OAuthTokenSource struct {
 	// Only set this for local development/testing.
 	AllowInsecure bool
 
+	// DPoPKey, when set, makes every token this source acquires DPoP-bound
+	// (RFC 9449, SEP-1932). The authorization request carries dpop_jkt, the
+	// token and refresh requests carry proofs, and each MCP request presents
+	// the token under the DPoP scheme with a fresh proof, answering a
+	// server's use_dpop_nonce challenge once. Nil keeps the Bearer path.
+	//
+	// The key must live as long as the tokens issued against it, so keep
+	// one per source. A CredStore shared with a source holding a different
+	// key, or none, hands it tokens it cannot present. Build one with
+	// oneauth's client.NewDPoPKey.
+	DPoPKey *client.DPoPKey
+
+	// dpopNonces holds the latest DPoP-Nonce each MCP server origin sent
+	// (RFC 9449 §9). The authorization server's nonces live inside the
+	// oneauth AuthClient. Keeping the two apart matters: a nonce is only
+	// accepted by the server that issued it. Guarded by dpopMu, not mu,
+	// because AuthorizeRequest runs on every request and must not wait
+	// behind a browser login holding mu.
+	dpopMu     sync.Mutex
+	dpopNonces map[string]string
+
 	// mu protects token access and discovery state.
 	mu       sync.Mutex
 	authInfo *MCPAuthInfo
@@ -274,6 +295,14 @@ func (s *OAuthTokenSource) Token() (string, error) {
 		return "", err
 	}
 
+	// A DPoP key the AS cannot verify would fail every token request with
+	// invalid_dpop_proof. Say so once, here, instead.
+	if s.DPoPKey != nil {
+		if err := s.DPoPKey.SupportedBy(s.authInfo.ASMetadata.DPoPSigningAlgValuesSupported); err != nil {
+			return "", fmt.Errorf("DPoP: %w", err)
+		}
+	}
+
 	// HTTPS enforcement (X1): AS endpoints MUST be HTTPS
 	if !s.AllowInsecure {
 		if err := client.ValidateHTTPS(s.authInfo.ASMetadata); err != nil {
@@ -307,7 +336,11 @@ func (s *OAuthTokenSource) Token() (string, error) {
 	if s.oaClient == nil {
 		issuer := s.authInfo.AuthorizationServers[0]
 		store := s.credStore()
-		s.oaClient = client.NewAuthClient(issuer, store)
+		var opts []client.ClientOption
+		if s.DPoPKey != nil {
+			opts = append(opts, client.WithDPoPKey(s.DPoPKey))
+		}
+		s.oaClient = client.NewAuthClient(issuer, store, opts...)
 		if s.OnToken != nil {
 			s.oaClient.OnToken = s.OnToken
 		}

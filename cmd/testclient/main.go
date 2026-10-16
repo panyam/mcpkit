@@ -186,7 +186,7 @@ func main() {
 	// so a quick discovery probe tells us which grant the AS will accept. The
 	// presence of PrivateKeyPEM additionally pins us to the private_key_jwt
 	// variant — no other scenario provides one.
-	ts := pickTokenSource(serverURL, ctx)
+	ts := pickTokenSource(serverURL, scenario, ctx)
 
 	// Step 3: Connect with auth token.
 	log.Println("Step 3: MCP initialize with OAuth token...")
@@ -292,7 +292,7 @@ type toolCallSpec struct {
 // authorization_code flow. The AS-discovery probe is gated on ClientID != ""
 // to keep DCR scenarios with no pre-registered credentials on the
 // OAuthTokenSource fast path without spurious PRM/AS round trips.
-func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource {
+func pickTokenSource(serverURL, scenario string, ctx conformanceContext) core.TokenSource {
 	if ctx.ValidJwt != "" {
 		log.Println("Step 2: ctx has valid_jwt → JWTBearerTokenSource (RFC 7523 WIF)")
 		return &auth.JWTBearerTokenSource{
@@ -341,6 +341,10 @@ func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource 
 	}
 	log.Println("Step 2: Setting up OAuthTokenSource...")
 	return &auth.OAuthTokenSource{
+		// SEP-1932: the auth/dpop scenarios grade a client that binds its
+		// token to a key and presents it under the DPoP scheme. A client
+		// opts into that by holding a key, so only those scenarios get one.
+		DPoPKey:      dpopKeyFor(scenario),
 		ServerURL:    serverURL,
 		ClientID:     ctx.ClientID,
 		ClientSecret: ctx.ClientSecret,
@@ -353,6 +357,20 @@ func pickTokenSource(serverURL string, ctx conformanceContext) core.TokenSource 
 		AllowInsecure:     true,
 		OpenBrowser:       oneauthclient.FollowRedirects(nil),
 	}
+}
+
+// dpopKeyFor returns a fresh DPoP key for the SEP-1932 scenarios
+// (auth/dpop, auth/dpop-nonce) and nil, the Bearer path, for every other.
+func dpopKeyFor(scenario string) *oneauthclient.DPoPKey {
+	if !strings.HasPrefix(scenario, "auth/dpop") {
+		return nil
+	}
+	log.Println("Step 2: SEP-1932 scenario → OAuthTokenSource with a DPoP key")
+	key, err := oneauthclient.NewDPoPKey()
+	if err != nil {
+		log.Fatalf("DPoP key: %v", err)
+	}
+	return key
 }
 
 // driveToolCalls invokes each scenario-directed tool call in sequence via the

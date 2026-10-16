@@ -193,6 +193,56 @@ sequenceDiagram
     Note left of C: Client re-authenticates with<br/>scope=read+admin:write<br/>Retries with broader-scoped token
 ```
 
+### Flow F: DPoP sender-constrained tokens (RFC 9449, SEP-1932)
+
+Opt-in on both sides, because SEP-1932 is still draft and the auth WG has not yet chosen among
+DPoP, mTLS and HTTP message signatures (#803). Without configuration every path above is
+unchanged.
+
+```mermaid
+sequenceDiagram
+    participant C as Client (OAuthTokenSource + DPoPKey)
+    participant AS as Authorization Server
+    participant S as MCP Server (JWTValidator + DPoP)
+
+    C->>S: POST /mcp (no token yet, lazy source)
+    S-->>C: 401 WWW-Authenticate: Bearer ..., DPoP algs="ES256 ...", resource_metadata=...
+    C->>AS: /authorize with dpop_jkt, then /token with DPoP proof
+    AS-->>C: access token with cnf.jkt = key thumbprint
+    C->>S: POST /mcp<br/>Authorization: DPoP <token><br/>DPoP: proof(htm, htu, ath, jti)
+    S-->>C: 401 DPoP error="use_dpop_nonce" + DPoP-Nonce (only if a NoncePolicy asks)
+    C->>S: same request, fresh proof carrying the nonce
+    Note right of S: proof verified, key matches cnf.jkt
+    S-->>C: 200
+```
+
+**Where the work lives.** oneauth does the cryptography: `client.DPoPKey` mints proofs,
+`client.WithDPoPKey` binds the token and refresh requests (and answers the authorization server's
+nonce), and `apiauth.DPoPProofValidator.ConfirmResource` checks a resource proof. mcpkit wires
+them in:
+
+- `OAuthTokenSource.DPoPKey` hands the key to the AuthClient and implements
+  `core.ProofTokenSource`. The transport's `DoWithAuthRetry` calls `AuthorizeRequest` in place of
+  writing `Bearer`, and answers a `use_dpop_nonce` from the MCP server once, below the 401 budget.
+  It sits below because a lazy source spends that budget on the discovery 401, and the very next
+  attempt is the one a nonce-requiring server challenges.
+- `JWTConfig.DPoP` / `RequireDPoP` make `JWTValidator` accept the `DPoP` scheme, check the proof
+  against `cnf.jkt` on every request (the token cache does not skip it), and refuse a bound token
+  presented as `Bearer`. Errors come back as `DPoP` challenges, and an insufficient-scope 403 uses
+  the scheme the client presented. The `DPoP-Nonce` header rides on the error through
+  `core.AuthResponseHeaders`, which `ext/auth` satisfies by method set so it builds against an
+  older core.
+- `MountAuth` adds `dpop_signing_alg_values_supported` (and `dpop_bound_access_tokens_required`
+  with `RequireDPoP`) to PRM.
+
+`JWTValidator` repeats the binding rules of oneauth's `APIMiddleware.enforceBinding` rather than
+calling it, because the JWT path here does its own kid-based JWKS validation.
+
+**Not covered yet.** `IntrospectionValidator` and `RequireScope` / the scope middleware still speak
+`Bearer` only. `ClientCredentialsTokenSource`, `JWTBearerTokenSource` and
+`EnterpriseManagedTokenSource` have no DPoP key. Upstream's server-leg suite (conformance PR 395)
+is not merged, so the server side is graded by this module's unit tests alone.
+
 ## Extension and Experimental Marking
 
 MCPKit uses a dual-layer system for marking feature maturity:
@@ -340,6 +390,18 @@ auth.MountAuth(mux, auth.AuthConfig{
 })
 ```
 
+To accept DPoP-bound tokens (Flow F), give the validator a proof validator and pass it to
+`MountAuth` as `AuthConfig.Validator` so PRM advertises it. `BaseURL` is the scheme and host
+clients call, which the proof's `htu` is checked against:
+
+```go
+validator := auth.NewJWTValidator(auth.JWTConfig{
+    // ...JWKSURL, Issuer, Audience, ResourceMetadataURL as above...
+    DPoP: apiauth.NewDPoPProofValidator(apiauth.DPoPConfig{BaseURL: "https://mcp.example.com"}),
+    // RequireDPoP: true, // refuse Bearer presentations outright
+})
+```
+
 ## Client Usage
 
 ```go
@@ -355,6 +417,12 @@ client := mcpkit.NewClient(serverURL, info,
         ClientID:  "my-client",
         Scopes:    []string{"tools:call"},
     })),
+)
+
+// DPoP-bound OAuth (RFC 9449). The key must outlive the tokens bound to it.
+key, _ := oneauthclient.NewDPoPKey()
+client := mcpkit.NewClient(serverURL, info,
+    mcpkit.WithTokenSource(&auth.OAuthTokenSource{ServerURL: serverURL, DPoPKey: key}),
 )
 
 // Machine-to-machine (client credentials)

@@ -147,6 +147,19 @@ type AuthError struct {
 
 func (e *AuthError) Error() string { return e.Message }
 
+// AuthResponseHeaders is implemented by an auth error that needs response
+// headers beyond WWW-Authenticate. The server's auth error writer finds it
+// with errors.As and copies the headers onto the 401/403. The motivating case
+// is the DPoP-Nonce header of an RFC 9449 §9 nonce challenge, which a client
+// must read to retry.
+//
+// It is an interface rather than a field on AuthError so that a validator in
+// a sub-module built against an older core can still carry headers: it wraps
+// *AuthError in its own type and implements this method.
+type AuthResponseHeaders interface {
+	ResponseHeaders() http.Header
+}
+
 // TokenSource provides access tokens for the MCP client.
 // Simple implementations return a static token; OAuth implementations
 // handle the full flow including discovery, browser auth, and refresh.
@@ -200,6 +213,32 @@ type InvalidatingTokenSource interface {
 	// flow. Safe to call multiple times — implementations clear what
 	// they have and otherwise no-op.
 	Invalidate()
+}
+
+// ProofTokenSource extends TokenSource for sender-constrained tokens
+// (RFC 9449 DPoP). A DPoP-bound token is refused under the Bearer scheme, and
+// every request needs a fresh proof, so the transport hands each outgoing
+// request to AuthorizeRequest instead of writing "Authorization: Bearer"
+// itself.
+//
+// ObserveResponse sees every response, so the source can keep a DPoP-Nonce
+// the server sends on any of them (RFC 9449 §8.2). It returns true when the
+// response is a nonce challenge (401 with error="use_dpop_nonce" and a
+// DPoP-Nonce header) that the source has absorbed. The transport then sends
+// the same request once more with a fresh proof carrying that nonce. That
+// retry sits outside the 401 refresh budget, because a nonce challenge says
+// nothing about the token being stale.
+//
+// ext/auth's OAuthTokenSource implements it when given a DPoP key. Sources
+// that do not implement it keep the Bearer path.
+type ProofTokenSource interface {
+	TokenSource
+	// AuthorizeRequest sets the Authorization header, and any proof header,
+	// for presenting token on req.
+	AuthorizeRequest(req *http.Request, token string) error
+	// ObserveResponse records any nonce in resp and reports whether req
+	// should be resent because resp was a nonce challenge.
+	ObserveResponse(req *http.Request, resp *http.Response) (retry bool)
 }
 
 // Extension is one extension's declaration, which the server renders into

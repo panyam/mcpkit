@@ -1716,8 +1716,17 @@ func extractMethodFromJSON(data []byte) string {
 
 // writeAuthError writes an authentication/authorization error to the response.
 // If the error is an *core.AuthError with a WWWAuthenticate field, the WWW-Authenticate
-// header is set. Used by both transports for consistent error responses.
+// header is set, and any core.AuthResponseHeaders in the chain (a DPoP-Nonce,
+// say) are copied on too. Used by both transports for consistent error responses.
 func writeAuthError(w http.ResponseWriter, err error) {
+	var extra core.AuthResponseHeaders
+	if errors.As(err, &extra) {
+		for k, vs := range extra.ResponseHeaders() {
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
+	}
 	var authErr *core.AuthError
 	if errors.As(err, &authErr) {
 		if authErr.WWWAuthenticate != "" {

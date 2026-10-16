@@ -9,6 +9,26 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **DPoP (RFC 9449, SEP-1932), opt-in on both sides** (#803). SEP-1932 is
+  still draft, so nothing changes unless configured.
+  - Client: `ext/auth` `OAuthTokenSource.DPoPKey` binds every token to the
+    key (`dpop_jkt`, proofs on the token and refresh requests) and presents
+    it under the `DPoP` scheme with a fresh proof per request, answering a
+    server's `use_dpop_nonce` once. The transport hook is the new
+    `core.ProofTokenSource`.
+  - Server: `ext/auth` `JWTConfig.DPoP` and `RequireDPoP` check the proof
+    against the token's `cnf.jkt`, refuse a bound token presented as
+    `Bearer`, send `DPoP` challenges with `invalid_dpop_proof` /
+    `use_dpop_nonce`, and advertise `dpop_signing_alg_values_supported` in
+    PRM. `core.AuthResponseHeaders` lets an auth error carry the
+    `DPoP-Nonce` header.
+  - Upstream client conformance is now 43/43, with `auth/dpop` and
+    `auth/dpop-nonce` passing.
+
+### Changed
+- **oneauth v0.2.0** in every module that uses it (#1556).
+
 ## [0.8.0] - 2026-10-15
 
 ### Security

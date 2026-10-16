@@ -30,6 +30,10 @@ type AuthConfig struct {
 	// Without this wiring, Validator.AllScopes defaults to empty and 401
 	// responses omit the scope= parameter, forcing clients through a
 	// narrow-to-broad scope dance. See #50.
+	//
+	// When the validator has DPoP wired, the PRM document also carries
+	// dpop_signing_alg_values_supported, and dpop_bound_access_tokens_required
+	// when it sets RequireDPoP.
 	Validator *JWTValidator
 }
 
@@ -61,6 +65,16 @@ func MountAuth(mux *http.ServeMux, cfg AuthConfig) {
 		Resource:             cfg.ResourceURI,
 		AuthorizationServers: cfg.AuthorizationServers,
 		ScopesSupported:      cfg.ScopesSupported,
+	}
+
+	// RFC 9728 §2 / RFC 9449: advertise DPoP when the validator accepts it,
+	// so a client knows to bind its token before it ever sends one.
+	if cfg.Validator != nil && cfg.Validator.DPoP != nil {
+		meta.DPoPSigningAlgValuesSupported = cfg.Validator.DPoP.SigningAlgValuesSupported()
+		if cfg.Validator.RequireDPoP {
+			required := true
+			meta.DPoPBoundAccessTokensRequired = &required
+		}
 	}
 
 	// Mount PRM + RFC 8414 AS metadata proxy. The proxy ensures clients
