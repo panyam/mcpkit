@@ -100,12 +100,19 @@ the tree.
 
 ## Issues and missions
 
-Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. The active mission is
-**#1508** (`mission_events_sep3415`): the events server and Go client score green against the
-SEP-3415 conformance suites. Its exercise is `make exercise-events` (after a one-time
-`make conf-events-setup`). Run it after
-each merged mission PR and log the result on #1508. A new issue gets a priority (`P0`–`P3`) and
-either a mission link (blocked-by on the mission issue) or `waiting` with its trigger.
+Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. Two missions are active,
+each worked in its own worktree:
+
+- **#1552** (`mission_wire_2026_07_28`): a 2026-07-28 client gets spec-correct results from mcpkit
+  on both wires. Exercise `make testconf testconf-stateless testconf-agents` until #1555 adds
+  `make exercise-wire`, which is the first ticket because the suites are green while its bugs live.
+- **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
+  Exercise in the issue; `go install …/cmd/mcpskills@<tag>` fails today (#1488).
+
+#1554 (`mission_apps_host`) is queued behind #1552. #1508 (events, SEP-3415) closed 2026-10-16.
+Run a mission's exercise after each merged PR on it and log the result on the mission issue. A new
+issue gets a priority (`P0`–`P3`) and either a mission link (blocked-by on the mission issue) or
+`waiting` with its trigger.
 
 ## Cross-cutting rules
 
