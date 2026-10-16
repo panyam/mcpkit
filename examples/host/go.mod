@@ -4,7 +4,7 @@ go 1.26.9
 
 require (
 	github.com/panyam/demokit v0.0.32
-	github.com/panyam/mcpkit v0.8.0
+	github.com/panyam/mcpkit v0.8.1
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/ui v0.6.0
 )
