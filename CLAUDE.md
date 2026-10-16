@@ -207,6 +207,9 @@ These span packages and will bite on a task that never opens a routed doc.
   fires on a merge to the **default** branch, so carry it on whichever PR actually reaches main.
   Two branches that both append tests to the end of the same file will re-conflict at every cross
   merge; land the shared base before branching the second consumer.
+  **Upstream, a fork PR cannot stack on another fork PR at all**: the base must be a branch in
+  the upstream repo, where we have no push. So conformance PR 541 bases on `main`, carries all of
+  PR 521's commits, and says "review #521 first" with a compare link in its body.
 - **A release that triggers no workflows looks exactly like one whose workflows all passed.**
   `make tag-push` used to send 20 refs in a single `git push`, and GitHub raises no push event for
   a tag push that large, so `publish-images.yml` never ran once and `vulncheck.yml` only ever fired
@@ -309,8 +312,9 @@ alone. Detail in `ext/skills/NOTES.md`, per-SDK setup in `RUNNING_SEP2640.md` on
 branch.
 
 **MCP Events has a conformance suite.** `testconf-events` (stage 8i, `INFO`) drives
-`examples/events/kitchen-sink` against scenarios proposed upstream as a draft in
-`modelcontextprotocol/conformance` PR 521. MCP Events is **SEP-3415**
+`examples/events/kitchen-sink` against scenarios proposed upstream in
+`modelcontextprotocol/conformance` PR 521, out of draft since 2026-10-16 after the WG saw a run
+against a second implementation (`metronome-mcp.fly.dev`, via `make conf-events-remote`). MCP Events is **SEP-3415**
 (`modelcontextprotocol/modelcontextprotocol` PR 3415, draft), so check ids carry `sep-3415-`. They
 carried a `sep-9999-` placeholder until #1502, because SEP numbers are PR numbers and no PR existed.
 Every row quotes SEP-3415 at `c47fd245` with a per-row section url; they quoted the design sketch
@@ -328,8 +332,8 @@ the last, endpoint verification, by #1444. The set is tracked in #1425. The sing
 `subscribe-auth-required`, is untestable rather than a defect. It stays `INFO` until the spec text
 stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
 
-**The Events client has a conformance suite too**, proposed as conformance PR 541 (issue 540) and
-stacked on PR 521. Its scenarios grade what a client sends to a scripted mock server, and the Go
+**The Events client has a conformance suite too**, proposed as conformance PR 541 (issue 540), also
+out of draft, and stacked on PR 521. Its scenarios grade what a client sends to a scripted mock server, and the Go
 client is driven through `experimental/ext/events/clients/go/cmd/conformance-client`, which lives in
 that module so the root module never imports `experimental/`. The driver only calls what the SDK
 offers, so a red row is an SDK gap, never a driver choice to patch. `make testconf-events-client`

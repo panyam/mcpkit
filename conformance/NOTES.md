@@ -31,8 +31,8 @@ Defaults, resolved relative to `conformance/justfile`:
 | `MCPCONFORMANCE_BASE_PATH` | `../conf-upstream-main` (audit + stateless) |
 | `MCPCONFORMANCE_FILE_INPUTS_PATH`, `MCPCONFORMANCE_AUTH_PATH` | `../conf-pending` (fork `pending`) |
 | `MCPCONFORMANCE_SKILLS_PATH` | `../conf-upstream-main` (upstream `main`, retargeted once PR 330 merged) |
-| `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, draft upstream PR 521) |
-| `MCPCONFORMANCE_EVENTS_CLIENT_PATH` | `../conf-events-client` (fork `feat/events-client-conformance`, draft upstream PR 541, a worktree of `../conf-events`) |
+| `MCPCONFORMANCE_EVENTS_PATH` | `../conf-events` (fork `feat/events-conformance-suite`, upstream PR 521) |
+| `MCPCONFORMANCE_EVENTS_CLIENT_PATH` | `../conf-events-client` (fork `feat/events-client-conformance`, upstream PR 541, a worktree of `../conf-events`) |
 
 Override per invocation when a SEP splits to its own branch awaiting upstream approval. Each target
 fail-fasts with a remediation message if its path is missing.
@@ -244,6 +244,11 @@ The productive response is to remove the prerequisite gap rather than to soften 
 untestable rows in the events suite, six became real grades once the fixture could be provoked, and
 one of those six immediately caught a defect nobody had evidence for.
 
+The same trap applies when grading someone else's server. metronome on 2026-10-16 read
+`push 13/20, 7 failed`, and every one of the seven was untestable from outside (no catalog control,
+no fault injection, one credential). Zero were violations. Report a remote run as
+pass / violated / untestable, never as the runner's ratio.
+
 ## The fork's own main goes stale
 
 `origin` in the `conf-skills` worktree is `panyam/mcpconformance`, the fork, not
@@ -441,8 +446,13 @@ The docs site needs nothing extra. `docs/site/content/conformance/index.html` is
 ## MCP Events suite
 
 `testconf-events`, stage 8i, `INFO`. Drives `examples/events/kitchen-sink`; scenarios live on
-`feat/events-conformance-suite` of the fork and are proposed upstream as a **draft**,
-`modelcontextprotocol/conformance` PR 521 (server) and PR 541 (client, stacked on it).
+`feat/events-conformance-suite` of the fork and are proposed upstream as
+`modelcontextprotocol/conformance` PR 521 (server) and PR 541 (client, stacked on it), both out of
+draft since 2026-10-16. The upstream runner puts extension scenarios on the draft lifecycle,
+`2026-07-28`, without any `--spec-version` (`resolvedSpecVersion` in `src/runner/server.ts`), so the
+events scenarios have always run on that wire. Every declared row in `sep-3415.yaml` is emitted;
+rows a single-principal harness cannot grade (`error-forbidden`, the `authz-*` pair) are
+`excluded:` with that reason rather than declared and untested.
 
 The client half is `testconf-events-client`, stage 8j, also `INFO`. It reads its own checkout of
 `feat/events-client-conformance` rather than reusing `../conf-events`, so each suite grades the head

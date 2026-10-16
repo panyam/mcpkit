@@ -126,6 +126,12 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin 
       `testconf-tasks-v2`, `testconf-mrtr`, `testconf-file-inputs`,
       `testconf-auth-server`, `testconf-skills`, and `testconf-events`
       (informational), plus `testconf-client` and `testconf-stateless`.
+      Until #1551 lands, two `testall` traps: stages 8f/8g need `../conf-pending`
+      (`git worktree add --detach ../conf-pending origin/pending` from a fork
+      checkout, or point `MCPCONFORMANCE_FILE_INPUTS_PATH` / `MCPCONFORMANCE_AUTH_PATH`
+      at one), and stage 5 deletes `examples/protogen/bookservice/gen/` while
+      reporting PASS, so `git checkout -- examples/protogen/bookservice/gen`
+      before committing anything.
 - [ ] `CHANGELOG.md` `[X.Y.0]` finalized with real PR references + date;
       `docs/releases/vX.Y.0.md` written
 - [ ] `make bump-root V=vX.Y.0` + commit

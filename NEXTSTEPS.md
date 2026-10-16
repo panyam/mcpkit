@@ -6,9 +6,10 @@ Maintained by /checkpoint: one thread per branch, pruned when the branch merges.
 ## At a glance
 
 - main — no open thread.
-- Mission #1552 (wire_2026_07_28, active): 0/11; next ready #1555 (make the exercise able to fail). Exercise logged 2026-10-16 @ 6d743af3: green, grades nothing yet.
-- Mission #1553 (release_installable, active, parallel worktree): 0/8; next ready #1488. Exercise logged 2026-10-16: broken at `go install …/cmd/mcpskills@v0.8.0`.
-- This run: dropped the #1535 thread (closed; WG posted, conformance #521/#541 undrafted); #1508 closed; retriage applied.
+- Mission #1552 (wire_2026_07_28, active): 0/11; next ready #1555, which makes the exercise able to fail. Exercise logged 2026-10-16 @ 6d743af3: green, but grades none of the mission's bugs yet.
+- Mission #1553 (release_installable, active, own worktree): 0/8; next ready #1488. Exercise logged 2026-10-16: broken at `go install …/cmd/mcpskills@v0.8.0`.
+- Mission #1554 (apps_host): queued behind #1552.
+- This run: no thread on any other branch (`deps/x-net-0.60` carries a stale copy; PR #1550 merged). v0.8.0 released; #1508 and #1535 closed.
 
 ## Across threads
 
