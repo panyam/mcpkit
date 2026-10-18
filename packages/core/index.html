@@ -243,7 +243,7 @@
 <h2 id="what-belongs-here">What belongs here <a class="anchor" href="#what-belongs-here">¶</a></h2>
 <ul>
 <li>JSON-RPC types: <code>Request</code>, <code>Response</code>, <code>Error</code></li>
-<li>MCP domain types: <code>ToolDef</code>, <code>ResourceDef</code>, <code>PromptDef</code>, <code>Content</code>, <code>Claims</code></li>
+<li>MCP domain types: <code>ToolDef</code>, <code>ResourceDef</code>, <code>ResourceTemplate</code>, <code>PromptDef</code>, <code>Content</code>, <code>Claims</code>. Each mirrors its spec type field for field; server-only config such as <code>Timeout</code>, <code>ScopeChallenge</code> and <code>PromptArgument.Schema</code> is tagged <code>json:&quot;-&quot;</code> and never sent</li>
 <li>Tool-handler APIs: <code>Sample()</code>, <code>Elicit()</code>, <code>EmitLog()</code>, <code>EmitProgress()</code>, <code>NotifyResourcesChanged()</code></li>
 <li>UI metadata types: <code>UIMetadata</code>, <code>UICSPConfig</code>, <code>UIVisibility</code>, <code>AppMIMEType</code>, <code>ToolMeta</code>, <code>ResourceContentMeta</code></li>
 <li>Extension types: <code>Extension</code>, <code>ExtensionProvider</code>, <code>RefValidator</code>, <code>ClientExtensionCap</code>, <code>UIExtensionID</code></li>
