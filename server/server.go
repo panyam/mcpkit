@@ -853,15 +853,6 @@ func (s *Server) RegisterExperimentalResource(def core.ResourceDef, handler core
 	s.RegisterResource(def, handler)
 }
 
-// RegisterExperimentalPrompt registers a prompt marked as experimental via annotations.
-func (s *Server) RegisterExperimentalPrompt(def core.PromptDef, handler core.PromptHandler) {
-	if def.Annotations == nil {
-		def.Annotations = make(map[string]any)
-	}
-	def.Annotations["experimental"] = true
-	s.RegisterPrompt(def, handler)
-}
-
 // RegisterCompletion registers a completion handler for argument autocompletion.
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
 func (s *Server) RegisterCompletion(refType, name string, handler core.CompletionHandler) {

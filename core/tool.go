@@ -44,6 +44,9 @@ type ToolDef struct {
 	// Serialized as "_meta" in the tools/list response.
 	Meta *ToolMeta `json:"_meta,omitempty"`
 
+	// Icons are visual identifiers a host may show beside the tool.
+	Icons []Icon `json:"icons,omitempty"`
+
 	// Timeout is a per-tool execution timeout. If set, overrides the
 	// server-wide WithToolTimeout for this tool. Not serialized to clients.
 	Timeout time.Duration `json:"-"`

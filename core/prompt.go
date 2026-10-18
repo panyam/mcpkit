@@ -19,8 +19,11 @@ type PromptDef struct {
 	// Arguments defines the parameters this prompt accepts.
 	Arguments []PromptArgument `json:"arguments,omitempty"`
 
-	// Annotations holds optional metadata for this prompt.
-	Annotations map[string]any `json:"annotations,omitempty"`
+	// Icons are visual identifiers a host may show beside the prompt.
+	Icons []Icon `json:"icons,omitempty"`
+
+	// Meta is the prompt's _meta object, passed through verbatim.
+	Meta map[string]any `json:"_meta,omitempty"`
 
 	// Timeout is a per-prompt execution timeout. Not serialized to clients.
 	Timeout time.Duration `json:"-"`
@@ -46,23 +49,22 @@ type PromptsListResult struct {
 
 // PromptArgument describes a single argument to a prompt.
 type PromptArgument struct {
-	Name        string `json:"name"`
+	Name string `json:"name"`
+	// Title is an optional display name, preferred over Name in a UI.
+	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 
-	// Schema is an optional JSON Schema describing the expected value shape
-	// for this argument. Mirrors ToolDef.InputSchema: typically a
-	// map[string]any with "type", "enum", "minimum", etc. Arbitrary JSON
-	// Schema keywords ($ref, $defs, additionalProperties, ...) are preserved
-	// as-is through registration, serialization, and client deserialization.
+	// Schema is an optional JSON Schema for this argument's value, such as a
+	// map[string]any with "type", "enum" or "minimum". It is server-side
+	// config: the dispatcher validates prompts/get arguments against it and
+	// returns -32602 Invalid Params with a structured errors list on failure
+	// (#184). Arguments without a Schema bypass validation, and
+	// server.WithSchemaValidation(false) turns validation off.
 	//
-	// Enforced server-side: when set, the dispatcher validates incoming
-	// argument values against the schema before invoking the handler and
-	// returns -32602 Invalid Params with a structured errors list on
-	// failure (#184). Arguments without a Schema bypass validation.
-	// Use server.WithSchemaValidation(false) to opt out of call-time
-	// validation if you prefer to validate in the handler.
-	Schema any `json:"schema,omitempty"`
+	// It is not sent to clients. No MCP schema defines a schema on
+	// PromptArgument, so prompts/list omits it (#1562).
+	Schema any `json:"-"`
 }
 
 // PromptMessage is a single message in a prompt result.

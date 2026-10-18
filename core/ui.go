@@ -211,6 +211,13 @@ func (m *ToolMeta) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ResourceMeta is the _meta of a resource or template as listed by
+// resources/list and resources/templates/list.
+type ResourceMeta struct {
+	// UI contains MCP Apps presentation metadata.
+	UI *UIMetadata `json:"ui,omitempty"`
+}
+
 // ResourceContentMeta holds per-content metadata in resources/read responses.
 // Takes precedence over the resource-level metadata from resources/list.
 type ResourceContentMeta struct {

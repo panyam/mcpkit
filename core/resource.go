@@ -25,6 +25,17 @@ type ResourceDef struct {
 	// Annotations holds optional metadata for this resource.
 	Annotations map[string]any `json:"annotations,omitempty"`
 
+	// Size is the raw content size in bytes, before any base64 encoding,
+	// if known. Nil omits it; a pointer so an empty resource can report 0.
+	Size *int64 `json:"size,omitempty"`
+
+	// Icons are visual identifiers a host may show beside the resource.
+	Icons []Icon `json:"icons,omitempty"`
+
+	// Meta is the resource-level _meta in resources/list. A resources/read
+	// content's own _meta (ResourceContentMeta) takes precedence over it.
+	Meta *ResourceMeta `json:"_meta,omitempty"`
+
 	// Timeout is a per-resource execution timeout. Not serialized to clients.
 	Timeout time.Duration `json:"-"`
 
@@ -55,6 +66,12 @@ type ResourceTemplate struct {
 
 	// Annotations holds optional metadata for this template.
 	Annotations map[string]any `json:"annotations,omitempty"`
+
+	// Icons are visual identifiers a host may show beside the template.
+	Icons []Icon `json:"icons,omitempty"`
+
+	// Meta is the template's _meta in resources/templates/list.
+	Meta *ResourceMeta `json:"_meta,omitempty"`
 
 	// Timeout is a per-template execution timeout. Not serialized to clients.
 	Timeout time.Duration `json:"-"`

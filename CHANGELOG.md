@@ -10,6 +10,13 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 ## [Unreleased]
 
 ### Changed
+- **Breaking: `PromptDef.Annotations` and `Server.RegisterExperimentalPrompt`
+  are gone** (#1562). No MCP schema gives `Prompt` an `annotations` field,
+  and nothing set it except that helper.
+- **Breaking: `PromptArgument.Schema` is no longer sent to clients** (#1562).
+  It is still server-side config and the dispatcher still validates
+  `prompts/get` arguments against it, but no MCP schema defines it on the
+  wire, so `prompts/list` omits it.
 - **Breaking: `core.ServerInfo` no longer has an `Instructions` field** (#1560).
   Set it with `server.WithInstructions(s)` instead. The spec has always put
   `instructions` on the initialize result beside `serverInfo`, never inside
@@ -20,6 +27,12 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   gain `icons` (`core.Icon`).
 
 ### Fixed
+- **List primitives carry the spec fields mcpkit lacked** (#1562): `icons`
+  on tools, resources, resource templates and prompts (2025-11-25), `size`
+  on resources, `_meta` on resources, templates and prompts, and `title` on
+  prompt arguments. Resource-level `_meta` (`ResourceMeta`, for MCP Apps
+  `ui`) could not be set at all before, although `ResourceContentMeta`'s doc
+  said read-level metadata overrides it.
 - **`instructions` placement on both wires** (#1560). Initialize sends it at
   the top level of the result. `server/discover` sends it at the top level,
   where it was missing. The `_meta` serverInfo on every stateless result no
