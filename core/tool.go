@@ -36,13 +36,16 @@ type ToolDef struct {
 	// Per MCP spec: declares whether this tool supports async task execution.
 	Execution *ToolExecution `json:"execution,omitempty"`
 
-	// Annotations holds optional metadata for this tool.
-	// Convention: {"experimental": true} marks experimental tools.
+	// Annotations holds the spec's tool hints (readOnlyHint, destructiveHint,
+	// idempotentHint, openWorldHint, title).
 	Annotations map[string]any `json:"annotations,omitempty"`
 
 	// Meta holds protocol-level metadata (e.g., UI presentation hints).
 	// Serialized as "_meta" in the tools/list response.
 	Meta *ToolMeta `json:"_meta,omitempty"`
+
+	// Icons are visual identifiers a host may show beside the tool.
+	Icons []Icon `json:"icons,omitempty"`
 
 	// Timeout is a per-tool execution timeout. If set, overrides the
 	// server-wide WithToolTimeout for this tool. Not serialized to clients.
@@ -356,38 +359,70 @@ func (m *ToolResultMeta) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Content is a single content item in a tool result.
-// Supports text, image, audio, and embedded resource types per MCP spec.
+// Content is one content block: in a tool result, a prompt message, or a
+// sampling message. The spec's ContentBlock is a union of text, image,
+// audio, resource_link and resource (embedded); Type says which, and only
+// that variant's fields are set.
 type Content struct {
 	Type     string           `json:"type"`
 	Text     string           `json:"text,omitempty"`
 	MimeType string           `json:"mimeType,omitempty"`
 	Data     string           `json:"data,omitempty"`
 	Resource *ResourceContent `json:"resource,omitempty"`
+
+	// URI, Name, Title, Description, Size and Icons are the Resource fields a
+	// "resource_link" block carries (2025-06-18), pointing at a resource the
+	// client may read rather than embedding it. ResourceLinkContent builds
+	// one from a ResourceDef.
+	URI         string `json:"uri,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	Size        *int64 `json:"size,omitempty"`
+	Icons       []Icon `json:"icons,omitempty"`
+
+	// Annotations are the spec's optional hints for every block type:
+	// audience, priority and lastModified.
+	Annotations map[string]any `json:"annotations,omitempty"`
+
+	// Meta is the block's _meta object, passed through verbatim.
+	Meta map[string]any `json:"_meta,omitempty"`
+}
+
+// ResourceLinkContent returns a "resource_link" content block pointing at
+// def. It copies the fields a Resource and a ResourceLink share; def.Meta is
+// not copied, since it is listing metadata rather than the link's own.
+func ResourceLinkContent(def ResourceDef) Content {
+	return Content{
+		Type:        "resource_link",
+		URI:         def.URI,
+		Name:        def.Name,
+		Title:       def.Title,
+		Description: def.Description,
+		MimeType:    def.MimeType,
+		Size:        def.Size,
+		Icons:       def.Icons,
+		Annotations: def.Annotations,
+	}
 }
 
 // UnmarshalJSON decodes a Content, tolerating an array-form `resource` field
 // from peers that confuse EmbeddedResource (single) with ReadResourceResult
 // (array). The first array element wins. See #81 for cardinality rationale.
+// Every other field decodes normally through the alias, so a field added to
+// Content needs no change here.
 func (c *Content) UnmarshalJSON(data []byte) error {
-	// Use an alias that still has `resource` typed loosely so a sibling decode
-	// can route it through the cardinality helper.
-	type scalarFields struct {
-		Type     string          `json:"type"`
-		Text     string          `json:"text,omitempty"`
-		MimeType string          `json:"mimeType,omitempty"`
-		Data     string          `json:"data,omitempty"`
+	type contentAlias Content
+	*c = Content{}
+	aux := struct {
+		*contentAlias
+		// Shadows contentAlias.Resource (shallower field wins) so the raw
+		// value can go through the cardinality helper.
 		Resource json.RawMessage `json:"resource,omitempty"`
-	}
-	var aux scalarFields
+	}{contentAlias: (*contentAlias)(c)}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	c.Type = aux.Type
-	c.Text = aux.Text
-	c.MimeType = aux.MimeType
-	c.Data = aux.Data
-	c.Resource = nil
 	return decodeResourceContentSingle(aux.Resource, &c.Resource)
 }
 

@@ -7,7 +7,7 @@ This package defines the shared types used by both `server/` and `client/`. It h
 ## What belongs here
 
 - JSON-RPC types: `Request`, `Response`, `Error`
-- MCP domain types: `ToolDef`, `ResourceDef`, `PromptDef`, `Content`, `Claims`
+- MCP domain types: `ToolDef`, `ResourceDef`, `ResourceTemplate`, `PromptDef`, `Content`, `Claims`. Each mirrors its spec type field for field; server-only config such as `Timeout`, `ScopeChallenge` and `PromptArgument.Schema` is tagged `json:"-"` and never sent
 - Tool-handler APIs: `Sample()`, `Elicit()`, `EmitLog()`, `EmitProgress()`, `NotifyResourcesChanged()`
 - UI metadata types: `UIMetadata`, `UICSPConfig`, `UIVisibility`, `AppMIMEType`, `ToolMeta`, `ResourceContentMeta`
 - Extension types: `Extension`, `ExtensionProvider`, `RefValidator`, `ClientExtensionCap`, `UIExtensionID`

@@ -6,42 +6,30 @@ import (
 	"testing"
 )
 
-// TestPromptArgumentSchemaRoundTrip verifies that a PromptArgument.Schema
-// (arbitrary JSON Schema object) round-trips through marshal/unmarshal without
-// loss. Issue #87: prompts gain optional schemas that mirror ToolDef.InputSchema
-// so clients can render typed inputs (numbers, enums, etc.). Arbitrary JSON
-// Schema fields ($ref, $defs, additionalProperties, etc.) must be preserved.
-func TestPromptArgumentSchemaRoundTrip(t *testing.T) {
+// TestPromptArgumentSchemaIsNotSerialized pins Schema as server-side config.
+// No MCP schema defines a schema on PromptArgument, so it stays off the wire
+// while the dispatcher still validates against it (#1562, #184).
+func TestPromptArgumentSchemaIsNotSerialized(t *testing.T) {
 	arg := PromptArgument{
 		Name:        "age",
+		Title:       "Age",
 		Description: "user age",
 		Required:    true,
-		Schema: map[string]any{
-			"type":    "integer",
-			"minimum": float64(1),
-			"maximum": float64(150),
-		},
+		Schema:      map[string]any{"type": "integer", "minimum": float64(1)},
 	}
 	data, err := json.Marshal(arg)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
+	if strings.Contains(string(data), "schema") {
+		t.Errorf("marshal emitted %s, schema must stay server-side", data)
+	}
 	var parsed PromptArgument
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if parsed.Name != arg.Name || parsed.Required != arg.Required {
-		t.Errorf("basic fields lost: %+v", parsed)
-	}
-	schema, ok := parsed.Schema.(map[string]any)
-	if !ok {
-		t.Fatalf("schema = %T, want map[string]any", parsed.Schema)
-	}
-	if schema["type"] != "integer" {
-		t.Errorf("schema.type = %v, want integer", schema["type"])
-	}
-	if schema["minimum"] != float64(1) || schema["maximum"] != float64(150) {
-		t.Errorf("schema bounds lost: %+v", schema)
+	if parsed.Name != arg.Name || parsed.Title != arg.Title || parsed.Required != arg.Required {
+		t.Errorf("spec fields lost: %+v", parsed)
 	}
 }
 
@@ -60,25 +48,19 @@ func TestPromptArgumentWithoutSchemaOmitsField(t *testing.T) {
 	}
 }
 
-// TestPromptArgumentSchemaWithNestedRef verifies that arbitrary JSON Schema
-// keywords — including $ref and $defs — survive round-trip. This matches the
-// treatment of ToolDef.InputSchema and is the foundation for future validation
-// work in #184.
-func TestPromptArgumentSchemaWithNestedRef(t *testing.T) {
-	raw := `{"name":"filter","schema":{"$ref":"#/$defs/Filter","$defs":{"Filter":{"type":"object","properties":{"q":{"type":"string"}}}}}}`
+// TestPromptArgumentIgnoresPeerSchema checks that a schema sent by a peer
+// built against the old shape is dropped on decode rather than becoming
+// server-side validation config.
+func TestPromptArgumentIgnoresPeerSchema(t *testing.T) {
+	raw := `{"name":"filter","schema":{"$ref":"#/$defs/Filter","$defs":{"Filter":{"type":"object"}}}}`
 	var arg PromptArgument
 	if err := json.Unmarshal([]byte(raw), &arg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	data, err := json.Marshal(arg)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if arg.Name != "filter" {
+		t.Errorf("name = %q, want filter", arg.Name)
 	}
-	s := string(data)
-	if !strings.Contains(s, `"$ref":"#/$defs/Filter"`) {
-		t.Errorf("marshal lost $ref: %s", s)
-	}
-	if !strings.Contains(s, `"$defs"`) {
-		t.Errorf("marshal lost $defs: %s", s)
+	if arg.Schema != nil {
+		t.Errorf("schema = %v, want nil (not read from the wire)", arg.Schema)
 	}
 }

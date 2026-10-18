@@ -3,30 +3,25 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	core "github.com/panyam/mcpkit/core"
 )
 
-// TestPromptsListAdvertisesSchema verifies that a PromptArgument with a Schema
-// field is advertised verbatim through prompts/list. Clients rely on this to
-// render typed inputs — dropping the schema silently would defeat the feature.
-// Issue #87.
-func TestPromptsListAdvertisesSchema(t *testing.T) {
+// TestPromptsListOmitsArgumentSchema checks that prompts/list never carries
+// PromptArgument.Schema. It is server-side validation config, and no MCP
+// schema defines it on the wire (#1562).
+func TestPromptsListOmitsArgumentSchema(t *testing.T) {
 	d := NewDispatcher(core.ServerInfo{Name: "test", Version: "1.0"})
 	d.RegisterPrompt(
 		core.PromptDef{
 			Name: "filter",
-			Arguments: []core.PromptArgument{
-				{
-					Name:     "limit",
-					Required: true,
-					Schema: map[string]any{
-						"type":    "integer",
-						"minimum": float64(1),
-					},
-				},
-			},
+			Arguments: []core.PromptArgument{{
+				Name:     "limit",
+				Required: true,
+				Schema:   map[string]any{"type": "integer", "minimum": float64(1)},
+			}},
 		},
 		func(ctx core.PromptContext, req core.PromptRequest) (core.PromptResponse, error) {
 			return core.PromptResult{}, nil
@@ -40,22 +35,15 @@ func TestPromptsListAdvertisesSchema(t *testing.T) {
 	if resp.Error != nil {
 		t.Fatalf("error: %s", resp.Error.Message)
 	}
-	var result struct {
-		Prompts []core.PromptDef `json:"prompts"`
+	raw, err := json.Marshal(resp.Result)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
 	}
-	if err := resp.ResultAs(&result); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if !strings.Contains(string(raw), `"name":"limit"`) {
+		t.Fatalf("argument missing from prompts/list: %s", raw)
 	}
-	if len(result.Prompts) != 1 || len(result.Prompts[0].Arguments) != 1 {
-		t.Fatalf("unexpected prompts shape: %+v", result.Prompts)
-	}
-	arg := result.Prompts[0].Arguments[0]
-	schema, ok := arg.Schema.(map[string]any)
-	if !ok {
-		t.Fatalf("schema = %T, want map[string]any — not advertised", arg.Schema)
-	}
-	if schema["type"] != "integer" {
-		t.Errorf("schema.type = %v, want integer", schema["type"])
+	if strings.Contains(string(raw), `"schema"`) {
+		t.Errorf("prompts/list advertises schema: %s", raw)
 	}
 }
 

@@ -247,13 +247,8 @@ func TestHostHandlers_BridgeWireFixture(t *testing.T) {
 			t.Errorf("downloadFile #%d decoded with no contents", i)
 		}
 		for _, c := range d.Contents {
-			var item struct {
-				Type     string          `json:"type"`
-				URI      string          `json:"uri"`
-				Resource json.RawMessage `json:"resource"`
-			}
-			if err := json.Unmarshal(c, &item); err != nil || item.Type == "" || (item.URI == "" && len(item.Resource) == 0) {
-				t.Errorf("downloadFile #%d item has no type or target: %s", i, c)
+			if c.Type == "" || (c.URI == "" && c.Resource == nil) {
+				t.Errorf("downloadFile #%d item has no type or target: %+v", i, c)
 			}
 		}
 	}

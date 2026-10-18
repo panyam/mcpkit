@@ -27,10 +27,10 @@ type OpenLinkRequest struct {
 }
 
 // DownloadFileRequest is the params of ui/download-file (draft spec). Each
-// entry is an EmbeddedResource or a ResourceLink; they stay raw because
-// core.Content has no resource_link fields.
+// entry is an EmbeddedResource (Type "resource", Resource set) or a
+// ResourceLink (Type "resource_link", URI and Name set).
 type DownloadFileRequest struct {
-	Contents []json.RawMessage `json:"contents"`
+	Contents []core.Content `json:"contents"`
 }
 
 // MessageRequest is the params of ui/message: content the app wants added to
