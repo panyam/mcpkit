@@ -58,6 +58,7 @@ type serverOptions struct {
 	allowedRoots         []string
 	authValidator        core.AuthValidator
 	extensions           []core.ExtensionProvider
+	instructions         string
 	middleware           []Middleware
 	notifyInterceptors   []NotifyInterceptor            // outgoing notification interceptors
 	requestInterceptors  []RequestInterceptor           // outgoing server-to-client request interceptors
@@ -185,6 +186,14 @@ func WithPublicMethods(methods ...string) Option {
 // and stability level.
 func WithExtension(ext core.ExtensionProvider) Option {
 	return func(o *serverOptions) { o.extensions = append(o.extensions, ext) }
+}
+
+// WithInstructions sets the natural-language guidance a host may add to
+// the model's system prompt when it connects. It is sent as the top-level
+// instructions field of the initialize result and of the server/discover
+// result. An empty string omits the field.
+func WithInstructions(instructions string) Option {
+	return func(o *serverOptions) { o.instructions = instructions }
 }
 
 // WithRequestLogging enables HTTP-level request/response logging on the server.
@@ -647,7 +656,7 @@ func WithRootsFetchTimeout(d time.Duration) Option {
 }
 
 // NewServer creates an MCP server with the given identity and options.
-func NewServer(info core.ServerInfo, opts ...Option) *Server {
+func NewServer(info core.Implementation, opts ...Option) *Server {
 	s := &Server{
 		dispatcher: NewDispatcher(info),
 	}
@@ -678,6 +687,7 @@ func NewServer(info core.ServerInfo, opts ...Option) *Server {
 	// Propagate schema validation opt-out to the dispatcher so per-session
 	// clones inherit it via newSession().
 	s.dispatcher.skipSchemaValidation = s.options.skipSchemaValidation
+	s.dispatcher.instructions = s.options.instructions
 	s.dispatcher.validateFileInputs = s.options.validateFileInputs
 	s.dispatcher.allowLegacyOnDraft = s.options.allowLegacyOnDraft
 	s.dispatcher.allowReinitialize = s.options.allowReinitialize

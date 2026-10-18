@@ -125,7 +125,11 @@ type DiscoverResult struct {
 	// (see Meta); adaptiveProbe copies it here so callers keep one
 	// stable accessor. The json tag doubles as a decode fallback for
 	// pre-3002 servers that still emit it in the result body.
-	ServerInfo core.ServerInfo `json:"serverInfo"`
+	ServerInfo core.Implementation `json:"serverInfo"`
+
+	// Instructions is the server's guidance for the model, a top-level
+	// field of the 2026-07-28 DiscoverResult.
+	Instructions string `json:"instructions,omitempty"`
 
 	// Meta carries the result-side _meta envelope (spec PR 3002).
 	Meta core.ResultMeta `json:"_meta"`
@@ -178,11 +182,8 @@ func (c *Client) Discover() (*DiscoverResult, error) {
 // across both wires.
 func (c *Client) buildRequestMeta() map[string]any {
 	return map[string]any{
-		core.MetaKeyProtocolVersion: c.getNegotiatedVersion(),
-		core.MetaKeyClientInfo: map[string]any{
-			"name":    c.info.Name,
-			"version": c.info.Version,
-		},
+		core.MetaKeyProtocolVersion:    c.getNegotiatedVersion(),
+		core.MetaKeyClientInfo:         c.info,
 		core.MetaKeyClientCapabilities: c.computeClientCapabilities(),
 	}
 }

@@ -25,6 +25,7 @@ type fakeBackend struct {
 }
 
 func (f *fakeBackend) ServerInfo() core.ServerInfo           { return f.info }
+func (f *fakeBackend) Instructions() string                  { return "" }
 func (f *fakeBackend) Capabilities() core.ServerCapabilities { return f.caps }
 func (f *fakeBackend) SupportedVersions() []string {
 	if f.versions == nil {

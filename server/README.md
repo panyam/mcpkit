@@ -13,6 +13,7 @@ MCP server implementation: Dispatcher, transports, middleware, subscriptions.
 - Resource subscriptions (`WithSubscriptions`, `NotifyResourceUpdated`)
 - Broadcast notifications (`Broadcast`) - fan out to all connected sessions
 - Extension registration (`WithExtension`) - extensions declare capabilities in the initialize response
+- Server instructions (`WithInstructions`) - guidance for the model, sent as the top-level `instructions` of the initialize and `server/discover` results
 - Startup validation (`validateExtensionRefs`) - calls `RefValidator` on registered extensions to warn about unresolvable resource references
 
 ## Dependencies

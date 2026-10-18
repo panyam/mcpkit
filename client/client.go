@@ -422,7 +422,7 @@ func (a *coreTransportAdapter) getSessionID() string {
 // Client is an MCP client that communicates over Streamable HTTP or SSE.
 type Client struct {
 	url         string
-	info        core.ClientInfo
+	info        core.Implementation
 	useSSE      bool
 	tokenSource core.TokenSource
 	nextID      int
@@ -448,7 +448,12 @@ type Client struct {
 	baseDelay  time.Duration
 
 	// ServerInfo is populated after Connect.
-	ServerInfo core.ServerInfo
+	ServerInfo core.Implementation
+
+	// Instructions is the server's guidance for the model, read after
+	// Connect from the initialize or server/discover result. Empty when the
+	// server sent none, or when a stateless server answered no discover.
+	Instructions string
 
 	// onNotify is an optional callback for server-to-client notifications.
 	// Used by all transports: in-memory (inline), SSE (background reader),
@@ -558,7 +563,7 @@ const defaultMaxListPages = 1000
 // NewClient creates a new MCP client targeting the given server URL.
 // By default uses Streamable HTTP. Use WithSSEClient() for SSE transport.
 // Call Connect() to perform the protocol handshake.
-func NewClient(url string, info core.ClientInfo, opts ...ClientOption) *Client {
+func NewClient(url string, info core.Implementation, opts ...ClientOption) *Client {
 	c := &Client{
 		url:    url,
 		info:   info,
@@ -743,6 +748,7 @@ func (c *Client) doConnect() error {
 		// first real request succeed. (issue 829)
 		if dr, fallback, err := c.adaptiveProbe(); err == nil && !fallback {
 			c.ServerInfo = dr.ServerInfo
+			c.Instructions = dr.Instructions
 			c.captureServerExtensions(dr.Capabilities)
 		}
 		c.startKeepalive()
@@ -757,6 +763,7 @@ func (c *Client) doConnect() error {
 			// Server speaks stateless wire.
 			c.useStatelessWire = true
 			c.ServerInfo = dr.ServerInfo
+			c.Instructions = dr.Instructions
 			c.captureServerExtensions(dr.Capabilities)
 			c.startKeepalive()
 			return nil
@@ -803,6 +810,7 @@ func (c *Client) doConnect() error {
 	var initResult core.InitializeResult
 	if err := json.Unmarshal(resp.Result, &initResult); err == nil {
 		c.ServerInfo = initResult.ServerInfo
+		c.Instructions = initResult.Instructions
 		if initResult.Capabilities.Extensions != nil {
 			c.serverExtensions = make(map[string]json.RawMessage, len(initResult.Capabilities.Extensions))
 			for id, ext := range initResult.Capabilities.Extensions {
@@ -1706,7 +1714,7 @@ func (c *Client) ListPrompts(ctx context.Context) ([]core.PromptDef, error) {
 type initializeParams struct {
 	ProtocolVersion string                  `json:"protocolVersion"`
 	Capabilities    core.ClientCapabilities `json:"capabilities"`
-	ClientInfo      core.ClientInfo         `json:"clientInfo"`
+	ClientInfo      core.Implementation     `json:"clientInfo"`
 }
 
 type rpcResponse struct {

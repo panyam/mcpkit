@@ -15,9 +15,14 @@ import (
 // goes away, this Backend interface stays — the future "stateless-only"
 // server will still satisfy it.
 type Backend interface {
-	// ServerInfo returns the implementation name/version pair advertised
-	// in server/discover.
-	ServerInfo() core.ServerInfo
+	// ServerInfo returns the server's identity, stamped into every success
+	// result's _meta[io.modelcontextprotocol/serverInfo].
+	ServerInfo() core.Implementation
+
+	// Instructions returns the server's natural-language guidance for the
+	// model, sent as server/discover's top-level instructions field and
+	// never inside serverInfo. Empty omits the field.
+	Instructions() string
 
 	// Capabilities returns the capability shape advertised by this server
 	// in server/discover. The dispatcher does not mutate it; the backend

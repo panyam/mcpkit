@@ -68,7 +68,7 @@ type RequestMeta struct {
 	// PR 3002 (clients SHOULD send it; servers MUST NOT require it) —
 	// nil when the request omitted the field. Self-reported and
 	// unverified: display/logging/debugging only.
-	ClientInfo         *ClientInfo         `json:"io.modelcontextprotocol/clientInfo"`
+	ClientInfo         *Implementation     `json:"io.modelcontextprotocol/clientInfo"`
 	ClientCapabilities *ClientCapabilities `json:"io.modelcontextprotocol/clientCapabilities"`
 
 	// LogLevel is set when the client opts in to log frames for this
@@ -137,7 +137,7 @@ type ResultMeta struct {
 	// response. Servers SHOULD set it on every result. Self-reported
 	// and unverified — display/logging/debugging only; clients SHOULD
 	// NOT use it to change behavior or for security decisions.
-	ServerInfo *ServerInfo `json:"io.modelcontextprotocol/serverInfo,omitempty"`
+	ServerInfo *Implementation `json:"io.modelcontextprotocol/serverInfo,omitempty"`
 }
 
 // InjectServerInfoIntoResult returns result with
@@ -151,7 +151,7 @@ type ResultMeta struct {
 //
 // The returned value is a json.RawMessage when stamping occurred; the
 // transport serializes it verbatim.
-func InjectServerInfoIntoResult(result any, info ServerInfo) any {
+func InjectServerInfoIntoResult(result any, info Implementation) any {
 	if info.Name == "" && info.Version == "" {
 		return result
 	}
