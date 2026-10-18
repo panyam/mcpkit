@@ -835,24 +835,6 @@ func (s *Server) RegisterPrompt(def core.PromptDef, handler core.PromptHandler) 
 	s.dispatcher.RegisterPrompt(def, handler)
 }
 
-// RegisterExperimentalTool registers a tool marked as experimental via annotations.
-func (s *Server) RegisterExperimentalTool(def core.ToolDef, handler core.ToolHandler) {
-	if def.Annotations == nil {
-		def.Annotations = make(map[string]any)
-	}
-	def.Annotations["experimental"] = true
-	s.RegisterTool(def, handler)
-}
-
-// RegisterExperimentalResource registers a resource marked as experimental via annotations.
-func (s *Server) RegisterExperimentalResource(def core.ResourceDef, handler core.ResourceHandler) {
-	if def.Annotations == nil {
-		def.Annotations = make(map[string]any)
-	}
-	def.Annotations["experimental"] = true
-	s.RegisterResource(def, handler)
-}
-
 // RegisterCompletion registers a completion handler for argument autocompletion.
 // refType is "ref/prompt" or "ref/resource". name is the prompt name or resource URI template.
 func (s *Server) RegisterCompletion(refType, name string, handler core.CompletionHandler) {

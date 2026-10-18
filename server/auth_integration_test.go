@@ -3,6 +3,7 @@ package server
 import (
 	core "github.com/panyam/mcpkit/core"
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -237,24 +238,24 @@ type testExtension struct {
 
 func (e testExtension) Extension() core.Extension { return e.ext }
 
-func TestAnnotationsOnToolDef(t *testing.T) {
-	srv := NewServer(core.ServerInfo{Name: "test", Version: "0.1.0"})
-	srv.RegisterExperimentalTool(
-		core.ToolDef{Name: "beta-tool", Description: "experimental"},
+func TestToolAnnotationsReachTheWire(t *testing.T) {
+	d := NewDispatcher(core.Implementation{Name: "test", Version: "0.1.0"})
+	d.RegisterTool(
+		core.ToolDef{Name: "lookup", InputSchema: map[string]any{"type": "object"},
+			Annotations: map[string]any{"readOnlyHint": true}},
 		func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 			return core.TextResult("ok"), nil
 		},
 	)
+	initDispatcher(d)
 
-	entry, ok := srv.dispatcher.Reg.tools["beta-tool"]
-	if !ok {
-		t.Fatal("tool not registered")
+	resp := d.Dispatch(context.Background(), &core.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "tools/list"})
+	if resp.Error != nil {
+		t.Fatalf("tools/list: %+v", resp.Error)
 	}
-	if entry.def.Annotations == nil {
-		t.Fatal("annotations is nil")
-	}
-	if entry.def.Annotations["experimental"] != true {
-		t.Errorf("experimental = %v, want true", entry.def.Annotations["experimental"])
+	ann, _ := listEntry(t, resp.Result, "tools", "lookup")["annotations"].(map[string]any)
+	if ann["readOnlyHint"] != true {
+		t.Errorf("annotations = %v, want readOnlyHint true", ann)
 	}
 }
 
