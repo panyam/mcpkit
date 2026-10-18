@@ -26,6 +26,12 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   longer repeats it. The client reads it into `Client.Instructions`.
 - **Stateless `_meta` clientInfo sends the whole identity** (#1560). It was
   built from name and version only.
+- **v1 `tasks/result` no longer hangs on a task that elicits or finishes
+  just before it waits** (#390). The long-poll checked the side channel and
+  the task status, then waited on the store, so a side-channel request queued
+  in between (not a store update) or a completion in between went unseen. It
+  now waits on the side channel and on `WaitForResult` together. This was the
+  intermittent `TestTaskElicitE2E` CI failure.
 
 ## [0.8.1] - 2026-10-16
 
