@@ -9,6 +9,18 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-17
+
+A patch release that brings mcpkit's protocol types in line with the MCP
+schema field for field, headlined by `instructions`, which hosts that follow
+the spec never saw. Some removed fields and helpers break compilation; nothing
+outside mcpkit's own tests used them. Full write-up:
+[`docs/releases/v0.8.2.md`](docs/releases/v0.8.2.md).
+
+### Security
+- **`compression` 1.8.2** in the `ext/ui` Playwright test workspace
+  (#1564), for GHSA-vc2v-76pw-4v95. Test tooling only.
+
 ### Changed
 - **Breaking: `PromptDef.Annotations` and `Server.RegisterExperimental{Tool,Resource,Prompt}`
   are gone** (#1562, #1566). No MCP schema gives `Prompt` an `annotations`
