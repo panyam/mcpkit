@@ -43,7 +43,10 @@ type pendingMap = conc.SyncMap[string, *pendingServerRequest]
 // Dispatcher routes JSON-RPC requests to the appropriate handler.
 type Dispatcher struct {
 	Reg        *Registry
-	serverInfo core.ServerInfo
+	serverInfo core.Implementation
+	// instructions is the WithInstructions text, emitted on the initialize
+	// result rather than inside serverInfo.
+	instructions string
 
 	// extensions registered via WithExtension, keyed by extension ID.
 	extensions map[string]core.Extension
@@ -275,7 +278,7 @@ type initializeParams struct {
 }
 
 // NewDispatcher creates a dispatcher with the given server identity.
-func NewDispatcher(info core.ServerInfo) *Dispatcher {
+func NewDispatcher(info core.Implementation) *Dispatcher {
 	return &Dispatcher{
 		Reg:        NewRegistry(),
 		extensions: make(map[string]core.Extension),
@@ -293,6 +296,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		Reg:                  d.Reg,
 		extensions:           d.extensions,
 		serverInfo:           d.serverInfo,
+		instructions:         d.instructions,
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
 		onRootsChanged:       d.onRootsChanged,
@@ -555,6 +559,7 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 		ProtocolVersion: negotiated,
 		Capabilities:    caps,
 		ServerInfo:      d.serverInfo,
+		Instructions:    d.instructions,
 	})
 }
 

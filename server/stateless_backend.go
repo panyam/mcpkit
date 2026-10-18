@@ -37,10 +37,15 @@ var _ stateless.Backend = (*statelessBackend)(nil)
 // to whatever owns the shared registry post-cleanup.
 func (b *statelessBackend) reg() *Registry { return b.s.dispatcher.Reg }
 
-// ServerInfo returns the implementation identity advertised in
-// server/discover responses. Sourced from NewServer's first argument.
-func (b *statelessBackend) ServerInfo() core.ServerInfo {
+// ServerInfo returns the server identity stamped into every stateless
+// result's _meta. Sourced from NewServer's first argument.
+func (b *statelessBackend) ServerInfo() core.Implementation {
 	return b.s.dispatcher.serverInfo
+}
+
+// Instructions returns the WithInstructions text for server/discover.
+func (b *statelessBackend) Instructions() string {
+	return b.s.dispatcher.instructions
 }
 
 // Capabilities returns the capability shape derived from registered

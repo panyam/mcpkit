@@ -9,6 +9,30 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **Breaking: `core.ServerInfo` no longer has an `Instructions` field** (#1560).
+  Set it with `server.WithInstructions(s)` instead. The spec has always put
+  `instructions` on the initialize result beside `serverInfo`, never inside
+  it, so hosts that follow the spec (Claude Code among them) never saw it.
+- **`core.Implementation` is the identity type for both ends** (#1560), as in
+  the spec. `ServerInfo` and `ClientInfo` are now aliases of it, so client
+  identity gains `title`, `description`, `websiteUrl` and `icons`, and both
+  gain `icons` (`core.Icon`).
+
+### Fixed
+- **`instructions` placement on both wires** (#1560). Initialize sends it at
+  the top level of the result. `server/discover` sends it at the top level,
+  where it was missing. The `_meta` serverInfo on every stateless result no
+  longer repeats it. The client reads it into `Client.Instructions`.
+- **Stateless `_meta` clientInfo sends the whole identity** (#1560). It was
+  built from name and version only.
+- **v1 `tasks/result` no longer hangs on a task that elicits or finishes
+  just before it waits** (#390). The long-poll checked the side channel and
+  the task status, then waited on the store, so a side-channel request queued
+  in between (not a store update) or a completion in between went unseen. It
+  now waits on the side channel and on `WaitForResult` together. This was the
+  intermittent `TestTaskElicitE2E` CI failure.
+
 ## [0.8.1] - 2026-10-16
 
 A patch release that adds opt-in DPoP (RFC 9449, SEP-1932) on the client and

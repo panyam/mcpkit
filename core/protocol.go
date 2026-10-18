@@ -9,20 +9,53 @@ import (
 // Protocol-level types shared between server and client packages.
 // These are MCP spec types that appear in both directions of communication.
 
-// ServerInfo identifies an MCP server in the initialize response.
-type ServerInfo struct {
-	Name         string `json:"name"`
-	Version      string `json:"version"`
-	Title        string `json:"title,omitempty"`
-	Description  string `json:"description,omitempty"`
-	Instructions string `json:"instructions,omitempty"`
-	WebsiteURL   string `json:"websiteUrl,omitempty"`
+// Implementation describes the software on one end of an MCP connection.
+// The spec uses this one type for both identity slots: serverInfo and
+// clientInfo on initialize, and the io.modelcontextprotocol/serverInfo and
+// io.modelcontextprotocol/clientInfo _meta keys on the 2026-07-28 wire.
+// Only Name and Version are required; the rest are display metadata.
+//
+// Instructions are not part of an implementation's identity. The spec
+// carries them on InitializeResult and DiscoverResult, and a server sets
+// them with server.WithInstructions.
+type Implementation struct {
+	Name    string `json:"name"`
+	Title   string `json:"title,omitempty"`
+	Version string `json:"version"`
+	// Description says what this implementation does (2025-11-25).
+	Description string `json:"description,omitempty"`
+	// WebsiteURL is the implementation's home page (2025-11-25).
+	WebsiteURL string `json:"websiteUrl,omitempty"`
+	// Icons are visual identifiers a host may render (2025-11-25).
+	Icons []Icon `json:"icons,omitempty"`
 }
 
-// ClientInfo identifies an MCP client from the initialize request.
-type ClientInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
+// ServerInfo is the name mcpkit used for Implementation in the serverInfo
+// slot before the two were unified. It is an alias, so values are
+// interchangeable.
+type ServerInfo = Implementation
+
+// ClientInfo is the name mcpkit used for Implementation in the clientInfo
+// slot. It is an alias, so values are interchangeable.
+type ClientInfo = Implementation
+
+// Icon theme values for Icon.Theme.
+const (
+	IconThemeLight = "light"
+	IconThemeDark  = "dark"
+)
+
+// Icon is one visual identifier. Src is an https: or data: URI; a consumer
+// must treat the icon as untrusted input (spec "icons" section).
+type Icon struct {
+	Src string `json:"src"`
+	// MIMEType overrides the type the server reports for Src.
+	MIMEType string `json:"mimeType,omitempty"`
+	// Sizes lists sizes such as "48x48", or "any" for scalable formats.
+	Sizes []string `json:"sizes,omitempty"`
+	// Theme is IconThemeLight or IconThemeDark when the icon is drawn for
+	// that background; empty means any.
+	Theme string `json:"theme,omitempty"`
 }
 
 // ElicitationFormCap is a marker for form-mode elicitation support.
@@ -185,7 +218,10 @@ type PromptsCap struct {
 type InitializeResult struct {
 	ProtocolVersion string             `json:"protocolVersion"`
 	Capabilities    ServerCapabilities `json:"capabilities"`
-	ServerInfo      ServerInfo         `json:"serverInfo"`
+	ServerInfo      Implementation     `json:"serverInfo"`
+	// Instructions is natural-language guidance on using the server, which
+	// a host may add to the model's system prompt. Omitted when empty.
+	Instructions string `json:"instructions,omitempty"`
 }
 
 // ExtensionCapability is one extension's settings object as it appears in

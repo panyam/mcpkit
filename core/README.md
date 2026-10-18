@@ -13,7 +13,7 @@ This package defines the shared types used by both `server/` and `client/`. It h
 - Extension types: `Extension`, `ExtensionProvider`, `RefValidator`, `ClientExtensionCap`, `UIExtensionID`
 - Context helpers: `ClientSupportsExtension()`, `ClientSupportsUI()`
 - Interfaces: `Transport`, `TokenSource`, `AuthValidator`
-- Protocol constants: `ServerInfo`, `ClientInfo`, `ClientCapabilities`
+- Protocol types: `Implementation` (the spec's one identity type, for both `serverInfo` and `clientInfo`; `ServerInfo` and `ClientInfo` are aliases of it), `Icon`, `ClientCapabilities`
 
 ## What does NOT belong here
 

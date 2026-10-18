@@ -27,6 +27,10 @@ type DiscoverResult struct {
 	SupportedVersions []string                `json:"supportedVersions"`
 	Capabilities      core.ServerCapabilities `json:"capabilities"`
 
+	// Instructions is the server's guidance for the model, a top-level
+	// field of DiscoverResult in the 2026-07-28 schema. Omitted when empty.
+	Instructions string `json:"instructions,omitempty"`
+
 	// TTLMs and CacheScope are required on DiscoverResult in the
 	// 2026-07-28 final schema (the SEP-2549 hints extended to
 	// server/discover). Always emitted; the defaults mirror the
@@ -43,6 +47,7 @@ func (d *Dispatcher) handleDiscover(id json.RawMessage) *core.Response {
 	return core.NewResponse(id, DiscoverResult{
 		SupportedVersions: d.Backend.SupportedVersions(),
 		Capabilities:      d.Backend.Capabilities(),
+		Instructions:      d.Backend.Instructions(),
 		TTLMs:             0,
 		CacheScope:        core.CacheScopePublic,
 	})

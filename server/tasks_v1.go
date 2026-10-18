@@ -374,32 +374,27 @@ func makeResultHandler(rt *taskRuntime) MethodHandler {
 		}
 
 		store := rt.store
+		sid := core.TaskBucketKey(ctx)
 
-		// Long-poll loop: wait for the task to reach a terminal state.
-		// Between iterations, proxy any pending side-channel requests
-		// (elicitation/sampling) through this handler's live connection.
+		// Long-poll loop: wait for the task to reach a terminal state, and
+		// proxy any side-channel request (elicitation/sampling) through this
+		// handler's live connection while waiting. Both are waited on at once
+		// (issue 390): a side-channel send is not a store update, so waiting
+		// on the store alone missed a request queued just before the wait.
 		for {
-			// 1. Check for pending side-channel requests from the background
-			//    goroutine. If one is waiting, proxy it through our live context.
-			if reqCh := rt.getChannel(p.TaskID); reqCh != nil {
-				select {
-				case scReq := <-reqCh:
-					// Proxy the request through this handler's live context.
-					// ctx (MethodContext) has a working requestFunc because
-					// this handler is inside an active POST SSE response.
-					raw, err := proxySideChannel(ctx, scReq)
-					scReq.Result <- sideChannelResponse{Raw: raw, Err: err}
-					continue // loop back to check for more
-				default:
-					// No pending request — fall through to status check.
+			scReq, info, err := waitForTaskEvent(ctx, store, rt.getChannel(p.TaskID), p.TaskID, sid)
+			if err != nil {
+				if _, found := store.Get(p.TaskID, sid); !found {
+					return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
 				}
+				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
 			}
-
-			// 2. Check if the task is terminal.
-			sid := core.TaskBucketKey(ctx)
-			info, found := store.Get(p.TaskID, sid)
-			if !found {
-				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "task not found: "+p.TaskID)
+			if scReq != nil {
+				// ctx (MethodContext) has a working requestFunc because this
+				// handler is inside an active POST SSE response.
+				raw, err := proxySideChannel(ctx, *scReq)
+				scReq.Result <- sideChannelResponse{Raw: raw, Err: err}
+				continue
 			}
 
 			if info.Status.IsTerminal() {
@@ -431,12 +426,34 @@ func makeResultHandler(rt *taskRuntime) MethodHandler {
 				result.Meta.RelatedTask = &core.RelatedTaskMeta{TaskID: p.TaskID}
 				return core.NewResponse(id, result)
 			}
-
-			// 3. Wait for a task update or context cancellation.
-			if err := store.WaitForUpdate(ctx, p.TaskID, sid); err != nil {
-				return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
-			}
 		}
+	}
+}
+
+// waitForTaskEvent blocks until a side-channel request arrives on reqCh or
+// the task reaches a terminal state, whichever comes first, and returns the
+// request or the terminal info. Terminal state comes from WaitForResult,
+// which checks and registers its waiter under one lock, so a task that
+// finishes just before the call is still seen. A nil reqCh waits on the
+// store only.
+func waitForTaskEvent(ctx context.Context, store TaskStore, reqCh <-chan sideChannelRequest, taskID, sid string) (*sideChannelRequest, core.TaskInfo, error) {
+	waitCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type terminal struct {
+		info core.TaskInfo
+		err  error
+	}
+	done := make(chan terminal, 1)
+	go func() {
+		_, info, err := store.WaitForResult(waitCtx, taskID, sid)
+		done <- terminal{info, err}
+	}()
+
+	select {
+	case req := <-reqCh:
+		return &req, core.TaskInfo{}, nil
+	case t := <-done:
+		return nil, t.info, t.err
 	}
 }
 

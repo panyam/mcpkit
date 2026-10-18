@@ -119,6 +119,7 @@ func (c *Client) reconnect() error {
 	var initResult core.InitializeResult
 	if err := json.Unmarshal(resp.Result, &initResult); err == nil {
 		c.ServerInfo = initResult.ServerInfo
+		c.Instructions = initResult.Instructions
 	}
 
 	// Send initialized notification (directly, not via notifyMethod)
