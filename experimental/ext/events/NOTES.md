@@ -99,6 +99,16 @@ r.noExpiryFailureGCWindow`. `DefaultNoExpiryFailureGCWindow = 72h`; the demo ove
 - **`DeliveryStatus.Throttled` and `RetryAfterMs *int64` are projector-only.** The wire shape
   exists but nothing in mcpkit sets them; adopters wire them from their own throttle state. The
   spec distinguishes active rate-limiting from failure-driven suspension (`Active=false`).
+- **Three ids, three dedup owners.** `eventId` names an occurrence: minted once at yield
+  (`evt_` + 16 random bytes, `yield.go`) or passed through from upstream via `MakeEvent`, and
+  identical on every copy (poll, push, webhook, retry, backfill), so the client dedups on it. The
+  webhook subscription id names a standing request: `sub_` + SHA-256 of
+  `principal ␟ url ␟ name ␟ sorted(arguments)` truncated to 16 bytes (`identity.go`), so a repeat
+  subscribe lands on the same row and the server dedups subscriptions. A push stream is a new
+  subscription on every open, identified by its JSON-RPC id. `webhook-id` names a POST and is set
+  to the `eventId` for events (`msg_<type>_<random>` for control envelopes), so a retry carries
+  the same id and a Standard Webhooks receiver drops it. A random id per attempt would defeat that.
+  The Go receiver does not dedup or check timestamp age yet (#1558).
 
 ---
 

@@ -701,6 +701,25 @@ other violated row: the sketch's `-32011` where SEP-3415 says `-32023`, and no `
 on `subscriptions/listen`. The per-row causes are in the fork yaml's header. Before the fork's
 `guardScenario`, a crash mid-scenario printed "runner exited 1" and nothing else.
 
+**metronome, 2026-10-16.** All three findings above are fixed upstream: `periodSeconds` now
+declares `"default": 60` and an empty or absent `arguments` polls cleanly, `-32023` is answered,
+and `eventsListChanged` is honoured. With `periodSeconds: 1` it scores discovery 12/13, poll 30/31,
+push 13/20, webhook 23/26, and every non-pass row is untestable from outside (no type lacking a
+mode, one principal, no anonymous probe, no diagnostic controls) rather than a violation. A default
+run still shows poll 23/31, because 60s ticks never land inside the window and the occurrence rows
+go untestable. That is the suite's timing, not a server defect. metronome only answers `events/*`
+on the 2026-07-28 wire: over 2025-11-25 it declares no events extension and `events/poll` gets `-32601`.
+
+**The client suite against a client nobody here wrote, 2026-10-16.** mcporter has no Events code,
+the TypeScript SDK's support is only a proposal (typescript-sdk 2945), and the fork's
+`examples/clients/typescript/events-client.ts` is the suite's own example. evdock
+(loveaihq/evdock @ `213d08b`, sketch issue 10) is hand-written against SEP-3415 and webhook-only.
+Driven by a small adapter (`server add` the harness URL, `serve` on a free port, `subscribe` each
+`conformance.*` type with `--callback-base`) it scores events-client-webhook 2/2 and
+events-client-no-extension 1/1 on 2026-07-28; poll, push and 2025-11-25 do not apply. Without
+`serve` both webhook rows go red, so the rows do grade it. The adapter was not committed. Results on
+#1535.
+
 ---
 
 ## Agent discovery suite
