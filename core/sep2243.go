@@ -14,7 +14,8 @@ import (
 //
 //   - Standard routing headers — `Mcp-Method` (always present) and `Mcp-Name`
 //     (for methods whose params carry a routable name/URI: tools/call,
-//     prompts/get, resources/read). Lets proxies and middleware route without
+//     prompts/get, resources/read, plus the task and events methods listed
+//     on [DeriveMcpName]). Lets proxies and middleware route without
 //     parsing the JSON body. See [McpMethodHeader], [McpNameHeader],
 //     [DeriveMcpName].
 //
@@ -26,13 +27,13 @@ import (
 //
 // Both surfaces share one value-encoding rule (SEP-2243 §value-encoding):
 // plain printable ASCII goes verbatim; anything else is wrapped as
-// `=?base64?{base64-utf8}?=`. See [EncodeMcpHeaderValue] +
-// [NeedsBase64Encoding].
+// `=?base64?{base64-utf8}?=`. See [EncodeMcpHeaderValue],
+// [DecodeMcpHeaderValue] and [NeedsBase64Encoding].
 //
 // Helpers in this file are pure spec rules — no I/O, no http.Request
 // mutation. Callers that need outbound-request mutation live one layer up
-// (e.g. client/headers.go::setSEP2243RoutingHeaders). Future server-side
-// validation/decoding will consume the same rules from this file.
+// (e.g. client/headers.go::setSEP2243RoutingHeaders); server-side validation
+// (server/header_validation.go) decodes with the same rules.
 //
 // Spec: https://modelcontextprotocol.io/specification/draft/basic/transports#custom-headers-from-tool-parameters
 
@@ -49,8 +50,13 @@ const McpNameHeader = "Mcp-Name"
 
 // DeriveMcpName extracts the [McpNameHeader] value from a JSON-RPC params
 // payload for the methods that carry a routable identifier: tools/call and
-// prompts/get (params.name), resources/read (params.uri), and the SEP-2663
-// task methods tasks/get, tasks/update, tasks/cancel (params.taskId).
+// prompts/get (params.name), resources/read (params.uri), the SEP-2663
+// task methods tasks/get, tasks/update, tasks/cancel (params.taskId), and
+// the SEP-3415 events methods events/poll, events/stream, events/subscribe,
+// events/unsubscribe (params.name). events/list has no name and gets none.
+//
+// The value returned is the raw body value. Encode it with
+// [EncodeMcpHeaderValue] before putting it on the wire.
 // Returns "" for any other method or when the field is missing / non-string
 // — callers should skip emitting Mcp-Name in that case (server-side
 // fail-closed will reject mismatches).
@@ -71,7 +77,8 @@ func DeriveMcpName(method string, params any) string {
 		return ""
 	}
 	switch method {
-	case "tools/call", "prompts/get":
+	case "tools/call", "prompts/get",
+		"events/poll", "events/stream", "events/subscribe", "events/unsubscribe":
 		return mcpParamsStringField(params, "name")
 	case "resources/read":
 		return mcpParamsStringField(params, "uri")
@@ -259,11 +266,41 @@ func EncodeMcpHeaderValue(v any) (string, bool) {
 	}
 }
 
+const (
+	mcpHeaderBase64Prefix = "=?base64?"
+	mcpHeaderBase64Suffix = "?="
+)
+
 func encodeMcpHeaderString(s string) string {
 	if NeedsBase64Encoding(s) {
-		return "=?base64?" + base64.StdEncoding.EncodeToString([]byte(s)) + "?="
+		return mcpHeaderBase64Prefix + base64.StdEncoding.EncodeToString([]byte(s)) + mcpHeaderBase64Suffix
 	}
 	return s
+}
+
+// DecodeMcpHeaderValue is the inverse of the string case of
+// [EncodeMcpHeaderValue]: a value wrapped in the Base64 sentinel
+// (`=?base64?...?=`, case-sensitive markers) is decoded to its UTF-8
+// string, and anything else is returned unchanged. A value that starts
+// with the prefix but lacks the suffix, or whose payload is not valid
+// standard Base64, is an error. SEP-2243 counts that as a header with
+// invalid characters, so a server answers it with -32020.
+//
+// Servers MUST decode Mcp-Name and Mcp-Param-{Name} with this before
+// comparing them to the body.
+func DecodeMcpHeaderValue(v string) (string, error) {
+	if !strings.HasPrefix(v, mcpHeaderBase64Prefix) {
+		return v, nil
+	}
+	if !strings.HasSuffix(v, mcpHeaderBase64Suffix) || len(v) < len(mcpHeaderBase64Prefix)+len(mcpHeaderBase64Suffix) {
+		return "", fmt.Errorf("header value %q starts with %q but does not end with %q", v, mcpHeaderBase64Prefix, mcpHeaderBase64Suffix)
+	}
+	payload := v[len(mcpHeaderBase64Prefix) : len(v)-len(mcpHeaderBase64Suffix)]
+	raw, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return "", fmt.Errorf("header value %q: invalid base64: %w", v, err)
+	}
+	return string(raw), nil
 }
 
 func encodeMcpHeaderNumber(f float64) string {
@@ -279,6 +316,8 @@ func encodeMcpHeaderNumber(f float64) string {
 //   - any byte outside printable ASCII range (0x20-0x7E)
 //   - any tab character (0x09)
 //   - leading or trailing whitespace (including spaces)
+//   - a value starting with the sentinel prefix `=?base64?`, so a receiver
+//     never decodes a plain value that only looks encoded
 //
 // Internal whitespace within the visible-ASCII range is fine (plain ASCII).
 // Exported so server-side decoders and external producers can apply the
@@ -287,7 +326,7 @@ func NeedsBase64Encoding(s string) bool {
 	if s == "" {
 		return false
 	}
-	if s != strings.TrimSpace(s) {
+	if s != strings.TrimSpace(s) || strings.HasPrefix(s, mcpHeaderBase64Prefix) {
 		return true
 	}
 	for _, r := range s {

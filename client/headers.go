@@ -16,8 +16,9 @@ import (
 // setSEP2243RoutingHeaders attaches the SEP-2243 standard routing headers
 // to a streamable HTTP request. method is the JSON-RPC method carried in
 // the body and is always mirrored onto Mcp-Method; cc may carry a per-call
-// mcpName (derived centrally in rawCallWithContext for tools/call /
-// prompts/get / resources/read) that is mirrored onto Mcp-Name. Passing
+// mcpName (derived centrally in rawCallWithContext via core.DeriveMcpName)
+// that is mirrored onto Mcp-Name, Base64-sentinel encoded when it is not
+// plain ASCII. Passing
 // nil cc, or a cc without mcpName set, simply skips Mcp-Name — Mcp-Method
 // is unconditional.
 func setSEP2243RoutingHeaders(req *http.Request, method string, cc *CallContext) {
@@ -25,7 +26,8 @@ func setSEP2243RoutingHeaders(req *http.Request, method string, cc *CallContext)
 		req.Header.Set(core.McpMethodHeader, method)
 	}
 	if cc != nil && cc.mcpName != "" {
-		req.Header.Set(core.McpNameHeader, cc.mcpName)
+		name, _ := core.EncodeMcpHeaderValue(cc.mcpName)
+		req.Header.Set(core.McpNameHeader, name)
 	}
 }
 
