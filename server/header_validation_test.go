@@ -194,3 +194,78 @@ func TestValidateRoutingHeaders_TasksMethodsCarryTaskID(t *testing.T) {
 		})
 	}
 }
+
+// SEP-3415 § Streamable HTTP: Routing Headers puts Mcp-Name: <params.name>
+// on the four name-carrying events methods. events/list carries none.
+func TestValidateRoutingHeaders_EventsMethodsCarryName(t *testing.T) {
+	for _, method := range []string{"events/poll", "events/stream", "events/subscribe", "events/unsubscribe"} {
+		t.Run(method+"/matched", func(t *testing.T) {
+			req := makeReq(t, method, map[string]any{"name": "tick"})
+			h := http.Header{}
+			h.Set("Mcp-Method", method)
+			h.Set("Mcp-Name", "tick")
+			if resp := validateRoutingHeaders(req, h); resp != nil {
+				t.Fatalf("matched Mcp-Name should pass, got %+v", resp)
+			}
+		})
+		t.Run(method+"/mismatched", func(t *testing.T) {
+			req := makeReq(t, method, map[string]any{"name": "tick"})
+			h := http.Header{}
+			h.Set("Mcp-Method", method)
+			h.Set("Mcp-Name", "tock")
+			resp := validateRoutingHeaders(req, h)
+			if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+				t.Fatalf("expected -32020 for mismatched Mcp-Name, got %+v", resp)
+			}
+		})
+		t.Run(method+"/missing", func(t *testing.T) {
+			req := makeReq(t, method, map[string]any{"name": "tick"})
+			h := http.Header{}
+			h.Set("Mcp-Method", method)
+			resp := validateRoutingHeaders(req, h)
+			if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+				t.Fatalf("expected -32020 for missing Mcp-Name, got %+v", resp)
+			}
+		})
+	}
+	t.Run("events/list/no-name", func(t *testing.T) {
+		req := makeReq(t, "events/list", map[string]any{})
+		h := http.Header{}
+		h.Set("Mcp-Method", "events/list")
+		if resp := validateRoutingHeaders(req, h); resp != nil {
+			t.Fatalf("events/list without Mcp-Name should pass, got %+v", resp)
+		}
+	})
+}
+
+// SEP-2243 § Server Validation: servers MUST decode a Base64-sentinel
+// Mcp-Name before comparing, and an undecodable one is a validation failure.
+func TestValidateRoutingHeaders_Base64SentinelName(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, bodyName, header string
+		wantErr                        bool
+	}{
+		{"tool-non-ascii", "tools/call", "Hello, 世界", "=?base64?SGVsbG8sIOS4lueVjA==?=", false},
+		{"event-non-ascii", "events/poll", "Hello, 世界", "=?base64?SGVsbG8sIOS4lueVjA==?=", false},
+		{"encoded-wrong-value", "tools/call", "greet", "=?base64?SGVsbG8sIOS4lueVjA==?=", true},
+		{"raw-sentinel-matches-body-literally", "tools/call", "=?base64?SGk=?=", "=?base64?SGk=?=", true},
+		{"malformed", "tools/call", "greet", "=?base64?!!!?=", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := makeReq(t, tc.method, map[string]any{"name": tc.bodyName})
+			h := http.Header{}
+			h.Set("Mcp-Method", tc.method)
+			h.Set("Mcp-Name", tc.header)
+			resp := validateRoutingHeaders(req, h)
+			if tc.wantErr {
+				if resp == nil || resp.Error == nil || resp.Error.Code != core.ErrCodeHeaderMismatch {
+					t.Fatalf("expected -32020, got %+v", resp)
+				}
+				return
+			}
+			if resp != nil {
+				t.Fatalf("expected pass, got %+v", resp)
+			}
+		})
+	}
+}

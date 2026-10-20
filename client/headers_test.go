@@ -23,6 +23,8 @@ func TestSetSEP2243RoutingHeaders(t *testing.T) {
 		{"method-and-name", "tools/call", &CallContext{mcpName: "echo"}, "tools/call", "echo"},
 		{"empty-method-skipped", "", &CallContext{mcpName: "echo"}, "", "echo"},
 		{"cc-without-name", "ping", &CallContext{}, "ping", ""},
+		{"non-ascii-name-sentinel", "tools/call", &CallContext{mcpName: "Hello, 世界"}, "tools/call", "=?base64?SGVsbG8sIOS4lueVjA==?="},
+		{"event-name", "events/poll", &CallContext{mcpName: "tick"}, "events/poll", "tick"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", "/", nil)

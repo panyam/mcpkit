@@ -62,6 +62,7 @@ func postStatelessJSON(t *testing.T, url string, body any, headers map[string]st
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", core.StreamableHTTPAccept)
+	stampRoutingHeaders(t, req, raw)
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -70,6 +71,26 @@ func postStatelessJSON(t *testing.T, url string, body any, headers map[string]st
 		t.Fatalf("do: %v", err)
 	}
 	return resp
+}
+
+// stampRoutingHeaders sets the SEP-2243 Mcp-Method and Mcp-Name headers a
+// 2026-07-28 client sends, derived from the JSON-RPC body, so tests aimed at
+// something else get past the stateless wire's routing-header check. Tests of
+// that check override or blank the headers afterwards.
+func stampRoutingHeaders(t *testing.T, req *http.Request, raw []byte) {
+	t.Helper()
+	var body struct {
+		Method string         `json:"method"`
+		Params map[string]any `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil || body.Method == "" {
+		return
+	}
+	req.Header.Set(core.McpMethodHeader, body.Method)
+	if name := core.DeriveMcpName(body.Method, body.Params); name != "" {
+		enc, _ := core.EncodeMcpHeaderValue(name)
+		req.Header.Set(core.McpNameHeader, enc)
+	}
 }
 
 // decode reads body into a core.Response (id+result+error envelope).
@@ -351,6 +372,43 @@ func TestStatelessRouting_DetectionPriorities(t *testing.T) {
 			got := detectWireKind(r, nil, req, stateless.ModeDual)
 			if got != c.want {
 				t.Errorf("detectWireKind = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// The stateless wire speaks only 2026-07-28, where SEP-2243 makes Mcp-Method
+// a required header: a request without it is a validation failure, not a
+// pre-SEP-2243 client to accommodate.
+func TestStatelessRouting_MissingRoutingHeadersReturn400(t *testing.T) {
+	_, url, teardown := newStatelessTestServer(t, stateless.ModeDual)
+	defer teardown()
+
+	meta := map[string]any{
+		"io.modelcontextprotocol/protocolVersion":    draftVersion,
+		"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "t", "version": "1"},
+		"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+	}
+	for _, tc := range []struct {
+		name    string
+		method  string
+		params  map[string]any
+		headers map[string]string
+	}{
+		{"no-mcp-method", "tools/list", map[string]any{"_meta": meta}, map[string]string{"Mcp-Method": ""}},
+		{"no-mcp-name", "tools/call", map[string]any{"_meta": meta, "name": "echo", "arguments": map[string]any{}},
+			map[string]string{"Mcp-Method": "tools/call", "Mcp-Name": ""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := postStatelessJSON(t, url, map[string]any{
+				"jsonrpc": "2.0", "id": 1, "method": tc.method, "params": tc.params,
+			}, tc.headers)
+			if resp.StatusCode != 400 {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status %d, want 400; body=%s", resp.StatusCode, string(body))
+			}
+			if r := decode(t, resp); r.Error == nil || r.Error.Code != core.ErrCodeHeaderMismatch {
+				t.Errorf("expected -32020, got %+v", r.Error)
 			}
 		})
 	}

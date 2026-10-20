@@ -153,6 +153,10 @@ func TestNeedsBase64Encoding(t *testing.T) {
 		{"newline", "line1\nline2", true},
 		{"crlf", "line1\r\nline2", true},
 		{"high-ascii", "café", true},
+		// A plain-ASCII value that looks like the sentinel must be wrapped,
+		// or the receiver would decode it.
+		{"sentinel-lookalike", "=?base64?literal?=", true},
+		{"sentinel-prefix-only", "=?base64?abc", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := NeedsBase64Encoding(tc.in); got != tc.want {
@@ -310,6 +314,12 @@ func TestDeriveMcpName(t *testing.T) {
 		{"tasks-update-taskid", "tasks/update", map[string]any{"taskId": "tsk_2"}, "tsk_2"},
 		{"tasks-cancel-taskid", "tasks/cancel", map[string]any{"taskId": "tsk_3"}, "tsk_3"},
 		{"tasks-get-no-taskid", "tasks/get", map[string]any{}, ""},
+		// SEP-3415 § Streamable HTTP: Routing Headers.
+		{"events-poll", "events/poll", map[string]any{"name": "tick"}, "tick"},
+		{"events-stream", "events/stream", map[string]any{"name": "tick"}, "tick"},
+		{"events-subscribe", "events/subscribe", map[string]any{"name": "tick"}, "tick"},
+		{"events-unsubscribe", "events/unsubscribe", map[string]any{"name": "tick"}, "tick"},
+		{"events-list-no-name", "events/list", map[string]any{"name": "ignored"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := DeriveMcpName(tc.method, tc.params)
@@ -317,5 +327,43 @@ func TestDeriveMcpName(t *testing.T) {
 				t.Errorf("DeriveMcpName(%q, %v) = %q, want %q", tc.method, tc.params, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestDecodeMcpHeaderValue(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"plain", "get_weather", "get_weather", false},
+		{"empty", "", "", false},
+		{"non-ascii", "=?base64?SGVsbG8sIOS4lueVjA==?=", "Hello, 世界", false},
+		{"padded", "=?base64?IHBhZGRlZCA=?=", " padded ", false},
+		{"sentinel-lookalike", "=?base64?PT9iYXNlNjQ/bGl0ZXJhbD89?=", "=?base64?literal?=", false},
+		{"prefix-case-sensitive", "=?BASE64?SGk=?=", "=?BASE64?SGk=?=", false},
+		{"bad-base64", "=?base64?!!!?=", "", true},
+		{"missing-suffix", "=?base64?SGk=", "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := DecodeMcpHeaderValue(tc.in)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("DecodeMcpHeaderValue(%q) err = %v, wantErr %v", tc.in, err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("DecodeMcpHeaderValue(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMcpHeaderValueRoundTrip(t *testing.T) {
+	for _, in := range []string{"echo", "Hello, 世界", " padded ", "line1\nline2", "=?base64?literal?="} {
+		enc, _ := EncodeMcpHeaderValue(in)
+		got, err := DecodeMcpHeaderValue(enc)
+		if err != nil || got != in {
+			t.Errorf("round trip %q -> %q -> %q, %v", in, enc, got, err)
+		}
 	}
 }

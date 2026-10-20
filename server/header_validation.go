@@ -17,9 +17,9 @@ import (
 // validateRoutingHeaders enforces SEP-2243 §Server Validation: the
 // `Mcp-Method` header MUST be present and exactly match the JSON-RPC
 // body method, and for methods that carry a body-side identifier
-// (currently `tools/call` → `params.name`, `resources/read` →
-// `params.uri`) the `Mcp-Name` header MUST be present and match.
-// Header values are trimmed for RFC 9110 OWS before comparison.
+// (see extractRoutingName) the `Mcp-Name` header MUST be present and match.
+// Header values are trimmed for RFC 9110 OWS, and a Base64-sentinel
+// `Mcp-Name` is decoded, before comparison; one that will not decode fails.
 //
 // Returns a JSON-RPC error frame on mismatch (caller writes HTTP 400 +
 // the frame as the body). Returns nil when the request passes.
@@ -33,7 +33,12 @@ func validateRoutingHeaders(req *core.Request, headers http.Header) *core.Respon
 		return nil
 	}
 	hdrName := strings.TrimSpace(headers.Get(core.McpNameHeader))
-	if hdrName != bodyValue {
+	decoded, err := core.DecodeMcpHeaderValue(hdrName)
+	if err != nil {
+		return headerMismatchResponse(req.ID, core.McpNameHeader, hdrName, bodyValue,
+			"bodyField", field, "decodeError", err.Error())
+	}
+	if decoded != bodyValue {
 		return headerMismatchResponse(req.ID, core.McpNameHeader, hdrName, bodyValue,
 			"bodyField", field)
 	}
@@ -67,6 +72,16 @@ func extractRoutingName(req *core.Request) (field, value string, ok bool) {
 		// SEP-2243 lists prompts/get among the name-carrying methods
 		// (params.name); mcpkit's own client stamps Mcp-Name for it via
 		// core.DeriveMcpName, so the server must validate it symmetrically.
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := req.Params.Bind(&p); err != nil {
+			return "name", "", true
+		}
+		return "name", p.Name, true
+	case "events/poll", "events/stream", "events/subscribe", "events/unsubscribe":
+		// SEP-3415 § Streamable HTTP: Routing Headers. events/list has no
+		// params.name and carries no Mcp-Name, so it falls to default.
 		var p struct {
 			Name string `json:"name"`
 		}

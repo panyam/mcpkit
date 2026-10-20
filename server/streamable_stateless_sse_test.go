@@ -186,6 +186,7 @@ func postStatelessRequestForSSE(t *testing.T, url, method string, params any) *h
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream, application/json")
 	req.Header.Set(mcpProtocolVersionHeader, "2026-07-28")
+	stampRoutingHeaders(t, req, raw)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	return resp
@@ -209,6 +210,7 @@ func postStatelessRequestPlain(t *testing.T, url, method string, params any) *ht
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set(mcpProtocolVersionHeader, "2026-07-28")
+	stampRoutingHeaders(t, req, raw)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	return resp

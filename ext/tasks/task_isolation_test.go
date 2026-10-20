@@ -73,6 +73,11 @@ func postAsTenant(t *testing.T, url, tenant string, id int, method string, param
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", core.StreamableHTTPAccept)
+	req.Header.Set(core.McpMethodHeader, method)
+	if name := core.DeriveMcpName(method, params); name != "" {
+		enc, _ := core.EncodeMcpHeaderValue(name)
+		req.Header.Set(core.McpNameHeader, enc)
+	}
 	req.Header.Set("MCP-Protocol-Version", statelessDraftVersion)
 	req.Header.Set("X-Tenant", tenant)
 	resp, err := http.DefaultClient.Do(req)
