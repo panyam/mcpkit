@@ -47,18 +47,12 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	}
 
 	// (1b) SEP-2243 routing-header validation. The stateless wire only
-	// speaks 2026-07-28 (the version that adopted SEP-2243), so any
-	// Mcp-Method / Mcp-Name a client does send MUST agree with the body.
-	// Lenient on absent headers — keeps clients that haven't adopted
-	// SEP-2243 yet working — strict on mismatched values, which is what
-	// the conformance suite locks. Header *presence* without a match
-	// surfaces -32020 via headerMismatchResponse with the diagnostic
-	// `data` payload (header, expected, received).
-	if r.Header.Get(core.McpMethodHeader) != "" {
-		if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
-			writeHeaderMismatch(w, errResp)
-			return
-		}
+	// speaks 2026-07-28, where Mcp-Method is required on every request and
+	// Mcp-Name on the name-carrying methods, so a missing header is a
+	// validation failure (-32020 + HTTP 400) like a mismatched one (#1567).
+	if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
+		writeHeaderMismatch(w, errResp)
+		return
 	}
 
 	// (2) Dispatch. ResponseHeaderCollector lets handlers stage
@@ -195,11 +189,9 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 	}
 
 	// SEP-2243 routing-header validation (mirrored from handleStatelessPost).
-	if r.Header.Get(core.McpMethodHeader) != "" {
-		if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
-			writeHeaderMismatch(w, errResp)
-			return
-		}
+	if errResp := validateRoutingHeaders(req, r.Header); errResp != nil {
+		writeHeaderMismatch(w, errResp)
+		return
 	}
 
 	resp, dErr := t.statelessDispatcher.Dispatch(dispatchCtx, req)
