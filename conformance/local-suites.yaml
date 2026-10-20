@@ -158,11 +158,13 @@ suites:
       path_var: MCPCONFORMANCE_EVENTS_PATH
       default_path: ../conf-events
     note: >-
-      122 pass / 1 fail / 12 warn across five scenarios, measured 2026-10-15
-      against examples/events/kitchen-sink on the 1417 branch with the fork at
-      24e1f1b (hand-recorded from the runner's own summaries, so re-run before
-      trusting it): events-discovery 13/13, events-poll 31/31, events-push
-      26/26, events-webhook 28/29, events-webhook-delivery 24/24. Since 1529
+      129 pass / 0 fail / 11 warn across five scenarios, measured 2026-10-20
+      against examples/events/kitchen-sink at 1570 with the fork at 23c7c2d
+      (hand-recorded from the runner's own summaries, so re-run before
+      trusting it): events-discovery 14/14, events-poll 33/33, events-push
+      28/28, events-webhook 30/30, events-webhook-delivery 24/24. The three
+      Mcp-Name rows (missing, mismatch, list exempt) came in with the re-pin
+      to 2ec39b9c and were red until 1570. Since 1529
       the cross-tenant row unsubscribes by key, the 410 row also grades that
       the subscription survives, and lastError is graded off a refresh after
       the 413 probe; since 1505 discovery grades list-changed-notification
@@ -181,11 +183,11 @@ suites:
       Proposed upstream as a draft in modelcontextprotocol/conformance 521 and
       tracked on the fork branch until it lands. Check IDs are sep-3415-*:
       MCP Events is SEP-3415, a draft in modelcontextprotocol/modelcontextprotocol.
-      Every row quotes SEP-3415 at c47fd245 with a per-row section url (1502).
-      INFO because the SEP is still a draft and its text can move. The one remaining red row,
-      subscribe-auth-required, is untestable rather than a defect: the harness
-      holds one credential for a run and kitchen-sink sets
-      UnsafeAnonymousPrincipal by design. Thirteen divergences found in total,
+      Every row quotes SEP-3415 at 2ec39b9c with a per-row section url (1502, 1567).
+      INFO because the SEP is still a draft and its text can move. Every graded
+      row is green since 1570; subscribe-auth-required and
+      subscribe-refresh-replaces-secret, which no harness can grade over the
+      wire, are excluded upstream. Thirteen divergences found in total,
       all closed (1379, 1381, 1416, 1432, 1433, 1434, and endpoint verification
       in 1444). Set tracked in 1425.
     tracking: "mcpkit 1374"
@@ -202,11 +204,12 @@ suites:
     note: >-
       Four client scenarios graded against the Go events client SDK through
       experimental/ext/events/clients/go/cmd/conformance-client, measured
-      2026-10-15, on both lifecycles: events-client-poll 8/8 on 2026-07-28
-      (list_changed over subscriptions/listen since 1505) and 7/7 on 2025-11-25
-      (the listen opt-in row does not apply there), events-client-push 2/2
-      (dead-stream reconnect since 1503), events-client-webhook 2/2,
-      events-client-no-extension 1/1. The harness plays the events server and
+      2026-10-20 at 1570 with the fork at 095a156, on both lifecycles:
+      events-client-poll 10/10 on 2026-07-28 (list_changed over
+      subscriptions/listen since 1505, Mcp-Name set and Base64-encoded since
+      1570) and 7/7 on 2025-11-25 (the listen opt-in and Mcp-Name rows do not
+      apply there), events-client-push 3/3 (dead-stream reconnect since 1503),
+      events-client-webhook 3/3, events-client-no-extension 1/1. The harness plays the events server and
       grades what the client sends. The driver only calls what the SDK offers,
       so a red row is an SDK gap. Proposed upstream as a draft in
       modelcontextprotocol/conformance 541, stacked on 521. Re-measured

@@ -485,7 +485,9 @@ built. Three consequences worth knowing before touching any of it:
   (`descriptor-description`, a rule the SEP never states), two came in (`refreshBefore` always
   present, the empty unsubscribe `Result`), and five graded rows now quote a rule the SEP states
   differently from the sketch; the yaml header lists them. Traceability after: 137 / 124 / 13.
-  Re-extract when the SEP's head moves past `c47fd245`.
+  Re-pinned to `2ec39b9c` on 2026-10-20 for the `Mcp-Name` section (#1567). No quoted row changed,
+  checked by the same script, so the move was URLs plus three new rows. Diff the SEP before
+  re-extracting.
 - **`new-sep` does not apply cleanly.** It expects a PR in
   `modelcontextprotocol/modelcontextprotocol` touching `docs/specification/draft/*.mdx`, and
   `specPathToUrl` hard-requires that prefix, so `--spec-path` fails too. Scaffold with `--spec-url`.
@@ -825,9 +827,13 @@ only warns that coverage grew.
   checks. Prep is #1111, where `cmd/testserver` needs an x-mcp-header-annotated tool. Note the *server*
   has no custom param-header validation at all today, only Mcp-Method / Mcp-Name routing headers;
   the machinery is client-side only.
-- **Fail-closed on missing Mcp-Method** is disputed in upstream issue 323. mcpkit and the TS SDK
-  are both fail-open. **Do not implement until it resolves.** Disputed tests are excluded from
-  tier scoring.
+- **Fail-closed on missing Mcp-Method** was disputed in upstream issue 323 (still open, quiet
+  since 2026-05-31), because the TypeScript SDK client did not send the header, so a strict server
+  failed every SDK-backed scenario. Both official SDK clients send `Mcp-Method` and `Mcp-Name` now
+  (TS `streamableHttp.ts`, Python `mcp/shared/message.py`), and the thread's maintainer view was that
+  a missing MUST header is a FAILURE. mcpkit is fail-closed on both wires on 2026-07-28 since #1570;
+  `testconf-stateless` stayed 30/0. A client that still omits the headers is the thing to fix.
+  Disputed tests are still excluded from tier scoring.
 - **DPoP** (SEP-1932, still draft): the client leg passes (`auth/dpop`, `auth/dpop-nonce`), since
   `cmd/testclient` gives those two scenarios an `OAuthTokenSource.DPoPKey`. The server leg, upstream
   PR 395 with 527 to 529 stacked on it, is not merged and not wired yet. `JWTValidator` has the

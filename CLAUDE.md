@@ -221,6 +221,13 @@ These span packages and will bite on a task that never opens a routed doc.
   the checker reports them `pending` until `publish-images` finishes (several minutes), so rerun it
   rather than read the first result as a miss. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
   because for five releases it did not.
+- **The stateless wire refuses a request without SEP-2243 routing headers** (#1567). `Mcp-Method`
+  on every request and `Mcp-Name` on the name-carrying methods (`core.DeriveMcpName` lists them),
+  Base64-sentinel encoded when not plain ASCII, or it is 400 + `-32020`. A raw-HTTP test against a
+  stateless server has to send them: `stampRoutingHeaders` in `server/streamable_stateless_test.go`
+  derives both from the body. The session wire has been strict the same way since 2026-07-28 is
+  negotiated. Why this is not the upstream-issue-323 dispute any more: `conformance/NOTES.md`
+  § Upstream watch.
 - **Capability checks must read the per-request envelope too.** On the 2026-07-28 stateless wire
   there is no `initialize`, so client capabilities arrive only in each request's `_meta`
   (`core.RequestMetaFromContext`). A helper that reads session caps alone answers false for every
@@ -317,9 +324,9 @@ branch.
 against a second implementation (`metronome-mcp.fly.dev`, via `make conf-events-remote`). MCP Events is **SEP-3415**
 (`modelcontextprotocol/modelcontextprotocol` PR 3415, draft), so check ids carry `sep-3415-`. They
 carried a `sep-9999-` placeholder until #1502, because SEP numbers are PR numbers and no PR existed.
-Every row quotes SEP-3415 at `c47fd245` with a per-row section url; they quoted the design sketch
-until #1502, and the SEP rewords nearly every sentence, so expect another re-extraction when its
-head moves. `testconf-events` drives
+Every row quotes SEP-3415 at `2ec39b9c` with a per-row section url; they quoted the design sketch
+until #1502, and `c47fd245` until 2026-10-20, when the SEP added `Mcp-Name` on `events/*` (#1567).
+No quoted row changed in that move, so check the SEP diff before assuming a re-extraction is needed. `testconf-events` drives
 all five of the suite's scenarios; take the counts from its note in `conformance/local-suites.yaml`.
 The fixture is spawned with `--conformance-events`, which registers the diagnostic controls the
 scenarios drive; see `examples/CONVENTIONS.md` § Conformance fixtures. `events-webhook-delivery`
@@ -328,9 +335,10 @@ needs the harness's loopback receiver, so it grades the SSRF refusal first and t
 
 Building the suite surfaced **thirteen divergences in our own implementation**, which is the whole
 argument for having one. Six closed by #1379, #1381 and #1416; five more by #1432, #1433 and #1434;
-the last, endpoint verification, by #1444. The set is tracked in #1425. The single remaining red row,
-`subscribe-auth-required`, is untestable rather than a defect. It stays `INFO` until the spec text
-stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
+the last, endpoint verification, by #1444. The set is tracked in #1425. Since #1570 every row in both
+events suites is green; `subscribe-auth-required` and `subscribe-refresh-replaces-secret`, which no
+harness can grade over the wire, moved to excluded after the rmcp team's review on PR 521. The suite
+stays `INFO` until the spec text stabilises. Detail in `conformance/NOTES.md` § MCP Events suite.
 
 **The Events client has a conformance suite too**, proposed as conformance PR 541 (issue 540), also
 out of draft, and stacked on PR 521. Its scenarios grade what a client sends to a scripted mock server, and the Go
