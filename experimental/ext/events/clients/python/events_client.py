@@ -39,8 +39,9 @@ def generate_webhook_secret() -> str:
     """Returns a Standard-Webhooks-shaped client-supplied secret:
     `whsec_` + base64 of 32 random bytes (256 bits, well inside the
     spec-mandated 24-64 byte range). Mirrors events.GenerateSecret() in
-    the Go SDK so both SDKs produce the same shape."""
-    return "whsec_" + base64.urlsafe_b64encode(os.urandom(32)).rstrip(b"=").decode("ascii")
+    the Go SDK so both SDKs produce the same shape. Standard padded base64,
+    since that is what Standard Webhooks verifiers decode (#1574)."""
+    return "whsec_" + base64.b64encode(os.urandom(32)).decode("ascii")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -573,15 +574,17 @@ def _signing_key(secret: str) -> bytes:
     """The bytes a Standard Webhooks signature is computed over.
 
     The spec defines the key as the base64-decoded value after the ``whsec_``
-    prefix, not the literal string. Both alphabets are tried because the SDKs
-    do not agree on which they emit. A value without the prefix is not a
+    prefix, not the literal string. Both alphabets are tried because other
+    clients emit URL-safe secrets (this one did until #1574). A value without the prefix is not a
     spec-format secret and is used verbatim, since decoding it would silently
     reinterpret any short string that happens to be valid base64.
     """
     if not secret.startswith("whsec_"):
         return secret.encode()
     body = secret[len("whsec_") :]
-    for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+    # validate=True, because a non-validating b64decode drops "-" and "_"
+    # rather than raising, so a URL-safe secret would decode to the wrong key.
+    for decoder in (lambda b: base64.b64decode(b, validate=True), base64.urlsafe_b64decode):
         try:
             return decoder(body + "=" * (-len(body) % 4))
         except Exception:

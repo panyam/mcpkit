@@ -26,6 +26,10 @@ const (
 // inside the spec-mandated 24-64 byte range. Exported wrapper used by
 // the Go SDK + demo tests so the spec-conformant format isn't hard-coded
 // in multiple places.
+//
+// The base64 is standard and padded (RFC 4648 §4), because that is what the
+// Standard Webhooks verifier libraries decode. The URL-safe alphabet used for
+// the package's random ids is unreadable to them (#1574).
 func GenerateSecret() string {
 	return generateSecret()
 }
@@ -41,7 +45,7 @@ func generateSecret() string {
 		// rather than silent.
 		return "whsec_INSECURE_FALLBACK"
 	}
-	return webhookSecretPrefix + base64.RawURLEncoding.EncodeToString(buf[:])
+	return webhookSecretPrefix + base64.StdEncoding.EncodeToString(buf[:])
 }
 
 // signingKey returns the bytes a webhook signature is computed over, which the
@@ -57,7 +61,7 @@ func generateSecret() string {
 // Nothing mcpkit owned could see it; the conformance suite could.
 //
 // Both base64 alphabets are accepted, matching validateClientSecret, because
-// the SDKs do not agree on which they emit.
+// other clients emit URL-safe secrets (mcpkit's own did until #1574).
 //
 // A value that does not decode falls back to its raw bytes. validateClientSecret
 // rejects those at subscribe time, so reaching here means a stored legacy secret
@@ -91,7 +95,8 @@ func signingKey(secret string) []byte {
 // subscription exist that can never produce verifiable deliveries.
 //
 // Both standard base64 (RFC 4648 §4) and raw URL-safe base64 (§5) are
-// accepted on input — the SDKs don't agree on which they emit.
+// accepted on input, since other clients emit URL-safe secrets (mcpkit's own
+// did until #1574). GenerateSecret emits standard.
 func validateClientSecret(s string) error {
 	if !strings.HasPrefix(s, webhookSecretPrefix) {
 		return errors.New("must start with the whsec_ prefix")
