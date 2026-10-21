@@ -320,7 +320,7 @@ jobs:
 
       # Also needed by the COMPAT.md freshness step below, which shells out to
       # scripts/refresh-apps-compat-report.sh and installs this package there.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 12.4.1
 
