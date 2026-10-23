@@ -1,5 +1,5 @@
 {
-  "name": "@mcpkit/rooms-page",
+  "name": "@panyam/mcpkit-rooms",
   "version": "0.1.0",
   "private": true,
   "description": "Page side of the mcpkit room bridge: offer WebMCP-shaped tools to agents through a massrelay room",

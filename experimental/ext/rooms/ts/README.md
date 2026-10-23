@@ -12,7 +12,7 @@ the TypeScript source (`src/index.ts`), so a bundler can take it from a checkout
 ## Joining a room
 
 ```ts
-import { joinToolRoom } from "@mcpkit/rooms-page";
+import { joinToolRoom } from "@panyam/mcpkit-rooms";
 
 const room = await joinToolRoom({
   relay: "https://relay.example.com",
