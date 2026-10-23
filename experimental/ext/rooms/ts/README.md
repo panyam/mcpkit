@@ -6,7 +6,8 @@ calls them over MCP, and every call goes to one page. Pre-SEP and experimental, 
 design is in issue [#1581](https://github.com/panyam/mcpkit/issues/1581).
 
 It speaks to a [massrelay](https://github.com/panyam/massrelay) relay (v0.2.0 or later) and depends
-on `@panyam/massrelay` and `@panyam/servicekit-client`. It isn't on npm yet. `package.json` points at
+on `@panyam/massrelay` (0.2.3 or later, whose package root exports the model types) and
+`@panyam/servicekit-client`. It isn't on npm yet. `package.json` points at
 the TypeScript source (`src/index.ts`), so a bundler can take it from a checkout or a git dependency.
 
 ## Joining a room

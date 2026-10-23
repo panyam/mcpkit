@@ -2,17 +2,22 @@
 
 ## Built on GRPCWSClient, not massrelay's CollabClient
 
-massrelay's TypeScript `CollabClient` (0.2.1) can't be the transport here, for two reasons. It
-builds the socket URL itself as `${relay}/ws/v1/${sessionId}/sync`, so there is nowhere to put the
-`?token=` a browser WebSocket needs to authenticate, and it does not escape the session id. A room
-named `design:demo/board.kicad_sch` puts its `/` into the path, and the relay's `{session_id}`
-route never matches. The page client therefore uses servicekit's `GRPCWSClient`, which
-`CollabClient` sits on, and massrelay's generated `./models` schemas, which is the same wire with
-the URL under our control. The Go adapter (`../massrelay`) speaks the same wire, for the same lack
-of a client.
+The page client talks to the relay through servicekit's `GRPCWSClient`, the socket `CollabClient`
+sits on, plus massrelay's generated model schemas. It's the same wire, with the connection's
+lifetime under our control. The Go adapter (`../massrelay`) speaks the same wire, since massrelay
+has no Go client.
 
-`CollabClient` also drops `to_client_id` from what `onAppMessage` reports, and the page has to see
-it to ignore room-wide messages.
+Slice 2 shipped on 0.2.1, where `CollabClient` couldn't be used at all: it had no token option, it
+didn't escape the room in the URL, and its `onAppMessage` dropped `to_client_id`. massrelay 0.2.3
+fixed all three (massrelay#31). The move onto it was then tried, and every existing test passed. One
+thing still rules it out. `CollabClient` treats every relay `ErrorEvent` as fatal: it closes the
+socket and resets its state before the close lands, so `onDisconnect` never fires. The relay answers
+a message addressed to a peer that has left with `ErrorEvent{PEER_NOT_FOUND}`. That happens whenever
+an agent disconnects while a page tool is still running and the page then sends its result. On
+`CollabClient` the page would drop out of the room at that point, and its `closed` promise would
+never resolve. The test "stays in the room when it answers a caller that already left" pins it, and
+it goes red on the `CollabClient` version. The move can happen once `CollabClient` treats
+`PEER_NOT_FOUND` as refusing one message rather than ending the connection.
 
 ## Only addressed messages are handled
 
