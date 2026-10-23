@@ -34,6 +34,13 @@ type PageCall struct {
 	// From is the bridge that forwarded the call.
 	From PeerID
 
+	// Caller is who the call acts for, from the bridge's validated token:
+	// the agent's subject and client. A page applies its app's own rules
+	// with it, e.g. letting a paired user view a design but not edit it.
+	// It is only as trustworthy as From; with TrustBridges the page answers
+	// no other peer, so set that before relying on Caller.
+	Caller Principal
+
 	// Progress reports progress back to the agent. A no-op when the agent
 	// asked for none.
 	Progress func(progress, total float64, message string)
@@ -63,15 +70,35 @@ type Page struct {
 	grants    []Principal
 	accepted  map[string]time.Time
 	focusedAt time.Time
+	// trusted, when set, are the relay subjects of the bridges the page
+	// answers; a message carries its sender's relay subject.
+	trusted map[string]bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	done   chan struct{}
 }
 
+// PageOption configures JoinPage.
+type PageOption func(*Page)
+
+// TrustBridges makes the page answer only peers whose relay subject is one of
+// subjects: the identities the host's bridges join the relay as. Without it a
+// page answers any peer in the room, so any holder of a relay token for the
+// room can call its tools directly, past the bridge's agreement check, and
+// PageCall.Caller says whatever that peer claims.
+func TrustBridges(subjects ...string) PageOption {
+	return func(p *Page) {
+		p.trusted = make(map[string]bool, len(subjects))
+		for _, s := range subjects {
+			p.trusted[s] = true
+		}
+	}
+}
+
 // JoinPage joins room through t and starts answering. Register tools before
 // or after; registering after the bridge has listed sends list_changed.
-func JoinPage(ctx context.Context, t RoomTransport, room string) (*Page, error) {
+func JoinPage(ctx context.Context, t RoomTransport, room string, opts ...PageOption) (*Page, error) {
 	r, err := t.Join(ctx, room)
 	if err != nil {
 		return nil, err
@@ -86,6 +113,9 @@ func JoinPage(ctx context.Context, t RoomTransport, room string) (*Page, error) 
 		ctx:      pctx,
 		cancel:   cancel,
 		done:     make(chan struct{}),
+	}
+	for _, o := range opts {
+		o(p)
 	}
 	go p.loop()
 	return p, nil
@@ -231,6 +261,9 @@ func (p *Page) loop() {
 			if json.Unmarshal(ev.Payload, &m) != nil {
 				continue
 			}
+			if p.trusted != nil && !p.trusted[ev.Peer.Subject] {
+				continue // not one of the host's bridges
+			}
 			p.handle(ev.Peer.ID, m)
 		}
 	}
@@ -335,6 +368,7 @@ func (p *Page) call(from PeerID, m rpcMessage) {
 		Arguments json.RawMessage `json:"arguments"`
 		Meta      struct {
 			ProgressToken json.RawMessage `json:"progressToken"`
+			Caller        Principal       `json:"io.mcpkit/rooms/caller"`
 		} `json:"_meta"`
 	}
 	_ = json.Unmarshal(m.Params, &params)
@@ -368,7 +402,7 @@ func (p *Page) call(from PeerID, m rpcMessage) {
 			delete(p.running, key)
 			p.mu.Unlock()
 		}()
-		res, err := tool.Execute(ctx, PageCall{Arguments: params.Arguments, From: from, Progress: progress})
+		res, err := tool.Execute(ctx, PageCall{Arguments: params.Arguments, From: from, Progress: progress, Caller: params.Meta.Caller})
 		if ctx.Err() != nil {
 			return // cancelled: MCP sends no response for a cancelled request
 		}

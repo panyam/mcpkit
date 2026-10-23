@@ -106,3 +106,26 @@ it, the first stateless call into a room picked no default.
 Joining a room on a call waits up to two seconds for the pages already there to be listed, so a call
 naming a room the bridge has never joined finds them. Another bridge in the room never answers
 `tools/list`, which is why the wait is capped rather than complete.
+
+## Declared tools are what make the stateless wire work (#1610)
+
+A stateless `tools/list` reads the server's one registry and skips the middleware chain (#1355), so
+the per-session filter that hides other rooms' tools never runs there. Rather than wait on #1355,
+`WithPageTools` puts a fixed catalog in the registry at `Register`, the same for every caller, so
+there is nothing to filter. Without it, the dynamic registry stays a session-wire feature, and the
+page tool handler refuses a call with no session instead of serving whatever pages happened to
+register.
+
+The tests run each acceptance case on both wires, and the agent helper asserts it really is on the
+wire the test names (`UsingStatelessWire`), since a stateless client that quietly fell back to a
+session would pass everything and grade nothing.
+
+## The caller, and why TrustBridges exists
+
+The bridge sends the caller's principal in the call's `_meta` (`MetaCaller`), so a page can apply
+its own rules per caller. But a page answers any peer in its room by default, and any peer holding
+a relay token for the room could send it a `tools/call` with any caller it likes, past the bridge's
+agreement check entirely. That was true before #1610 too; passing a caller just made it matter more.
+`TrustBridges` limits a Go page to peers whose relay subject is one of the host's bridges, which both
+transports stamp on each message. The TS client can't do the same yet, because massrelay's
+`CollabClient` drops `identity` when it reports peers.

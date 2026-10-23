@@ -382,6 +382,18 @@ describe("a TypeScript page behind the Go bridge", () => {
     expect(textOf(res)).toBe("p2 power");
   });
 
+  it("passes the caller's principal to execute", async () => {
+    const callers: unknown[] = [];
+    const p = await page("alice", { ...showSheet, execute: (_args, ctx) => (callers.push(ctx.caller), "ok") });
+    p.setAgentsAllowed(true);
+    const a = await agent("alice");
+    await eventually(async () => {
+      const res: any = await a.callTool({ name: "show_sheet", arguments: { room: ROOM, sheet: "x" } });
+      return !res.isError;
+    }, 5000, "the call to land");
+    expect(callers[0]).toEqual({ subject: "alice" });
+  });
+
   it("rejects a join the relay refuses", async () => {
     await expect(joinToolRoom({ relay: info.relay, room: ROOM, token: "not-a-jwt" })).rejects.toThrow();
   });

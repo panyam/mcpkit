@@ -38,9 +38,37 @@ already name what they act on, through `WithRoomOf(func(args) (room, error))`: a
 `design` argument to `design:<mount>/<entry>`, and the arguments reach the page unchanged. A call
 that names no room uses the session's default rooms, or fails asking for one.
 
-With the dynamic registry, a bridge has no page tools until it joins a room (by `attach`,
-`list_pages(resource)`, or `pair`), and on the session wire a session sees the page tools of its
-default rooms and of the pages that agreed to it. A missing scope is a 403
+### Declared page tools, and the stateless wire
+
+`WithPageTools([]PageToolDecl{...})` fixes the bridge's catalog up front: name, description, input
+schema and read-only hint. `tools/list` then answers the same for every caller, on either wire,
+before the bridge has joined any room. That makes it cacheable (`server.WithListTTLMs`), and it needs
+no `list_changed`. Tabs still register and unregister tools at runtime, and a call goes only to a
+tab offering the tool right now. A page that registers an undeclared tool, or a declared one with a
+different schema or read-only hint, has it refused (`tool_refused`). A declaration whose name is the
+bridge's own, or whose schema has `page` (or `room` without `WithRoomOf`), makes `Register` panic.
+
+Serving the stateless wire needs declared tools. Without them the bridge keeps a dynamic registry:
+it has no page tools until it joins a room (`attach`, `list_pages(resource)` or `pair`), and on the
+session wire a session sees the page tools of its default rooms and of the pages that agreed to it.
+A stateless call to a page tool on such a bridge is refused, naming `WithPageTools`. A stateless
+`tools/list` skips middleware until #1355, so it would list every room's tools.
+
+### Limiting what an agent can do
+
+- **The page registers only what its user may use.** That's the main way to restrict tools. A tab
+  whose user can't edit doesn't offer `move_part`, so no call reaches it, and on the session wire
+  the agent doesn't see the tool at all.
+- **The grant is the gate for other users.** A page that doesn't grant Bob's agent never gets a call
+  from it.
+- **The caller reaches the page on every call**, as `PageCall.Caller` (TS: `ctx.caller`), the
+  subject and client from the bridge's validated token, so a page can refuse per caller, e.g. let a
+  paired user view a design but not edit it.
+- **`rooms.TrustBridges(subjects...)`** on `JoinPage` makes a page answer only peers whose relay
+  subject is one of the host's bridges. Without it, any holder of a relay token for the room can
+  call the page's tools directly, past agreement, and claim any caller. Set it before relying on
+  `Caller`. (Not in the TS client yet: massrelay's `CollabClient` doesn't pass peers' relay identity
+  through.) A missing scope is a 403
 with an `insufficient_scope` challenge (`WithResourceMetadataURL` sets its link).
 
 `WithLocalSubject("me")` is single-user local mode for a server with no identity provider: a
@@ -127,14 +155,16 @@ the two questions it asks.
 `WithEventFallbacks(buffer)` adds two ways to hear page events without MCP Events, both applying the
 same agreement:
 
-- **`next_request(resource?, after?, wait_seconds?)`**, a tool that holds the call until the next
+- **`next_request(resource?, after?, wait_seconds?)`**, a tool that works with no session when it
+  names its resource, and holds the call until the next
   event from a page that agreed to the session, or returns `event: null` after the wait (30 s by
   default, 120 at most). Pass the returned `cursor` as `after` and nothing between calls is missed,
   up to `buffer` recent events per room. Cancelling the call ends the wait.
 - **`rooms://events/{resource}`**, a resource per room. `attach` returns its URI as
-  `eventsResource`. Reading it lists the room's recent events from pages that agreed. Subscribing
-  (`resources/subscribe`, attached sessions only) gets `notifications/resources/updated` for it when
-  such a page emits. A client that checks the resources capability before subscribing needs the
+  `eventsResource`. Reading it, on either wire, lists the room's recent events from pages that agreed
+  to the caller. Subscribing (`resources/subscribe`, which needs a session) gets
+  `notifications/resources/updated` for it when such a page emits. On the stateless wire, poll it or
+  use `next_request`. A client that checks the resources capability before subscribing needs the
   server built with `server.WithSubscriptions()`.
 
 Neither starts a turn by itself: `resources/updated` wakes an agent that is already looping on a pull,

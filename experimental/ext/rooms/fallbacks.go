@@ -168,10 +168,26 @@ func (f *fallbacks) forget(sid string) {
 	f.mu.Unlock()
 }
 
-// hears reports whether sid may hear an event the page emitted in resource's
-// room: the same rule that lets it call the page.
-func (b *Bridge) hears(sid string, ev RecentEvent) bool {
-	return b.Attached(sid, ev.Resource) && b.PageAgreed(sid, ev.Resource, ev.Page)
+// hears reports whether p may hear an event the page emitted: the page agreed
+// to p, the same rule that lets p call it (#1610).
+func (b *Bridge) hears(p Principal, ev RecentEvent) bool {
+	return b.PageAgreedTo(p, ev.Resource, ev.Page)
+}
+
+// principalOfResource is the caller behind a resource read: the validated
+// claims, or local mode's subject.
+func (b *Bridge) principalOfResource(ctx core.ResourceContext) Principal {
+	if c := ctx.AuthClaims(); c != nil && c.Subject != "" {
+		p := Principal{Subject: c.Subject}
+		for _, k := range []string{"client_id", "azp"} {
+			if v, ok := c.Extra[k].(string); ok {
+				p.Client = v
+				break
+			}
+		}
+		return p
+	}
+	return Principal{Subject: b.localSubject}
 }
 
 // fallbackEvent is the fallbacks' share of a page event: buffer it, wake any
@@ -181,17 +197,15 @@ func (b *Bridge) fallbackEvent(e PageEvent) {
 	subscribed := b.fb.publish(e)
 	ev := RecentEvent{Resource: e.Resource, Page: e.Page}
 	for _, sid := range subscribed {
-		if !b.hears(sid, ev) {
-			continue
-		}
 		b.mu.Lock()
 		s := b.sessions[sid]
 		var notify context.Context
+		var p Principal
 		if s != nil {
-			notify = s.notify
+			notify, p = s.notify, s.principal
 		}
 		b.mu.Unlock()
-		if notify != nil {
+		if notify != nil && b.hears(p, ev) {
 			core.Notify(notify, "notifications/resources/updated", core.ResourceUpdatedNotification{URI: EventsURI(e.Resource)})
 		}
 	}
@@ -229,23 +243,10 @@ func (b *Bridge) nextRequest(tc core.ToolContext, req core.ToolRequest) (core.To
 		WaitSeconds *float64 `json:"wait_seconds"`
 	}
 	_ = json.Unmarshal(req.Arguments, &a)
-	sid := tc.SessionID()
-	b.mu.Lock()
-	s := b.sessions[sid]
-	var resources []string
-	if s != nil {
-		for r := range s.attached {
-			if a.Resource == "" || r == a.Resource {
-				resources = append(resources, r)
-			}
-		}
-	}
-	b.mu.Unlock()
-	if len(resources) == 0 {
-		if a.Resource != "" {
-			return core.ErrorResult("this session is not attached to " + a.Resource), nil
-		}
-		return core.ErrorResult("this session is not attached to any room; call attach first"), nil
+	p, s := b.caller(tc)
+	resources, err := b.roomArgs(a.Resource, s)
+	if err != nil {
+		return core.ErrorResult(err.Error()), nil
 	}
 	slices.Sort(resources)
 
@@ -274,7 +275,7 @@ func (b *Bridge) nextRequest(tc core.ToolContext, req core.ToolRequest) (core.To
 			after, haveAfter, events = newest, true, nil
 		}
 		for _, ev := range events {
-			if b.hears(sid, ev) {
+			if b.hears(p, ev) {
 				return core.StructuredResult(fmt.Sprintf("%s from page %s in %s", ev.Name, ev.Page, ev.Resource),
 					map[string]any{"event": ev, "cursor": ev.Cursor}), nil
 			}
@@ -296,14 +297,17 @@ func (b *Bridge) readRecentEvents(ctx core.ResourceContext, uri string, _ map[st
 	if !ok {
 		return core.ResourceResult{}, fmt.Errorf("not a room events uri: %s", uri)
 	}
-	sid := ctx.SessionID()
-	if !b.Attached(sid, resource) {
-		return core.ResourceResult{}, fmt.Errorf("this session is not attached to %s; call attach first", resource)
+	p := b.principalOfResource(ctx)
+	if p.Subject == "" {
+		return core.ResourceResult{}, fmt.Errorf("reading %s needs an authenticated subject", uri)
+	}
+	if _, err := b.roomArgs(resource, nil); err != nil {
+		return core.ResourceResult{}, err
 	}
 	events, newest, _ := b.fb.since([]string{resource}, 0)
 	visible := []RecentEvent{}
 	for _, ev := range events {
-		if b.hears(sid, ev) {
+		if b.hears(p, ev) {
 			visible = append(visible, ev)
 		}
 	}
@@ -334,9 +338,38 @@ func (b *Bridge) subscribeGate(ctx context.Context, req *core.Request, next serv
 		b.fb.subscribe(sid, resource, false)
 		return core.NewResponse(req.ID, struct{}{}), nil
 	}
-	if sid == "" || !b.Attached(sid, resource) {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "attach to "+resource+" before subscribing to its events"), nil
+	if sid == "" {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, "subscribing to "+p.URI+" needs an MCP session; poll it, or use next_request, on the stateless wire"), nil
 	}
+	if _, err := b.roomArgs(resource, nil); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams, err.Error()), nil
+	}
+	b.noteSession(ctx, sid)
 	b.fb.subscribe(sid, resource, true)
 	return core.NewResponse(req.ID, struct{}{}), nil
+}
+
+// noteSession records who a session acts for from a request that is not a
+// tool call (a resource subscription), so the updates it gets are filtered by
+// that principal's agreement.
+func (b *Bridge) noteSession(ctx context.Context, sid string) {
+	p := Principal{Subject: b.localSubject}
+	if c := core.AuthClaims(ctx); c != nil && c.Subject != "" {
+		p = Principal{Subject: c.Subject}
+		for _, k := range []string{"client_id", "azp"} {
+			if v, ok := c.Extra[k].(string); ok {
+				p.Client = v
+				break
+			}
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	s := b.sessions[sid]
+	if s == nil {
+		s = &session{id: sid, attached: make(map[string]bool)}
+		b.sessions[sid] = s
+	}
+	s.principal = p
+	s.notify = core.DetachForBackground(ctx)
 }

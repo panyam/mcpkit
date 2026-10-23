@@ -63,6 +63,10 @@ the page only when the page agreed:
 - `offerPairingCode({ ttlMs? })` makes up a code for the page to show; the user gives it to the
   agent, which enters it with the bridge's `pair` tool. `onPaired(fn)` reports which agent it was,
   and the code is withdrawn once used. Two minutes by default, at most ten.
+- Each call's `ctx.caller` is the agent's `{ subject, client? }` from the bridge's validated token,
+  so a tool can refuse per caller. Any peer in the room can send the page a call, though, so don't
+  rely on it alone yet (the Go page has `TrustBridges`; the TS one waits on massrelay passing peers'
+  relay identity).
 - `revoke({ subject, client? })` ends grants to that principal, `revokeAll()` ends every grant, and
   `grants()` lists them. A grant outlives the agent's MCP session and ends when revoked or when the
   page leaves.

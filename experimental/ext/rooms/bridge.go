@@ -56,6 +56,30 @@ func WithRoomOf(fn func(args map[string]any) (string, error)) Option {
 	return func(b *Bridge) { b.roomOf = fn }
 }
 
+// PageToolDecl declares one page tool up front: what tools/list shows for it,
+// whichever pages offer it at the moment.
+type PageToolDecl struct {
+	Name        string
+	Description string
+	InputSchema map[string]any
+	ReadOnly    bool
+}
+
+// WithPageTools fixes the bridge's page-tool catalog. tools/list then answers
+// the same for every caller, so it is cacheable (set server.WithListTTLMs) and
+// needs no list_changed, which is what the stateless wire needs. Pages still
+// register and unregister tools at runtime, and a call goes only to a tab that
+// offers the tool right now; a page registering a name not declared, or a
+// declared one with a different schema or read-only hint, has it refused
+// (tool_refused). Without it the bridge keeps a dynamic registry, filtered per
+// session, which works on the session wire only.
+//
+// A declaration with a reserved name (the bridge's own tools), or whose
+// schema declares page, or room without WithRoomOf, makes Register panic.
+func WithPageTools(decls []PageToolDecl) Option {
+	return func(b *Bridge) { b.declared = slices.Clone(decls) }
+}
+
 // WithResourceMetadataURL sets the protected-resource metadata URL that the
 // bridge's insufficient_scope challenges point at.
 func WithResourceMetadataURL(url string) Option {
@@ -76,8 +100,11 @@ type Bridge struct {
 	localSubject string
 	prmURL       string
 	roomOf       func(args map[string]any) (string, error)
-	onEvent      func(PageEvent)
-	fb           *fallbacks
+	// declared is the fixed page-tool catalog from WithPageTools; nil means
+	// the dynamic registry, which needs the session wire.
+	declared []PageToolDecl
+	onEvent  func(PageEvent)
+	fb       *fallbacks
 
 	srv    *server.Server
 	ctx    context.Context
@@ -221,6 +248,7 @@ func (b *Bridge) Register(srv *server.Server) {
 		},
 		ScopeChallenge: core.RequireScopes(ScopeRoomsAttach),
 	}, b.pair)
+	b.registerDeclared(srv)
 	middleware := []server.Middleware{b.filterToolsList, b.scopeGate}
 	if b.fb != nil {
 		b.registerFallbacks(srv)
@@ -588,7 +616,12 @@ func pageName(id PeerID, label string) string {
 func (b *Bridge) request(ctx context.Context, rs *roomState, page PeerID, method string, params map[string]any, progress func(json.RawMessage)) (rpcMessage, error) {
 	callID := randomID(16)
 	if progress != nil {
-		params["_meta"] = map[string]any{"progressToken": callID}
+		meta, _ := params["_meta"].(map[string]any)
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		meta["progressToken"] = callID
+		params["_meta"] = meta
 	}
 	pc := &pendingCall{page: page, done: make(chan callOutcome, 1), progress: progress}
 	b.mu.Lock()
@@ -702,20 +735,21 @@ func (b *Bridge) listTools(rs *roomState, page PeerID) {
 // page to register a name fixes its schema across the bridge; a later page
 // whose schema differs has that tool refused.
 func (b *Bridge) admitLocked(t core.ToolDef) string {
-	if t.Name == "" || slices.Contains([]string{"attach", "detach", "list_pages", "pair", "next_request"}, t.Name) {
-		return "the name is reserved by the bridge"
-	}
-	schema, _ := t.InputSchema.(map[string]any)
-	if props, ok := schema["properties"].(map[string]any); ok {
-		if _, ok := props["page"]; ok {
-			return "the bridge adds a property named page to every tool, so a tool may not declare one"
-		}
-		if _, ok := props["room"]; ok && b.roomOf == nil {
-			return "the bridge adds a property named room to every tool, so a tool may not declare one unless the host maps rooms with WithRoomOf"
-		}
+	if reason := b.reservedLocked(t); reason != "" {
+		return reason
 	}
 	readOnly, _ := t.Annotations["readOnlyHint"].(bool)
 	key := string(mustJSON(t.InputSchema)) + fmt.Sprint(readOnly)
+	if b.declared != nil {
+		spec, ok := b.defs[t.Name]
+		switch {
+		case !ok:
+			return "the bridge's catalog (WithPageTools) does not declare this tool"
+		case spec.key != key:
+			return "the schema or read-only hint differs from the bridge's declaration"
+		}
+		return ""
+	}
 	if spec, ok := b.defs[t.Name]; ok && spec.key != key {
 		return "another page already offers a tool with this name and a different schema"
 	}
@@ -743,7 +777,7 @@ func (b *Bridge) syncTools(rs *roomState) {
 	}
 	var remove []string
 	for _, name := range sortedKeys(b.defs) {
-		if !offered[name] {
+		if !offered[name] && b.declared == nil {
 			remove = append(remove, name)
 			delete(b.defs, name)
 		}
@@ -756,7 +790,7 @@ func (b *Bridge) syncTools(rs *roomState) {
 	}
 	b.mu.Unlock()
 
-	if b.srv != nil {
+	if b.srv != nil && b.declared == nil {
 		reg := b.srv.Registry()
 		for _, t := range add {
 			if offered[t.Name] {
@@ -826,6 +860,9 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 		if args == nil {
 			args = map[string]json.RawMessage{}
 		}
+		if b.declared == nil && tc.SessionID() == "" {
+			return core.ErrorResult("this bridge serves page tools on the session wire only; its host declares them with WithPageTools to serve callers with no session"), nil
+		}
 		room, err := b.roomOfCall(args)
 		if err != nil {
 			return core.ErrorResult(err.Error()), nil
@@ -843,7 +880,9 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 			return res, nil
 		}
 
-		params := map[string]any{"name": name, "arguments": args}
+		// The caller's principal, from the bridge's validated token, so the
+		// page can refuse per caller (see PageCall.Caller).
+		params := map[string]any{"name": name, "arguments": args, "_meta": map[string]any{MetaCaller: p}}
 		var progress func(json.RawMessage)
 		if token := tc.ProgressToken(); token != nil {
 			progress = func(raw json.RawMessage) {
@@ -876,7 +915,7 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 // so without this every session would see every room's tools.
 func (b *Bridge) filterToolsList(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
 	resp, err := next(ctx, req)
-	if req.Method != "tools/list" || err != nil || resp == nil || resp.Error != nil || resp.Result == nil {
+	if b.declared != nil || req.Method != "tools/list" || err != nil || resp == nil || resp.Error != nil || resp.Result == nil {
 		return resp, err
 	}
 	raw, err := json.Marshal(resp.Result)
@@ -932,4 +971,46 @@ func (b *Bridge) roomOfCall(args map[string]json.RawMessage) (string, error) {
 		delete(args, "room")
 	}
 	return room, nil
+}
+
+// registerDeclared adds the WithPageTools catalog to srv's registry, once,
+// and records each declaration so admitLocked holds pages to it.
+func (b *Bridge) registerDeclared(srv *server.Server) {
+	if b.declared == nil {
+		return
+	}
+	decls := slices.SortedFunc(slices.Values(b.declared), func(a, c PageToolDecl) int { return strings.Compare(a.Name, c.Name) })
+	reg := srv.Registry()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for _, d := range decls {
+		schema := d.InputSchema
+		if schema == nil {
+			schema = map[string]any{"type": "object"}
+		}
+		t := core.ToolDef{Name: d.Name, Description: d.Description, InputSchema: schema, Annotations: map[string]any{"readOnlyHint": d.ReadOnly}}
+		if reason := b.reservedLocked(t); reason != "" {
+			panic(fmt.Sprintf("rooms: WithPageTools: tool %q: %s", d.Name, reason))
+		}
+		b.defs[d.Name] = toolSpec{key: string(mustJSON(t.InputSchema)) + fmt.Sprint(d.ReadOnly), readOnly: d.ReadOnly}
+		_ = reg.AddTool(b.bridgeDef(t), b.pageToolHandler(d.Name))
+	}
+}
+
+// reservedLocked refuses a tool whose name is one of the bridge's own, or
+// whose schema declares a property the bridge adds.
+func (b *Bridge) reservedLocked(t core.ToolDef) string {
+	if t.Name == "" || slices.Contains([]string{"attach", "detach", "list_pages", "pair", "next_request"}, t.Name) {
+		return "the name is reserved by the bridge"
+	}
+	schema, _ := t.InputSchema.(map[string]any)
+	if props, ok := schema["properties"].(map[string]any); ok {
+		if _, ok := props["page"]; ok {
+			return "the bridge adds a property named page to every tool, so a tool may not declare one"
+		}
+		if _, ok := props["room"]; ok && b.roomOf == nil {
+			return "the bridge adds a property named room to every tool, so a tool may not declare one unless the host maps rooms with WithRoomOf"
+		}
+	}
+	return ""
 }

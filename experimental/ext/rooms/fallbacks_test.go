@@ -152,15 +152,14 @@ func TestFallbacks_RoomResourceNotifiesSubscribersAndListsEvents(t *testing.T) {
 	alice := st.notedAgent(t, "alice")
 	uri := rooms.EventsURI(room)
 
-	err := alice.SubscribeResource(t.Context(), uri)
-	require.Error(t, err, "subscribing before attach is refused")
-	assert.Contains(t, err.Error(), "attach")
+	// Subscribing needs a session and no attach (#1610); what the session
+	// hears is filtered by agreement, which the next test pins.
+	require.NoError(t, alice.SubscribeResource(t.Context(), uri))
 
 	res, err := alice.ToolCallFull(t.Context(), "attach", map[string]any{"resource": room})
 	require.NoError(t, err)
 	b, _ := json.Marshal(res.StructuredContent)
 	assert.Contains(t, string(b), `"eventsResource":"`+uri+`"`)
-	require.NoError(t, alice.SubscribeResource(t.Context(), uri))
 
 	p := st.page(t, "alice", room)
 	p.SetAgentsAllowed(true)
@@ -210,12 +209,14 @@ func TestFallbacks_NextRequestHonoursCancellation(t *testing.T) {
 		"the bridge stops holding a call the agent cancelled")
 }
 
-func TestFallbacks_NextRequestNeedsAnAttachedRoom(t *testing.T) {
+// next_request needs to know which room: the one it names, or a default
+// room from attach (#1610).
+func TestFallbacks_NextRequestNeedsARoom(t *testing.T) {
 	st := newStack(t, rooms.WithEventFallbacks(0))
 	a := st.agent(t, "alice", allScopes...)
 	_, res := nextRequest(t, a.Client, map[string]any{"wait_seconds": 0.1})
 	assert.True(t, res.IsError)
-	assert.Contains(t, text(res), "attach first")
+	assert.Contains(t, text(res), "name the room")
 }
 
 func TestFallbacks_AreOffUnlessAsked(t *testing.T) {

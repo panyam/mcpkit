@@ -34,6 +34,14 @@ export interface ToolCallContext {
   progress?(progress: number, total?: number, message?: string): void;
   /** The peer id of the bridge that forwarded the call. */
   from?: string;
+  /**
+   * Who the call acts for, from the bridge's validated token: the agent's
+   * subject and client. A page applies its app's own rules with it, e.g.
+   * letting a paired user view a design but not edit it. It is only as
+   * trustworthy as `from`: any peer holding a relay token for the room can
+   * send a page a call, so don't rely on it alone for anything that matters.
+   */
+  caller?: { subject: string; client?: string };
 }
 
 /** An MCP `CallToolResult`, the subset the client produces. */
