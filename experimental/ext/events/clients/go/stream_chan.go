@@ -25,6 +25,10 @@ type ChanStreamOptions struct {
 	// Cursor and Arguments pass through to the underlying stream call.
 	Cursor    *string
 	Arguments map[string]any
+
+	// Dedup and AllowDuplicates pass through as StreamOptions documents.
+	Dedup           *Deduper
+	AllowDuplicates bool
 }
 
 // StreamChan opens an events/stream call and delivers occurrences on a
@@ -39,9 +43,11 @@ func StreamChan(ctx context.Context, sess *client.Client, opts ChanStreamOptions
 	}
 	ch := make(chan events.Event, buf)
 	call, err := Stream(ctx, sess, StreamOptions{
-		EventName: opts.EventName,
-		Cursor:    opts.Cursor,
-		Arguments: opts.Arguments,
+		EventName:       opts.EventName,
+		Cursor:          opts.Cursor,
+		Arguments:       opts.Arguments,
+		Dedup:           opts.Dedup,
+		AllowDuplicates: opts.AllowDuplicates,
 		OnEvent: func(ev events.Event) {
 			select {
 			case ch <- ev:

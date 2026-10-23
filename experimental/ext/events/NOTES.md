@@ -393,3 +393,27 @@ Grading the server half needed the catalog to change during a run, which a healt
 does. `events_conformance_catalog` on kitchen-sink adds and removes types (the add/remove half of
 #1465), minting a fresh `catalog.N` each time for the same reason `build.finished` exists.
 
+
+## The Go client dedups on eventId, and the receiver scopes it per subscription (#1558)
+
+The server mints `eventId` once at yield and every copy carries it, and `webhook-id` on an event
+POST is that same id. Nothing on the client used it, so a webhook retry or a poll backfill that
+overlapped push delivery reached the application twice. That was harmless for a dashboard and
+expensive for the bridges in #1579 and #1581, where each delivery starts an agent turn.
+
+The seen-set is a value (`Deduper`) rather than a field of each loop because the overlap that
+matters crosses delivery modes: a stream's push frames and the poll backfill after it. A private
+set per call catches retries only.
+
+The receiver keys on `X-MCP-Subscription-Id` plus `eventId`, not `webhook-id` alone. One event
+matching two subscriptions to the same URL arrives as two POSTs with the same `webhook-id`, and
+whether SEP-3415 means that to be one delivery or two is an open question for the WG. Scoping by
+subscription delivers both, which is the reversible choice: a caller can collapse them, but cannot
+recover one that was dropped. A side effect is that sharing a `Deduper` between a `Receiver` and a
+`Poll` dedups nothing across them when the POST carries a subscription id, which the README says.
+
+A delivery dropped on a full channel is forgotten again, so the server's retry is delivered.
+
+The verifiers in `headers.go` check only the HMAC, so a captured POST verified forever. Rather than
+change their signatures, `TimestampWithinTolerance` sits beside them and the receiver calls both,
+with five minutes as in the Standard Webhooks reference libraries.

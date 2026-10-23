@@ -96,6 +96,14 @@ type StreamOptions struct {
 	// has ended — auth revoked, etc.). The Stream's Done() channel closes
 	// shortly after.
 	OnTerminated func(error)
+
+	// Dedup drops events whose eventId this stream, or anything sharing the
+	// Deduper, has already delivered, including replays after a reconnect.
+	// Nil means a private Deduper.
+	Dedup *Deduper
+
+	// AllowDuplicates turns dedup off, for callers who dedup themselves.
+	AllowDuplicates bool
 }
 
 // StreamCall represents an open events/stream subscription. Unless
@@ -158,6 +166,7 @@ func Stream(parent context.Context, sess *client.Client, opts StreamOptions) (*S
 
 	ctx, cancel := context.WithCancel(parent)
 	s := &StreamCall{cancel: cancel, done: make(chan struct{})}
+	opts.Dedup = dedupFor(opts.Dedup, opts.AllowDuplicates)
 	st := &streamState{opts: opts}
 
 	first := st.open(ctx, sess, st.params(true))
@@ -440,6 +449,9 @@ func (st *streamState) hook(onActive func()) func(string, json.RawMessage) {
 				return
 			}
 			st.frame(false, ev.Cursor, true)
+			if opts.Dedup != nil && opts.Dedup.Seen(ev.EventID) {
+				return
+			}
 			if opts.OnEvent != nil {
 				opts.OnEvent(ev)
 			}
