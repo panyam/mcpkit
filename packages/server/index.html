@@ -250,6 +250,7 @@
 <li>Resource subscriptions (<code>WithSubscriptions</code>, <code>NotifyResourceUpdated</code>)</li>
 <li>Broadcast notifications (<code>Broadcast</code>) - fan out to all connected sessions</li>
 <li>Extension registration (<code>WithExtension</code>) - extensions declare capabilities in the initialize response</li>
+<li>Experimental capabilities (<code>WithExperimentalCapability</code>) - entries under the spec&rsquo;s <code>capabilities.experimental</code>, e.g. Claude Code&rsquo;s <code>claude/channel</code></li>
 <li>Server instructions (<code>WithInstructions</code>) - guidance for the model, sent as the top-level <code>instructions</code> of the initialize and <code>server/discover</code> results</li>
 <li>Startup validation (<code>validateExtensionRefs</code>) - calls <code>RefValidator</code> on registered extensions to warn about unresolvable resource references</li>
 </ul>
