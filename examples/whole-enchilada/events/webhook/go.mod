@@ -9,8 +9,8 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.8.4
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.4
+	github.com/panyam/mcpkit v0.8.5
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.5
 	github.com/panyam/mcpkit/experimental/ext/events/clients/go v0.6.0
 )
 
