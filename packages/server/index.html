@@ -259,6 +259,21 @@
 <li><code>servicekit</code> - SSE hub, graceful shutdown</li>
 <li>Does NOT import <code>client/</code></li>
 </ul>
+<h2 id="session-lifecycle">Session lifecycle <a class="anchor" href="#session-lifecycle">¶</a></h2>
+<p><code>OnSessionClose</code> runs a hook once when a session ends, however it ends (DELETE, idle expiry, the<br />
+SSE stream closing, <code>CloseSession</code>, stdio or in-process close), so an extension can drop<br />
+per-session state:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>srv.<span style="color:#900;font-weight:bold">OnSessionClose</span>(<span style="color:#000;font-weight:bold">func</span>(ctx context.Context, sessionID <span style="color:#458;font-weight:bold">string</span>) {
+</span></span><span style="display:flex;"><span>    myExt.<span style="color:#900;font-weight:bold">forget</span>(sessionID)
+</span></span><span style="display:flex;"><span>})
+</span></span></code></pre><p>Hooks run in order on the goroutine closing the session, so keep them short. The stateless wire has<br />
+no sessions and fires none.</p>
+<h2 id="refusing-for-lack-of-scope">Refusing for lack of scope <a class="anchor" href="#refusing-for-lack-of-scope">¶</a></h2>
+<p>Middleware that refuses a request returns <code>core.InsufficientScope(&quot;pages:act&quot;)</code>, which the server<br />
+writes as a 403 with <code>WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;pages:act&quot;</code>, the<br />
+same challenge <code>ext/auth</code>&rsquo;s scope middleware sends. A <code>*core.ScopeChallenge</code> converts with<br />
+<code>.AuthError(resourceMetadataURL)</code>. Return it from middleware rather than a tool handler: middleware<br />
+runs before dispatch, while a handler&rsquo;s response may already be streaming with a 200.</p>
 <h2 id="in-process-transport">In-process transport <a class="anchor" href="#in-process-transport">¶</a></h2>
 <p>For testing, use <code>NewInProcessTransport(srv)</code> with <code>client.WithTransport()</code>:</p>
 <pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>transport <span style="color:#000;font-weight:bold">:=</span> server.<span style="color:#900;font-weight:bold">NewInProcessTransport</span>(srv,

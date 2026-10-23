@@ -297,6 +297,26 @@ routes each notification by method:</p>
 </span></span></span></code></pre><p><code>Listen</code> returns once the server has acknowledged the stream. Handlers run one at a time on the<br />
 stream&rsquo;s reader goroutine, so keep them short. On the legacy wire it returns<br />
 <code>ErrListenNeedsStatelessWire</code>.</p>
+<h2 id="cancelling-a-call-and-progress">Cancelling a call, and progress <a class="anchor" href="#cancelling-a-call-and-progress">¶</a></h2>
+<p>Cancelling a call&rsquo;s context returns from the call and sends <code>notifications/cancelled</code> with its<br />
+request id, so the server can stop the work. It is not sent for <code>initialize</code>, or on the 2026-07-28<br />
+stateless wire, where aborting the request is the cancellation.</p>
+<p><code>ToolCallWith</code> takes per-call options. <code>WithProgress</code> asks the server for progress and hands each<br />
+report for this call to a callback:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>res, err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ToolCallWith</span>(ctx, <span style="color:#d14">&#34;reindex&#34;</span>, args, client.<span style="color:#900;font-weight:bold">WithProgress</span>(<span style="color:#000;font-weight:bold">func</span>(p core.ProgressNotification) {
+</span></span><span style="display:flex;"><span>    fmt.<span style="color:#900;font-weight:bold">Printf</span>(<span style="color:#d14">&#34;%.0f/%.0f %s\n&#34;</span>, p.Progress, p.Total, p.Message)
+</span></span><span style="display:flex;"><span>}))
+</span></span></code></pre><p>The callback runs on the transport&rsquo;s reader goroutine, so keep it short. Reports that arrive after<br />
+the call returns are dropped.</p>
+<h2 id="when-the-server-wants-more-scope">When the server wants more scope <a class="anchor" href="#when-the-server-wants-more-scope">¶</a></h2>
+<p>A 403 the client cannot step up from (a static token, say) comes back as a<br />
+<code>*client.ClientAuthError</code> carrying the scopes the server asked for:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>_, err <span style="color:#000;font-weight:bold">:=</span> c.<span style="color:#900;font-weight:bold">ToolCall</span>(ctx, <span style="color:#d14">&#34;edit&#34;</span>, args)
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">var</span> ae <span style="color:#000;font-weight:bold">*</span>client.ClientAuthError
+</span></span><span style="display:flex;"><span><span style="color:#000;font-weight:bold">if</span> errors.<span style="color:#900;font-weight:bold">As</span>(err, <span style="color:#000;font-weight:bold">&amp;</span>ae) <span style="color:#000;font-weight:bold">&amp;&amp;</span> ae.StatusCode <span style="color:#000;font-weight:bold">==</span> <span style="color:#099">403</span> {
+</span></span><span style="display:flex;"><span>    fmt.<span style="color:#900;font-weight:bold">Println</span>(<span style="color:#d14">&#34;ask for:&#34;</span>, ae.RequiredScopes) <span style="color:#998;font-style:italic">// from WWW-Authenticate scope=&#34;...&#34;
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>}
+</span></span></code></pre><p>A <code>core.ScopeAwareTokenSource</code> gets those scopes first and the call is retried once.</p>
 <h2 id="transport-interface">Transport interface <a class="anchor" href="#transport-interface">¶</a></h2>
 <p>The client accepts any <code>core.Transport</code> via <code>WithTransport()</code>. This enables:</p>
 <ul>
