@@ -32,9 +32,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -45,11 +47,10 @@ import (
 )
 
 // dockerHostAlias is the hostname containers can use to reach the
-// docker host's loopback interface. On Docker Desktop (Mac/Windows)
-// and recent Docker Engine releases (Linux) this resolves to the
-// host's gateway address. Required because Keycloak runs inside a
-// container and the test's httptest.Server binds to localhost on the
-// host.
+// docker host. Docker Desktop (Mac/Windows) provides it; on Linux
+// keycloak-up.sh maps it with --add-host=host.docker.internal:host-gateway.
+// Required because Keycloak runs inside a container and calls back to the
+// test's httptest.Server on the host.
 const dockerHostAlias = "host.docker.internal"
 
 // bclCapture wraps an httptest.Server that records every POST
@@ -69,7 +70,7 @@ type bclCapture struct {
 func newBCLCapture(t *testing.T) *bclCapture {
 	t.Helper()
 	c := &bclCapture{}
-	c.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	c.srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		c.mu.Lock()
 		c.hits++
@@ -78,14 +79,24 @@ func newBCLCapture(t *testing.T) *bclCapture {
 		c.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
+	// On Linux host-gateway is the docker bridge address, which a loopback
+	// listener never sees, so listen on every interface there. Docker Desktop
+	// forwards host.docker.internal to the host's loopback, so elsewhere the
+	// default 127.0.0.1 listener is enough.
+	if runtime.GOOS == "linux" {
+		ln, err := net.Listen("tcp", "0.0.0.0:0")
+		require.NoError(t, err)
+		c.srv.Listener.Close()
+		c.srv.Listener = ln
+	}
+	c.srv.Start()
 	t.Cleanup(c.srv.Close)
 	return c
 }
 
 // urlForKeycloak returns the BCL URL Keycloak should be configured
-// with. The httptest.Server binds to 127.0.0.1:<port> on the host;
-// Keycloak in the container reaches it via the docker-host alias on
-// the same port.
+// with. Keycloak in the container reaches the httptest.Server via the
+// docker-host alias on the server's port.
 func (c *bclCapture) urlForKeycloak() string {
 	u, _ := url.Parse(c.srv.URL)
 	return "http://" + dockerHostAlias + ":" + u.Port()

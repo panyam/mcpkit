@@ -20,6 +20,7 @@ else
     docker rm -f "${KC_CONTAINER}" 2>/dev/null || true
     docker run -d --name "${KC_CONTAINER}" \
         -p "${KC_PORT}:8080" \
+        --add-host=host.docker.internal:host-gateway \
         -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
         -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
         -v "${ROOT}/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json" \
