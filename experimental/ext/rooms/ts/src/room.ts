@@ -1,6 +1,4 @@
-import { fromJson, type JsonValue } from "@bufbuild/protobuf";
-import { base64Encode } from "@bufbuild/protobuf/wire";
-import { CollabEventSchema, type CollabEvent } from "@panyam/massrelay";
+import { CollabClient } from "@panyam/massrelay";
 import { GRPCWSClient } from "@panyam/servicekit-client";
 import { errorResult, toCallToolResult, type PageTool } from "./tool.js";
 
@@ -112,13 +110,7 @@ interface RpcMessage {
  * addressed to it, never room-wide ones.
  */
 export async function joinToolRoom(opts: JoinToolRoomOptions): Promise<ToolRoom> {
-  // servicekit's GRPCWSClient rather than massrelay's CollabClient: as of
-  // massrelay 0.2.3 CollabClient treats every ErrorEvent as fatal, including
-  // the PEER_NOT_FOUND the relay answers to a reply addressed to a bridge that
-  // has just left, and closes without calling onDisconnect, so the page would
-  // drop out of the room unnoticed.
-  const grpc = new GRPCWSClient(opts.WebSocket ? { WebSocket: opts.WebSocket } : undefined);
-  const page = new Page(grpc, opts);
+  const page = new Page(opts);
   await page.join();
   return page;
 }
@@ -139,7 +131,9 @@ class Page implements ToolRoom {
   private left = false;
   private modelContext?: ModelContextLike;
 
-  constructor(private grpc: GRPCWSClient, private opts: JoinToolRoomOptions) {
+  private client!: CollabClient;
+
+  constructor(private opts: JoinToolRoomOptions) {
     this.room = opts.room;
     this.closed = new Promise((resolve) => (this.resolveClosed = resolve));
     this.modelContext = findModelContext(opts.modelContext);
@@ -148,56 +142,59 @@ class Page implements ToolRoom {
   join(): Promise<void> {
     return new Promise((resolve, reject) => {
       let joined = false;
-      const timer = setTimeout(() => {
-        if (!joined) {
-          reject(new Error(`joinToolRoom: relay did not admit the page within ${this.opts.joinTimeoutMs ?? 10000}ms`));
-          this.grpc.close();
-        }
-      }, this.opts.joinTimeoutMs ?? 10000);
-      this.grpc.onMessage = (data: unknown) => {
-        let event: CollabEvent;
-        try {
-          event = fromJson(CollabEventSchema, data as JsonValue, { ignoreUnknownFields: true });
-        } catch {
-          return;
-        }
-        if (!joined) {
-          if (event.event.case === "roomJoined") {
-            joined = true;
-            clearTimeout(timer);
-            this.id = event.event.value.clientId;
-            resolve();
-          } else if (event.event.case === "error") {
-            clearTimeout(timer);
-            reject(new Error(`joinToolRoom: ${event.event.value.code}: ${event.event.value.message}`));
-            this.grpc.close();
-          }
-          return;
-        }
-        this.handleEvent(event);
-      };
-      this.grpc.onClose = () => {
+      const refuse = (err: Error) => {
         clearTimeout(timer);
-        if (!joined) reject(new Error("joinToolRoom: the relay closed the connection before admitting the page"));
-        this.shutdown();
+        reject(err);
       };
-      this.grpc.onError = () => {};
-      this.grpc
-        .connect(wsUrl(this.opts.relay, this.opts.room, this.opts.token))
-        .then(() => {
-          this.grpc.send({
-            join: {
-              sessionId: this.opts.room,
-              username: this.opts.username ?? "page",
-              clientType: "browser",
-              protocolVersion: 2,
-            },
-          });
-        })
-        .catch((err: unknown) => {
+      const timer = setTimeout(() => {
+        if (joined) return;
+        reject(new Error(`joinToolRoom: relay did not admit the page within ${this.opts.joinTimeoutMs ?? 10000}ms`));
+        this.client.disconnect();
+      }, this.opts.joinTimeoutMs ?? 10000);
+      const WebSocketImpl = this.opts.WebSocket;
+      this.client = new CollabClient({
+        token: this.opts.token,
+        // A reconnect would rejoin under a new peer id, which no pairing
+        // knows, so a dropped page ends and `closed` resolves instead.
+        maxRetries: 0,
+        // CollabClient takes a WebSocket implementation only through the
+        // GRPCWSClient it builds on.
+        _grpcFactory: WebSocketImpl ? () => new GRPCWSClient({ WebSocket: WebSocketImpl }) : undefined,
+        onConnect: (clientId) => {
+          joined = true;
           clearTimeout(timer);
-          reject(err instanceof Error ? err : new Error(String(err)));
-        });
+          this.id = clientId;
+          resolve();
+        },
+        // Before the join an ErrorEvent is the relay refusing it. After the
+        // join it refuses one message, typically PEER_NOT_FOUND for a reply
+        // to a bridge that has just left, and the page stays in the room.
+        onErrorEvent: (code, message) => {
+          if (!joined) refuse(new Error(`joinToolRoom: ${code}: ${message}`));
+        },
+        onError: (err) => {
+          if (!joined) refuse(err);
+        },
+        onDisconnect: () => this.shutdown(),
+        onPeerLeft: (clientId) => this.bridges.delete(clientId),
+        onAppMessage: (kind, payload, from, to) => {
+          // Only messages addressed to this page; a room-wide one is someone
+          // else's traffic.
+          if (kind !== MESSAGE_KIND || to !== this.id) return;
+          let m: RpcMessage;
+          try {
+            m = JSON.parse(new TextDecoder().decode(payload));
+          } catch {
+            return;
+          }
+          this.handle(from, m);
+        },
+      });
+      try {
+        this.client.connect(relayBase(this.opts.relay), this.opts.room, this.opts.username ?? "page", {});
+      } catch (err) {
+        refuse(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   }
 
@@ -244,12 +241,7 @@ class Page implements ToolRoom {
 
   leave(): void {
     if (this.left) return;
-    try {
-      this.grpc.send({ leave: { reason: "left" } });
-    } catch {
-      // The socket is already gone.
-    }
-    this.grpc.close();
+    this.client.disconnect();
     this.shutdown();
   }
 
@@ -259,32 +251,6 @@ class Page implements ToolRoom {
     for (const ctl of this.running.values()) ctl.abort();
     this.running.clear();
     this.resolveClosed();
-  }
-
-  private handleEvent(event: CollabEvent): void {
-    switch (event.event.case) {
-      case "peerLeft":
-        this.bridges.delete(event.event.value.clientId);
-        break;
-      case "sessionEnded":
-        this.grpc.close();
-        this.shutdown();
-        break;
-      case "appMessage": {
-        const msg = event.event.value;
-        // Only messages addressed to this page; a room-wide one is someone
-        // else's traffic.
-        if (msg.kind !== MESSAGE_KIND || msg.toClientId !== this.id) return;
-        let m: RpcMessage;
-        try {
-          m = JSON.parse(new TextDecoder().decode(msg.payload));
-        } catch {
-          return;
-        }
-        this.handle(event.fromClientId, m);
-        break;
-      }
-    }
   }
 
   private handle(from: string, m: RpcMessage): void {
@@ -369,7 +335,7 @@ class Page implements ToolRoom {
   private send(to: string, m: RpcMessage): void {
     if (this.left) return;
     const payload = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", ...m }));
-    this.grpc.send({ appMessage: { kind: MESSAGE_KIND, payload: base64Encode(payload), toClientId: to } });
+    this.client.sendAppMessage(MESSAGE_KIND, payload, { to });
   }
 }
 
@@ -378,6 +344,17 @@ function findModelContext(opt: JoinToolRoomOptions["modelContext"]): ModelContex
   if (opt !== true) return opt;
   const g = globalThis as any;
   return g.navigator?.modelContext ?? g.document?.modelContext ?? undefined;
+}
+
+/**
+ * The base URL CollabClient appends its room path to: ws(s), with any mount
+ * path, and no trailing slash or query.
+ */
+function relayBase(relay: string): string {
+  const u = new URL(wsUrl(relay, "_"));
+  u.pathname = u.pathname.replace(/\/ws\/v1\/_\/sync$/, "");
+  u.search = "";
+  return u.toString().replace(/\/$/, "");
 }
 
 /**

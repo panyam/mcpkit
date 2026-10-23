@@ -12,11 +12,11 @@ importers:
         specifier: ^2.11.0
         version: 2.16.0
       '@panyam/massrelay':
-        specifier: ^0.2.3
-        version: 0.2.3(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.0.7)
+        specifier: ^0.2.4
+        version: 0.2.4(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.1.9)
       '@panyam/servicekit-client':
-        specifier: ^0.0.7
-        version: 0.0.7
+        specifier: ^0.1.9
+        version: 0.1.9
     devDependencies:
       '@modelcontextprotocol/client':
         specifier: ^2.3.1
@@ -120,14 +120,14 @@ packages:
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
 
-  '@panyam/massrelay@0.2.3':
-    resolution: {integrity: sha512-N0BafUoGheo17UGac9cTNiEjemhQnyuLUhS3dpen36Xn/gj85TPN9T8yqQfDfXiHeiHINZ0BvuyoIrJqqCQtWA==}
+  '@panyam/massrelay@0.2.4':
+    resolution: {integrity: sha512-OawqRHBHgDtqcGCyMou62hWxVHOyS+dDiLF6BKl+YtdyanwLNbq4Uq+IlLp7zzPoDzEZzcc06FtqPfgpNfazeQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.0.0
-      '@panyam/servicekit-client': ^0.0.7
+      '@panyam/servicekit-client': ^0.0.7 || ^0.1.9
 
-  '@panyam/servicekit-client@0.0.7':
-    resolution: {integrity: sha512-Dnrzq8Mw6kGO+yQyWNJTggnTDOqTTn2t58Wxfebh6U9sO9fD+lwJAcBx/T5HMyeP7w5uq9sNfGnudjlBdwyn2Q==}
+  '@panyam/servicekit-client@0.1.9':
+    resolution: {integrity: sha512-FzQxgQIHQdO8+YRYt9gX4fi91/MjRb/UoMhak64Hi3WMPD7YP+ksZ7cD0DmAA46CE4KsWNc+OpKSGM9dUv4yzA==}
     engines: {node: '>=16.0.0'}
 
   '@rolldown/binding-android-arm-eabi@1.2.15':
@@ -852,12 +852,12 @@ snapshots:
 
   '@oxc-project/types@0.155.0': {}
 
-  '@panyam/massrelay@0.2.3(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.0.7)':
+  '@panyam/massrelay@0.2.4(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.1.9)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@panyam/servicekit-client': 0.0.7
+      '@panyam/servicekit-client': 0.1.9
 
-  '@panyam/servicekit-client@0.0.7': {}
+  '@panyam/servicekit-client@0.1.9': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.15':
     optional: true

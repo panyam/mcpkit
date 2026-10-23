@@ -36,7 +36,7 @@ in-process path in one run.
 
 ## Not every test runs under -race
 
-servicekit v0.1.7's `grpcws.BidiStreamConn.OnClose` reads a message counter that its forwarding
+servicekit's (v0.1.7, still in v0.1.9) `grpcws.BidiStreamConn.OnClose` reads a message counter that its forwarding
 goroutine updates with `atomic.AddInt64`, so every WebSocket close inside the relay is a reported
 race. It is in the relay, not here: no race report across five runs had a frame in this module.
 `experimental/scripts/test-rooms-massrelay.sh` runs everything without `-race`, then the embedded
@@ -48,6 +48,11 @@ massrelay v0.2.1 requires newer x/net, x/crypto, x/sys, x/text, otel, genproto a
 than the rest of the tree pinned, and `scripts/dep-baseline.json` was empty. Rather than accept 13
 divergences there, the PR ran `check_dep_consistency.py --unify` and `make tidy-all`, which raised
 every module to those versions. That is most of the PR's go.mod and go.sum churn.
+
+Moving to massrelay v0.2.4 did the same for servicekit, v0.1.7 to v0.1.9 in all 75 modules,
+the root included since it requires servicekit directly. No source changed. servicekit's
+`BidiStreamConn.OnClose` race inside the relay is still there in v0.1.9, so this module's WebSocket
+tests still run without `-race`.
 
 Moving to massrelay v0.2.3 did the same for oneauth, v0.2.2 to v0.3.0 across the ten modules that
 use it, which was also wanted in its own right. Nothing needed a source change, and the Keycloak
