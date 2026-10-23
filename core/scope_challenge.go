@@ -94,3 +94,42 @@ func AcceptAnyScope(advertise string, alternatives ...string) ScopeChallengeFunc
 		return &ScopeChallenge{Scopes: []string{advertise}}, nil
 	}
 }
+
+// InsufficientScope is the error a server middleware returns to refuse a
+// request for lack of scope. The server writes it as a 403 with
+// `WWW-Authenticate: Bearer error="insufficient_scope", scope="..."`, the same
+// challenge ext/auth's scope middleware sends, so an extension can gate on
+// scopes without depending on ext/auth:
+//
+//	func gate(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
+//	    if !core.HasScope(ctx, "pages:act") {
+//	        return nil, core.InsufficientScope("pages:act")
+//	    }
+//	    return next(ctx, req)
+//	}
+//
+// Return it from middleware, which runs before dispatch. A tool handler that
+// returns it gets an ordinary error result instead, because by then a
+// streaming response may already have sent its 200.
+func InsufficientScope(scopes ...string) *AuthError {
+	return (&ScopeChallenge{Scopes: scopes}).AuthError("")
+}
+
+// AuthError turns a challenge into the 403 a middleware returns, with the
+// challenge's ErrorDescription and, when resourceMetadataURL is non-empty, a
+// `resource_metadata` parameter so a client meeting its first 403 on the
+// stateless wire can find the authorization server. A nil challenge yields a
+// 403 with no scope, which is the fail-closed answer when a
+// ScopeChallengeFunc returned an error.
+func (c *ScopeChallenge) AuthError(resourceMetadataURL string) *AuthError {
+	var scopes []string
+	var desc string
+	if c != nil {
+		scopes, desc = c.Scopes, c.ErrorDescription
+	}
+	return &AuthError{
+		Code:            403, // core keeps net/http to interface types (C2)
+		Message:         "insufficient scope",
+		WWWAuthenticate: InsufficientScopeChallenge(resourceMetadataURL, desc, scopes...),
+	}
+}

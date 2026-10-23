@@ -234,10 +234,17 @@ because the single violation was found and fixed by hand.
 
 ---
 
-## C10: A list response is built from sorted keys, never from map iteration order
+## C10: A list response has a stable order, never map iteration order
 
-Any handler that turns a `map` into a JSON array sorts the keys first. Go randomizes map iteration
-deliberately, so a list method that ranges its registry answers in a different order on every call.
+Any handler that turns a collection into a JSON array emits it in an order that is the same on every
+call: sorted keys, or an explicitly ordered structure such as registration order. What it must never
+do is range a `map`. Go randomizes map iteration deliberately, so a list method that ranges its
+registry answers in a different order on every call.
+
+Sorted is not required. `server/registry.go` lists tools, resources and prompts in registration
+order through `toolOrder` and its siblings, which is stable, and sorting them instead would change
+the wire order of every mcpkit server for no gain (decided on #1585, after #1584 read this rule as
+"sorted").
 
 This is not theoretical and it is not one-off. `InProcessAppBridge` ranged a map for `tools/list`
 and the order flapped between calls (#1408). `experimental/ext/events` did the same for

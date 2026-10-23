@@ -22,6 +22,29 @@ MCP server implementation: Dispatcher, transports, middleware, subscriptions.
 - `servicekit` - SSE hub, graceful shutdown
 - Does NOT import `client/`
 
+## Session lifecycle
+
+`OnSessionClose` runs a hook once when a session ends, however it ends (DELETE, idle expiry, the
+SSE stream closing, `CloseSession`, stdio or in-process close), so an extension can drop
+per-session state:
+
+```go
+srv.OnSessionClose(func(ctx context.Context, sessionID string) {
+    myExt.forget(sessionID)
+})
+```
+
+Hooks run in order on the goroutine closing the session, so keep them short. The stateless wire has
+no sessions and fires none.
+
+## Refusing for lack of scope
+
+Middleware that refuses a request returns `core.InsufficientScope("pages:act")`, which the server
+writes as a 403 with `WWW-Authenticate: Bearer error="insufficient_scope", scope="pages:act"`, the
+same challenge `ext/auth`'s scope middleware sends. A `*core.ScopeChallenge` converts with
+`.AuthError(resourceMetadataURL)`. Return it from middleware rather than a tool handler: middleware
+runs before dispatch, while a handler's response may already be streaming with a 200.
+
 ## In-process transport
 
 For testing, use `NewInProcessTransport(srv)` with `client.WithTransport()`:

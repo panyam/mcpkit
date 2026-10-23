@@ -228,6 +228,33 @@ ends share round-trips fine.
 
 ---
 
+## Client and server gaps found by the room bridge (#1585)
+
+Building `experimental/ext/rooms` (#1584) turned up four places where an extension had to work
+around the library. Two were real and two were already solved, just hard to find.
+
+`OnSessionClose` exists because the bridge kept pairings in memory until a page left, with an
+exported `EndSession` for callers to remember to call. Every close path already ended in
+`Dispatcher.Close` (DELETE, idle expiry, `CloseSession`, `CloseAllSessions`, the SSE disconnect
+paths in `transport.go`, stdio and in-process), so the hook lives there behind a `sync.Once`, with
+one hook list shared by every session dispatcher the way `subManager` is. A hook registered after a
+session started still fires for it.
+
+The client never sent `notifications/cancelled`. On Streamable HTTP that mostly did not matter,
+because aborting the POST cancels the handler, but the in-process and stdio paths went through
+`coreTransportAdapter`, which handed the transport `context.Background()`, and the legacy SSE
+transport built its POST without the context and waited on the response channel with no ctx case.
+So a cancelled call over any of those kept waiting for the tool to finish. All three take the
+caller's context now. The notification is skipped on the stateless wire, which removed it from the
+method set (`server/stateless/dispatch.go`, `removedLegacyMethods`).
+
+The other two looked like gaps and were not. A 403 on a static token does keep its scopes: they are
+on `*client.ClientAuthError` (servicekit's `AuthRetryError`) as `RequiredScopes`, and the flat
+"does not support step-up" string is only its `Cause`. The rooms PR read the message and missed the
+type. And an extension never needed `ext/auth` to send a scope challenge, since `*core.AuthError`
+with `core.InsufficientScopeChallenge` is what `ext/auth` itself returns; `core.InsufficientScope`
+and `(*ScopeChallenge).AuthError` just stop each caller rebuilding it.
+
 ## Testing
 
 - **The server requires initialization.** A direct `srv.Dispatch()` in a test fails. Use httptest

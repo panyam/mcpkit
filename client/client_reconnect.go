@@ -55,14 +55,9 @@ func (c *Client) reconnect() error {
 		ct.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 			return c.HandleServerRequest(req)
 		}
-		if c.onNotify != nil {
-			ct.notifyHandler = func(method string, params []byte) {
-				var parsed any
-				if len(params) > 0 {
-					json.Unmarshal(params, &parsed)
-				}
-				c.onNotify(method, parsed)
-			}
+		adapter := c.makeNotifyAdapter()
+		ct.notifyHandler = func(method string, params []byte) {
+			adapter(method, json.RawMessage(params))
 		}
 		c.transport = &coreTransportAdapter{inner: ct}
 	} else if c.useSSE {
@@ -71,9 +66,7 @@ func (c *Client) reconnect() error {
 		st.sessionID = c.transport.getSessionID() // preserve for reconnection
 		st.serverReqHandler = c.HandleServerRequest
 		st.modifyReq = c.modifyRequest
-		if c.onNotify != nil {
-			st.notifyHandler = c.makeNotifyAdapter()
-		}
+		st.notifyHandler = c.makeNotifyAdapter()
 		c.transport = st
 	} else {
 		st := newStreamableClientTransport(c.url, c.tokenSource)
@@ -81,9 +74,7 @@ func (c *Client) reconnect() error {
 		st.serverReqHandler = c.HandleServerRequest
 		st.enableGetSSE = c.enableGetSSE
 		st.modifyReq = c.modifyRequest
-		if c.onNotify != nil {
-			st.notifyHandler = c.makeNotifyAdapter()
-		}
+		st.notifyHandler = c.makeNotifyAdapter()
 		c.transport = st
 	}
 

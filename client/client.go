@@ -369,17 +369,21 @@ func (a *coreTransportAdapter) call(method string, data []byte) (*rpcResponse, e
 	return a.callWithContext(method, data, nil)
 }
 
-// callWithContext on the core.Transport adapter ignores method and cc —
-// core.Transport has no notion of per-call notification scoping, and the
-// underlying transport carries its own method routing inside the JSON-RPC
-// envelope. Notifications still flow through whatever notify path the
-// underlying transport provides.
-func (a *coreTransportAdapter) callWithContext(_ string, data []byte, _ *CallContext) (*rpcResponse, error) {
+// callWithContext on the core.Transport adapter ignores method and cc's
+// hooks and headers, since core.Transport has no notion of per-call
+// notification scoping and the underlying transport carries its own method
+// routing inside the JSON-RPC envelope. It does pass cc's context down, so
+// cancelling a call over stdio or a subprocess ends the wait.
+func (a *coreTransportAdapter) callWithContext(_ string, data []byte, cc *CallContext) (*rpcResponse, error) {
 	var req core.Request
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
-	resp, err := a.inner.Call(context.Background(), &req)
+	ctx := context.Background()
+	if cc != nil && cc.Context != nil {
+		ctx = cc.Context
+	}
+	resp, err := a.inner.Call(ctx, &req)
 	if err != nil {
 		return nil, err
 	}
@@ -459,6 +463,11 @@ type Client struct {
 	// Used by all transports: in-memory (inline), SSE (background reader),
 	// and Streamable HTTP (POST SSE responses + optional GET SSE stream).
 	onNotify func(method string, params any)
+
+	// progress maps a progress token minted by ToolCallWith to the caller's
+	// WithProgress callback, for the life of that call.
+	progress   sync.Map // string → func(core.ProgressNotification)
+	progressID atomic.Uint64
 
 	// enableGetSSE opts into the background GET SSE stream (Streamable HTTP only).
 	enableGetSSE bool
@@ -930,9 +939,12 @@ func (c *Client) unwrapStreamableTransport() *streamableClientTransport {
 	return nil
 }
 
-// needsNotifyAdapter returns true if any notification-intercepting handler is set.
+// needsNotifyAdapter reports whether the transport needs the notify adapter.
+// It always does now: ToolCallWith's progress callbacks are registered per
+// call, after the transport is built, so routing has to be in place from the
+// start.
 func (c *Client) needsNotifyAdapter() bool {
-	return c.onNotify != nil || c.onContentChunk != nil || c.elicitationCompleteHandler != nil || c.toolsListChangedHandler != nil
+	return true
 }
 
 // makeNotifyAdapter creates a transport-level notification handler that
@@ -940,6 +952,10 @@ func (c *Client) needsNotifyAdapter() bool {
 // Also intercepts content chunk and elicitation complete notifications.
 func (c *Client) makeNotifyAdapter() func(string, json.RawMessage) {
 	return func(method string, params json.RawMessage) {
+		if method == "notifications/progress" {
+			c.routeProgress(params)
+			// Still deliver to generic onNotify below.
+		}
 		// Intercept content chunk notifications for the dedicated handler.
 		// Matches the default method or any custom method containing "content_chunk".
 		if c.onContentChunk != nil && method == core.DefaultContentChunkMethod {
@@ -1477,6 +1493,68 @@ func (c *Client) ToolCallFull(ctx context.Context, name string, args any) (*core
 	return &toolResult, nil
 }
 
+// CallOption configures one ToolCallWith call.
+type CallOption func(*callOptions)
+
+type callOptions struct {
+	onProgress func(core.ProgressNotification)
+}
+
+// WithProgress asks the server for progress on this call and hands each
+// notifications/progress for it to fn. The client mints the progress token
+// and sends it as _meta.progressToken; fn sees only notifications carrying
+// that token, while WithNotificationCallback still sees all of them.
+//
+// fn runs on the transport's read goroutine, so it must not block, and it may
+// run concurrently with fn for another call. Progress that arrives after the
+// call has returned is dropped. Delivered on Streamable HTTP, SSE and stdio;
+// a client built over WithTransport gets whatever notifications that
+// transport delivers.
+func WithProgress(fn func(core.ProgressNotification)) CallOption {
+	return func(o *callOptions) { o.onProgress = fn }
+}
+
+// ToolCallWith invokes a tool like ToolCallFull, with per-call options such
+// as WithProgress. With no options it is ToolCallFull.
+func (c *Client) ToolCallWith(ctx context.Context, name string, args any, opts ...CallOption) (*core.ToolResult, error) {
+	var o callOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	params := map[string]any{"name": name, "arguments": args}
+	if o.onProgress != nil {
+		token := fmt.Sprintf("mcpkit-progress-%d", c.progressID.Add(1))
+		params["_meta"] = map[string]any{"progressToken": token}
+		c.progress.Store(token, o.onProgress)
+		defer c.progress.Delete(token)
+	}
+	result, err := c.Call(ctx, "tools/call", params)
+	if err != nil {
+		return nil, err
+	}
+	var toolResult core.ToolResult
+	if err := json.Unmarshal(result.Raw, &toolResult); err != nil {
+		return nil, fmt.Errorf("unmarshal tool result: %w", err)
+	}
+	return &toolResult, nil
+}
+
+// routeProgress hands a progress notification to the ToolCallWith call that
+// minted its token, if that call is still waiting.
+func (c *Client) routeProgress(params json.RawMessage) {
+	var p core.ProgressNotification
+	if json.Unmarshal(params, &p) != nil {
+		return
+	}
+	token, ok := p.ProgressToken.(string)
+	if !ok {
+		return
+	}
+	if fn, ok := c.progress.Load(token); ok {
+		fn.(func(core.ProgressNotification))(p)
+	}
+}
+
 // ReadResource reads a resource by URI and returns the first text content.
 func (c *Client) ReadResource(ctx context.Context, uri string) (string, error) {
 	result, err := c.Call(ctx, "resources/read", map[string]string{"uri": uri})
@@ -1781,16 +1859,42 @@ func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) 
 // and mints a fresh JSON-RPC id (servers reject reused ids).
 func (c *Client) doRawCall(method string, params any, cc *CallContext) (*rpcResponse, error) {
 	wrapped := c.wrapParamsForStatelessWire(params)
+	id := c.nextRequestID()
 	req := core.Request{
 		JSONRPC: "2.0",
-		ID:      marshalID(c.nextRequestID()),
+		ID:      marshalID(id),
 		Method:  method,
 	}
 	if wrapped != nil {
 		req.Params, _ = core.MarshalRawJSON(wrapped)
 	}
 	data, _ := json.Marshal(req)
-	return c.transport.callWithContext(method, data, cc)
+	resp, err := c.transport.callWithContext(method, data, cc)
+	if err != nil && cc != nil && cc.Context != nil && cc.Context.Err() != nil {
+		c.sendCancelled(cc.Context, method, id)
+	}
+	return resp, err
+}
+
+// sendCancelled tells the server the caller gave up on request id, as the
+// spec's cancellation section says a client SHOULD, so the server can stop
+// the work rather than finish it for nobody. Aborting the request's HTTP
+// connection often cancels the handler already (mcpkit's server does, on both
+// HTTP wires); a server that acknowledges the POST and runs the work
+// afterwards has only this notification to go on.
+//
+// Not sent for initialize, which the spec says a client MUST NOT cancel, or
+// on the SEP-2575 stateless wire, which removed notifications/cancelled and
+// cancels by closing the request's connection instead. Sent from its own
+// goroutine because the caller has already been told its context ended.
+func (c *Client) sendCancelled(ctx context.Context, method string, id int) {
+	if method == "initialize" || c.useStatelessWire {
+		return
+	}
+	reason := context.Cause(ctx).Error()
+	safeGo("client.sendCancelled", func() {
+		_ = c.notifyMethod("notifications/cancelled", map[string]any{"requestId": id, "reason": reason})
+	})
 }
 
 // marshalID converts an integer request ID to json.RawMessage.
@@ -2553,11 +2657,21 @@ func (t *sseClientTransport) getSessionID() string { return t.sessionID }
 // routing headers are also a no-op on this transport (legacy SSE predates
 // the SEP). Notifications still reach the session-global callback via the
 // existing path.
-func (t *sseClientTransport) callWithContext(method string, data []byte, _ *CallContext) (*rpcResponse, error) {
-	return t.call(method, data)
+func (t *sseClientTransport) callWithContext(method string, data []byte, cc *CallContext) (*rpcResponse, error) {
+	ctx := context.Background()
+	if cc != nil && cc.Context != nil {
+		ctx = cc.Context
+	}
+	return t.callCtx(ctx, data)
 }
 
 func (t *sseClientTransport) call(_ string, data []byte) (*rpcResponse, error) {
+	return t.callCtx(context.Background(), data)
+}
+
+// callCtx POSTs a request and waits for its response on the SSE stream. ctx
+// ends the wait; the server is told separately (see Client.sendCancelled).
+func (t *sseClientTransport) callCtx(ctx context.Context, data []byte) (*rpcResponse, error) {
 	// Check if the background reader is already dead before doing any work.
 	select {
 	case <-t.done:
@@ -2584,7 +2698,7 @@ func (t *sseClientTransport) call(_ string, data []byte) (*rpcResponse, error) {
 
 	// POST the request
 	buildReq := func() (*http.Request, error) {
-		req, err := http.NewRequest("POST", t.postURL, bytes.NewReader(data))
+		req, err := http.NewRequestWithContext(ctx, "POST", t.postURL, bytes.NewReader(data))
 		if err != nil {
 			return nil, err
 		}
@@ -2605,6 +2719,8 @@ func (t *sseClientTransport) call(_ string, data []byte) (*rpcResponse, error) {
 	// reader to die. Without the t.done case, a dead reader causes call()
 	// to block forever — the old bug.
 	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case result := <-ch:
 		if result == nil {
 			if t.readerErr != nil {
@@ -2702,6 +2818,11 @@ func normalizeID(id any) string {
 
 // ClientAuthError is returned by the client transport when the server rejects
 // a request with 401 or 403 and the transport has exhausted its retry budget.
+// Find it with errors.As. On a 403 insufficient_scope challenge,
+// RequiredScopes holds the scopes the server asked for and WWWAuthenticate the
+// raw header, so a caller whose token source cannot step up (a static token)
+// still learns what to request. Cause carries the client's own reason for
+// giving up, e.g. that the source does not support step-up.
 type ClientAuthError = ssehttp.AuthRetryError
 
 // HTTPStatusError is returned when the server responds with a non-2xx HTTP
