@@ -193,9 +193,9 @@ func (s *Subscription) RefreshBefore() *time.Time {
 	return &t
 }
 
-// Stop ends the refresh loop. Does not unsubscribe — call sess.Call
-// "events/unsubscribe" yourself if you want server-side cleanup before
-// the soft-state TTL evicts the entry naturally.
+// Stop ends the refresh loop. Does not unsubscribe, so the server keeps
+// delivering until the soft-state TTL evicts the entry; StopAndUnsubscribe
+// removes it at once.
 func (s *Subscription) Stop() {
 	select {
 	case <-s.stop:
@@ -204,6 +204,28 @@ func (s *Subscription) Stop() {
 		close(s.stop)
 	}
 	<-s.stopped
+}
+
+// StopAndUnsubscribe ends the refresh loop and then sends events/unsubscribe
+// for this subscription, so the server stops delivering now rather than when
+// the TTL runs out. The loop stops first so a refresh cannot recreate the
+// subscription after it is removed.
+//
+// The subscription is stopped whatever happens upstream. A failed unsubscribe
+// (the server unreachable, or NotFound because the TTL already evicted it) is
+// returned, and the server's TTL is then what removes the entry. Safe to call
+// after Stop, and more than once; a repeat returns the server's NotFound.
+func (s *Subscription) StopAndUnsubscribe(ctx context.Context) error {
+	s.Stop()
+	params := map[string]any{
+		"name":     s.opts.EventName,
+		"delivery": map[string]any{"url": s.opts.CallbackURL},
+	}
+	if len(s.opts.Arguments) > 0 {
+		params["arguments"] = s.opts.Arguments
+	}
+	_, err := s.sess.Call(ctx, "events/unsubscribe", params)
+	return err
 }
 
 // subscribe performs one events/subscribe round-trip and updates state.

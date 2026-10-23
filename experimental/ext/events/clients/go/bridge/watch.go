@@ -43,6 +43,10 @@ type Watch struct {
 	// instead of starting a fresh run (see ResumeSession).
 	Session *Session `json:"session,omitempty"`
 
+	// Tools, when set, is the subset of the sink's tools this rule's runs
+	// may use (see WithTools). Sorted, without duplicates.
+	Tools []string `json:"tools,omitempty"`
+
 	// Secret signs this watch's deliveries. Reused on resubscribe, so a
 	// restart is a refresh of the same subscription upstream.
 	Secret string `json:"secret"`
@@ -74,6 +78,68 @@ type WatchOption func(*Watch)
 // happens when the session no longer exists.
 func ResumeSession(id, dir string) WatchOption {
 	return func(w *Watch) { w.Session = &Session{ID: id, Dir: dir} }
+}
+
+// WithTools limits a watch's runs to the named tools. Every name must be one
+// the sink offers (see ToolScoped), so a watch can narrow the daemon's tool
+// list and never add to it.
+func WithTools(tools ...string) WatchOption {
+	return func(w *Watch) {
+		if tools == nil {
+			tools = []string{}
+		}
+		w.Tools = tools
+	}
+}
+
+// ToolScoped is implemented by a sink whose runs are given a tool list, so a
+// watch can be limited to part of it. ToolCeiling reports every tool a run
+// could get: allowed are given to every run, outward only with approval. The
+// bridge checks a watch's tools against it at watch time, and reports the
+// effective list in the watch's view.
+type ToolScoped interface {
+	ToolCeiling() (allowed, outward []string)
+}
+
+// validateTools refuses a tool list the sink cannot honour, and returns it
+// sorted and deduplicated.
+func (b *Bridge) validateTools(tools []string) ([]string, error) {
+	if tools == nil {
+		return nil, nil
+	}
+	scoped, ok := b.cfg.Sink.(ToolScoped)
+	if !ok {
+		return nil, &WatchError{Message: "this bridge's sink takes no per-watch tool list; omit tools"}
+	}
+	allowed, outward := scoped.ToolCeiling()
+	ceiling := sortedUnique(append(append([]string(nil), allowed...), outward...))
+	if len(tools) == 0 {
+		return nil, &WatchError{Message: "tools is empty; name the tools this rule needs from: " + strings.Join(ceiling, ", ") + ", or omit tools for all of them"}
+	}
+	var unknown []string
+	for _, t := range tools {
+		if !contains(ceiling, t) {
+			unknown = append(unknown, t)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, &WatchError{Message: fmt.Sprintf("tools %s are not offered by this bridge; a watch may use only: %s",
+			strings.Join(sortedUnique(unknown), ", "), strings.Join(ceiling, ", "))}
+	}
+	return sortedUnique(tools), nil
+}
+
+func sortedUnique(xs []string) []string {
+	out := append([]string(nil), xs...)
+	sort.Strings(out)
+	n := 0
+	for i, x := range out {
+		if i == 0 || x != out[n-1] {
+			out[n] = x
+			n++
+		}
+	}
+	return out[:n]
 }
 
 var sessionIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -261,6 +327,11 @@ func (b *Bridge) Watch(ctx context.Context, event string, arguments map[string]a
 	if err := validateSession(w.Session); err != nil {
 		return Watch{}, err
 	}
+	tools, err := b.validateTools(w.Tools)
+	if err != nil {
+		return Watch{}, err
+	}
+	w.Tools = tools
 	b.mu.Lock()
 	b.watches[w.ID] = &w
 	b.mu.Unlock()
@@ -286,10 +357,20 @@ func (b *Bridge) Unwatch(ctx context.Context, id string) error {
 	if !ok {
 		return &WatchError{Message: fmt.Sprintf("no watch %q; call watches to list them", id)}
 	}
+	var unsubscribed bool
 	if lw != nil {
+		if lw.sub != nil {
+			if err := lw.sub.StopAndUnsubscribe(ctx); err != nil {
+				b.logf("bridge: unsubscribe %s: %v", id, err)
+			}
+			unsubscribed = true
+		}
 		lw.stop()
 	}
-	if up, ok := b.upstreams[w.Server]; ok {
+	// A watch that is not live (its resubscribe failed, or the server ended
+	// it) has no Subscription to unsubscribe through, though the server may
+	// still hold one from before a restart.
+	if up, ok := b.upstreams[w.Server]; ok && !unsubscribed {
 		params := map[string]any{
 			"name":     w.Name,
 			"delivery": map[string]any{"url": b.callbackURL(id)},

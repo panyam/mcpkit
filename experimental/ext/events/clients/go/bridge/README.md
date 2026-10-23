@@ -17,7 +17,7 @@ Four tools cover every event type on every configured server.
 | Tool | Does |
 |------|------|
 | `watch_list(server?, query?)` | Runs `events/list` and returns qualified names (`<server>/<event>`), each with its description and `inputSchema`. `query` keeps only events whose name or description contains every word, so a large catalog stays out of context. Sorted by qualified name. |
-| `watch(event, arguments, instruction, session?)` | Checks `arguments` against the event's `inputSchema`, subscribes, and stores `instruction`. A mistake comes back as a tool error that says what to fix. `session` (`{id, dir}`) makes each occurrence continue the conversation that set up the watch, see below. |
+| `watch(event, arguments, instruction, tools?, session?)` | Checks `arguments` against the event's `inputSchema`, subscribes, and stores `instruction`. A mistake comes back as a tool error that says what to fix. `tools` limits the rule's runs to part of the daemon's tool list, and `session` (`{id, dir}`) makes each occurrence continue the conversation that set up the watch. Both are covered below. The result lists the tools the rule can use. |
 | `unwatch(id)` | Stops the watch and unsubscribes it upstream. |
 | `watches()` | Every standing watch with its status and last error, sorted by id. |
 
@@ -60,6 +60,12 @@ The fence makes a payload easier to read as data. It does not make it safe, so t
 - `-mcp-config` passes `--mcp-config <file> --strict-mcp-config`, so a run sees only the MCP servers in that file.
 
 Any other `eventsclient.EventSink` can stand in for the headless one.
+
+### Limiting a rule to the tools it needs
+
+The daemon's `-allowed-tools` and `-outward-tools` are the most any run can get. A watch can name a subset with `tools`, e.g. `["Read", "mcp__slack__post"]` for a rule that only posts to a channel. Its runs get those, the daemon's other tools go to `--disallowedTools`, and the `Approver` is asked only about the outward tools the rule named, so a rule that names none never asks. A name the daemon doesn't offer is refused at `watch` time with the list it does offer, so a watch can never add a tool. `watch` and `watches` report the effective list either way (`tools`, and `outwardTools` for the ones still needing approval), which is what the user should see before agreeing to a standing rule.
+
+The bridge learns the list from the sink: a sink that implements `ToolScoped` (`HeadlessClaudeSink` does) reports its `ToolCeiling()`. A watch naming tools on a sink that doesn't is refused.
 
 ### Continuing the session that asked
 

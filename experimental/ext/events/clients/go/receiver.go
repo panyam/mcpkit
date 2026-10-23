@@ -249,6 +249,8 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		Cursor:    wire.Cursor,
 		Data:      data,
 		Meta:      wire.Meta,
+
+		SubscriptionID: req.Header.Get("X-MCP-Subscription-Id"),
 	}
 
 	key := dedupKey(req.Header, wire.EventID)

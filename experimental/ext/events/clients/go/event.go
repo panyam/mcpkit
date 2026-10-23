@@ -13,6 +13,12 @@ type Event[Data any] struct {
 	// Meta mirrors the wire `_meta` field on EventOccurrence (spec
 	// follow-on commit d4faef9 2026-05-01). Opaque, app-defined.
 	Meta map[string]any
+
+	// SubscriptionID is the X-MCP-Subscription-Id header the delivery
+	// carried: the server-derived id of the subscription that matched, the
+	// same value Subscription.ID returns. Empty when the server sent none.
+	// One receiver serving several subscriptions tells them apart by it.
+	SubscriptionID string
 }
 
 // HasCursor reports whether the event carries a cursor.

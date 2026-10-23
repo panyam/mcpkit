@@ -456,3 +456,22 @@ session stops falling back and starts failing visibly, which is the safer way to
 case falls back; any other failure of a resumed run is reported, so a broken run is not quietly
 repeated without the context it was meant to have. Pushing into a session that is open right now
 (a channel) is #1581's sink.
+
+## A watch narrows the daemon's tool list and never widens it (#1585)
+
+Before #1585 every rule on a bridge ran with the same tools, so a rule that only needed to read and
+post to one channel could also send email if the daemon allowed it for some other rule. `watch` now
+takes `tools`, and the daemon's lists stay the ceiling: a name outside them is refused when the watch
+is made, not when it fires, because a rule that fails a week later is worse than one refused now.
+
+The bridge reads the ceiling from the sink (`ToolScoped.ToolCeiling()`) rather than from a field on
+`Config`. The tool lists already live on `HeadlessClaudeSink`, and a second copy in `Config` would be
+two lists that can disagree, with the bridge checking against one while the sink runs the other. A
+sink with no notion of tools (a channel into a live session, say) simply doesn't implement it, and a
+watch naming tools there is refused instead of silently ignored.
+
+The same change gave `Event` a `SubscriptionID` and `Subscription` a `StopAndUnsubscribe`. The bridge
+still routes by per-watch URL (the reasons are above) and only passes the id along on the
+`Delivery`. `Unwatch` used to send `events/unsubscribe` by hand; it now goes through
+`StopAndUnsubscribe` for a live watch, and keeps the hand-rolled call only for a watch with no live
+subscription, whose upstream entry may still exist from before a restart.

@@ -88,6 +88,15 @@ func (s recordingSink) Deliver(_ context.Context, d eventsclient.Delivery) error
 	return nil
 }
 
+// scopedSink is a recordingSink that reports a tool ceiling, as
+// HeadlessClaudeSink does.
+type scopedSink struct {
+	recordingSink
+	allowed, outward []string
+}
+
+func (s scopedSink) ToolCeiling() ([]string, []string) { return s.allowed, s.outward }
+
 // hookServer is the bridge's public webhook endpoint. Its handler is swapped
 // in after the bridge exists, since the bridge needs the URL first, and swapped
 // again on a restart while the server may still be delivering.
@@ -390,4 +399,68 @@ func TestNew_RejectsBadConfig(t *testing.T) {
 		_, err := bridge.New(cfg)
 		assert.Error(t, err)
 	}
+}
+
+func TestWatch_ToolsAreCheckedAgainstTheSinkCeiling(t *testing.T) {
+	sink := scopedSink{recordingSink: make(recordingSink, 1), allowed: []string{"Read", "Grep"}, outward: []string{"mcp__gmail__send"}}
+	c := agent(t, newBridge(t, newHookServer(t), sink, nil, map[string]upstream{"ops": newUpstream(t)}))
+
+	for _, tc := range []struct {
+		name  string
+		tools []any
+		want  string
+	}{
+		{"unknown tool", []any{"Read", "Bash"}, "tools Bash are not offered by this bridge; a watch may use only: Grep, Read, mcp__gmail__send"},
+		{"empty list", []any{}, "tools is empty"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := callTool(t, c, "watch", map[string]any{"event": "ops/alert.fired", "instruction": "x", "tools": tc.tools})
+			require.True(t, res.IsError)
+			assert.Contains(t, res.Content[0].Text, tc.want)
+		})
+	}
+	assert.Equal(t, "0 watch(es)", callTool(t, c, "watches", nil).Content[0].Text)
+}
+
+func TestWatch_ToolsRefusedWhenTheSinkHasNoCeiling(t *testing.T) {
+	c := agent(t, newBridge(t, newHookServer(t), make(recordingSink, 1), nil, map[string]upstream{"ops": newUpstream(t)}))
+	res := callTool(t, c, "watch", map[string]any{"event": "ops/alert.fired", "instruction": "x", "tools": []any{"Read"}})
+	require.True(t, res.IsError)
+	assert.Contains(t, res.Content[0].Text, "takes no per-watch tool list")
+}
+
+func TestWatch_ToolsNarrowTheViewPersistAndReachTheSink(t *testing.T) {
+	up := newUpstream(t)
+	sink := scopedSink{recordingSink: make(recordingSink, 4), allowed: []string{"Read", "Grep"}, outward: []string{"mcp__gmail__send", "mcp__slack__post"}}
+	store := bridge.NewMemoryStore()
+	c := agent(t, newBridge(t, newHookServer(t), sink, store, map[string]upstream{"ops": up}))
+
+	res := callTool(t, c, "watch", map[string]any{
+		"event": "ops/alert.fired", "instruction": "post it to the channel",
+		"tools": []any{"mcp__slack__post", "Read", "Read"},
+	})
+	require.False(t, res.IsError, res.Content[0].Text)
+	view := structured[bridge.WatchView](t, res)
+	assert.Equal(t, []string{"Read", "mcp__slack__post"}, view.Tools)
+	assert.Equal(t, []string{"mcp__slack__post"}, view.OutwardTools)
+
+	saved, err := store.Load()
+	require.NoError(t, err)
+	require.Len(t, saved, 1)
+	assert.Equal(t, []string{"Read", "mcp__slack__post"}, saved[0].Tools, "sorted and deduplicated")
+
+	require.NoError(t, up.yield(t.Context(), alert{Severity: "P1", Msg: "db down"}))
+	d := waitDelivery(t, sink.recordingSink)
+	assert.Equal(t, []string{"Read", "mcp__slack__post"}, d.Tools)
+	assert.NotEmpty(t, d.SubscriptionID, "the webhook's X-MCP-Subscription-Id reaches the sink")
+}
+
+// A watch that names no tools shows everything the sink offers, so the user
+// sees what the rule can use either way.
+func TestWatch_ViewWithoutToolsShowsTheCeiling(t *testing.T) {
+	sink := scopedSink{recordingSink: make(recordingSink, 1), allowed: []string{"Read"}, outward: []string{"mcp__gmail__send"}}
+	c := agent(t, newBridge(t, newHookServer(t), sink, nil, map[string]upstream{"ops": newUpstream(t)}))
+	view := structured[bridge.WatchView](t, callTool(t, c, "watch", map[string]any{"event": "ops/alert.fired", "instruction": "x"}))
+	assert.Equal(t, []string{"Read", "mcp__gmail__send"}, view.Tools)
+	assert.Equal(t, []string{"mcp__gmail__send"}, view.OutwardTools)
 }

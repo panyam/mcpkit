@@ -51,6 +51,11 @@ type Delivery struct {
 	Session    string
 	SessionDir string
 
+	// Tools narrows the tools the sink gives the run that handles this
+	// delivery, to the ones the user's rule named. Nil means the sink's
+	// default. A sink never widens its own list because of it.
+	Tools []string
+
 	Event events.Event
 }
 

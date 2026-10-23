@@ -203,3 +203,50 @@ func TestHeadless_RunnerErrorIsReturnedAndReported(t *testing.T) {
 	assert.ErrorContains(t, sink.Deliver(t.Context(), delivery(`{}`)), "exit 1")
 	assert.ErrorContains(t, reported, "exit 1")
 }
+
+func TestHeadless_DeliveryToolsNarrowTheRun(t *testing.T) {
+	r := &fakeRunner{}
+	var asked []string
+	sink := &bridge.HeadlessClaudeSink{
+		Runner:       r,
+		AllowedTools: []string{"Read", "Grep"},
+		OutwardTools: []string{"mcp__gmail__send", "mcp__slack__post"},
+		Approver: bridge.ApproverFunc(func(_ context.Context, _ eventsclient.Delivery, tools []string) (bool, error) {
+			asked = tools
+			return true, nil
+		}),
+	}
+	d := delivery(`{}`)
+	d.Tools = []string{"Read", "mcp__slack__post"}
+	require.NoError(t, sink.Deliver(t.Context(), d))
+
+	allowed, _ := argAfter(r.args, "--allowedTools")
+	assert.Equal(t, "Read,mcp__slack__post", allowed)
+	denied, _ := argAfter(r.args, "--disallowedTools")
+	assert.Equal(t, "Grep,mcp__gmail__send", denied, "the sink's other tools are refused outright")
+	assert.Equal(t, []string{"mcp__slack__post"}, asked, "approval covers only the outward tools the rule named")
+}
+
+func TestHeadless_RuleWithoutOutwardToolsSkipsApproval(t *testing.T) {
+	r := &fakeRunner{}
+	sink := &bridge.HeadlessClaudeSink{
+		Runner:       r,
+		AllowedTools: []string{"Read"},
+		OutwardTools: []string{"mcp__gmail__send"},
+		Approver: bridge.ApproverFunc(func(context.Context, eventsclient.Delivery, []string) (bool, error) {
+			t.Error("no outward tool was named, so nothing needs approving")
+			return false, nil
+		}),
+	}
+	d := delivery(`{}`)
+	d.Tools = []string{"Read"}
+	require.NoError(t, sink.Deliver(t.Context(), d))
+	assert.NotContains(t, r.stdin, "were not approved")
+}
+
+func TestHeadless_ToolCeilingReportsBothLists(t *testing.T) {
+	sink := &bridge.HeadlessClaudeSink{AllowedTools: []string{"Read"}, OutwardTools: []string{"mcp__gmail__send"}}
+	allowed, outward := sink.ToolCeiling()
+	assert.Equal(t, []string{"Read"}, allowed)
+	assert.Equal(t, []string{"mcp__gmail__send"}, outward)
+}
