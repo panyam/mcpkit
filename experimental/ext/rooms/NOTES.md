@@ -83,3 +83,26 @@ may not withdraw; `TestPairing_CodeIsSingleUse` uses a hand-rolled page that nev
 A page sends its standing offer when a bridge greets it, which can reach the bridge before the
 bridge has finished listing the page's tools. So offers are recorded from any page in the roster, and
 `pair` requires the page to be listed when the code is spent.
+
+## Agreement moved onto the page (#1610)
+
+Agreement was per MCP session: a pairing granted a session, and ended with it. The stateless wire
+has no session, and several bridges in a room (one per replica) would each have needed the same
+pairing table. So the page holds it now, as grants to principals (subject, optional client), and
+sends the full list to every bridge that lists it and again whenever it changes. A bridge keeps only
+a copy, which it updates itself the moment `pair` or an accepted code makes a grant, so a call made
+straight afterwards works before the page's own grants arrive; the page's next list replaces it.
+
+The page only adds a grant for a code it offered or accepted. A peer in the room that sends
+`paired_by_code` for anything else is ignored, since otherwise any peer with a relay token could
+grant itself, or anyone, the page.
+
+Two ordering rules came out of the tests. A page greets a bridge (label, focus, switch, grants,
+offer) before answering its `tools/list`, so by the time the bridge has listed the page it already
+has its state; the bridge handles one peer's messages in order. And a page sends `focusedAt` with
+its focus, so a tab its user focused before a bridge joined still counts as focused last; without
+it, the first stateless call into a room picked no default.
+
+Joining a room on a call waits up to two seconds for the pages already there to be listed, so a call
+naming a room the bridge has never joined finds them. Another bridge in the room never answers
+`tools/list`, which is why the wait is capped rather than complete.

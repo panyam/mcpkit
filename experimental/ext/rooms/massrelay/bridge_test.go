@@ -17,9 +17,10 @@ import (
 // bridge joins in-process, pages dial in with relay tokens, and agents reach
 // the bridge over MCP.
 
-// Acceptance 1: a call without page goes to the paired page alone; naming page
-// 2 runs it there, and the relay delivers nothing to page 1.
-func TestBridgeOverRelay_CallGoesToPairedPageOrTheNamedOne(t *testing.T) {
+// Acceptance 1: a call without page goes to the agreed tab its user focused
+// last, alone; naming page 2 runs it there, and the relay delivers nothing to
+// page 1.
+func TestBridgeOverRelay_CallGoesToTheLastFocusedPageOrTheNamedOne(t *testing.T) {
 	st := newStack(t)
 	rec := &recorder{}
 	p1, calls1 := st.page(t, "alice", rec.tool("show_sheet", "p1"))
@@ -27,9 +28,12 @@ func TestBridgeOverRelay_CallGoesToPairedPageOrTheNamedOne(t *testing.T) {
 	a := st.agent(t, "alice", allScopes...)
 	a.attach(t, room)
 
-	p2.SetAgentsAllowed(true)
-	a.waitPaired(t, p2.ID())
 	p1.SetAgentsAllowed(true)
+	p2.SetAgentsAllowed(true)
+	p2.Focus()
+	a.waitPaired(t, p2.ID())
+	time.Sleep(5 * time.Millisecond)
+	p1.Focus()
 	a.waitPaired(t, p1.ID())
 
 	res, err := a.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s-power"})

@@ -47,7 +47,14 @@ type stack struct {
 
 func newStack(t *testing.T, opts ...rooms.Option) *stack {
 	t.Helper()
-	st := &stack{relay: memroom.New(), tokens: tokens{}}
+	return newStackOn(t, memroom.New(), opts...)
+}
+
+// newStackOn is a bridge and its MCP server on an existing relay, so several
+// bridges can share one room.
+func newStackOn(t *testing.T, relay *memroom.Relay, opts ...rooms.Option) *stack {
+	t.Helper()
+	st := &stack{relay: relay, tokens: tokens{}}
 	st.bridge = rooms.New(st.relay.Transport("bridge"), opts...)
 	srv := server.NewServer(core.ServerInfo{Name: "rooms-test", Version: "0"}, server.WithAuth(st.tokens))
 	st.bridge.Register(srv)

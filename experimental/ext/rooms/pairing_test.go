@@ -189,16 +189,20 @@ func TestPairing_GuessesAreRateLimited(t *testing.T) {
 	assert.Contains(t, text(res), "too many wrong pairing codes")
 }
 
-// bob is attached, but to another room, so the code for this one is refused.
-func TestPairing_NeedsAttach(t *testing.T) {
+// pair names its room, so it needs no attach: bob has only ever attached to
+// another room (#1610).
+func TestPairing_NeedsNoAttach(t *testing.T) {
 	st := newStack(t)
 	p := st.page(t, "alice", room)
 	bob := st.agent(t, "bob", allScopes...)
 	bob.attach(t, "design:demo/other.kicad_sch")
+	_, err := bob.ToolCallFull(t.Context(), "list_pages", map[string]any{"resource": room})
+	require.NoError(t, err)
 	code := p.OfferPairingCode(0)
+	offered(t, st, p.ID(), code)
 	res := pairCall(t, bob, code)
-	assert.True(t, res.IsError)
-	assert.Contains(t, text(res), "attach first")
+	require.False(t, res.IsError, text(res))
+	assert.True(t, st.bridge.PageAgreedTo(rooms.Principal{Subject: "bob"}, room, p.ID()))
 }
 
 // A bridge that greets the page after the code was made still gets it.

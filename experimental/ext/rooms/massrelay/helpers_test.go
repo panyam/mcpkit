@@ -183,12 +183,12 @@ func (a *agent) waitPaired(t *testing.T, page rooms.PeerID) {
 		b, _ := json.Marshal(res.StructuredContent)
 		_ = json.Unmarshal(b, &out)
 		for _, p := range out.Pages {
-			if p.Page == page && p.Paired {
+			if p.Page == page && p.Allowed && p.Default {
 				return true
 			}
 		}
 		return false
-	}, 5*time.Second, 20*time.Millisecond, "page %s never paired", page)
+	}, 5*time.Second, 20*time.Millisecond, "page %s never became the agreed default", page)
 }
 
 func text(res *core.ToolResult) string {

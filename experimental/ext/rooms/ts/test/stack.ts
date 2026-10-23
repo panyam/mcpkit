@@ -73,7 +73,7 @@ export async function eventually(ok: () => Promise<boolean> | boolean, timeoutMs
   }
 }
 
-/** Waits until list_pages shows page paired with this session. */
+/** Waits until list_pages shows page agreed to this agent and its default target. */
 export async function waitPaired(agent: Client, page: string): Promise<void> {
-  await eventually(async () => (await listPages(agent)).some((p) => p.page === page && p.paired), 5000, `page ${page} to pair`);
+  await eventually(async () => (await listPages(agent)).some((p) => p.page === page && p.allowed && p.default), 5000, `page ${page} to agree`);
 }

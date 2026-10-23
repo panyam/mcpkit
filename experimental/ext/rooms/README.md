@@ -22,17 +22,25 @@ defer bridge.Close()
 srv.Run(":8080")
 ```
 
-`Register` adds three tools and two middlewares. The bridge needs the session wire, because
-attachments and pairings are per MCP session.
+`Register` adds the bridge's tools and two middlewares. Every call names the room it is about, so
+none of them needs an MCP session. On the session wire, `attach` also sets a default room.
 
 | Tool | Scope | What it does |
 |------|-------|--------------|
-| `attach(resource)` | `rooms:attach` | Joins this session to the resource's room. Returns a pairing code and the roster. |
-| `detach(resource)` | `rooms:attach` | Leaves, ending this session's pairings there. |
-| `list_pages(resource?)` | `pages:read` | Page id, user, label, last focus, `allowed` and `paired` for this session, tools. |
-| each page tool | `pages:read` if the page marks it read-only, else `pages:act` | Runs on one page. Takes an optional `page` argument. |
+| `attach(resource)` | `rooms:attach` | Joins the room and returns a pairing code and the roster. On a session, makes the resource a default room. Never required. |
+| `detach(resource)` | `rooms:attach` | Drops a default room. Pages that agreed to you still do. |
+| `list_pages(resource?)` | `pages:read` | One room's tabs: page id, user, label, last focus, `allowed` and `default` for you, tools. |
+| `pair(resource, code)` | `rooms:attach` | Pairs with the page showing `code`; see Agreement. |
+| each page tool | `pages:read` if the page marks it read-only, else `pages:act` | Runs on one page. Takes optional `room` and `page` arguments. |
 
-A session sees the page tools of the rooms it attached to and no others. A missing scope is a 403
+A page tool call names its room with the `room` argument the bridge adds, or, when the host's tools
+already name what they act on, through `WithRoomOf(func(args) (room, error))`: agni maps its
+`design` argument to `design:<mount>/<entry>`, and the arguments reach the page unchanged. A call
+that names no room uses the session's default rooms, or fails asking for one.
+
+With the dynamic registry, a bridge has no page tools until it joins a room (by `attach`,
+`list_pages(resource)`, or `pair`), and on the session wire a session sees the page tools of its
+default rooms and of the pages that agreed to it. A missing scope is a 403
 with an `insufficient_scope` challenge (`WithResourceMetadataURL` sets its link).
 
 `WithLocalSubject("me")` is single-user local mode for a server with no identity provider: a
@@ -73,25 +81,31 @@ schema has that tool refused. Either refusal reaches the page as `notifications/
 
 ## Which page a call goes to
 
-1. The `page` argument, when given.
-2. Else the page paired with this session in that room, which is the page that agreed most recently.
-3. Else, when one page in the room has agreed to this session, that page.
-4. Else an error result carrying the roster, so the model can choose.
+1. The `page` argument, when given, if that page agreed to you.
+2. Else the tab that agreed to you which your own user focused most recently. A page reports focus
+   with `Focus()`, and a tab focused before a bridge joined keeps its place.
+3. Else the only tab that agreed to you.
+4. Else an error result carrying the room's roster, so the model can choose.
 
 ## Agreement
 
-A page's user agrees before an agent can call it.
+A page's user agrees before an agent can call it. The page holds the agreement, as grants to a
+principal: the subject of the caller's validated token and, optionally, its client. The page sends
+its grants to every bridge that lists it, so several bridges in one room agree without sharing
+state, and agreement needs no MCP session.
 
-- **Same user.** `SetAgentsAllowed(true)` agrees to every session whose subject is the page's user.
-- **Another user, agent's code.** `attach` returns a code. The page's user accepts it with
-  `AcceptPairing(code)`. `OnPairingRequest` shows the page who asked.
+- **Same user.** `SetAgentsAllowed(true)` agrees to every agent acting for the page's own user.
+- **Another user, agent's code.** `attach` returns a code (valid ten minutes). The page's user
+  accepts it with `AcceptPairing(code)`. The bridge that minted it names the principal, and the page
+  adds the grant. `OnPairingRequest` shows the page who asked.
 - **Another user, page's code.** The page shows a code from `OfferPairingCode(ttl)`, and the user
-  gives it to the agent, which enters it with `pair(resource, code)`. `OnPaired` tells the page which
-  agent it was (subject and client, from the session's token). A code is single-use and lasts two
-  minutes by default, at most ten. The bridge refuses a code shorter than six characters of the
-  pairing alphabet, and stops checking a session's guesses after five wrong ones in a minute.
-- **Ending it.** `Revoke(session)` on the page, `detach`, the page leaving, or the MCP session
-  closing (the bridge hooks the server's `OnSessionClose`).
+  gives it to the agent, which enters it with `pair(resource, code)`. A code is single-use and lasts
+  two minutes by default, at most ten. The bridge refuses a code shorter than six characters of the
+  pairing alphabet, and stops checking a principal's guesses after five wrong ones in a minute.
+- Either way `OnPaired` tells the page which agent it was (subject and client, from the token), and
+  `Grants()` lists who it agrees to.
+- **Ending it.** `Revoke(principal)` or `RevokeAll()` on the page, or the page leaving. A grant
+  outlives the agent's MCP session: there is no session end on the stateless wire to hang it on.
 
 ## Page events
 

@@ -1,6 +1,7 @@
 package rooms
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/json"
@@ -87,16 +88,17 @@ func (b *Bridge) offerLocked(rs *roomState, pg *pageState, params json.RawMessag
 	rs.offers[pg.peer.ID] = pairingOffer{code: code, expires: time.Now().Add(min(ttl, MaxPairingCodeTTL))}
 }
 
-// allowGuessLocked reports whether s may try another code, dropping failures
-// older than a minute.
-func allowGuessLocked(s *session, now time.Time) bool {
-	kept := s.pairFails[:0]
-	for _, t := range s.pairFails {
+// allowGuessLocked reports whether p may try another code, dropping failures
+// older than a minute. Guesses are counted per principal, since a stateless
+// caller has no session to count them on.
+func (b *Bridge) allowGuessLocked(p Principal, now time.Time) bool {
+	kept := b.pairFails[p.key()][:0]
+	for _, t := range b.pairFails[p.key()] {
 		if now.Sub(t) < time.Minute {
 			kept = append(kept, t)
 		}
 	}
-	s.pairFails = kept
+	b.pairFails[p.key()] = kept
 	return len(kept) < MaxPairFailuresPerMinute
 }
 
@@ -108,29 +110,33 @@ func (b *Bridge) pair(tc core.ToolContext, req core.ToolRequest) (core.ToolRespo
 	_ = json.Unmarshal(req.Arguments, &a)
 	code := strings.ToUpper(strings.TrimSpace(a.Code))
 	now := time.Now()
+	p, _ := b.caller(tc)
+	if p.Subject == "" {
+		return core.ErrorResult("pair needs an authenticated subject"), nil
+	}
+	if a.Resource == "" {
+		return core.ErrorResult("pair needs the resource whose page shows the code"), nil
+	}
+	rs, err := b.joinRoom(a.Resource)
+	if err != nil {
+		return core.ErrorResult("could not join the room for " + a.Resource + ": " + err.Error()), nil
+	}
+	b.settle(rs)
 
 	b.mu.Lock()
-	s := b.sessions[tc.SessionID()]
-	if s == nil || !s.attached[a.Resource] {
+	if !b.allowGuessLocked(p, now) {
 		b.mu.Unlock()
-		return core.ErrorResult("this session is not attached to " + a.Resource + "; call attach first"), nil
+		return core.ErrorResult("too many wrong pairing codes from you; wait a minute and ask the page's user for a fresh code"), nil
 	}
-	if !allowGuessLocked(s, now) {
-		b.mu.Unlock()
-		return core.ErrorResult("too many wrong pairing codes from this session; wait a minute and ask the page's user for a fresh code"), nil
-	}
-	rs := b.rooms[a.Resource]
 	var page PeerID
-	if rs != nil {
-		for _, id := range slices.Sorted(maps.Keys(rs.offers)) {
-			o := rs.offers[id]
-			if now.After(o.expires) {
-				delete(rs.offers, id)
-				continue
-			}
-			if subtle.ConstantTimeCompare([]byte(o.code), []byte(code)) == 1 {
-				page = id
-			}
+	for _, id := range slices.Sorted(maps.Keys(rs.offers)) {
+		o := rs.offers[id]
+		if now.After(o.expires) {
+			delete(rs.offers, id)
+			continue
+		}
+		if subtle.ConstantTimeCompare([]byte(o.code), []byte(code)) == 1 {
+			page = id
 		}
 	}
 	pg := (*pageState)(nil)
@@ -138,21 +144,26 @@ func (b *Bridge) pair(tc core.ToolContext, req core.ToolRequest) (core.ToolRespo
 		pg = rs.pages[page]
 	}
 	if pg == nil || !pg.listed {
-		s.pairFails = append(s.pairFails, now)
+		b.pairFails[p.key()] = append(b.pairFails[p.key()], now)
 		b.mu.Unlock()
 		return core.ErrorResult("no page in " + a.Resource + " is offering that code; codes are single-use and expire, so ask the page's user for the one it shows now"), nil
 	}
 	delete(rs.offers, page)
-	b.grantLocked(rs, pg, s)
+	grantLocked(pg, p)
 	note := PairedByCode{
-		PairingRequest: PairingRequest{Session: s.handle, Subject: s.subject, Client: s.client, SameSubject: s.subject == pg.peer.Subject},
+		PairingRequest: PairingRequest{Subject: p.Subject, Client: p.Client, SameSubject: p.Subject == pg.peer.Subject},
 		Code:           code,
 	}
-	notify := s.notify
+	var notify []context.Context
+	for _, s := range b.notifyPrincipalLocked(p) {
+		notify = append(notify, s.notify)
+	}
 	b.mu.Unlock()
 
 	b.sendTo(rs, page, rpcMessage{Method: MethodPairedByCode, Params: mustJSON(note)})
-	core.Notify(notify, "notifications/tools/list_changed", nil)
+	for _, ctx := range notify {
+		core.Notify(ctx, "notifications/tools/list_changed", nil)
+	}
 	return core.StructuredResult(fmt.Sprintf("Paired with page %s in %s.", page, a.Resource),
 		map[string]any{"resource": a.Resource, "page": page}), nil
 }
@@ -183,29 +194,46 @@ func (p *Page) WithdrawPairingCode() {
 	p.notifyBridges(MethodPairingOffer, map[string]any{"code": ""})
 }
 
-// OnPaired installs a callback for a session pairing with the page by the
-// code it offered, which is where the page shows its user which agent it was.
+// OnPaired installs a callback for a principal pairing with the page by a
+// code, whichever side showed it, which is where the page shows its user which
+// agent it was.
 func (p *Page) OnPaired(fn func(PairedByCode)) {
 	p.mu.Lock()
 	p.onPaired = fn
 	p.mu.Unlock()
 }
 
-// pairedByCode handles a bridge reporting that its session used the page's
-// code: the code is spent, so it is withdrawn from every bridge.
+// pairedByCode handles a bridge naming the principal behind a code: one the
+// page offered (spent now, so withdrawn everywhere) or an agent's code the
+// page's user accepted. Any other code is ignored, so a peer that is not a
+// bridge cannot grant itself, or anyone, access by claiming a pairing.
 func (p *Page) pairedByCode(m rpcMessage) {
 	var note PairedByCode
 	_ = json.Unmarshal(m.Params, &note)
+	code := strings.ToUpper(note.Code)
+	now := time.Now()
 	p.mu.Lock()
-	spent := note.Code != "" && note.Code == p.offer.code
-	if spent {
+	offered := code != "" && code == p.offer.code && now.Before(p.offer.expires)
+	exp, accepted := p.accepted[code]
+	accepted = accepted && now.Before(exp)
+	if !(offered || accepted) || note.Subject == "" {
+		p.mu.Unlock()
+		return
+	}
+	if offered {
 		p.offer = pairingOffer{}
+	}
+	delete(p.accepted, code)
+	g := Principal{Subject: note.Subject, Client: note.Client}
+	if !slices.Contains(p.grants, g) {
+		p.grants = append(p.grants, g)
 	}
 	fn := p.onPaired
 	p.mu.Unlock()
-	if spent {
+	if offered {
 		p.notifyBridges(MethodPairingOffer, map[string]any{"code": ""})
 	}
+	p.sendGrants()
 	if fn != nil {
 		fn(note)
 	}

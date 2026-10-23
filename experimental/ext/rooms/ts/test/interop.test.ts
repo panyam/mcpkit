@@ -105,7 +105,7 @@ describe("a TypeScript page behind the Go bridge", () => {
     await waitPaired(a, p.id);
 
     const pages = await listPages(a);
-    expect(pages.find((x) => x.page === p.id)).toMatchObject({ user: "alice", label: "board.kicad_sch", paired: true });
+    expect(pages.find((x) => x.page === p.id)).toMatchObject({ user: "alice", label: "board.kicad_sch", allowed: true, default: true });
 
     const res: any = await a.callTool({ name: "show_sheet", arguments: { sheet: "s-power" } });
     expect(res.isError).toBeFalsy();
@@ -339,6 +339,47 @@ describe("a TypeScript page behind the Go bridge", () => {
     const read: any = await a.readResource({ uri });
     const body = JSON.parse(read.contents[0].text);
     expect(body.events.map((e: any) => e.name)).toContain("viewer.sheet_opened");
+  });
+
+  it("grants another user's agent by accepting its code, keeps the grant past its session, and revokes it", async () => {
+    const p = await page("alice", showSheet);
+    const first = await connectAgent(info, "bob");
+    const attached: any = await first.callTool({ name: "attach", arguments: { resource: ROOM } });
+    p.acceptPairing(attached.structuredContent.pairingCode);
+    await eventually(() => p.grants().some((g) => g.subject === "bob"), 5000, "the page to grant bob");
+    await first.close();
+
+    // A new session, no attach: the room on the call and the page's grant are enough.
+    const bob = await connectAgent(info, "bob");
+    cleanup.push(() => bob.close());
+    await bob.callTool({ name: "list_pages", arguments: { resource: ROOM } });
+    const ran: any = await bob.callTool({ name: "show_sheet", arguments: { room: ROOM, page: p.id, sheet: "s-io" } });
+    expect(ran.isError, textOf(ran)).toBeFalsy();
+    expect(textOf(ran)).toBe("showing s-io");
+
+    p.revoke({ subject: "bob" });
+    expect(p.grants()).toEqual([]);
+    await eventually(async () => {
+      const res: any = await bob.callTool({ name: "show_sheet", arguments: { room: ROOM, page: p.id, sheet: "x" } });
+      return !!res.isError && /has not agreed to you/.test(textOf(res));
+    }, 5000, "the revoke to reach the bridge");
+  });
+
+  it("reaches the tab its user focused last when a call names only the room", async () => {
+    const p1 = await page("alice", { ...showSheet, execute: ({ sheet }) => `p1 ${sheet}` });
+    const p2 = await page("alice", { ...showSheet, execute: ({ sheet }) => `p2 ${sheet}` });
+    p1.setAgentsAllowed(true);
+    p2.setAgentsAllowed(true);
+    p2.focus();
+    const a = await connectAgent(info, "alice");
+    cleanup.push(() => a.close());
+    await a.callTool({ name: "list_pages", arguments: { resource: ROOM } });
+    let res: any;
+    await eventually(async () => {
+      res = await a.callTool({ name: "show_sheet", arguments: { room: ROOM, sheet: "power" } });
+      return !res.isError;
+    }, 5000, "the call to land");
+    expect(textOf(res)).toBe("p2 power");
   });
 
   it("rejects a join the relay refuses", async () => {

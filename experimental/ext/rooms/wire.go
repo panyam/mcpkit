@@ -10,8 +10,11 @@ import (
 // tools/call, notifications/tools/list_changed, notifications/cancelled and
 // notifications/progress. All are notifications.
 const (
-	// MethodPageState: page to bridge, {label, focused}. The label is what
-	// list_pages shows; focused true stamps the page's last-focus time.
+	// MethodPageState: page to bridge, {label, focused, focusedAt}. The
+	// label is what list_pages shows; focused true stamps the page's
+	// last-focus time, at focusedAt (RFC 3339) when given, else on arrival.
+	// A page sends focusedAt when it greets a bridge, so a tab its user
+	// focused before that bridge joined still counts as focused last.
 	MethodPageState = "notifications/rooms/page_state"
 
 	// MethodAgentsAllowed: page to bridge, {allowed}. The switch "let my
@@ -20,14 +23,17 @@ const (
 	MethodAgentsAllowed = "notifications/rooms/agents_allowed"
 
 	// MethodAcceptPairing: page to bridge, {code}. The page's user accepted
-	// the code an agent session got back from attach.
+	// the code an agent got back from attach. The bridge that minted it
+	// answers with MethodPairedByCode, naming the principal.
 	MethodAcceptPairing = "notifications/rooms/accept_pairing"
 
-	// MethodRevoke: page to bridge, {session}. Ends the page's pairing with
-	// that session, or with every session when session is empty.
-	MethodRevoke = "notifications/rooms/revoke"
+	// MethodGrants: page to bridge, {grants: [Principal]}. Every principal
+	// the page agrees to beyond its agents switch, as a full list each time.
+	// The page sends it to every bridge that lists it, and again when it
+	// changes, so the bridges in a room agree without sharing state.
+	MethodGrants = "notifications/rooms/grants"
 
-	// MethodPairingRequested: bridge to page, a PairingRequest. A session
+	// MethodPairingRequested: bridge to page, a PairingRequest. An agent
 	// attached to the page's room and is not yet allowed to call it.
 	MethodPairingRequested = "notifications/rooms/pairing_requested"
 
@@ -40,17 +46,18 @@ const (
 	// withdraws the offer.
 	MethodPairingOffer = "notifications/rooms/pairing_offer"
 
-	// MethodPairedByCode: bridge to page, a PairedByCode. A session entered
-	// the code the page offered and is now paired with it.
+	// MethodPairedByCode: bridge to page, a PairedByCode. A principal paired
+	// with the page by a code: one the page offered and an agent entered with
+	// pair, or one an agent got from attach and the page accepted. The page
+	// adds the grant and sends its grants again.
 	MethodPairedByCode = "notifications/rooms/paired_by_code"
 )
 
 // PairingRequest tells a page's user which agent asked to drive it. Subject
-// comes from the session's validated token. SameSubject is true when it is the
-// page's own user, in which case the agents_allowed switch is enough; otherwise
-// the user needs the code the agent was given.
+// and Client come from the caller's validated token. SameSubject is true when
+// it is the page's own user, in which case the agents switch is enough;
+// otherwise the user needs a pairing code.
 type PairingRequest struct {
-	Session     string `json:"session"`
 	Subject     string `json:"subject"`
 	Client      string `json:"client,omitempty"`
 	SameSubject bool   `json:"sameSubject"`
