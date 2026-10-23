@@ -270,8 +270,9 @@ func (b *Bridge) deliverLoop(w Watch, lw *liveWatch) {
 	defer close(lw.done)
 	for ev := range lw.recv.Events() {
 		d := eventsclient.Delivery{
-			Server:      w.Server,
-			Instruction: w.Instruction,
+			Server:         w.Server,
+			Instruction:    w.Instruction,
+			SubscriptionID: ev.SubscriptionID,
 			Event: events.Event{
 				EventID:   ev.EventID,
 				Name:      ev.Name,
@@ -284,6 +285,7 @@ func (b *Bridge) deliverLoop(w Watch, lw *liveWatch) {
 		if w.Session != nil {
 			d.Session, d.SessionDir = w.Session.ID, w.Session.Dir
 		}
+		d.Tools = w.Tools
 		if err := b.cfg.Sink.Deliver(lw.ctx, d); err != nil {
 			b.logf("bridge: watch %s: sink: %v", w.ID, err)
 			b.setError(w.ID, fmt.Errorf("event %s: %w", ev.EventID, err))

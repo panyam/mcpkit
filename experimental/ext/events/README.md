@@ -327,6 +327,8 @@ for ev := range recv.Events() {
 }
 ```
 
+`Event.SubscriptionID` carries the delivery's `X-MCP-Subscription-Id`, the same id `Subscription.ID()` returns, so one receiver serving several subscriptions can tell them apart. `Subscription.Stop` only stops refreshing, and the server keeps delivering until the TTL runs out. `StopAndUnsubscribe(ctx)` also sends `events/unsubscribe`, so delivery ends at once. It stops whatever the server answers and returns the unsubscribe error, if any.
+
 #### Duplicates and replays
 
 Every copy of an occurrence carries the same `eventId`: a webhook retry, a push frame, the poll backfill after a reconnect. `Poll`, `Stream`, `StreamChan` and `Receiver` each drop a second sighting by default, through a bounded seen-set (`Deduper`, 10,000 ids for 24 hours). A client that takes the same events by more than one mode shares one `Deduper` across them so the overlap is dropped too:

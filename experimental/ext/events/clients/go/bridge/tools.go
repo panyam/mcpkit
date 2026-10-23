@@ -17,14 +17,20 @@ type WatchView struct {
 	Arguments   map[string]any `json:"arguments,omitempty"`
 	Instruction string         `json:"instruction"`
 	Session     *Session       `json:"session,omitempty"`
-	Status      string         `json:"status"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	LastError   string         `json:"lastError,omitempty"`
-	LastErrorAt time.Time      `json:"lastErrorAt,omitzero"`
+	// Tools and OutwardTools are what this rule's runs can use: the watch's
+	// own list when it set one, otherwise everything the sink offers.
+	// OutwardTools still need approval per run. Both are empty when the sink
+	// does not report its tools (see ToolScoped).
+	Tools        []string  `json:"tools,omitempty"`
+	OutwardTools []string  `json:"outwardTools,omitempty"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
+	LastError    string    `json:"lastError,omitempty"`
+	LastErrorAt  time.Time `json:"lastErrorAt,omitzero"`
 }
 
-func viewOf(w Watch) WatchView {
-	return WatchView{
+func (b *Bridge) viewOf(w Watch) WatchView {
+	v := WatchView{
 		ID:          w.ID,
 		Event:       w.Event,
 		Arguments:   w.Arguments,
@@ -35,6 +41,26 @@ func viewOf(w Watch) WatchView {
 		LastError:   w.LastError,
 		LastErrorAt: w.LastErrorAt,
 	}
+	if scoped, ok := b.cfg.Sink.(ToolScoped); ok {
+		allowed, outward := scoped.ToolCeiling()
+		if w.Tools != nil {
+			allowed, outward = intersect(allowed, w.Tools), intersect(outward, w.Tools)
+		}
+		v.Tools = sortedUnique(append(allowed, outward...))
+		v.OutwardTools = sortedUnique(outward)
+	}
+	return v
+}
+
+// intersect keeps the elements of xs that are in keep, in xs's order.
+func intersect(xs, keep []string) []string {
+	var out []string
+	for _, x := range xs {
+		if contains(keep, x) {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // Register adds watch_list, watch, unwatch and watches to srv. The tools are
@@ -98,6 +124,11 @@ func (b *Bridge) Register(srv *server.Server) {
 				"event":       map[string]any{"type": "string", "description": "Qualified event name, \"<server>/<event>\"."},
 				"arguments":   map[string]any{"type": "object", "description": "Subscription arguments for the event's inputSchema."},
 				"instruction": map[string]any{"type": "string", "description": "What should happen when the event arrives."},
+				"tools": map[string]any{
+					"type":        "array",
+					"items":       map[string]any{"type": "string"},
+					"description": "Optional. The tools each run of this rule may use, a subset of what the bridge offers. Omit for all of them; an unknown name is refused with the list.",
+				},
 				"session": map[string]any{
 					"type":        "object",
 					"description": "Optional. The session each occurrence continues.",
@@ -116,6 +147,7 @@ func (b *Bridge) Register(srv *server.Server) {
 			Arguments   map[string]any `json:"arguments"`
 			Instruction string         `json:"instruction"`
 			Session     *Session       `json:"session"`
+			Tools       []string       `json:"tools"`
 		}
 		if err := req.Bind(&in); err != nil {
 			return core.ErrorResult("invalid arguments: " + err.Error()), nil
@@ -123,6 +155,9 @@ func (b *Bridge) Register(srv *server.Server) {
 		var opts []WatchOption
 		if in.Session != nil {
 			opts = append(opts, ResumeSession(in.Session.ID, in.Session.Dir))
+		}
+		if in.Tools != nil {
+			opts = append(opts, WithTools(in.Tools...))
 		}
 		w, err := b.Watch(ctx, in.Event, in.Arguments, in.Instruction, opts...)
 		if err != nil {
@@ -132,7 +167,7 @@ func (b *Bridge) Register(srv *server.Server) {
 			}
 			return core.ErrorResult(err.Error()), nil
 		}
-		return core.StructuredResult(fmt.Sprintf("watching %s as %s", w.Event, w.ID), viewOf(w)), nil
+		return core.StructuredResult(fmt.Sprintf("watching %s as %s", w.Event, w.ID), b.viewOf(w)), nil
 	})
 
 	srv.RegisterTool(core.ToolDef{
@@ -165,7 +200,7 @@ func (b *Bridge) Register(srv *server.Server) {
 		views := make([]WatchView, 0, len(ws))
 		lines := make([]string, 0, len(ws))
 		for _, w := range ws {
-			views = append(views, viewOf(w))
+			views = append(views, b.viewOf(w))
 			line := fmt.Sprintf("%s %s [%s]", w.ID, w.Event, w.Status)
 			if w.LastError != "" {
 				line += " last error: " + w.LastError

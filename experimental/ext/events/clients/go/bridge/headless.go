@@ -122,23 +122,43 @@ type HeadlessClaudeSink struct {
 // exit status 1, for an id it has no transcript for in the working directory.
 const sessionNotFound = "No conversation found with session ID"
 
-// Deliver implements eventsclient.EventSink.
+// ToolCeiling implements ToolScoped: AllowedTools and OutwardTools are every
+// tool a run can get, so a watch may name a subset of them.
+func (h *HeadlessClaudeSink) ToolCeiling() (allowed, outward []string) {
+	return append([]string(nil), h.AllowedTools...), append([]string(nil), h.OutwardTools...)
+}
+
+// Deliver implements eventsclient.EventSink. A delivery carrying Tools is
+// limited to those: AllowedTools and OutwardTools outside it are passed as
+// --disallowedTools, and the Approver is asked only about the outward tools
+// the rule named.
 func (h *HeadlessClaudeSink) Deliver(ctx context.Context, d eventsclient.Delivery) error {
-	allowed := append([]string(nil), h.AllowedTools...)
+	allowed, outward := h.AllowedTools, h.OutwardTools
 	var disallowed []string
-	if len(h.OutwardTools) > 0 {
+	if d.Tools != nil {
+		allowed, outward = intersect(h.AllowedTools, d.Tools), intersect(h.OutwardTools, d.Tools)
+		for _, t := range append(append([]string(nil), h.AllowedTools...), h.OutwardTools...) {
+			if !contains(d.Tools, t) {
+				disallowed = append(disallowed, t)
+			}
+		}
+	}
+	allowed = append([]string(nil), allowed...)
+	var denied []string
+	if len(outward) > 0 {
 		approver := h.Approver
 		if approver == nil {
 			approver = DenyAll
 		}
-		ok, err := approver.Approve(ctx, d, h.OutwardTools)
+		ok, err := approver.Approve(ctx, d, outward)
 		if err != nil {
 			return fmt.Errorf("approval: %w", err)
 		}
 		if ok {
-			allowed = append(allowed, h.OutwardTools...)
+			allowed = append(allowed, outward...)
 		} else {
-			disallowed = append(disallowed, h.OutwardTools...)
+			denied = append(denied, outward...)
+			disallowed = append(disallowed, outward...)
 		}
 	}
 
@@ -158,7 +178,7 @@ func (h *HeadlessClaudeSink) Deliver(ctx context.Context, d eventsclient.Deliver
 			err = fmt.Errorf("session dir: %w", statErr)
 		} else {
 			resume := append([]string{"--resume", d.Session, "--fork-session"}, args...)
-			out, err = h.run(ctx, d.SessionDir, resume, d, disallowed)
+			out, err = h.run(ctx, d.SessionDir, resume, d, denied)
 			if err == nil || !strings.Contains(err.Error(), sessionNotFound) {
 				h.report(d, out, err)
 				return err
@@ -169,7 +189,7 @@ func (h *HeadlessClaudeSink) Deliver(ctx context.Context, d eventsclient.Deliver
 		}
 		d.Session, d.SessionDir = "", ""
 	}
-	out, err := h.run(ctx, "", args, d, disallowed)
+	out, err := h.run(ctx, "", args, d, denied)
 	h.report(d, out, err)
 	return err
 }
