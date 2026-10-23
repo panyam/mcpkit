@@ -308,6 +308,14 @@ report for this call to a callback:</p>
 </span></span><span style="display:flex;"><span>}))
 </span></span></code></pre><p>The callback runs on the transport&rsquo;s reader goroutine, so keep it short. Reports that arrive after<br />
 the call returns are dropped.</p>
+<p><code>ReadResourceWith</code> and <code>GetPromptWith</code> take the same options, since any request can carry a<br />
+progress token. Whether progress arrives is up to the server&rsquo;s handler. <code>ToolCallWith</code> also sends<br />
+the SEP-2243 <code>Mcp-Param-*</code> headers that <code>ToolCall</code> derives from a tool&rsquo;s cached <code>inputSchema</code>.</p>
+<h2 id="closing">Closing <a class="anchor" href="#closing">¶</a></h2>
+<p><code>Close</code> ends a Streamable HTTP session with the <code>DELETE</code> the transport spec asks a client to send,<br />
+so the server frees it, and runs its <code>OnSessionClose</code> hooks, right away instead of at idle<br />
+expiry. It&rsquo;s best effort and gives up after two seconds. A server answering 405, or one that&rsquo;s<br />
+gone, doesn&rsquo;t make <code>Close</code> fail. Stateless-wire clients have no session, so they send nothing.</p>
 <h2 id="when-the-server-wants-more-scope">When the server wants more scope <a class="anchor" href="#when-the-server-wants-more-scope">¶</a></h2>
 <p>A 403 the client cannot step up from (a static token, say) comes back as a<br />
 <code>*client.ClientAuthError</code> carrying the scopes the server asked for:</p>
@@ -323,6 +331,10 @@ the call returns are dropped.</p>
 <li><code>server.NewInProcessTransport</code> for testing (no HTTP)</li>
 <li>Custom transports for stdio, WebSocket, etc.</li>
 </ul>
+<p>A transport that implements <code>core.NotificationReceiver</code> gets the client&rsquo;s notification routing<br />
+before <code>Connect</code>, so <code>WithProgress</code> and <code>WithNotificationCallback</code> work over it as they do over<br />
+HTTP. <code>server.NewInProcessTransport</code> implements it. Any other transport delivers no notifications<br />
+to the client.</p>
 
 
     </div>
