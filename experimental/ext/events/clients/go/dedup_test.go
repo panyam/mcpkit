@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -181,4 +182,22 @@ func TestTimestampWithinTolerance(t *testing.T) {
 	assert.False(t, events.TimestampWithinTolerance(ts(5*time.Minute+time.Second), now, 5*time.Minute))
 	assert.False(t, events.TimestampWithinTolerance("", now, 5*time.Minute))
 	assert.False(t, events.TimestampWithinTolerance("not-a-number", now, 5*time.Minute))
+}
+
+// Close racing in-flight deliveries used to panic with "send on closed
+// channel": the closed check and the send were not under one lock.
+func TestReceiver_CloseDuringDeliveryDoesNotPanic(t *testing.T) {
+	for range 200 {
+		recv := eventsclient.NewReceiver[fakePayload](dedupSecret)
+		var wg sync.WaitGroup
+		for i := range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				postSigned(t, recv, "evt-"+strconv.Itoa(i), "", time.Now())
+			}()
+		}
+		recv.Close()
+		wg.Wait()
+	}
 }

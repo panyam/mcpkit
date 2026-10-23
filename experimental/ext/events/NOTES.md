@@ -417,3 +417,42 @@ A delivery dropped on a full channel is forgotten again, so the server's retry i
 The verifiers in `headers.go` check only the HMAC, so a captured POST verified forever. Rather than
 change their signatures, `TimestampWithinTolerance` sits beside them and the receiver calls both,
 with five minutes as in the Standard Webhooks reference libraries.
+
+## The events bridge gives each watch its own callback URL (#1579)
+
+`clients/go/bridge` subscribes by webhook with itself as the receiver. A delivery has to be matched
+to the watch that asked for it, so the instruction and cursor can be found. `Receiver` does not hand
+the application the `X-MCP-Subscription-Id` header, and two watches on one event with different
+arguments are separate subscriptions. So each watch gets its own path (`/hooks/<watch id>`), its own
+secret and its own `Receiver`, and the URL does the routing. A side benefit is that a leaked secret
+signs deliveries for one rule only.
+
+The secret is stored and reused on resubscribe. The server derives a subscription's id from
+principal, name, arguments and URL, so a restart that sends the same URL and secret refreshes the
+existing subscription rather than creating a second one. A fresh secret on restart would also fail
+endpoint verification against a receiver still holding the old one.
+
+The cursor advances after the sink returns, not when the POST arrives. A crash mid-run then replays
+that event on restart instead of losing it, and the shared `Deduper` (#1558) does not survive the
+restart, so a sink can see one event twice across a crash. That is the safe direction for a
+standing rule, but a sink with side effects should be idempotent on `eventId`.
+
+Building it found `Receiver.Close` racing an in-flight POST: the closed check and the channel send
+were not under one lock, so a delivery arriving during `unwatch` panicked with "send on closed
+channel". The send now happens under the lock `Close` takes.
+
+SEP-2495 (event-driven re-entry) has only its motivation written, so there was no wire design to
+follow. The bridge's answer is that re-entry is a new run with the stored instruction, not a turn
+in the session that subscribed, because a standing rule cannot depend on that session being open.
+
+A watch can still carry the session's context, though. With `session` set the run is
+`claude -p --resume <id> --fork-session` in the session's directory: a fork, so it never writes to a
+conversation that may still be open, and the closest a headless run gets to "the agent that asked".
+Two things were found out by running `claude` rather than reading about it. The model can learn its
+own id from `$CLAUDE_CODE_SESSION_ID` (MCP gives the server no session id), and resuming a missing
+id exits 1 with `No conversation found with session ID` on stderr, which is the string the fallback
+keys on. That string is not a documented contract, so if a Claude Code release rewords it, a missing
+session stops falling back and starts failing visibly, which is the safer way to break. Only that
+case falls back; any other failure of a resumed run is reported, so a broken run is not quietly
+repeated without the context it was meant to have. Pushing into a session that is open right now
+(a channel) is #1581's sink.

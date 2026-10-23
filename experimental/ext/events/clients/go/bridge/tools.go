@@ -1,0 +1,181 @@
+package bridge
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/panyam/mcpkit/core"
+	"github.com/panyam/mcpkit/server"
+)
+
+// WatchView is a Watch as the tools report it: everything but the secret.
+type WatchView struct {
+	ID          string         `json:"id"`
+	Event       string         `json:"event"`
+	Arguments   map[string]any `json:"arguments,omitempty"`
+	Instruction string         `json:"instruction"`
+	Session     *Session       `json:"session,omitempty"`
+	Status      string         `json:"status"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	LastError   string         `json:"lastError,omitempty"`
+	LastErrorAt time.Time      `json:"lastErrorAt,omitzero"`
+}
+
+func viewOf(w Watch) WatchView {
+	return WatchView{
+		ID:          w.ID,
+		Event:       w.Event,
+		Arguments:   w.Arguments,
+		Instruction: w.Instruction,
+		Session:     w.Session,
+		Status:      w.Status,
+		CreatedAt:   w.CreatedAt,
+		LastError:   w.LastError,
+		LastErrorAt: w.LastErrorAt,
+	}
+}
+
+// Register adds watch_list, watch, unwatch and watches to srv. The tools are
+// general across every event type and server: an agent finds an event with
+// watch_list and subscribes with watch, rather than the bridge growing a tool
+// per event type.
+func (b *Bridge) Register(srv *server.Server) {
+	srv.RegisterTool(core.ToolDef{
+		Name: "watch_list",
+		Description: "List the event types the configured events servers offer, as qualified names \"<server>/<event>\" " +
+			"with each one's description and the inputSchema its watch arguments must match. " +
+			"Use query to search names and descriptions instead of listing everything.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server": map[string]any{"type": "string", "description": "Only this server. Omit for every server."},
+				"query":  map[string]any{"type": "string", "description": "Words that must all appear in the event's name or description."},
+			},
+		},
+		Annotations: map[string]any{"readOnlyHint": true},
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		var in struct{ Server, Query string }
+		if err := req.Bind(&in); err != nil {
+			return core.ErrorResult("invalid arguments: " + err.Error()), nil
+		}
+		entries, err := b.Catalog(ctx, in.Server, in.Query)
+		var werr *WatchError
+		if errors.As(err, &werr) {
+			return core.ErrorResult(werr.Message), nil
+		}
+		if entries == nil {
+			entries = []CatalogEntry{}
+		}
+		text := fmt.Sprintf("%d event type(s)", len(entries))
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Event)
+		}
+		if len(names) > 0 {
+			text += ": " + strings.Join(names, ", ")
+		}
+		out := map[string]any{"events": entries}
+		if err != nil {
+			text += ". " + err.Error()
+			out["error"] = err.Error()
+		}
+		return core.StructuredResult(text, out), nil
+	})
+
+	srv.RegisterTool(core.ToolDef{
+		Name: "watch",
+		Description: "Subscribe to an event and store what to do when it arrives. event is a qualified name from watch_list; " +
+			"arguments must match that event's inputSchema; instruction is the user's request for each occurrence " +
+			"(e.g. \"email me a two-line summary\"). Each occurrence starts a separate run with only the tools that run is allowed. " +
+			"The watch persists until unwatch. To have each occurrence continue this conversation, with its context, " +
+			"instead of starting fresh, pass session with id set to $CLAUDE_CODE_SESSION_ID and dir set to the current " +
+			"working directory; the run resumes a fork, so this conversation itself is not changed.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"event":       map[string]any{"type": "string", "description": "Qualified event name, \"<server>/<event>\"."},
+				"arguments":   map[string]any{"type": "object", "description": "Subscription arguments for the event's inputSchema."},
+				"instruction": map[string]any{"type": "string", "description": "What should happen when the event arrives."},
+				"session": map[string]any{
+					"type":        "object",
+					"description": "Optional. The session each occurrence continues.",
+					"properties": map[string]any{
+						"id":  map[string]any{"type": "string", "description": "The session UUID, $CLAUDE_CODE_SESSION_ID."},
+						"dir": map[string]any{"type": "string", "description": "The session's absolute working directory."},
+					},
+					"required": []any{"id", "dir"},
+				},
+			},
+			"required": []any{"event", "instruction"},
+		},
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		var in struct {
+			Event       string         `json:"event"`
+			Arguments   map[string]any `json:"arguments"`
+			Instruction string         `json:"instruction"`
+			Session     *Session       `json:"session"`
+		}
+		if err := req.Bind(&in); err != nil {
+			return core.ErrorResult("invalid arguments: " + err.Error()), nil
+		}
+		var opts []WatchOption
+		if in.Session != nil {
+			opts = append(opts, ResumeSession(in.Session.ID, in.Session.Dir))
+		}
+		w, err := b.Watch(ctx, in.Event, in.Arguments, in.Instruction, opts...)
+		if err != nil {
+			var werr *WatchError
+			if errors.As(err, &werr) {
+				return core.StructuredError(werr.Message, werr), nil
+			}
+			return core.ErrorResult(err.Error()), nil
+		}
+		return core.StructuredResult(fmt.Sprintf("watching %s as %s", w.Event, w.ID), viewOf(w)), nil
+	})
+
+	srv.RegisterTool(core.ToolDef{
+		Name:        "unwatch",
+		Description: "Stop a watch and unsubscribe it upstream. id comes from watch or watches.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"id": map[string]any{"type": "string"}},
+			"required":   []any{"id"},
+		},
+		Annotations: map[string]any{"destructiveHint": true, "idempotentHint": true},
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		var in struct{ ID string }
+		if err := req.Bind(&in); err != nil {
+			return core.ErrorResult("invalid arguments: " + err.Error()), nil
+		}
+		if err := b.Unwatch(ctx, in.ID); err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		return core.TextResult("stopped " + in.ID), nil
+	})
+
+	srv.RegisterTool(core.ToolDef{
+		Name:        "watches",
+		Description: "List every standing watch with its instruction, status and last error, sorted by id.",
+		InputSchema: map[string]any{"type": "object"},
+		Annotations: map[string]any{"readOnlyHint": true},
+	}, func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		ws := b.List()
+		views := make([]WatchView, 0, len(ws))
+		lines := make([]string, 0, len(ws))
+		for _, w := range ws {
+			views = append(views, viewOf(w))
+			line := fmt.Sprintf("%s %s [%s]", w.ID, w.Event, w.Status)
+			if w.LastError != "" {
+				line += " last error: " + w.LastError
+			}
+			lines = append(lines, line)
+		}
+		text := fmt.Sprintf("%d watch(es)", len(ws))
+		if len(lines) > 0 {
+			text += "\n" + strings.Join(lines, "\n")
+		}
+		return core.StructuredResult(text, map[string]any{"watches": views}), nil
+	})
+}

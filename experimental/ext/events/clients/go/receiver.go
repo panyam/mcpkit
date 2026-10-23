@@ -259,17 +259,27 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Non-blocking send. A full channel signals a slow consumer; we'd
 	// rather drop than back up the registry's delivery loop. A dropped
-	// event is forgotten so a retry of it is delivered.
+	// event is forgotten so a retry of it is delivered. The send happens
+	// under the lock Close takes, so a Close racing this request cannot
+	// close the channel between the check and the send.
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		if r.dedup != nil {
+			r.dedup.Forget(key)
+		}
+		http.Error(w, "receiver closed", http.StatusGone)
+		return
+	}
 	select {
 	case r.out <- ev:
 	default:
 		if r.dedup != nil {
 			r.dedup.Forget(key)
 		}
-		r.mu.Lock()
 		r.rejected++
-		r.mu.Unlock()
 	}
+	r.mu.Unlock()
 
 	w.WriteHeader(http.StatusOK)
 }
