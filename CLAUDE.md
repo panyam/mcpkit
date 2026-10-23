@@ -44,7 +44,7 @@ upstream changes to watch.
 | `ext/skills/` — SEP-2640 skills (data-only, enforced) | `ext/skills/NOTES.md` |
 | `ext/ui/` — MCP Apps, Bridge JS, AppHost, ServerRegistry | `docs/APPS_DESIGN.md`, `docs/APPS_HOST.md`, `ext/ui/NOTES.md` |
 | `ext/otel/` — SEP-414 OpenTelemetry adapter | `ext/otel/README.md`, `docs/SEP_414_OTEL.md` |
-| `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md`, `experimental/ext/events/NOTES.md` |
+| `experimental/ext/events/` — MCP Events protocol; `clients/go/bridge` is the watch-and-act daemon (#1579) | `experimental/ext/events/README.md`, `experimental/ext/events/NOTES.md`, `experimental/ext/events/clients/go/bridge/README.md` |
 | `experimental/ext/agents/` — Server-declared agent discovery (pre-SEP) | `experimental/ext/agents/README.md`, `experimental/ext/agents/NOTES.md` |
 | `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581) | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md` |
 | `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
@@ -239,6 +239,9 @@ These span packages and will bite on a task that never opens a routed doc.
   after the same bug turned up twice: `tools/list` on the apps bridge (#1408) and `events/list`
   (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
   downstream assumed a stable order, and it surfaces as flakiness somewhere else.
+- **CI runs no `-race`** on the experimental modules (`experimental/scripts/test-*.sh`). The events
+  bridge shipped a test-helper race that failed 5 runs in 6 under `-race` and never showed in CI.
+  After touching anything concurrent there, run `go test -race` on that package a few times by hand.
 - **`make test-examples` runs in no workflow, so a broken example test ships green.** `test.yml`
   runs `scripts/check-examples-build.sh`, which compiles each module's *packages* and not their
   `_test.go` files, and mentions `test-examples` only in a comment explaining why it exists.
