@@ -49,6 +49,12 @@ than the rest of the tree pinned, and `scripts/dep-baseline.json` was empty. Rat
 divergences there, the PR ran `check_dep_consistency.py --unify` and `make tidy-all`, which raised
 every module to those versions. That is most of the PR's go.mod and go.sum churn.
 
+Moving to massrelay v0.2.3 did the same for oneauth, v0.2.2 to v0.3.0 across the ten modules that
+use it, which was also wanted in its own right. Nothing needed a source change, and the Keycloak
+interop suite (`make testkcl-auto`) passed 19 of 19 on it. That suite runs in no workflow, though,
+and had been failing one test on `main` since #1567 for an unrelated reason: a raw stateless request
+without routing headers.
+
 ## A test stack for the TypeScript client
 
 `internal/relaytest` starts the relay the Go tests use, and `internal/cmd/teststack` wraps it with

@@ -1,6 +1,6 @@
 import { fromJson, type JsonValue } from "@bufbuild/protobuf";
 import { base64Encode } from "@bufbuild/protobuf/wire";
-import { CollabEventSchema, type CollabEvent } from "@panyam/massrelay/models";
+import { CollabEventSchema, type CollabEvent } from "@panyam/massrelay";
 import { GRPCWSClient } from "@panyam/servicekit-client";
 import { errorResult, toCallToolResult, type PageTool } from "./tool.js";
 
@@ -112,6 +112,11 @@ interface RpcMessage {
  * addressed to it, never room-wide ones.
  */
 export async function joinToolRoom(opts: JoinToolRoomOptions): Promise<ToolRoom> {
+  // servicekit's GRPCWSClient rather than massrelay's CollabClient: as of
+  // massrelay 0.2.3 CollabClient treats every ErrorEvent as fatal, including
+  // the PEER_NOT_FOUND the relay answers to a reply addressed to a bridge that
+  // has just left, and closes without calling onDisconnect, so the page would
+  // drop out of the room unnoticed.
   const grpc = new GRPCWSClient(opts.WebSocket ? { WebSocket: opts.WebSocket } : undefined);
   const page = new Page(grpc, opts);
   await page.join();

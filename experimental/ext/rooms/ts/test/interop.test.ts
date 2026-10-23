@@ -29,6 +29,40 @@ async function page(subject: string, ...tools: PageTool[]): Promise<ToolRoom> {
   return p;
 }
 
+/** A bare relay peer that speaks the page's wire by hand, addressed. */
+async function rawPeer(username: string) {
+  const grpc = new GRPCWSClient();
+  const inbox: any[] = [];
+  const waiters: Array<() => void> = [];
+  let joined!: () => void;
+  const ready = new Promise<void>((r) => (joined = r));
+  grpc.onMessage = (data: any) => {
+    if (data?.roomJoined) joined();
+    const am = data?.appMessage;
+    if (am?.kind === "mcp/1") {
+      inbox.push(JSON.parse(Buffer.from(am.payload, "base64").toString()));
+      for (const w of waiters.splice(0)) w();
+    }
+  };
+  await grpc.connect(wsUrl(info.relay, ROOM, info.pageTokens.alice));
+  cleanup.push(() => grpc.close());
+  grpc.send({ join: { sessionId: ROOM, username, clientType: "browser", protocolVersion: 2 } });
+  await ready;
+  return {
+    send(to: string, m: unknown) {
+      grpc.send({ appMessage: { kind: "mcp/1", payload: base64Encode(new TextEncoder().encode(JSON.stringify(m))), toClientId: to } });
+    },
+    async next(match: (m: any) => boolean): Promise<unknown> {
+      for (;;) {
+        const hit = inbox.find(match);
+        if (hit) return hit;
+        await Promise.race([new Promise<void>((r) => waiters.push(r)), new Promise((_, rej) => setTimeout(() => rej(new Error("no reply")), 3000))]);
+      }
+    },
+    close: () => grpc.close(),
+  };
+}
+
 async function agent(subject: string): Promise<Client> {
   const a = await connectAgent(info, subject);
   cleanup.push(() => a.close());
@@ -167,6 +201,30 @@ describe("a TypeScript page behind the Go bridge", () => {
 
     expect(ran).toEqual([]);
     expect(p.id).not.toBe("");
+  });
+
+  // A reply addressed to a bridge that has since left gets ErrorEvent
+  // PEER_NOT_FOUND from the relay. That refuses one message, so the page has to
+  // stay in the room and keep answering everyone else.
+  it("stays in the room when it answers a caller that already left", async () => {
+    let release!: () => void;
+    const p = await page("alice", { name: "slow_once", execute: () => new Promise<string>((r) => (release = () => r("late"))) });
+    let closed = false;
+    void p.closed.then(() => (closed = true));
+
+    const caller = await rawPeer("caller");
+    caller.send(p.id, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "slow_once", arguments: {} } });
+    await eventually(() => release !== undefined, 3000, "slow_once started");
+    caller.close();
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    await new Promise((r) => setTimeout(r, 300));
+
+    const other = await rawPeer("other");
+    other.send(p.id, { jsonrpc: "2.0", id: 7, method: "tools/list" });
+    const reply: any = await other.next((m) => m.id === 7);
+    expect(reply.result.tools.map((t: any) => t.name)).toEqual(["slow_once"]);
+    expect(closed).toBe(false);
   });
 
   it("also registers with a WebMCP model context when asked", async () => {
