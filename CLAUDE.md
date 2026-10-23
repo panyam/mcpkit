@@ -47,6 +47,7 @@ upstream changes to watch.
 | `experimental/ext/events/` — MCP Events protocol; `clients/go/bridge` is the watch-and-act daemon (#1579) | `experimental/ext/events/README.md`, `experimental/ext/events/NOTES.md`, `experimental/ext/events/clients/go/bridge/README.md` |
 | `experimental/ext/agents/` — Server-declared agent discovery (pre-SEP) | `experimental/ext/agents/README.md`, `experimental/ext/agents/NOTES.md` |
 | `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581) | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md` |
+| `experimental/ext/rooms/massrelay/` — `RoomTransport` over massrelay, embedded or WebSocket (separate go.mod) | `experimental/ext/rooms/massrelay/README.md`, `experimental/ext/rooms/massrelay/NOTES.md` |
 | `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
 | `conformance/` — Suite orchestration + audits | `conformance/NOTES.md` |
 | `examples/` — Working examples | `examples/README.md`, `examples/CONVENTIONS.md`, `examples/NOTES.md` |
