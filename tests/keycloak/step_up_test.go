@@ -118,6 +118,10 @@ func toolsCallStateless(t *testing.T, serverURL, bearer, toolName string) (int, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+	// The stateless wire refuses a request without its SEP-2243 routing
+	// headers (#1567), with a 400 that hides the 403 under test.
+	req.Header.Set("Mcp-Method", "tools/call")
+	req.Header.Set("Mcp-Name", toolName)
 	req.Header.Set("Authorization", "Bearer "+bearer)
 
 	resp, err := http.DefaultClient.Do(req)
