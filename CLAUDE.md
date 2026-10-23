@@ -244,6 +244,9 @@ These span packages and will bite on a task that never opens a routed doc.
   order both qualify. Constraint C10, added after the same bug turned up twice: `tools/list` on the
   apps bridge (#1408) and `events/list` (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
   downstream assumed a stable order, and it surfaces as flakiness somewhere else.
+- **The Keycloak suite (`tests/keycloak`) runs only on auth-path PRs, `main` and nightly**
+  (`keycloak-interop.yml`, #1597). A change elsewhere that breaks auth on the wire shows up there
+  later, not on its own PR. Locally, `make testkcl-auto` (`KC_PORT=8181` if 8180 is taken).
 - **CI runs no `-race`** on the experimental modules (`experimental/scripts/test-*.sh`). The events
   bridge shipped a test-helper race that failed 5 runs in 6 under `-race` and never showed in CI.
   After touching anything concurrent there, run `go test -race` on that package a few times by hand.

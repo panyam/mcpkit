@@ -14,12 +14,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${KC_REALM:=mcpkit-test}"
 KC_REALM_URL="http://localhost:${KC_PORT}/realms/${KC_REALM}"
 
-if curl -sf "$KC_REALM_URL" > /dev/null 2>&1; then
+if curl -sf --max-time 3 "$KC_REALM_URL" > /dev/null 2>&1; then
     echo "Keycloak already running on port ${KC_PORT} — skipping start"
 else
     docker rm -f "${KC_CONTAINER}" 2>/dev/null || true
     docker run -d --name "${KC_CONTAINER}" \
         -p "${KC_PORT}:8080" \
+        --add-host=host.docker.internal:host-gateway \
         -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
         -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
         -v "${ROOT}/tests/keycloak/realm.json:/opt/keycloak/data/import/realm.json" \
@@ -28,7 +29,7 @@ else
     echo "Keycloak starting on port ${KC_PORT}... (realm import takes ~30s)"
     echo "Waiting for realm import to land before flipping master sslRequired..."
     for i in $(seq 1 60); do
-        curl -sf "$KC_REALM_URL" > /dev/null 2>&1 && break
+        curl -sf --max-time 3 "$KC_REALM_URL" > /dev/null 2>&1 && break
         sleep 1
     done
     echo "Flipping master realm sslRequired=NONE so the test admin-token grant works over HTTP..."

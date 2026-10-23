@@ -62,6 +62,11 @@ jobs:
       - name: Conformance fixture guards self-test
         run: make check-conf-fixture-guards
 
+      # The Keycloak suite skips when Keycloak is unreachable, so a job that
+      # failed to start it would pass as 19 skips (#1597).
+      - name: Keycloak suite guards self-test
+        run: make check-kcl-guards
+
       # bump-root once left tagged sub-modules pinning their siblings a
       # release behind, which broke v0.7.0's stores/gorm for anyone fetching
       # it alone until the pins were fixed by hand.
