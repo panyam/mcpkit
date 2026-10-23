@@ -1,8 +1,8 @@
 # massrelay and servicekit-client are ours, and this package bumps them right
-# after their releases, so they are exempt from the one-day release-age policy.
-# servicekit-client is pinned to the one version that needed it (published
-# 2026-10-23, the day massrelay 0.2.4 moved to it); drop the pin once that is
-# more than a day old. Nothing else is exempt.
+# after their releases, so both are exempt from the one-day release-age
+# policy. servicekit-client used to be pinned to the one version that needed
+# it; each massrelay release moves it, so the pin needed rewriting every time
+# (0.1.9, then 0.1.11). Nothing else is exempt.
 minimumReleaseAgeExclude:
   - "@panyam/massrelay"
-  - "@panyam/servicekit-client@0.1.9"
+  - "@panyam/servicekit-client"
