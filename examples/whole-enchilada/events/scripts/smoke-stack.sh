@@ -11,7 +11,9 @@
 #
 # Speaks the SEP-2575 STATELESS wire: every request carries a namespaced
 # params._meta envelope (protocolVersion plus the REQUIRED clientCapabilities)
-# and there is no initialize and no Mcp-Session-Id. nginx round-robins across
+# and there is no initialize and no Mcp-Session-Id. It also carries the
+# SEP-2243 routing headers, Mcp-Method always and Mcp-Name on the methods that
+# name something, which the stateless wire refuses a request without (#1567). nginx round-robins across
 # the replicas with no session affinity, so a legacy session established on
 # replica 1 is unknown to replicas 2 and 3 on the very next request.
 #
@@ -45,18 +47,25 @@ STATUS=""
 BODY=""
 
 # call sets STATUS and BODY. It never fails on a non-2xx, because both modes
-# need to inspect the refusal rather than abort on it.
+# need to inspect the refusal rather than abort on it. name, when given, is the
+# request's Mcp-Name; it has to match the name in extra, and stays plain ASCII
+# here so it needs no Base64 sentinel.
 call() {
-  local method="$1" extra="${2:-}"
+  local method="$1" extra="${2:-}" name="${3:-}"
   local meta="\"io.modelcontextprotocol/protocolVersion\":\"${PROTOCOL}\",\"io.modelcontextprotocol/clientCapabilities\":{}"
   local params="\"_meta\":{${meta}}"
   [ -n "$extra" ] && params="${params},${extra}"
+
+  local name_header=()
+  [ -n "$name" ] && name_header=(-H "Mcp-Name: ${name}")
 
   local out
   out=$(curl -sS --max-time 20 -X POST "$ENDPOINT" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' \
     -H "MCP-Protocol-Version: ${PROTOCOL}" \
+    -H "Mcp-Method: ${method}" \
+    ${name_header[@]+"${name_header[@]}"} \
     -w '\n%{http_code}' \
     -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"${method}\",\"params\":{${params}}}") \
     || fail "${method}: curl could not reach ${ENDPOINT}"
@@ -115,7 +124,7 @@ echo "$BODY" | grep -q '"chat.message"' \
   body: $(brief "$BODY")"
 echo "smoke-stack: events/list OK"
 
-call "events/poll" '"name":"chat.message"'
+call "events/poll" '"name":"chat.message"' "chat.message"
 [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 300 ] \
   || fail "events/poll: HTTP ${STATUS}
   body: $(brief "$BODY")"
