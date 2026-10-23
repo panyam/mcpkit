@@ -20,8 +20,8 @@ github.com/panyam/goutils v0.1.13 h1:V819IdZTEJ3rpu33ZqohC6O9ou7KOu6cxfigoYT12OQ
 github.com/panyam/goutils v0.1.13/go.mod h1:vd3iFcv1DjaeV6h8tslIJh9d09RLndg8UYNSGROBrM4=
 github.com/panyam/protokit v0.0.5 h1:QdgKjwmmj4EBGD6HJ/WcA7HApLSN/7cOS50hTTbHgHo=
 github.com/panyam/protokit v0.0.5/go.mod h1:Xocw0Djs7NZpLUGzuCJagUQomSoEET5pDEi2VenKYfI=
-github.com/panyam/servicekit v0.1.7 h1:r/cyBzfHfzviIGj21os/mC/woJy5H+X93hNQH603PGA=
-github.com/panyam/servicekit v0.1.7/go.mod h1:wk/9hY9Vgl83WuYJt7n4NYPvV6nbxnZwpKpNRIAPoR8=
+github.com/panyam/servicekit v0.1.9 h1:z5PihABsxt2kAyORw812UtZmjrGydf8BYtjdkqpH/6o=
+github.com/panyam/servicekit v0.1.9/go.mod h1:siWprh7sIhhM4GL+2Ffk+nFtdr9SVWM5MNXD9qSAaTM=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 h1:1EYB5IzjZawrrnELUi78f9fPu57HuXjmddZPjrls/28=

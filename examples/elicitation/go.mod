@@ -12,7 +12,7 @@ require (
 	github.com/panyam/demokit v0.0.32
 	github.com/panyam/mcpkit v0.8.4
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
-	github.com/panyam/servicekit v0.1.7
+	github.com/panyam/servicekit v0.1.9
 )
 
 require (
