@@ -44,8 +44,11 @@ Pages learn the bridge's peer id from its first request, then send it the state 
 the agents switch). A page listed after a session attached is sent that session's pairing request
 when it is first listed, since it was not in the roster at attach time.
 
-## No session-close hook
+## Session close comes from the server's hook
 
-The server exposes none to extensions, so `EndSession` is exported for hosts and `detach` covers
-the rest. A pairing outliving its session holds nothing callable, since calls are made from a
-session, but its entry sits in memory until the page leaves.
+Slice 1 shipped before the server had a session-close hook for extensions, so `EndSession` was
+exported for hosts to call and a pairing whose session vanished sat in memory until its page left.
+#1587 added `Server.OnSessionClose`, which `Register` now hooks; `EndSession` stays exported for
+hosts that end sessions some other way. The scope gate likewise builds its 403 with
+`ScopeChallenge.AuthError` from #1587 rather than by hand. It still can't use `ext/auth`'s
+middleware (C4), but the response comes from the same core code.
