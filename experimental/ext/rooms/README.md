@@ -14,7 +14,7 @@ agent (MCP client) --MCP--> rooms.Bridge (MCP server) --relay room--> page (tool
 ## Serving the bridge
 
 ```go
-relay := memroom.New() // or a massrelay adapter
+relay := memroom.New() // or massrelay.Embedded / massrelay.Dial, see below
 bridge := rooms.New(relay.Transport("bridge"))
 srv := server.NewServer(info, server.WithAuth(jwtValidator))
 bridge.Register(srv)
@@ -37,6 +37,17 @@ with an `insufficient_scope` challenge (`WithResourceMetadataURL` sets its link)
 
 `WithLocalSubject("me")` is single-user local mode for a server with no identity provider: a
 session without claims acts for `me`, so the page's switch is the only step.
+
+## Relays
+
+`RoomTransport` is the bridge's only view of the relay. `memroom` is in-process and in-memory, for
+tests and for a bridge whose pages share its process. A real deployment uses massrelay through
+[`experimental/ext/rooms/massrelay`](massrelay/), a separate module so this one never depends on it:
+
+```go
+bridge := rooms.New(massrelay.Embedded(relayApp.Service, &services.Principal{Subject: "bridge"}))
+page, _ := rooms.JoinPage(ctx, massrelay.Dial("https://relay.example.com", relayToken), room)
+```
 
 ## Offering tools from a page
 

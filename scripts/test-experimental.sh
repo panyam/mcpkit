@@ -12,6 +12,7 @@ test-events-stores-gorm
 test-events-discord
 test-events-telegram
 test-rooms
+test-rooms-massrelay
 "
 
 for suite in $SUITES; do

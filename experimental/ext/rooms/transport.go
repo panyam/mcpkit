@@ -50,8 +50,9 @@ type RoomEvent struct {
 // one, joined as itself, and each page holds its own.
 //
 // mcpkit ships an in-memory implementation (memroom) for tests and
-// single-process use. A massrelay adapter is planned as its own module, so
-// this module, and mcpkit's root, never depend on massrelay.
+// single-process use, and a massrelay one in its own module
+// (experimental/ext/rooms/massrelay), so this module, and mcpkit's root,
+// never depend on massrelay.
 type RoomTransport interface {
 	// Join enters the named room. The room name is the resource the app
 	// chose, e.g. "design:demo/board.kicad_sch". ctx bounds the join itself,
