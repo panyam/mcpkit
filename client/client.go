@@ -1987,8 +1987,12 @@ func (c *Client) notifyMethod(method string, params any) error {
 // --- Streamable HTTP transport ---
 
 type streamableClientTransport struct {
-	url              string
-	sessionID        string
+	url       string
+	sessionID string
+	// terminated makes terminateSession run once. It replaces clearing
+	// sessionID, which other goroutines read without a lock once the session
+	// is up; only initialize writes that field.
+	terminated       atomic.Bool
 	httpClient       *http.Client
 	tokenSource      core.TokenSource
 	client           *Client                                     // back-pointer for lastEventID tracking
@@ -2040,7 +2044,7 @@ const sessionDeleteTimeout = 2 * time.Second
 // abandons its old session without waiting on the network.
 func (t *streamableClientTransport) terminateSession() {
 	sid := t.sessionID
-	if sid == "" {
+	if sid == "" || !t.terminated.CompareAndSwap(false, true) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
@@ -2062,7 +2066,6 @@ func (t *streamableClientTransport) terminateSession() {
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
-	t.sessionID = ""
 }
 
 // close shuts down the transport, including the background GET SSE stream if open.
