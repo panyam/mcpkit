@@ -293,10 +293,10 @@ test-report: ## Generate HTML report with per-stage collapsible logs
 # Keycloak (for interop tests)
 # =============================================================================
 
-KC_IMAGE := quay.io/keycloak/keycloak:26.0
-KC_PORT := 8180
-KC_CONTAINER := mcpkit-keycloak
-KC_REALM := mcpkit-test
+KC_IMAGE ?= quay.io/keycloak/keycloak:26.0
+KC_PORT ?= 8180
+KC_CONTAINER ?= mcpkit-keycloak
+KC_REALM ?= mcpkit-test
 
 upkcl: ## Start Keycloak container for interop tests (skips if already healthy)
 	@bash scripts/keycloak-up.sh
