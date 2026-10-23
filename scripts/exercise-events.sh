@@ -30,6 +30,10 @@ grep -hE '^  events-[a-z-]+( \([0-9-]+\))?: ' "$LOG/server.log" "$LOG/client.log
 [ "$SERVER_RC" -ne 0 ] && echo "  server suite REFUSED to grade (exit $SERVER_RC), see above"
 [ "$CLIENT_RC" -ne 0 ] && echo "  client suite REFUSED to grade (exit $CLIENT_RC), see above"
 
+# A suite checkout behind upstream grades against old scenarios, and its
+# warning scrolled past at the top. Repeat it here, beside the numbers.
+grep -h "commit(s) behind @{u}" "$LOG/server.log" "$LOG/client.log" | sed 's/^ *//'
+
 # The suite carried a sep-9999 placeholder until #1502. Seeing it again means a
 # checkout predates the rename.
 if grep -q 'sep-9999-' "$LOG/server.log" "$LOG/client.log"; then

@@ -453,7 +453,7 @@ check-release-workflows: ## Release step — fail if a tag-triggered workflow ne
 check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
 
-check-conf-fixture-guards: ## CI gate — self-test the conformance fixture guards (held port, dead fixture) in conformance/scripts/_common.sh
+check-conf-fixture-guards: ## CI gate — self-test the conformance fixture guards (held port, dead fixture, stale suite checkout) in conformance/scripts/_common.sh
 	@bash conformance/scripts/_common_selftest.sh
 
 bump-pins-selftest: ## CI gate — bump-root repoints root and tagged-sibling pins, and leaves untagged examples' sibling pins alone

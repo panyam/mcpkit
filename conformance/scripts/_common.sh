@@ -49,6 +49,10 @@ require_conf_dir() {
 # had drifted 45 commits behind, or that ../conf-upstream-main predated the
 # conformance PR 468 merge. Now every run says so.
 #
+# The warning names the variable so it still reads on its own when an
+# aggregate runner (scripts/exercise-events.sh) repeats it under its results,
+# which is where a reader looks at red numbers.
+#
 # Set CONF_PULL=1 to fast-forward before running. Offline degrades to just the
 # SHA line: the fetch is best-effort and never fails the suite.
 conf_source_status() {
@@ -76,7 +80,7 @@ conf_source_status() {
     fi
     behind=$(git -C "$dir" rev-list --count "HEAD..@{u}" 2>/dev/null) || return 0
     if [ -n "$behind" ] && [ "$behind" -gt 0 ]; then
-        echo "  WARNING: ${behind} commit(s) behind @{u}. Grading against an older suite."
+        echo "  WARNING: ${var_name} is ${behind} commit(s) behind @{u}. Grading against an older suite."
         echo "           Re-run with CONF_PULL=1, or: git -C ${dir} pull --ff-only"
     fi
 }
