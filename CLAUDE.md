@@ -141,8 +141,11 @@ These span packages and will bite on a task that never opens a routed doc.
   script's `ALLOWED`.
 - **Makefiles and justfiles dispatch; they do not hold shell scripts.** Control flow, or four or
   more statements, goes in `scripts/` and the recipe calls it. Nearly every directory carries both
-  a `Makefile` and a `justfile` that must stay name-and-behavior identical, so inline logic is
-  written twice in two escaping dialects and maintained in neither. `just clean-backends` became a
+  a `Makefile` and a `justfile`, and in `examples/` they must stay name-and-behavior identical
+  (`examples/CONVENTIONS.md` §6), so inline logic is written twice in two escaping dialects and
+  maintained in neither. The root justfile is partial (72 Makefile targets have no twin as of
+  2026-10-22) and nothing gates its parity. Keep the Makefile complete; bringing the justfile up
+  to it is open to whoever wants it. `just clean-backends` became a
   byte-identical copy of `just clean`, wiping the events volumes while promising to wipe
   `docker/backends` (#1396). Constraint C8, gated by `make check-recipe-complexity`. The
   sweep is done and `scripts/recipe-complexity-allowed.txt` is empty, so any entry appearing there

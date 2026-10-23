@@ -55,9 +55,23 @@ check "require_fixture_alive refuses a fixture that exited" 1 $?
 grep -q "bind: address already in use" "$TMP/dead.out"
 check "the refusal shows the fixture log's tail" 0 $?
 
+# A suite checkout behind its upstream is named in the warning itself, so the
+# line still makes sense when exercise-events repeats it under the results.
+GIT="git -c user.name=selftest -c user.email=selftest@invalid"
+$GIT init -q -b main "$TMP/up" && $GIT -C "$TMP/up" commit -q --allow-empty -m one && $GIT -C "$TMP/up" commit -q --allow-empty -m two
+git clone -q "$TMP/up" "$TMP/down" && git -C "$TMP/down" reset -q --hard HEAD~1
+SELFTEST_SUITE_PATH="$TMP/down"
+conf_source_status SELFTEST_SUITE_PATH >"$TMP/stale.out" 2>&1
+grep -q "SELFTEST_SUITE_PATH is 1 commit(s) behind @{u}" "$TMP/stale.out"
+check "a stale checkout's warning names its path variable" 0 $?
+git -C "$TMP/down" pull -q --ff-only
+conf_source_status SELFTEST_SUITE_PATH >"$TMP/fresh.out" 2>&1
+grep -q "behind @{u}" "$TMP/fresh.out"
+check "an up-to-date checkout prints no warning" 1 $?
+
 rm -rf "$TMP"
 if [ "$FAILS" -ne 0 ]; then
     echo "conf-common selftest: ${FAILS} case(s) failed"
     exit 1
 fi
-echo "conf-common selftest: 6/6 cases pass"
+echo "conf-common selftest: 8/8 cases pass"

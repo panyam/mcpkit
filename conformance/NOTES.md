@@ -61,7 +61,7 @@ branch:
 ```
 MCPCONFORMANCE_MRTR_PATH: /path/to/conf-upstream-main
   checked out main @ a983ba9
-  WARNING: 3 commit(s) behind @{u}. Grading against an older suite.
+  WARNING: MCPCONFORMANCE_MRTR_PATH is 3 commit(s) behind @{u}. Grading against an older suite.
            Re-run with CONF_PULL=1, or: git -C /path/to/conf-upstream-main pull --ff-only
 ```
 
@@ -73,6 +73,12 @@ fight `check-conformance-stale`, which pins `upstream-conformance@<sha>` in `CON
 PR-ref worktree like `../conf-481` with no tracking branch, it degrades to just the SHA line.
 
 This is the gap that let `../conf-pending` drift 45 commits behind without anyone noticing.
+
+A warning at the top of a run still gets missed when the numbers come at the bottom. On 2026-10-22
+`make exercise-events` printed `events-poll: Passed: 1/36` against a green tree, because
+`../conf-events` sat 8 commits behind upstream and predated `Mcp-Name` on `events/*` (#1567). The
+warning was there, a screen and a half above the table. So the warning names its path variable, and
+`exercise-events` repeats any such line under its results (#1585).
 
 **One session, one worktree.** The default paths are shared by every session on the machine, so two
 sessions editing the fork at once edit the *same files*. On 2026-10-15, #1505 and #1529 were both
