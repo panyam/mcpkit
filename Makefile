@@ -21,6 +21,7 @@ SUB_MODS_TO_TAG := \
 	experimental/ext/events \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
+	experimental/ext/rooms \
 	cmd/testclient cmd/common cmd/mcpskills \
 	examples/mcpskills-walkthrough \
 	tests/e2e tests/keycloak
@@ -239,6 +240,9 @@ test-experimental-events-discord: ## Run experimental events Discord example tes
 
 test-experimental-events-telegram: ## Run experimental events Telegram example tests
 	@bash experimental/scripts/test-events-telegram.sh
+
+test-experimental-rooms: ## Run experimental ext/rooms room bridge tests
+	@bash experimental/scripts/test-rooms.sh
 
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright). EXAMPLE=<name> picks a fixture.
 	uv run scripts/apps_playwright_test.py

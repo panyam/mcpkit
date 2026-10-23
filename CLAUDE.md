@@ -46,6 +46,7 @@ upstream changes to watch.
 | `ext/otel/` — SEP-414 OpenTelemetry adapter | `ext/otel/README.md`, `docs/SEP_414_OTEL.md` |
 | `experimental/ext/events/` — MCP Events protocol | `experimental/ext/events/README.md`, `experimental/ext/events/NOTES.md` |
 | `experimental/ext/agents/` — Server-declared agent discovery (pre-SEP) | `experimental/ext/agents/README.md`, `experimental/ext/agents/NOTES.md` |
+| `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581) | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md` |
 | `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
 | `conformance/` — Suite orchestration + audits | `conformance/NOTES.md` |
 | `examples/` — Working examples | `examples/README.md`, `examples/CONVENTIONS.md`, `examples/NOTES.md` |

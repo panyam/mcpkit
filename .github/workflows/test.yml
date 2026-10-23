@@ -154,6 +154,18 @@ jobs:
       - name: Run experimental events Go client tests
         run: bash experimental/scripts/test-events-clients-go.sh
 
+  test-rooms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run experimental rooms tests
+        run: bash experimental/scripts/test-rooms.sh
+
   test-agents:
     runs-on: ubuntu-latest
     steps:
