@@ -16,9 +16,9 @@
 
 EXPERIMENTAL_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: test test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-stores-gorm-pg test-events-stores-redis test-events-stores-redis-real test-events-discord test-events-telegram test-rooms test-rooms-massrelay test-rooms-ts help
+.PHONY: test test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-stores-gorm-pg test-events-stores-redis test-events-stores-redis-real test-events-discord test-events-telegram test-rooms test-rooms-massrelay test-roomsevents test-rooms-ts help
 
-test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram test-rooms test-rooms-massrelay test-rooms-ts ## Run all experimental POC tests
+test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram test-rooms test-rooms-massrelay test-roomsevents test-rooms-ts ## Run all experimental POC tests
 
 test-agents: ## Run experimental ext/agents library tests
 	@bash $(EXPERIMENTAL_DIR)/scripts/test-agents.sh
@@ -55,6 +55,9 @@ test-rooms: ## Run experimental ext/rooms room bridge tests
 
 test-rooms-massrelay: ## Run the room bridge over a real massrelay relay
 	@bash $(EXPERIMENTAL_DIR)/scripts/test-rooms-massrelay.sh
+
+test-roomsevents: ## Run the room bridge's events and the stdio channel front end
+	@bash $(EXPERIMENTAL_DIR)/scripts/test-roomsevents.sh
 
 test-rooms-ts: ## Run the TypeScript page client against the Go room bridge (needs pnpm)
 	@bash $(EXPERIMENTAL_DIR)/scripts/test-rooms-ts.sh
