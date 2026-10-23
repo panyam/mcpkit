@@ -91,6 +91,17 @@ res, err := c.ToolCallWith(ctx, "reindex", args, client.WithProgress(func(p core
 The callback runs on the transport's reader goroutine, so keep it short. Reports that arrive after
 the call returns are dropped.
 
+`ReadResourceWith` and `GetPromptWith` take the same options, since any request can carry a
+progress token. Whether progress arrives is up to the server's handler. `ToolCallWith` also sends
+the SEP-2243 `Mcp-Param-*` headers that `ToolCall` derives from a tool's cached `inputSchema`.
+
+## Closing
+
+`Close` ends a Streamable HTTP session with the `DELETE` the transport spec asks a client to send,
+so the server frees it, and runs its `OnSessionClose` hooks, right away instead of at idle
+expiry. It's best effort and gives up after two seconds. A server answering 405, or one that's
+gone, doesn't make `Close` fail. Stateless-wire clients have no session, so they send nothing.
+
 ## When the server wants more scope
 
 A 403 the client cannot step up from (a static token, say) comes back as a
@@ -111,3 +122,8 @@ A `core.ScopeAwareTokenSource` gets those scopes first and the call is retried o
 The client accepts any `core.Transport` via `WithTransport()`. This enables:
 - `server.NewInProcessTransport` for testing (no HTTP)
 - Custom transports for stdio, WebSocket, etc.
+
+A transport that implements `core.NotificationReceiver` gets the client's notification routing
+before `Connect`, so `WithProgress` and `WithNotificationCallback` work over it as they do over
+HTTP. `server.NewInProcessTransport` implements it. Any other transport delivers no notifications
+to the client.

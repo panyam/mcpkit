@@ -683,11 +683,9 @@ func (c *Client) doConnect() error {
 			ct.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 				return c.HandleServerRequest(req)
 			}
-			if c.needsNotifyAdapter() {
-				adapter := c.makeNotifyAdapter()
-				ct.notifyHandler = func(method string, params []byte) {
-					adapter(method, json.RawMessage(params))
-				}
+			adapter := c.makeNotifyAdapter()
+			ct.notifyHandler = func(method string, params []byte) {
+				adapter(method, json.RawMessage(params))
 			}
 			tr = &coreTransportAdapter{inner: ct}
 		} else if c.stdioReader != nil && c.stdioWriter != nil {
@@ -695,11 +693,9 @@ func (c *Client) doConnect() error {
 			st.serverReqHandler = func(_ context.Context, req *core.Request) *core.Response {
 				return c.HandleServerRequest(req)
 			}
-			if c.needsNotifyAdapter() {
-				adapter := c.makeNotifyAdapter()
-				st.notifyHandler = func(method string, params []byte) {
-					adapter(method, json.RawMessage(params))
-				}
+			adapter := c.makeNotifyAdapter()
+			st.notifyHandler = func(method string, params []byte) {
+				adapter(method, json.RawMessage(params))
 			}
 			tr = &coreTransportAdapter{inner: st}
 		} else if c.useSSE {
@@ -708,9 +704,7 @@ func (c *Client) doConnect() error {
 			st.serverReqHandler = c.HandleServerRequest
 			st.modifyReq = c.modifyRequest
 			st.inspectResp = c.inspectResponse
-			if c.needsNotifyAdapter() {
-				st.notifyHandler = c.makeNotifyAdapter()
-			}
+			st.notifyHandler = c.makeNotifyAdapter()
 			tr = st
 		} else {
 			st := newStreamableClientTransport(c.url, c.tokenSource)
@@ -719,9 +713,7 @@ func (c *Client) doConnect() error {
 			st.enableGetSSE = c.enableGetSSE
 			st.modifyReq = c.modifyRequest
 			st.inspectResp = c.inspectResponse
-			if c.needsNotifyAdapter() {
-				st.notifyHandler = c.makeNotifyAdapter()
-			}
+			st.notifyHandler = c.makeNotifyAdapter()
 			tr = st
 		}
 
@@ -735,6 +727,15 @@ func (c *Client) doConnect() error {
 		c.mu.Lock()
 		c.transport = tr
 		c.mu.Unlock()
+	} else if a, ok := tr.(*coreTransportAdapter); ok {
+		// A WithTransport transport was built before the client could hand it
+		// a notification route; give it one if it can take it.
+		if nr, ok := a.inner.(core.NotificationReceiver); ok {
+			adapter := c.makeNotifyAdapter()
+			nr.SetNotificationHandler(func(method string, params []byte) {
+				adapter(method, json.RawMessage(params))
+			})
+		}
 	}
 
 	if err := tr.connect(); err != nil {
@@ -920,31 +921,29 @@ func (c *Client) Close() error {
 	tr := c.transport
 	c.mu.Unlock()
 	if tr != nil {
+		if st := streamableOf(tr); st != nil {
+			st.terminateSession()
+		}
 		return tr.close()
 	}
 	return nil
+}
+
+// streamableOf returns tr's *streamableClientTransport, peeling a
+// loggingTransport, or nil for any other transport.
+func streamableOf(tr clientTransport) *streamableClientTransport {
+	if lt, ok := tr.(*loggingTransport); ok {
+		tr = lt.inner
+	}
+	st, _ := tr.(*streamableClientTransport)
+	return st
 }
 
 // unwrapStreamableTransport returns the underlying *streamableClientTransport
 // if the client uses Streamable HTTP. Peels through loggingTransport wrappers.
 // Returns nil for SSE and in-memory transports.
 func (c *Client) unwrapStreamableTransport() *streamableClientTransport {
-	t := c.transport
-	if lt, ok := t.(*loggingTransport); ok {
-		t = lt.inner
-	}
-	if st, ok := t.(*streamableClientTransport); ok {
-		return st
-	}
-	return nil
-}
-
-// needsNotifyAdapter reports whether the transport needs the notify adapter.
-// It always does now: ToolCallWith's progress callbacks are registered per
-// call, after the transport is built, so routing has to be in place from the
-// start.
-func (c *Client) needsNotifyAdapter() bool {
-	return true
+	return streamableOf(c.transport)
 }
 
 // makeNotifyAdapter creates a transport-level notification handler that
@@ -1493,7 +1492,8 @@ func (c *Client) ToolCallFull(ctx context.Context, name string, args any) (*core
 	return &toolResult, nil
 }
 
-// CallOption configures one ToolCallWith call.
+// CallOption configures one ToolCallWith, ReadResourceWith or GetPromptWith
+// call.
 type CallOption func(*callOptions)
 
 type callOptions struct {
@@ -1507,28 +1507,26 @@ type callOptions struct {
 //
 // fn runs on the transport's read goroutine, so it must not block, and it may
 // run concurrently with fn for another call. Progress that arrives after the
-// call has returned is dropped. Delivered on Streamable HTTP, SSE and stdio;
-// a client built over WithTransport gets whatever notifications that
-// transport delivers.
+// call has returned is dropped. Delivered on Streamable HTTP, SSE, stdio, and
+// over WithTransport when the transport implements core.NotificationReceiver
+// (server.NewInProcessTransport does); any other WithTransport transport
+// delivers none.
+//
+// Any request may carry a progress token, so this works for resources/read and
+// prompts/get too. Whether progress arrives is up to the server's handler.
 func WithProgress(fn func(core.ProgressNotification)) CallOption {
 	return func(o *callOptions) { o.onProgress = fn }
 }
 
 // ToolCallWith invokes a tool like ToolCallFull, with per-call options such
-// as WithProgress. With no options it is ToolCallFull.
+// as WithProgress. With no options it is ToolCallFull, except that it also
+// sends the SEP-2243 Mcp-Param-* headers ToolCall derives from the tool's
+// cached inputSchema. Like ToolCall, a call that carries such headers skips
+// WithCallMiddleware.
 func (c *Client) ToolCallWith(ctx context.Context, name string, args any, opts ...CallOption) (*core.ToolResult, error) {
-	var o callOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
 	params := map[string]any{"name": name, "arguments": args}
-	if o.onProgress != nil {
-		token := fmt.Sprintf("mcpkit-progress-%d", c.progressID.Add(1))
-		params["_meta"] = map[string]any{"progressToken": token}
-		c.progress.Store(token, o.onProgress)
-		defer c.progress.Delete(token)
-	}
-	result, err := c.Call(ctx, "tools/call", params)
+	defer c.applyCallOptions(params, opts)()
+	result, err := c.callWithHeaders(ctx, "tools/call", params, c.buildToolCallHeaders(name, args))
 	if err != nil {
 		return nil, err
 	}
@@ -1537,6 +1535,69 @@ func (c *Client) ToolCallWith(ctx context.Context, name string, args any, opts .
 		return nil, fmt.Errorf("unmarshal tool result: %w", err)
 	}
 	return &toolResult, nil
+}
+
+// ReadResourceWith reads a resource like ReadResourceFull, with per-call
+// options such as WithProgress.
+func (c *Client) ReadResourceWith(ctx context.Context, uri string, opts ...CallOption) (*core.ResourceResult, error) {
+	params := map[string]any{"uri": uri}
+	defer c.applyCallOptions(params, opts)()
+	result, err := c.Call(ctx, "resources/read", params)
+	if err != nil {
+		return nil, err
+	}
+	var out core.ResourceResult
+	if err := json.Unmarshal(result.Raw, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal resource result: %w", err)
+	}
+	return &out, nil
+}
+
+// GetPromptWith runs prompts/get for name with args, with per-call options
+// such as WithProgress, and returns the typed result.
+func (c *Client) GetPromptWith(ctx context.Context, name string, args map[string]any, opts ...CallOption) (*core.PromptResult, error) {
+	params := map[string]any{"name": name}
+	if args != nil {
+		params["arguments"] = args
+	}
+	defer c.applyCallOptions(params, opts)()
+	result, err := c.Call(ctx, "prompts/get", params)
+	if err != nil {
+		return nil, err
+	}
+	var out core.PromptResult
+	if err := json.Unmarshal(result.Raw, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal prompt result: %w", err)
+	}
+	return &out, nil
+}
+
+// applyCallOptions folds opts into params (a progress token in _meta) and
+// returns the cleanup to defer, which stops routing that token once the call
+// returns.
+func (c *Client) applyCallOptions(params map[string]any, opts []CallOption) func() {
+	var o callOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	if o.onProgress == nil {
+		return func() {}
+	}
+	token := fmt.Sprintf("mcpkit-progress-%d", c.progressID.Add(1))
+	params["_meta"] = map[string]any{"progressToken": token}
+	c.progress.Store(token, o.onProgress)
+	return func() { c.progress.Delete(token) }
+}
+
+// callWithHeaders is Call when headers is empty. Otherwise it goes straight to
+// the transport with the headers on the CallContext, skipping
+// WithCallMiddleware, the same trade-off callForToolCall makes, but keeping
+// ctx so the call can still be cancelled.
+func (c *Client) callWithHeaders(ctx context.Context, method string, params any, headers map[string]string) (*CallResult, error) {
+	if len(headers) == 0 {
+		return c.Call(ctx, method, params)
+	}
+	return c.CallContext(ctx, &CallContext{Headers: headers}, method, params)
 }
 
 // routeProgress hands a progress notification to the ToolCallWith call that
@@ -1965,6 +2026,44 @@ func (t *streamableClientTransport) do(req *http.Request) (*http.Response, error
 
 func (t *streamableClientTransport) connect() error       { return nil }
 func (t *streamableClientTransport) getSessionID() string { return t.sessionID }
+
+// sessionDeleteTimeout bounds the DELETE Client.Close sends, so closing a client
+// whose server has gone away doesn't hang.
+const sessionDeleteTimeout = 2 * time.Second
+
+// terminateSession tells the server the client is done with its session, with
+// the HTTP DELETE the Streamable HTTP transport says a client SHOULD send, so
+// the server frees it (and runs its session-close hooks) now rather than at
+// idle expiry. Best effort: no session (which includes every stateless-wire
+// client, since that wire has none), a 405 from a server that doesn't support
+// it, or an unreachable server all leave nothing to do. Only Client.Close calls it; a reconnect
+// abandons its old session without waiting on the network.
+func (t *streamableClientTransport) terminateSession() {
+	sid := t.sessionID
+	if sid == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sessionDeleteTimeout)
+	defer cancel()
+	buildReq := func() (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, t.url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Mcp-Session-Id", sid)
+		if t.modifyReq != nil {
+			t.modifyReq(req)
+		}
+		return req, nil
+	}
+	resp, err := DoWithAuthRetry(t.tokenSource, buildReq, t.do)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	t.sessionID = ""
+}
 
 // close shuts down the transport, including the background GET SSE stream if open.
 func (t *streamableClientTransport) close() error {

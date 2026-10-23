@@ -62,3 +62,5 @@ c := client.NewClient("memory://", info, client.WithTransport(transport))
 ```
 
 The in-process transport passes `*core.Request`/`*core.Response` directly, with no JSON envelope serialization. This catches logic bugs; HTTP transport tests catch wire format bugs.
+
+Notifications reach the client too, so per-call progress (`client.WithProgress`) works in-process. A handler given with `WithNotificationHandler` keeps seeing every notification as well.
