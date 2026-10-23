@@ -475,3 +475,25 @@ still routes by per-watch URL (the reasons are above) and only passes the id alo
 `Delivery`. `Unwatch` used to send `events/unsubscribe` by hand; it now goes through
 `StopAndUnsubscribe` for a live watch, and keeps the hand-rolled call only for a watch with no live
 subscription, whose upstream entry may still exist from before a restart.
+
+## Outward tools wait for a person, through the bridge's own tools (#1589)
+
+Until #1589 a run got its outward-facing tools only from `-approve-outward`, which approved every
+run with nobody looking. `PendingApprover` parks the request and the bridge's MCP server answers
+it (`approvals`, `approve`, `deny`), so the person deciding uses whatever host they already have
+the bridge connected in. Announcing the request in the session that made the watch would be nicer,
+but that needs #1581's channel front end and only works while that session is open, so it's a
+notifier on `OnPending` for later rather than the mechanism.
+
+Three choices worth keeping. A timeout is a denial, because a request nobody saw is not consent.
+The daemon defaults to the pending approver, since it always serves MCP to someone, and
+`-approval-timeout 0` is the way to deny outright. And nothing about a pending request is
+persisted. The run waiting on it is a process that a restart kills anyway, and its event is
+redelivered from the cursor, so it asks again rather than being approved by a stale answer.
+
+A waiting run blocks its own watch's delivery loop, by design: approving event 2 before event 1
+has been decided would reorder a rule's actions. The cost is that the receiver buffers 64 events,
+and one it drops on a full buffer still answers 200, so the server doesn't retry it. A rule left
+waiting through a burst loses events until the bridge restarts and resubscribes from its cursor,
+which still points before them. Worth a bounded per-watch queue if anyone hits it.
+

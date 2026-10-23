@@ -29,8 +29,9 @@ type alert struct {
 }
 
 type upstream struct {
-	client *client.Client
-	yield  func(context.Context, alert) error
+	client   *client.Client
+	yield    func(context.Context, alert) error
+	webhooks *events.WebhookRegistry
 }
 
 // newUpstream stands up an events server with alert.fired (arguments
@@ -64,12 +65,13 @@ func newUpstream(t *testing.T) upstream {
 		Delivery:    []string{"poll", "webhook"},
 	})
 	srv := server.NewServer(core.ServerInfo{Name: "upstream", Version: "0"}, server.WithSubscriptions())
+	webhooks := events.NewWebhookRegistry(
+		events.WithWebhookAllowPrivateNetworks(true),
+		events.WithUnsafeWebhookAllowPlaintextCallbacks(),
+	)
 	events.Register(events.Config{
-		Sources: []events.EventSource{alertSrc, buildSrc},
-		Webhooks: events.NewWebhookRegistry(
-			events.WithWebhookAllowPrivateNetworks(true),
-			events.WithUnsafeWebhookAllowPlaintextCallbacks(),
-		),
+		Sources:                  []events.EventSource{alertSrc, buildSrc},
+		Webhooks:                 webhooks,
 		Server:                   srv,
 		UnsafeAnonymousPrincipal: "test-principal",
 	})
@@ -78,7 +80,7 @@ func newUpstream(t *testing.T) upstream {
 	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "bridge", Version: "0"})
 	require.NoError(t, c.Connect(t.Context()))
 	t.Cleanup(func() { _ = c.Close() })
-	return upstream{client: c, yield: yield}
+	return upstream{client: c, yield: yield, webhooks: webhooks}
 }
 
 type recordingSink chan eventsclient.Delivery
@@ -117,7 +119,14 @@ func newHookServer(t *testing.T) *hookServer {
 
 func newBridge(t *testing.T, hs *hookServer, sink eventsclient.EventSink, store bridge.Store, ups map[string]upstream) *bridge.Bridge {
 	t.Helper()
-	cfg := bridge.Config{PublicURL: hs.ts.URL, Sink: sink, Store: store, Logf: t.Logf}
+	return newBridgeWith(t, hs, bridge.Config{Sink: sink, Store: store}, ups)
+}
+
+// newBridgeWith starts a bridge from cfg, filling in the hook URL, the
+// upstreams and the test logger.
+func newBridgeWith(t *testing.T, hs *hookServer, cfg bridge.Config, ups map[string]upstream) *bridge.Bridge {
+	t.Helper()
+	cfg.PublicURL, cfg.Logf = hs.ts.URL, t.Logf
 	for name, u := range ups {
 		cfg.Upstreams = append(cfg.Upstreams, bridge.Upstream{Name: name, Client: u.client})
 	}
@@ -326,6 +335,34 @@ func TestUnwatch_StopsDeliveryAndForgets(t *testing.T) {
 
 	var werr *bridge.WatchError
 	assert.ErrorAs(t, b.Unwatch(t.Context(), w.ID), &werr)
+}
+
+func TestUnwatch_RemovesTheUpstreamSubscription(t *testing.T) {
+	up := newUpstream(t)
+	b := newBridge(t, newHookServer(t), make(recordingSink, 4), nil, map[string]upstream{"ops": up})
+
+	w, err := b.Watch(t.Context(), "ops/alert.fired", nil, "note it")
+	require.NoError(t, err)
+	require.Len(t, up.webhooks.Targets(), 1)
+	require.NoError(t, b.Unwatch(t.Context(), w.ID))
+	assert.Empty(t, up.webhooks.Targets(), "the server no longer holds the subscription")
+}
+
+func TestWatchList_ReportsTheToolCeiling(t *testing.T) {
+	ups := map[string]upstream{"ops": newUpstream(t)}
+	sink := scopedSink{recordingSink: make(recordingSink, 1), allowed: []string{"Read", "Grep"}, outward: []string{"mcp__gmail__send"}}
+	res := callTool(t, agent(t, newBridge(t, newHookServer(t), sink, nil, ups)), "watch_list", nil)
+
+	out := structured[struct {
+		Tools struct{ Allowed, Outward []string } `json:"tools"`
+	}](t, res)
+	assert.Equal(t, []string{"Grep", "Read"}, out.Tools.Allowed)
+	assert.Equal(t, []string{"mcp__gmail__send"}, out.Tools.Outward)
+	assert.Contains(t, res.Content[0].Text, "A watch's tools may name: Grep, Read, mcp__gmail__send")
+
+	plain := callTool(t, agent(t, newBridge(t, newHookServer(t), make(recordingSink, 1), nil, ups)), "watch_list", nil)
+	raw, _ := json.Marshal(plain.StructuredContent)
+	assert.NotContains(t, string(raw), `"tools"`, "a sink without a tool list reports none")
 }
 
 // A standing rule outlives the bridge: a second bridge on the same store

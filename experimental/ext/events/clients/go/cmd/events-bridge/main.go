@@ -10,6 +10,11 @@
 // A bearer token for an upstream comes from EVENTS_BRIDGE_TOKEN_<NAME>, with
 // the name upper-cased and '-' as '_'.
 //
+// A run that needs one of -outward-tools waits for a person: it is listed by
+// the approvals tool and answered with approve or deny, and denied after
+// -approval-timeout (15m). -approval-timeout 0 denies outward tools at once,
+// and -approve-outward approves them for every run, unattended.
+//
 // It lives in this module rather than the root one so the root mcpkit module
 // does not have to depend on experimental/.
 package main
@@ -25,6 +30,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
@@ -48,6 +54,7 @@ func main() {
 	allowed := flag.String("allowed-tools", "Read,Grep,Glob", "comma-separated tools every headless run gets; keep these read-only")
 	outward := flag.String("outward-tools", "", "comma-separated outward-facing tools, added to a run only when approved")
 	approveOutward := flag.Bool("approve-outward", false, "approve -outward-tools for every run, unattended")
+	approvalTimeout := flag.Duration("approval-timeout", bridge.DefaultApprovalTimeout, "how long a run waits for approve/deny before it is denied; 0 denies outward tools at once")
 	mcpConfig := flag.String("mcp-config", "", "MCP config for headless runs (passed with --strict-mcp-config)")
 	dryRun := flag.Bool("dry-run", false, "print each run's prompt and arguments instead of starting claude")
 	flag.Parse()
@@ -91,8 +98,12 @@ func main() {
 			log.Printf("run for %s %s: session %s is gone (%v), starting fresh", d.QualifiedName(), d.Event.EventID, d.Session, err)
 		},
 	}
-	if *approveOutward {
-		sink.Approver = bridge.ApproverFunc(func(context.Context, eventsclient.Delivery, []string) (bool, error) { return true, nil })
+	approver, approvals := chooseApprover(*approveOutward, *approvalTimeout)
+	sink.Approver = approver
+	if approvals != nil {
+		approvals.OnPending = func(a bridge.Approval) {
+			log.Printf("approval %s: %s wants %s; answer with the approve or deny tool", a.ID, a.Event, strings.Join(a.Tools, ", "))
+		}
 	}
 	if *mcpConfig != "" {
 		// Absolute, because a run that resumes a session starts in that
@@ -112,6 +123,7 @@ func main() {
 		PublicURL: strings.TrimSuffix(*publicURL, "/"),
 		Sink:      sink,
 		Store:     bridge.NewFileStore(*state),
+		Approvals: approvals,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -150,6 +162,22 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// chooseApprover picks how a run's outward-facing tools are approved. The
+// daemon always serves MCP to the user, so by default a person answers through
+// the approvals tools. approveAll wins over timeout, and a zero timeout means
+// nobody is expected to answer, so the tools are denied at once.
+func chooseApprover(approveAll bool, timeout time.Duration) (bridge.Approver, *bridge.PendingApprover) {
+	switch {
+	case approveAll:
+		return bridge.ApproverFunc(func(context.Context, eventsclient.Delivery, []string) (bool, error) { return true, nil }), nil
+	case timeout <= 0:
+		return bridge.DenyAll, nil
+	default:
+		p := &bridge.PendingApprover{Timeout: timeout}
+		return p, p
+	}
 }
 
 // printRunner stands in for claude under -dry-run.

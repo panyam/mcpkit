@@ -68,6 +68,12 @@ type Config struct {
 
 	// Logf reports delivery and resubscribe failures. Nil uses log.Printf.
 	Logf func(format string, args ...any)
+
+	// Approvals, when set, gives the bridge's MCP server the approvals,
+	// approve and deny tools over it. Set the same PendingApprover as the
+	// sink's Approver (HeadlessClaudeSink.Approver), so the requests its runs
+	// park are the ones these tools answer.
+	Approvals *PendingApprover
 }
 
 // Bridge holds the watches and their live subscriptions. Construct with New,
