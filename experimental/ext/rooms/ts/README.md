@@ -53,16 +53,19 @@ adds so an agent can pick a page.
 
 ## Who may call
 
-The relay validates `token` and reports its `sub` as the page's user. The bridge lets a session call
+The relay validates `token` and reports its `sub` as the page's user. The bridge lets an agent call
 the page only when the page agreed:
 
-- `setAgentsAllowed(true)` agrees to every agent session acting for the page's own user.
-- `acceptPairing(code)` agrees to the session that got `code` back from `attach`, typically another
-  user's. `onPairingRequest(fn)` reports who is asking, so the page can show its user.
+- `setAgentsAllowed(true)` agrees to every agent acting for the page's own user.
+- `acceptPairing(code)` agrees to the agent that got `code` back from `attach`, typically another
+  user's. The page then holds a grant for that agent's principal (subject, client), sends it to
+  every bridge, and `onPaired(fn)` reports it. `onPairingRequest(fn)` reports who is asking.
 - `offerPairingCode({ ttlMs? })` makes up a code for the page to show; the user gives it to the
   agent, which enters it with the bridge's `pair` tool. `onPaired(fn)` reports which agent it was,
   and the code is withdrawn once used. Two minutes by default, at most ten.
-- `revoke(session?)` ends one pairing, or all of them when called with no argument.
+- `revoke({ subject, client? })` ends grants to that principal, `revokeAll()` ends every grant, and
+  `grants()` lists them. A grant outlives the agent's MCP session and ends when revoked or when the
+  page leaves.
 
 ## Telling agents what happened
 

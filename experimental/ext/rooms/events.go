@@ -62,8 +62,8 @@ func WithPageEvents(fn func(PageEvent)) Option {
 	return func(b *Bridge) { b.onEvent = fn }
 }
 
-// Attached reports whether the MCP session attached to resource's room and
-// has not detached since.
+// Attached reports whether the MCP session made resource one of its default
+// rooms with attach and has not detached since.
 func (b *Bridge) Attached(sessionID, resource string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -71,19 +71,36 @@ func (b *Bridge) Attached(sessionID, resource string) bool {
 	return s != nil && s.attached[resource]
 }
 
-// PageAgreed reports whether page, in resource's room, agreed to the session:
-// by its agents switch for the page's own user, or by accepting the session's
-// pairing code. It is the same agreement that lets the session call the
-// page's tools.
+// PageAgreed reports whether page, in resource's room, agreed to the
+// principal acting in the MCP session: by its agents switch for the page's own
+// user, or by a grant. It is the same agreement that lets that principal call
+// the page's tools. A session the bridge has not seen a call from agrees to
+// nothing.
 func (b *Bridge) PageAgreed(sessionID, resource string, page PeerID) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	s := b.sessions[sessionID]
+	if s == nil {
+		return false
+	}
+	return b.agreedLocked(s.principal, resource, page)
+}
+
+// PageAgreedTo reports whether page, in resource's room, agreed to p, for a
+// caller with no MCP session.
+func (b *Bridge) PageAgreedTo(p Principal, resource string, page PeerID) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.agreedLocked(p, resource, page)
+}
+
+func (b *Bridge) agreedLocked(p Principal, resource string, page PeerID) bool {
 	rs := b.rooms[resource]
 	if rs == nil {
 		return false
 	}
 	pg := rs.pages[page]
-	return pg != nil && pg.allowed[sessionID]
+	return pg != nil && agreesLocked(pg, p)
 }
 
 // pageEventLocked validates an event a page sent and returns it for the hook,

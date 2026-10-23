@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -56,6 +57,12 @@ type Page struct {
 	onPairing func(PairingRequest)
 	offer     pairingOffer
 	onPaired  func(PairedByCode)
+	// grants are the principals the page agrees to beyond its agents
+	// switch; accepted are agent codes its user accepted, by code, until a
+	// bridge names the principal or they expire.
+	grants    []Principal
+	accepted  map[string]time.Time
+	focusedAt time.Time
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -71,13 +78,14 @@ func JoinPage(ctx context.Context, t RoomTransport, room string) (*Page, error) 
 	}
 	pctx, cancel := context.WithCancel(context.Background())
 	p := &Page{
-		room:    r,
-		tools:   make(map[string]PageTool),
-		bridges: make(map[PeerID]bool),
-		running: make(map[string]context.CancelFunc),
-		ctx:     pctx,
-		cancel:  cancel,
-		done:    make(chan struct{}),
+		room:     r,
+		tools:    make(map[string]PageTool),
+		bridges:  make(map[PeerID]bool),
+		running:  make(map[string]context.CancelFunc),
+		accepted: make(map[string]time.Time),
+		ctx:      pctx,
+		cancel:   cancel,
+		done:     make(chan struct{}),
 	}
 	go p.loop()
 	return p, nil
@@ -105,10 +113,12 @@ func (p *Page) SetLabel(label string) {
 
 // Focus reports that the page's user is looking at it now.
 func (p *Page) Focus() {
+	now := time.Now().UTC()
 	p.mu.Lock()
 	label := p.label
+	p.focusedAt = now
 	p.mu.Unlock()
-	p.notifyBridges(MethodPageState, map[string]any{"label": label, "focused": true})
+	p.notifyBridges(MethodPageState, map[string]any{"label": label, "focused": true, "focusedAt": now.Format(time.RFC3339Nano)})
 }
 
 // SetAgentsAllowed is the "let my agents drive this tab" switch. On pairs the
@@ -121,16 +131,56 @@ func (p *Page) SetAgentsAllowed(allowed bool) {
 	p.notifyBridges(MethodAgentsAllowed, map[string]any{"allowed": allowed})
 }
 
-// AcceptPairing accepts a code an agent session got back from attach, pairing
-// the page with that session.
+// AcceptPairing accepts a code an agent got back from attach. The bridge that
+// minted it answers with the agent's principal, which the page then agrees to
+// (OnPaired reports it) and sends to every bridge with its other grants.
 func (p *Page) AcceptPairing(code string) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	p.mu.Lock()
+	p.accepted[code] = time.Now().Add(DefaultAgentCodeTTL)
+	p.mu.Unlock()
 	p.notifyBridges(MethodAcceptPairing, map[string]any{"code": code})
 }
 
-// Revoke ends the pairing with one session, or with all of them when session
-// is empty.
-func (p *Page) Revoke(session string) {
-	p.notifyBridges(MethodRevoke, map[string]any{"session": session})
+// Grants returns the principals the page agrees to beyond its agents switch.
+func (p *Page) Grants() []Principal {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.grants)
+}
+
+// Revoke ends the page's agreement with who: every grant to who's subject
+// when who.Client is empty, or the one for that client. It does not turn off
+// the agents switch, which SetAgentsAllowed(false) does.
+func (p *Page) Revoke(who Principal) {
+	p.mu.Lock()
+	p.grants = slices.DeleteFunc(p.grants, func(g Principal) bool {
+		return g.Subject == who.Subject && (who.Client == "" || g.Client == who.Client)
+	})
+	p.mu.Unlock()
+	p.sendGrants()
+}
+
+// RevokeAll ends every grant. The agents switch is unchanged.
+func (p *Page) RevokeAll() {
+	p.mu.Lock()
+	p.grants = nil
+	p.mu.Unlock()
+	p.sendGrants()
+}
+
+func (p *Page) sendGrants() {
+	p.mu.Lock()
+	grants := slices.Clone(p.grants)
+	p.mu.Unlock()
+	p.notifyBridges(MethodGrants, map[string]any{"grants": nonNil(grants)})
+}
+
+func nonNil(g []Principal) []Principal {
+	if g == nil {
+		return []Principal{}
+	}
+	return g
 }
 
 // OnPairingRequest installs a callback for sessions asking to drive the page,
@@ -190,8 +240,10 @@ func (p *Page) loop() {
 func (p *Page) handle(from PeerID, m rpcMessage) {
 	switch m.Method {
 	case "tools/list":
-		p.reply(from, m.ID, map[string]any{"tools": p.descriptors()})
+		// Greet before answering: a bridge handles one peer's messages in
+		// order, so by the time it has the list it also has the page's state.
 		p.greet(from)
+		p.reply(from, m.ID, map[string]any{"tools": p.descriptors()})
 	case "tools/call":
 		p.greet(from)
 		p.call(from, m)
@@ -230,10 +282,16 @@ func (p *Page) greet(from PeerID) {
 	p.mu.Lock()
 	known := p.bridges[from]
 	p.bridges[from] = true
-	label, allowed, offer := p.label, p.allowed, p.offer
+	label, allowed, offer, grants, focusedAt := p.label, p.allowed, p.offer, slices.Clone(p.grants), p.focusedAt
 	p.mu.Unlock()
 	if known {
 		return
+	}
+	if !focusedAt.IsZero() {
+		p.send(from, rpcMessage{Method: MethodPageState, Params: mustJSON(map[string]any{"label": label, "focused": true, "focusedAt": focusedAt.Format(time.RFC3339Nano)})})
+	}
+	if len(grants) > 0 {
+		p.send(from, rpcMessage{Method: MethodGrants, Params: mustJSON(map[string]any{"grants": grants})})
 	}
 	if left := time.Until(offer.expires); offer.code != "" && left > 0 {
 		p.send(from, rpcMessage{Method: MethodPairingOffer, Params: mustJSON(map[string]any{"code": offer.code, "ttlMs": left.Milliseconds()})})

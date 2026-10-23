@@ -17,19 +17,23 @@ import (
 
 // Acceptance 1: a call without page goes to the paired page alone; naming the
 // other page runs it there, and the paired page receives nothing.
-func TestBridge_CallGoesToPairedPageOrTheNamedOne(t *testing.T) {
+// With no page named, a call goes to the agreed tab its user focused last
+// (#1610); naming a page reaches only that page.
+func TestBridge_CallGoesToTheLastFocusedPageOrTheNamedOne(t *testing.T) {
 	st := newStack(t)
 	rec := &recorder{}
 	p1 := st.page(t, "alice", room, rec.tool("show_sheet", "p1", false))
 	p2 := st.page(t, "alice", room, rec.tool("show_sheet", "p2", false))
 	a := st.agent(t, "alice", allScopes...)
 	a.attach(t, room)
-
-	// The page that agreed last is the default target.
-	p2.SetAgentsAllowed(true)
-	a.waitPage(t, p2.ID(), func(p rooms.PageInfo) bool { return p.Paired })
 	p1.SetAgentsAllowed(true)
-	a.waitPage(t, p1.ID(), func(p rooms.PageInfo) bool { return p.Paired })
+	p2.SetAgentsAllowed(true)
+
+	p2.Focus()
+	a.waitPage(t, p2.ID(), func(p rooms.PageInfo) bool { return p.Default })
+	time.Sleep(5 * time.Millisecond)
+	p1.Focus()
+	a.waitPage(t, p1.ID(), func(p rooms.PageInfo) bool { return p.Default })
 
 	res, err := a.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s-power"})
 	require.NoError(t, err)
@@ -62,7 +66,7 @@ func TestBridge_OverlappingRequestIDsAcrossSessions(t *testing.T) {
 	agents := []*agent{st.agent(t, "alice", allScopes...), st.agent(t, "alice", allScopes...)}
 	for _, a := range agents {
 		a.attach(t, room)
-		a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
+		a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Default })
 	}
 
 	var wg sync.WaitGroup
@@ -103,7 +107,7 @@ func TestBridge_PageLeavingFailsPendingCallAtOnce(t *testing.T) {
 	p.SetAgentsAllowed(true)
 	a := st.agent(t, "alice", allScopes...)
 	a.attach(t, room)
-	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
+	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Default })
 
 	done := make(chan *core.ToolResult, 1)
 	go func() {
@@ -140,7 +144,7 @@ func TestBridge_DeadlineFailsCallAndCancelsPage(t *testing.T) {
 	p.SetAgentsAllowed(true)
 	a := st.agent(t, "alice", allScopes...)
 	a.attach(t, room)
-	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
+	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Default })
 
 	res, err := a.ToolCallFull(t.Context(), "stuck", map[string]any{})
 	require.NoError(t, err)
@@ -204,7 +208,7 @@ func TestBridge_DifferentSubjectNeedsPairingCode(t *testing.T) {
 	assert.Equal(t, 0, st.callsTo(p.ID()))
 
 	p.AcceptPairing(got.PairingCode)
-	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
+	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Default })
 	res, err = bob.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s1"})
 	require.NoError(t, err)
 	require.False(t, res.IsError, text(res))
@@ -220,7 +224,7 @@ func TestBridge_ActingToolNeedsPagesAct(t *testing.T) {
 	p.SetAgentsAllowed(true)
 	a := st.agent(t, "alice", rooms.ScopeRoomsAttach, rooms.ScopePagesRead)
 	a.attach(t, room)
-	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired && len(pi.Tools) == 2 })
+	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Default && len(pi.Tools) == 2 })
 
 	_, err := a.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s1"})
 	require.Error(t, err)
@@ -319,11 +323,7 @@ func TestBridge_AmbiguousTargetCarriesRoster(t *testing.T) {
 	p2.SetAgentsAllowed(true)
 	a.waitPage(t, p1.ID(), func(pi rooms.PageInfo) bool { return pi.Allowed })
 	a.waitPage(t, p2.ID(), func(pi rooms.PageInfo) bool { return pi.Allowed })
-	p3 := st.page(t, "alice", room, rec.tool("show_sheet", "p3", false))
-	p3.SetAgentsAllowed(true)
-	a.waitPage(t, p3.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
-	p3.Leave()
-	require.Eventually(t, func() bool { return len(a.pages(t)) == 2 }, 3*time.Second, 10*time.Millisecond)
+	// Two agreed tabs and neither focused: there is no default.
 
 	res, err := a.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s"})
 	require.NoError(t, err)
@@ -347,8 +347,10 @@ func TestBridge_SessionCloseEndsItsState(t *testing.T) {
 	require.Eventually(t, func() bool { return st.bridge.SessionCount() == 0 }, 2*time.Second, 10*time.Millisecond)
 }
 
-// A pairing ends when the page revokes it or the session ends.
-func TestBridge_RevokeAndEndSessionEndPairings(t *testing.T) {
+// A grant ends when the page revokes it, and outlives the MCP session: the
+// page holds agreement, and there is no session end on the stateless wire to
+// hang it on (#1610).
+func TestBridge_RevokeEndsAGrantAndSessionEndDoesNot(t *testing.T) {
 	st := newStack(t)
 	rec := &recorder{}
 	p := st.page(t, "alice", room, rec.tool("show_sheet", "p", false))
@@ -356,20 +358,22 @@ func TestBridge_RevokeAndEndSessionEndPairings(t *testing.T) {
 	code := bob.attach(t, room).PairingCode
 	bob.waitPage(t, p.ID(), func(rooms.PageInfo) bool { return true })
 	p.AcceptPairing(code)
-	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
+	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Allowed && pi.Default })
+	assert.Equal(t, []rooms.Principal{{Subject: "bob"}}, p.Grants())
 
-	p.Revoke("")
-	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return !pi.Allowed && !pi.Paired })
+	p.Revoke(rooms.Principal{Subject: "bob"})
+	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return !pi.Allowed && !pi.Default })
 	res, err := bob.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s"})
 	require.NoError(t, err)
-	assert.True(t, res.IsError)
-
-	p.AcceptPairing(code)
-	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
-	st.bridge.EndSession(bob.SessionID())
-	res, err = bob.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s"})
-	require.NoError(t, err)
-	assert.True(t, res.IsError)
-	assert.Contains(t, text(res), "attach first")
+	assert.True(t, res.IsError, "a revoked grant no longer reaches the page")
 	assert.Empty(t, rec.all())
+
+	code = bob.attach(t, room).PairingCode
+	p.AcceptPairing(code)
+	bob.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Allowed })
+	st.bridge.EndSession(bob.SessionID())
+	res, err = bob.ToolCallFull(t.Context(), "show_sheet", map[string]any{"sheet": "s", "room": room})
+	require.NoError(t, err)
+	require.False(t, res.IsError, text(res))
+	assert.Equal(t, []string{"p:s"}, rec.all(), "the grant survives the session ending")
 }

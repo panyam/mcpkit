@@ -99,7 +99,7 @@ func (r *rawSession) waitPaired(page rooms.PeerID) {
 			}
 			_ = json.Unmarshal([]byte(mustString(m)), &out)
 			for _, p := range out.Result.StructuredContent.Pages {
-				if p.Page == page && p.Paired {
+				if p.Page == page && p.Default {
 					return true
 				}
 			}
@@ -202,7 +202,7 @@ func TestBridge_DropsRepliesFromOtherPeersAndUnknownIDs(t *testing.T) {
 	p.SetAgentsAllowed(true)
 	a := st.agent(t, "alice", allScopes...)
 	a.attach(t, room)
-	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Paired })
+	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Default })
 
 	rogue, err := st.relay.Transport("mallory").Join(t.Context(), room)
 	require.NoError(t, err)

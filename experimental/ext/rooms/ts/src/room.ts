@@ -9,12 +9,14 @@ export const MESSAGE_KIND = "mcp/1";
 const PAGE_STATE = "notifications/rooms/page_state";
 const AGENTS_ALLOWED = "notifications/rooms/agents_allowed";
 const ACCEPT_PAIRING = "notifications/rooms/accept_pairing";
-const REVOKE = "notifications/rooms/revoke";
+const GRANTS = "notifications/rooms/grants";
 const PAIRING_REQUESTED = "notifications/rooms/pairing_requested";
 const PAGE_EVENT = "notifications/rooms/event";
 const PAIRING_OFFER = "notifications/rooms/pairing_offer";
 const PAIRED_BY_CODE = "notifications/rooms/paired_by_code";
 
+/** How long an agent's attach code stays acceptable, matching `rooms.DefaultAgentCodeTTL`. */
+const AGENT_CODE_TTL_MS = 10 * 60 * 1000;
 /** How long an offered pairing code stays valid by default, matching `rooms.DefaultPairingCodeTTL`. */
 export const DEFAULT_PAIRING_CODE_TTL_MS = 2 * 60 * 1000;
 // Leaves out 0, O, 1 and I, which a user reading a code aloud mixes up.
@@ -39,10 +41,18 @@ export function validEventName(name: string): boolean {
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 
-/** A session asking to drive the page, as the bridge describes it. */
+/**
+ * Who a call acts for: the subject of the caller's validated token, and the
+ * client it used. A grant with no client covers every client of its subject.
+ */
+export interface Principal {
+  subject: string;
+  client?: string;
+}
+
+/** An agent asking to drive the page, as the bridge describes it. */
 export interface PairingRequest {
-  session: string;
-  /** The session's subject, from its validated token. */
+  /** The agent's subject, from its validated token. */
   subject: string;
   /** The agent client that asked, when it said. */
   client?: string;
@@ -110,10 +120,22 @@ export interface ToolRoom {
    * page with every agent session acting for the page's own user.
    */
   setAgentsAllowed(allowed: boolean): void;
-  /** Accepts the code an agent session got back from `attach`. */
+  /**
+   * Accepts the code an agent got back from `attach`. The bridge answers with
+   * the agent's principal, which the page then agrees to (`onPaired` reports
+   * it) and sends to every bridge with its other grants.
+   */
   acceptPairing(code: string): void;
-  /** Ends the pairing with one session, or with all of them when omitted. */
-  revoke(session?: string): void;
+  /**
+   * Ends the page's agreement with `who`: every grant to its subject when no
+   * client is given, or the one for that client. The agents switch is
+   * unchanged.
+   */
+  revoke(who: Principal): void;
+  /** Ends every grant. The agents switch is unchanged. */
+  revokeAll(): void;
+  /** The principals the page agrees to beyond its agents switch. */
+  grants(): Principal[];
   /** Called when a session asks to drive the page. */
   onPairingRequest(fn: (req: PairingRequest) => void): void;
   /**
@@ -184,6 +206,10 @@ class Page implements ToolRoom {
   private onPairing?: (req: PairingRequest) => void;
   private onPairedFn?: (paired: PairedByCode) => void;
   private offer?: { code: string; expires: number };
+  private grantList: Principal[] = [];
+  // Agent codes the page's user accepted, until a bridge names the principal.
+  private accepted = new Map<string, number>();
+  private focusedAt?: string;
   private left = false;
   private modelContext?: ModelContextLike;
 
@@ -275,7 +301,8 @@ class Page implements ToolRoom {
   }
 
   focus(): void {
-    this.notifyBridges(PAGE_STATE, { label: this.label, focused: true });
+    this.focusedAt = new Date().toISOString();
+    this.notifyBridges(PAGE_STATE, { label: this.label, focused: true, focusedAt: this.focusedAt });
   }
 
   setAgentsAllowed(allowed: boolean): void {
@@ -284,11 +311,27 @@ class Page implements ToolRoom {
   }
 
   acceptPairing(code: string): void {
+    code = code.trim().toUpperCase();
+    this.accepted.set(code, Date.now() + AGENT_CODE_TTL_MS);
     this.notifyBridges(ACCEPT_PAIRING, { code });
   }
 
-  revoke(session = ""): void {
-    this.notifyBridges(REVOKE, { session });
+  revoke(who: Principal): void {
+    this.grantList = this.grantList.filter((g) => !(g.subject === who.subject && (!who.client || g.client === who.client)));
+    this.sendGrants();
+  }
+
+  revokeAll(): void {
+    this.grantList = [];
+    this.sendGrants();
+  }
+
+  grants(): Principal[] {
+    return this.grantList.map((g) => ({ ...g }));
+  }
+
+  private sendGrants(): void {
+    this.notifyBridges(GRANTS, { grants: this.grantList });
   }
 
   emit(name: string, data: unknown = null): void {
@@ -347,8 +390,10 @@ class Page implements ToolRoom {
   private handle(from: string, m: RpcMessage): void {
     switch (m.method) {
       case "tools/list":
-        this.reply(from, m.id, { tools: this.descriptors() });
+        // Greet before answering: a bridge handles one peer's messages in
+        // order, so by the time it has the list it also has the page's state.
         this.greet(from);
+        this.reply(from, m.id, { tools: this.descriptors() });
         return;
       case "tools/call":
         this.greet(from);
@@ -361,9 +406,21 @@ class Page implements ToolRoom {
         this.onPairing?.(m.params as PairingRequest);
         return;
       case PAIRED_BY_CODE: {
+        // Only a code this page offered, or an agent's code its user
+        // accepted, counts; any other claim grants nothing, so a peer that
+        // is not a bridge cannot grant itself access.
         const paired = m.params as PairedByCode;
-        // The code is spent, so withdraw it from every bridge.
-        if (paired?.code && paired.code === this.offer?.code) this.withdrawPairingCode();
+        const code = (paired?.code ?? "").toUpperCase();
+        const now = Date.now();
+        const offered = !!code && code === this.offer?.code && now < this.offer.expires;
+        const acceptedUntil = this.accepted.get(code);
+        if ((!offered && !(acceptedUntil && now < acceptedUntil)) || !paired.subject) return;
+        this.accepted.delete(code);
+        if (!this.grantList.some((g) => g.subject === paired.subject && (g.client ?? "") === (paired.client ?? ""))) {
+          this.grantList.push(paired.client ? { subject: paired.subject, client: paired.client } : { subject: paired.subject });
+        }
+        if (offered) this.withdrawPairingCode();
+        this.sendGrants();
         this.onPairedFn?.(paired);
         return;
       }
@@ -378,8 +435,10 @@ class Page implements ToolRoom {
   private greet(from: string): void {
     if (this.bridges.has(from)) return;
     this.bridges.add(from);
-    if (this.label) this.send(from, { method: PAGE_STATE, params: { label: this.label } });
+    if (this.focusedAt) this.send(from, { method: PAGE_STATE, params: { label: this.label, focused: true, focusedAt: this.focusedAt } });
+    else if (this.label) this.send(from, { method: PAGE_STATE, params: { label: this.label } });
     if (this.allowed) this.send(from, { method: AGENTS_ALLOWED, params: { allowed: true } });
+    if (this.grantList.length) this.send(from, { method: GRANTS, params: { grants: this.grantList } });
     const left = this.offer ? this.offer.expires - Date.now() : 0;
     if (this.offer && left > 0) this.send(from, { method: PAIRING_OFFER, params: { code: this.offer.code, ttlMs: left } });
   }
