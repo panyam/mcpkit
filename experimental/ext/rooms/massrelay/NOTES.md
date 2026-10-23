@@ -34,13 +34,14 @@ key store) and its per-IP rate limit off, since every test peer dials from loopb
 joins embedded and pages dial in, so the acceptance cases cross the WebSocket path and the
 in-process path in one run.
 
-## Not every test runs under -race
+## Every test runs under -race, since servicekit v0.1.10
 
-servicekit's (v0.1.7, still in v0.1.9) `grpcws.BidiStreamConn.OnClose` reads a message counter that its forwarding
-goroutine updates with `atomic.AddInt64`, so every WebSocket close inside the relay is a reported
-race. It is in the relay, not here: no race report across five runs had a frame in this module.
-`experimental/scripts/test-rooms-massrelay.sh` runs everything without `-race`, then the embedded
-transport subtests, which open no WebSocket, with it.
+Through servicekit v0.1.9, `grpcws.BidiStreamConn.OnClose` read a message counter that its
+forwarding goroutine updated with `atomic.AddInt64`, so every WebSocket close inside the relay was a
+reported race, with no frame in this module. `experimental/scripts/test-rooms-massrelay.sh` ran the
+WebSocket tests without `-race` and only the embedded subtests with it. servicekit v0.1.10 made the
+counters `atomic.Int64` (servicekit issue 41), and the script now runs the whole module under
+`-race`.
 
 ## Adding the module converged the tree's dependencies
 
@@ -50,9 +51,8 @@ divergences there, the PR ran `check_dep_consistency.py --unify` and `make tidy-
 every module to those versions. That is most of the PR's go.mod and go.sum churn.
 
 Moving to massrelay v0.2.4 did the same for servicekit, v0.1.7 to v0.1.9 in all 75 modules,
-the root included since it requires servicekit directly. No source changed. servicekit's
-`BidiStreamConn.OnClose` race inside the relay is still there in v0.1.9, so this module's WebSocket
-tests still run without `-race`.
+the root included since it requires servicekit directly. No source changed. massrelay v0.2.5 moved
+it again, to servicekit v0.1.11, whose v0.1.10 fixed the `OnClose` race above.
 
 Moving to massrelay v0.2.3 did the same for oneauth, v0.2.2 to v0.3.0 across the ten modules that
 use it, which was also wanted in its own right. Nothing needed a source change, and the Keycloak

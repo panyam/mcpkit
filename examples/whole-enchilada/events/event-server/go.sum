@@ -119,8 +119,8 @@ github.com/panyam/goutils v0.1.13 h1:V819IdZTEJ3rpu33ZqohC6O9ou7KOu6cxfigoYT12OQ
 github.com/panyam/goutils v0.1.13/go.mod h1:vd3iFcv1DjaeV6h8tslIJh9d09RLndg8UYNSGROBrM4=
 github.com/panyam/oneauth v0.3.0 h1:nD1coHdYtkr1tfPnUXGo4zO5vWaKBLC9nIWtKPi3L28=
 github.com/panyam/oneauth v0.3.0/go.mod h1:kuj4u+oxzZIvHbyoNNIzpUlSq+22261X1CePLBG+fwQ=
-github.com/panyam/servicekit v0.1.9 h1:z5PihABsxt2kAyORw812UtZmjrGydf8BYtjdkqpH/6o=
-github.com/panyam/servicekit v0.1.9/go.mod h1:siWprh7sIhhM4GL+2Ffk+nFtdr9SVWM5MNXD9qSAaTM=
+github.com/panyam/servicekit v0.1.11 h1:tHhGU+J0EatEvZ0lrWGf6s9+iWs/odp7rutLTI8Q4Xo=
+github.com/panyam/servicekit v0.1.11/go.mod h1:2Y5GhelIpriJZfa+6oj9eE8qs1iWA6YT6q77T9VcOiE=
 github.com/panyam/templar v0.1.2 h1:JFOx31tCFDfu299iF8fKA0yu6fDB4vopEaB/coT1kMQ=
 github.com/panyam/templar v0.1.2/go.mod h1:Pqn7VhOod9MGZ0GqrwoHw16jFjiAxPgWXZBAFou1fZ0=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=

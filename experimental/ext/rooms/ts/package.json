@@ -32,8 +32,8 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
-    "@panyam/massrelay": "^0.2.4",
-    "@panyam/servicekit-client": "^0.1.9"
+    "@panyam/massrelay": "^0.2.5",
+    "@panyam/servicekit-client": "^0.1.11"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.3.1",

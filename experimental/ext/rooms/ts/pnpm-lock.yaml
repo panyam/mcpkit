@@ -12,11 +12,11 @@ importers:
         specifier: ^2.11.0
         version: 2.16.0
       '@panyam/massrelay':
-        specifier: ^0.2.4
-        version: 0.2.4(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.1.9)
+        specifier: ^0.2.5
+        version: 0.2.5(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.1.11)
       '@panyam/servicekit-client':
-        specifier: ^0.1.9
-        version: 0.1.9
+        specifier: ^0.1.11
+        version: 0.1.11
     devDependencies:
       '@modelcontextprotocol/client':
         specifier: ^2.3.1
@@ -120,14 +120,14 @@ packages:
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
 
-  '@panyam/massrelay@0.2.4':
-    resolution: {integrity: sha512-OawqRHBHgDtqcGCyMou62hWxVHOyS+dDiLF6BKl+YtdyanwLNbq4Uq+IlLp7zzPoDzEZzcc06FtqPfgpNfazeQ==}
+  '@panyam/massrelay@0.2.5':
+    resolution: {integrity: sha512-cag+jNHxgBUINxmKpKS/QluEyFomB/o9BqCr+KyOO7W4jFFEj8IQ8zXjahKw82y6RLCHdPP/UDI+re518D5Pyw==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.0.0
       '@panyam/servicekit-client': ^0.0.7 || ^0.1.9
 
-  '@panyam/servicekit-client@0.1.9':
-    resolution: {integrity: sha512-FzQxgQIHQdO8+YRYt9gX4fi91/MjRb/UoMhak64Hi3WMPD7YP+ksZ7cD0DmAA46CE4KsWNc+OpKSGM9dUv4yzA==}
+  '@panyam/servicekit-client@0.1.11':
+    resolution: {integrity: sha512-WEsPCEY2uiAcDe6zP0MN88ftl5w7pqFPrVTLnMSuZQQzQ7rCTV3oH89LISBI0/vcR3w1X0Xfw5zrzwhxZ23uhA==}
     engines: {node: '>=16.0.0'}
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
@@ -852,12 +852,12 @@ snapshots:
 
   '@oxc-project/types@0.154.0': {}
 
-  '@panyam/massrelay@0.2.4(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.1.9)':
+  '@panyam/massrelay@0.2.5(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.1.11)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
-      '@panyam/servicekit-client': 0.1.9
+      '@panyam/servicekit-client': 0.1.11
 
-  '@panyam/servicekit-client@0.1.9': {}
+  '@panyam/servicekit-client@0.1.11': {}
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     optional: true

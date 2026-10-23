@@ -46,7 +46,7 @@ require (
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit v0.8.5 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.8.5 // indirect
-	github.com/panyam/servicekit v0.1.9 // indirect
+	github.com/panyam/servicekit v0.1.11 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
