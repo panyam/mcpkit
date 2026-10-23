@@ -58,6 +58,13 @@ type PollOptions struct {
 	// so this cannot fire against a conformant server. Use WatchListChanged,
 	// or events.ListChangedFilterKey in your own client.Listen filter.
 	OnListChanged func()
+
+	// Dedup drops events whose eventId this loop, or anything sharing the
+	// Deduper, has already delivered. Nil means a private Deduper.
+	Dedup *Deduper
+
+	// AllowDuplicates turns dedup off, for callers who dedup themselves.
+	AllowDuplicates bool
 }
 
 // PollCall is a running poll loop.
@@ -98,6 +105,8 @@ func Poll(parent context.Context, sess *client.Client, opts PollOptions) (*PollC
 	if opts.Floor <= 0 {
 		opts.Floor = DefaultPollFloor
 	}
+
+	opts.Dedup = dedupFor(opts.Dedup, opts.AllowDuplicates)
 
 	ctx, cancel := context.WithCancel(parent)
 	p := &PollCall{cancel: cancel, done: make(chan struct{}), cursor: opts.Cursor}
@@ -173,6 +182,9 @@ func (p *PollCall) pollOnce(ctx context.Context, sess *client.Client, opts PollO
 	p.mu.Unlock()
 
 	for _, ev := range res.Events {
+		if opts.Dedup != nil && opts.Dedup.Seen(ev.EventID) {
+			continue
+		}
 		if opts.OnEvent != nil {
 			opts.OnEvent(ev)
 		}

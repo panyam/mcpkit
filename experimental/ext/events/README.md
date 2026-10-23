@@ -326,6 +326,20 @@ for ev := range recv.Events() {
 }
 ```
 
+#### Duplicates and replays
+
+Every copy of an occurrence carries the same `eventId`: a webhook retry, a push frame, the poll backfill after a reconnect. `Poll`, `Stream`, `StreamChan` and `Receiver` each drop a second sighting by default, through a bounded seen-set (`Deduper`, 10,000 ids for 24 hours). A client that takes the same events by more than one mode shares one `Deduper` across them so the overlap is dropped too:
+
+```go
+seen := eventsclient.NewDeduper(0, 0)
+stream, _ := eventsclient.Stream(ctx, c, eventsclient.StreamOptions{EventName: "room.ask", OnEvent: handle, Dedup: seen})
+backfill, _ := eventsclient.Poll(ctx, c, eventsclient.PollOptions{EventName: "room.ask", Cursor: saved, OnEvent: handle, Dedup: seen})
+```
+
+`Receiver` keys on the `X-MCP-Subscription-Id` header plus `eventId`, so an event that matches two subscriptions to one URL still arrives once per subscription. It answers a duplicate `200` so the server stops retrying. Set `AllowDuplicates` (or `WithoutDedup()` on a receiver) to dedup yourself.
+
+`Receiver` also refuses a delivery whose timestamp is more than five minutes from its clock, either way, so a captured POST cannot be replayed later. `WithTimestampTolerance` changes the window and `0` turns the check off. A receiver built some other way can call `events.TimestampWithinTolerance` beside the signature verifiers, which check only the HMAC.
+
 ## Deployment
 
 For private-cloud / WAF-fronted deployments, see [`DEPLOYMENT.md`](DEPLOYMENT.md), which covers egress patterns, WAF allowlist guidance, SSRF guards, retry/backoff timing for proxy tuning, and TTL refresh as keepalive.

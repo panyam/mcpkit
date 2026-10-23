@@ -137,6 +137,23 @@ jobs:
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
 
+  test-events:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # Neither events module ran in any workflow, so the Go client's dedup
+      # and replay checks (#1558) would have shipped unrun.
+      - name: Run experimental events tests
+        run: bash experimental/scripts/test-events.sh
+
+      - name: Run experimental events Go client tests
+        run: bash experimental/scripts/test-events-clients-go.sh
+
   test-agents:
     runs-on: ubuntu-latest
     steps:

@@ -17,6 +17,10 @@
 //     wire envelope's Data field into the typed Data parameter, and
 //     delivers Event[Data] values on the Events() channel.
 //
+// Every mode drops a second delivery of the same eventId by default; share a
+// Deduper across modes to drop the overlap between them. EventSink is the
+// interface a bridge hands each arrived event to, on its way to a model.
+//
 // Quickstart:
 //
 //	c := client.NewClient(...)

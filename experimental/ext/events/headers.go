@@ -237,6 +237,25 @@ func VerifyStandardWebhooksSignature(body []byte, secret, msgID, timestamp, sign
 	return false
 }
 
+// DefaultTimestampTolerance is how far a webhook timestamp may sit from the
+// receiver's clock, either way, and still be accepted. Five minutes matches the
+// Standard Webhooks reference libraries.
+const DefaultTimestampTolerance = 5 * time.Minute
+
+// TimestampWithinTolerance reports whether a webhook-timestamp or
+// X-MCP-Timestamp value (unix seconds) is within tolerance of now. The
+// signature verifiers check only the HMAC, so a captured POST verifies forever;
+// a receiver calls this as well to refuse replays (#1558). An empty or
+// unparseable timestamp is outside every tolerance.
+func TimestampWithinTolerance(timestamp string, now time.Time, tolerance time.Duration) bool {
+	n, err := strconv.ParseInt(strings.TrimSpace(timestamp), 10, 64)
+	if err != nil {
+		return false
+	}
+	d := now.Sub(time.Unix(n, 0))
+	return d <= tolerance && d >= -tolerance
+}
+
 func parseUnix(s string) int64 {
 	n, _ := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 	return n

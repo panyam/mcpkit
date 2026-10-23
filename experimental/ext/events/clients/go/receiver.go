@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/experimental/ext/events"
 )
@@ -22,14 +23,22 @@ import (
 // holding the wrong secret refuses the challenge and Subscribe fails
 // with -32027 challenge_failed.
 //
+// Refuses a delivery whose timestamp is outside the tolerance (see
+// WithTimestampTolerance), so a captured POST cannot be replayed later, and
+// drops a second delivery of the same event on the same subscription (see
+// WithDeduper), answering it 200 so the server stops retrying.
+//
 // Decodes the wire envelope's Data field into the typed Data parameter
 // and delivers Event[Data] values on the Events() channel.
 type Receiver[Data any] struct {
-	mu       sync.RWMutex
-	secret   string
-	out      chan Event[Data]
-	closed   bool
-	rejected uint64
+	mu        sync.RWMutex
+	secret    string
+	out       chan Event[Data]
+	closed    bool
+	rejected  uint64
+	tolerance time.Duration
+	dedup     *Deduper
+	now       func() time.Time
 
 	// Control envelope callbacks per SEP-3415 §"Non-event webhook bodies"
 	// L415-423. Both are optional. The discriminator is the top-level
@@ -54,11 +63,50 @@ type ControlError struct {
 // Buffered to 64 events; callers should drain Events() promptly. A full
 // channel causes the receiver to drop new deliveries silently rather
 // than block the inbound HTTP handler.
-func NewReceiver[Data any](secret string) *Receiver[Data] {
-	return &Receiver[Data]{
-		secret: secret,
-		out:    make(chan Event[Data], 64),
+func NewReceiver[Data any](secret string, opts ...ReceiverOption) *Receiver[Data] {
+	cfg := receiverConfig{tolerance: events.DefaultTimestampTolerance, now: time.Now}
+	for _, o := range opts {
+		o(&cfg)
 	}
+	return &Receiver[Data]{
+		secret:    secret,
+		out:       make(chan Event[Data], 64),
+		tolerance: cfg.tolerance,
+		dedup:     dedupFor(cfg.dedup, cfg.allowDuplicates),
+		now:       cfg.now,
+	}
+}
+
+// ReceiverOption configures NewReceiver.
+type ReceiverOption func(*receiverConfig)
+
+type receiverConfig struct {
+	tolerance       time.Duration
+	dedup           *Deduper
+	allowDuplicates bool
+	now             func() time.Time
+}
+
+// WithTimestampTolerance sets how far the delivery's timestamp header may be
+// from the receiver's clock (default events.DefaultTimestampTolerance). A
+// delivery outside it gets 401 like a bad signature. Zero turns the check off.
+func WithTimestampTolerance(d time.Duration) ReceiverOption {
+	return func(c *receiverConfig) { c.tolerance = d }
+}
+
+// WithDeduper shares a Deduper with the receiver. Webhook deliveries are keyed
+// on the X-MCP-Subscription-Id header together with eventId, so one event that
+// matches two subscriptions to the same URL arrives twice, once per
+// subscription. Poll and Stream key on eventId alone, so sharing a Deduper
+// with them drops overlap only for deliveries that carry no subscription id.
+func WithDeduper(d *Deduper) ReceiverOption {
+	return func(c *receiverConfig) { c.dedup = d }
+}
+
+// WithoutDedup hands every verified delivery to the application, retries
+// included, for callers who dedup themselves.
+func WithoutDedup() ReceiverOption {
+	return func(c *receiverConfig) { c.allowDuplicates = true }
 }
 
 // SetSecret updates the verification secret. Safe to call concurrently
@@ -127,7 +175,7 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if !verifySignature(req.Header, body, secret) {
+	if !verifySignature(req.Header, body, secret) || !r.timestampFresh(req.Header, secret) {
 		http.Error(w, "signature verification failed", http.StatusUnauthorized)
 		return
 	}
@@ -203,11 +251,21 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		Meta:      wire.Meta,
 	}
 
+	key := dedupKey(req.Header, wire.EventID)
+	if r.dedup != nil && r.dedup.Seen(key) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// Non-blocking send. A full channel signals a slow consumer; we'd
-	// rather drop than back up the registry's delivery loop.
+	// rather drop than back up the registry's delivery loop. A dropped
+	// event is forgotten so a retry of it is delivered.
 	select {
 	case r.out <- ev:
 	default:
+		if r.dedup != nil {
+			r.dedup.Forget(key)
+		}
 		r.mu.Lock()
 		r.rejected++
 		r.mu.Unlock()
@@ -222,6 +280,32 @@ func (r *Receiver[Data]) Rejected() uint64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.rejected
+}
+
+// dedupKey scopes eventId by subscription, so two subscriptions to one URL
+// each get their copy of an event that matches both.
+func dedupKey(h http.Header, eventID string) string {
+	if eventID == "" {
+		return ""
+	}
+	if sub := h.Get("X-MCP-Subscription-Id"); sub != "" {
+		return sub + "\x00" + eventID
+	}
+	return eventID
+}
+
+// timestampFresh applies the tolerance to whichever timestamp header the
+// delivery carries. The empty-secret test mode skips it along with the
+// signature.
+func (r *Receiver[Data]) timestampFresh(h http.Header, secret string) bool {
+	if secret == "" || r.tolerance <= 0 {
+		return true
+	}
+	ts := h.Get("X-MCP-Timestamp")
+	if ts == "" {
+		ts = h.Get("webhook-timestamp")
+	}
+	return events.TimestampWithinTolerance(ts, r.now(), r.tolerance)
 }
 
 // verifySignature auto-detects the header set on the inbound request and
