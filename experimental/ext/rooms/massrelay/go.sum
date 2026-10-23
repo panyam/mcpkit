@@ -45,12 +45,12 @@ github.com/panyam/gocurrent v0.1.2 h1:MtD98xJKVvGGdMrxIvUqhVA7AxA6rr9eU1ZUo5pNoy
 github.com/panyam/gocurrent v0.1.2/go.mod h1:jIIhcNfNnnIe2JXH8aY2+ba+/5G1fzwCWoZXdcMNw6o=
 github.com/panyam/goutils v0.1.13 h1:V819IdZTEJ3rpu33ZqohC6O9ou7KOu6cxfigoYT12OQ=
 github.com/panyam/goutils v0.1.13/go.mod h1:vd3iFcv1DjaeV6h8tslIJh9d09RLndg8UYNSGROBrM4=
-github.com/panyam/massrelay v0.2.3 h1:w/xk+uZBy+aSVkizTL8ABoEC1qC7Y6PPO0pU07qXfxU=
-github.com/panyam/massrelay v0.2.3/go.mod h1:ol5bbUmd3cJi971UvH3y6Aa294rWUfi090DvhpWuyqg=
+github.com/panyam/massrelay v0.2.4 h1:Mo3rRZkKtfra3WFYCtkSD9G34KywaCQfr8DTXlAV34E=
+github.com/panyam/massrelay v0.2.4/go.mod h1:BOyac6r7720Y6ev6S9vsq/XiKlprTaVEhDDaNiyM6zw=
 github.com/panyam/oneauth v0.3.0 h1:nD1coHdYtkr1tfPnUXGo4zO5vWaKBLC9nIWtKPi3L28=
 github.com/panyam/oneauth v0.3.0/go.mod h1:kuj4u+oxzZIvHbyoNNIzpUlSq+22261X1CePLBG+fwQ=
-github.com/panyam/servicekit v0.1.7 h1:r/cyBzfHfzviIGj21os/mC/woJy5H+X93hNQH603PGA=
-github.com/panyam/servicekit v0.1.7/go.mod h1:wk/9hY9Vgl83WuYJt7n4NYPvV6nbxnZwpKpNRIAPoR8=
+github.com/panyam/servicekit v0.1.9 h1:z5PihABsxt2kAyORw812UtZmjrGydf8BYtjdkqpH/6o=
+github.com/panyam/servicekit v0.1.9/go.mod h1:siWprh7sIhhM4GL+2Ffk+nFtdr9SVWM5MNXD9qSAaTM=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/prometheus/client_golang v1.24.1 h1:JnJkREXzWxUdCuPFpIWZiPispT9xVV59uiuyR2bPlnU=
