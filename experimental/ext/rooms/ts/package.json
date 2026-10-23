@@ -1,12 +1,33 @@
 {
   "name": "@panyam/mcpkit-rooms",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.8.5",
   "description": "Page side of the mcpkit room bridge: offer WebMCP-shaped tools to agents through a massrelay room",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/panyam/mcpkit.git",
+    "directory": "experimental/ext/rooms/ts"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
+    "check:pack": "node scripts/check-pack.mjs",
     "test": "vitest run"
   },
   "dependencies": {

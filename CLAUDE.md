@@ -248,6 +248,10 @@ These span packages and will bite on a task that never opens a routed doc.
 - **The Keycloak suite (`tests/keycloak`) runs only on auth-path PRs, `main` and nightly**
   (`keycloak-interop.yml`, #1597). A change elsewhere that breaks auth on the wire shows up there
   later, not on its own PR. Locally, `make testkcl-auto` (`KC_PORT=8181` if 8180 is taken).
+- **`@panyam/mcpkit-rooms` (npm) is released with mcpkit.** `make bump-root` sets
+  `experimental/ext/rooms/ts/package.json`'s version, `make check-rooms-ts-version` holds it to the
+  rooms module's pin in CI, and the root tag publishes it (`publish-npm-rooms.yml`, which
+  `check-release-workflows` now expects). The first publish is manual; see `RELEASING.md` § npm.
 - **CI runs no `-race`** on the experimental modules (`experimental/scripts/test-*.sh`). The events
   bridge shipped a test-helper race that failed 5 runs in 6 under `-race` and never showed in CI.
   After touching anything concurrent there, run `go test -race` on that package a few times by hand.

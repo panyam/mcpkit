@@ -1,0 +1,58 @@
+name: Publish @panyam/mcpkit-rooms
+
+# Publishes experimental/ext/rooms/ts, the room bridge's page client, to npm
+# on a release tag, through servicekit's shared workflow, which uses npm
+# trusted publishing (no token). The package is versioned with the release:
+# @panyam/mcpkit-rooms X.Y.Z is the page side of the bridge protocol that the
+# Go modules carry at vX.Y.Z. make bump-root sets its version, and
+# scripts/rooms-ts-version.sh fails this run when the tag, the package and the
+# rooms module's mcpkit pin disagree. Run it by hand (workflow_dispatch, ref =
+# an existing tag) to publish a tag again; a version already on npm is
+# skipped.
+#
+# npm side, once, after the first publish (trusted publishing can only be
+# configured for a package that exists):
+#   npm trust github @panyam/mcpkit-rooms --repo panyam/mcpkit --file publish-npm-rooms.yml --allow-publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Tag, package and rooms pin agree
+        run: bash scripts/rooms-ts-version.sh check "$GITHUB_REF_NAME"
+
+      # The interop tests run the Go bridge on a real relay against the
+      # package's source, then build and check the tarball.
+      - name: Rooms page client tests and pack check
+        run: bash experimental/scripts/test-rooms-ts.sh
+
+  publish:
+    needs: test
+    uses: panyam/servicekit/.github/workflows/npm-publish.yml@master
+    with:
+      working-directory: experimental/ext/rooms/ts
+      package-manager: pnpm
+      pnpm-version: 12.4.1

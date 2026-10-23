@@ -67,6 +67,11 @@ jobs:
       - name: Keycloak suite guards self-test
         run: make check-kcl-guards
 
+      # @panyam/mcpkit-rooms publishes at the release version; a package.json
+      # that drifted from the rooms pin would fail the publish at tag time.
+      - name: Rooms npm package version matches the release pin
+        run: make check-rooms-ts-version
+
       # bump-root once left tagged sub-modules pinning their siblings a
       # release behind, which broke v0.7.0's stores/gorm for anyone fetching
       # it alone until the pins were fixed by hand.

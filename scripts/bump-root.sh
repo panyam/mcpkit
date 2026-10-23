@@ -19,6 +19,8 @@ if [ -z "$V" ]; then
 fi
 
 V="$V" SUB_MODS_ALL="$MODS" bash scripts/bump-pins.sh "$PWD"
+# The rooms page client ships on npm at the release's version (#1581).
+bash scripts/rooms-ts-version.sh set "$V"
 
 # $(MAKE) rather than a bare `make`, so a nested run inherits the jobserver and
 # any -n / -k the caller passed.
