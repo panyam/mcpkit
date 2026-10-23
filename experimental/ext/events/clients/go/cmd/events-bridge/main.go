@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -86,12 +87,21 @@ func main() {
 			}
 			log.Printf("run for %s %s: %s", d.QualifiedName(), d.Event.EventID, strings.TrimSpace(string(out)))
 		},
+		OnResumeFailed: func(d eventsclient.Delivery, err error) {
+			log.Printf("run for %s %s: session %s is gone (%v), starting fresh", d.QualifiedName(), d.Event.EventID, d.Session, err)
+		},
 	}
 	if *approveOutward {
 		sink.Approver = bridge.ApproverFunc(func(context.Context, eventsclient.Delivery, []string) (bool, error) { return true, nil })
 	}
 	if *mcpConfig != "" {
-		sink.ExtraArgs = []string{"--mcp-config", *mcpConfig, "--strict-mcp-config"}
+		// Absolute, because a run that resumes a session starts in that
+		// session's directory rather than this one.
+		cfgPath, err := filepath.Abs(*mcpConfig)
+		if err != nil {
+			log.Fatalf("mcp-config: %v", err)
+		}
+		sink.ExtraArgs = []string{"--mcp-config", cfgPath, "--strict-mcp-config"}
 	}
 	if *dryRun {
 		sink.Runner = printRunner{}
@@ -145,7 +155,10 @@ func splitList(s string) []string {
 // printRunner stands in for claude under -dry-run.
 type printRunner struct{}
 
-func (printRunner) Run(_ context.Context, name string, args []string, stdin []byte) ([]byte, error) {
+func (printRunner) Run(_ context.Context, dir, name string, args []string, stdin []byte) ([]byte, error) {
+	if dir != "" {
+		fmt.Printf("--- in %s\n", dir)
+	}
 	fmt.Printf("--- would run: %s %s\n%s\n---\n", name, strings.Join(args, " "), stdin)
 	return []byte("dry run"), nil
 }

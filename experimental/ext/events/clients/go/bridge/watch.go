@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -37,6 +39,10 @@ type Watch struct {
 	Arguments   map[string]any `json:"arguments,omitempty"`
 	Instruction string         `json:"instruction"`
 
+	// Session, when set, is the agent session each occurrence continues
+	// instead of starting a fresh run (see ResumeSession).
+	Session *Session `json:"session,omitempty"`
+
 	// Secret signs this watch's deliveries. Reused on resubscribe, so a
 	// restart is a refresh of the same subscription upstream.
 	Secret string `json:"secret"`
@@ -49,6 +55,43 @@ type Watch struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	LastError   string    `json:"lastError,omitempty"`
 	LastErrorAt time.Time `json:"lastErrorAt,omitzero"`
+}
+
+// Session is a Claude Code session a watch continues: its id
+// ($CLAUDE_CODE_SESSION_ID inside the session) and the working directory it
+// ran in, which is where Claude Code looks for its transcript.
+type Session struct {
+	ID  string `json:"id"`
+	Dir string `json:"dir"`
+}
+
+// WatchOption configures one Watch call.
+type WatchOption func(*Watch)
+
+// ResumeSession ties a watch to the agent session that created it, so each
+// occurrence resumes a fork of that session, with its context, rather than
+// starting with nothing but the instruction. See HeadlessClaudeSink for what
+// happens when the session no longer exists.
+func ResumeSession(id, dir string) WatchOption {
+	return func(w *Watch) { w.Session = &Session{ID: id, Dir: dir} }
+}
+
+var sessionIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// validateSession refuses anything but a UUID and an absolute directory. The
+// id ends up in argv after --resume, so a value that could read as a flag
+// never gets that far.
+func validateSession(s *Session) error {
+	if s == nil {
+		return nil
+	}
+	if !sessionIDPattern.MatchString(s.ID) {
+		return &WatchError{Message: fmt.Sprintf("session id %q is not a session UUID; pass the value of $CLAUDE_CODE_SESSION_ID", s.ID)}
+	}
+	if !filepath.IsAbs(s.Dir) {
+		return &WatchError{Message: fmt.Sprintf("session dir %q must be an absolute path; pass the session's working directory ($PWD)", s.Dir)}
+	}
+	return nil
 }
 
 // CatalogEntry is one event type as watch_list reports it.
@@ -168,7 +211,7 @@ func listEvents(ctx context.Context, up Upstream) ([]events.EventDef, error) {
 // type's inputSchema before anything is sent upstream, so a mistake comes
 // back as a WatchError the model can correct rather than a JSON-RPC error
 // from the server. The returned Watch is already persisted and live.
-func (b *Bridge) Watch(ctx context.Context, event string, arguments map[string]any, instruction string) (Watch, error) {
+func (b *Bridge) Watch(ctx context.Context, event string, arguments map[string]any, instruction string, opts ...WatchOption) (Watch, error) {
 	server, name, ok := strings.Cut(event, "/")
 	if !ok || server == "" || name == "" {
 		return Watch{}, &WatchError{Message: fmt.Sprintf("event %q is not a qualified name; use \"<server>/<event>\" as watch_list returns it", event)}
@@ -211,6 +254,12 @@ func (b *Bridge) Watch(ctx context.Context, event string, arguments map[string]a
 		Secret:      events.GenerateSecret(),
 		Status:      StatusActive,
 		CreatedAt:   time.Now().UTC(),
+	}
+	for _, o := range opts {
+		o(&w)
+	}
+	if err := validateSession(w.Session); err != nil {
+		return Watch{}, err
 	}
 	b.mu.Lock()
 	b.watches[w.ID] = &w

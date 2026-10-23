@@ -43,6 +43,14 @@ type Delivery struct {
 	// Unlike Event.Data it comes from the user and is trusted.
 	Instruction string
 
+	// Session names the agent session that asked for this event, for a sink
+	// that can continue that session rather than start a fresh one. Empty
+	// when the watch was not tied to a session. SessionDir is the working
+	// directory it ran in, for hosts that key sessions by directory (Claude
+	// Code does).
+	Session    string
+	SessionDir string
+
 	Event events.Event
 }
 

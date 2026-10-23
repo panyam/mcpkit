@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,10 +15,11 @@ import (
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
-// Runner starts one command and returns its standard output. It exists so
-// tests and alternative hosts can stand in for the real `claude` binary.
+// Runner starts one command in dir (empty means the bridge's own working
+// directory) and returns its standard output. It exists so tests and
+// alternative hosts can stand in for the real `claude` binary.
 type Runner interface {
-	Run(ctx context.Context, name string, args []string, stdin []byte) ([]byte, error)
+	Run(ctx context.Context, dir, name string, args []string, stdin []byte) ([]byte, error)
 }
 
 // ExecRunner runs commands with os/exec. A failing command's error carries
@@ -25,8 +27,9 @@ type Runner interface {
 type ExecRunner struct{}
 
 // Run implements Runner.
-func (ExecRunner) Run(ctx context.Context, name string, args []string, stdin []byte) ([]byte, error) {
+func (ExecRunner) Run(ctx context.Context, dir, name string, args []string, stdin []byte) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = dir
 	cmd.Stdin = bytes.NewReader(stdin)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -74,6 +77,15 @@ var DenyAll Approver = ApproverFunc(func(context.Context, eventsclient.Delivery,
 //
 // The prompt goes on standard input rather than argv, so a payload never
 // appears in the process list.
+//
+// A delivery carrying a Session resumes a fork of that session
+// (`--resume <id> --fork-session`, run in SessionDir), so the run starts with
+// the conversation that set up the watch and the conversation itself is left
+// as it was. The tool limits apply the same way. When the session is gone,
+// because Claude Code reports no conversation with that id or SessionDir no
+// longer exists, the delivery falls back to a fresh run and OnResumeFailed is
+// told. Any other failure of the resumed run is returned as it is, so a
+// broken run is not quietly repeated without its context.
 type HeadlessClaudeSink struct {
 	// Command is the binary to run. Empty means "claude".
 	Command string
@@ -100,7 +112,15 @@ type HeadlessClaudeSink struct {
 
 	// OnResult, when set, receives each run's output or error.
 	OnResult func(d eventsclient.Delivery, output []byte, err error)
+
+	// OnResumeFailed, when set, is told that d's session could not be
+	// resumed and the delivery is falling back to a fresh run.
+	OnResumeFailed func(d eventsclient.Delivery, err error)
 }
+
+// sessionNotFound is what `claude --resume` prints, on standard error with
+// exit status 1, for an id it has no transcript for in the working directory.
+const sessionNotFound = "No conversation found with session ID"
 
 // Deliver implements eventsclient.EventSink.
 func (h *HeadlessClaudeSink) Deliver(ctx context.Context, d eventsclient.Delivery) error {
@@ -131,11 +151,34 @@ func (h *HeadlessClaudeSink) Deliver(ctx context.Context, d eventsclient.Deliver
 	}
 	args = append(args, h.ExtraArgs...)
 
-	prompt, err := HeadlessPrompt(d, disallowed)
-	if err != nil {
-		return err
+	if d.Session != "" {
+		var out []byte
+		var err error
+		if _, statErr := os.Stat(d.SessionDir); statErr != nil {
+			err = fmt.Errorf("session dir: %w", statErr)
+		} else {
+			resume := append([]string{"--resume", d.Session, "--fork-session"}, args...)
+			out, err = h.run(ctx, d.SessionDir, resume, d, disallowed)
+			if err == nil || !strings.Contains(err.Error(), sessionNotFound) {
+				h.report(d, out, err)
+				return err
+			}
+		}
+		if h.OnResumeFailed != nil {
+			h.OnResumeFailed(d, err)
+		}
+		d.Session, d.SessionDir = "", ""
 	}
+	out, err := h.run(ctx, "", args, d, disallowed)
+	h.report(d, out, err)
+	return err
+}
 
+func (h *HeadlessClaudeSink) run(ctx context.Context, dir string, args []string, d eventsclient.Delivery, denied []string) ([]byte, error) {
+	prompt, err := HeadlessPrompt(d, denied)
+	if err != nil {
+		return nil, err
+	}
 	timeout := h.Timeout
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
@@ -151,11 +194,13 @@ func (h *HeadlessClaudeSink) Deliver(ctx context.Context, d eventsclient.Deliver
 	if command == "" {
 		command = "claude"
 	}
-	out, err := runner.Run(runCtx, command, args, []byte(prompt))
+	return runner.Run(runCtx, dir, command, args, []byte(prompt))
+}
+
+func (h *HeadlessClaudeSink) report(d eventsclient.Delivery, out []byte, err error) {
 	if h.OnResult != nil {
 		h.OnResult(d, out, err)
 	}
-	return err
 }
 
 // HeadlessPrompt builds the prompt a headless run gets for one delivery. The
@@ -175,7 +220,12 @@ func HeadlessPrompt(d eventsclient.Delivery, denied []string) (string, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString("You are handling one occurrence of an MCP event that the user asked to watch.\n\n")
+	if d.Session != "" {
+		b.WriteString("Earlier in this conversation the user asked to watch an MCP event, and one occurrence has arrived. ")
+		b.WriteString("This is a separate headless run on a copy of the conversation; the user is not watching it, so act on the instruction and report.\n\n")
+	} else {
+		b.WriteString("You are handling one occurrence of an MCP event that the user asked to watch.\n\n")
+	}
 	b.WriteString("The user's instruction for this event (trusted):\n")
 	b.WriteString(d.Instruction)
 	b.WriteString("\n\n")

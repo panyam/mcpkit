@@ -444,3 +444,15 @@ channel". The send now happens under the lock `Close` takes.
 SEP-2495 (event-driven re-entry) has only its motivation written, so there was no wire design to
 follow. The bridge's answer is that re-entry is a new run with the stored instruction, not a turn
 in the session that subscribed, because a standing rule cannot depend on that session being open.
+
+A watch can still carry the session's context, though. With `session` set the run is
+`claude -p --resume <id> --fork-session` in the session's directory: a fork, so it never writes to a
+conversation that may still be open, and the closest a headless run gets to "the agent that asked".
+Two things were found out by running `claude` rather than reading about it. The model can learn its
+own id from `$CLAUDE_CODE_SESSION_ID` (MCP gives the server no session id), and resuming a missing
+id exits 1 with `No conversation found with session ID` on stderr, which is the string the fallback
+keys on. That string is not a documented contract, so if a Claude Code release rewords it, a missing
+session stops falling back and starts failing visibly, which is the safer way to break. Only that
+case falls back; any other failure of a resumed run is reported, so a broken run is not quietly
+repeated without the context it was meant to have. Pushing into a session that is open right now
+(a channel) is #1581's sink.

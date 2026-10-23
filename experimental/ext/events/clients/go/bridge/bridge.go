@@ -281,6 +281,9 @@ func (b *Bridge) deliverLoop(w Watch, lw *liveWatch) {
 				Meta:      ev.Meta,
 			},
 		}
+		if w.Session != nil {
+			d.Session, d.SessionDir = w.Session.ID, w.Session.Dir
+		}
 		if err := b.cfg.Sink.Deliver(lw.ctx, d); err != nil {
 			b.logf("bridge: watch %s: sink: %v", w.ID, err)
 			b.setError(w.ID, fmt.Errorf("event %s: %w", ev.EventID, err))

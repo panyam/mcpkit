@@ -17,7 +17,7 @@ Four tools cover every event type on every configured server.
 | Tool | Does |
 |------|------|
 | `watch_list(server?, query?)` | Runs `events/list` and returns qualified names (`<server>/<event>`), each with its description and `inputSchema`. `query` keeps only events whose name or description contains every word, so a large catalog stays out of context. Sorted by qualified name. |
-| `watch(event, arguments, instruction)` | Checks `arguments` against the event's `inputSchema`, subscribes, and stores `instruction`. A mistake comes back as a tool error that says what to fix. |
+| `watch(event, arguments, instruction, session?)` | Checks `arguments` against the event's `inputSchema`, subscribes, and stores `instruction`. A mistake comes back as a tool error that says what to fix. `session` (`{id, dir}`) makes each occurrence continue the conversation that set up the watch, see below. |
 | `unwatch(id)` | Stops the watch and unsubscribes it upstream. |
 | `watches()` | Every standing watch with its status and last error, sorted by id. |
 
@@ -60,6 +60,22 @@ The fence makes a payload easier to read as data. It does not make it safe, so t
 - `-mcp-config` passes `--mcp-config <file> --strict-mcp-config`, so a run sees only the MCP servers in that file.
 
 Any other `eventsclient.EventSink` can stand in for the headless one.
+
+### Continuing the session that asked
+
+By default a run starts with nothing but the instruction and the payload. A watch that carries a `session` instead resumes a fork of that Claude Code session, so the run has the conversation so far, which is handy when the instruction was "deal with it the way we discussed":
+
+```
+claude -p --resume <session id> --fork-session --output-format json --allowedTools ... 
+```
+
+run in the session's directory, since that is where Claude Code keeps the transcript. `--fork-session` gives the run its own copy, so the original conversation is never written to and can stay open while the run happens. The tool limits and the payload fence are the same as for a fresh run.
+
+Inside Claude Code the model can read its own id from `$CLAUDE_CODE_SESSION_ID`, and the `watch` tool's description tells it to pass that with the working directory. The id must be a UUID and the directory absolute, because the id lands in argv.
+
+When the session is gone (Claude Code answers `No conversation found with session ID`, or the directory no longer exists) the run falls back to a fresh one and `OnResumeFailed` is told; the daemon logs it. Any other failure of a resumed run is returned as it is rather than repeated without the context.
+
+A watch that fires weeks later resumes weeks-old context, which may be more misleading than helpful. Only tie a watch to a session when the instruction leans on it.
 
 ## State
 

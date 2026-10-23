@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -88,15 +89,19 @@ func (s recordingSink) Deliver(_ context.Context, d eventsclient.Delivery) error
 }
 
 // hookServer is the bridge's public webhook endpoint. Its handler is swapped
-// in after the bridge exists, since the bridge needs the URL first.
+// in after the bridge exists, since the bridge needs the URL first, and swapped
+// again on a restart while the server may still be delivering.
 type hookServer struct {
 	ts *httptest.Server
-	h  http.Handler
+	h  atomic.Value // http.Handler
 }
 
 func newHookServer(t *testing.T) *hookServer {
-	hs := &hookServer{h: http.NotFoundHandler()}
-	hs.ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hs.h.ServeHTTP(w, r) }))
+	hs := &hookServer{}
+	hs.h.Store(http.NotFoundHandler())
+	hs.ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hs.h.Load().(http.Handler).ServeHTTP(w, r)
+	}))
 	t.Cleanup(hs.ts.Close)
 	return hs
 }
@@ -109,7 +114,7 @@ func newBridge(t *testing.T, hs *hookServer, sink eventsclient.EventSink, store 
 	}
 	b, err := bridge.New(cfg)
 	require.NoError(t, err)
-	hs.h = b.Handler()
+	hs.h.Store(b.Handler())
 	require.NoError(t, b.Start(t.Context()))
 	t.Cleanup(b.Close)
 	return b
@@ -206,6 +211,8 @@ func TestWatch_RefusesWithModelReadableErrors(t *testing.T) {
 		{"blank instruction", map[string]any{"event": "ops/alert.fired", "instruction": "  "}, "instruction is required"},
 		{"bad enum", map[string]any{"event": "ops/alert.fired", "instruction": "x", "arguments": map[string]any{"severity": "P9"}}, "/severity"},
 		{"extra property", map[string]any{"event": "ops/alert.fired", "instruction": "x", "arguments": map[string]any{"color": "red"}}, "inputSchema"},
+		{"session id not a uuid", map[string]any{"event": "ops/alert.fired", "instruction": "x", "session": map[string]any{"id": "--dangerously-skip-permissions", "dir": "/tmp"}}, "$CLAUDE_CODE_SESSION_ID"},
+		{"session dir relative", map[string]any{"event": "ops/alert.fired", "instruction": "x", "session": map[string]any{"id": "0b5c3e1a-7d2f-4c9e-8a61-2f4d9b7e1c35", "dir": "repo"}}, "absolute path"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := callTool(t, c, "watch", tc.args)
@@ -247,6 +254,35 @@ func TestWatch_DeliversMatchingEventsWithInstruction(t *testing.T) {
 	require.Len(t, w.Watches, 1)
 	assert.Equal(t, view.ID, w.Watches[0].ID)
 	assert.Equal(t, bridge.StatusActive, w.Watches[0].Status)
+}
+
+func TestWatch_SessionReachesTheSinkAndIsPersisted(t *testing.T) {
+	up := newUpstream(t)
+	sink := make(recordingSink, 4)
+	store := bridge.NewMemoryStore()
+	c := agent(t, newBridge(t, newHookServer(t), sink, store, map[string]upstream{"ops": up}))
+	dir := t.TempDir()
+
+	res := callTool(t, c, "watch", map[string]any{
+		"event":       "ops/alert.fired",
+		"instruction": "look at it with what we discussed",
+		"session":     map[string]any{"id": "0b5c3e1a-7d2f-4c9e-8a61-2f4d9b7e1c35", "dir": dir},
+	})
+	require.False(t, res.IsError, res.Content[0].Text)
+	view := structured[bridge.WatchView](t, res)
+	require.NotNil(t, view.Session)
+	assert.Equal(t, dir, view.Session.Dir)
+
+	require.NoError(t, up.yield(t.Context(), alert{Severity: "P1", Msg: "db down"}))
+	d := waitDelivery(t, sink)
+	assert.Equal(t, "0b5c3e1a-7d2f-4c9e-8a61-2f4d9b7e1c35", d.Session)
+	assert.Equal(t, dir, d.SessionDir)
+
+	saved, err := store.Load()
+	require.NoError(t, err)
+	require.Len(t, saved, 1)
+	require.NotNil(t, saved[0].Session, "the session survives a restart with the watch")
+	assert.Equal(t, dir, saved[0].Session.Dir)
 }
 
 func TestWatches_SortedByID(t *testing.T) {

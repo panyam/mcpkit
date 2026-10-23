@@ -16,6 +16,7 @@ type WatchView struct {
 	Event       string         `json:"event"`
 	Arguments   map[string]any `json:"arguments,omitempty"`
 	Instruction string         `json:"instruction"`
+	Session     *Session       `json:"session,omitempty"`
 	Status      string         `json:"status"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	LastError   string         `json:"lastError,omitempty"`
@@ -28,6 +29,7 @@ func viewOf(w Watch) WatchView {
 		Event:       w.Event,
 		Arguments:   w.Arguments,
 		Instruction: w.Instruction,
+		Session:     w.Session,
 		Status:      w.Status,
 		CreatedAt:   w.CreatedAt,
 		LastError:   w.LastError,
@@ -87,13 +89,24 @@ func (b *Bridge) Register(srv *server.Server) {
 		Description: "Subscribe to an event and store what to do when it arrives. event is a qualified name from watch_list; " +
 			"arguments must match that event's inputSchema; instruction is the user's request for each occurrence " +
 			"(e.g. \"email me a two-line summary\"). Each occurrence starts a separate run with only the tools that run is allowed. " +
-			"The watch persists until unwatch.",
+			"The watch persists until unwatch. To have each occurrence continue this conversation, with its context, " +
+			"instead of starting fresh, pass session with id set to $CLAUDE_CODE_SESSION_ID and dir set to the current " +
+			"working directory; the run resumes a fork, so this conversation itself is not changed.",
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"event":       map[string]any{"type": "string", "description": "Qualified event name, \"<server>/<event>\"."},
 				"arguments":   map[string]any{"type": "object", "description": "Subscription arguments for the event's inputSchema."},
 				"instruction": map[string]any{"type": "string", "description": "What should happen when the event arrives."},
+				"session": map[string]any{
+					"type":        "object",
+					"description": "Optional. The session each occurrence continues.",
+					"properties": map[string]any{
+						"id":  map[string]any{"type": "string", "description": "The session UUID, $CLAUDE_CODE_SESSION_ID."},
+						"dir": map[string]any{"type": "string", "description": "The session's absolute working directory."},
+					},
+					"required": []any{"id", "dir"},
+				},
 			},
 			"required": []any{"event", "instruction"},
 		},
@@ -102,11 +115,16 @@ func (b *Bridge) Register(srv *server.Server) {
 			Event       string         `json:"event"`
 			Arguments   map[string]any `json:"arguments"`
 			Instruction string         `json:"instruction"`
+			Session     *Session       `json:"session"`
 		}
 		if err := req.Bind(&in); err != nil {
 			return core.ErrorResult("invalid arguments: " + err.Error()), nil
 		}
-		w, err := b.Watch(ctx, in.Event, in.Arguments, in.Instruction)
+		var opts []WatchOption
+		if in.Session != nil {
+			opts = append(opts, ResumeSession(in.Session.ID, in.Session.Dir))
+		}
+		w, err := b.Watch(ctx, in.Event, in.Arguments, in.Instruction, opts...)
 		if err != nil {
 			var werr *WatchError
 			if errors.As(err, &werr) {
