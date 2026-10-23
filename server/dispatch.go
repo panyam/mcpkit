@@ -166,6 +166,10 @@ type Dispatcher struct {
 	// header check, and the discover advertise all see the operator's set.
 	configuredVersions []string
 
+	// experimental is rendered as capabilities.experimental at initialize
+	// (WithExperimentalCapability). Shared, never mutated after construction.
+	experimental map[string]any
+
 	// taskBucketKeyer derives the task-store isolation bucket for each request
 	// (issue 485). Nil = default (session ID). Set via WithTaskBucketKeyer;
 	// injected onto the request context in dispatchWithOpts and the stateless
@@ -326,6 +330,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		allowLegacyOnDraft:   d.allowLegacyOnDraft,
 		allowReinitialize:    d.allowReinitialize,
 		configuredVersions:   d.configuredVersions,
+		experimental:         d.experimental,
 		taskBucketKeyer:      d.taskBucketKeyer,
 	}
 }
@@ -552,6 +557,9 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	}
 	if hasPrompts {
 		caps.Prompts = &core.PromptsCap{ListChanged: true}
+	}
+	if len(d.experimental) > 0 {
+		caps.Experimental = d.experimental
 	}
 	if d.tasksCap != nil {
 		caps.Tasks = d.tasksCap

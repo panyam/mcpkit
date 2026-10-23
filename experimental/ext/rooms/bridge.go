@@ -65,6 +65,7 @@ type Bridge struct {
 	callTimeout  time.Duration
 	localSubject string
 	prmURL       string
+	onEvent      func(PageEvent)
 
 	srv    *server.Server
 	ctx    context.Context
@@ -544,6 +545,7 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 	}
 
 	var notify []context.Context
+	var event *PageEvent
 	b.mu.Lock()
 	pg := rs.pages[from]
 	if pg == nil {
@@ -551,6 +553,12 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 		return
 	}
 	switch m.Method {
+	case MethodPageEvent:
+		if pg.listed {
+			if e, ok := b.pageEventLocked(rs, pg, m.Params); ok {
+				event = &e
+			}
+		}
 	case "notifications/tools/list_changed":
 		go b.listTools(rs, from)
 	case "notifications/progress":
@@ -614,6 +622,9 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 	b.mu.Unlock()
 	for _, ctx := range notify {
 		core.Notify(ctx, "notifications/tools/list_changed", nil)
+	}
+	if event != nil {
+		b.onEvent(*event)
 	}
 }
 

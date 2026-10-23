@@ -55,6 +55,20 @@ the page only when the page agreed:
   user's. `onPairingRequest(fn)` reports who is asking, so the page can show its user.
 - `revoke(session?)` ends one pairing, or all of them when called with no argument.
 
+## Telling agents what happened
+
+```ts
+room.ask("why is SDA flagged?");           // room.ask
+room.selectionChanged({ net: "SDA" });      // page.selection_changed
+room.emit("viewer.sheet_opened", { sheet }); // a name of your own
+```
+
+Agents subscribed to the room's events hear these, if this page agreed to their session (the same
+agreement as calls). Names are one to four dot-separated lowercase segments (`validEventName`), and
+`data` is capped at `MAX_EVENT_DATA_BYTES` (16 KiB). `emit` throws on either before anything is sent.
+An event goes only to bridges that have already listed the page, so one emitted straight after
+`joinToolRoom` may reach nobody.
+
 ## The same tool in an MCP Apps frame
 
 `registerOnApp(app, tool)` registers a tool with an MCP Apps bridge, such as mcpkit's

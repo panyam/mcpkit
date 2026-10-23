@@ -1,4 +1,4 @@
-export { joinToolRoom, wsUrl, MESSAGE_KIND } from "./room.js";
+export { joinToolRoom, wsUrl, MESSAGE_KIND, validEventName, EVENT_ASK, EVENT_SELECTION_CHANGED, MAX_EVENT_DATA_BYTES } from "./room.js";
 export type { JoinToolRoomOptions, ToolRoom, PairingRequest, ModelContextLike } from "./room.js";
 export { registerOnApp } from "./app.js";
 export type { AppToolRegistry } from "./app.js";

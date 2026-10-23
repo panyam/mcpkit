@@ -88,6 +88,21 @@ A page's user agrees before an agent can call it.
 - **Ending it.** `Revoke(session)` on the page, `detach`, the page leaving, or the MCP session
   closing (the bridge hooks the server's `OnSessionClose`).
 
+## Page events
+
+A page tells the bridge when something happens: `Ask(text)` emits `room.ask`, `SelectionChanged(sel)`
+emits `page.selection_changed`, and `Emit(name, data)` sends a name of the page's own
+(`viewer.sheet_opened`). Names are one to four dot-separated lowercase segments, and data is capped at
+`MaxEventDataBytes` (16 KiB). The page refuses anything else with `ErrInvalidEvent`, and the bridge
+drops it too, since a page is any peer with a relay token.
+
+The bridge hands each event to `WithPageEvents(fn)`, stamped with the page's peer id, its subject from
+the relay token, and its label. It applies no agreement there. To offer the events to agents as MCP
+Events (SEP-3415), with the bridge's agreement deciding who hears which page, use
+[`experimental/integrations/roomsevents`](../../integrations/roomsevents), which also has the Claude
+Code channel front end. `Attached(session, resource)` and `PageAgreed(session, resource, page)` are
+the two questions it asks.
+
 ## Calls
 
 The bridge gives each call its own id on the relay, since an agent's request id is unique only in

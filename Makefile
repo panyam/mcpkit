@@ -22,6 +22,7 @@ SUB_MODS_TO_TAG := \
 	experimental/ext/events/stores/memory experimental/ext/events/stores/gorm experimental/ext/events/stores/redis \
 	experimental/ext/events/clients/go \
 	experimental/ext/rooms experimental/ext/rooms/massrelay \
+	experimental/integrations/roomsevents \
 	cmd/testclient cmd/common cmd/mcpskills \
 	examples/mcpskills-walkthrough \
 	tests/e2e tests/keycloak
@@ -246,6 +247,9 @@ test-experimental-rooms: ## Run experimental ext/rooms room bridge tests
 
 test-experimental-rooms-massrelay: ## Run the room bridge over a real massrelay relay (embedded and WebSocket)
 	@bash experimental/scripts/test-rooms-massrelay.sh
+
+test-experimental-roomsevents: ## Run the room bridge's events and the stdio channel front end (integrations/roomsevents)
+	@bash experimental/scripts/test-roomsevents.sh
 
 test-experimental-rooms-ts: ## Run the TypeScript page client against the Go room bridge on a real relay (needs pnpm)
 	@bash experimental/scripts/test-rooms-ts.sh
