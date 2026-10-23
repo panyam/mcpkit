@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -149,7 +148,9 @@ func New(t RoomTransport, opts ...Option) *Bridge {
 // Register adds the bridge's tools (attach, detach, list_pages) to srv and
 // installs two middlewares: one that shows each session only the page tools of
 // rooms it attached to, and a scope gate that turns a missing scope on any of
-// the bridge's tools into a 403 with an insufficient_scope challenge. Page
+// the bridge's tools into a 403 with an insufficient_scope challenge. It also
+// hooks srv's session close, so a closed session's attachments and pairings
+// end with it. Page
 // tools are added to and removed from srv's registry as pages come and go.
 func (b *Bridge) Register(srv *server.Server) {
 	b.srv = srv
@@ -184,6 +185,7 @@ func (b *Bridge) Register(srv *server.Server) {
 		ScopeChallenge: core.RequireScopes(ScopePagesRead),
 	}, b.listPages)
 	srv.UseMiddleware(b.filterToolsList, b.scopeGate)
+	srv.OnSessionClose(func(_ context.Context, sessionID string) { b.EndSession(sessionID) })
 }
 
 // isBridgeTool reports whether name is one of the bridge's own tools or a page
@@ -224,22 +226,14 @@ func (b *Bridge) scopeGate(ctx context.Context, req *core.Request, next server.M
 	if err == nil && challenge == nil {
 		return next(ctx, req)
 	}
-	var scopes []string
-	var desc string
-	if challenge != nil {
-		scopes, desc = challenge.Scopes, challenge.ErrorDescription
-	}
-	return nil, &core.AuthError{
-		Code:            http.StatusForbidden,
-		Message:         "insufficient scope",
-		WWWAuthenticate: core.InsufficientScopeChallenge(b.prmURL, desc, scopes...),
-	}
+	return nil, challenge.AuthError(b.prmURL)
 }
 
 // EndSession drops everything the bridge holds for an MCP session: its
-// attachments, its pairings and its pairing codes. The server has no
-// session-close hook an extension can use, so a host that tracks session ends
-// calls this; detaching from every room has the same effect.
+// attachments, its pairings and its pairing codes. Register wires it to the
+// server's session-close hook, so a host need not call it; it stays exported
+// for hosts that end a session some other way. Calling it twice, or for a
+// session the bridge never saw, does nothing.
 func (b *Bridge) EndSession(sessionID string) {
 	b.mu.Lock()
 	s := b.sessions[sessionID]

@@ -71,8 +71,8 @@ A page's user agrees before an agent can call it.
 - **Same user.** `SetAgentsAllowed(true)` agrees to every session whose subject is the page's user.
 - **Another user.** `attach` returns a code. The page's user accepts it with `AcceptPairing(code)`.
   `OnPairingRequest` shows the page who asked.
-- **Ending it.** `Revoke(session)` on the page, `detach`, or the page leaving. A host that tracks
-  session ends calls `Bridge.EndSession`.
+- **Ending it.** `Revoke(session)` on the page, `detach`, the page leaving, or the MCP session
+  closing (the bridge hooks the server's `OnSessionClose`).
 
 ## Calls
 

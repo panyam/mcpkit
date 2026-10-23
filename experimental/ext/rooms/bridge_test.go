@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -332,6 +334,27 @@ func TestBridge_AmbiguousTargetCarriesRoster(t *testing.T) {
 	assert.Contains(t, text(res), string(p1.ID()))
 	assert.Contains(t, text(res), string(p2.ID()))
 	assert.Empty(t, rec.all())
+}
+
+// Closing the MCP session drops the bridge's state for it, with no call from
+// the host.
+func TestBridge_SessionCloseEndsItsState(t *testing.T) {
+	st := newStack(t)
+	st.page(t, "alice", room, (&recorder{}).tool("show_sheet", "p", false))
+	bob := st.agent(t, "bob", allScopes...)
+	bob.attach(t, room)
+	require.Equal(t, 1, st.bridge.SessionCount())
+
+	// client.Close sends no DELETE, so terminate the session as a
+	// spec-following client would.
+	req, _ := http.NewRequest(http.MethodDelete, st.url, nil)
+	req.Header.Set("Mcp-Session-Id", bob.SessionID())
+	req.Header.Set("Authorization", "Bearer bob-"+strings.Join(allScopes, ","))
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Eventually(t, func() bool { return st.bridge.SessionCount() == 0 }, 2*time.Second, 10*time.Millisecond)
 }
 
 // A pairing ends when the page revokes it or the session ends.
