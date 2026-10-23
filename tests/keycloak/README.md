@@ -7,9 +7,33 @@ End-to-end tests that validate mcpkit's auth system against a real Keycloak inst
 ```bash
 # From project root:
 make upkcl              # Start Keycloak (first time takes ~30s to import realm)
-make test-auth-keycloak # Run interop tests
+make testkcl          # Run interop tests
 make downkcl            # Stop Keycloak when done
 ```
+
+Or in one step, which starts Keycloak if it isn't running and stops it after:
+
+```bash
+make testkcl-auto                 # port 8180
+KC_PORT=8181 make testkcl-auto    # if 8180 is taken
+```
+
+`testkcl-auto` refuses a port that something other than this suite's Keycloak already holds, and
+sets `KEYCLOAK_REQUIRED=1`, so an unreachable Keycloak fails the run. A plain `go test ./...`
+leaves it unset, and every test skips when Keycloak isn't there.
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `KEYCLOAK_URL` | `http://localhost:8180` | Where the tests look. `testkcl-auto` derives it from `KC_PORT`. |
+| `KEYCLOAK_REQUIRED` | unset (`1` under `testkcl-auto`) | `1` turns "Keycloak unreachable" from a skip into a failure. |
+| `KC_PORT` | `8180` | The port `keycloak-up.sh` and `testkcl-auto` use. |
+
+## In CI
+
+`.github/workflows/keycloak-interop.yml` runs `make testkcl-auto` on PRs that touch `ext/auth`,
+`client`, `server`, `core` or this suite, on pushes to `main`, nightly, and on manual dispatch.
+`make check-kcl-guards`, part of the main `test` job, self-tests the two guards above without
+Docker.
 
 ## Realm Configuration
 

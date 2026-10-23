@@ -1,25 +1,39 @@
 name: Keycloak Interop
 
+# The 19 tests in tests/keycloak against a real Keycloak realm. They guard
+# ext/auth on both wires, and #1567 broke the stateless step-up test with
+# nothing going red, because this suite ran nowhere (#1597).
+#
+# A plain job rather than a service container: a service container can't be
+# given a command, and the Keycloak image exits printing its usage unless it is
+# told `start-dev`. scripts/keycloak-up.sh passes it, along with the realm.
+# testkcl-auto sets KEYCLOAK_REQUIRED=1, so a Keycloak that never came up fails
+# the job rather than passing it as skips.
+
 on:
+  pull_request:
+    paths:
+      - 'ext/auth/**'
+      - 'client/**'
+      - 'server/**'
+      - 'core/**'
+      - 'tests/keycloak/**'
+      - 'scripts/keycloak-up.sh'
+      - 'scripts/testkcl-auto.sh'
+      - '.github/workflows/keycloak-interop.yml'
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   keycloak:
     runs-on: ubuntu-latest
-    services:
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0
-        ports:
-          - 8180:8080
-        env:
-          KC_BOOTSTRAP_ADMIN_USERNAME: admin
-          KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-        options: >-
-          --health-cmd "curl -sf http://localhost:8080/health/ready || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 30
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -27,28 +41,5 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Import realm via Admin REST API
-        run: |
-          TOKEN=$(curl -sf -X POST http://localhost:8180/realms/master/protocol/openid-connect/token \
-            -d "grant_type=client_credentials&client_id=admin-cli" \
-            -d "username=admin&password=admin&grant_type=password" \
-            | jq -r '.access_token')
-          curl -sf -X POST http://localhost:8180/admin/realms \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @tests/keycloak/realm.json
-
-      - name: Wait for realm
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8180/realms/mcpkit-test > /dev/null 2>&1; then
-              echo "Realm ready"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Run Keycloak interop tests
-        run: cd tests/keycloak && go test ./... -v -count=1 -timeout 120s
-        env:
-          KEYCLOAK_URL: http://localhost:8180
+      - name: Keycloak interop tests
+        run: make testkcl-auto

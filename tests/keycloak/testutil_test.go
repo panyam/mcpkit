@@ -7,7 +7,9 @@ package keycloak_test
 //   - MCP server wiring with JWTValidator pointed at Keycloak's JWKS
 //
 // Keycloak URL defaults to http://localhost:8180. Override with KEYCLOAK_URL env var.
-// Tests skip gracefully when Keycloak is not reachable — run "make upkcl" to start.
+// Tests skip gracefully when Keycloak is not reachable — run "make upkcl" to start —
+// unless KEYCLOAK_REQUIRED=1, which CI and `make testkcl-auto` set, so a Keycloak
+// that never came up fails the run instead of passing it as 19 skips (#1597).
 
 import (
 	"encoding/json"
@@ -57,17 +59,23 @@ func realmURL() string {
 }
 
 // skipIfKeycloakNotRunning checks if Keycloak's mcpkit-test realm is reachable.
-// Skips the test if not — allows running "go test ./..." without Docker.
+// Skips the test if not — allows running "go test ./..." without Docker — or
+// fails it when KEYCLOAK_REQUIRED=1.
 func skipIfKeycloakNotRunning(t *testing.T) {
 	t.Helper()
+	unavailable := t.Skipf
+	if os.Getenv("KEYCLOAK_REQUIRED") == "1" {
+		unavailable = t.Fatalf
+	}
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(realmURL())
 	if err != nil {
-		t.Skipf("Keycloak not reachable at %s: %v (run 'make upkcl' to start)", keycloakURL(), err)
+		unavailable("Keycloak not reachable at %s: %v (run 'make upkcl' to start)", keycloakURL(), err)
+		return
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Skipf("Keycloak realm %s not ready (status %d)", realmName, resp.StatusCode)
+		unavailable("Keycloak realm %s not ready (status %d)", realmName, resp.StatusCode)
 	}
 }
 
