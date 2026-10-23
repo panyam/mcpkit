@@ -11,6 +11,7 @@ test-events-clients-go
 test-events-stores-gorm
 test-events-discord
 test-events-telegram
+test-rooms
 "
 
 for suite in $SUITES; do

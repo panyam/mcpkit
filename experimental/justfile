@@ -17,7 +17,7 @@
 EXPERIMENTAL_DIR := justfile_directory()
 
 # Run all experimental POC tests
-test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram
+test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram test-rooms
 
 # Run experimental ext/agents library tests
 test-agents:
@@ -59,6 +59,10 @@ test-events-discord:
 # (alias) Telegram example tests — moved to examples/justfile (issue 688)
 test-events-telegram:
     just -f {{EXPERIMENTAL_DIR}}/../examples/justfile test-events-telegram
+
+# Run experimental ext/rooms room bridge tests
+test-rooms:
+    @bash {{EXPERIMENTAL_DIR}}/scripts/test-rooms.sh
 
 # Show available recipes
 help:

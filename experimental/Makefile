@@ -16,9 +16,9 @@
 
 EXPERIMENTAL_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: test test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-stores-gorm-pg test-events-stores-redis test-events-stores-redis-real test-events-discord test-events-telegram help
+.PHONY: test test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-stores-gorm-pg test-events-stores-redis test-events-stores-redis-real test-events-discord test-events-telegram test-rooms help
 
-test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram ## Run all experimental POC tests
+test: test-agents test-agents-clients-go test-events test-events-clients-go test-events-stores-gorm test-events-discord test-events-telegram test-rooms ## Run all experimental POC tests
 
 test-agents: ## Run experimental ext/agents library tests
 	@bash $(EXPERIMENTAL_DIR)/scripts/test-agents.sh
@@ -49,6 +49,9 @@ test-events-discord: ## (alias) Discord example tests — moved to examples/Make
 
 test-events-telegram: ## (alias) Telegram example tests — moved to examples/Makefile
 	$(MAKE) -C $(EXPERIMENTAL_DIR)/../examples test-events-telegram
+
+test-rooms: ## Run experimental ext/rooms room bridge tests
+	@bash $(EXPERIMENTAL_DIR)/scripts/test-rooms.sh
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-30s\033[0m %s\n", $$1, $$2}'
