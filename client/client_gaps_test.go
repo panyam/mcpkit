@@ -224,3 +224,25 @@ func TestToolCallWith_ProgressOverTheInProcessTransport(t *testing.T) {
 	assert.Equal(t, []float64{1, 2, 3}, log.progress())
 	assert.Equal(t, int32(3), seenByTransport.Load(), "the transport's own handler still sees every notification")
 }
+
+// Close's DELETE must not race requests still in flight on other goroutines.
+// Run under -race; it reported a write to the session id in terminateSession
+// against the read in notify.
+func TestClose_DoesNotRaceRequestsInFlight(t *testing.T) {
+	g := newGapsServer(t, nil)
+	c := client.NewClient(g.url, core.ClientInfo{Name: "c", Version: "1"})
+	require.NoError(t, c.Connect(t.Context()))
+
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 20 {
+				_ = c.NotifyRootsChanged(context.Background())
+			}
+		})
+	}
+	time.Sleep(2 * time.Millisecond)
+	require.NoError(t, c.Close())
+	wg.Wait()
+	assert.Equal(t, 1, g.deleteCount(), "one DELETE, however many requests were in flight")
+}
