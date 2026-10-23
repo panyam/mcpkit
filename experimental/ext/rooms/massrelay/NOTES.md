@@ -48,3 +48,10 @@ massrelay v0.2.1 requires newer x/net, x/crypto, x/sys, x/text, otel, genproto a
 than the rest of the tree pinned, and `scripts/dep-baseline.json` was empty. Rather than accept 13
 divergences there, the PR ran `check_dep_consistency.py --unify` and `make tidy-all`, which raised
 every module to those versions. That is most of the PR's go.mod and go.sum churn.
+
+## A test stack for the TypeScript client
+
+`internal/relaytest` starts the relay the Go tests use, and `internal/cmd/teststack` wraps it with
+the bridge and an MCP endpoint, printing their URLs and tokens as a JSON line. It serves until its
+stdin closes. The page client's tests in `../ts` run it with `go run`, so they test the TS page
+against the real Go bridge rather than a fake one.

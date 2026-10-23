@@ -48,6 +48,7 @@ upstream changes to watch.
 | `experimental/ext/agents/` — Server-declared agent discovery (pre-SEP) | `experimental/ext/agents/README.md`, `experimental/ext/agents/NOTES.md` |
 | `experimental/ext/rooms/` — Room bridge: agents call tools web pages offer (#1581) | `experimental/ext/rooms/README.md`, `experimental/ext/rooms/NOTES.md` |
 | `experimental/ext/rooms/massrelay/` — `RoomTransport` over massrelay, embedded or WebSocket (separate go.mod) | `experimental/ext/rooms/massrelay/README.md`, `experimental/ext/rooms/massrelay/NOTES.md` |
+| `experimental/ext/rooms/ts/` — `joinToolRoom`, the browser page client for the room bridge (pnpm) | `experimental/ext/rooms/ts/README.md`, `experimental/ext/rooms/ts/NOTES.md` |
 | `experimental/ext/protogen/` — Proto → MCP codegen | `experimental/ext/protogen/docs/DESIGN.md` |
 | `conformance/` — Suite orchestration + audits | `conformance/NOTES.md` |
 | `examples/` — Working examples | `examples/README.md`, `examples/CONVENTIONS.md`, `examples/NOTES.md` |
