@@ -190,11 +190,7 @@ func (v *IntrospectionValidator) Validate(r *http.Request) error {
 	}
 
 	if len(v.cfg.RequiredScopes) > 0 && !containsAllScopes(scopes, v.cfg.RequiredScopes) {
-		return &mcpcore.AuthError{
-			Code:            http.StatusForbidden,
-			Message:         "insufficient scope",
-			WWWAuthenticate: WWWAuth403(v.cfg.ResourceMetadataURL, v.cfg.RequiredScopes...),
-		}
+		return (&mcpcore.ScopeChallenge{Scopes: v.cfg.RequiredScopes}).AuthError(v.cfg.ResourceMetadataURL)
 	}
 
 	// SessionID — oneauth's IntrospectionResult doesn't surface the OIDC
