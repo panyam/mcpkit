@@ -91,6 +91,7 @@ type serverOptions struct {
 	allowReinitialize    bool                           // WithAllowReinitialize — opt-in acceptance of a duplicate initialize (off by default; issue 421)
 	taskBucketKeyer      core.TaskBucketKeyer           // WithTaskBucketKeyer — per-request task-store isolation bucket (nil = session ID; issue 485)
 	supportedVersions    []string                       // WithSupportedVersions — per-server protocol version override (nil = package default; issue 419)
+	experimental         map[string]any                 // WithExperimentalCapability — capabilities.experimental entries
 	tracerProvider       core.TracerProvider            // SEP-414 P2 — WithTracerProvider; nil/Noop = trace middleware not installed
 	meterProvider        core.MeterProvider             // issue 7 — WithMeterProvider; nil/Noop = metrics middleware not installed
 	notificationRelay    NotificationRelay              // issue 755 — WithNotificationRelay; nil = no cross-replica broadcast (Broadcast fires local only)
@@ -645,6 +646,23 @@ func WithSupportedVersions(versions ...string) Option {
 	}
 }
 
+// WithExperimentalCapability declares name under capabilities.experimental in
+// the initialize result, with settings as its value (nil renders as {}). The
+// MCP spec reserves that object for non-standard capabilities; Claude Code's
+// channels are one, declared as WithExperimentalCapability("claude/channel",
+// nil). Calling it again for the same name replaces the earlier settings.
+func WithExperimentalCapability(name string, settings map[string]any) Option {
+	return func(o *serverOptions) {
+		if o.experimental == nil {
+			o.experimental = map[string]any{}
+		}
+		if settings == nil {
+			settings = map[string]any{}
+		}
+		o.experimental[name] = settings
+	}
+}
+
 // WithRootsFetchTimeout sets the deadline for server-to-client roots/list
 // requests issued after notifications/roots/list_changed. Default is 30s.
 // Decrease for aggressive fail-fast; increase for slow clients with large
@@ -693,6 +711,7 @@ func NewServer(info core.Implementation, opts ...Option) *Server {
 	s.dispatcher.allowReinitialize = s.options.allowReinitialize
 	s.dispatcher.taskBucketKeyer = s.options.taskBucketKeyer
 	s.dispatcher.configuredVersions = s.options.supportedVersions
+	s.dispatcher.experimental = s.options.experimental
 	s.dispatcher.customHandlers = s.options.customHandlers
 	// Wire registry change notifications to Server.Broadcast so that
 	// dynamic adds/removes automatically notify all connected sessions.

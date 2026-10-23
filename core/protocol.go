@@ -132,6 +132,12 @@ type ServerCapabilities struct {
 	Completions *struct{}                      `json:"completions,omitempty"`
 	Extensions  map[string]ExtensionCapability `json:"extensions,omitempty"`
 
+	// Experimental is the spec's capabilities.experimental: non-standard
+	// capabilities a server declares by name, each with its own settings
+	// object. Claude Code's channels, for one, read `claude/channel` here.
+	// Set through server.WithExperimentalCapability.
+	Experimental map[string]any `json:"experimental,omitempty"`
+
 	// TopLevel carries extension-contributed keys rendered at the top level
 	// of the capabilities object (see Extension.TopLevel). MarshalJSON merges
 	// them in and drops any key a field above already claims, set or not.
