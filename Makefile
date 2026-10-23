@@ -247,6 +247,9 @@ test-experimental-rooms: ## Run experimental ext/rooms room bridge tests
 test-experimental-rooms-massrelay: ## Run the room bridge over a real massrelay relay (embedded and WebSocket)
 	@bash experimental/scripts/test-rooms-massrelay.sh
 
+test-experimental-rooms-ts: ## Run the TypeScript page client against the Go room bridge on a real relay (needs pnpm)
+	@bash experimental/scripts/test-rooms-ts.sh
+
 test-apps-playwright: ## Run ext-apps Playwright tests against testserver (needs Node.js + Playwright). EXAMPLE=<name> picks a fixture.
 	uv run scripts/apps_playwright_test.py
 

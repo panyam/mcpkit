@@ -11,31 +11,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/panyam/massrelay/services"
-	relaymw "github.com/panyam/massrelay/web/middleware"
-	relayserver "github.com/panyam/massrelay/web/server"
-	"github.com/panyam/oneauth/keys"
 	"github.com/stretchr/testify/require"
 
 	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/rooms"
 	"github.com/panyam/mcpkit/experimental/ext/rooms/massrelay"
+	"github.com/panyam/mcpkit/experimental/ext/rooms/massrelay/internal/relaytest"
 	"github.com/panyam/mcpkit/server"
 )
 
-const (
-	room          = "design:demo/board.kicad_sch"
-	relaySecret   = "massrelay-adapter-test-secret"
-	relayClientID = "rooms-test"
-	relayIssuer   = "rooms-test-issuer"
-)
+const room = "design:demo/board.kicad_sch"
 
 var allScopes = []string{rooms.ScopeRoomsAttach, rooms.ScopePagesRead, rooms.ScopePagesAct}
 
-// relay is a real massrelay: its HTTP app with JWT auth required, and the
-// CollabService behind it for embedded joins.
+// relay is a real massrelay with JWT auth required; see relaytest.
 type relay struct {
 	svc *services.CollabService
 	url string
@@ -43,42 +34,21 @@ type relay struct {
 
 func newRelay(t *testing.T) *relay {
 	t.Helper()
-	ks := keys.NewInMemoryKeyStore()
-	_, err := ks.PutKey(context.Background(), &keys.PutKeyRequest{Record: &keys.KeyRecord{
-		ClientID: relayClientID, Key: []byte(relaySecret), Algorithm: "HS256",
-	}})
+	r, err := relaytest.Start()
 	require.NoError(t, err)
-	auth := relaymw.NewRelayAuthenticator(relaymw.RelayAuthConfig{
-		KeyStore: ks, Required: true, Issuer: relayIssuer, TokenQueryParam: "token",
-	})
-	app := relayserver.NewRelayApp()
-	// No per-IP connection rate limit: every test peer dials from loopback.
-	app.Guard = relaymw.NewGuard(nil, nil, auth, nil, nil)
-	require.NoError(t, app.Init())
-	ts := httptest.NewServer(app)
-	t.Cleanup(ts.Close)
-	return &relay{svc: app.Service, url: ts.URL}
+	t.Cleanup(r.Close)
+	return &relay{svc: r.Service, url: r.URL}
 }
 
-// token mints a relay token for subject, as an app would after
-// authenticating its user. extra adds claims such as "rooms".
 func token(t *testing.T, subject string, extra map[string]any) string {
 	t.Helper()
-	now := time.Now()
-	claims := jwt.MapClaims{
-		"sub": subject, "client_id": relayClientID, "type": "access", "iss": relayIssuer,
-		"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
-	}
-	for k, v := range extra {
-		claims[k] = v
-	}
-	s, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(relaySecret))
+	s, err := relaytest.Token(subject, extra)
 	require.NoError(t, err)
 	return s
 }
 
 func (r *relay) embedded(subject string) rooms.RoomTransport {
-	return massrelay.Embedded(r.svc, &services.Principal{Subject: subject, ClientID: relayClientID})
+	return massrelay.Embedded(r.svc, &services.Principal{Subject: subject, ClientID: relaytest.ClientID})
 }
 
 func (r *relay) dial(t *testing.T, subject string) rooms.RoomTransport {

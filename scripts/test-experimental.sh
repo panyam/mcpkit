@@ -13,6 +13,7 @@ test-events-discord
 test-events-telegram
 test-rooms
 test-rooms-massrelay
+test-rooms-ts
 "
 
 for suite in $SUITES; do

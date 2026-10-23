@@ -1,0 +1,25 @@
+{
+  "name": "@mcpkit/rooms-page",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Page side of the mcpkit room bridge: offer WebMCP-shaped tools to agents through a massrelay room",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
+    "@panyam/massrelay": "^0.2.1",
+    "@panyam/servicekit-client": "^0.0.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^22.20.5",
+    "jsdom": "^30.1.3",
+    "typescript": "7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

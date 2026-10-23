@@ -169,6 +169,21 @@ jobs:
       - name: Run the room bridge over massrelay
         run: bash experimental/scripts/test-rooms-massrelay.sh
 
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: experimental/ext/rooms/ts/pnpm-lock.yaml
+
+      # The TypeScript page client against the Go bridge on a real relay,
+      # including the ext/ui frame case (#1581 acceptance 7).
+      - name: Run the TypeScript page client tests
+        run: bash experimental/scripts/test-rooms-ts.sh
+
   test-agents:
     runs-on: ubuntu-latest
     steps:

@@ -51,6 +51,9 @@ page, _ := rooms.JoinPage(ctx, massrelay.Dial("https://relay.example.com", relay
 
 ## Offering tools from a page
 
+A browser page uses the TypeScript client in [`ts/`](ts/), `joinToolRoom`, which takes WebMCP's
+`registerTool` shape. A Go program that shows something uses `rooms.Page`:
+
 ```go
 page, _ := rooms.JoinPage(ctx, relay.Transport("alice"), "design:demo/board.kicad_sch")
 page.RegisterTool(rooms.PageTool{

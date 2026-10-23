@@ -1,0 +1,4 @@
+# massrelay is ours, and this package bumps it right after a massrelay
+# release, so it is exempt from the one-day release-age policy. Nothing else is.
+minimumReleaseAgeExclude:
+  - "@panyam/massrelay"
