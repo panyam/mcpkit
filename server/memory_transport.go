@@ -54,6 +54,15 @@ type InProcessTransport struct {
 	dispatcher    *Dispatcher
 	reqHandler    core.ServerRequestHandler
 	notifyHandler core.NotificationHandler
+	clientNotify  core.NotificationHandler // installed by the client, see SetNotificationHandler
+}
+
+// SetNotificationHandler implements core.NotificationReceiver: the client that
+// wraps this transport (client.WithTransport) calls it before Connect so
+// notifications reach the client's own routing, per-call progress included.
+// A handler from WithNotificationHandler keeps receiving them too.
+func (t *InProcessTransport) SetNotificationHandler(h core.NotificationHandler) {
+	t.clientNotify = h
 }
 
 // NewInProcessTransport creates a transport that dispatches to the given server
@@ -84,12 +93,18 @@ func (t *InProcessTransport) Connect(ctx context.Context) error {
 
 	// Wire notifyFunc for server-to-client notifications.
 	t.dispatcher.SetNotifyFunc(func(method string, params any) {
+		if t.notifyHandler == nil && t.clientNotify == nil {
+			return
+		}
+		raw, err := json.Marshal(params)
+		if err != nil {
+			return
+		}
 		if t.notifyHandler != nil {
-			raw, err := json.Marshal(params)
-			if err != nil {
-				return
-			}
 			t.notifyHandler(method, raw)
+		}
+		if t.clientNotify != nil {
+			t.clientNotify(method, raw)
 		}
 	})
 

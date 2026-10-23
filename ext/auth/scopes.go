@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -30,11 +29,9 @@ func RequireScope(ctx context.Context, scope string) error {
 	// reachable from a handler ctx today, so the emitted challenge omits the
 	// resource_metadata link. Use NewToolScopeMiddleware with WithResourceMetadataURL
 	// for middleware-level enforcement that includes the link in the 403.
-	return &core.AuthError{
-		Code:            http.StatusForbidden,
-		Message:         "insufficient scope: " + scope,
-		WWWAuthenticate: WWWAuth403("", scope),
-	}
+	ae := core.InsufficientScope(scope)
+	ae.Message = "insufficient scope: " + scope
+	return ae
 }
 
 // RequireAllScopes checks that all given scopes are present in the context's claims.

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server"
@@ -151,11 +150,7 @@ func NewToolScopeMiddleware(lookup ToolDefLookup, opts ...ToolScopeOption) serve
 			if cfg.includeGrantedScopes {
 				challengeScopes = UnionScopes(core.GetScopes(ctx), def.RequiredScopes)
 			}
-			return nil, &core.AuthError{
-				Code:            http.StatusForbidden,
-				Message:         "insufficient scope",
-				WWWAuthenticate: WWWAuth403(cfg.resourceMetadataURL, challengeScopes...),
-			}
+			return nil, (&core.ScopeChallenge{Scopes: challengeScopes}).AuthError(cfg.resourceMetadataURL)
 		}
 
 		return next(ctx, req)
@@ -219,11 +214,7 @@ func NewScopeMiddleware(lookup ScopeLookup, opts ...ToolScopeOption) server.Midd
 		if err != nil {
 			// Fail closed. The callback could not decide, so the caller does
 			// not get the benefit of the doubt.
-			return nil, &core.AuthError{
-				Code:            http.StatusForbidden,
-				Message:         "insufficient scope",
-				WWWAuthenticate: WWWAuth403(cfg.resourceMetadataURL),
-			}
+			return nil, (*core.ScopeChallenge)(nil).AuthError(cfg.resourceMetadataURL)
 		}
 		if result == nil {
 			return next(ctx, req)
@@ -233,11 +224,7 @@ func NewScopeMiddleware(lookup ScopeLookup, opts ...ToolScopeOption) server.Midd
 		if cfg.includeGrantedScopes && len(advertised) > 0 {
 			advertised = UnionScopes(core.GetScopes(ctx), advertised)
 		}
-		return nil, &core.AuthError{
-			Code:            http.StatusForbidden,
-			Message:         "insufficient scope",
-			WWWAuthenticate: WWWAuth403Desc(cfg.resourceMetadataURL, result.ErrorDescription, advertised...),
-		}
+		return nil, (&core.ScopeChallenge{Scopes: advertised, ErrorDescription: result.ErrorDescription}).AuthError(cfg.resourceMetadataURL)
 	}
 }
 

@@ -335,11 +335,9 @@ func (v *JWTValidator) Validate(r *http.Request) error {
 
 	// Check required scopes
 	if len(v.RequiredScopes) > 0 && !oacore.ContainsAllScopes(scopes, v.RequiredScopes) {
-		return &mcpcore.AuthError{
-			Code:            http.StatusForbidden,
-			Message:         "insufficient scope",
-			WWWAuthenticate: inScheme(scheme, WWWAuth403(v.ResourceMetadataURL, v.RequiredScopes...)),
-		}
+		ae := (&mcpcore.ScopeChallenge{Scopes: v.RequiredScopes}).AuthError(v.ResourceMetadataURL)
+		ae.WWWAuthenticate = inScheme(scheme, ae.WWWAuthenticate)
+		return ae
 	}
 
 	// Extract custom claims
