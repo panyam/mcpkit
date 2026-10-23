@@ -78,6 +78,11 @@ type Dispatcher struct {
 	sessionID            string                // set by transport, used as key in subscription registry
 	subManager           *subscriptionRegistry // shared pointer to Server's registry (nil if disabled)
 
+	// closeHooks is shared with the server's root dispatcher (see
+	// Server.OnSessionClose); closeOnce makes Close fire them once.
+	closeHooks *sessionCloseHooks
+	closeOnce  sync.Once
+
 	// Roots state — tracked per session. See refreshRoots for the full state
 	// machine. rootsMu guards roots, rootsStale, and rootsFetching; it must
 	// NOT be held across user-callback invocations or network round trips.
@@ -234,9 +239,12 @@ func (d *Dispatcher) getPushRequest() func(json.RawMessage) {
 // elicitation) only requires updating this method, not every transport.
 // Safe to call multiple times and on dispatchers with no session state.
 func (d *Dispatcher) Close() {
-	if d.subManager != nil && d.sessionID != "" {
-		d.subManager.unsubscribeAll(d.sessionID)
-	}
+	d.closeOnce.Do(func() {
+		if d.subManager != nil && d.sessionID != "" {
+			d.subManager.unsubscribeAll(d.sessionID)
+		}
+		d.closeHooks.fire(d.sessionID)
+	})
 }
 
 type toolEntry struct {
@@ -284,6 +292,7 @@ func NewDispatcher(info core.Implementation) *Dispatcher {
 		extensions: make(map[string]core.Extension),
 		serverInfo: info,
 		mrtr:       &mrtrRuntime{},
+		closeHooks: &sessionCloseHooks{},
 	}
 }
 
@@ -299,6 +308,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		instructions:         d.instructions,
 		subscriptionsEnabled: d.subscriptionsEnabled,
 		subManager:           d.subManager,
+		closeHooks:           d.closeHooks,
 		onRootsChanged:       d.onRootsChanged,
 		rootsFetchTimeout:    d.rootsFetchTimeout,
 		allowedRoots:         d.allowedRoots,

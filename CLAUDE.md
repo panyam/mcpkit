@@ -238,9 +238,9 @@ These span packages and will bite on a task that never opens a routed doc.
   stateless client, silently. `core.ClientSupportsExtension` did exactly that until #1470, which
   made it read both. `ClientSupportsTasksV1` still reads session caps only (v1 is frozen and
   legacy-only). Any new capability helper checks both sources.
-- **A list response is built from sorted keys, never from map iteration.** Constraint C10, added
-  after the same bug turned up twice: `tools/list` on the apps bridge (#1408) and `events/list`
-  (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
+- **A list response has a stable order, never map iteration order.** Sorted keys or registration
+  order both qualify. Constraint C10, added after the same bug turned up twice: `tools/list` on the
+  apps bridge (#1408) and `events/list` (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
   downstream assumed a stable order, and it surfaces as flakiness somewhere else.
 - **CI runs no `-race`** on the experimental modules (`experimental/scripts/test-*.sh`). The events
   bridge shipped a test-helper race that failed 5 runs in 6 under `-race` and never showed in CI.

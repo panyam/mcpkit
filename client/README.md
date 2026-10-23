@@ -73,6 +73,39 @@ l.Honored() // the keys the server agreed to, from its acknowledgement
 stream's reader goroutine, so keep them short. On the legacy wire it returns
 `ErrListenNeedsStatelessWire`.
 
+## Cancelling a call, and progress
+
+Cancelling a call's context returns from the call and sends `notifications/cancelled` with its
+request id, so the server can stop the work. It is not sent for `initialize`, or on the 2026-07-28
+stateless wire, where aborting the request is the cancellation.
+
+`ToolCallWith` takes per-call options. `WithProgress` asks the server for progress and hands each
+report for this call to a callback:
+
+```go
+res, err := c.ToolCallWith(ctx, "reindex", args, client.WithProgress(func(p core.ProgressNotification) {
+    fmt.Printf("%.0f/%.0f %s\n", p.Progress, p.Total, p.Message)
+}))
+```
+
+The callback runs on the transport's reader goroutine, so keep it short. Reports that arrive after
+the call returns are dropped.
+
+## When the server wants more scope
+
+A 403 the client cannot step up from (a static token, say) comes back as a
+`*client.ClientAuthError` carrying the scopes the server asked for:
+
+```go
+_, err := c.ToolCall(ctx, "edit", args)
+var ae *client.ClientAuthError
+if errors.As(err, &ae) && ae.StatusCode == 403 {
+    fmt.Println("ask for:", ae.RequiredScopes) // from WWW-Authenticate scope="..."
+}
+```
+
+A `core.ScopeAwareTokenSource` gets those scopes first and the call is retried once.
+
 ## Transport interface
 
 The client accepts any `core.Transport` via `WithTransport()`. This enables:
