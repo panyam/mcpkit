@@ -1,6 +1,6 @@
 {
   "name": "@panyam/mcpkit-rooms",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Page side of the mcpkit room bridge: offer WebMCP-shaped tools to agents through a massrelay room",
   "type": "module",
   "main": "dist/index.js",
