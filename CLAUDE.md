@@ -252,9 +252,15 @@ These span packages and will bite on a task that never opens a routed doc.
   `experimental/ext/rooms/ts/package.json`'s version, `make check-rooms-ts-version` holds it to the
   rooms module's pin in CI, and the root tag publishes it (`publish-npm-rooms.yml`, which
   `check-release-workflows` now expects). The first publish is manual; see `RELEASING.md` § npm.
-- **CI runs no `-race`** on the experimental modules (`experimental/scripts/test-*.sh`). The events
-  bridge shipped a test-helper race that failed 5 runs in 6 under `-race` and never showed in CI.
-  After touching anything concurrent there, run `go test -race` on that package a few times by hand.
+- **CI runs `-race` only in the rooms jobs.** `test-rooms-massrelay.sh` runs that module fully under
+  `-race` since servicekit v0.1.10 fixed its `OnClose` race, and roomsevents runs under it too; that
+  is where a client race in `Close` (#1614) first showed, though the root `test` job never runs
+  `-race`. The other experimental scripts don't either: the events bridge shipped a test-helper race
+  that failed 5 runs in 6 under `-race` and never showed in CI. After touching anything concurrent,
+  run `go test -race` on the package a few times by hand.
+- **A mutation that breaks the build reads as a pass** to a red-before-green runner that greps for
+  `--- FAIL`. Check for `build failed` too, or a "no test went red" result means nothing. It hid two
+  mutations in #1613 until a direct run showed the build error.
 - **`make test-examples` runs in no workflow, so a broken example test ships green.** `test.yml`
   runs `scripts/check-examples-build.sh`, which compiles each module's *packages* and not their
   `_test.go` files, and mentions `test-examples` only in a comment explaining why it exists.
