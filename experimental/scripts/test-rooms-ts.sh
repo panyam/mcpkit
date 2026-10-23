@@ -9,3 +9,6 @@ cd "$EXPERIMENTAL_DIR/ext/rooms/ts"
 pnpm install --frozen-lockfile --silent
 pnpm check
 pnpm test
+# What npm would ship: the built entry points, no tests or sources.
+pnpm build
+pnpm check:pack

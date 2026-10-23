@@ -7,8 +7,14 @@ design is in issue [#1581](https://github.com/panyam/mcpkit/issues/1581).
 
 It speaks to a [massrelay](https://github.com/panyam/massrelay) relay (v0.2.0 or later) and depends
 on `@panyam/massrelay` (0.2.4 or later, whose `CollabClient` it joins through) and
-`@panyam/servicekit-client` (0.1.9 or later). It isn't on npm yet. `package.json` points at
-the TypeScript source (`src/index.ts`), so a bundler can take it from a checkout or a git dependency.
+`@panyam/servicekit-client` (0.1.9 or later).
+
+```
+npm install @panyam/mcpkit-rooms
+```
+
+It's published at mcpkit's release version, so `@panyam/mcpkit-rooms@X.Y.Z` is the page side of the
+bridge that the Go modules carry at `vX.Y.Z`. Use the same version on both sides.
 
 ## Joining a room
 

@@ -52,3 +52,16 @@ not the one `fileURLToPath` accepts.
 pnpm 12 refuses packages published within the last day (`minimumReleaseAge`). This package bumps
 `@panyam/massrelay` right after a massrelay release, which would fail every install for a day, so
 `pnpm-workspace.yaml` exempts that one package. Everything else keeps the policy.
+
+## Published at the release's version
+
+The package could have kept its own version and its own tag. It shares mcpkit's instead, because
+it is one half of a wire protocol whose other half is the Go bridge: a page at 0.9.0 talking to a
+bridge at 0.8.5 is the mismatch worth preventing, and one number for both sides makes it visible.
+`make bump-root` sets it, `scripts/rooms-ts-version.sh check` holds it to the rooms module's mcpkit
+pin on every PR, and the root `v*` tag publishes it. The cost is a republish on every release, even
+one that changed nothing here.
+
+The tarball ships `dist/` (built by `tsconfig.build.json`, tests excluded) and the README. `pnpm
+check:pack` checks that on every PR, and servicekit's shared publish workflow refuses test files
+again at release time.

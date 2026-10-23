@@ -41,8 +41,10 @@ From a green `main`:
    `experimental/ext/events/stores/gorm` would have resolved an `events` without
    the `VerifiedAt` field it uses. `v0.0.0` placeholder pins in `tests/*` are
    left alone, as the non-library policy allows.
-   Accepts pre-release strings (`v0.4.0-b1`) fine. Commit the resulting go.mod
-   changes to `main` and push.
+   Accepts pre-release strings (`v0.4.0-b1`) fine. It also sets the version of
+   `@panyam/mcpkit-rooms` (`experimental/ext/rooms/ts/package.json`), which is
+   published at the release's version. Commit the resulting go.mod and
+   package.json changes to `main` and push.
 3. **Tag + push.** `make tag-push V=<version>` — creates and pushes the root
    tag plus one per sub-module (`ext/tasks/<version>`, …). The `Makefile` just
    string-interpolates `V`, so hyphenated pre-release strings are valid git
@@ -59,9 +61,35 @@ From a green `main`:
    GOPROXY=direct GOFLAGS=-mod=mod go list -m github.com/panyam/mcpkit/ext/tasks@<version>
    ```
    For a pre-release, also confirm `@latest` still returns the stable tag.
+   The tag also publishes `@panyam/mcpkit-rooms` to npm through
+   `publish-npm-rooms.yml`, which `check-release-workflows` now counts. See
+   § npm below for the one-time setup.
 6. **GitHub Release.** See the token note below. For a stable release write a
    release note; for a `-bN` pre-release, publish with **"Set as a pre-release"**
    checked.
+
+## npm: `@panyam/mcpkit-rooms`
+
+The room bridge's page client (`experimental/ext/rooms/ts`) is published on every release tag by
+`.github/workflows/publish-npm-rooms.yml`, at the release's version, through servicekit's shared
+workflow with npm trusted publishing (no token). `scripts/rooms-ts-version.sh check` fails CI when
+the package's version drifts from the rooms module's mcpkit pin, and fails the publish when the tag
+disagrees. A version already on npm is skipped, so re-running the workflow is safe.
+
+**Once, before the first release that publishes it.** npm can only attach a trusted publisher to a
+package that already exists, so the first version goes up by hand. After `make bump-root V=vX.Y.Z`
+is committed and before `make tag-push`:
+
+```
+cd experimental/ext/rooms/ts
+pnpm install --frozen-lockfile
+pnpm build && pnpm check:pack
+npm publish --access public          # publishes X.Y.Z, the version bump-root set
+npm trust github @panyam/mcpkit-rooms --repo panyam/mcpkit --file publish-npm-rooms.yml --allow-publish
+```
+
+Then push the tags as usual. The workflow finds X.Y.Z already published and skips it, and every
+later tag publishes on its own.
 
 ## GitHub Release: use gh's own login, not the PAT
 
