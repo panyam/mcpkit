@@ -44,6 +44,14 @@ Pages learn the bridge's peer id from its first request, then send it the state 
 the agents switch). A page listed after a session attached is sent that session's pairing request
 when it is first listed, since it was not in the roster at attach time.
 
+## Page events go out through a hook, not through ext/events
+
+#1581 makes the bridge an events server for its rooms. Constraint C4 keeps this module from
+requiring experimental/ext/events, so the bridge only validates a page's event and calls
+`WithPageEvents`. experimental/integrations/roomsevents, a module with no `ext` path segment, does
+the SEP-3415 side and asks the bridge `Attached` and `PageAgreed` to decide who hears what. An event
+the bridge drops (bad name, over 16 KiB, from a page it has not listed yet) never reaches the hook.
+
 ## Session close comes from the server's hook
 
 Slice 1 shipped before the server had a session-close hook for extensions, so `EndSession` was

@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { GRPCWSClient } from "@panyam/servicekit-client";
 import { base64Encode } from "@bufbuild/protobuf/wire";
 import type { Client } from "@modelcontextprotocol/client";
-import { joinToolRoom, wsUrl, type PageTool, type ToolRoom } from "../src/index.js";
+import { joinToolRoom, wsUrl, MAX_EVENT_DATA_BYTES, type PageTool, type ToolRoom } from "../src/index.js";
 import { connectAgent, eventually, listPages, ROOM, startStack, textOf, waitPaired, type StackInfo } from "./stack.js";
 
 // The Go room bridge (experimental/ext/rooms) on a real massrelay relay, called
@@ -242,6 +242,34 @@ describe("a TypeScript page behind the Go bridge", () => {
     handle.unregister();
     expect(registered).toEqual(["show_sheet"]);
     expect(unregistered).toEqual(["show_sheet"]);
+  });
+
+  it("delivers ask, selection and its own events to the bridge, stamped with the page's identity", async () => {
+    const p = await page("alice");
+    p.setLabel("viewer");
+    const a = await agent("alice");
+    await eventually(async () => (await listPages(a)).some((x) => x.page === p.id), 5000, "the page to be listed");
+
+    p.ask("why is SDA flagged?");
+    p.selectionChanged({ net: "SDA" });
+    p.emit("viewer.sheet_opened", { sheet: "s-power" });
+
+    const mine = async () => {
+      const res: any = await a.callTool({ name: "teststack_page_events", arguments: {} });
+      return (res.structuredContent?.events ?? []).filter((e: any) => e.page === p.id);
+    };
+    await eventually(async () => (await mine()).length === 3, 5000, "three page events at the bridge");
+    const got = await mine();
+    expect(got.map((e: any) => e.name)).toEqual(["room.ask", "page.selection_changed", "viewer.sheet_opened"]);
+    for (const e of got) expect(e).toMatchObject({ resource: ROOM, subject: "alice", label: "viewer" });
+    expect(got[0].data).toEqual({ text: "why is SDA flagged?" });
+    expect(got[1].data).toEqual({ selection: { net: "SDA" } });
+  });
+
+  it("refuses an event name or size the bridge would drop, before sending", async () => {
+    const p = await page("alice");
+    expect(() => p.emit("Room Ask", null)).toThrow(/invalid page event name/);
+    expect(() => p.emit("room.ask", "x".repeat(MAX_EVENT_DATA_BYTES))).toThrow(/over/);
   });
 
   it("rejects a join the relay refuses", async () => {

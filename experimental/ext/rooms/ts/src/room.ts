@@ -11,6 +11,24 @@ const AGENTS_ALLOWED = "notifications/rooms/agents_allowed";
 const ACCEPT_PAIRING = "notifications/rooms/accept_pairing";
 const REVOKE = "notifications/rooms/revoke";
 const PAIRING_REQUESTED = "notifications/rooms/pairing_requested";
+const PAGE_EVENT = "notifications/rooms/event";
+
+/** Event name `ask()` emits: the page's user asked the agents something. */
+export const EVENT_ASK = "room.ask";
+/** Event name `selectionChanged()` emits. */
+export const EVENT_SELECTION_CHANGED = "page.selection_changed";
+/** Largest encoded `data` one event may carry, matching the bridge's cap. */
+export const MAX_EVENT_DATA_BYTES = 16 << 10;
+const EVENT_NAME = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){0,3}$/;
+
+/**
+ * Reports whether `name` is one a page may emit: one to four dot-separated
+ * lowercase segments, each starting with a letter, at most 64 characters.
+ * Mirrors `rooms.ValidEventName`.
+ */
+export function validEventName(name: string): boolean {
+  return name.length <= 64 && EVENT_NAME.test(name);
+}
 const METHOD_NOT_FOUND = -32601;
 const INVALID_PARAMS = -32602;
 
@@ -85,6 +103,18 @@ export interface ToolRoom {
   revoke(session?: string): void;
   /** Called when a session asks to drive the page. */
   onPairingRequest(fn: (req: PairingRequest) => void): void;
+  /**
+   * Tells the bridges something happened on the page. Agents subscribed to
+   * the room's events hear it, if this page agreed to their session. Throws
+   * on a name `validEventName` refuses or data over `MAX_EVENT_DATA_BYTES`.
+   * Bridges hear only once they have greeted the page, so an event emitted
+   * before any bridge listed its tools goes nowhere.
+   */
+  emit(name: string, data?: unknown): void;
+  /** Emits `room.ask`: the page's user asked the agents `text`. */
+  ask(text: string): void;
+  /** Emits `page.selection_changed` with whatever the page counts as its selection. */
+  selectionChanged(selection: unknown): void;
   /** Leaves the room. Calls in flight are aborted. */
   leave(): void;
 }
@@ -233,6 +263,24 @@ class Page implements ToolRoom {
 
   revoke(session = ""): void {
     this.notifyBridges(REVOKE, { session });
+  }
+
+  emit(name: string, data: unknown = null): void {
+    if (!validEventName(name)) throw new Error(`invalid page event name ${JSON.stringify(name)}`);
+    const encoded = JSON.stringify(data ?? null);
+    const size = new TextEncoder().encode(encoded).length;
+    if (size > MAX_EVENT_DATA_BYTES) {
+      throw new Error(`page event data is ${size} bytes, over ${MAX_EVENT_DATA_BYTES}`);
+    }
+    this.notifyBridges(PAGE_EVENT, { name, data: data ?? null });
+  }
+
+  ask(text: string): void {
+    this.emit(EVENT_ASK, { text });
+  }
+
+  selectionChanged(selection: unknown): void {
+    this.emit(EVENT_SELECTION_CHANGED, { selection });
   }
 
   onPairingRequest(fn: (req: PairingRequest) => void): void {

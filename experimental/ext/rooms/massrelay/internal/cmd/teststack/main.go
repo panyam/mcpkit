@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/panyam/massrelay/services"
@@ -57,8 +58,18 @@ func main() {
 	}
 	defer relay.Close()
 
+	// Page events the bridge hands its hook, for the TypeScript tests to read
+	// back through the teststack_page_events tool.
+	var eventsMu sync.Mutex
+	var pageEvents []rooms.PageEvent
+	recordEvent := func(e rooms.PageEvent) {
+		eventsMu.Lock()
+		pageEvents = append(pageEvents, e)
+		eventsMu.Unlock()
+	}
+
 	bridge := rooms.New(massrelay.Embedded(relay.Service, &services.Principal{Subject: "bridge", ClientID: relaytest.ClientID}),
-		rooms.WithCallTimeout(*callTimeout))
+		rooms.WithCallTimeout(*callTimeout), rooms.WithPageEvents(recordEvent))
 	defer bridge.Close()
 	scopes := []string{rooms.ScopeRoomsAttach, rooms.ScopePagesRead, rooms.ScopePagesAct}
 	agents := tokens{}
@@ -76,6 +87,20 @@ func main() {
 
 	srv := server.NewServer(core.ServerInfo{Name: "rooms-teststack", Version: "0"}, server.WithAuth(agents))
 	bridge.Register(srv)
+	srv.RegisterTool(core.ToolDef{
+		Name:        "teststack_page_events",
+		Description: "Test only: every page event the bridge's hook received, in order.",
+		InputSchema: map[string]any{"type": "object"},
+	}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+		eventsMu.Lock()
+		defer eventsMu.Unlock()
+		out := make([]map[string]any, 0, len(pageEvents))
+		for _, e := range pageEvents {
+			out = append(out, map[string]any{"resource": e.Resource, "page": string(e.Page), "subject": e.Subject,
+				"label": e.Label, "name": e.Name, "data": e.Data})
+		}
+		return core.StructuredResult("page events", map[string]any{"events": out}), nil
+	})
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 	info.MCP = ts.URL + "/mcp"
