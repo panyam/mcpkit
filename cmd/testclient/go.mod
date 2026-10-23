@@ -3,8 +3,8 @@ module github.com/panyam/mcpkit/cmd/testclient
 go 1.26.9
 
 require (
-	github.com/panyam/mcpkit v0.8.3
-	github.com/panyam/mcpkit/ext/auth v0.8.3
+	github.com/panyam/mcpkit v0.8.4
+	github.com/panyam/mcpkit/ext/auth v0.8.4
 	github.com/panyam/oneauth v0.2.2
 )
 
@@ -26,7 +26,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/mcpkit/ext/skills v0.8.3
+	github.com/panyam/mcpkit/ext/skills v0.8.4
 	github.com/panyam/servicekit v0.1.7 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
