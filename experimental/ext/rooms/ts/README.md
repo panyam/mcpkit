@@ -53,6 +53,9 @@ the page only when the page agreed:
 - `setAgentsAllowed(true)` agrees to every agent session acting for the page's own user.
 - `acceptPairing(code)` agrees to the session that got `code` back from `attach`, typically another
   user's. `onPairingRequest(fn)` reports who is asking, so the page can show its user.
+- `offerPairingCode({ ttlMs? })` makes up a code for the page to show; the user gives it to the
+  agent, which enters it with the bridge's `pair` tool. `onPaired(fn)` reports which agent it was,
+  and the code is withdrawn once used. Two minutes by default, at most ten.
 - `revoke(session?)` ends one pairing, or all of them when called with no argument.
 
 ## Telling agents what happened
@@ -67,7 +70,9 @@ Agents subscribed to the room's events hear these, if this page agreed to their 
 agreement as calls). Names are one to four dot-separated lowercase segments (`validEventName`), and
 `data` is capped at `MAX_EVENT_DATA_BYTES` (16 KiB). `emit` throws on either before anything is sent.
 An event goes only to bridges that have already listed the page, so one emitted straight after
-`joinToolRoom` may reach nobody.
+`joinToolRoom` may reach nobody. Agents whose host speaks no events hear the same events through the
+bridge's `next_request` tool or its `rooms://events/{resource}` resource, when the bridge enables
+them (`rooms.WithEventFallbacks`).
 
 ## The same tool in an MCP Apps frame
 

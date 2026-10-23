@@ -83,8 +83,13 @@ schema has that tool refused. Either refusal reaches the page as `notifications/
 A page's user agrees before an agent can call it.
 
 - **Same user.** `SetAgentsAllowed(true)` agrees to every session whose subject is the page's user.
-- **Another user.** `attach` returns a code. The page's user accepts it with `AcceptPairing(code)`.
-  `OnPairingRequest` shows the page who asked.
+- **Another user, agent's code.** `attach` returns a code. The page's user accepts it with
+  `AcceptPairing(code)`. `OnPairingRequest` shows the page who asked.
+- **Another user, page's code.** The page shows a code from `OfferPairingCode(ttl)`, and the user
+  gives it to the agent, which enters it with `pair(resource, code)`. `OnPaired` tells the page which
+  agent it was (subject and client, from the session's token). A code is single-use and lasts two
+  minutes by default, at most ten. The bridge refuses a code shorter than six characters of the
+  pairing alphabet, and stops checking a session's guesses after five wrong ones in a minute.
 - **Ending it.** `Revoke(session)` on the page, `detach`, the page leaving, or the MCP session
   closing (the bridge hooks the server's `OnSessionClose`).
 
@@ -102,6 +107,25 @@ Events (SEP-3415), with the bridge's agreement deciding who hears which page, us
 [`experimental/integrations/roomsevents`](../../integrations/roomsevents), which also has the Claude
 Code channel front end. `Attached(session, resource)` and `PageAgreed(session, resource, page)` are
 the two questions it asks.
+
+## Agents whose host speaks no events
+
+`WithEventFallbacks(buffer)` adds two ways to hear page events without MCP Events, both applying the
+same agreement:
+
+- **`next_request(resource?, after?, wait_seconds?)`**, a tool that holds the call until the next
+  event from a page that agreed to the session, or returns `event: null` after the wait (30 s by
+  default, 120 at most). Pass the returned `cursor` as `after` and nothing between calls is missed,
+  up to `buffer` recent events per room. Cancelling the call ends the wait.
+- **`rooms://events/{resource}`**, a resource per room. `attach` returns its URI as
+  `eventsResource`. Reading it lists the room's recent events from pages that agreed. Subscribing
+  (`resources/subscribe`, attached sessions only) gets `notifications/resources/updated` for it when
+  such a page emits. A client that checks the resources capability before subscribing needs the
+  server built with `server.WithSubscriptions()`.
+
+Neither starts a turn by itself: `resources/updated` wakes an agent that is already looping on a pull,
+and `next_request` holds the agent's turn while it waits. For a push into a live session, use the
+channel front end in [`experimental/integrations/roomsevents`](../../integrations/roomsevents).
 
 ## Calls
 

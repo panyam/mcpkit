@@ -89,7 +89,7 @@ func (b *Bridge) PageAgreed(sessionID, resource string, page PeerID) bool {
 // pageEventLocked validates an event a page sent and returns it for the hook,
 // or false when the bridge drops it.
 func (b *Bridge) pageEventLocked(rs *roomState, pg *pageState, params json.RawMessage) (PageEvent, bool) {
-	if b.onEvent == nil {
+	if b.onEvent == nil && b.fb == nil {
 		return PageEvent{}, false
 	}
 	var e struct {
