@@ -53,6 +53,10 @@ const (
 	MethodPairedByCode = "notifications/rooms/paired_by_code"
 )
 
+// MetaCaller is the _meta key on a tools/call the bridge sends a page, holding
+// the caller's Principal from the bridge's validated token.
+const MetaCaller = "io.mcpkit/rooms/caller"
+
 // PairingRequest tells a page's user which agent asked to drive it. Subject
 // and Client come from the caller's validated token. SameSubject is true when
 // it is the page's own user, in which case the agents switch is enough;

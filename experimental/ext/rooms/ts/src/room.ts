@@ -10,6 +10,8 @@ const PAGE_STATE = "notifications/rooms/page_state";
 const AGENTS_ALLOWED = "notifications/rooms/agents_allowed";
 const ACCEPT_PAIRING = "notifications/rooms/accept_pairing";
 const GRANTS = "notifications/rooms/grants";
+// The _meta key holding the caller's principal on a call, matching rooms.MetaCaller.
+const CALLER_META = "io.mcpkit/rooms/caller";
 const PAIRING_REQUESTED = "notifications/rooms/pairing_requested";
 const PAGE_EVENT = "notifications/rooms/event";
 const PAIRING_OFFER = "notifications/rooms/pairing_offer";
@@ -472,7 +474,8 @@ class Page implements ToolRoom {
     };
     let result;
     try {
-      result = toCallToolResult(await tool.execute(m.params?.arguments ?? {}, { signal: ctl.signal, progress, from }));
+      const caller = m.params?._meta?.[CALLER_META];
+      result = toCallToolResult(await tool.execute(m.params?.arguments ?? {}, { signal: ctl.signal, progress, from, caller }));
     } catch (err) {
       result = errorResult(err);
     } finally {

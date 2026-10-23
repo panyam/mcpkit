@@ -101,20 +101,33 @@ type agent struct {
 
 func (st *stack) agent(t *testing.T, subject string, scopes ...string) *agent {
 	t.Helper()
+	return st.agentOn(t, "session", subject, scopes...)
+}
+
+// wires are the two MCP wires an acceptance test runs on (#1610).
+var wires = []string{"session", "stateless"}
+
+// agentOn is an agent on the given wire: "session" (Streamable HTTP with an
+// MCP session) or "stateless" (SEP-2575, no session).
+func (st *stack) agentOn(t *testing.T, wire, subject string, scopes ...string) *agent {
+	t.Helper()
 	token := subject + "-" + strings.Join(scopes, ",")
 	st.tokens[token] = &core.Claims{Subject: subject, Scopes: scopes}
 	a := &agent{changed: make(chan struct{}, 64)}
-	a.Client = client.NewClient(st.url, core.ClientInfo{Name: "agent-" + subject, Version: "0"},
-		client.WithTokenSource(stepUpRefuser{token}),
-		client.WithGetSSEStream(),
-		client.WithToolsListChangedHandler(func() {
+	opts := []client.ClientOption{client.WithTokenSource(stepUpRefuser{token})}
+	if wire == "stateless" {
+		opts = append(opts, client.WithClientMode(client.ClientModeStateless))
+	} else {
+		opts = append(opts, client.WithGetSSEStream(), client.WithToolsListChangedHandler(func() {
 			select {
 			case a.changed <- struct{}{}:
 			default:
 			}
-		}),
-	)
+		}))
+	}
+	a.Client = client.NewClient(st.url, core.ClientInfo{Name: "agent-" + subject, Version: "0"}, opts...)
 	require.NoError(t, a.Connect(t.Context()))
+	require.Equal(t, wire == "stateless", a.UsingStatelessWire(), "the agent is on the %s wire", wire)
 	t.Cleanup(func() { a.Close() })
 	return a
 }
@@ -135,9 +148,15 @@ func (a *agent) attach(t *testing.T, resource string) attachResult {
 	return out
 }
 
-func (a *agent) pages(t *testing.T) []rooms.PageInfo {
+// pages is list_pages for resource, or for the session's default rooms when
+// none is given.
+func (a *agent) pages(t *testing.T, resource ...string) []rooms.PageInfo {
 	t.Helper()
-	res, err := a.ToolCallFull(t.Context(), "list_pages", map[string]any{})
+	args := map[string]any{}
+	if len(resource) > 0 {
+		args["resource"] = resource[0]
+	}
+	res, err := a.ToolCallFull(t.Context(), "list_pages", args)
 	require.NoError(t, err)
 	require.False(t, res.IsError, text(res))
 	var out struct {
