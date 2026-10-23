@@ -34,6 +34,15 @@ const (
 	// MethodToolRefused: bridge to page, {name, reason}. The bridge would not
 	// offer one of the page's tools.
 	MethodToolRefused = "notifications/rooms/tool_refused"
+
+	// MethodPairingOffer: page to bridge, {code, ttlMs}. The code the page
+	// shows its user, for an agent to enter with the pair tool. An empty code
+	// withdraws the offer.
+	MethodPairingOffer = "notifications/rooms/pairing_offer"
+
+	// MethodPairedByCode: bridge to page, a PairedByCode. A session entered
+	// the code the page offered and is now paired with it.
+	MethodPairedByCode = "notifications/rooms/paired_by_code"
 )
 
 // PairingRequest tells a page's user which agent asked to drive it. Subject

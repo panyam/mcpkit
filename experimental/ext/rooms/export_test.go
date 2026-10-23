@@ -6,3 +6,6 @@ func (b *Bridge) SessionCount() int {
 	defer b.mu.Unlock()
 	return len(b.sessions)
 }
+
+// NextRequestWaiting reports how many next_request calls are holding.
+func (b *Bridge) NextRequestWaiting() int { return int(b.fb.waiting.Load()) }

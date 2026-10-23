@@ -272,6 +272,75 @@ describe("a TypeScript page behind the Go bridge", () => {
     expect(() => p.emit("room.ask", "x".repeat(MAX_EVENT_DATA_BYTES))).toThrow(/over/);
   });
 
+  it("pairs another user's agent by the code the page shows, once, and tells the page who it was", async () => {
+    const p = await page("alice", showSheet);
+    const paired: any[] = [];
+    p.onPaired((n) => paired.push(n));
+    const bob = await agent("bob");
+    const bobAgain = await agent("bob");
+    await eventually(async () => (await listPages(bob)).some((x) => x.page === p.id), 5000, "the page to be listed");
+
+    const code = p.offerPairingCode();
+    expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+    // The offer travels page to bridge; give it a moment rather than spend
+    // the session's guesses retrying.
+    await new Promise((r) => setTimeout(r, 300));
+    const res: any = await bob.callTool({ name: "pair", arguments: { resource: ROOM, code } });
+    expect(res.isError, textOf(res)).toBeFalsy();
+    const ran: any = await bob.callTool({ name: "show_sheet", arguments: { sheet: "s-power" } });
+    expect(textOf(ran)).toBe("showing s-power");
+
+    await eventually(() => paired.length === 1, 5000, "onPaired");
+    expect(paired[0]).toMatchObject({ subject: "bob", sameSubject: false, code });
+
+    const again: any = await bobAgain.callTool({ name: "pair", arguments: { resource: ROOM, code } });
+    expect(again.isError).toBe(true);
+    expect(textOf(again)).toMatch(/single-use/);
+  });
+
+  it("answers next_request with what the page's user did, for agents that speak no events", async () => {
+    const p = await page("alice");
+    p.setAgentsAllowed(true);
+    const a = await agent("alice");
+    await eventually(async () => (await listPages(a)).some((x) => x.page === p.id && x.allowed), 5000, "the page to agree");
+
+    const waiting = a.callTool({ name: "next_request", arguments: { wait_seconds: 5 } });
+    await new Promise((r) => setTimeout(r, 200));
+    p.ask("why is SDA flagged?");
+    const res: any = await waiting;
+    expect(res.isError, textOf(res)).toBeFalsy();
+    expect(res.structuredContent.event).toMatchObject({ name: "room.ask", resource: ROOM, page: p.id, user: "alice", data: { text: "why is SDA flagged?" } });
+
+    // An event between calls comes back on the next call, from the cursor.
+    p.selectionChanged({ net: "SCL" });
+    await new Promise((r) => setTimeout(r, 200));
+    const next: any = await a.callTool({ name: "next_request", arguments: { after: res.structuredContent.cursor, wait_seconds: 5 } });
+    expect(next.structuredContent.event).toMatchObject({ name: "page.selection_changed", data: { selection: { net: "SCL" } } });
+  });
+
+  it("tells a subscribed agent its room changed, through notifications/resources/updated", async () => {
+    const p = await page("alice");
+    p.setAgentsAllowed(true);
+    const a = await connectAgent(info, "alice");
+    cleanup.push(() => a.close());
+    const updated: string[] = [];
+    a.setNotificationHandler("notifications/resources/updated", (n: any) => {
+      updated.push(n.params.uri);
+    });
+    const attached: any = await a.callTool({ name: "attach", arguments: { resource: ROOM } });
+    const uri = attached.structuredContent.eventsResource;
+    expect(uri).toBe(`rooms://events/${encodeURIComponent(ROOM).replace(/%20/g, "+")}`);
+    await a.subscribeResource({ uri });
+    await eventually(async () => (await listPages(a)).some((x) => x.page === p.id && x.allowed), 5000, "the page to agree");
+
+    p.emit("viewer.sheet_opened", { sheet: "s-power" });
+    await eventually(() => updated.length === 1, 5000, "resources/updated");
+    expect(updated).toEqual([uri]);
+    const read: any = await a.readResource({ uri });
+    const body = JSON.parse(read.contents[0].text);
+    expect(body.events.map((e: any) => e.name)).toContain("viewer.sheet_opened");
+  });
+
   it("rejects a join the relay refuses", async () => {
     await expect(joinToolRoom({ relay: info.relay, room: ROOM, token: "not-a-jwt" })).rejects.toThrow();
   });

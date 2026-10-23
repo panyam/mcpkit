@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -53,6 +54,8 @@ type Page struct {
 	allowed   bool
 	running   map[string]context.CancelFunc
 	onPairing func(PairingRequest)
+	offer     pairingOffer
+	onPaired  func(PairedByCode)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -203,6 +206,8 @@ func (p *Page) handle(from PeerID, m rpcMessage) {
 		if cancel != nil {
 			cancel()
 		}
+	case MethodPairedByCode:
+		p.pairedByCode(m)
 	case MethodPairingRequested:
 		var req PairingRequest
 		_ = json.Unmarshal(m.Params, &req)
@@ -225,10 +230,13 @@ func (p *Page) greet(from PeerID) {
 	p.mu.Lock()
 	known := p.bridges[from]
 	p.bridges[from] = true
-	label, allowed := p.label, p.allowed
+	label, allowed, offer := p.label, p.allowed, p.offer
 	p.mu.Unlock()
 	if known {
 		return
+	}
+	if left := time.Until(offer.expires); offer.code != "" && left > 0 {
+		p.send(from, rpcMessage{Method: MethodPairingOffer, Params: mustJSON(map[string]any{"code": offer.code, "ttlMs": left.Milliseconds()})})
 	}
 	if label != "" {
 		p.send(from, rpcMessage{Method: MethodPageState, Params: mustJSON(map[string]any{"label": label})})

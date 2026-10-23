@@ -66,6 +66,7 @@ type Bridge struct {
 	localSubject string
 	prmURL       string
 	onEvent      func(PageEvent)
+	fb           *fallbacks
 
 	srv    *server.Server
 	ctx    context.Context
@@ -88,6 +89,7 @@ type roomState struct {
 	room     Room
 	pages    map[PeerID]*pageState
 	codes    map[string]string // pairing code -> session id
+	offers   map[PeerID]pairingOffer
 }
 
 type pageState struct {
@@ -109,6 +111,9 @@ type session struct {
 	attached map[string]bool
 	paired   map[string]PeerID // resource -> the page calls default to
 	codes    map[string]string // resource -> pairing code
+	// pairFails are the times this session entered a wrong code, within
+	// the last minute.
+	pairFails []time.Time
 }
 
 type toolSpec struct {
@@ -146,13 +151,14 @@ func New(t RoomTransport, opts ...Option) *Bridge {
 	return b
 }
 
-// Register adds the bridge's tools (attach, detach, list_pages) to srv and
+// Register adds the bridge's tools (attach, detach, list_pages, pair, and with
+// WithEventFallbacks next_request and the room events resource) to srv and
 // installs two middlewares: one that shows each session only the page tools of
 // rooms it attached to, and a scope gate that turns a missing scope on any of
 // the bridge's tools into a 403 with an insufficient_scope challenge. It also
 // hooks srv's session close, so a closed session's attachments and pairings
-// end with it. Page
-// tools are added to and removed from srv's registry as pages come and go.
+// end with it. Page tools are added to and removed from srv's registry as
+// pages come and go.
 func (b *Bridge) Register(srv *server.Server) {
 	b.srv = srv
 	srv.RegisterTool(core.ToolDef{
@@ -185,15 +191,38 @@ func (b *Bridge) Register(srv *server.Server) {
 		Annotations:    map[string]any{"readOnlyHint": true},
 		ScopeChallenge: core.RequireScopes(ScopePagesRead),
 	}, b.listPages)
-	srv.UseMiddleware(b.filterToolsList, b.scopeGate)
-	srv.OnSessionClose(func(_ context.Context, sessionID string) { b.EndSession(sessionID) })
+	srv.RegisterTool(core.ToolDef{
+		Name:        "pair",
+		Description: "Pair this session with a page in an attached room by entering the code the page shows its user. Codes are single-use and short-lived; the page's user sees which agent paired.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"resource": map[string]any{"type": "string", "description": "The attached resource whose page shows the code"},
+				"code":     map[string]any{"type": "string", "description": "The code the page shows"},
+			},
+			"required": []string{"resource", "code"},
+		},
+		ScopeChallenge: core.RequireScopes(ScopeRoomsAttach),
+	}, b.pair)
+	middleware := []server.Middleware{b.filterToolsList, b.scopeGate}
+	if b.fb != nil {
+		b.registerFallbacks(srv)
+		middleware = append(middleware, b.subscribeGate)
+	}
+	srv.UseMiddleware(middleware...)
+	srv.OnSessionClose(func(_ context.Context, sessionID string) {
+		b.EndSession(sessionID)
+		if b.fb != nil {
+			b.fb.forget(sessionID)
+		}
+	})
 }
 
 // isBridgeTool reports whether name is one of the bridge's own tools or a page
 // tool it registered.
 func (b *Bridge) isBridgeTool(name string) bool {
 	switch name {
-	case "attach", "detach", "list_pages":
+	case "attach", "detach", "list_pages", "pair", "next_request":
 		return true
 	}
 	b.mu.Lock()
@@ -351,8 +380,12 @@ func (b *Bridge) attach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 	}
 	core.Notify(s.notify, "notifications/tools/list_changed", nil)
 
-	res := core.TextResult(fmt.Sprintf("Attached to %s. Pages whose user is not you can pair by accepting code %s.", resource, code))
-	res.StructuredContent = map[string]any{"resource": resource, "pairingCode": code, "pages": roster}
+	res := core.TextResult(fmt.Sprintf("Attached to %s. Pages whose user is not you can pair by accepting code %s, or by showing a code you enter with pair.", resource, code))
+	out := map[string]any{"resource": resource, "pairingCode": code, "pages": roster}
+	if b.fb != nil {
+		out["eventsResource"] = EventsURI(resource)
+	}
+	res.StructuredContent = out
 	return res, nil
 }
 
@@ -486,7 +519,7 @@ func (b *Bridge) joinRoom(resource string) (*roomState, error) {
 	if err != nil {
 		return nil, err
 	}
-	rs = &roomState{resource: resource, room: room, pages: make(map[PeerID]*pageState), codes: make(map[string]string)}
+	rs = &roomState{resource: resource, room: room, pages: make(map[PeerID]*pageState), codes: make(map[string]string), offers: make(map[PeerID]pairingOffer)}
 	b.mu.Lock()
 	b.rooms[resource] = rs
 	for _, p := range room.Roster() {
@@ -608,6 +641,11 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 			b.grantLocked(rs, pg, s)
 			notify = append(notify, s.notify)
 		}
+	case MethodPairingOffer:
+		// Recorded before the page is listed: a page sends its standing
+		// offer when a bridge greets it, which can arrive before the
+		// tools/list answer is processed. pair checks the page is listed.
+		b.offerLocked(rs, pg, m.Params)
 	case MethodRevoke:
 		var r struct {
 			Session string `json:"session"`
@@ -624,7 +662,12 @@ func (b *Bridge) fromPage(rs *roomState, from PeerID, m rpcMessage) {
 		core.Notify(ctx, "notifications/tools/list_changed", nil)
 	}
 	if event != nil {
-		b.onEvent(*event)
+		if b.onEvent != nil {
+			b.onEvent(*event)
+		}
+		if b.fb != nil {
+			b.fallbackEvent(*event)
+		}
 	}
 }
 
@@ -634,6 +677,7 @@ func (b *Bridge) pageLeft(rs *roomState, id PeerID) {
 	b.mu.Lock()
 	pg := rs.pages[id]
 	delete(rs.pages, id)
+	delete(rs.offers, id)
 	var failed []*pendingCall
 	for cid, pc := range b.pending {
 		if pc.page == id {

@@ -69,7 +69,7 @@ func main() {
 	}
 
 	bridge := rooms.New(massrelay.Embedded(relay.Service, &services.Principal{Subject: "bridge", ClientID: relaytest.ClientID}),
-		rooms.WithCallTimeout(*callTimeout), rooms.WithPageEvents(recordEvent))
+		rooms.WithCallTimeout(*callTimeout), rooms.WithPageEvents(recordEvent), rooms.WithEventFallbacks(0))
 	defer bridge.Close()
 	scopes := []string{rooms.ScopeRoomsAttach, rooms.ScopePagesRead, rooms.ScopePagesAct}
 	agents := tokens{}
@@ -85,7 +85,7 @@ func main() {
 		info.AgentTokens[subject] = agentTok
 	}
 
-	srv := server.NewServer(core.ServerInfo{Name: "rooms-teststack", Version: "0"}, server.WithAuth(agents))
+	srv := server.NewServer(core.ServerInfo{Name: "rooms-teststack", Version: "0"}, server.WithAuth(agents), server.WithSubscriptions())
 	bridge.Register(srv)
 	srv.RegisterTool(core.ToolDef{
 		Name:        "teststack_page_events",

@@ -12,6 +12,13 @@ const ACCEPT_PAIRING = "notifications/rooms/accept_pairing";
 const REVOKE = "notifications/rooms/revoke";
 const PAIRING_REQUESTED = "notifications/rooms/pairing_requested";
 const PAGE_EVENT = "notifications/rooms/event";
+const PAIRING_OFFER = "notifications/rooms/pairing_offer";
+const PAIRED_BY_CODE = "notifications/rooms/paired_by_code";
+
+/** How long an offered pairing code stays valid by default, matching `rooms.DefaultPairingCodeTTL`. */
+export const DEFAULT_PAIRING_CODE_TTL_MS = 2 * 60 * 1000;
+// Leaves out 0, O, 1 and I, which a user reading a code aloud mixes up.
+const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 /** Event name `ask()` emits: the page's user asked the agents something. */
 export const EVENT_ASK = "room.ask";
@@ -41,6 +48,12 @@ export interface PairingRequest {
   client?: string;
   /** True when it is the page's own user, so the agents switch is enough. */
   sameSubject: boolean;
+}
+
+/** A session that paired with the page by entering the code it offered. */
+export interface PairedByCode extends PairingRequest {
+  /** The code it entered, now spent. */
+  code: string;
 }
 
 /** Where `registerTool` also registers when `modelContext` is set. */
@@ -104,6 +117,17 @@ export interface ToolRoom {
   /** Called when a session asks to drive the page. */
   onPairingRequest(fn: (req: PairingRequest) => void): void;
   /**
+   * Makes up a code for the page's user to give an agent, which enters it
+   * with the bridge's `pair` tool, and offers it to the bridges. Replaces any
+   * code offered before. Single-use: once a session pairs with it the page
+   * withdraws it and `onPaired` runs. Bridges honour at most ten minutes.
+   */
+  offerPairingCode(opts?: { ttlMs?: number }): string;
+  /** Withdraws the code `offerPairingCode` made, if any. */
+  withdrawPairingCode(): void;
+  /** Called when a session pairs by the offered code: where the page shows its user which agent it was. */
+  onPaired(fn: (paired: PairedByCode) => void): void;
+  /**
    * Tells the bridges something happened on the page. Agents subscribed to
    * the room's events hear it, if this page agreed to their session. Throws
    * on a name `validEventName` refuses or data over `MAX_EVENT_DATA_BYTES`.
@@ -158,6 +182,8 @@ class Page implements ToolRoom {
   private label = "";
   private allowed = false;
   private onPairing?: (req: PairingRequest) => void;
+  private onPairedFn?: (paired: PairedByCode) => void;
+  private offer?: { code: string; expires: number };
   private left = false;
   private modelContext?: ModelContextLike;
 
@@ -287,6 +313,23 @@ class Page implements ToolRoom {
     this.onPairing = fn;
   }
 
+  offerPairingCode(opts: { ttlMs?: number } = {}): string {
+    const ttlMs = opts.ttlMs && opts.ttlMs > 0 ? opts.ttlMs : DEFAULT_PAIRING_CODE_TTL_MS;
+    const code = newPairingCode();
+    this.offer = { code, expires: Date.now() + ttlMs };
+    this.notifyBridges(PAIRING_OFFER, { code, ttlMs });
+    return code;
+  }
+
+  withdrawPairingCode(): void {
+    this.offer = undefined;
+    this.notifyBridges(PAIRING_OFFER, { code: "" });
+  }
+
+  onPaired(fn: (paired: PairedByCode) => void): void {
+    this.onPairedFn = fn;
+  }
+
   leave(): void {
     if (this.left) return;
     this.client.disconnect();
@@ -317,6 +360,13 @@ class Page implements ToolRoom {
       case PAIRING_REQUESTED:
         this.onPairing?.(m.params as PairingRequest);
         return;
+      case PAIRED_BY_CODE: {
+        const paired = m.params as PairedByCode;
+        // The code is spent, so withdraw it from every bridge.
+        if (paired?.code && paired.code === this.offer?.code) this.withdrawPairingCode();
+        this.onPairedFn?.(paired);
+        return;
+      }
     }
     if (m.id !== undefined && m.method) {
       this.send(from, { id: m.id, error: { code: METHOD_NOT_FOUND, message: `method not found: ${m.method}` } });
@@ -330,6 +380,8 @@ class Page implements ToolRoom {
     this.bridges.add(from);
     if (this.label) this.send(from, { method: PAGE_STATE, params: { label: this.label } });
     if (this.allowed) this.send(from, { method: AGENTS_ALLOWED, params: { allowed: true } });
+    const left = this.offer ? this.offer.expires - Date.now() : 0;
+    if (this.offer && left > 0) this.send(from, { method: PAIRING_OFFER, params: { code: this.offer.code, ttlMs: left } });
   }
 
   private descriptors() {
@@ -385,6 +437,13 @@ class Page implements ToolRoom {
     const payload = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", ...m }));
     this.client.sendAppMessage(MESSAGE_KIND, payload, { to });
   }
+}
+
+function newPairingCode(): string {
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
+  // 256 is a multiple of the 32-letter alphabet, so this is unbiased.
+  return [...bytes].map((b) => PAIRING_ALPHABET[b % PAIRING_ALPHABET.length]).join("");
 }
 
 function findModelContext(opt: JoinToolRoomOptions["modelContext"]): ModelContextLike | undefined {

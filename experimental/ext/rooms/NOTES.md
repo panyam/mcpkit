@@ -60,3 +60,26 @@ exported for hosts to call and a pairing whose session vanished sat in memory un
 hosts that end sessions some other way. The scope gate likewise builds its 403 with
 `ScopeChallenge.AuthError` from #1587 rather than by hand. It still can't use `ext/auth`'s
 middleware (C4), but the response comes from the same core code.
+
+## The room resource answers its own subscriptions
+
+The fallbacks' `rooms://events/{resource}` could have used the server's subscription registry and
+`NotifyResourceUpdated`. That broadcasts to every subscriber of the URI, and any session can
+subscribe to any URI, so a session that never attached would hear when alice's page did something.
+The bridge answers `resources/subscribe` and `unsubscribe` for its own URIs in a middleware instead,
+refuses a session that isn't attached, and sends `resources/updated` itself, only to sessions the
+emitting page agreed to. Reads and `next_request` apply the same `hears` check, so all three paths
+share one rule with the event forwarder in roomsevents.
+
+## Reverse pairing: who makes the code, and who spends it
+
+The page makes the code (`OfferPairingCode`), because it is what the page's user reads off the
+screen. That lets a careless page offer a weak one, so the bridge refuses anything under six
+characters of the pairing alphabet and limits a session to five wrong guesses a minute. A code is
+spent twice over: the bridge deletes it when a session pairs, and the page withdraws it from every
+bridge when it hears so. The bridge's delete is the one that counts, since a page in another language
+may not withdraw; `TestPairing_CodeIsSingleUse` uses a hand-rolled page that never does.
+
+A page sends its standing offer when a bridge greets it, which can reach the bridge before the
+bridge has finished listing the page's tools. So offers are recorded from any page in the roster, and
+`pair` requires the page to be listed when the code is spent.
