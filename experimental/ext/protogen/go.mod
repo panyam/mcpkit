@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/experimental/ext/protogen
 go 1.26.9
 
 require (
-	github.com/panyam/mcpkit v0.8.6
+	github.com/panyam/mcpkit v0.8.7
 	github.com/panyam/protokit v0.0.5
 	github.com/stretchr/testify v1.12.1
 	google.golang.org/grpc v1.84.0
