@@ -8,8 +8,8 @@ replace (
 )
 
 require (
-	github.com/panyam/mcpkit v0.8.7
-	github.com/panyam/mcpkit/experimental/ext/events v0.8.7
+	github.com/panyam/mcpkit v0.8.8
+	github.com/panyam/mcpkit/experimental/ext/events v0.8.8
 	github.com/stretchr/testify v1.12.1
 )
 
