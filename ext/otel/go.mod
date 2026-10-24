@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/ext/otel
 go 1.26.9
 
 require (
-	github.com/panyam/mcpkit v0.8.9
+	github.com/panyam/mcpkit v0.8.10
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/metric v1.47.0
@@ -34,9 +34,6 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
-	google.golang.org/grpc v1.84.0 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )
 
 replace github.com/panyam/mcpkit => ../..

@@ -10,7 +10,7 @@ replace (
 
 require (
 	github.com/panyam/demokit v0.0.33
-	github.com/panyam/mcpkit v0.8.9
+	github.com/panyam/mcpkit v0.8.10
 	github.com/panyam/mcpkit/examples/common v0.0.0
 	github.com/panyam/mcpkit/ext/ui v0.6.0
 	github.com/panyam/servicekit v0.2.0
