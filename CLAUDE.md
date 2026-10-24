@@ -236,8 +236,9 @@ These span packages and will bite on a task that never opens a routed doc.
   `go install pkg@vX` for a module with any `replace`, so `make tag` commits a tree with the
   in-repo ones stripped, tags it, and restores them in the next commit
   (`scripts/release-replaces.sh`). A tagged module may only `replace` an in-repo path, or the strip
-  refuses. A workflow that builds a tagged module from the tag runs
-  `release-replaces.sh restore` first, as `vulncheck.yml` does. CI's `release-rehearsal` job
+  refuses. A tag workflow that sets up Go runs `release-replaces.sh restore`
+  first, as `vulncheck.yml` and `publish-npm-rooms.yml` do, and `check-release-workflows-selftest`
+  fails one that doesn't. v0.8.8's npm publish broke on exactly that. CI's `release-rehearsal` job
   installs every command from a fake tag; after a real one, `make check-install V=`.
 - **The stateless wire refuses a request without SEP-2243 routing headers** (#1567). `Mcp-Method`
   on every request and `Mcp-Name` on the name-carrying methods (`core.DeriveMcpName` lists them),

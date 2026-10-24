@@ -461,6 +461,7 @@ rehearse-release: ## CI gate — clone, bump, tag (replaces stripped) and go ins
 
 check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
+	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --check-restore
 
 check-conf-fixture-guards: ## CI gate — self-test the conformance fixture guards (held port, dead fixture, stale suite checkout) in conformance/scripts/_common.sh
 	@bash conformance/scripts/_common_selftest.sh
