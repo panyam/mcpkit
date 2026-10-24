@@ -66,6 +66,15 @@ routed through the chain needs a terminal case there too, or it comes back `-326
 in `server/stateless/handlers.go` keep their own answer only for test fakes with no chain.
 `server/discover` is still answered outside the chain.
 
+That leaves the chain opt-in per handler, the opposite of the session wire, where it wraps
+`d.Dispatch` once and nothing below can skip it. #1625 moves the stateless chain above the method
+switch and shares one method table between the wires. The rule it follows, set 2026-10-24: the
+session wire stays through roughly 18 months of deprecation, so seeing where the wires differ
+matters more than code that never branches. Prefer one shared handler with an explicit
+`if session … else …` where behaviour differs over a second per-wire handler. A grep for the branch
+finds every parity difference, a feature missing on one wire can't hide as code nobody wrote (which
+is how #1355 lived), and retiring the session wire is deleting the session arms.
+
 ### Typed middleware errors on the stateless wire (#815, PR 816)
 
 A `server.Middleware` that short-circuits with `*core.AuthError` (SEP-2350 scope challenge, step-up

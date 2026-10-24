@@ -112,7 +112,8 @@ each worked in its own worktree:
   on both wires. Exercise `make testconf testconf-stateless testconf-agents` until #1555 adds
   `make exercise-wire`, which is the first ticket because the suites are green while its bugs live.
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
-  Exercise in the issue; `go install …/cmd/mcpskills@<tag>` fails today (#1488).
+  Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
+  directives) closed with #1624, which tags a tree without them.
 
 #1554 (`mission_apps_host`) is queued behind #1552. #1508 (events, SEP-3415) closed 2026-10-16.
 Run a mission's exercise after each merged PR on it and log the result on the mission issue. A new
@@ -142,7 +143,9 @@ These span packages and will bite on a task that never opens a routed doc.
   that state until #1352: a scope gate held on `tools/call` and not on `resources/read`, so a caller
   refused a tool could ask for the resource. Constraint C7, gated by
   `make check-stateless-middleware`. Every handler routes since #1355, so the script's `ALLOWED`
-  is empty and an entry there is a new decision.
+  is empty and an entry there is a new decision. #1625 moves the chain above the method switch so
+  the bypass can't be written, and sets the rule for wire differences: one shared handler with an
+  explicit wire branch, not a handler per wire (`server/NOTES.md` § Stateless-wire dispatch parity).
 - **Makefiles and justfiles dispatch; they do not hold shell scripts.** Control flow, or four or
   more statements, goes in `scripts/` and the recipe calls it. Nearly every directory carries both
   a `Makefile` and a `justfile`, and in `examples/` they must stay name-and-behavior identical
