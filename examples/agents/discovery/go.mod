@@ -13,7 +13,7 @@ replace github.com/panyam/mcpkit/experimental/ext/agents => ../../../experimenta
 replace github.com/panyam/mcpkit/experimental/ext/agents/clients/go => ../../../experimental/ext/agents/clients/go
 
 require (
-	github.com/panyam/demokit v0.0.32
+	github.com/panyam/demokit v0.0.33
 	github.com/panyam/mcpkit v0.8.9
 	github.com/panyam/mcpkit/examples/common v0.0.0-00010101000000-000000000000
 	github.com/panyam/mcpkit/experimental/ext/agents v0.8.9
@@ -59,7 +59,7 @@ require (
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
-	github.com/panyam/servicekit v0.1.12 // indirect
+	github.com/panyam/servicekit v0.2.0 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

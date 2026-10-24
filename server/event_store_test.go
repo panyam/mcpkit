@@ -104,7 +104,7 @@ func TestStreamableHTTPEventStoreIntegration(t *testing.T) {
 	_, _ = io.Copy(io.Discard, resp2.Body)
 
 	// Verify events were stored for this session
-	events, err := store.Replay(sessionID, "unknown")
+	events, err := gohttp.ReplayAll(store, sessionID, "unknown")
 	require.NoError(t, err)
 	assert.Greater(t, len(events), 0, "should have stored at least one event for the session")
 
@@ -182,7 +182,7 @@ func TestEventStoreTrimOnSessionDelete(t *testing.T) {
 	}
 
 	// Verify events exist before delete
-	events, _ := store.Replay(sessionID, "unknown")
+	events, _ := gohttp.ReplayAll(store, sessionID, "unknown")
 	require.Greater(t, len(events), 0, "should have events before delete")
 
 	// Delete the session
@@ -194,6 +194,6 @@ func TestEventStoreTrimOnSessionDelete(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp3.StatusCode)
 
 	// Verify events were trimmed
-	events, _ = store.Replay(sessionID, "unknown")
+	events, _ = gohttp.ReplayAll(store, sessionID, "unknown")
 	assert.Nil(t, events, "events should be trimmed after session delete")
 }

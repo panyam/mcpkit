@@ -236,7 +236,7 @@ func TestSSELastEventIDReplay(t *testing.T) {
 	readSSEEvent(reader) // consume tool response
 
 	// Get the first stored event ID as our "already seen" anchor.
-	events, _ := store.Replay(sessionID, "")
+	events, _ := gohttp.ReplayAll(store, sessionID, "")
 	if len(events) == 0 {
 		t.Fatal("expected events in store after tool call")
 	}

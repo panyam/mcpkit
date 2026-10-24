@@ -7,7 +7,7 @@ replace github.com/panyam/mcpkit => ../..
 replace github.com/panyam/mcpkit/ext/otel => ../../ext/otel
 
 require (
-	github.com/panyam/demokit v0.0.32
+	github.com/panyam/demokit v0.0.33
 	github.com/panyam/mcpkit v0.8.9
 	github.com/panyam/mcpkit/ext/otel v0.6.0
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
@@ -62,7 +62,7 @@ require (
 	github.com/panyam/demokit/notebook v0.0.32 // indirect
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
-	github.com/panyam/servicekit v0.1.12 // indirect
+	github.com/panyam/servicekit v0.2.0 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

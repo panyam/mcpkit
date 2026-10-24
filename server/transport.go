@@ -341,7 +341,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 		// Reconnecting to an existing session within grace period.
 		entry = c.entry
 		dispatcher = entry.dispatcher
-		entry.connID = c.ConnId()
+		entry.connID = c.ConnID()
 		entry.conn = c
 	} else {
 		// New session — create Dispatcher and session entry.
@@ -366,7 +366,7 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 			dispatcher:  dispatcher,
 			graceTimer:  graceTimer,
 			subject:     subject,
-			connID:      c.ConnId(),
+			connID:      c.ConnID(),
 			gracePeriod: cfg.sseGracePeriod,
 			conn:        c,
 		}
@@ -397,8 +397,10 @@ func (c *mcpSSEConn) OnStart(w http.ResponseWriter, r *http.Request) error {
 	// where to POST before receiving replayed responses.
 	if c.reconnecting {
 		if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && store != nil {
-			events, _ := store.Replay(sessionID, lastID)
-			for _, ev := range events {
+			for ev, err := range store.Replay(sessionID, lastID) {
+				if err != nil {
+					break
+				}
 				c.SendEventWithID(ev.Event, ev.ID, SSEJSON(ev.Data))
 			}
 		}
@@ -420,13 +422,13 @@ func (c *mcpSSEConn) OnClose() {
 	}
 
 	if !ok {
-		c.transport.hub.Unregister(c.ConnId())
+		c.transport.hub.Unregister(c.ConnID())
 		c.BaseSSEConn.OnClose()
 		return
 	}
 
 	// Unregister the physical SSE connection from the hub.
-	c.transport.hub.Unregister(c.ConnId())
+	c.transport.hub.Unregister(c.ConnID())
 	entry.connID = ""
 	entry.conn = nil
 
@@ -539,7 +541,7 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 			conn := &mcpSSEConn{
 				BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
 					Codec:     &sseDataCodec{},
-					ConnIdStr: reqSessionID, // reuse session ID as hub connection ID
+					ConnIDStr: reqSessionID, // reuse session ID as hub connection ID
 					NameStr:   "MCP",
 				},
 				sessionID:    reqSessionID,
@@ -571,7 +573,7 @@ func (h *mcpSSEHandler) Validate(w http.ResponseWriter, r *http.Request) (*mcpSS
 	conn := &mcpSSEConn{
 		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
 			Codec:     &sseDataCodec{},
-			ConnIdStr: sessionID,
+			ConnIDStr: sessionID,
 			NameStr:   "MCP",
 		},
 		sessionID: sessionID,

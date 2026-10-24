@@ -697,7 +697,7 @@ func (h *streamableSSEHandler) Validate(w http.ResponseWriter, r *http.Request) 
 	conn := &streamableSSEConn{
 		BaseSSEConn: gohttp.BaseSSEConn[SSEData]{
 			Codec:     &sseDataCodec{},
-			ConnIdStr: sessionID,
+			ConnIDStr: sessionID,
 			NameStr:   "MCP-GET-SSE",
 		},
 		sessionID:  sessionID,
@@ -739,8 +739,10 @@ func (c *streamableSSEConn) OnStart(w http.ResponseWriter, r *http.Request) erro
 	// Replay missed events if client reconnected with Last-Event-ID.
 	// Must happen AFTER wiring so pushFunc is set (replay uses the hub).
 	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" && c.transport.config.eventStore != nil {
-		events, _ := c.transport.config.eventStore.Replay(sessionID, lastID)
-		for _, ev := range events {
+		for ev, err := range c.transport.config.eventStore.Replay(sessionID, lastID) {
+			if err != nil {
+				break
+			}
 			c.SendEventWithID(ev.Event, ev.ID, SSEJSON(ev.Data))
 		}
 	}
@@ -759,7 +761,7 @@ func (c *streamableSSEConn) OnClose() {
 	// Clear the persistent push function: the underlying hub connection is
 	// about to go away. A later GET SSE stream will re-wire via OnStart.
 	c.dispatcher.SetPushRequest(nil)
-	c.transport.sseHub.Unregister(c.ConnId())
+	c.transport.sseHub.Unregister(c.ConnID())
 	if c.entry != nil {
 		// Clear the GET conn pointer only if it still points at us —
 		// a rapid close+reconnect could have replaced it already (#202).

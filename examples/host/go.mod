@@ -3,7 +3,7 @@ module github.com/panyam/mcpkit/examples/host
 go 1.26.9
 
 require (
-	github.com/panyam/demokit v0.0.32
+	github.com/panyam/demokit v0.0.33
 	github.com/panyam/mcpkit v0.8.9
 	github.com/panyam/mcpkit/examples/common v0.0.0-20260917230721-e154756d5e32
 	github.com/panyam/mcpkit/ext/ui v0.6.0
@@ -47,7 +47,7 @@ require (
 	github.com/panyam/gocurrent v0.1.2 // indirect
 	github.com/panyam/goutils v0.1.13 // indirect
 	github.com/panyam/mcpkit/ext/otel v0.6.0 // indirect
-	github.com/panyam/servicekit v0.1.12 // indirect
+	github.com/panyam/servicekit v0.2.0 // indirect
 	github.com/panyam/templar v0.1.2 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
