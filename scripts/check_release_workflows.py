@@ -15,9 +15,17 @@ The workflow list is derived from the tree rather than hardcoded: any workflow
 whose `on.push.tags` filter matches the version being checked is in scope, so a
 third tag-triggered workflow is covered the day it is added.
 
+A second mode, --check-restore, needs no network. A tag points at a tree with
+the in-repo `replace` lines stripped (#1488), so a tag-triggered workflow that
+builds Go from that checkout fetches siblings at a version the proxy may not
+serve yet, with no go.sum entries for them. Every such workflow (one that runs
+actions/setup-go) has to call `scripts/release-replaces.sh restore` first.
+publish-npm-rooms.yml didn't, and v0.8.8's npm publish failed on it.
+
 Usage:
-    scripts/check_release_workflows.py v0.6.0     # check a released tag
-    scripts/check_release_workflows.py --selftest # gate the checker itself
+    scripts/check_release_workflows.py v0.6.0          # check a released tag
+    scripts/check_release_workflows.py --check-restore # CI: tag workflows restore replaces
+    scripts/check_release_workflows.py --selftest      # gate the checker itself
 """
 from __future__ import annotations
 
@@ -57,6 +65,22 @@ def tag_triggered_workflows(sources: dict[str, str], tag: str) -> list[str]:
         if any(fnmatch.fnmatch(tag, p) for p in as_patterns(push.get("tags"))):
             matched.append(name)
     return sorted(matched)
+
+
+RESTORE_CALL = "scripts/release-replaces.sh restore"
+
+
+def missing_restore(sources: dict[str, str]) -> list[str]:
+    """Tag-triggered workflows that set up Go without restoring the replaces.
+
+    Any version tag stands in for the release; the question is only whether
+    the workflow fires on one.
+    """
+    return [
+        name
+        for name in tag_triggered_workflows(sources, "v0.0.0")
+        if "actions/setup-go" in sources[name] and RESTORE_CALL not in sources[name]
+    ]
 
 
 def as_patterns(value) -> list[str]:
@@ -204,8 +228,38 @@ SELFTEST_RUNS = [
 ]
 
 
+# (label, sources, expected)
+SELFTEST_RESTORE = [
+    (
+        "a tag workflow that sets up Go and restores passes",
+        {"v.yml": "on:\n  push:\n    tags: ['v*']\njobs:\n  a:\n    steps:\n      - run: bash scripts/release-replaces.sh restore\n      - uses: actions/setup-go@v7\n"},
+        [],
+    ),
+    (
+        "the v0.8.8 case: a tag workflow sets up Go and never restores",
+        {"npm.yml": "on:\n  push:\n    tags: ['v*']\njobs:\n  a:\n    steps:\n      - uses: actions/setup-go@v7\n"},
+        ["npm.yml"],
+    ),
+    (
+        "a tag workflow without Go needs no restore",
+        {"img.yml": "on:\n  push:\n    tags: ['v*']\njobs:\n  a:\n    steps:\n      - uses: docker/build-push-action@v7\n"},
+        [],
+    ),
+    (
+        "a Go workflow that never fires on a tag needs no restore",
+        {"test.yml": "on:\n  push:\n    branches: [main]\njobs:\n  a:\n    steps:\n      - uses: actions/setup-go@v7\n"},
+        [],
+    ),
+]
+
+
 def selftest() -> int:
     failures = 0
+    for label, sources, expected in SELFTEST_RESTORE:
+        got = missing_restore(sources)
+        if got != expected:
+            failures += 1
+            print(f"selftest: {label}\n  expected {expected}, got {got}")
     for label, sources, tag, expected in SELFTEST_DISCOVERY:
         got = tag_triggered_workflows(sources, tag)
         if got != expected:
@@ -216,7 +270,7 @@ def selftest() -> int:
         if got != expected:
             failures += 1
             print(f"selftest: {label}\n  expected {expected}, got {got}")
-    total = len(SELFTEST_DISCOVERY) + len(SELFTEST_RUNS)
+    total = len(SELFTEST_RESTORE) + len(SELFTEST_DISCOVERY) + len(SELFTEST_RUNS)
     print(f"selftest: {total - failures}/{total} cases pass")
     return 1 if failures else 0
 
@@ -246,6 +300,15 @@ def fetch_runs(workflow: str) -> list[dict]:
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
+    if "--check-restore" in sys.argv:
+        missing = missing_restore(read_workflows())
+        for name in missing:
+            print(f"check-release-workflows: {name} fires on a tag and sets up Go, but never runs")
+            print(f"  `{RESTORE_CALL}`. The tag's tree has no in-repo replaces (#1488).")
+        if missing:
+            return 1
+        print("check-release-workflows: every tag workflow that builds Go restores the replaces")
+        return 0
 
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     if len(args) != 1:

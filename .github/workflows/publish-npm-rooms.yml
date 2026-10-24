@@ -28,6 +28,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # A tag points at the stripped-replaces commit, and restoring needs
+          # its parent.
+          fetch-depth: 2
+
+      # The interop tests `go run` massrelay's teststack. On a tag the tree
+      # has no in-repo replaces (#1488), so without this it needs go.sum
+      # entries for siblings at the new version, which don't exist. v0.8.8's
+      # publish failed exactly there. Anywhere else this is a no-op.
+      - name: Restore in-repo replaces
+        run: bash scripts/release-replaces.sh restore
 
       - uses: actions/setup-go@v7
         with:
