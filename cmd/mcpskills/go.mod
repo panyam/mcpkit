@@ -33,9 +33,3 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/panyam/mcpkit => ../..
-
-replace github.com/panyam/mcpkit/cmd/common => ../common
-
-replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
