@@ -357,7 +357,8 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 		case "resources/read":
 			return b.readResourceForStateless(ctx, req), nil
 		case "tools/list":
-			return core.NewResponse(req.ID, core.ToolsListResult{Tools: b.Tools(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
+			// The stateless wire reads fileInputs from the request's _meta (#1515).
+			return core.NewResponse(req.ID, toolsListResult(b.reg(), req.Params.Raw(), core.HasFileInputs(ctx), b.ListTTLMs(), b.ListCacheScope())), nil
 		case "resources/list":
 			return core.NewResponse(req.ID, core.ResourcesListResult{Resources: b.Resources(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
 		case "resources/templates/list":

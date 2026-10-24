@@ -123,6 +123,19 @@ func TestHasFileInputs(t *testing.T) {
 	}
 }
 
+// On the stateless wire the declaration arrives in each request's _meta, and
+// there is no session to read it from (#1515).
+func TestHasFileInputs_RequestMeta(t *testing.T) {
+	ctx := WithRequestMeta(context.Background(), &RequestMeta{ClientCapabilities: &ClientCapabilities{}})
+	if HasFileInputs(ctx) {
+		t.Error("HasFileInputs true for a _meta envelope without fileInputs")
+	}
+	ctx = WithRequestMeta(context.Background(), &RequestMeta{ClientCapabilities: &ClientCapabilities{FileInputs: &struct{}{}}})
+	if !HasFileInputs(ctx) {
+		t.Error("HasFileInputs false despite fileInputs in the _meta envelope")
+	}
+}
+
 // verifies: StripFileInputKeywords removes the keyword from every property
 // (single + array items) without touching surrounding schema structure.
 // The result is a fresh copy — input must not be mutated.

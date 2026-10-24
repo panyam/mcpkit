@@ -582,16 +582,23 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 }
 
 func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
+	// The session wire reads fileInputs from the initialize handshake.
+	return core.NewResponse(id, toolsListResult(d.Reg, params, d.clientCaps.FileInputs != nil, d.listTTLMs, d.listCacheScope))
+}
+
+// toolsListResult builds the tools/list result for both wires, which differ
+// only in where the caller's fileInputs declaration comes from.
+func toolsListResult(reg *Registry, params json.RawMessage, fileInputs bool, ttlMs *int, cacheScope string) core.ToolsListResult {
 	cursor, _ := parsePaginationParams(params)
 
-	d.Reg.mu.RLock()
-	tools := make([]core.ToolDef, 0, len(d.Reg.toolOrder))
-	for _, name := range d.Reg.toolOrder {
-		if entry, ok := d.Reg.tools[name]; ok {
+	reg.mu.RLock()
+	tools := make([]core.ToolDef, 0, len(reg.toolOrder))
+	for _, name := range reg.toolOrder {
+		if entry, ok := reg.tools[name]; ok {
 			tools = append(tools, entry.def)
 		}
 	}
-	d.Reg.mu.RUnlock()
+	reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(tools, cursor, defaultPageSize)
 
@@ -599,11 +606,11 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage)
 	// MUST NOT see the `x-mcp-file` keyword. Strip it (keeping the
 	// underlying string/uri property visible so the tool stays callable
 	// on legacy clients). Wire shape locked by panyam/mcpconformance `pending` (`src/scenarios/server/file-inputs/`).
-	if d.clientCaps.FileInputs == nil {
+	if !fileInputs {
 		page = stripFileInputsFromTools(page)
 	}
 
-	return core.NewResponse(id, core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
+	return core.ToolsListResult{Tools: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: cacheScope}
 }
 
 // stripFileInputsFromTools returns a copy of `tools` with every

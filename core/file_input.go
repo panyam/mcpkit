@@ -33,16 +33,19 @@ type FileInputDescriptor struct {
 	MaxSize *int `json:"maxSize,omitempty"`
 }
 
-// HasFileInputs reports whether the connected client declared the SEP-2356
-// fileInputs capability during the initialize handshake. Servers consult
-// this before advertising x-mcp-file in tool inputSchemas — per spec, the
-// keyword MUST NOT appear if the client cannot handle it.
+// HasFileInputs reports whether the client declared the SEP-2356 fileInputs
+// capability, either in the initialize handshake or, on the SEP-2575
+// stateless wire where there is no handshake, in the request's _meta
+// envelope. Servers consult this before advertising x-mcp-file in tool
+// inputSchemas — per spec, the keyword MUST NOT appear if the client cannot
+// handle it. It read the session alone until #1515, which answered false for
+// every stateless client.
 func HasFileInputs(ctx context.Context) bool {
-	sc := sessionFromContext(ctx)
-	if sc == nil || sc.clientCaps == nil {
-		return false
+	if sc := sessionFromContext(ctx); sc != nil && sc.clientCaps != nil && sc.clientCaps.FileInputs != nil {
+		return true
 	}
-	return sc.clientCaps.FileInputs != nil
+	meta := RequestMetaFromContext(ctx)
+	return meta != nil && meta.ClientCapabilities != nil && meta.ClientCapabilities.FileInputs != nil
 }
 
 // FileInputProperty builds a JSON Schema property for a single file input.
