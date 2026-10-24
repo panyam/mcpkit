@@ -35,6 +35,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # A tag points at the stripped-replaces commit, and restoring needs
+          # its parent.
+          fetch-depth: 2
+
+      # On a tag, put the in-repo replaces back (#1488), so each module is
+      # scanned against the tree it was tagged with rather than fetching its
+      # siblings at a version the proxy may not serve yet. Anywhere else this
+      # is a no-op.
+      - name: Restore in-repo replaces
+        run: bash scripts/release-replaces.sh restore
 
       - uses: actions/setup-go@v7
         with:

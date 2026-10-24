@@ -411,18 +411,10 @@ ghdeploy: ## Build + force-push docs/site/dist/docs to the gh-pages branch (one-
 tag: ## Tag root + all sub-modules (usage: make tag V=v0.0.11)
 	@V="$(V)" ./scripts/tag-all.sh
 
-# The root tag is pushed BY ITSELF, ahead of the sub-module tags. GitHub does
-# not raise push events for a tag push carrying many refs at once, and this
-# repo pushes twenty. The symptom is silent: the release succeeds, and the
-# workflows keyed on `tags: ['v*']` simply never run. Both of ours were in that
-# state from v0.4.0 through v0.6.0 -- publish-images.yml had zero runs ever, and
-# vulncheck.yml only ever fired on its schedule, which quietly falsified
-# DEPENDENCY_POLICY.md's claim that the audit runs before every tagged release.
-# Two pushes, not one, is the whole fix. See #1391.
+# The push order is load-bearing (#1391, #1488); scripts/tag-push.sh says why.
 tag-push: ## Tag and push in one step (usage: make tag-push V=v0.0.11)
 	@$(MAKE) tag V=$(V)
-	git push origin $(V)
-	git push origin $$(echo '$(SUB_MODS_TO_TAG)' | tr ' ' '\n' | sed 's|$$|/$(V)|' | tr '\n' ' ')
+	@V="$(V)" ./scripts/tag-push.sh
 
 # ---------------------------------------------------------------------------
 # Agent SDK release (STAGED, not part of a protocol release, not run today)
@@ -460,6 +452,13 @@ check-release-workflows: ## Release step — fail if a tag-triggered workflow ne
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py $(V)
 
+check-install: ## Release step — go install every command the tagged modules ship, at V, from an empty module (usage: make check-install V=v0.8.8)
+	@bash scripts/check-install.sh $(V)
+
+rehearse-release: ## CI gate — clone, bump, tag (replaces stripped) and go install every command at a fake version, publishing nothing (#1488)
+	@bash scripts/release-replaces_selftest.sh
+	@bash scripts/release-rehearsal.sh
+
 check-release-workflows-selftest: ## CI gate — exercise the release-workflow checker without touching the network
 	@$(RELEASE_WF_PY) scripts/check_release_workflows.py --selftest
 
@@ -481,5 +480,5 @@ setup: setup-tools setup-hooks ## Full development setup
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup testconf-agents conf-agents-setup exercise-events conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-dep-consistency check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
+.PHONY: build test test-examples test-race test-v cover cover-html cover-func cover-all test-auth test-ui test-skills test-mcpskills build-mcpskills test-mcpskills-walkthrough test-protogen test-e2e test-experimental test-apps-playwright test-apps-playwright-docker test-apps-playwright-all test-apps-playwright-docker-all refresh-visual-gallery release-audit-apps demo-app demo-upstream testkcl testkcl-auto testall test-report smoke smoke-wire verify-dual testconfall testconf testconfauth testconf-client testconf-tasks testconf-tasks-v2 testconf-mrtr testconf-file-inputs testconf-auth-server testconf-elicitation testconf-skills testconf-events testconf-events-client conf-events-setup testconf-agents conf-agents-setup exercise-events conf-events-remote testconf-stateless testconf-upstream-audit testconf-external-checker refresh-conformance check-conformance-stale check-local-suites-stale check-conf-fixture-guards check-kcl-guards check-rooms-ts-version check-snippets check-examples-build check-dep-consistency check-dependabot-dirs update-dep-baseline dep-sweep check-auth-markers refresh-apps-compat-report check-apps-compat-stale vet lint vulncheck seccheck secrets verify-submodule-deps verify-submodule-deps-resolve audit ci ci-full serve serve-streamable serve-both tidy tidy-all bump-root collect-walkthroughs ghbuild ghserve ghdeploy tag tag-push check-install rehearse-release setup-tools setup-hooks setup upkcl downkcl kcllogs build-bridge help
 .DEFAULT_GOAL := help

@@ -24,6 +24,7 @@ make audit             # govulncheck + gosec + gitleaks + race
 make tidy-all          # Required after touching core/ imports
 make tag-push V=vX.Y.Z # Tag root + all sub-modules and push (RELEASING.md; pre-release is vX.Y.Z-bN)
 make check-release-workflows V=vX.Y.Z  # Confirm the tag actually triggered its workflows
+make check-install V=vX.Y.Z            # go install every tagged command from the proxy (#1488)
 ```
 
 Conformance targets (`testconf`, `testconf-client`, `testconf-tasks-v2`, `testconf-mrtr`,
@@ -228,6 +229,13 @@ These span packages and will bite on a task that never opens a routed doc.
   the checker reports them `pending` until `publish-images` finishes (several minutes), so rerun it
   rather than read the first result as a miss. `DEPENDENCY_POLICY.md` no longer claims the audit runs before every tagged release,
   because for five releases it did not.
+- **Release tags carry no `replace` directives; `main` does, on purpose** (#1488). Go refuses
+  `go install pkg@vX` for a module with any `replace`, so `make tag` commits a tree with the
+  in-repo ones stripped, tags it, and restores them in the next commit
+  (`scripts/release-replaces.sh`). A tagged module may only `replace` an in-repo path, or the strip
+  refuses. A workflow that builds a tagged module from the tag runs
+  `release-replaces.sh restore` first, as `vulncheck.yml` does. CI's `release-rehearsal` job
+  installs every command from a fake tag; after a real one, `make check-install V=`.
 - **The stateless wire refuses a request without SEP-2243 routing headers** (#1567). `Mcp-Method`
   on every request and `Mcp-Name` on the name-carrying methods (`core.DeriveMcpName` lists them),
   Base64-sentinel encoded when not plain ASCII, or it is 400 + `-32020`. A raw-HTTP test against a

@@ -48,7 +48,14 @@ From a green `main`:
 3. **Tag + push.** `make tag-push V=<version>` — creates and pushes the root
    tag plus one per sub-module (`ext/tasks/<version>`, …). The `Makefile` just
    string-interpolates `V`, so hyphenated pre-release strings are valid git
-   tags.
+   tags. It also leaves two commits on `main` and pushes them first: the tags
+   point at `release: installable tree for <version>`, which drops every
+   in-repo `replace` from the tagged modules, and
+   `release: restore in-repo replaces after <version>` puts them back. Go
+   refuses `go install pkg@<version>` for a module that carries a `replace`,
+   which is why no command here had installed at any tag before #1488
+   (`scripts/release-replaces.sh`). `make rehearse-release` runs the whole
+   thing at a fake version in a clone, and CI runs it on every PR.
 4. **Verify the tag's workflows fired.** `make check-release-workflows V=<version>`.
    A tag that triggers nothing is indistinguishable from a tag whose workflows
    all passed: green repo, published tag, no red anywhere. That is how v0.4.0
@@ -64,7 +71,12 @@ From a green `main`:
    The tag also publishes `@panyam/mcpkit-rooms` to npm through
    `publish-npm-rooms.yml`, which `check-release-workflows` now counts. See
    § npm below for the one-time setup.
-6. **GitHub Release.** See the token note below. For a stable release write a
+6. **Verify the commands install.** `make check-install V=<version>` runs
+   `go install` for every command in the root and the tagged modules from an
+   empty module, as someone outside the repo would. A "not found" in the first
+   few minutes is usually the proxy catching up, so rerun before reading it as
+   broken.
+7. **GitHub Release.** See the token note below. For a stable release write a
    release note; for a `-bN` pre-release, publish with **"Set as a pre-release"**
    checked.
 
@@ -172,4 +184,6 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_github -o IdentitiesOnly=yes" git push origin 
 - [ ] `make check-release-workflows V=vX.Y.0` green — confirms the tag actually
       triggered `publish-images` and `vulncheck` rather than silently firing
       neither (#1412)
+- [ ] `make check-install V=vX.Y.0` green — every command `go install`s from the
+      proxy at the tag (#1488)
 - [ ] GitHub Release published (`env -u GH_TOKEN gh release create`, per the token note)
