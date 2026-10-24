@@ -135,6 +135,18 @@ state, and agreement needs no MCP session.
 - **Ending it.** `Revoke(principal)` or `RevokeAll()` on the page, or the page leaving. A grant
   outlives the agent's MCP session: there is no session end on the stateless wire to hang it on.
 
+### Which agents are around
+
+A page can show its user which agents have used the tab, and offer to revoke them from there.
+`OnPresence(fn)` runs on each bridge's report and `Presence()` returns the current list: one entry
+per principal (subject, client), with `LastSeen` and `Acting`. An agent counts as soon as it
+attaches to the page's room, with `Acting` false, and as acting once it calls the page. A page
+hears of agents it never agreed to, the same as it sees their pairing requests.
+
+Each bridge reports only the agents it served, so the page merges the reports: the latest
+`LastSeen` wins, and acting on any bridge stays acting. An entry drops out an hour after it was
+last seen (`WithPresenceTTL` on `JoinPage`). Reports name principals and never MCP sessions.
+
 ## Page events
 
 A page tells the bridge when something happens: `Ask(text)` emits `room.ask`, `SelectionChanged(sel)`

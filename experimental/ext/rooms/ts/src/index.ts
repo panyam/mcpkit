@@ -7,8 +7,9 @@ export {
   EVENT_SELECTION_CHANGED,
   MAX_EVENT_DATA_BYTES,
   DEFAULT_PAIRING_CODE_TTL_MS,
+  DEFAULT_PRESENCE_TTL_MS,
 } from "./room.js";
-export type { JoinToolRoomOptions, ToolRoom, PairingRequest, PairedByCode, Principal, ModelContextLike } from "./room.js";
+export type { JoinToolRoomOptions, ToolRoom, PairingRequest, PairedByCode, Principal, Presence, ModelContextLike } from "./room.js";
 export { registerOnApp } from "./app.js";
 export type { AppToolRegistry } from "./app.js";
 export { toCallToolResult } from "./tool.js";

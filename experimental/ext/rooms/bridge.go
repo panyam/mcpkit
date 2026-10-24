@@ -134,6 +134,9 @@ type roomState struct {
 	codes          map[string]agentCode
 	principalCodes map[string]string
 	offers         map[PeerID]pairingOffer
+	// attachedBy is who attached to the room and when, by Principal.key, so
+	// a page listed later still hears they are around.
+	attachedBy map[string]Presence
 	// settled closes once the pages present when the bridge joined have
 	// been listed (or failed to be).
 	settled chan struct{}
@@ -147,6 +150,10 @@ type pageState struct {
 	allowAgents bool
 	grants      []Principal // the page's own list, as it last sent it
 	tools       map[string]bool
+	// presence is the agents this bridge has seen around the page, and
+	// reported what it last sent the page of each, both by Principal.key.
+	presence map[string]Presence
+	reported map[string]Presence
 }
 
 // session is what the bridge keeps for an MCP session on the session wire:
@@ -403,7 +410,7 @@ func (b *Bridge) joinRoom(resource string) (*roomState, error) {
 	rs = &roomState{
 		resource: resource, room: room, pages: make(map[PeerID]*pageState),
 		codes: make(map[string]agentCode), principalCodes: make(map[string]string),
-		offers: make(map[PeerID]pairingOffer), settled: make(chan struct{}),
+		offers: make(map[PeerID]pairingOffer), attachedBy: make(map[string]Presence), settled: make(chan struct{}),
 	}
 	roster := room.Roster()
 	b.mu.Lock()
@@ -425,7 +432,7 @@ func (b *Bridge) joinRoom(resource string) (*roomState, error) {
 }
 
 func newPageState(p Peer) *pageState {
-	return &pageState{peer: p, tools: make(map[string]bool)}
+	return &pageState{peer: p, tools: make(map[string]bool), presence: make(map[string]Presence), reported: make(map[string]Presence)}
 }
 
 func (b *Bridge) roomLoop(rs *roomState) {
@@ -719,8 +726,15 @@ func (b *Bridge) listTools(rs *roomState, page PeerID) {
 			}
 		}
 	}
+	var presence []Presence
+	if firstListing {
+		presence = attachedLocked(rs, pg, time.Now())
+	}
 	b.mu.Unlock()
 
+	if presence != nil {
+		b.sendPresence(rs, page, presence)
+	}
 	for _, a := range asks {
 		b.sendTo(rs, page, rpcMessage{Method: MethodPairingRequested, Params: mustJSON(a)})
 	}
@@ -879,6 +893,8 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 			res.StructuredContent = map[string]any{"error": nt.reason, "pages": nt.roster}
 			return res, nil
 		}
+
+		b.seen(rs, []PeerID{target}, p, true)
 
 		// The caller's principal, from the bridge's validated token, so the
 		// page can refuse per caller (see PageCall.Caller).

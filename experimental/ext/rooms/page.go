@@ -73,6 +73,10 @@ type Page struct {
 	// trusted, when set, are the relay subjects of the bridges the page
 	// answers; a message carries its sender's relay subject.
 	trusted map[string]bool
+	// presence is the merged agent presence, by Principal.key.
+	presence    map[string]Presence
+	presenceTTL time.Duration
+	onPresence  func([]Presence)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -105,14 +109,16 @@ func JoinPage(ctx context.Context, t RoomTransport, room string, opts ...PageOpt
 	}
 	pctx, cancel := context.WithCancel(context.Background())
 	p := &Page{
-		room:     r,
-		tools:    make(map[string]PageTool),
-		bridges:  make(map[PeerID]bool),
-		running:  make(map[string]context.CancelFunc),
-		accepted: make(map[string]time.Time),
-		ctx:      pctx,
-		cancel:   cancel,
-		done:     make(chan struct{}),
+		room:        r,
+		tools:       make(map[string]PageTool),
+		bridges:     make(map[PeerID]bool),
+		running:     make(map[string]context.CancelFunc),
+		accepted:    make(map[string]time.Time),
+		presence:    make(map[string]Presence),
+		presenceTTL: DefaultPresenceTTL,
+		ctx:         pctx,
+		cancel:      cancel,
+		done:        make(chan struct{}),
 	}
 	for _, o := range opts {
 		o(p)
@@ -293,6 +299,8 @@ func (p *Page) handle(from PeerID, m rpcMessage) {
 		}
 	case MethodPairedByCode:
 		p.pairedByCode(m)
+	case MethodPresence:
+		p.mergePresence(m.Params)
 	case MethodPairingRequested:
 		var req PairingRequest
 		_ = json.Unmarshal(m.Params, &req)

@@ -160,7 +160,9 @@ func (b *Bridge) attach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 		}
 	}
 	roster := b.rosterLocked(p, []string{resource})
+	pages := sortedPages(rs)
 	b.mu.Unlock()
+	b.seen(rs, pages, p, false)
 
 	for _, id := range slices.Sorted(maps.Keys(asks)) {
 		b.sendTo(rs, id, rpcMessage{Method: MethodPairingRequested, Params: mustJSON(asks[id])})
