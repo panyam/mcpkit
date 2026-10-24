@@ -207,14 +207,19 @@ func (b *statelessBackend) Completion(refType, key string) (core.CompletionHandl
 	return h, ok
 }
 
-// ListTTLMs returns the SEP-2549 ttlMs hint applied to list responses.
+// ListTTLMs returns the SEP-2549 ttlMs hint applied to list responses. The
+// stateless wire speaks only 2026-07-28, where the field is required, so a
+// hint the server turned off comes back as 0 (#1546).
 func (b *statelessBackend) ListTTLMs() *int {
-	return b.s.options.listTTLMs
+	ttlMs, _ := cacheHints(statelessFeatures, b.s.options.listTTLMs, b.s.options.listCacheScope, core.CacheScopePublic)
+	return ttlMs
 }
 
-// ListCacheScope returns the SEP-2549 cacheScope hint applied to list responses.
+// ListCacheScope returns the SEP-2549 cacheScope hint applied to list
+// responses, "public" when the server turned it off (see ListTTLMs).
 func (b *statelessBackend) ListCacheScope() string {
-	return b.s.options.listCacheScope
+	_, scope := cacheHints(statelessFeatures, b.s.options.listTTLMs, b.s.options.listCacheScope, core.CacheScopePublic)
+	return scope
 }
 
 // readResourceForStateless resolves and reads a resource on the stateless
@@ -308,14 +313,18 @@ func (b *statelessBackend) MatchResourceTemplate(uri string) (core.ResourceTempl
 	return core.ResourceTemplate{}, nil, nil, false
 }
 
-// ReadTTLMs returns the SEP-2549 ttlMs default for resources/read responses.
+// ReadTTLMs returns the SEP-2549 ttlMs default for resources/read responses,
+// 0 when the server turned it off (see ListTTLMs).
 func (b *statelessBackend) ReadTTLMs() *int {
-	return b.s.options.readTTLMs
+	ttlMs, _ := cacheHints(statelessFeatures, b.s.options.readTTLMs, b.s.options.readCacheScope, core.CacheScopePrivate)
+	return ttlMs
 }
 
-// ReadCacheScope returns the SEP-2549 cacheScope default for resources/read responses.
+// ReadCacheScope returns the SEP-2549 cacheScope default for resources/read
+// responses, "private" when the server turned it off (see ListTTLMs).
 func (b *statelessBackend) ReadCacheScope() string {
-	return b.s.options.readCacheScope
+	_, scope := cacheHints(statelessFeatures, b.s.options.readTTLMs, b.s.options.readCacheScope, core.CacheScopePrivate)
+	return scope
 }
 
 // InvokeWithMiddleware runs the server's middleware chain (s.options.middleware)
@@ -357,7 +366,8 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 		case "resources/read":
 			return b.readResourceForStateless(ctx, req), nil
 		case "tools/list":
-			return core.NewResponse(req.ID, core.ToolsListResult{Tools: b.Tools(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
+			// The stateless wire reads fileInputs from the request's _meta (#1515).
+			return core.NewResponse(req.ID, toolsListResult(b.reg(), req.Params.Raw(), core.HasFileInputs(ctx), b.ListTTLMs(), b.ListCacheScope())), nil
 		case "resources/list":
 			return core.NewResponse(req.ID, core.ResourcesListResult{Resources: b.Resources(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
 		case "resources/templates/list":

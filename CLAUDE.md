@@ -109,8 +109,9 @@ Work is queued by mission, per `~/.claude/skills/retriage/CONVENTIONS.md`. Two m
 each worked in its own worktree:
 
 - **#1552** (`mission_wire_2026_07_28`): a 2026-07-28 client gets spec-correct results from mcpkit
-  on both wires. Exercise `make testconf testconf-stateless testconf-agents` until #1555 adds
-  `make exercise-wire`, which is the first ticket because the suites are green while its bugs live.
+  on both wires. Exercise `make exercise-wire`: session-vs-stateless parity rows
+  (`TestWireParity` in `server/` and `experimental/ext/agents`, one row per ticket) plus
+  `testconf testconf-stateless testconf-agents`. A new wire bug gets a row there first.
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
   Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
   directives) closed with #1624, which tags a tree without them.

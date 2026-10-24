@@ -31,8 +31,9 @@ type Config struct {
 	// server-wide default for the core list methods.
 	PageSize int
 
-	// TTLMs is the SEP-2549 freshness hint stamped on both results. Nil omits
-	// it.
+	// TTLMs is the SEP-2549 freshness hint stamped on both results. Nil means
+	// 0 (immediately stale), because the 2026-07-28 schema makes ttlMs
+	// required, matching the core list methods' default (#1546).
 	TTLMs *int
 
 	// CacheScope is the SEP-2549 cache scope stamped on both results. Empty
@@ -102,6 +103,10 @@ func Register(cfg Config) (*Registry, error) {
 	}
 	if cfg.CacheScope == "" {
 		cfg.CacheScope = core.CacheScopePrivate
+	}
+	if cfg.TTLMs == nil {
+		zero := 0
+		cfg.TTLMs = &zero
 	}
 	r := &Registry{
 		byName: make(map[string]AgentDef),

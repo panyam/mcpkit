@@ -75,6 +75,13 @@ matters more than code that never branches. Prefer one shared handler with an ex
 finds every parity difference, a feature missing on one wire can't hide as code nobody wrote (which
 is how #1355 lived), and retiring the session wire is deleting the session arms.
 
+`make exercise-wire` (#1555) checks this class. `server/wireparity_test.go` sends
+the same 2026-07-28 requests over both wires and compares, with `knownWireDifferences` naming every
+key allowed to differ. It needs two single-wire handlers, because a dual-mode handler routes any
+request whose `_meta` carries a `protocolVersion` to the stateless dispatcher, session id or not.
+So under the default `ModeDual` a 2026-07-28 client never reaches the session wire at all; only
+`ModeLegacyOnly` serves a session at that version.
+
 ### Typed middleware errors on the stateless wire (#815, PR 816)
 
 A `server.Middleware` that short-circuits with `*core.AuthError` (SEP-2350 scope challenge, step-up

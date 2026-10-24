@@ -64,3 +64,45 @@ func TestStatelessToolsMatchWithFileInputs(t *testing.T) {
 	c := newStatelessClient(t, []client.ClientOption{client.WithFileInputs()}, opsAgent())
 	assertToolsMatchList(t, testCall(t, c), "ops-agent")
 }
+
+// The agents rows of the wire-parity exercise for mission #1552
+// (`make exercise-wire`), named like server.TestWireParity's.
+func TestWireParity(t *testing.T) {
+	t.Run("1515 agents/get matches tools/list without fileInputs", func(t *testing.T) {
+		c := newStatelessClient(t, nil, opsAgent())
+		assertToolsMatchList(t, testCall(t, c), "ops-agent")
+		listed := toolsByName(t, testCall(t, c))
+		assert.NotContains(t, string(listed["upload_report"]), core.FileInputSchemaKey,
+			"a stateless client that declared no fileInputs must not see x-mcp-file")
+	})
+
+	t.Run("1546 ttlMs and cacheScope on agents/list and agents/get", func(t *testing.T) {
+		session, _ := newAgentsServer(t, sepWorkflowAgent())
+		wires := map[string]*client.Client{
+			"session":   session.Client,
+			"stateless": newStatelessClient(t, nil, sepWorkflowAgent()),
+		}
+		for name, c := range wires {
+			for _, call := range []struct {
+				method string
+				params any
+			}{
+				{agents.MethodList, nil},
+				{agents.MethodGet, agents.GetAgentParams{Name: "workflow-agent"}},
+			} {
+				res, err := c.Call(t.Context(), call.method, call.params)
+				require.NoError(t, err)
+				var hints struct {
+					TTLMs      *int   `json:"ttlMs"`
+					CacheScope string `json:"cacheScope"`
+				}
+				require.NoError(t, res.Unmarshal(&hints))
+				if assert.NotNil(t, hints.TTLMs, "%s wire, %s: ttlMs missing", name, call.method) {
+					assert.GreaterOrEqual(t, *hints.TTLMs, 0)
+				}
+				assert.Contains(t, []string{core.CacheScopePublic, core.CacheScopePrivate}, hints.CacheScope,
+					"%s wire, %s", name, call.method)
+			}
+		}
+	})
+}
