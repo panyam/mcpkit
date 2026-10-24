@@ -232,18 +232,40 @@ func (b *Bridge) Notify(ctx context.Context, sel Selector, name string, data any
 	}
 	b.mu.Unlock()
 
+	// One relay message per room, addressed to every chosen tab in it. sends
+	// is grouped by room already, since resources is sorted and walked once.
 	msg := encode(rpcMessage{Method: MethodNotify, Params: mustJSON(map[string]any{"name": name, "data": json.RawMessage(raw)})})
 	var rep NotifyReport
-	for _, s := range sends {
-		if err := s.rs.room.Send(ctx, s.Page, MessageKind, msg); err != nil {
-			s.Err = err
-			rep.Failed = append(rep.Failed, s.NotifyTarget)
-			if ctx.Err() != nil {
-				return rep, ctx.Err()
-			}
-			continue
+	for start := 0; start < len(sends); {
+		end := start + 1
+		for end < len(sends) && sends[end].rs == sends[start].rs {
+			end++
 		}
-		rep.Sent = append(rep.Sent, s.NotifyTarget)
+		group := sends[start:end]
+		start = end
+
+		ids := make([]PeerID, len(group))
+		for i, s := range group {
+			ids[i] = s.Page
+		}
+		err := group[0].rs.room.SendEach(ctx, ids, MessageKind, msg)
+		var nm *NotMembersError
+		partial := errors.As(err, &nm)
+		for _, s := range group {
+			switch {
+			case err == nil, partial && !slices.Contains(nm.Peers, s.Page):
+				rep.Sent = append(rep.Sent, s.NotifyTarget)
+				continue
+			case partial:
+				s.Err = &NotMembersError{Peers: []PeerID{s.Page}}
+			default:
+				s.Err = err
+			}
+			rep.Failed = append(rep.Failed, s.NotifyTarget)
+		}
+		if ctx.Err() != nil {
+			return rep, ctx.Err()
+		}
 	}
 	return rep, nil
 }

@@ -50,7 +50,7 @@ async function rawPeer(username: string) {
   await ready;
   return {
     send(to: string, m: unknown) {
-      grpc.send({ appMessage: { kind: "mcp/1", payload: base64Encode(new TextEncoder().encode(JSON.stringify(m))), toClientId: to } });
+      grpc.send({ appMessage: { kind: "mcp/1", payload: base64Encode(new TextEncoder().encode(JSON.stringify(m))), toClientIds: [to] } });
     },
     async next(match: (m: any) => boolean): Promise<unknown> {
       for (;;) {

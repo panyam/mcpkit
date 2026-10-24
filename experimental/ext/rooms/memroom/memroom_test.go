@@ -2,6 +2,7 @@ package memroom_test
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -57,4 +58,24 @@ func TestRelay_LeaveIsReportedAndClosesEvents(t *testing.T) {
 	assert.False(t, open)
 	assert.ErrorIs(t, a.Send(t.Context(), b.Self(), "mcp/1", nil), memroom.ErrNotMember)
 	assert.Empty(t, a.Roster())
+}
+
+func TestRelay_SendEachReachesEachTargetOnceAndNamesTheMissing(t *testing.T) {
+	relay := memroom.New()
+	a, _ := relay.Transport("alice").Join(t.Context(), "r")
+	b, _ := relay.Transport("bob").Join(t.Context(), "r")
+	c, _ := relay.Transport("carol").Join(t.Context(), "r")
+	d, _ := relay.Transport("dave").Join(t.Context(), "r")
+
+	err := a.SendEach(t.Context(), []rooms.PeerID{b.Self(), c.Self(), b.Self(), "ghost"}, "mcp/1", json.RawMessage(`{"x":1}`))
+	var nm *rooms.NotMembersError
+	require.True(t, errors.As(err, &nm), "got %v", err)
+	assert.Equal(t, []rooms.PeerID{"ghost"}, nm.Peers)
+
+	var got []rooms.PeerID
+	for _, d := range relay.Deliveries() {
+		got = append(got, d.To)
+	}
+	assert.Equal(t, []rooms.PeerID{b.Self(), c.Self()}, got, "each listed peer once, and dave not at all")
+	_ = d
 }

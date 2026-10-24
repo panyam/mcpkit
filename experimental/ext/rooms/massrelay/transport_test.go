@@ -2,6 +2,7 @@ package massrelay_test
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -155,5 +156,35 @@ func TestTransport_DialledBurstArrivesWhole(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("%d of %d messages arrived; the relay dropped the rest", got, burst)
 		}
+	}
+}
+
+// One AppMessage to several peers, as massrelay v0.3 allows: each listed peer
+// gets it once, a peer not in the room is named, and anyone unlisted hears
+// nothing.
+func TestTransport_SendEachReachesEachTargetOnceAndNamesTheMissing(t *testing.T) {
+	for _, kind := range transportKinds {
+		t.Run(kind, func(t *testing.T) {
+			r := newRelay(t)
+			alice := join(t, r.transport(t, kind, "alice"), room)
+			bob := join(t, r.transport(t, kind, "bob"), room)
+			carol := join(t, r.transport(t, kind, "carol"), room)
+			dave := join(t, r.transport(t, kind, "dave"), room)
+			require.Eventually(t, func() bool { return len(alice.Roster()) == 3 }, 3e9, 1e7)
+
+			payload := json.RawMessage(`{"jsonrpc":"2.0","method":"notifications/x"}`)
+			err := alice.SendEach(t.Context(), []rooms.PeerID{bob.Self(), carol.Self(), bob.Self(), "ghost"}, rooms.MessageKind, payload)
+			var nm *rooms.NotMembersError
+			require.True(t, errors.As(err, &nm), "got %v", err)
+			assert.Equal(t, []rooms.PeerID{"ghost"}, nm.Peers)
+
+			for _, to := range []rooms.Room{bob, carol} {
+				ev := next(t, to, rooms.MessageReceived)
+				assert.Equal(t, alice.Self(), ev.Peer.ID)
+				assert.JSONEq(t, string(payload), string(ev.Payload))
+			}
+			quiet(t, bob)
+			quiet(t, dave)
+		})
 	}
 }

@@ -5,7 +5,7 @@ go 1.26.9
 require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/panyam/gocurrent v0.1.2
-	github.com/panyam/servicekit v0.1.11
+	github.com/panyam/servicekit v0.1.12
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	github.com/yosida95/uritemplate/v3 v3.0.2

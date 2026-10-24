@@ -43,11 +43,12 @@ options and `WithUsername` the name other peers see.
 | a room | a session whose id is the resource name |
 | `Peer.ID` | the relay's client id |
 | `Peer.Subject` | `PeerInfo.identity.subject`, from the validated token |
-| `Send(to, kind, payload)` | an `AppMessage` with `to_client_id` |
+| `Send(to, kind, payload)` | an `AppMessage` with `to_client_ids: [to]` |
+| `SendEach(to, kind, payload)` | one `AppMessage` listing every target (massrelay v0.3.0 and later) |
 | `PeerJoined` / `PeerLeft` | `PeerJoined` / `PeerLeft` |
 | `Events` closes | `Leave`, the connection dropping, or `SessionEnded` |
 
-Room-wide `AppMessage`s (no `to_client_id`) and the relay's collaboration traffic (presence, scene
+Room-wide `AppMessage`s (empty `to_client_ids`) and the relay's collaboration traffic (presence, scene
 updates) are not reported, since the bridge sends neither.
 
 ## Limits the relay sets
@@ -56,7 +57,8 @@ updates) are not reported, since the bridge sends neither.
   A full room fails the join with `ROOM_FULL`.
 - 30 messages a second per WebSocket connection by default, past which the relay drops messages
   without telling the sender. `Dial` paces each connection at 25 a second (`WithSendRate`, 0 turns
-  it off), so a bridge's fan-out or `Notify` waits instead of losing messages. The embedded
+  it off), so a bridge's fan-out waits instead of losing messages. `Notify` sends one message
+  per room whatever the number of tabs, so it rarely gets near the limit. The embedded
   transport doesn't cross that limit. The TypeScript page doesn't pace yet, so a page answering a
   burst of calls can still hit it.
 - 1 MB per message.

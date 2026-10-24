@@ -79,7 +79,10 @@ func (m *member) handle(ev *pb.CollabEvent) {
 		m.push(rooms.RoomEvent{Type: rooms.PeerLeft, Peer: peer})
 	case ev.GetAppMessage() != nil:
 		msg := ev.GetAppMessage()
-		if rooms.PeerID(msg.GetToClientId()) != m.self {
+		// The relay rewrites to_client_ids to hold only the receiver's own id,
+		// and leaves it empty for a room-wide message, which the bridge never
+		// sends and doesn't act on.
+		if !slices.Contains(msg.GetToClientIds(), string(m.self)) {
 			return
 		}
 		from := rooms.PeerID(ev.GetFromClientId())
@@ -143,12 +146,63 @@ func (m *member) Send(ctx context.Context, to rooms.PeerID, kind string, payload
 	if gone || !known {
 		return ErrNotMember
 	}
-	return m.send(ctx, &pb.CollabAction{
+	err := m.send(ctx, &pb.CollabAction{
 		ClientId: string(m.self),
 		Action: &pb.CollabAction_AppMessage{AppMessage: &pb.AppMessage{
-			Kind: kind, Payload: slices.Clone(payload), ToClientId: string(to),
+			Kind: kind, Payload: slices.Clone(payload), ToClientIds: []string{string(to)},
 		}},
 	})
+	var nm *rooms.NotMembersError
+	if errors.As(err, &nm) {
+		return ErrNotMember
+	}
+	return err
+}
+
+// SendEach sends one AppMessage listing every target the roster knows, which
+// the relay delivers to each of them once. Targets the roster doesn't know
+// are never sent; they come back in the *NotMembersError, merged with any the
+// relay itself reports missing (a peer that left in between).
+func (m *member) SendEach(ctx context.Context, to []rooms.PeerID, kind string, payload json.RawMessage) error {
+	m.mu.Lock()
+	gone := m.gone
+	var ids []string
+	var missing []rooms.PeerID
+	seen := make(map[rooms.PeerID]bool, len(to))
+	for _, id := range to {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if _, known := m.roster[id]; known {
+			ids = append(ids, string(id))
+		} else {
+			missing = append(missing, id)
+		}
+	}
+	m.mu.Unlock()
+	if gone {
+		return ErrNotMember
+	}
+	if len(ids) > 0 {
+		err := m.send(ctx, &pb.CollabAction{
+			ClientId: string(m.self),
+			Action: &pb.CollabAction_AppMessage{AppMessage: &pb.AppMessage{
+				Kind: kind, Payload: slices.Clone(payload), ToClientIds: ids,
+			}},
+		})
+		var nm *rooms.NotMembersError
+		switch {
+		case errors.As(err, &nm):
+			missing = append(missing, nm.Peers...)
+		case err != nil:
+			return err
+		}
+	}
+	if len(missing) > 0 {
+		return &rooms.NotMembersError{Peers: missing}
+	}
+	return nil
 }
 
 func (m *member) Events() <-chan rooms.RoomEvent { return m.events }

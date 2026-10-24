@@ -13,8 +13,19 @@ relay stamps a message's sender from the connection and ignores the client id in
 
 `RoomTransport` promises the messages addressed to this peer. massrelay also fans out room-wide
 `AppMessage`s, which other apps in the room may use. Reporting those would let any peer reach a
-page's MCP handler without addressing it, so `handle` drops any `AppMessage` whose `to_client_id`
-is not this peer.
+page's MCP handler without addressing it, so `handle` drops any `AppMessage` whose
+`to_client_ids` doesn't hold this peer. Since v0.3.0 the relay rewrites that list to just the
+receiver's id, so a receiver never learns who else a message went to.
+
+## SendEach and the relay's PEER_NOT_FOUND
+
+`SendEach` checks targets against the roster and sends one `AppMessage` listing the ones it
+knows. A peer that left in the gap comes back from the relay as one `PEER_NOT_FOUND` whose
+message names every missing id ("Not in this room: a, b"), and the relay still delivers to the
+rest. Over the embedded transport that answer is synchronous, and `missingPeers` reads the ids
+out of the text, since v0.3 has no structured field for them. Over `Dial` it arrives as an
+`ErrorEvent` on the stream with nothing tying it to the send, so a dialled `SendEach` reports
+only what the roster knew.
 
 ## A leave does not close the relay's channel
 
