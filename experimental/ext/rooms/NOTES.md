@@ -144,7 +144,9 @@ would look like a complete answer. And Notify sticks to joined rooms, since "eve
 anywhere needs the relay to answer a query it doesn't offer.
 
 The pacing lives in the massrelay transport, not the bridge, because the limit is per WebSocket
-connection and only the dialled transport has one. panyam/massrelay#43 is the relay-side fix.
+connection and only the dialled transport has one. The relay-side fix, massrelay PR 44 (an
+AppMessage to many peers, and `RATE_LIMITED` instead of a silent drop), merged after v0.2.5 and
+isn't tagged yet; #1621 picks it up.
 
 ## The caller, and why TrustBridges exists
 
