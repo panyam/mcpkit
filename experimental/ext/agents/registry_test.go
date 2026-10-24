@@ -292,11 +292,12 @@ func TestUnregisteredToolIsInvalidDefinition(t *testing.T) {
 }
 
 func TestCacheHints(t *testing.T) {
-	t.Run("private by default", func(t *testing.T) {
+	t.Run("private and immediately stale by default", func(t *testing.T) {
 		tc, _ := newAgentsServer(t, sepWorkflowAgent())
 		out := listAll(t, testCall(t, tc.Client))
 		assert.Equal(t, core.CacheScopePrivate, out.CacheScope)
-		assert.Nil(t, out.TTLMs)
+		require.NotNil(t, out.TTLMs)
+		assert.Equal(t, 0, *out.TTLMs)
 	})
 	t.Run("configured", func(t *testing.T) {
 		ttl := 5000

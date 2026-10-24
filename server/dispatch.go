@@ -197,6 +197,13 @@ func (d *Dispatcher) applyReadCacheControl(r *core.ResourceResult) {
 	if r.CacheScope == "" {
 		r.CacheScope = d.readCacheScope
 	}
+	r.TTLMs, r.CacheScope = cacheHints(d.protocolFeatures(), r.TTLMs, r.CacheScope, core.CacheScopePrivate)
+}
+
+// listCacheHints is the ttlMs and cacheScope for a session-wire list result,
+// at the negotiated version.
+func (d *Dispatcher) listCacheHints() (*int, string) {
+	return cacheHints(d.protocolFeatures(), d.listTTLMs, d.listCacheScope, core.CacheScopePublic)
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -583,7 +590,8 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 
 func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
 	// The session wire reads fileInputs from the initialize handshake.
-	return core.NewResponse(id, toolsListResult(d.Reg, params, d.clientCaps.FileInputs != nil, d.listTTLMs, d.listCacheScope))
+	ttlMs, scope := d.listCacheHints()
+	return core.NewResponse(id, toolsListResult(d.Reg, params, d.clientCaps.FileInputs != nil, ttlMs, scope))
 }
 
 // toolsListResult builds the tools/list result for both wires, which differ
@@ -792,7 +800,8 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
+	ttlMs, scope := d.listCacheHints()
+	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -868,7 +877,8 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
-	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
+	ttlMs, scope := d.listCacheHints()
+	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
 // --- Resource Subscriptions ---
@@ -934,7 +944,8 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
-	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: d.listTTLMs, CacheScope: d.listCacheScope})
+	ttlMs, scope := d.listCacheHints()
+	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
 // promptsGetEnvelope is the MRTR-aware prompts/get request shape. The

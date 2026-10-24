@@ -74,6 +74,14 @@ type ProtocolFeatures struct {
 	// treat the absent field as "complete" anyway.
 	GeneralizedResultType bool
 
+	// CacheHintsRequired is the 2026-07-28 schema's CacheableResult, which
+	// makes ttlMs and cacheScope required on the list results and on
+	// resources/read. Where it is set, a hint the server turned off
+	// (WithoutListCacheControl, a negative TTL) is sent as ttlMs 0, which is
+	// what an absent field means to a client anyway (#1546). Earlier
+	// versions keep omitting it.
+	CacheHintsRequired bool
+
 	// BatchingRemoved refuses JSON-RPC batches. 2025-03-26 added batching
 	// and 2025-06-18 removed it, so sessions on 2025-06-18 and later get a
 	// single -32600 error for a JSON array body and none of its elements
@@ -91,6 +99,7 @@ func featuresForVersion(version string) ProtocolFeatures {
 			RoutingHeaderValidation: true,
 			StatelessMetaRequired:   true,
 			GeneralizedResultType:   true,
+			CacheHintsRequired:      true,
 			BatchingRemoved:         true,
 		}
 	case "2025-11-25", "2025-06-18":
@@ -104,4 +113,26 @@ func featuresForVersion(version string) ProtocolFeatures {
 // currently negotiated protocol version.
 func (d *Dispatcher) protocolFeatures() ProtocolFeatures {
 	return featuresForVersion(d.negotiatedVersion)
+}
+
+// statelessFeatures is the feature set of the SEP-2575 stateless wire, which
+// speaks only the 2026-07-28 line (core.SupportedStatelessVersions).
+var statelessFeatures = featuresForVersion(core.DraftProtocolVersion2026V1)
+
+// cacheHints returns the SEP-2549 ttlMs and cacheScope to send, given the
+// configured values. When f.CacheHintsRequired, an unset ttlMs becomes 0 and
+// an unset scope becomes fallbackScope; otherwise both pass through, and an
+// unset one is omitted.
+func cacheHints(f ProtocolFeatures, ttlMs *int, scope, fallbackScope string) (*int, string) {
+	if !f.CacheHintsRequired {
+		return ttlMs, scope
+	}
+	if ttlMs == nil {
+		zero := 0
+		ttlMs = &zero
+	}
+	if scope == "" {
+		scope = fallbackScope
+	}
+	return ttlMs, scope
 }

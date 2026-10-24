@@ -48,6 +48,18 @@ client-equivalent: the pointer lets a server emit an explicit `"ttlMs": 0`
 distinct from omitting the field. `core.CacheScopePublic` and
 `core.CacheScopePrivate` are the two `cacheScope` constants.
 
+### What mcpkit sends on 2026-07-28
+
+The 2026-07-28 schema makes `ttlMs` and `cacheScope` required on every
+`CacheableResult`: the four list results, `resources/read`, and
+`server/discover`. So on that version, on either wire, mcpkit always sends
+both. A hint the server turned off with `WithoutListCacheControl`,
+`WithoutReadResourceCacheControl` or a negative TTL goes out as `"ttlMs": 0`
+with `cacheScope` `"public"` for lists and `"private"` for reads, which is
+what an absent field meant to a client anyway. On 2025-11-25 and earlier the
+opt-outs still omit the fields. `experimental/ext/agents` follows the same
+rule: a nil `Config.TTLMs` sends `0` (#1546).
+
 ### `cacheScope` semantics
 
 `cacheScope` mirrors HTTP `Cache-Control: public` vs `private`:

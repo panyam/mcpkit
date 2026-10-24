@@ -88,7 +88,7 @@ wire:
 | Field | Default | Effect |
 |-------|---------|--------|
 | `PageSize` | `0` | Agents per `agents/list` page. Zero returns the whole roster, matching mcpkit's core list methods. |
-| `TTLMs` | nil | SEP-2549 freshness hint on both results. |
+| `TTLMs` | nil (sent as `0`) | SEP-2549 freshness hint on both results. Always sent, since 2026-07-28 makes it required. |
 | `CacheScope` | `private` | SEP-2549 scope on both results. The SEP asks for `private` unless every caller gets the same response. |
 | `Visible` | nil (all visible) | `func(ctx, name) bool`. A hidden agent is missing from `agents/list` and answers `agents/get` exactly as a nonexistent one does. |
 | `ResourceMetadataURL` | empty | RFC 9728 metadata URL put in a step-up challenge's `resource_metadata`, below. |
