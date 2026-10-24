@@ -48,11 +48,17 @@ tab offering the tool right now. A page that registers an undeclared tool, or a 
 different schema or read-only hint, has it refused (`tool_refused`). A declaration whose name is the
 bridge's own, or whose schema has `page` (or `room` without `WithRoomOf`), makes `Register` panic.
 
-Serving the stateless wire needs declared tools. Without them the bridge keeps a dynamic registry:
-it has no page tools until it joins a room (`attach`, `list_pages(resource)` or `pair`), and on the
-session wire a session sees the page tools of its default rooms and of the pages that agreed to it.
-A stateless call to a page tool on such a bridge is refused, naming `WithPageTools`. A stateless
-`tools/list` skips middleware until #1355, so it would list every room's tools.
+Without declared tools the bridge keeps a dynamic registry: it has no page tools until it joins a
+room (`attach`, `list_pages(resource)` or `pair`), and on the session wire a session sees the page
+tools of its default rooms and of the pages that agreed to it, with `list_changed` as they come and
+go. A caller with no session sees none of them, and a call to one is refused, naming
+`WithPageTools`.
+
+`WithDynamicCatalogTTL(ttl)` serves the dynamic registry to callers with no session too. Their
+`tools/list` shows the tools of the pages that agreed to them, in rooms the bridge has joined, with
+`ttlMs` set to `ttl` and `cacheScope: private`. The stateless wire has no `list_changed`, so a tool a
+page registers can take up to one `ttl` to show, and every stateless client re-lists that often.
+Keep it to a few seconds; a fixed catalog is cheaper whenever one will do.
 
 ### Limiting what an agent can do
 
@@ -68,8 +74,12 @@ A stateless call to a page tool on such a bridge is refused, naming `WithPageToo
   subject is one of the host's bridges. Without it, any holder of a relay token for the room can
   call the page's tools directly, past agreement, and claim any caller. Set it before relying on
   `Caller`. (Not in the TS client yet: massrelay's `CollabClient` doesn't pass peers' relay identity
-  through.) A missing scope is a 403
-with an `insufficient_scope` challenge (`WithResourceMetadataURL` sets its link).
+  through.)
+- **Scopes.** Read-only page tools need `pages:read` and the rest `pages:act`. A missing scope is a
+  403 with an `insufficient_scope` challenge (`WithResourceMetadataURL` sets its link), on both
+  wires. The list shows every tool by default, as MCP's step-up flow expects.
+  `WithScopeFilteredList()` shows each caller only what its scopes allow, with `cacheScope: private`,
+  and `list_pages` then carries `stepUp: [{tool, scopes}]` for the tools it hid.
 
 `WithLocalSubject("me")` is single-user local mode for a server with no identity provider: a
 session without claims acts for `me`, so the page's switch is the only step.
