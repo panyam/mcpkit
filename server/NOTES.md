@@ -59,9 +59,12 @@ Three landed this way:
 `make verify-dual` (#478) drives example walkthroughs over both wires to catch this class; see
 `examples/DUAL_MODE_AUDIT.md`.
 
-**Still uninstrumented**: stateless `resources/read` and `completion/complete` do not traverse the
-middleware chain at all, so auth middleware cannot gate them on the stateless wire yet. That is a
-separate, broader gap.
+Every request-bearing stateless handler now traverses the middleware chain: `resources/read` since
+#1352, and the four `*/list` methods plus `completion/complete` since #1355. The backend's terminal
+(`statelessBackend.InvokeWithMiddleware`) answers those five from the registry, so a new method
+routed through the chain needs a terminal case there too, or it comes back `-32601`. The handlers
+in `server/stateless/handlers.go` keep their own answer only for test fakes with no chain.
+`server/discover` is still answered outside the chain.
 
 ### Typed middleware errors on the stateless wire (#815, PR 816)
 
@@ -70,8 +73,8 @@ auth) now reaches the transport's shared `writeAuthError`, emitting HTTP 403 plu
 `WWW-Authenticate`. Previously it was folded into a generic `-32603` / HTTP 200, losing both.
 
 Mechanism: `stateless.Backend.InvokeWithMiddleware` returns `(*core.Response, error, bool)` and
-`stateless.Dispatcher.Dispatch` returns `(*core.Response, error)`. The three middleware-bearing
-branches forward the raw error; the rest wrap with `nil`. `handleStatelessPost` and
+`stateless.Dispatcher.Dispatch` returns `(*core.Response, error)`. The middleware-bearing
+branches forward the raw error; `server/discover` wraps with `nil`. `handleStatelessPost` and
 `handleStatelessPostSSE` call `writeAuthError` on a non-nil dispatch error. The SSE path is safe
 because middleware short-circuits before any frame is written, so `sseStarted` is always false.
 

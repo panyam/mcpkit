@@ -134,30 +134,29 @@ func (d *Dispatcher) dispatch(ctx context.Context, req *core.Request) (*core.Res
 	// ctx.ClientCaps() can read it without an import cycle.
 	ctx = core.WithRequestMeta(ctx, meta)
 
-	// Handlers that route through the backend's middleware chain
-	// (tools/call, prompts/get, and the default custom-method branch)
-	// return (resp, err); the err is a middleware short-circuit forwarded
-	// to the transport's writeAuthError. The remaining handlers can't raise
-	// a middleware auth error, so they're wrapped with a nil error here.
+	// Every request-bearing handler routes through the backend's middleware
+	// chain and returns (resp, err); the err is a middleware short-circuit
+	// forwarded to the transport's writeAuthError. server/discover is
+	// answered here directly.
 	switch req.Method {
 	case "server/discover":
 		return d.handleDiscover(id), nil
 	case "tools/list":
-		return d.handleToolsList(id, req.Params.Raw()), nil
+		return d.handleToolsList(ctx, id, req.Params.Raw())
 	case "tools/call":
 		return d.handleToolsCall(ctx, id, req.Params.Raw())
 	case "resources/list":
-		return d.handleResourcesList(id, req.Params.Raw()), nil
+		return d.handleResourcesList(ctx, id, req.Params.Raw())
 	case "resources/read":
 		return d.handleResourcesRead(ctx, id, req.Params.Raw())
 	case "resources/templates/list":
-		return d.handleResourcesTemplatesList(id, req.Params.Raw()), nil
+		return d.handleResourcesTemplatesList(ctx, id, req.Params.Raw())
 	case "prompts/list":
-		return d.handlePromptsList(id, req.Params.Raw()), nil
+		return d.handlePromptsList(ctx, id, req.Params.Raw())
 	case "prompts/get":
 		return d.handlePromptsGet(ctx, id, req.Params.Raw())
 	case "completion/complete":
-		return d.handleCompletionComplete(ctx, id, req.Params.Raw()), nil
+		return d.handleCompletionComplete(ctx, id, req.Params.Raw())
 	default:
 		// Any other method (custom JSON-RPC verbs registered via
 		// Server.HandleMethod — events/poll, events/list,

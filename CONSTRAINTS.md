@@ -139,13 +139,11 @@ That is not hypothetical. `handleResourcesRead` never called it, so a scope gate
 caller refused a tool could ask for the resource instead and be served. Fixed in #1352, and found
 by an external conformance suite rather than by our own tests, which passed throughout.
 
-**Known divergence today.** Five handlers do not route, and are listed in the checker's `ALLOWED`:
-`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`, `completion/complete`.
-All five reach the middleware chain on the session wire, so the asymmetry the constraint forbids is
-still present for them. `completion/complete` is the one most like an invocation and the most
-likely real gap; the four enumeration methods raise a design question about whether a middleware
-should be able to filter listings at all. Shrinking `ALLOWED` is the point of keeping it visible,
-and issue 1355 tracks it.
+**No known divergence.** The four `*/list` methods and `completion/complete` skipped the chain on
+the stateless wire until #1355, so a middleware that filtered `tools/list` filtered it on one wire
+only. The checker's `ALLOWED` is empty now, and an entry added there is a new decision that needs a
+reason in its PR. The listings went through the chain rather than out of it because the session
+wire already let a middleware rewrite them, and the room bridge depends on doing so.
 
 **Verify:** `make check-stateless-middleware`, wired into `.github/workflows/test.yml`. It parses
 each `handle*` in `server/stateless/handlers.go` and fails on any that neither calls
