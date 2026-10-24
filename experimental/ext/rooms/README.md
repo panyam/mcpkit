@@ -151,11 +151,14 @@ rep, err := bridge.Notify(ctx, rooms.Selector{Users: []string{"alice"}}, "design
 joined is joined first. Notify can't find a user's tabs in rooms the bridge was never asked
 about, since only the relay knows those. Pages handle it with `OnNotify(name, fn)`. The name and
 data follow the same rules as page events. Being the host talking to its own pages, it needs no
-agreement, though a page using `TrustBridges` hears it only from the host's bridges.
+agreement, though a page using `TrustBridges` hears it only from the host's bridges. Each room
+gets one relay message addressed to every chosen tab in it (`Room.SendEach`), and a tab the relay
+reports gone lands in `rep.Failed` with a `*NotMembersError` while the rest of its room is sent.
 
 The massrelay transport paces each dialled connection at 25 messages a second
 (`massrelay.WithSendRate`), under the relay's limit of 30, past which the relay drops messages
-without saying so. A large fan-out takes longer rather than losing tabs.
+without saying so. A large fan-out takes longer rather than losing tabs. Fan-out tool calls stay
+one message per tab, since each tab answers its own call.
 
 ## Agreement
 

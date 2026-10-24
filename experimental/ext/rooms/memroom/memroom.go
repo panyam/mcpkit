@@ -147,6 +147,36 @@ func (m *member) Send(_ context.Context, to rooms.PeerID, kind string, payload j
 	return nil
 }
 
+// SendEach delivers to each target in the room under one lock, so the
+// targets get it in the same order relative to other sends, as on a relay.
+func (m *member) SendEach(_ context.Context, to []rooms.PeerID, kind string, payload json.RawMessage) error {
+	r := m.relay
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if m.gone {
+		return ErrNotMember
+	}
+	var missing []rooms.PeerID
+	seen := make(map[rooms.PeerID]bool, len(to))
+	for _, id := range to {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		target, ok := r.rooms[m.room][id]
+		if !ok {
+			missing = append(missing, id)
+			continue
+		}
+		r.log = append(r.log, Delivery{Room: m.room, From: m.peer.ID, To: id, Kind: kind, Payload: slices.Clone(payload)})
+		target.push(rooms.RoomEvent{Type: rooms.MessageReceived, Peer: m.peer, Kind: kind, Payload: slices.Clone(payload)})
+	}
+	if len(missing) > 0 {
+		return &rooms.NotMembersError{Peers: missing}
+	}
+	return nil
+}
+
 func (m *member) Events() <-chan rooms.RoomEvent { return m.events }
 
 func (m *member) Leave() error {

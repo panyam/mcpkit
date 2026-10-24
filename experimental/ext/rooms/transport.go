@@ -3,6 +3,7 @@ package rooms
 import (
 	"context"
 	"encoding/json"
+	"strings"
 )
 
 // MessageKind is the AppMessage kind that carries MCP JSON-RPC between the
@@ -73,9 +74,32 @@ type Room interface {
 	// broadcast, by design; see the package doc.
 	Send(ctx context.Context, to PeerID, kind string, payload json.RawMessage) error
 
+	// SendEach delivers one message to each peer in to, as a single relay
+	// message where the relay can address several peers at once (massrelay
+	// since v0.3.0). Each receiver sees itself as the only addressee.
+	//
+	// Targets not in the room come back as a *NotMembersError naming them,
+	// and every other target still gets the message. Any other error means
+	// none did. Duplicates in to are delivered once.
+	SendEach(ctx context.Context, to []PeerID, kind string, payload json.RawMessage) error
+
 	// Events reports membership changes and messages addressed to this peer.
 	Events() <-chan RoomEvent
 
 	// Leave ends the membership. Safe to call more than once.
 	Leave() error
+}
+
+// NotMembersError is SendEach's error when some targets are not in the room.
+// The rest were delivered to.
+type NotMembersError struct {
+	Peers []PeerID
+}
+
+func (e *NotMembersError) Error() string {
+	ids := make([]string, len(e.Peers))
+	for i, p := range e.Peers {
+		ids[i] = string(p)
+	}
+	return "rooms: not in the room: " + strings.Join(ids, ", ")
 }

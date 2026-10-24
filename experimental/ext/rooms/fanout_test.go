@@ -3,12 +3,15 @@ package rooms_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/rooms"
+	"github.com/panyam/mcpkit/experimental/ext/rooms/memroom"
 	"github.com/panyam/mcpkit/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -255,4 +258,111 @@ func TestNotify_TrustBridgesIgnoresOtherPeers(t *testing.T) {
 	require.Eventually(t, func() bool { return len(n.all()) > 0 }, 3*time.Second, 10*time.Millisecond)
 	assert.Equal(t, `p:"real"`, n.all()[0])
 	assert.NotContains(t, n.all(), `p:"spoofed"`)
+}
+
+// sendCounter wraps the bridge's transport and records each notification Send
+// and every SendEach its rooms make. The bridge's own traffic to new tabs
+// (listing, grants, presence) goes by Send and isn't counted. drop, when set, is a peer SendEach reports as not in the
+// room without delivering to it.
+type sendCounter struct {
+	rooms.RoomTransport
+	mu       sync.Mutex
+	sends    int
+	sendEach [][]rooms.PeerID
+	drop     rooms.PeerID
+}
+
+func (c *sendCounter) Join(ctx context.Context, room string) (rooms.Room, error) {
+	r, err := c.RoomTransport.Join(ctx, room)
+	if err != nil {
+		return nil, err
+	}
+	return &countedRoom{Room: r, c: c}, nil
+}
+
+func (c *sendCounter) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sends, c.sendEach = 0, nil
+}
+
+type countedRoom struct {
+	rooms.Room
+	c *sendCounter
+}
+
+func (r *countedRoom) Send(ctx context.Context, to rooms.PeerID, kind string, payload json.RawMessage) error {
+	if strings.Contains(string(payload), rooms.MethodNotify) {
+		r.c.mu.Lock()
+		r.c.sends++
+		r.c.mu.Unlock()
+	}
+	return r.Room.Send(ctx, to, kind, payload)
+}
+
+func (r *countedRoom) SendEach(ctx context.Context, to []rooms.PeerID, kind string, payload json.RawMessage) error {
+	r.c.mu.Lock()
+	r.c.sendEach = append(r.c.sendEach, append([]rooms.PeerID(nil), to...))
+	drop := r.c.drop
+	r.c.mu.Unlock()
+	var keep []rooms.PeerID
+	for _, id := range to {
+		if id != drop {
+			keep = append(keep, id)
+		}
+	}
+	if err := r.Room.SendEach(ctx, keep, kind, payload); err != nil || len(keep) == len(to) {
+		return err
+	}
+	return &rooms.NotMembersError{Peers: []rooms.PeerID{drop}}
+}
+
+// massrelay v0.3 addresses one AppMessage to several peers, so a notification
+// to many tabs costs the relay, and the dialled transport's pacing, one
+// message per room rather than one per tab.
+func TestNotify_SendsOneMessagePerRoom(t *testing.T) {
+	relay := memroom.New()
+	c := &sendCounter{RoomTransport: relay.Transport("bridge")}
+	st := newStackVia(t, relay, c, fanCatalog)
+	n := &notified{}
+	n.on(st.page(t, "alice", roomA, whereTool("a")), "alice-A", "design.changed")
+	n.on(st.page(t, "bob", roomA, whereTool("b")), "bob-A", "design.changed")
+	n.on(st.page(t, "carol", roomA, whereTool("c")), "carol-A", "design.changed")
+	n.on(st.page(t, "alice", roomB, whereTool("a")), "alice-B", "design.changed")
+	c.reset()
+
+	rep, err := st.bridge.Notify(t.Context(), rooms.Selector{Rooms: []string{roomA, roomB}}, "design.changed", map[string]any{"rev": 8})
+	require.NoError(t, err)
+	assert.Len(t, rep.Sent, 4)
+	require.Eventually(t, func() bool { return len(n.all()) == 4 }, 3*time.Second, 10*time.Millisecond)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	assert.Zero(t, c.sends, "no tab is sent to on its own")
+	require.Len(t, c.sendEach, 2, "one message per room")
+	assert.Len(t, c.sendEach[0], 3)
+	assert.Len(t, c.sendEach[1], 1)
+}
+
+// A tab the relay says has gone fails on its own, and the rest of its room
+// still counts as sent.
+func TestNotify_AGoneTabFailsAloneInItsRoom(t *testing.T) {
+	relay := memroom.New()
+	c := &sendCounter{RoomTransport: relay.Transport("bridge")}
+	st := newStackVia(t, relay, c, fanCatalog)
+	gone := st.page(t, "alice", roomA, whereTool("a"))
+	st.page(t, "bob", roomA, whereTool("b"))
+	c.mu.Lock()
+	c.drop = gone.ID()
+	c.mu.Unlock()
+
+	rep, err := st.bridge.Notify(t.Context(), rooms.Selector{Rooms: []string{roomA}}, "design.changed", nil)
+	require.NoError(t, err)
+	require.Len(t, rep.Failed, 1)
+	assert.Equal(t, gone.ID(), rep.Failed[0].Page)
+	var nm *rooms.NotMembersError
+	require.True(t, errors.As(rep.Failed[0].Err, &nm))
+	assert.Equal(t, []rooms.PeerID{gone.ID()}, nm.Peers)
+	require.Len(t, rep.Sent, 1)
+	assert.Equal(t, "bob", rep.Sent[0].User)
 }

@@ -54,8 +54,15 @@ func newStack(t *testing.T, opts ...rooms.Option) *stack {
 // bridges can share one room.
 func newStackOn(t *testing.T, relay *memroom.Relay, opts ...rooms.Option) *stack {
 	t.Helper()
+	return newStackVia(t, relay, relay.Transport("bridge"), opts...)
+}
+
+// newStackVia is newStackOn with the bridge joining through tr, for tests that
+// wrap the bridge's transport to watch what it sends.
+func newStackVia(t *testing.T, relay *memroom.Relay, tr rooms.RoomTransport, opts ...rooms.Option) *stack {
+	t.Helper()
 	st := &stack{relay: relay, tokens: tokens{}}
-	st.bridge = rooms.New(st.relay.Transport("bridge"), opts...)
+	st.bridge = rooms.New(tr, opts...)
 	srv := server.NewServer(core.ServerInfo{Name: "rooms-test", Version: "0"}, server.WithAuth(st.tokens))
 	st.bridge.Register(srv)
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))

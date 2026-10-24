@@ -3,6 +3,7 @@ package massrelay
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	pb "github.com/panyam/massrelay/gen/go/massrelay/v1/models"
@@ -62,7 +63,7 @@ func (e embedded) Join(ctx context.Context, room string) (rooms.Room, error) {
 			return err
 		}
 		if code := resp.GetError().GetCode(); code == "PEER_NOT_FOUND" {
-			return ErrNotMember
+			return &rooms.NotMembersError{Peers: missingPeers(resp.GetError().GetMessage())}
 		} else if code != "" {
 			return fmt.Errorf("massrelay: %s: %s", code, resp.GetError().GetMessage())
 		}
@@ -115,4 +116,21 @@ func joinedFrom(room string, ev *pb.CollabEvent) (*pb.RoomJoined, error) {
 		return nil, fmt.Errorf("massrelay: join %s: unexpected answer %T", room, ev.GetEvent())
 	}
 	return joined, nil
+}
+
+// missingPeers reads the ids out of the relay's PEER_NOT_FOUND message, "Not
+// in this room: a, b", which is the only place v0.3 names them for a socket's
+// action.
+func missingPeers(msg string) []rooms.PeerID {
+	_, list, ok := strings.Cut(msg, ": ")
+	if !ok {
+		return nil
+	}
+	var out []rooms.PeerID
+	for _, id := range strings.Split(list, ", ") {
+		if id = strings.TrimSpace(id); id != "" {
+			out = append(out, rooms.PeerID(id))
+		}
+	}
+	return out
 }
