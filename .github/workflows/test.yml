@@ -135,6 +135,25 @@ jobs:
       - name: Run E2E tests (auth + apps)
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
 
+  # Every command in a tagged module failed `go install pkg@vX` at every
+  # release until #1488, because the tags carried in-repo replaces. This runs
+  # bump-pins and tag-all at a fake version in a clone and installs each
+  # command from it. Full history because mcpskills-walkthrough pins the
+  # untagged examples/common at a pseudo-version.
+  release-rehearsal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Rehearse a release and install every command from it
+        run: make rehearse-release
+
   test-ui:
     runs-on: ubuntu-latest
     steps:
