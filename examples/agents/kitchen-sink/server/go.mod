@@ -4,7 +4,7 @@ go 1.26.9
 
 replace github.com/panyam/mcpkit => ../../../..
 
-require github.com/panyam/mcpkit v0.8.8
+require github.com/panyam/mcpkit v0.8.9
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
