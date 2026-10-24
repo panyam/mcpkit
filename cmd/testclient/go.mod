@@ -43,3 +43,9 @@ require (
 	google.golang.org/grpc v1.84.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/panyam/mcpkit => ../..
+
+replace github.com/panyam/mcpkit/ext/auth => ../../ext/auth
+
+replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
