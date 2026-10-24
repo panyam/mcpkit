@@ -263,6 +263,35 @@ func (b *statelessBackend) readResourceForStateless(ctx context.Context, req *co
 	return core.NewResponse(req.ID, result)
 }
 
+// completeForStateless answers completion/complete from the registered
+// completion handlers. A (ref, name|uri) pair with no handler gets an empty
+// list, matching the stateless dispatcher's own fallback.
+func (b *statelessBackend) completeForStateless(ctx context.Context, req *core.Request) *core.Response {
+	var env struct {
+		Ref      core.CompletionRef      `json:"ref"`
+		Argument core.CompletionArgument `json:"argument"`
+	}
+	if err := json.Unmarshal(req.Params.Raw(), &env); err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
+			"invalid completion/complete params: "+err.Error())
+	}
+	key := env.Ref.Name
+	if env.Ref.Type == "ref/resource" {
+		key = env.Ref.URI
+	}
+	handler, ok := b.Completion(env.Ref.Type, key)
+	if !ok {
+		return core.NewResponse(req.ID, core.CompletionCompleteResult{
+			Completion: core.CompletionResult{Values: []string{}},
+		})
+	}
+	result, err := handler(core.NewPromptContext(ctx), env.Ref, env.Argument)
+	if err != nil {
+		return core.NewErrorResponse(req.ID, core.ErrCodeCompletionError, err.Error())
+	}
+	return core.NewResponse(req.ID, core.CompletionCompleteResult{Completion: result})
+}
+
 // MatchResourceTemplate matches uri against registered templates in
 // registration order, mirroring Dispatcher.handleResourcesRead on the session
 // wire so a URI resolves to the same definition on both.
@@ -294,6 +323,9 @@ func (b *statelessBackend) ReadCacheScope() string {
 //
 //   - "tools/call" → look up the registered tool, invoke it, translate
 //     *core.MissingCapabilityError into a SEP-2575 -32021 response.
+//   - "prompts/get", "resources/read", "completion/complete" and the four
+//     */list methods → answer from the registry, as the session dispatcher
+//     does, so a middleware sees and can rewrite them on this wire too (#1355).
 //   - any other method → consult s.dispatcher.customHandlers (the map populated
 //     by Server.HandleMethod, used by tasks.Register for tasks/get|update|cancel).
 //     Returns -32601 when no handler is registered for the method.
@@ -324,6 +356,16 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 			return b.callPromptForStateless(ctx, req), nil
 		case "resources/read":
 			return b.readResourceForStateless(ctx, req), nil
+		case "tools/list":
+			return core.NewResponse(req.ID, core.ToolsListResult{Tools: b.Tools(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
+		case "resources/list":
+			return core.NewResponse(req.ID, core.ResourcesListResult{Resources: b.Resources(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
+		case "resources/templates/list":
+			return core.NewResponse(req.ID, core.ResourceTemplatesListResult{ResourceTemplates: b.ResourceTemplates(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
+		case "prompts/list":
+			return core.NewResponse(req.ID, core.PromptsListResult{Prompts: b.Prompts(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
+		case "completion/complete":
+			return b.completeForStateless(ctx, req), nil
 		default:
 			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
 				return h(core.NewMethodContext(ctx), req.ID, req.Params.Raw()), nil

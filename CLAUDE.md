@@ -140,8 +140,8 @@ These span packages and will bite on a task that never opens a routed doc.
   works, the response still looks right, and the middleware never runs. `resources/read` was in
   that state until #1352: a scope gate held on `tools/call` and not on `resources/read`, so a caller
   refused a tool could ask for the resource. Constraint C7, gated by
-  `make check-stateless-middleware`. Five handlers are still knowingly unrouted, listed in the
-  script's `ALLOWED`.
+  `make check-stateless-middleware`. Every handler routes since #1355, so the script's `ALLOWED`
+  is empty and an entry there is a new decision.
 - **Makefiles and justfiles dispatch; they do not hold shell scripts.** Control flow, or four or
   more statements, goes in `scripts/` and the recipe calls it. Nearly every directory carries both
   a `Makefile` and a `justfile`, and in `examples/` they must stay name-and-behavior identical

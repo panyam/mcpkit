@@ -16,8 +16,8 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 FILE=server/stateless/handlers.go
 
-# Enumeration and completion are not routed yet; see issue in ALLOWED_REASON.
-ALLOWED="handleToolsList handleResourcesList handleResourcesTemplatesList handlePromptsList handleCompletionComplete"
+# Every handler routes since #1355; an entry here needs a reason in its PR.
+ALLOWED=""
 
 fail=0
 for h in $(grep -o "func (d \*Dispatcher) handle[A-Za-z]*" "$FILE" | sed 's/.*) //'); do

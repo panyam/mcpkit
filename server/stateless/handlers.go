@@ -16,7 +16,14 @@ import (
 
 // ---------- tools ----------
 
-func (d *Dispatcher) handleToolsList(id json.RawMessage, _ json.RawMessage) *core.Response {
+// handleToolsList and the other enumeration handlers below run the middleware
+// chain like the invocation handlers do, so a middleware that filters or gates
+// a list sees it on both wires (#1355).
+func (d *Dispatcher) handleToolsList(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
+	req := &core.Request{JSONRPC: "2.0", ID: id, Method: "tools/list", Params: core.NewRawJSON(params)}
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
+	}
 	tools := d.Backend.Tools()
 	// Cap-aware stripping (SEP-2356 x-mcp-file etc.) is the legacy
 	// dispatcher's concern; stateless clients always advertise caps
@@ -28,7 +35,7 @@ func (d *Dispatcher) handleToolsList(id json.RawMessage, _ json.RawMessage) *cor
 		NextCursor: "",
 		TTLMs:      d.Backend.ListTTLMs(),
 		CacheScope: d.Backend.ListCacheScope(),
-	})
+	}), nil
 }
 
 // toolsCallEnvelope is the stateless wire's tools/call params shape.
@@ -109,13 +116,17 @@ func translateToolError(id json.RawMessage, err error) *core.Response {
 
 // ---------- resources ----------
 
-func (d *Dispatcher) handleResourcesList(id json.RawMessage, _ json.RawMessage) *core.Response {
+func (d *Dispatcher) handleResourcesList(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
+	req := &core.Request{JSONRPC: "2.0", ID: id, Method: "resources/list", Params: core.NewRawJSON(params)}
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
+	}
 	return core.NewResponse(id, core.ResourcesListResult{
 		Resources:  d.Backend.Resources(),
 		NextCursor: "",
 		TTLMs:      d.Backend.ListTTLMs(),
 		CacheScope: d.Backend.ListCacheScope(),
-	})
+	}), nil
 }
 
 type resourcesReadEnvelope struct {
@@ -185,24 +196,32 @@ func (d *Dispatcher) readResource(ctx context.Context, uri string) (*core.Resour
 	return nil, nil
 }
 
-func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, _ json.RawMessage) *core.Response {
+func (d *Dispatcher) handleResourcesTemplatesList(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
+	req := &core.Request{JSONRPC: "2.0", ID: id, Method: "resources/templates/list", Params: core.NewRawJSON(params)}
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
+	}
 	return core.NewResponse(id, core.ResourceTemplatesListResult{
 		ResourceTemplates: d.Backend.ResourceTemplates(),
 		NextCursor:        "",
 		TTLMs:             d.Backend.ListTTLMs(),
 		CacheScope:        d.Backend.ListCacheScope(),
-	})
+	}), nil
 }
 
 // ---------- prompts ----------
 
-func (d *Dispatcher) handlePromptsList(id json.RawMessage, _ json.RawMessage) *core.Response {
+func (d *Dispatcher) handlePromptsList(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
+	req := &core.Request{JSONRPC: "2.0", ID: id, Method: "prompts/list", Params: core.NewRawJSON(params)}
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
+	}
 	return core.NewResponse(id, core.PromptsListResult{
 		Prompts:    d.Backend.Prompts(),
 		NextCursor: "",
 		TTLMs:      d.Backend.ListTTLMs(),
 		CacheScope: d.Backend.ListCacheScope(),
-	})
+	}), nil
 }
 
 type promptsGetEnvelope struct {
@@ -260,11 +279,15 @@ type completionCompleteEnvelope struct {
 	Argument core.CompletionArgument `json:"argument"`
 }
 
-func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMessage, params json.RawMessage) (*core.Response, error) {
+	req := &core.Request{JSONRPC: "2.0", ID: id, Method: "completion/complete", Params: core.NewRawJSON(params)}
+	if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, req); ok {
+		return resp, err
+	}
 	var env completionCompleteEnvelope
 	if err := json.Unmarshal(params, &env); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams,
-			"invalid completion/complete params: "+err.Error())
+			"invalid completion/complete params: "+err.Error()), nil
 	}
 	// Completion is keyed by (refType, name | uri) — name for ref/prompt,
 	// uri for ref/resource. Coalesce the two so backends don't have to.
@@ -280,11 +303,11 @@ func (d *Dispatcher) handleCompletionComplete(ctx context.Context, id json.RawMe
 		// but legacy callers expect a non-error response.
 		return core.NewResponse(id, core.CompletionCompleteResult{
 			Completion: core.CompletionResult{Values: []string{}},
-		})
+		}), nil
 	}
 	result, err := handler(core.NewPromptContext(ctx), env.Ref, env.Argument)
 	if err != nil {
-		return core.NewErrorResponse(id, core.ErrCodeCompletionError, err.Error())
+		return core.NewErrorResponse(id, core.ErrCodeCompletionError, err.Error()), nil
 	}
-	return core.NewResponse(id, core.CompletionCompleteResult{Completion: result})
+	return core.NewResponse(id, core.CompletionCompleteResult{Completion: result}), nil
 }
