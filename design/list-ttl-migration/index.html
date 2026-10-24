@@ -323,6 +323,16 @@ re-fetch every time the result is needed. Per the merged spec an absent<br />
 client-equivalent: the pointer lets a server emit an explicit <code>&quot;ttlMs&quot;: 0</code><br />
 distinct from omitting the field. <code>core.CacheScopePublic</code> and<br />
 <code>core.CacheScopePrivate</code> are the two <code>cacheScope</code> constants.</p>
+<h3 id="what-mcpkit-sends-on-2026-07-28">What mcpkit sends on 2026-07-28 <a class="anchor" href="#what-mcpkit-sends-on-2026-07-28">¶</a></h3>
+<p>The 2026-07-28 schema makes <code>ttlMs</code> and <code>cacheScope</code> required on every<br />
+<code>CacheableResult</code>: the four list results, <code>resources/read</code>, and<br />
+<code>server/discover</code>. So on that version, on either wire, mcpkit always sends<br />
+both. A hint the server turned off with <code>WithoutListCacheControl</code>,<br />
+<code>WithoutReadResourceCacheControl</code> or a negative TTL goes out as <code>&quot;ttlMs&quot;: 0</code><br />
+with <code>cacheScope</code> <code>&quot;public&quot;</code> for lists and <code>&quot;private&quot;</code> for reads, which is<br />
+what an absent field meant to a client anyway. On 2025-11-25 and earlier the<br />
+opt-outs still omit the fields. <code>experimental/ext/agents</code> follows the same<br />
+rule: a nil <code>Config.TTLMs</code> sends <code>0</code> (#1546).</p>
 <h3 id="cachescope-semantics"><code>cacheScope</code> semantics <a class="anchor" href="#cachescope-semantics">¶</a></h3>
 <p><code>cacheScope</code> mirrors HTTP <code>Cache-Control: public</code> vs <code>private</code>:</p>
 <ul>
