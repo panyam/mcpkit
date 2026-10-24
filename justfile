@@ -155,6 +155,10 @@ conf-agents-setup:
 conf-events-setup:
     just -f conformance/justfile conf-events-setup
 
+# Mission #1552 exercise: session vs stateless parity rows plus testconf, testconf-stateless, testconf-agents
+exercise-wire:
+    @bash scripts/exercise-wire.sh
+
 # Mission #1508 exercise: events server + Go client against the SEP-3415 suites, one table
 exercise-events:
     @bash scripts/exercise-events.sh
