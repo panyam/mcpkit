@@ -58,6 +58,11 @@ const (
 	// starts acting, or was last reported over 30 seconds ago. Each bridge
 	// reports only its own, and the page merges them by principal.
 	MethodPresence = "notifications/rooms/presence"
+
+	// MethodNotify: bridge to page, {name, data}. A notification the host
+	// sent its pages with Bridge.Notify, not on any agent's behalf. name
+	// follows ValidEventName; the page hands data to its OnNotify handler.
+	MethodNotify = "notifications/rooms/notify"
 )
 
 // MetaCaller is the _meta key on a tools/call the bridge sends a page, holding

@@ -2,7 +2,9 @@ package massrelay_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
+	"time"
 
 	pb "github.com/panyam/massrelay/gen/go/massrelay/v1/models"
 	"github.com/stretchr/testify/assert"
@@ -125,4 +127,33 @@ func TestDial_RoomsClaimLimitsTheJoin(t *testing.T) {
 	ok, err := massrelay.Dial(r.url, tok).Join(t.Context(), room)
 	require.NoError(t, err)
 	_ = ok.Leave()
+}
+
+// The relay drops what a WebSocket sends past 30 messages a second, without
+// telling the sender, so a dialled transport paces itself under that and a
+// burst arrives whole, only later (#1615).
+func TestTransport_DialledBurstArrivesWhole(t *testing.T) {
+	r := newRelay(t)
+	alice := join(t, r.transport(t, "dial", "alice"), room)
+	bob := join(t, r.transport(t, "embedded", "bob"), room)
+	require.Eventually(t, func() bool { return len(alice.Roster()) == 1 }, 3e9, 1e7)
+
+	const burst = 60
+	go func() {
+		for i := range burst {
+			_ = alice.Send(t.Context(), bob.Self(), rooms.MessageKind, json.RawMessage(`{"jsonrpc":"2.0","method":"n","params":{"i":`+strconv.Itoa(i)+`}}`))
+		}
+	}()
+	got := 0
+	deadline := time.After(6 * time.Second)
+	for got < burst {
+		select {
+		case ev := <-bob.Events():
+			if ev.Type == rooms.MessageReceived {
+				got++
+			}
+		case <-deadline:
+			t.Fatalf("%d of %d messages arrived; the relay dropped the rest", got, burst)
+		}
+	}
 }
