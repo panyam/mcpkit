@@ -2,8 +2,9 @@
 
 `rooms.RoomTransport` over [massrelay](https://github.com/panyam/massrelay), so the room bridge
 (`experimental/ext/rooms`) and its pages meet in a real relay. Its own module, so neither mcpkit nor
-`experimental/ext/rooms` depends on massrelay. Needs massrelay v0.2.0 or later, for addressed
-`AppMessage`s and `PeerInfo.identity`.
+`experimental/ext/rooms` depends on massrelay. Needs a massrelay v0.3.0 relay or later, for
+`AppMessage.to_client_ids` and `PeerInfo.identity`, and pages on `@panyam/mcpkit-rooms` 0.8.9 or
+later, which address replies the same way.
 
 ```
 go get github.com/panyam/mcpkit/experimental/ext/rooms/massrelay

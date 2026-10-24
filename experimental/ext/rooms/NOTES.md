@@ -169,5 +169,6 @@ its own rules per caller. But a page answers any peer in its room by default, an
 a relay token for the room could send it a `tools/call` with any caller it likes, past the bridge's
 agreement check entirely. That was true before #1610 too; passing a caller just made it matter more.
 `TrustBridges` limits a Go page to peers whose relay subject is one of the host's bridges, which both
-transports stamp on each message. The TS client can't do the same yet, because massrelay's
-`CollabClient` drops `identity` when it reports peers.
+transports stamp on each message. The TS client doesn't do the same yet. Until massrelay v0.3.1
+(massrelay issue 42) `CollabClient` dropped `identity` when it reported peers, so it couldn't, and
+now it's open work on #1621.
