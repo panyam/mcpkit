@@ -476,7 +476,9 @@ func WithReadResourceCacheControl(ttlMs int, scope string) Option {
 
 // WithoutListCacheControl turns OFF the conformant-by-default SEP-2549 list
 // cache hints (issue 496), so tools/list, prompts/list, resources/list, and
-// resources/templates/list responses omit both ttlMs and cacheScope. Use this
+// resources/templates/list responses omit both ttlMs and cacheScope on
+// 2025-11-25 and earlier. The 2026-07-28 schema makes both fields required,
+// so there they are sent as ttlMs 0 and cacheScope "public" regardless (#1546). Use this
 // only if you deliberately want no cache-control hint on list responses; most
 // servers should keep the default (ttlMs:0, scope:public) or set explicit
 // values with WithListCacheControl.
@@ -489,7 +491,9 @@ func WithoutListCacheControl() Option {
 
 // WithoutReadResourceCacheControl turns OFF the conformant-by-default SEP-2549
 // resources/read cache hints (issue 496), so read responses omit both ttlMs and
-// cacheScope unless a handler sets them per-read. Prefer keeping the default
+// cacheScope unless a handler sets them per-read, on 2025-11-25 and earlier.
+// On 2026-07-28, where both are required, they are sent as ttlMs 0 and
+// cacheScope "private" (#1546). Prefer keeping the default
 // (ttlMs:0, scope:private) or setting explicit values with
 // WithReadResourceCacheControl.
 func WithoutReadResourceCacheControl() Option {

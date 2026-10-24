@@ -25,11 +25,8 @@ func (d *Dispatcher) handleToolsList(ctx context.Context, id json.RawMessage, pa
 		return resp, err
 	}
 	tools := d.Backend.Tools()
-	// Cap-aware stripping (SEP-2356 x-mcp-file etc.) is the legacy
-	// dispatcher's concern; stateless clients always advertise caps
-	// per-request so any stripping happens against the per-call envelope.
-	// First-cut emits the unfiltered list; per-request cap stripping
-	// lands when the example fixture starts exercising the path.
+	// Only backends with no middleware chain (test fakes) get here. The real
+	// answer, SEP-2356 x-mcp-file strip included, is statelessBackend's.
 	return core.NewResponse(id, core.ToolsListResult{
 		Tools:      tools,
 		NextCursor: "",
