@@ -26,6 +26,11 @@ trap 'chmod -R u+w "$W" 2>/dev/null; rm -rf "$W"' EXIT
 # Committed work only: commit (or stash) before rehearsing a change.
 git clone -q "$SRC" "$W/repo"
 cd "$W/repo"
+# CI checks out a detached merge commit, and a clone of that has no branch.
+# go fetches branches and tags from a git remote, so without one it can't see
+# the history a pseudo-version pin (mcpskills-walkthrough on examples/common)
+# needs.
+git checkout -q -B rehearsal
 git config user.name rehearsal
 git config user.email rehearsal@localhost
 
