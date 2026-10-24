@@ -99,8 +99,9 @@ func WithResourceMetadataURL(url string) Option {
 // the bridge.
 //
 // Agreement is held by the pages, and every call names its room, so calls need
-// no MCP session. The dynamic page-tool registry is still per session on the
-// session wire; serving the stateless wire needs declared page tools (#1610).
+// no MCP session. Without declared page tools (WithPageTools) the page-tool
+// registry is dynamic and filtered per caller, which serves the stateless wire
+// only with WithDynamicCatalogTTL.
 type Bridge struct {
 	transport    RoomTransport
 	callTimeout  time.Duration
@@ -111,6 +112,11 @@ type Bridge struct {
 	// the dynamic registry, which needs the session wire.
 	declared    []PageToolDecl
 	fanOutLimit int
+	// dynamicTTL, when set, serves the dynamic registry on the stateless
+	// wire with this ttlMs; scopeFilter hides tools the caller lacks scopes
+	// for. Both from catalog.go.
+	dynamicTTL  time.Duration
+	scopeFilter bool
 	onEvent     func(PageEvent)
 	fb          *fallbacks
 
@@ -360,7 +366,13 @@ type PageInfo struct {
 }
 
 func (b *Bridge) subjectOf(tc core.ToolContext) (subject, client string) {
-	if c := tc.AuthClaims(); c != nil && c.Subject != "" {
+	return b.subjectOfClaims(tc.AuthClaims())
+}
+
+// subjectOfClaims is the subject and client behind validated claims, or the
+// local subject when there are none.
+func (b *Bridge) subjectOfClaims(c *core.Claims) (subject, client string) {
+	if c != nil && c.Subject != "" {
 		for _, k := range []string{"client_id", "azp"} {
 			if v, ok := c.Extra[k].(string); ok {
 				client = v
@@ -889,8 +901,8 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 		if args == nil {
 			args = map[string]json.RawMessage{}
 		}
-		if b.declared == nil && tc.SessionID() == "" {
-			return core.ErrorResult("this bridge serves page tools on the session wire only; its host declares them with WithPageTools to serve callers with no session"), nil
+		if b.declared == nil && b.dynamicTTL <= 0 && tc.SessionID() == "" {
+			return core.ErrorResult("this bridge serves page tools on the session wire only; its host declares them with WithPageTools, or serves them with WithDynamicCatalogTTL, to serve callers with no session"), nil
 		}
 		room, err := b.roomOfCall(args)
 		if err != nil {
@@ -947,13 +959,17 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 	}
 }
 
-// filterToolsList shows a session the bridge's own tools plus the page tools
-// of its default rooms and of the pages that agreed to it. Page tools live in the server's one registry,
+// filterToolsList shows a caller the bridge's own tools plus the page tools
+// it may see (pageToolsFilterLocked), and with WithScopeFilteredList only the
+// tools its scopes let it call. Page tools live in the server's one registry,
 // so without this every session would see every room's tools.
 func (b *Bridge) filterToolsList(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
 	resp, err := next(ctx, req)
-	if b.declared != nil || req.Method != "tools/list" || err != nil || resp == nil || resp.Error != nil || resp.Result == nil {
+	if req.Method != "tools/list" || err != nil || resp == nil || resp.Error != nil || resp.Result == nil {
 		return resp, err
+	}
+	if b.declared != nil && !b.scopeFilter {
+		return resp, nil
 	}
 	raw, err := json.Marshal(resp.Result)
 	if err != nil {
@@ -966,21 +982,32 @@ func (b *Bridge) filterToolsList(ctx context.Context, req *core.Request, next se
 	}
 
 	sid := core.GetSessionID(ctx)
+	p := b.principalOfCtx(ctx)
 	b.mu.Lock()
-	visible := b.visibleToolsLocked(b.sessions[sid])
+	visible := b.pageToolsFilterLocked(p, b.sessions[sid], sid == "")
+	b.mu.Unlock()
 	kept := make([]json.RawMessage, 0, len(tools))
 	for _, t := range tools {
 		var head struct {
 			Name string `json:"name"`
 		}
 		_ = json.Unmarshal(t, &head)
-		if _, isPage := b.defs[head.Name]; !isPage || visible[head.Name] {
-			kept = append(kept, t)
+		if visible != nil && b.isPageTool(head.Name) && !visible[head.Name] {
+			continue
 		}
+		if b.scopeFilter && b.missingScopes(ctx, head.Name) != nil {
+			continue
+		}
+		kept = append(kept, t)
 	}
-	b.mu.Unlock()
 
 	result["tools"] = mustJSON(kept)
+	if b.scopeFilter || b.servesDynamicStateless(sid) {
+		result["cacheScope"] = mustJSON(core.CacheScopePrivate)
+	}
+	if b.servesDynamicStateless(sid) {
+		result["ttlMs"] = mustJSON(b.dynamicTTL.Milliseconds())
+	}
 	resp.Result = result
 	return resp, nil
 }

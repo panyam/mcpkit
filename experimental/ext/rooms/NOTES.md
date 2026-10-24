@@ -109,12 +109,24 @@ naming a room the bridge has never joined finds them. Another bridge in the room
 
 ## Declared tools are what make the stateless wire work (#1610)
 
-A stateless `tools/list` reads the server's one registry and skips the middleware chain (#1355), so
-the per-session filter that hides other rooms' tools never runs there. Rather than wait on #1355,
-`WithPageTools` puts a fixed catalog in the registry at `Register`, the same for every caller, so
-there is nothing to filter. Without it, the dynamic registry stays a session-wire feature, and the
-page tool handler refuses a call with no session instead of serving whatever pages happened to
-register.
+When #1610 landed, a stateless `tools/list` read the server's one registry and skipped the
+middleware chain, so the per-session filter that hides other rooms' tools never ran there. Rather
+than wait on that (#1355), `WithPageTools` puts a fixed catalog in the registry at `Register`, the
+same for every caller, so there is nothing to filter. Without it, the page tool handler refuses a
+call with no session instead of serving whatever pages happened to register.
+
+#1355 routed stateless `tools/list` through the chain (#1619), so the filter now runs on both
+wires, and #1611 used that for two opt-ins. `WithDynamicCatalogTTL` lets the filter serve the
+dynamic registry by agreement alone, since a stateless caller has no default rooms. The cost is
+polling: with no `list_changed` the TTL is the only way a new tool reaches a client, so it is short,
+and the list is per caller, so it is `private`. `WithScopeFilteredList` stays off by default
+because MCP's step-up flow expects a client to see a tool, call it and be told which scope to ask
+for. A client that never sees a tool never gets to that challenge, which is why `list_pages`
+reports what the list hid as `stepUp`.
+
+#1611 said #1610 had added per-tool scopes (`PageToolDecl.Scopes`). It hadn't. The scope a page
+tool needs comes from its read-only hint alone, `pages:read` or `pages:act`, and the filter reads
+the same `ScopeChallenge` the call gate does, so the two can't disagree.
 
 The tests run each acceptance case on both wires, and the agent helper asserts it really is on the
 wire the test names (`UsingStatelessWire`), since a stateless client that quietly fell back to a

@@ -206,7 +206,11 @@ func (b *Bridge) listPages(tc core.ToolContext, req core.ToolRequest) (core.Tool
 	b.mu.Unlock()
 	text, _ := json.Marshal(roster)
 	res := core.TextResult(string(text))
-	res.StructuredContent = map[string]any{"pages": roster}
+	out := map[string]any{"pages": roster}
+	if b.scopeFilter {
+		out["stepUp"] = b.stepUpsFor(tc, p, s)
+	}
+	res.StructuredContent = out
 	return res, nil
 }
 
@@ -321,17 +325,17 @@ func (b *Bridge) target(p Principal, rooms []string, name string, page PeerID) (
 	}
 }
 
-// visibleToolsLocked is the page tools a session may see in a dynamic
-// registry: those offered by pages in its default rooms, and by any page that
-// agreed to its principal.
-func (b *Bridge) visibleToolsLocked(s *session) map[string]bool {
+// visibleToolsLocked is the page tools p may see in a dynamic registry: those
+// offered by pages in its default rooms (attached, on the session wire), and by
+// any page that agreed to it.
+func (b *Bridge) visibleToolsLocked(p Principal, attached map[string]bool) map[string]bool {
 	visible := map[string]bool{}
-	if s == nil {
+	if p.Subject == "" {
 		return visible
 	}
 	for _, rs := range b.rooms {
 		for _, pg := range rs.pages {
-			if s.attached[rs.resource] || agreesLocked(pg, s.principal) {
+			if attached[rs.resource] || agreesLocked(pg, p) {
 				for name := range pg.tools {
 					visible[name] = true
 				}
