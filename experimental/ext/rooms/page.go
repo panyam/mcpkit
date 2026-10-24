@@ -77,6 +77,7 @@ type Page struct {
 	presence    map[string]Presence
 	presenceTTL time.Duration
 	onPresence  func([]Presence)
+	onNotify    map[string]func(json.RawMessage)
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -116,6 +117,7 @@ func JoinPage(ctx context.Context, t RoomTransport, room string, opts ...PageOpt
 		accepted:    make(map[string]time.Time),
 		presence:    make(map[string]Presence),
 		presenceTTL: DefaultPresenceTTL,
+		onNotify:    make(map[string]func(json.RawMessage)),
 		ctx:         pctx,
 		cancel:      cancel,
 		done:        make(chan struct{}),
@@ -301,6 +303,8 @@ func (p *Page) handle(from PeerID, m rpcMessage) {
 		p.pairedByCode(m)
 	case MethodPresence:
 		p.mergePresence(m.Params)
+	case MethodNotify:
+		p.notified(m.Params)
 	case MethodPairingRequested:
 		var req PairingRequest
 		_ = json.Unmarshal(m.Params, &req)

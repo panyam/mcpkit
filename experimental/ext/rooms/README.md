@@ -115,6 +115,38 @@ schema has that tool refused. Either refusal reaches the page as `notifications/
 3. Else the only tab that agreed to you.
 4. Else an error result carrying the room's roster, so the model can choose.
 
+## Reaching many tabs
+
+Two ways, depending on who decides.
+
+**An agent asks, with a fan-out tool.** Declare it with `FanOut: true` in `WithPageTools`. A call
+names its room and goes to every tab there that offers the tool and agreed to the caller, so
+fan-out never reaches a tab that didn't agree. Instead of `page` the tool takes
+`targets: {users: [...]}`, which narrows it to those users' tabs. The answer's structured content
+is `{results: [FanOutResult]}`, one per tab with its page, user, label and either its result or
+its error. Each tab has its own deadline, so a slow one doesn't hold up the rest.
+
+A fan-out tool has to be `ReadOnly` (`Register` panics otherwise), since one call moving every
+user's screen at once is what #1581 argued against. A call that would reach more than 25 tabs
+(`WithFanOutLimit`) is refused, and told to narrow with `targets`.
+
+**The host decides, with `Bridge.Notify`.** For things like "the design changed" or "it's these
+users' birthday", where no agent is involved:
+
+```go
+rep, err := bridge.Notify(ctx, rooms.Selector{Users: []string{"alice"}}, "design.changed", map[string]any{"rev": 7})
+```
+
+`Selector.Rooms` empty means every room the bridge has joined, and a room named that it hasn't
+joined is joined first. Notify can't find a user's tabs in rooms the bridge was never asked
+about, since only the relay knows those. Pages handle it with `OnNotify(name, fn)`. The name and
+data follow the same rules as page events. Being the host talking to its own pages, it needs no
+agreement, though a page using `TrustBridges` hears it only from the host's bridges.
+
+The massrelay transport paces each dialled connection at 25 messages a second
+(`massrelay.WithSendRate`), under the relay's limit of 30, past which the relay drops messages
+without saying so. A large fan-out takes longer rather than losing tabs.
+
 ## Agreement
 
 A page's user agrees before an agent can call it. The page holds the agreement, as grants to a

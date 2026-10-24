@@ -130,6 +130,22 @@ or was last reported over 30 seconds ago, since a report per call would double t
 of a busy tab. The page owns the TTL: each bridge only knows its own callers, and the page is the
 one place all of them meet.
 
+## Fan-out is read-only, and one-to-many changes are the host's (#1615)
+
+An agent reaching every tab in a room at once is fine for a question ("what does each tab show")
+and a problem for an action, which is #1581's case against one-to-many actions: a model that
+misreads a request moves every user's screen. So `FanOut` requires `ReadOnly`, and the one-to-many
+changes people actually asked for ("the design changed", birthdays) go through `Bridge.Notify`,
+which the host's own code calls. A host that wants an agent to trigger one can wrap Notify in a
+tool of its own, where the decision is visibly the host's.
+
+The limit refuses rather than truncates, because a fan-out that silently skipped tabs past 25
+would look like a complete answer. And Notify sticks to joined rooms, since "every tab of user X"
+anywhere needs the relay to answer a query it doesn't offer.
+
+The pacing lives in the massrelay transport, not the bridge, because the limit is per WebSocket
+connection and only the dialled transport has one. panyam/massrelay#43 is the relay-side fix.
+
 ## The caller, and why TrustBridges exists
 
 The bridge sends the caller's principal in the call's `_meta` (`MetaCaller`), so a page can apply

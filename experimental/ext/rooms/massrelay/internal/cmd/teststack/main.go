@@ -101,6 +101,24 @@ func main() {
 		}
 		return core.StructuredResult("page events", map[string]any{"events": out}), nil
 	})
+	srv.RegisterTool(core.ToolDef{
+		Name:        "teststack_notify",
+		Description: "Test only: the host's Bridge.Notify, with {rooms, users, name, data}.",
+		InputSchema: map[string]any{"type": "object"},
+	}, func(tc core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
+		var a struct {
+			Rooms []string        `json:"rooms"`
+			Users []string        `json:"users"`
+			Name  string          `json:"name"`
+			Data  json.RawMessage `json:"data"`
+		}
+		_ = json.Unmarshal(req.Arguments, &a)
+		rep, err := bridge.Notify(tc, rooms.Selector{Rooms: a.Rooms, Users: a.Users}, a.Name, a.Data)
+		if err != nil {
+			return core.ErrorResult(err.Error()), nil
+		}
+		return core.StructuredResult("notified", map[string]any{"sent": len(rep.Sent)}), nil
+	})
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true)))
 	defer ts.Close()
 	info.MCP = ts.URL + "/mcp"

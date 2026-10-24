@@ -17,6 +17,7 @@ const PAGE_EVENT = "notifications/rooms/event";
 const PAIRING_OFFER = "notifications/rooms/pairing_offer";
 const PAIRED_BY_CODE = "notifications/rooms/paired_by_code";
 const PRESENCE = "notifications/rooms/presence";
+const NOTIFY = "notifications/rooms/notify";
 
 /** How long an agent's attach code stays acceptable, matching `rooms.DefaultAgentCodeTTL`. */
 const AGENT_CODE_TTL_MS = 10 * 60 * 1000;
@@ -186,6 +187,15 @@ export interface ToolRoom {
    */
   presence(): Presence[];
   /**
+   * Installs the handler for the host's notifications named `name`, which the
+   * host sends its pages with the bridge's `Notify` (no agent involved),
+   * replacing any before it. `data` is what the host sent, `null` when it
+   * sent none. A notification with no handler is dropped. Any peer in the
+   * room can send one, as with `ctx.caller`, so treat it as a prompt to
+   * refresh rather than as the change itself.
+   */
+  onNotify(name: string, fn: (data: unknown) => void): { off(): void };
+  /**
    * Tells the bridges something happened on the page. Agents subscribed to
    * the room's events hear it, if this page agreed to their session. Throws
    * on a name `validEventName` refuses or data over `MAX_EVENT_DATA_BYTES`.
@@ -249,6 +259,7 @@ class Page implements ToolRoom {
   // Merged agent presence, by subject and client.
   private seen = new Map<string, Presence>();
   private onPresenceFn?: (agents: Presence[]) => void;
+  private notifyHandlers = new Map<string, (data: unknown) => void>();
   private left = false;
   private modelContext?: ModelContextLike;
 
@@ -416,6 +427,15 @@ class Page implements ToolRoom {
     this.onPresenceFn = fn;
   }
 
+  onNotify(name: string, fn: (data: unknown) => void): { off(): void } {
+    this.notifyHandlers.set(name, fn);
+    return {
+      off: () => {
+        if (this.notifyHandlers.get(name) === fn) this.notifyHandlers.delete(name);
+      },
+    };
+  }
+
   presence(): Presence[] {
     const ttl = this.opts.presenceTtlMs ?? DEFAULT_PRESENCE_TTL_MS;
     const now = Date.now();
@@ -475,6 +495,9 @@ class Page implements ToolRoom {
         return;
       case PRESENCE:
         this.mergePresence(m.params);
+        return;
+      case NOTIFY:
+        if (typeof m.params?.name === "string") this.notifyHandlers.get(m.params.name)?.(m.params.data ?? null);
         return;
       case PAIRED_BY_CODE: {
         // Only a code this page offered, or an agent's code its user

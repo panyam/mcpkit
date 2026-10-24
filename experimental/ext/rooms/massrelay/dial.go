@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	pb "github.com/panyam/massrelay/gen/go/massrelay/v1/models"
+	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/panyam/mcpkit/experimental/ext/rooms"
@@ -32,6 +33,19 @@ func WithUsername(name string) DialOption {
 	return func(r *remote) { r.username = name }
 }
 
+// DefaultSendRate is the messages a second a dialled membership sends at
+// most. The relay drops what one WebSocket sends past 30 a second without
+// telling the sender, so this stays under it.
+const DefaultSendRate = 25
+
+// WithSendRate sets how many messages a second each dialled membership sends,
+// with a burst of the same size. Send waits for its turn, or fails when its
+// context ends first. Match it to the relay's StreamConfig.MaxMessageRate if
+// that was changed; 0 turns pacing off.
+func WithSendRate(perSecond float64) DialOption {
+	return func(r *remote) { r.sendRate = perSecond }
+}
+
 // Dial returns a RoomTransport that joins rooms on the relay at baseURL
 // (http, https, ws or wss, with any path prefix the relay is mounted under)
 // over its WebSocket endpoint, `<baseURL>/ws/v1/<room>/sync`. Each Join opens
@@ -41,7 +55,7 @@ func WithUsername(name string) DialOption {
 // reports its `sub` as the peer's Subject; it travels as a Bearer header.
 // Empty joins anonymously.
 func Dial(baseURL, token string, opts ...DialOption) rooms.RoomTransport {
-	r := &remote{base: baseURL, token: token, dialer: websocket.DefaultDialer}
+	r := &remote{base: baseURL, token: token, dialer: websocket.DefaultDialer, sendRate: DefaultSendRate}
 	for _, o := range opts {
 		o(r)
 	}
@@ -53,6 +67,7 @@ type remote struct {
 	token    string
 	dialer   *websocket.Dialer
 	username string
+	sendRate float64
 }
 
 // envelope is servicekit's grpcws control message, which carries every frame
@@ -119,7 +134,16 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 			conn.Close()
 		})
 	}
-	m.send = func(_ context.Context, action *pb.CollabAction) error {
+	var pace *rate.Limiter
+	if r.sendRate > 0 {
+		pace = rate.NewLimiter(rate.Limit(r.sendRate), max(1, int(r.sendRate)))
+	}
+	m.send = func(ctx context.Context, action *pb.CollabAction) error {
+		if pace != nil {
+			if err := pace.Wait(ctx); err != nil {
+				return err
+			}
+		}
 		// The relay stamps the sender from the connection; the client id
 		// here is ignored and left empty.
 		action.ClientId = ""

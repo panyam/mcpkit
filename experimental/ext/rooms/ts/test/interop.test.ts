@@ -437,4 +437,21 @@ describe("a TypeScript page behind the Go bridge", () => {
     expect(carol.lastSeen.getTime()).toBeGreaterThan(Date.parse(earlier));
     expect(dave.lastSeen.getTime()).toBeLessThanOrEqual(Date.now());
   });
+
+  it("hands the host's notifications to the handler for their name, only on the tabs selected", async () => {
+    const alices = await page("alice", showSheet);
+    const bobs = await page("bob", showSheet);
+    const heard: string[] = [];
+    alices.onNotify("design.changed", (data) => heard.push(`alice:${JSON.stringify(data)}`));
+    alices.onNotify("other.thing", () => heard.push("alice:other"));
+    bobs.onNotify("design.changed", (data) => heard.push(`bob:${JSON.stringify(data)}`));
+    const host = await agent("alice");
+    await eventually(async () => (await listPages(host)).filter((p) => p.page === alices.id || p.page === bobs.id).length === 2, 5000, "both tabs listed");
+
+    const res: any = await host.callTool({ name: "teststack_notify", arguments: { rooms: [ROOM], users: ["alice"], name: "design.changed", data: { rev: 7 } } });
+    expect(res.isError).toBeFalsy();
+    await eventually(() => heard.length > 0, 5000, "notification delivered");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(heard).toEqual(['alice:{"rev":7}']);
+  });
 });

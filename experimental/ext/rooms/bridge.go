@@ -58,11 +58,18 @@ func WithRoomOf(fn func(args map[string]any) (string, error)) Option {
 
 // PageToolDecl declares one page tool up front: what tools/list shows for it,
 // whichever pages offer it at the moment.
+//
+// FanOut makes a call go to every tab in its room that offers the tool and
+// agreed to the caller, instead of to one, and answer with a FanOutResult per
+// tab. Agents narrow it with a targets argument, {users: [...]}, which the
+// bridge adds to the schema in place of page. A fan-out tool must be ReadOnly;
+// one-to-many changes are the host's to send, with Notify.
 type PageToolDecl struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
 	ReadOnly    bool
+	FanOut      bool
 }
 
 // WithPageTools fixes the bridge's page-tool catalog. tools/list then answers
@@ -102,9 +109,10 @@ type Bridge struct {
 	roomOf       func(args map[string]any) (string, error)
 	// declared is the fixed page-tool catalog from WithPageTools; nil means
 	// the dynamic registry, which needs the session wire.
-	declared []PageToolDecl
-	onEvent  func(PageEvent)
-	fb       *fallbacks
+	declared    []PageToolDecl
+	fanOutLimit int
+	onEvent     func(PageEvent)
+	fb          *fallbacks
 
 	srv    *server.Server
 	ctx    context.Context
@@ -169,6 +177,7 @@ type session struct {
 type toolSpec struct {
 	key      string // canonical inputSchema plus readOnly; a different key is a conflict
 	readOnly bool
+	fanOut   bool
 }
 
 type pendingCall struct {
@@ -188,6 +197,7 @@ func New(t RoomTransport, opts ...Option) *Bridge {
 	b := &Bridge{
 		transport:   t,
 		callTimeout: DefaultCallTimeout,
+		fanOutLimit: DefaultFanOutLimit,
 		ctx:         ctx,
 		cancel:      cancel,
 		rooms:       make(map[string]*roomState),
@@ -808,7 +818,7 @@ func (b *Bridge) syncTools(rs *roomState) {
 		reg := b.srv.Registry()
 		for _, t := range add {
 			if offered[t.Name] {
-				_ = reg.AddTool(b.bridgeDef(t), b.pageToolHandler(t.Name))
+				_ = reg.AddTool(b.bridgeDef(t, false), b.pageToolHandler(t.Name))
 			}
 		}
 		for _, name := range remove {
@@ -821,8 +831,9 @@ func (b *Bridge) syncTools(rs *roomState) {
 }
 
 // bridgeDef is the page's descriptor as agents see it: the same tool with an
-// optional page property and the scope its kind needs.
-func (b *Bridge) bridgeDef(t core.ToolDef) core.ToolDef {
+// optional page property (targets for a fan-out tool) and the scope its kind
+// needs.
+func (b *Bridge) bridgeDef(t core.ToolDef, fanOut bool) core.ToolDef {
 	schema := map[string]any{"type": "object"}
 	if s, ok := t.InputSchema.(map[string]any); ok {
 		for k, v := range s {
@@ -835,7 +846,11 @@ func (b *Bridge) bridgeDef(t core.ToolDef) core.ToolDef {
 			props[k] = v
 		}
 	}
-	props["page"] = map[string]any{"type": "string", "description": "Page id from list_pages. Omit for the page that agreed to you which your user focused last, or the only one that agreed."}
+	if fanOut {
+		props["targets"] = targetsSchema
+	} else {
+		props["page"] = map[string]any{"type": "string", "description": "Page id from list_pages. Omit for the page that agreed to you which your user focused last, or the only one that agreed."}
+	}
 	if b.roomOf == nil {
 		props["room"] = map[string]any{"type": "string", "description": "The resource the pages show, e.g. design:demo/board.kicad_sch. Omit to use your default room from attach."}
 	}
@@ -885,6 +900,12 @@ func (b *Bridge) pageToolHandler(name string) core.ToolHandler {
 		rooms, err := b.roomArgs(room, s)
 		if err != nil {
 			return core.ErrorResult(err.Error()), nil
+		}
+		b.mu.Lock()
+		fanOut := b.defs[name].fanOut
+		b.mu.Unlock()
+		if fanOut {
+			return b.fanOutCall(tc, name, p, rooms, args)
 		}
 
 		rs, target, nt := b.target(p, rooms, name, page)
@@ -1005,11 +1026,15 @@ func (b *Bridge) registerDeclared(srv *server.Server) {
 			schema = map[string]any{"type": "object"}
 		}
 		t := core.ToolDef{Name: d.Name, Description: d.Description, InputSchema: schema, Annotations: map[string]any{"readOnlyHint": d.ReadOnly}}
-		if reason := b.reservedLocked(t); reason != "" {
+		reason := b.reservedLocked(t)
+		if reason == "" && d.FanOut {
+			reason = fanOutReason(d)
+		}
+		if reason != "" {
 			panic(fmt.Sprintf("rooms: WithPageTools: tool %q: %s", d.Name, reason))
 		}
-		b.defs[d.Name] = toolSpec{key: string(mustJSON(t.InputSchema)) + fmt.Sprint(d.ReadOnly), readOnly: d.ReadOnly}
-		_ = reg.AddTool(b.bridgeDef(t), b.pageToolHandler(d.Name))
+		b.defs[d.Name] = toolSpec{key: string(mustJSON(t.InputSchema)) + fmt.Sprint(d.ReadOnly), readOnly: d.ReadOnly, fanOut: d.FanOut}
+		_ = reg.AddTool(b.bridgeDef(t, d.FanOut), b.pageToolHandler(d.Name))
 	}
 }
 

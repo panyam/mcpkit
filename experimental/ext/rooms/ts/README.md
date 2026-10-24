@@ -78,6 +78,17 @@ An entry drops out an hour after it was last seen (`presenceTtlMs`). The same ca
 `ctx.caller` applies: any peer in the room can send the page a report, so show it as a hint, not
 as a record.
 
+## Hearing from the host
+
+```ts
+const sub = room.onNotify("design.changed", ({ rev }: any) => reload(rev));
+sub.off();
+```
+
+The host sends these with the bridge's `Notify`, to tabs it picks by room and user, with no agent
+involved. One handler per name; a notification nobody handles is dropped. Treat one as a prompt to
+refresh, not as the change itself, since any peer in the room could send it.
+
 ## Telling agents what happened
 
 ```ts
