@@ -9,7 +9,7 @@ replace (
 )
 
 require (
-	github.com/panyam/demokit v0.0.32
+	github.com/panyam/demokit v0.0.33
 	github.com/panyam/gocurrent v0.1.2
 	github.com/panyam/mcpkit v0.8.9
 	github.com/panyam/mcpkit/examples/common v0.0.0

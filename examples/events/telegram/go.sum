@@ -87,6 +87,8 @@ github.com/muesli/termenv v0.16.0 h1:S5AlUN9dENB57rsbnkPyfdGuWIlkmzJjbFf0Tf5FWUc
 github.com/muesli/termenv v0.16.0/go.mod h1:ZRfOIKPFDYQoDFF4Olj7/QJbW60Ol/kL1pU3VfY/Cnk=
 github.com/panyam/demokit v0.0.32 h1:WQSqKzlpeD6kEbwvQrxzhOHjSp9M9ZasffWlOTd3mA8=
 github.com/panyam/demokit v0.0.32/go.mod h1:Lyz5i2DGL2c2s/9tW1Nru+kKU02CLfp5ls02JLsrj30=
+github.com/panyam/demokit v0.0.33 h1:oUdbxZ+CXxlEflTx7l08rCY6jf9Jc9pQz3rJ5YhwnTs=
+github.com/panyam/demokit v0.0.33/go.mod h1:ZFEAyYkJyeVS47dM33dKE/h/arZ8Er6Sy9o56VoEPSw=
 github.com/panyam/demokit/notebook v0.0.32 h1:c32rG9Xa6SRzvbxilPK+4xEZ3JFswPdlfDYK9fOLT6E=
 github.com/panyam/demokit/notebook v0.0.32/go.mod h1:412YG4kCp9K/VqrfAg6cJqaBhcRQOi0Jc81Nc75nf0k=
 github.com/panyam/gocurrent v0.1.2 h1:MtD98xJKVvGGdMrxIvUqhVA7AxA6rr9eU1ZUo5pNoyc=
