@@ -57,11 +57,11 @@ why is SDA flagged?
 </channel>
 ```
 
-Build it from a checkout (the module carries `replace` directives, so `go install …@version` refuses
-it, as #1488 describes for `cmd/mcpskills`), then register it in `.mcp.json`:
+Install it (v0.8.8 or later; earlier tags carried `replace` directives that `go install` refuses,
+#1488), then register it in `.mcp.json`:
 
 ```bash
-cd experimental/integrations/roomsevents && go build -o ~/bin/rooms-channel ./cmd/rooms-channel
+go install github.com/panyam/mcpkit/experimental/integrations/roomsevents/cmd/rooms-channel@latest
 ```
 
 ```json
