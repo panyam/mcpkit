@@ -120,6 +120,16 @@ The tests run each acceptance case on both wires, and the agent helper asserts i
 wire the test names (`UsingStatelessWire`), since a stateless client that quietly fell back to a
 session would pass everything and grade nothing.
 
+## Presence names principals, and is rate-limited by the bridge (#1616)
+
+A presence report carries `{subject, client}` and never a session id, for the same reason agreement
+moved to the page: the stateless wire has no session, and a tab user has no use for one. The
+bridge keeps what it has seen per page, plus who attached to each room, so a tab listed after an
+attach still hears of it. It reports again only when an agent is new to the page, starts acting,
+or was last reported over 30 seconds ago, since a report per call would double the relay traffic
+of a busy tab. The page owns the TTL: each bridge only knows its own callers, and the page is the
+one place all of them meet.
+
 ## The caller, and why TrustBridges exists
 
 The bridge sends the caller's principal in the call's `_meta` (`MetaCaller`), so a page can apply

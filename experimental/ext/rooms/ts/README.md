@@ -71,6 +71,13 @@ the page only when the page agreed:
   `grants()` lists them. A grant outlives the agent's MCP session and ends when revoked or when the
   page leaves.
 
+`onPresence(fn)` and `presence()` say which agents are around: one entry per principal
+(`subject`, `client?`) with `lastSeen` (a `Date`) and `acting`. An agent shows as soon as it
+attaches to the room and as acting once it calls the page, merged across every bridge in the room.
+An entry drops out an hour after it was last seen (`presenceTtlMs`). The same caveat as
+`ctx.caller` applies: any peer in the room can send the page a report, so show it as a hint, not
+as a record.
+
 ## Telling agents what happened
 
 ```ts

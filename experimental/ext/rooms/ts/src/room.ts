@@ -16,6 +16,7 @@ const PAIRING_REQUESTED = "notifications/rooms/pairing_requested";
 const PAGE_EVENT = "notifications/rooms/event";
 const PAIRING_OFFER = "notifications/rooms/pairing_offer";
 const PAIRED_BY_CODE = "notifications/rooms/paired_by_code";
+const PRESENCE = "notifications/rooms/presence";
 
 /** How long an agent's attach code stays acceptable, matching `rooms.DefaultAgentCodeTTL`. */
 const AGENT_CODE_TTL_MS = 10 * 60 * 1000;
@@ -23,6 +24,9 @@ const AGENT_CODE_TTL_MS = 10 * 60 * 1000;
 export const DEFAULT_PAIRING_CODE_TTL_MS = 2 * 60 * 1000;
 // Leaves out 0, O, 1 and I, which a user reading a code aloud mixes up.
 const PAIRING_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** How long a page keeps an agent in `presence()` after a bridge last reported it, matching `rooms.DefaultPresenceTTL`. */
+export const DEFAULT_PRESENCE_TTL_MS = 60 * 60 * 1000;
 
 /** Event name `ask()` emits: the page's user asked the agents something. */
 export const EVENT_ASK = "room.ask";
@@ -68,6 +72,18 @@ export interface PairedByCode extends PairingRequest {
   code: string;
 }
 
+/**
+ * An agent a bridge has seen around the page: one that called it (`acting`),
+ * or attached to its room without calling yet. It names a principal, never a
+ * session.
+ */
+export interface Presence extends Principal {
+  /** When a bridge last saw it, never later than the page's own clock. */
+  lastSeen: Date;
+  /** True once any bridge has seen it call the page. */
+  acting: boolean;
+}
+
 /** Where `registerTool` also registers when `modelContext` is set. */
 export interface ModelContextLike {
   registerTool(tool: PageTool): unknown;
@@ -99,6 +115,11 @@ export interface JoinToolRoomOptions {
   WebSocket?: typeof WebSocket;
   /** How long to wait for the relay to admit the page. Default 10s. */
   joinTimeoutMs?: number;
+  /**
+   * How long `presence()` keeps an agent after a bridge last reported seeing
+   * it. Default `DEFAULT_PRESENCE_TTL_MS`.
+   */
+  presenceTtlMs?: number;
 }
 
 /** A page's membership in a tool room. */
@@ -151,6 +172,19 @@ export interface ToolRoom {
   withdrawPairingCode(): void;
   /** Called when a session pairs by the offered code: where the page shows its user which agent it was. */
   onPaired(fn: (paired: PairedByCode) => void): void;
+  /**
+   * Called whenever a bridge reports the agents it has seen around the page,
+   * with the merged list `presence()` returns. Where a page shows its user
+   * which agents have used the tab, and offers to revoke them.
+   */
+  onPresence(fn: (agents: Presence[]) => void): void;
+  /**
+   * The agents seen around the page within the presence TTL, merged across
+   * every bridge in the room: one entry per principal, with the latest
+   * `lastSeen`, and `acting` if any bridge saw it call. Sorted by subject,
+   * then client.
+   */
+  presence(): Presence[];
   /**
    * Tells the bridges something happened on the page. Agents subscribed to
    * the room's events hear it, if this page agreed to their session. Throws
@@ -212,6 +246,9 @@ class Page implements ToolRoom {
   // Agent codes the page's user accepted, until a bridge names the principal.
   private accepted = new Map<string, number>();
   private focusedAt?: string;
+  // Merged agent presence, by subject and client.
+  private seen = new Map<string, Presence>();
+  private onPresenceFn?: (agents: Presence[]) => void;
   private left = false;
   private modelContext?: ModelContextLike;
 
@@ -375,6 +412,35 @@ class Page implements ToolRoom {
     this.onPairedFn = fn;
   }
 
+  onPresence(fn: (agents: Presence[]) => void): void {
+    this.onPresenceFn = fn;
+  }
+
+  presence(): Presence[] {
+    const ttl = this.opts.presenceTtlMs ?? DEFAULT_PRESENCE_TTL_MS;
+    const now = Date.now();
+    for (const [k, e] of this.seen) if (now - e.lastSeen.getTime() > ttl) this.seen.delete(k);
+    return [...this.seen.values()]
+      .map((e) => ({ ...e }))
+      .sort((a, b) => cmp(a.subject, b.subject) || cmp(a.client ?? "", b.client ?? ""));
+  }
+
+  // Folds one bridge's report into the merged list. A bridge's clock is not
+  // trusted to be ahead of the page's, so a future lastSeen counts as now.
+  private mergePresence(params: any): void {
+    const now = Date.now();
+    for (const e of Array.isArray(params?.agents) ? params.agents : []) {
+      if (!e?.subject) continue;
+      const at = Math.min(Date.parse(e.lastSeen) || now, now);
+      const key = `${e.subject}\u0000${e.client ?? ""}`;
+      const cur = this.seen.get(key);
+      const entry: Presence = { subject: e.subject, lastSeen: new Date(Math.max(at, cur?.lastSeen.getTime() ?? 0)), acting: !!e.acting || !!cur?.acting };
+      if (e.client) entry.client = e.client;
+      this.seen.set(key, entry);
+    }
+    this.onPresenceFn?.(this.presence());
+  }
+
   leave(): void {
     if (this.left) return;
     this.client.disconnect();
@@ -406,6 +472,9 @@ class Page implements ToolRoom {
         return;
       case PAIRING_REQUESTED:
         this.onPairing?.(m.params as PairingRequest);
+        return;
+      case PRESENCE:
+        this.mergePresence(m.params);
         return;
       case PAIRED_BY_CODE: {
         // Only a code this page offered, or an agent's code its user
@@ -499,6 +568,10 @@ class Page implements ToolRoom {
     const payload = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", ...m }));
     this.client.sendAppMessage(MESSAGE_KIND, payload, { to });
   }
+}
+
+function cmp(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function newPairingCode(): string {

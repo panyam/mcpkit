@@ -397,4 +397,44 @@ describe("a TypeScript page behind the Go bridge", () => {
   it("rejects a join the relay refuses", async () => {
     await expect(joinToolRoom({ relay: info.relay, room: ROOM, token: "not-a-jwt" })).rejects.toThrow();
   });
+
+  it("hears which agents have driven it, merged into one entry per principal", async () => {
+    const p = await page("alice", showSheet);
+    p.setAgentsAllowed(true);
+    const heard: any[][] = [];
+    p.onPresence((list) => heard.push(list));
+    const a = await agent("alice");
+    await eventually(() => p.presence().some((e) => e.subject === "alice"), 5000, "attach reported");
+    expect(p.presence().find((e) => e.subject === "alice")?.acting).toBe(false);
+
+    await waitPaired(a, p.id);
+    const res: any = await a.callTool({ name: "show_sheet", arguments: { sheet: "x" } });
+    expect(res.isError).toBeFalsy();
+    await eventually(() => p.presence().find((e) => e.subject === "alice")?.acting === true, 5000, "call reported as acting");
+    expect(p.presence().filter((e) => e.subject === "alice")).toHaveLength(1);
+    expect(heard.length).toBeGreaterThan(0);
+    const last = p.presence()[0];
+    expect(last.lastSeen).toBeInstanceOf(Date);
+    expect(Date.now() - last.lastSeen.getTime()).toBeLessThan(60_000);
+  });
+
+  it("keeps acting, the latest lastSeen and the page's own clock when two reports disagree", async () => {
+    const p = await page("alice", showSheet);
+    const bridge = await rawPeer("bridge-2");
+    const presence = (agents: unknown[]) => ({ jsonrpc: "2.0", method: "notifications/rooms/presence", params: { agents } });
+    const earlier = new Date(Date.now() - 10_000).toISOString();
+    bridge.send(p.id, presence([{ subject: "carol", client: "cursor", lastSeen: new Date(Date.now() - 1_000).toISOString(), acting: true }]));
+    const mine = () => p.presence().filter((e) => e.subject === "carol" || e.subject === "dave");
+    await eventually(() => mine().length === 1, 5000, "first report");
+    bridge.send(p.id, presence([
+      { subject: "carol", client: "cursor", lastSeen: earlier, acting: false },
+      { subject: "dave", lastSeen: new Date(Date.now() + 3_600_000).toISOString(), acting: false },
+    ]));
+    await eventually(() => mine().length === 2, 5000, "second report");
+
+    const [carol, dave] = mine();
+    expect(carol).toMatchObject({ subject: "carol", client: "cursor", acting: true });
+    expect(carol.lastSeen.getTime()).toBeGreaterThan(Date.parse(earlier));
+    expect(dave.lastSeen.getTime()).toBeLessThanOrEqual(Date.now());
+  });
 });

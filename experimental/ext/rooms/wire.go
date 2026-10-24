@@ -51,6 +51,13 @@ const (
 	// pair, or one an agent got from attach and the page accepted. The page
 	// adds the grant and sends its grants again.
 	MethodPairedByCode = "notifications/rooms/paired_by_code"
+
+	// MethodPresence: bridge to page, {agents: [Presence]}. The agents this
+	// bridge has seen around the page within DefaultPresenceTTL: those that
+	// called it, and those that attached to its room. Sent when one is new,
+	// starts acting, or was last reported over 30 seconds ago. Each bridge
+	// reports only its own, and the page merges them by principal.
+	MethodPresence = "notifications/rooms/presence"
 )
 
 // MetaCaller is the _meta key on a tools/call the bridge sends a page, holding
