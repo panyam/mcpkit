@@ -12,7 +12,7 @@
 //     connection per room. Use it when the relay runs elsewhere.
 //
 // Either way a room is a massrelay session whose id is the resource name, a
-// message is an AppMessage addressed to one peer (to_client_id), and a peer's
+// message is an AppMessage addressed to one peer (to_client_ids), and a peer's
 // Subject is the `sub` the relay validated (PeerInfo.identity). This module
 // has its own go.mod so neither mcpkit nor experimental/ext/rooms depends on
 // massrelay.

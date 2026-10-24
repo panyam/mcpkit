@@ -79,7 +79,10 @@ func (m *member) handle(ev *pb.CollabEvent) {
 		m.push(rooms.RoomEvent{Type: rooms.PeerLeft, Peer: peer})
 	case ev.GetAppMessage() != nil:
 		msg := ev.GetAppMessage()
-		if rooms.PeerID(msg.GetToClientId()) != m.self {
+		// The relay rewrites to_client_ids to hold only the receiver's own id,
+		// and leaves it empty for a room-wide message, which the bridge never
+		// sends and doesn't act on.
+		if !slices.Contains(msg.GetToClientIds(), string(m.self)) {
 			return
 		}
 		from := rooms.PeerID(ev.GetFromClientId())
@@ -146,7 +149,7 @@ func (m *member) Send(ctx context.Context, to rooms.PeerID, kind string, payload
 	return m.send(ctx, &pb.CollabAction{
 		ClientId: string(m.self),
 		Action: &pb.CollabAction_AppMessage{AppMessage: &pb.AppMessage{
-			Kind: kind, Payload: slices.Clone(payload), ToClientId: string(to),
+			Kind: kind, Payload: slices.Clone(payload), ToClientIds: []string{string(to)},
 		}},
 	})
 }
