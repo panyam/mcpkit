@@ -50,7 +50,7 @@ MCPKit is a Go library for building production-grade MCP (Model Context Protocol
 
 ```
 mcpkit/                          # module: github.com/panyam/mcpkit
-├── go.mod                       # servicekit v0.1.4
+├── go.mod                       # requires servicekit (SSE, WebSocket, event store)
 ├── core/                        # Protocol types + tool-handler APIs
 │   ├── jsonrpc.go               # Request, Response, Error, ErrCode*
 │   ├── tool.go                  # ToolDef, ToolRequest, ToolResult, Content, ToolHandler

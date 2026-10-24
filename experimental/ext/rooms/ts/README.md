@@ -6,8 +6,8 @@ calls them over MCP, and every call goes to one page. Pre-SEP and experimental, 
 design is in issue [#1581](https://github.com/panyam/mcpkit/issues/1581).
 
 It speaks to a [massrelay](https://github.com/panyam/massrelay) relay (v0.3.0 or later) and depends
-on `@panyam/massrelay` (0.3.1 or later, whose `CollabClient` it joins through) and
-`@panyam/servicekit-client` (0.1.12 or later). massrelay v0.3.0 renamed the JSON field a reply is
+on `@panyam/massrelay` (0.3.2 or later, whose `CollabClient` it joins through) and
+`@panyam/servicekit-client` (0.2.0 or later). massrelay v0.3.0 renamed the JSON field a reply is
 addressed by, so a page from 0.8.7 or earlier and a v0.3 relay don't work together: the page's
 replies never arrive and the agent's call times out. Upgrade the page with the Go side.
 
