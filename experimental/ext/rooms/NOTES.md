@@ -156,9 +156,11 @@ would look like a complete answer. And Notify sticks to joined rooms, since "eve
 anywhere needs the relay to answer a query it doesn't offer.
 
 The pacing lives in the massrelay transport, not the bridge, because the limit is per WebSocket
-connection and only the dialled transport has one. The relay-side fix, massrelay PR 44 (an
-AppMessage to many peers, and `RATE_LIMITED` instead of a silent drop), merged after v0.2.5 and
-isn't tagged yet; #1621 picks it up.
+connection and only the dialled transport has one. massrelay v0.3.0 (PR 44) answers a dropped
+message with `ErrorEvent{RATE_LIMITED}` naming its `actionId`, but only on the WebSocket stream, so
+the embedded transport never sees it. Neither page client handles it after joining yet, so a
+dropped reply still leaves the agent waiting out its timeout (#1621). The many-peer AppMessage from
+the same release is what `Notify` uses.
 
 ## The caller, and why TrustBridges exists
 

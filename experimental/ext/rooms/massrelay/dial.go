@@ -34,8 +34,9 @@ func WithUsername(name string) DialOption {
 }
 
 // DefaultSendRate is the messages a second a dialled membership sends at
-// most. The relay drops what one WebSocket sends past 30 a second without
-// telling the sender, so this stays under it.
+// most. The relay drops what one WebSocket sends past 30 a second, answering
+// with an ErrorEvent{RATE_LIMITED} that nothing here reads yet, so this stays
+// under it.
 const DefaultSendRate = 25
 
 // WithSendRate sets how many messages a second each dialled membership sends,
