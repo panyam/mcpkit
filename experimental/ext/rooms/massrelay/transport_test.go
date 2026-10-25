@@ -130,12 +130,19 @@ func TestDial_RoomsClaimLimitsTheJoin(t *testing.T) {
 	_ = ok.Leave()
 }
 
-// The relay drops what a WebSocket sends past 30 messages a second, without
-// telling the sender, so a dialled transport paces itself under that and a
-// burst arrives whole, only later (#1615).
+// The relay drops what a WebSocket sends past 30 messages a second, so a
+// dialled transport paces itself under that and a burst arrives whole, only
+// later (#1615). Unpaced, it sends again whatever the relay answers with
+// RATE_LIMITED, and the burst still arrives whole (#1621).
 func TestTransport_DialledBurstArrivesWhole(t *testing.T) {
+	t.Run("paced", func(t *testing.T) { dialledBurst(t, 6*time.Second) })
+	// The resends go after one second, then two.
+	t.Run("unpaced", func(t *testing.T) { dialledBurst(t, 10*time.Second, massrelay.WithSendRate(0)) })
+}
+
+func dialledBurst(t *testing.T, within time.Duration, opts ...massrelay.DialOption) {
 	r := newRelay(t)
-	alice := join(t, r.transport(t, "dial", "alice"), room)
+	alice := join(t, massrelay.Dial(r.url, token(t, "alice", nil), opts...), room)
 	bob := join(t, r.transport(t, "embedded", "bob"), room)
 	require.Eventually(t, func() bool { return len(alice.Roster()) == 1 }, 3e9, 1e7)
 
@@ -146,7 +153,7 @@ func TestTransport_DialledBurstArrivesWhole(t *testing.T) {
 		}
 	}()
 	got := 0
-	deadline := time.After(6 * time.Second)
+	deadline := time.After(within)
 	for got < burst {
 		select {
 		case ev := <-bob.Events():

@@ -34,9 +34,9 @@ func WithUsername(name string) DialOption {
 }
 
 // DefaultSendRate is the messages a second a dialled membership sends at
-// most. The relay drops what one WebSocket sends past 30 a second, answering
-// with an ErrorEvent{RATE_LIMITED} that nothing here reads yet, so this stays
-// under it.
+// most. The relay drops what one WebSocket sends past 30 a second, so this
+// stays under it. A message it drops anyway, answered with
+// ErrorEvent{RATE_LIMITED}, is sent again up to three times.
 const DefaultSendRate = 25
 
 // WithSendRate sets how many messages a second each dialled membership sends,
@@ -128,9 +128,11 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 	_ = conn.SetReadDeadline(time.Time{})
 
 	m := newMember(joined)
+	life, end := context.WithCancel(context.Background())
 	var once sync.Once
 	m.leave = func() {
 		once.Do(func() {
+			end()
 			_ = c.sendAction(&pb.CollabAction{Action: &pb.CollabAction_Leave{Leave: &pb.LeaveRoom{Reason: "left"}}})
 			conn.Close()
 		})
@@ -139,7 +141,7 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 	if r.sendRate > 0 {
 		pace = rate.NewLimiter(rate.Limit(r.sendRate), max(1, int(r.sendRate)))
 	}
-	m.send = func(ctx context.Context, action *pb.CollabAction) error {
+	deliver := func(ctx context.Context, action *pb.CollabAction) error {
 		if pace != nil {
 			if err := pace.Wait(ctx); err != nil {
 				return err
@@ -150,7 +152,11 @@ func (r *remote) Join(ctx context.Context, room string) (rooms.Room, error) {
 		action.ClientId = ""
 		return c.sendAction(action)
 	}
+	res := newResender(life, deliver)
+	m.send = res.send
+	m.rateLimited = res.rateLimited
 	go func() {
+		defer end()
 		defer m.close()
 		for {
 			ev, err := c.read()

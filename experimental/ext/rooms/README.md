@@ -73,8 +73,7 @@ Keep it to a few seconds; a fixed catalog is cheaper whenever one will do.
 - **`rooms.TrustBridges(subjects...)`** on `JoinPage` makes a page answer only peers whose relay
   subject is one of the host's bridges. Without it, any holder of a relay token for the room can
   call the page's tools directly, past agreement, and claim any caller. Set it before relying on
-  `Caller`. (Not in the TS client yet: massrelay's `CollabClient` doesn't pass peers' relay identity
-  through.)
+  `Caller`. The TS page's option is `trustBridges`.
 - **Scopes.** Read-only page tools need `pages:read` and the rest `pages:act`. A missing scope is a
   403 with an `insufficient_scope` challenge (`WithResourceMetadataURL` sets its link), on both
   wires. The list shows every tool by default, as MCP's step-up flow expects.
@@ -156,8 +155,9 @@ gets one relay message addressed to every chosen tab in it (`Room.SendEach`), an
 reports gone lands in `rep.Failed` with a `*NotMembersError` while the rest of its room is sent.
 
 The massrelay transport paces each dialled connection at 25 messages a second
-(`massrelay.WithSendRate`), under the relay's limit of 30, past which the relay drops messages
-without saying so. A large fan-out takes longer rather than losing tabs. Fan-out tool calls stay
+(`massrelay.WithSendRate`), under the relay's limit of 30, past which the relay drops messages and
+answers `RATE_LIMITED`. A large fan-out takes longer rather than losing tabs, and a message dropped
+anyway is sent again. The TS page does both too. Fan-out tool calls stay
 one message per tab, since each tab answers its own call.
 
 ## Agreement

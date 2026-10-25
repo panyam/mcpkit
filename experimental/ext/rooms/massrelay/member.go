@@ -23,12 +23,14 @@ var ErrNotMember = errors.New("massrelay: peer is not in the room")
 const eventBuffer = 1024
 
 // member is one membership, whichever way it reaches the relay. send carries
-// one action to the relay; leave tears the connection down.
+// one action to the relay; leave tears the connection down. rateLimited, set
+// only when dialled, handles the message of a RATE_LIMITED error.
 type member struct {
-	self   rooms.PeerID
-	send   func(ctx context.Context, action *pb.CollabAction) error
-	leave  func()
-	events chan rooms.RoomEvent
+	self        rooms.PeerID
+	send        func(ctx context.Context, action *pb.CollabAction) error
+	leave       func()
+	rateLimited func(message string)
+	events      chan rooms.RoomEvent
 
 	mu     sync.Mutex
 	roster map[rooms.PeerID]rooms.Peer
@@ -95,6 +97,10 @@ func (m *member) handle(ev *pb.CollabEvent) {
 			peer = rooms.Peer{ID: from}
 		}
 		m.push(rooms.RoomEvent{Type: rooms.MessageReceived, Peer: peer, Kind: msg.GetKind(), Payload: json.RawMessage(slices.Clone(msg.GetPayload()))})
+	case ev.GetError().GetCode() == "RATE_LIMITED":
+		if m.rateLimited != nil {
+			m.rateLimited(ev.GetError().GetMessage())
+		}
 	case ev.GetSessionEnded() != nil:
 		m.close()
 	}

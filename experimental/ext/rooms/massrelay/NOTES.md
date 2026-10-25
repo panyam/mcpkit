@@ -77,3 +77,24 @@ without routing headers.
 the bridge and an MCP endpoint, printing their URLs and tokens as a JSON line. It serves until its
 stdin closes. The page client's tests in `../ts` run it with `go run`, so they test the TS page
 against the real Go bridge rather than a fake one.
+
+## Sending again what the relay drops for the rate (#1621)
+
+The relay answers an action over its per-connection rate with `ErrorEvent{RATE_LIMITED}`, whose
+message names the action's id (`Dropped action "d12": over 30 messages/sec`), and drops it before
+any peer sees it. That makes a resend safe, since it can't arrive twice. Nothing here set an action
+id before this, so the message named `""` and there was no telling which reply had gone. Now the
+dialled transport stamps `d1`, `d2`, … and keeps the last 256 actions (`resend.go`), and the TS
+page does the same with `p1`, `p2`, … (`../ts/src/sender.ts`).
+
+A dropped action goes again after one second, then two, then four, and is given up on with a log
+line after that. The relay's limiter refills every second, so a shorter first wait mostly gets
+refused again. A resend doesn't keep its place in the order, so a reply can overtake the
+notifications sent before it; JSON-RPC replies carry ids, and nothing in the page protocol depends
+on that order across a drop.
+
+Pacing (`WithSendRate`, the page's `sendRate`) keeps a connection under the limit in the first
+place, so the resend is for a relay configured below 25 a second, or a page whose pacing is off.
+The message text is the only place the id appears, so `droppedAction` parses it, the way
+`missingPeers` parses `PEER_NOT_FOUND`. A relay that changes the wording breaks both quietly,
+which `TestDroppedAction_ReadsTheRelaysMessage` and the burst tests would catch.

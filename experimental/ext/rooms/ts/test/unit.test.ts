@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toCallToolResult, wsUrl } from "../src/index.js";
+import { droppedAction } from "../src/sender.js";
 
 describe("wsUrl", () => {
   it("escapes the room into one path segment and carries the token as a query parameter", () => {
@@ -33,5 +34,17 @@ describe("toCallToolResult", () => {
 
   it("sends nothing for undefined", () => {
     expect(toCallToolResult(undefined)).toEqual({ content: [] });
+  });
+});
+
+describe("droppedAction", () => {
+  it("reads the action id out of the relay's RATE_LIMITED message", () => {
+    expect(droppedAction('Dropped action "p12": over 30 messages/sec')).toBe("p12");
+    expect(droppedAction('Dropped action "a \\"quoted\\" id": over 30 messages/sec')).toBe('a "quoted" id');
+  });
+
+  it("returns undefined for any other message", () => {
+    expect(droppedAction("Not in this room: a, b")).toBeUndefined();
+    expect(droppedAction("Dropped action p12")).toBeUndefined();
   });
 });

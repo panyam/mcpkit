@@ -158,9 +158,9 @@ anywhere needs the relay to answer a query it doesn't offer.
 The pacing lives in the massrelay transport, not the bridge, because the limit is per WebSocket
 connection and only the dialled transport has one. massrelay v0.3.0 (PR 44) answers a dropped
 message with `ErrorEvent{RATE_LIMITED}` naming its `actionId`, but only on the WebSocket stream, so
-the embedded transport never sees it. Neither page client handles it after joining yet, so a
-dropped reply still leaves the agent waiting out its timeout (#1621). The many-peer AppMessage from
-the same release is what `Notify` uses.
+the embedded transport never sees it. The dialled transport and the TS page send such a message
+again (#1621), which `massrelay/NOTES.md` explains. The many-peer AppMessage from the same release
+is what `Notify` uses.
 
 ## The caller, and why TrustBridges exists
 
@@ -169,6 +169,6 @@ its own rules per caller. But a page answers any peer in its room by default, an
 a relay token for the room could send it a `tools/call` with any caller it likes, past the bridge's
 agreement check entirely. That was true before #1610 too; passing a caller just made it matter more.
 `TrustBridges` limits a Go page to peers whose relay subject is one of the host's bridges, which both
-transports stamp on each message. The TS client doesn't do the same yet. Until massrelay v0.3.1
-(massrelay issue 42) `CollabClient` dropped `identity` when it reported peers, so it couldn't, and
-now it's open work on #1621.
+transports stamp on each message. The TS page's `trustBridges` does the same with
+`CollabClient.getPeer(from)?.identity?.subject` (#1621), which it couldn't before massrelay v0.3.1:
+until then `CollabClient` dropped `identity` when it reported peers (massrelay issue 42).

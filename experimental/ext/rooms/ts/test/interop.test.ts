@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { GRPCWSClient } from "@panyam/servicekit-client";
 import { base64Encode } from "@bufbuild/protobuf/wire";
 import type { Client } from "@modelcontextprotocol/client";
-import { joinToolRoom, wsUrl, MAX_EVENT_DATA_BYTES, type PageTool, type ToolRoom } from "../src/index.js";
+import { joinToolRoom, wsUrl, MAX_EVENT_DATA_BYTES, type JoinToolRoomOptions, type PageTool, type ToolRoom } from "../src/index.js";
 import { connectAgent, eventually, listPages, ROOM, startStack, textOf, waitPaired, type StackInfo } from "./stack.js";
 
 // The Go room bridge (experimental/ext/rooms) on a real massrelay relay, called
@@ -23,7 +23,11 @@ afterEach(async () => {
 });
 
 async function page(subject: string, ...tools: PageTool[]): Promise<ToolRoom> {
-  const p = await joinToolRoom({ relay: info.relay, room: ROOM, token: info.pageTokens[subject] });
+  return pageWith({}, subject, ...tools);
+}
+
+async function pageWith(opts: Partial<JoinToolRoomOptions>, subject: string, ...tools: PageTool[]): Promise<ToolRoom> {
+  const p = await joinToolRoom({ relay: info.relay, room: ROOM, token: info.pageTokens[subject], ...opts });
   cleanup.push(() => p.leave());
   for (const t of tools) p.registerTool(t);
   return p;
@@ -52,11 +56,14 @@ async function rawPeer(username: string) {
     send(to: string, m: unknown) {
       grpc.send({ appMessage: { kind: "mcp/1", payload: base64Encode(new TextEncoder().encode(JSON.stringify(m))), toClientIds: [to] } });
     },
-    async next(match: (m: any) => boolean): Promise<unknown> {
+    async next(match: (m: any) => boolean, timeoutMs = 3000): Promise<unknown> {
+      const deadline = Date.now() + timeoutMs;
       for (;;) {
         const hit = inbox.find(match);
         if (hit) return hit;
-        await Promise.race([new Promise<void>((r) => waiters.push(r)), new Promise((_, rej) => setTimeout(() => rej(new Error("no reply")), 3000))]);
+        const left = deadline - Date.now();
+        if (left <= 0) throw new Error("no reply");
+        await Promise.race([new Promise<void>((r) => waiters.push(r)), new Promise((_, rej) => setTimeout(() => rej(new Error("no reply")), left))]);
       }
     },
     close: () => grpc.close(),
@@ -454,4 +461,39 @@ describe("a TypeScript page behind the Go bridge", () => {
     await new Promise((r) => setTimeout(r, 200));
     expect(heard).toEqual(['alice:{"rev":7}']);
   });
+
+  it("answers only the host's bridges with trustBridges", async () => {
+    const p = await pageWith({ trustBridges: ["bridge"] }, "alice", showSheet);
+    const intruder = await rawPeer("intruder");
+    intruder.send(p.id, { jsonrpc: "2.0", id: 1, method: "tools/list" });
+    await expect(intruder.next((m) => m.id === 1)).rejects.toThrow("no reply");
+
+    p.setAgentsAllowed(true);
+    const a = await agent("alice");
+    await waitPaired(a, p.id);
+    const res: any = await a.callTool({ name: "show_sheet", arguments: { sheet: "power" } });
+    expect(textOf(res)).toBe("showing power");
+  });
+
+  // The relay drops what one connection sends past 30 a second, with a burst
+  // of 30. Holding 40 replies and letting them go at once goes over it.
+  for (const [what, opts] of [
+    ["paces its replies under the relay's rate", {}],
+    ["resends the replies the relay drops for the rate", { sendRate: 0 }],
+  ] as const) {
+    it(`${what}, so every one of a burst arrives`, async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      let started = 0;
+      const p = await pageWith(opts, "alice", { name: "held", execute: async () => (started++, await gate, "done") });
+      const caller = await rawPeer("caller");
+      for (let id = 1; id <= 40; id++) {
+        caller.send(p.id, { jsonrpc: "2.0", id, method: "tools/call", params: { name: "held", arguments: {} } });
+        await new Promise((r) => setTimeout(r, 50)); // the caller stays under the rate itself
+      }
+      await eventually(() => started === 40, 5000, "all 40 calls started");
+      release();
+      for (let id = 1; id <= 40; id++) await caller.next((m) => m.id === id, 8000);
+    }, 20000);
+  }
 });
