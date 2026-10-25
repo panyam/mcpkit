@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	webhooks "github.com/panyam/servicekit/http/webhooks"
 )
 
 // WebhookHeaderMode selects the header / signature wire format for outbound
@@ -149,19 +151,12 @@ func signMCP(_ string, body []byte, secret string, now time.Time) signedDelivery
 // L415-423) supply their own msgID of the form msg_<type>_<random>;
 // see newMessageID.
 func signStandardWebhooks(msgID string, body []byte, secret string, now time.Time) signedDelivery {
-	ts := strconv.FormatInt(now.Unix(), 10)
-	mac := hmac.New(sha256.New, signingKey(secret))
-	mac.Write([]byte(msgID))
-	mac.Write([]byte("."))
-	mac.Write([]byte(ts))
-	mac.Write([]byte("."))
-	mac.Write(body)
-	sig := "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	ts := webhooks.Timestamp(now)
 	return signedDelivery{
 		headers: map[string]string{
-			"webhook-id":        msgID,
-			"webhook-timestamp": ts,
-			"webhook-signature": sig,
+			webhooks.HeaderID:        msgID,
+			webhooks.HeaderTimestamp: ts,
+			webhooks.HeaderSignature: webhooks.Sign(secret, msgID, ts, body),
 		},
 		body: body,
 	}
@@ -222,25 +217,13 @@ func VerifyMCPSignature(body []byte, secret, timestamp, signature string) bool {
 // Webhooks allows multiple space-separated versioned signatures
 // (e.g. "v1,abc v1,def"); we accept any matching v1.
 func VerifyStandardWebhooksSignature(body []byte, secret, msgID, timestamp, signature string) bool {
-	mac := hmac.New(sha256.New, signingKey(secret))
-	mac.Write([]byte(msgID))
-	mac.Write([]byte("."))
-	mac.Write([]byte(timestamp))
-	mac.Write([]byte("."))
-	mac.Write(body)
-	expected := "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
-	for _, candidate := range strings.Fields(signature) {
-		if hmac.Equal([]byte(candidate), []byte(expected)) {
-			return true
-		}
-	}
-	return false
+	return webhooks.Verify(secret, msgID, timestamp, body, signature)
 }
 
 // DefaultTimestampTolerance is how far a webhook timestamp may sit from the
 // receiver's clock, either way, and still be accepted. Five minutes matches the
 // Standard Webhooks reference libraries.
-const DefaultTimestampTolerance = 5 * time.Minute
+const DefaultTimestampTolerance = webhooks.DefaultTolerance
 
 // TimestampWithinTolerance reports whether a webhook-timestamp or
 // X-MCP-Timestamp value (unix seconds) is within tolerance of now. The
@@ -248,12 +231,7 @@ const DefaultTimestampTolerance = 5 * time.Minute
 // a receiver calls this as well to refuse replays (#1558). An empty or
 // unparseable timestamp is outside every tolerance.
 func TimestampWithinTolerance(timestamp string, now time.Time, tolerance time.Duration) bool {
-	n, err := strconv.ParseInt(strings.TrimSpace(timestamp), 10, 64)
-	if err != nil {
-		return false
-	}
-	d := now.Sub(time.Unix(n, 0))
-	return d <= tolerance && d >= -tolerance
+	return webhooks.TimestampWithinTolerance(timestamp, now, tolerance)
 }
 
 func parseUnix(s string) int64 {

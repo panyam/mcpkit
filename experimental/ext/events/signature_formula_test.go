@@ -45,22 +45,35 @@ func TestStandardWebhooksSignature_MatchesSpecFormula(t *testing.T) {
 // TestSigningKey_DecodesOnlyPrefixedSecrets pins the boundary the round-trip
 // test found: a value without the whsec_ prefix is not a spec-format secret,
 // and decoding one anyway silently reinterprets any short string that happens
-// to be valid base64, which is most of them.
+// to be valid base64, which is most of them. The key derivation now lives in
+// servicekit's webhooks package (#1578), so this checks it through the
+// signature it produces.
 func TestSigningKey_DecodesOnlyPrefixedSecrets(t *testing.T) {
 	raw := []byte("0123456789abcdef0123456789abcdef")
+	body := []byte(`{"eventId":"evt_1"}`)
+	now := time.Unix(1700000000, 0)
+	signedWith := func(secret string) string {
+		return signStandardWebhooks("evt_1", body, secret, now).headers["webhook-signature"]
+	}
+	keyed := func(key []byte) string {
+		mac := hmac.New(sha256.New, key)
+		mac.Write([]byte("evt_1.1700000000."))
+		mac.Write(body)
+		return "v1," + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	}
 
 	for _, enc := range []string{
 		base64.StdEncoding.EncodeToString(raw),
 		base64.RawURLEncoding.EncodeToString(raw),
 	} {
-		assert.Equal(t, raw, signingKey(webhookSecretPrefix+enc),
+		assert.Equal(t, keyed(raw), signedWith(webhookSecretPrefix+enc),
 			"both base64 alphabets must decode, since the SDKs disagree on which they emit")
 	}
 
-	assert.Equal(t, []byte("rotated"), signingKey("rotated"),
+	assert.Equal(t, keyed([]byte("rotated")), signedWith("rotated"),
 		"an unprefixed secret is used verbatim")
-	assert.Equal(t, []byte(webhookSecretPrefix+"!!not base64!!"),
-		signingKey(webhookSecretPrefix+"!!not base64!!"),
+	assert.Equal(t, keyed([]byte(webhookSecretPrefix+"!!not base64!!")),
+		signedWith(webhookSecretPrefix+"!!not base64!!"),
 		"a prefixed value that cannot decode falls back rather than failing to sign")
 }
 
