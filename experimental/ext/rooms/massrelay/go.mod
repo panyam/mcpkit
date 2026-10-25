@@ -10,7 +10,7 @@ replace (
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/gorilla/websocket v1.5.3
-	github.com/panyam/massrelay v0.3.2
+	github.com/panyam/massrelay v0.3.3
 	github.com/panyam/mcpkit v0.8.12
 	github.com/panyam/mcpkit/experimental/ext/rooms v0.8.12
 	github.com/panyam/oneauth v0.3.0
