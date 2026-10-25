@@ -1,5 +1,6 @@
 import { CollabClient } from "@panyam/massrelay";
 import { GRPCWSClient } from "@panyam/servicekit-client";
+import { DEFAULT_SEND_RATE, Sender } from "./sender.js";
 import { errorResult, toCallToolResult, type PageTool } from "./tool.js";
 
 /** The AppMessage kind that carries MCP JSON-RPC between a page and the bridge. */
@@ -121,6 +122,21 @@ export interface JoinToolRoomOptions {
    * it. Default `DEFAULT_PRESENCE_TTL_MS`.
    */
   presenceTtlMs?: number;
+  /**
+   * The relay subjects of the host's bridges. When set, the page answers only
+   * peers the relay validated a token for with one of these subjects, the way
+   * `rooms.TrustBridges` does for a Go page. Without it, any holder of a relay
+   * token for the room can call the page's tools directly, past the bridge's
+   * agreement check, and `ctx.caller` says whatever that peer claims.
+   */
+  trustBridges?: string[];
+  /**
+   * The messages a second the page sends at most, so it stays under the
+   * relay's per-connection limit (30 a second by default). Default
+   * `DEFAULT_SEND_RATE`; 0 turns pacing off. Either way, a message the relay
+   * drops for the rate is sent again.
+   */
+  sendRate?: number;
 }
 
 /** A page's membership in a tool room. */
@@ -264,11 +280,15 @@ class Page implements ToolRoom {
   private modelContext?: ModelContextLike;
 
   private client!: CollabClient;
+  private sender: Sender;
+  private trusted?: Set<string>;
 
   constructor(private opts: JoinToolRoomOptions) {
     this.room = opts.room;
     this.closed = new Promise((resolve) => (this.resolveClosed = resolve));
     this.modelContext = findModelContext(opts.modelContext);
+    this.sender = new Sender((action) => this.client.send(action), opts.sendRate ?? DEFAULT_SEND_RATE);
+    if (opts.trustBridges) this.trusted = new Set(opts.trustBridges);
   }
 
   join(): Promise<void> {
@@ -299,10 +319,12 @@ class Page implements ToolRoom {
           resolve();
         },
         // Before the join an ErrorEvent is the relay refusing it. After the
-        // join it refuses one message, typically PEER_NOT_FOUND for a reply
-        // to a bridge that has just left, and the page stays in the room.
+        // join it refuses one message and the page stays in the room:
+        // PEER_NOT_FOUND for a reply to a bridge that has just left, or
+        // RATE_LIMITED for one the sender sends again.
         onErrorEvent: (code, message) => {
           if (!joined) refuse(new Error(`joinToolRoom: ${code}: ${message}`));
+          else if (code === "RATE_LIMITED") this.sender.rateLimited(message);
         },
         onError: (err) => {
           if (!joined) refuse(err);
@@ -313,6 +335,7 @@ class Page implements ToolRoom {
           // Only messages addressed to this page; a room-wide one is someone
           // else's traffic.
           if (kind !== MESSAGE_KIND || to !== this.id) return;
+          if (this.trusted && !this.trusted.has(this.client.getPeer(from)?.identity?.subject ?? "")) return;
           let m: RpcMessage;
           try {
             m = JSON.parse(new TextDecoder().decode(payload));
@@ -470,6 +493,7 @@ class Page implements ToolRoom {
   private shutdown(): void {
     if (this.left) return;
     this.left = true;
+    this.sender.stop();
     for (const ctl of this.running.values()) ctl.abort();
     this.running.clear();
     this.resolveClosed();
@@ -588,8 +612,7 @@ class Page implements ToolRoom {
 
   private send(to: string, m: RpcMessage): void {
     if (this.left) return;
-    const payload = new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", ...m }));
-    this.client.sendAppMessage(MESSAGE_KIND, payload, { to });
+    this.sender.send(MESSAGE_KIND, new TextEncoder().encode(JSON.stringify({ jsonrpc: "2.0", ...m })), to);
   }
 }
 

@@ -66,8 +66,9 @@ the page only when the page agreed:
   agent, which enters it with the bridge's `pair` tool. `onPaired(fn)` reports which agent it was,
   and the code is withdrawn once used. Two minutes by default, at most ten.
 - Each call's `ctx.caller` is the agent's `{ subject, client? }` from the bridge's validated token,
-  so a tool can refuse per caller. Any peer in the room can send the page a call, though, so don't
-  rely on it alone yet. The Go page has `TrustBridges`, and the TS one doesn't yet (#1621).
+  so a tool can refuse per caller. Any peer in the room can send the page a call, though, and
+  claim any caller. Set `trustBridges` to the relay subjects the host's bridges join as before
+  relying on it, and the page answers only those peers, as a Go page does with `TrustBridges`.
 - `revoke({ subject, client? })` ends grants to that principal, `revokeAll()` ends every grant, and
   `grants()` lists them. A grant outlives the agent's MCP session and ends when revoked or when the
   page leaves.
@@ -76,8 +77,8 @@ the page only when the page agreed:
 (`subject`, `client?`) with `lastSeen` (a `Date`) and `acting`. An agent shows as soon as it
 attaches to the room and as acting once it calls the page, merged across every bridge in the room.
 An entry drops out an hour after it was last seen (`presenceTtlMs`). The same caveat as
-`ctx.caller` applies: any peer in the room can send the page a report, so show it as a hint, not
-as a record.
+`ctx.caller` applies: without `trustBridges`, any peer in the room can send the page a report, so
+show it as a hint, not as a record.
 
 ## Hearing from the host
 
@@ -119,6 +120,14 @@ registerOnApp(window.MCPApp, showSheet);
 
 `modelContext: true` also registers each tool with the browser's own WebMCP context
 (`navigator.modelContext`, then `document.modelContext`), when one is there.
+
+## Staying under the relay's rate
+
+The relay drops what one connection sends past 30 messages a second, so a page answering a burst
+of calls from several agents could lose replies, and the agents would wait out their timeouts. The
+page sends at most 25 a second (`sendRate`, 0 turns it off), in order, which is a bit slower in a
+burst and loses nothing. A message the relay drops anyway, which it answers with `RATE_LIMITED`, is
+sent again after a second, then two, then four, and given up on with a console warning after that.
 
 ## Developing
 

@@ -56,10 +56,10 @@ updates) are not reported, since the bridge sends neither.
 
 - 10 peers per room by default (`CollabService.MaxPeersPerRoom`): the bridge plus nine pages.
   A full room fails the join with `ROOM_FULL`.
-- 30 messages a second per WebSocket connection by default, past which the relay drops messages
-  without telling the sender. `Dial` paces each connection at 25 a second (`WithSendRate`, 0 turns
-  it off), so a bridge's fan-out waits instead of losing messages. `Notify` sends one message
-  per room whatever the number of tabs, so it rarely gets near the limit. The embedded
-  transport doesn't cross that limit. The TypeScript page doesn't pace yet, so a page answering a
-  burst of calls can still hit it.
+- 30 messages a second per WebSocket connection by default, past which the relay drops a message
+  and answers `ErrorEvent{RATE_LIMITED}`. `Dial` paces each connection at 25 a second
+  (`WithSendRate`, 0 turns it off), so a bridge's fan-out waits instead of losing messages, and it
+  sends a dropped message again, up to three times. `Notify` sends one message per room whatever
+  the number of tabs, so it rarely gets near the limit. The embedded transport doesn't cross that
+  limit. The TypeScript page paces and resends the same way.
 - 1 MB per message.
