@@ -12,8 +12,8 @@ importers:
         specifier: ^2.11.0
         version: 2.16.0
       '@panyam/massrelay':
-        specifier: ^0.3.2
-        version: 0.3.2(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.2.0)
+        specifier: ^0.3.3
+        version: 0.3.3(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.2.0)
       '@panyam/servicekit-client':
         specifier: ^0.2.0
         version: 0.2.0
@@ -120,8 +120,8 @@ packages:
   '@oxc-project/types@0.154.0':
     resolution: {integrity: sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA==}
 
-  '@panyam/massrelay@0.3.2':
-    resolution: {integrity: sha512-K2DFZfbj2zk4K1+ISkH8LvFjpvwSKUNC6DaafWgACwcpzN+lFr1liqLyiOesS7OoiBbVegGImKKUvrIjKUjDNA==}
+  '@panyam/massrelay@0.3.3':
+    resolution: {integrity: sha512-N+FUXNHIJKbDHx+vAul/BPbH6C3kxxOJyLly58NDcopG+atTd8TtwU9I83fHT3cjRcZ3mrBzHWvbYuiW+ZFOFQ==}
     peerDependencies:
       '@bufbuild/protobuf': ^2.0.0
       '@panyam/servicekit-client': ^0.0.7 || ^0.1.9 || ^0.2.0
@@ -852,7 +852,7 @@ snapshots:
 
   '@oxc-project/types@0.154.0': {}
 
-  '@panyam/massrelay@0.3.2(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.2.0)':
+  '@panyam/massrelay@0.3.3(@bufbuild/protobuf@2.16.0)(@panyam/servicekit-client@0.2.0)':
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@panyam/servicekit-client': 0.2.0

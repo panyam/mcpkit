@@ -307,8 +307,9 @@ class Page implements ToolRoom {
       this.client = new CollabClient({
         token: this.opts.token,
         // A reconnect would rejoin under a new peer id, which no pairing
-        // knows, so a dropped page ends and `closed` resolves instead.
-        maxRetries: 0,
+        // knows, so a dropped or evicted page ends and `closed` resolves
+        // instead.
+        reconnect: false,
         // CollabClient takes a WebSocket implementation only through the
         // GRPCWSClient it builds on.
         _grpcFactory: WebSocketImpl ? () => new GRPCWSClient({ WebSocket: WebSocketImpl }) : undefined,

@@ -19,8 +19,10 @@ releases, and the history explains the shape of `room.ts`.
   `onErrorEvent`, and pairs every `onConnect` with one `onDisconnect`, so the page moved over.
 
 So `onErrorEvent` means refusal only before the join. After it, the page ignores the event and
-stays. `closed` resolves from `onDisconnect`, and `maxRetries` is pinned to 0, because a reconnect
-would rejoin under a new peer id that no pairing knows.
+stays. `closed` resolves from `onDisconnect`, and `reconnect` is off, because a reconnect would
+rejoin under a new peer id that no pairing knows. Before 0.3.3 that took `maxRetries: 0`. 0.3.3
+turned reconnect on by default, including after a slow-consumer eviction, and with `maxRetries: 0` a
+drop now ends as `reconnect_failed`. `reconnect: false` keeps the old ending.
 
 `@panyam/servicekit-client` stays a direct dependency. `CollabClient` accepts a WebSocket
 implementation only through its `_grpcFactory` hook, so `joinToolRoom`'s `WebSocket` option builds a
