@@ -2,6 +2,8 @@ module github.com/panyam/mcpkit/experimental/ext/events
 
 go 1.26.9
 
+replace github.com/panyam/mcpkit => ../../..
+
 require (
 	github.com/panyam/mcpkit v0.8.11
 	github.com/stretchr/testify v1.12.1
