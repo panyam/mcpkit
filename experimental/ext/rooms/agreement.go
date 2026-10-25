@@ -130,13 +130,16 @@ func (b *Bridge) roomArgs(named string, s *session) ([]string, error) {
 			return rooms, nil
 		}
 	}
-	return nil, fmt.Errorf("name the room (resource) this call is about")
+	return nil, fmt.Errorf("name the room this call is about with %s", b.roomWords())
 }
 
 func (b *Bridge) attach(tc core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-	resource := resourceArg(req)
+	resource, err := b.namedRoom(req)
+	if err != nil {
+		return core.ErrorResult(err.Error()), nil
+	}
 	if resource == "" {
-		return core.ErrorResult("attach needs a resource"), nil
+		return core.ErrorResult("attach needs " + b.roomWords()), nil
 	}
 	p, s := b.caller(tc)
 	if p.Subject == "" {
@@ -181,7 +184,10 @@ func (b *Bridge) attach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 }
 
 func (b *Bridge) detach(tc core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-	resource := resourceArg(req)
+	resource, err := b.namedRoom(req)
+	if err != nil {
+		return core.ErrorResult(err.Error()), nil
+	}
 	_, s := b.caller(tc)
 	b.mu.Lock()
 	if s == nil || !s.attached[resource] {
@@ -197,7 +203,11 @@ func (b *Bridge) detach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 
 func (b *Bridge) listPages(tc core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 	p, s := b.caller(tc)
-	rooms, err := b.roomArgs(resourceArg(req), s)
+	named, err := b.namedRoom(req)
+	if err != nil {
+		return core.ErrorResult(err.Error()), nil
+	}
+	rooms, err := b.roomArgs(named, s)
 	if err != nil {
 		return core.ErrorResult(err.Error()), nil
 	}

@@ -114,8 +114,13 @@ func (b *Bridge) pair(tc core.ToolContext, req core.ToolRequest) (core.ToolRespo
 	if p.Subject == "" {
 		return core.ErrorResult("pair needs an authenticated subject"), nil
 	}
+	named, err := b.namedRoom(req)
+	if err != nil {
+		return core.ErrorResult(err.Error()), nil
+	}
+	a.Resource = named
 	if a.Resource == "" {
-		return core.ErrorResult("pair needs the resource whose page shows the code"), nil
+		return core.ErrorResult("pair needs " + b.roomWords() + " for the room whose page shows the code"), nil
 	}
 	rs, err := b.joinRoom(a.Resource)
 	if err != nil {

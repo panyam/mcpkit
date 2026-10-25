@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -46,15 +47,30 @@ func WithLocalSubject(subject string) Option {
 	return func(b *Bridge) { b.localSubject = subject }
 }
 
-// WithRoomOf maps a page tool call's arguments to the room it is about, for
-// hosts whose tools already name what they act on: agni maps its design
-// argument to design:<mount>/<entry>. The arguments reach the page unchanged.
-// Without it, the bridge adds an optional room property to every page tool.
-// A call that names no room goes to the session's default rooms from attach,
-// on the session wire, or fails.
-func WithRoomOf(fn func(args map[string]any) (string, error)) Option {
-	return func(b *Bridge) { b.roomOf = fn }
+// WithRoomOf maps a call's arguments to the room it is about, for hosts whose
+// tools already name what they act on: agni maps its design argument to
+// design:<mount>/<entry>. On a page tool the arguments reach the page
+// unchanged. Without it, the bridge adds an optional room property to every
+// page tool. A call that names no room goes to the session's default rooms
+// from attach, on the session wire, or fails.
+//
+// args declares the properties fn reads. The bridge's own tools that take a
+// resource (attach, detach, list_pages, pair, next_request) then accept them
+// too, so an agent names a room the same way everywhere. resource still wins
+// when given, and fn is called only when one of args is present, so a bare
+// list_pages keeps using the session's default rooms. nil leaves those tools
+// taking resource alone. A name the bridge's tools already use (resource,
+// code, after, wait_seconds) makes Register panic.
+func WithRoomOf(fn func(args map[string]any) (string, error), args RoomArgs) Option {
+	return func(b *Bridge) {
+		b.roomOf = fn
+		b.roomArgDefs = args
+	}
 }
+
+// RoomArgs are the arguments a WithRoomOf mapper reads, as JSON Schema
+// properties by name, e.g. {"design": {"type": "string"}}.
+type RoomArgs map[string]map[string]any
 
 // PageToolDecl declares one page tool up front: what tools/list shows for it,
 // whichever pages offer it at the moment.
@@ -108,6 +124,7 @@ type Bridge struct {
 	localSubject string
 	prmURL       string
 	roomOf       func(args map[string]any) (string, error)
+	roomArgDefs  RoomArgs
 	// declared is the fixed page-tool catalog from WithPageTools; nil means
 	// the dynamic registry, which needs the session wire.
 	declared    []PageToolDecl
@@ -228,47 +245,41 @@ func New(t RoomTransport, opts ...Option) *Bridge {
 // pages come and go.
 func (b *Bridge) Register(srv *server.Server) {
 	b.srv = srv
+	for name := range b.roomArgDefs {
+		if slices.Contains(bridgeArgNames, name) {
+			panic(fmt.Sprintf("rooms: WithRoomOf: room argument %q is a name the bridge's own tools use", name))
+		}
+	}
 	srv.RegisterTool(core.ToolDef{
 		Name:        "attach",
 		Description: "Join the room for a resource and get a pairing code for pages whose user is not you. On a session it also makes the resource your default room. Calls can name the resource instead, so attach is never required.",
-		InputSchema: map[string]any{
-			"type":       "object",
-			"properties": map[string]any{"resource": map[string]any{"type": "string", "description": "The resource the pages show, e.g. design:demo/board.kicad_sch"}},
-			"required":   []string{"resource"},
-		},
+		InputSchema: b.roomSchema(map[string]any{
+			"resource": map[string]any{"type": "string", "description": "The resource the pages show, e.g. design:demo/board.kicad_sch"},
+		}, "resource"),
 		ScopeChallenge: core.RequireScopes(ScopeRoomsAttach),
 	}, b.attach)
 	srv.RegisterTool(core.ToolDef{
-		Name:        "detach",
-		Description: "Drop a resource from this session's default rooms. Pages that agreed to you still do; their users revoke that on the page.",
-		InputSchema: map[string]any{
-			"type":       "object",
-			"properties": map[string]any{"resource": map[string]any{"type": "string"}},
-			"required":   []string{"resource"},
-		},
+		Name:           "detach",
+		Description:    "Drop a resource from this session's default rooms. Pages that agreed to you still do; their users revoke that on the page.",
+		InputSchema:    b.roomSchema(map[string]any{"resource": map[string]any{"type": "string"}}, "resource"),
 		ScopeChallenge: core.RequireScopes(ScopeRoomsAttach),
 	}, b.detach)
 	srv.RegisterTool(core.ToolDef{
 		Name:        "list_pages",
 		Description: "List the pages showing a resource: id, user, label, last focus, whether each agreed to you and which one calls go to by default. Name the resource; on a session it defaults to the rooms you attached to.",
-		InputSchema: map[string]any{
-			"type":       "object",
-			"properties": map[string]any{"resource": map[string]any{"type": "string", "description": "The resource whose pages to list, e.g. design:demo/board.kicad_sch"}},
-		},
+		InputSchema: b.roomSchema(map[string]any{
+			"resource": map[string]any{"type": "string", "description": "The resource whose pages to list, e.g. design:demo/board.kicad_sch"},
+		}),
 		Annotations:    map[string]any{"readOnlyHint": true},
 		ScopeChallenge: core.RequireScopes(ScopePagesRead),
 	}, b.listPages)
 	srv.RegisterTool(core.ToolDef{
 		Name:        "pair",
 		Description: "Pair this session with a page in an attached room by entering the code the page shows its user. Codes are single-use and short-lived; the page's user sees which agent paired.",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"resource": map[string]any{"type": "string", "description": "The attached resource whose page shows the code"},
-				"code":     map[string]any{"type": "string", "description": "The code the page shows"},
-			},
-			"required": []string{"resource", "code"},
-		},
+		InputSchema: b.roomSchema(map[string]any{
+			"resource": map[string]any{"type": "string", "description": "The attached resource whose page shows the code"},
+			"code":     map[string]any{"type": "string", "description": "The code the page shows"},
+		}, "resource", "code"),
 		ScopeChallenge: core.RequireScopes(ScopeRoomsAttach),
 	}, b.pair)
 	b.registerDeclared(srv)
@@ -384,12 +395,58 @@ func (b *Bridge) subjectOfClaims(c *core.Claims) (subject, client string) {
 	return b.localSubject, ""
 }
 
-func resourceArg(req core.ToolRequest) string {
-	var a struct {
-		Resource string `json:"resource"`
+// bridgeArgNames are the properties the bridge's own room tools declare,
+// which a RoomArgs name may not reuse.
+var bridgeArgNames = []string{"resource", "code", "after", "wait_seconds"}
+
+// roomSchema is the input schema of a bridge tool with these properties,
+// plus the host's room arguments. With room arguments declared, resource is
+// no longer required, since either names the room; the handler checks.
+func (b *Bridge) roomSchema(props map[string]any, required ...string) map[string]any {
+	for name, schema := range b.roomArgDefs {
+		props[name] = schema
 	}
-	_ = json.Unmarshal(req.Arguments, &a)
-	return a.Resource
+	if len(b.roomArgDefs) > 0 {
+		required = slices.DeleteFunc(slices.Clone(required), func(s string) bool { return s == "resource" })
+	}
+	schema := map[string]any{"type": "object", "properties": props}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
+}
+
+// namedRoom is the room a bridge tool call names: resource if given, else
+// what WithRoomOf maps the host's room arguments to, when any is present.
+// Empty means the call named none.
+func (b *Bridge) namedRoom(req core.ToolRequest) (string, error) {
+	var args map[string]any
+	_ = json.Unmarshal(req.Arguments, &args)
+	if r, _ := args["resource"].(string); r != "" {
+		return r, nil
+	}
+	if b.roomOf == nil {
+		return "", nil
+	}
+	for name := range b.roomArgDefs {
+		if _, ok := args[name]; ok {
+			room, err := b.roomOf(args)
+			if err != nil {
+				return "", fmt.Errorf("which room: %w", err)
+			}
+			return room, nil
+		}
+	}
+	return "", nil
+}
+
+// roomWords is how an error asks for a room: "a resource", or "a resource or
+// design" when the host maps its own design argument.
+func (b *Bridge) roomWords() string {
+	if len(b.roomArgDefs) == 0 {
+		return "a resource"
+	}
+	return "a resource or " + strings.Join(slices.Sorted(maps.Keys(b.roomArgDefs)), " or ")
 }
 
 // sortedPages returns the ids of rs's listed pages in order.

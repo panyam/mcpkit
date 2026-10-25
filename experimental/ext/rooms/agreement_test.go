@@ -178,7 +178,7 @@ func TestAgreement_WithRoomOfMapsTheHostsOwnArgument(t *testing.T) {
 			return "", nil
 		}
 		return "design:demo/" + d, nil
-	}))
+	}, nil))
 	var got []string
 	tool := rooms.PageTool{
 		Name:        "show_sheet",

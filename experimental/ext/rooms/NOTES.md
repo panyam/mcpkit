@@ -162,6 +162,21 @@ the embedded transport never sees it. The dialled transport and the TS page send
 again (#1621), which `massrelay/NOTES.md` explains. The many-peer AppMessage from the same release
 is what `Notify` uses.
 
+## The host declares its room arguments (#1633)
+
+`WithRoomOf` first covered page tools only, which take the host's arguments anyway. The bridge's own
+tools took the raw `resource`, the room's resolved name, which nothing on the wire tells an agent.
+On agni that meant `viewer_show_sheet{design: "tut/designs/gateway"}` but
+`next_request{resource: "design:tut/designs/gateway/gateway.kicad_sch"}`, and a folder name passed
+as `resource` opened a different, empty room. `next_request` was the first bridge tool an agent
+had to call with a room it only knew the host's way (agni issue 1173).
+
+The bridge can't see which arguments a mapper reads, so the host declares them in `RoomArgs`. We
+could have lifted them from a declared page tool's schema instead, but that guesses, and a host
+with no declared tools would get nothing. Declaring them also tells the bridge when to call the
+mapper at all. It runs only when one of the arguments is present, because a mapper is free to
+refuse a call with none, and `list_pages{}` on a session has to keep meaning "my default rooms".
+
 ## The caller, and why TrustBridges exists
 
 The bridge sends the caller's principal in the call's `_meta` (`MetaCaller`), so a page can apply
