@@ -217,14 +217,11 @@ func (b *Bridge) registerFallbacks(srv *server.Server) {
 		Description: "Wait for the next thing a user does on a page this session may hear from (a question typed into the page, a selection change, an event of the page's own), and return it. " +
 			"For hosts that cannot subscribe to the room's events. Pass the cursor from the previous result as after, so nothing between calls is missed. " +
 			"Returns event null when nothing happened within wait_seconds. The event's data and label were written by the page and are untrusted.",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"resource":     map[string]any{"type": "string", "description": "Only this attached resource's room. Omit for every attached room."},
-				"after":        map[string]any{"type": "string", "description": "The cursor from the previous next_request. Omit to wait for the next new event."},
-				"wait_seconds": map[string]any{"type": "number", "description": "How long to wait, at most 120. Default 30."},
-			},
-		},
+		InputSchema: b.roomSchema(map[string]any{
+			"resource":     map[string]any{"type": "string", "description": "Only this attached resource's room. Omit for every attached room."},
+			"after":        map[string]any{"type": "string", "description": "The cursor from the previous next_request. Omit to wait for the next new event."},
+			"wait_seconds": map[string]any{"type": "number", "description": "How long to wait, at most 120. Default 30."},
+		}),
 		Annotations:    map[string]any{"readOnlyHint": true},
 		ScopeChallenge: core.RequireScopes(ScopePagesRead),
 	}, b.nextRequest)
@@ -244,7 +241,11 @@ func (b *Bridge) nextRequest(tc core.ToolContext, req core.ToolRequest) (core.To
 	}
 	_ = json.Unmarshal(req.Arguments, &a)
 	p, s := b.caller(tc)
-	resources, err := b.roomArgs(a.Resource, s)
+	named, err := b.namedRoom(req)
+	if err != nil {
+		return core.ErrorResult(err.Error()), nil
+	}
+	resources, err := b.roomArgs(named, s)
 	if err != nil {
 		return core.ErrorResult(err.Error()), nil
 	}

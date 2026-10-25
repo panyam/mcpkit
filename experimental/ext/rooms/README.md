@@ -34,9 +34,30 @@ none of them needs an MCP session. On the session wire, `attach` also sets a def
 | each page tool | `pages:read` if the page marks it read-only, else `pages:act` | Runs on one page. Takes optional `room` and `page` arguments. |
 
 A page tool call names its room with the `room` argument the bridge adds, or, when the host's tools
-already name what they act on, through `WithRoomOf(func(args) (room, error))`: agni maps its
+already name what they act on, through `WithRoomOf(fn, rooms.RoomArgs{...})`: agni maps its
 `design` argument to `design:<mount>/<entry>`, and the arguments reach the page unchanged. A call
 that names no room uses the session's default rooms, or fails asking for one.
+
+`RoomArgs` declares the arguments the mapper reads, as JSON Schema properties. The bridge adds them
+to `attach`, `detach`, `list_pages`, `pair` and `next_request`, so an agent names a room the same
+way for those as for a page tool:
+
+```go
+rooms.WithRoomOf(designRoom, rooms.RoomArgs{"design": {"type": "string", "description": "The design folder"}})
+```
+
+```json
+{"name": "viewer_show_sheet", "arguments": {"design": "tut/designs/gateway", "sheet": "board"}}
+{"name": "next_request",      "arguments": {"design": "tut/designs/gateway"}}
+```
+
+`resource` still works and wins when both are given. The mapper runs only when one of its arguments
+is present, so a bare `list_pages` keeps using the session's default rooms, and an error from it
+comes back as the tool's error. The room events template (`rooms://events/{resource}`) has nothing
+to map and takes the resolved room, which every `list_pages` row and `next_request` event carries as
+`resource`. With `nil` room arguments those tools take `resource` alone, as before. A room argument
+named like one of the bridge's own (`resource`, `code`, `after`, `wait_seconds`) makes `Register`
+panic.
 
 ### Declared page tools, and the stateless wire
 
