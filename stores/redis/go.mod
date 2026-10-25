@@ -2,8 +2,6 @@ module github.com/panyam/mcpkit/stores/redis
 
 go 1.26.9
 
-replace github.com/panyam/mcpkit => ../..
-
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/panyam/mcpkit v0.8.12
