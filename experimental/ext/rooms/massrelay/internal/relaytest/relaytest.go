@@ -26,6 +26,7 @@ type Relay struct {
 	Service *services.CollabService
 	URL     string
 	ts      *httptest.Server
+	app     *relayserver.RelayApp
 }
 
 // Start runs a relay that requires a relay token on every WebSocket, with
@@ -44,14 +45,18 @@ func Start() (*Relay, error) {
 	app := relayserver.NewRelayApp()
 	app.Guard = relaymw.NewGuard(nil, nil, auth, nil, nil)
 	if err := app.Init(); err != nil {
+		app.Close()
 		return nil, err
 	}
 	ts := httptest.NewServer(app)
-	return &Relay{Service: app.Service, URL: ts.URL, ts: ts}, nil
+	return &Relay{Service: app.Service, URL: ts.URL, ts: ts, app: app}, nil
 }
 
 // Close stops the relay.
-func (r *Relay) Close() { r.ts.Close() }
+func (r *Relay) Close() {
+	r.ts.Close()
+	r.app.Close()
+}
 
 // ClientID is the client_id relay tokens carry, for embedded Principals.
 const ClientID = clientID

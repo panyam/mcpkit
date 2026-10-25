@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
-    "@panyam/massrelay": "^0.3.2",
+    "@panyam/massrelay": "^0.3.3",
     "@panyam/servicekit-client": "^0.2.0"
   },
   "devDependencies": {
