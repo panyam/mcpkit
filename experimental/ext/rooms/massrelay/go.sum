@@ -49,8 +49,8 @@ github.com/panyam/massrelay v0.3.2 h1:lTVkhV/O4i3yhtKYevq84MRHrrKeSBIU0blYMBkDq2
 github.com/panyam/massrelay v0.3.2/go.mod h1:nwt+FDUQELd6FDYWIfhhtiGe/KYA+ITRTPd/DJ6D9rk=
 github.com/panyam/oneauth v0.3.0 h1:nD1coHdYtkr1tfPnUXGo4zO5vWaKBLC9nIWtKPi3L28=
 github.com/panyam/oneauth v0.3.0/go.mod h1:kuj4u+oxzZIvHbyoNNIzpUlSq+22261X1CePLBG+fwQ=
-github.com/panyam/servicekit v0.2.0 h1:4owGvAua0+nLKcjIzODNXtIiSDyJVWgcVT2M0OnluVo=
-github.com/panyam/servicekit v0.2.0/go.mod h1:1oln+K/Rpgq0zs/UfBkn5qEl0WCkaOUxfJmadMA1ZTs=
+github.com/panyam/servicekit v0.2.2 h1:ra5MCDoDvAmCaeB7Qe8SToAo8pB0W4i+ciUjAmd6GJ0=
+github.com/panyam/servicekit v0.2.2/go.mod h1:GslqqjqDYzMw9a3h8LRTAmydHUIPV6VjAeOmWHjCzck=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/prometheus/client_golang v1.24.1 h1:JnJkREXzWxUdCuPFpIWZiPispT9xVV59uiuyR2bPlnU=
