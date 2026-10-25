@@ -2,13 +2,6 @@ module github.com/panyam/mcpkit/experimental/integrations/roomsevents
 
 go 1.26.9
 
-replace (
-	github.com/panyam/mcpkit => ../../..
-	github.com/panyam/mcpkit/experimental/ext/events => ../../ext/events
-	github.com/panyam/mcpkit/experimental/ext/events/clients/go => ../../ext/events/clients/go
-	github.com/panyam/mcpkit/experimental/ext/rooms => ../../ext/rooms
-)
-
 require (
 	github.com/panyam/mcpkit v0.8.11
 	github.com/panyam/mcpkit/experimental/ext/events v0.8.11
