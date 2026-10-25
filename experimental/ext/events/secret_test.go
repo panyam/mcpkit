@@ -1,9 +1,12 @@
 package events
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -32,7 +35,11 @@ func TestGenerateSecret_DecodesAsStandardBase64(t *testing.T) {
 			return
 		}
 		assert.Len(t, raw, 32)
-		assert.Equal(t, raw, signingKey(s), "the key mcpkit signs with must match what a Standard Webhooks verifier derives")
+		mac := hmac.New(sha256.New, raw)
+		mac.Write([]byte("evt_1.1700000000.{}"))
+		assert.Equal(t, "v1,"+base64.StdEncoding.EncodeToString(mac.Sum(nil)),
+			signStandardWebhooks("evt_1", []byte("{}"), s, time.Unix(1700000000, 0)).headers["webhook-signature"],
+			"the key mcpkit signs with must match what a Standard Webhooks verifier derives")
 		assert.NoError(t, validateClientSecret(s))
 	}
 }
