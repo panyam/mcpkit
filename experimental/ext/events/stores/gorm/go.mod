@@ -2,6 +2,10 @@ module github.com/panyam/mcpkit/experimental/ext/events/stores/gorm
 
 go 1.26.9
 
+replace github.com/panyam/mcpkit => ../../../../..
+
+replace github.com/panyam/mcpkit/experimental/ext/events => ../..
+
 require (
 	github.com/panyam/mcpkit/experimental/ext/events v0.8.15
 	github.com/stretchr/testify v1.12.1
