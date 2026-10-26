@@ -2,8 +2,6 @@ module github.com/panyam/mcpkit/experimental/ext/events
 
 go 1.26.9
 
-replace github.com/panyam/mcpkit => ../../..
-
 require (
 	github.com/panyam/mcpkit v0.8.14
 	github.com/panyam/servicekit v0.2.2
