@@ -129,9 +129,9 @@ SEP-2575 stateless wire if and only if it sees it on the session wire. Anything 
 policy holds on one transport and not the other, and the deployment cannot tell.
 
 Both wires get this from structure since #1625. The session wire wraps `d.Dispatch` with the
-chain in `Server.runRequest`, and the stateless dispatcher (`server/stateless/dispatch.go`) makes
-exactly one call past its envelope checks, `Backend.InvokeWithMiddleware`, which runs the same
-`runRequest` with `wireStateless`. The method table sits at the end of the chain on both wires, so
+chain in `Server.runRequest`, and the stateless wire's `Server.dispatchStateless`
+(`server/stateless_dispatch.go`) calls the same `runRequest`, with `wireStateless`, for every
+method past its envelope checks. The method table sits at the end of the chain on both wires, so
 there is no per-method handler left that could forget to call it.
 
 It used to be otherwise, and that is why this is a constraint at all. The stateless wire
@@ -144,8 +144,8 @@ that wire (#1352, found by an external conformance suite while our own tests pas
 above the chain until #1625. The metrics and trace middleware, which `runRequest` installs, never
 saw a stateless request until #1625 either.
 
-**Verify:** `TestDispatch_EveryMethodGoesThroughTheBackend` (`server/stateless`) checks that every
-method past the envelope, `server/discover` and unknown methods included, reaches the backend, and
+**Verify:** `TestDispatchStateless_EveryMethodGoesThroughTheChain` (`server`) checks that every
+method past the envelope, `server/discover` and unknown methods included, reaches the chain, and
 the `TestWireParity` rows `1355 middleware sees every method`, `1625 middleware sees the handshake`
 and `1625 metrics and trace see both wires` check it end to end on both wires. All run in
 `make test`. The `make check-stateless-middleware` script that guarded the per-method handlers went

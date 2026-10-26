@@ -39,10 +39,10 @@ So `Tools` is `[]string`, looked up in `srv.Registry().ToolDef` on every `agents
 strip applied from `ctx.ClientCaps()`. `TestGetToolsMatchToolsList` and the stateless parity tests
 compare the two responses as JSON for both kinds of client.
 
-One case still disagrees, and the bug is in `tools/list`, not here. The stateless `tools/list`
-never strips `x-mcp-file` (`server/stateless/handlers.go:19`), so a stateless client without
-`fileInputs` sees it there and not in `agents/get`. Tracked as #1515, which also adds that case to
-the parity test. If `tools/list` ever gains another per-caller rewrite or authorization filter,
+One case used to disagree, and the bug was in `tools/list`, not here. The stateless `tools/list`
+never stripped `x-mcp-file`, so a stateless client without `fileInputs` saw it there and not in
+`agents/get`. #1515 fixed it and added the case to the parity test, and since #1625 both wires
+answer `tools/list` from the same handler. If `tools/list` ever gains another per-caller rewrite or authorization filter,
 `resolveTools` has to apply it too, or the parity tests go red.
 
 ---
@@ -98,9 +98,9 @@ negotiation envelope.
 ## Stateless wire parity came for free
 
 The primitive needed **zero** stateless-specific code, because both halves ride shared seams: the
-stateless caps builder (`server/stateless_backend.go`) copies `dispatcher.extensions`, and any
-`HandleMethod` method dispatches through `dispatcher.customHandlers` in the stateless backend's
-`InvokeWithMiddleware` default case. A stateless client reads the extension from `server/discover`
+stateless caps builder (`Dispatcher.statelessCapabilities`) copies `dispatcher.extensions`, and any
+`HandleMethod` method dispatches through `dispatcher.customHandlers` in the method table both wires
+share (`Dispatcher.route`). A stateless client reads the extension from `server/discover`
 instead of `initialize` (both call `captureServerExtensions`), so `SupportsAgents()` is identical.
 
 Guarded by `TestStatelessWireParity`.
@@ -165,7 +165,7 @@ answering differently, need an explicit `NotifyListChanged`.
 `WWW-Authenticate` header, which is what a host needs to step up. A handler can only answer with a
 JSON-RPC error inside a 200, and by then the headers are gone. `ext/auth`'s `NewScopeMiddleware`
 is shaped the same way for the same reason. The stateless wire routes extension methods through
-the same chain (`server/stateless/dispatch.go`), so there's nothing wire-specific to do.
+the same chain (`Server.runRequest`), so there's nothing wire-specific to do.
 
 The middleware asks `Visible` before it asks the challenge. Done the other way round, a caller who
 may not know an agent exists would get a 403 naming its scopes, while an unknown name gets

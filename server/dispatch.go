@@ -14,7 +14,6 @@ import (
 
 	conc "github.com/panyam/gocurrent"
 	core "github.com/panyam/mcpkit/core"
-	"github.com/panyam/mcpkit/server/stateless"
 	gohttp "github.com/panyam/servicekit/http"
 	uritemplate "github.com/yosida95/uritemplate/v3"
 )
@@ -488,7 +487,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 
 // route is the method table both wires share (#1625). The session wire calls
 // it from Dispatch once the session is initialized; the stateless wire calls
-// it from statelessBackend's terminal. Where a method exists on one wire only,
+// it from dispatchStateless's terminal. Where a method exists on one wire only,
 // or behaves differently, the arm branches on wire, so grepping for wire ==
 // finds every difference. Everything else is the same on both by
 // construction.
@@ -499,7 +498,7 @@ func (d *Dispatcher) route(ctx context.Context, wire wireKind, id json.RawMessag
 		// The stateless wire's handshake. A session has initialize instead,
 		// so there it falls through to custom handlers like any other name.
 		if wire == wireStateless {
-			return core.NewResponse(id, stateless.NewDiscoverResult(discoverSource{d}))
+			return core.NewResponse(id, d.discoverResult())
 		}
 	case "tools/list":
 		return d.handleToolsList(ctx, wire, id, params)

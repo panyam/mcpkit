@@ -943,7 +943,7 @@ type sessionIO struct {
 // runRequest builds the per-request context and runs req through the
 // middleware chain to terminal. Both wires come through here (#1625): the
 // session wire from dispatchWithOpts and the stateless wire from
-// statelessBackend.InvokeWithMiddleware. What only a session has is inside
+// dispatchStateless. What only a session has is inside
 // the wire == wireLegacy branch; everything after it applies to both.
 func (s *Server) runRequest(ctx context.Context, wire wireKind, d *Dispatcher, req *core.Request, sio sessionIO, terminal MiddlewareFunc) (*core.Response, error) {
 	if wire == wireLegacy {

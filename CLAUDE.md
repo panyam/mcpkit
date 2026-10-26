@@ -137,13 +137,13 @@ These span packages and will bite on a task that never opens a routed doc.
   `scripts/check-no-binaries.sh` (whole-tree, wired into `test.yml`, the actual gate).
   `HANDOFF.md` / `HANDOFF_*.md` are gitignored for the same `git add -A` reason.
 - **Both wires run one request path, and wire differences are explicit branches in it.** Since
-  #1625 the stateless dispatcher makes a single `Backend.InvokeWithMiddleware` call past its
-  envelope checks, which runs `Server.runRequest` with `wireStateless`, the same function the
-  session wire uses. Per-request context, user middleware, metrics and trace all live there, with
+  #1625 the stateless wire's `Server.dispatchStateless` runs its envelope checks and then
+  `Server.runRequest` with `wireStateless`, the same function the session wire uses, ending in the
+  shared method table `Dispatcher.route`. Per-request context, user middleware, metrics and trace all live there, with
   the session-only parts inside `if wire == wireLegacy`. Before that the stateless wire dispatched
   per method and each handler had to call the chain itself; `resources/read` didn't (#1352), so a
   scope gate held on `tools/call` and not on the resource. Don't add a stateless path that answers
-  above `InvokeWithMiddleware`, and put a new wire difference in a `wire` branch of the shared code
+  above `runRequest`, and put a new wire difference in a `wire` branch of the shared code
   rather than a second handler (`server/NOTES.md` § Stateless-wire dispatch parity, constraint C7).
 - **Makefiles and justfiles dispatch; they do not hold shell scripts.** Control flow, or four or
   more statements, goes in `scripts/` and the recipe calls it. Nearly every directory carries both

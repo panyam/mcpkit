@@ -591,22 +591,22 @@ func quickInteractive(ctx core.ToolContext, req core.ToolRequest) (core.ToolResp
 
 A production-deployment note worth knowing upfront.
 
-[`server/stateless_backend.go:236-240`](../server/stateless_backend.go) documents the current state:
-
-> All stateless task store entries currently key under sessionID=""
-> (no session). This means stateless tasks share one bucket per process,
-> which is acceptable for the single-tenant fixtures the conformance
-> suite covers; multi-tenant deployments should layer an auth-subject-
-> keyed store wrapper. Tracked for a follow-up.
-
-What this means in practice:
+By default the task store buckets tasks by session ID:
 
 - On the legacy wire, every request carries an `Mcp-Session-Id` header → `core.GetSessionID(ctx)` returns the live session ID → the task store buckets tasks per session → users can't see each other's tasks.
 - On the stateless wire, there is no session → `core.GetSessionID(ctx)` returns `""` → all tasks land in the `""` bucket → in a multi-tenant deployment, every user's tasks share the same bucket.
 
-Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. Multi-tenant deployments have a real isolation hole today: `tasks/get`, `tasks/cancel`, and `tasks/update` look up by `(taskID, sessionID)`, and with `sessionID=""` across users they can read / cancel / update each other's tasks.
+Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. A multi-tenant stateless deployment would otherwise have a real isolation hole: `tasks/get`, `tasks/cancel`, and `tasks/update` look up by `(taskID, sessionID)`, and with `sessionID=""` across users they could read / cancel / update each other's tasks.
 
-The fix is tracked in [issue 485](https://github.com/panyam/mcpkit/issues/485), a `TaskBucketKeyer` hook that lets deployers derive the bucket key from an auth subject (or any other request attribute) without `ext/tasks` taking a hard dependency on `ext/auth`. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.
+Install a `server.WithTaskBucketKeyer` ([issue 485](https://github.com/panyam/mcpkit/issues/485)) to derive the bucket from an authenticated subject instead. It takes a raw `context.Context`, so neither `ext/tasks` nor mcpkit depends on `ext/auth`:
+
+```go
+server.WithTaskBucketKeyer(func(ctx context.Context) string {
+    return auth.SubjectFromContext(ctx) // your auth accessor
+})
+```
+
+It applies to both the v1 and v2 task surfaces, on both wires.
 
 ---
 

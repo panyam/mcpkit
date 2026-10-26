@@ -31,7 +31,6 @@ import (
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/internal/stdioframe"
-	"github.com/panyam/mcpkit/server/stateless"
 )
 
 // StdioOption configures the stdio transport.
@@ -134,7 +133,6 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 	// wires, like dual mode on HTTP: a request that carries a stateless
 	// signal goes to the SEP-2575 dispatcher and everything else to the
 	// session (#1637).
-	statelessDispatcher := stateless.New(newStatelessBackend(s))
 	dispatcher := s.newSession()
 	dispatcher.sessionID = "stdio"
 	defer dispatcher.Close()
@@ -248,7 +246,7 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 			if wireKindFromMessage(&req) == wireStateless {
 				// Same context the HTTP stateless path builds, minus what needs
 				// HTTP: no claims (stdio has no auth) and no response headers.
-				resp, dErr = statelessDispatcher.Dispatch(ctx, &req)
+				resp, dErr = s.dispatchStateless(ctx, &req)
 			} else {
 				resp, dErr = s.dispatchWithNotifyAndRequest(
 					dispatcher, ctx, nil,

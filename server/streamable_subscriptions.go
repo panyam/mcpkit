@@ -296,7 +296,7 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 	}
 
 	acceptCtx := core.WithRequestMeta(r.Context(), reqMeta)
-	caps := newStatelessBackend(t.server).Capabilities()
+	caps := t.server.dispatcher.statelessCapabilities()
 	accepted, err := t.server.resolveFilter(acceptCtx, params.Notifications, caps)
 	if err != nil {
 		writeStatelessResponse(w, filterRefusal(id, err))

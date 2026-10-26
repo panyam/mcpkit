@@ -1,8 +1,6 @@
 package stateless
 
-import (
-	core "github.com/panyam/mcpkit/core"
-)
+import core "github.com/panyam/mcpkit/core"
 
 // DiscoverResult is the SEP-2575 server/discover response payload.
 //
@@ -15,8 +13,7 @@ import (
 //	}
 //
 // Server identity moved from the result body to _meta in spec PR 3002;
-// the _meta stamp is applied centrally by Dispatch, like every other
-// stateless result.
+// the server stamps it onto every stateless result, this one included.
 //
 // Per the spec, clients MAY call server/discover up front to negotiate
 // version + capability shape, OR call any other RPC inline and handle
@@ -36,16 +33,4 @@ type DiscoverResult struct {
 	// immediately stale, publicly cacheable.
 	TTLMs      int    `json:"ttlMs"`
 	CacheScope string `json:"cacheScope"`
-}
-
-// NewDiscoverResult assembles the server/discover result from b. The backend's
-// method table answers server/discover with it, inside the middleware chain.
-func NewDiscoverResult(b DiscoverSource) DiscoverResult {
-	return DiscoverResult{
-		SupportedVersions: b.SupportedVersions(),
-		Capabilities:      b.Capabilities(),
-		Instructions:      b.Instructions(),
-		TTLMs:             0,
-		CacheScope:        core.CacheScopePublic,
-	}
 }

@@ -42,15 +42,8 @@ type streamableTransport struct {
 	originChecker *mw.OriginChecker       // nil = allow all (set by allowedOrigins config)
 	config        transportConfig
 
-	// SEP-2575 stateless-wire dispatcher. Non-nil iff statelessMode allows
-	// the stateless wire (ModeDual or ModeStateless). The detection helper
-	// (stateless_detect.go) routes per-request between this and the legacy
-	// session dispatcher; pure-Legacy mode leaves this nil and never routes
-	// to stateless. Singleton — no per-request state lives on it.
-	statelessDispatcher *stateless.Dispatcher
-
 	// statelessSubs holds the set of open subscriptions/listen streams.
-	// Initialized alongside statelessDispatcher. broadcast() fans
+	// Non-nil iff statelessMode allows the stateless wire. broadcast() fans
 	// list-changed notifications through this on every Server.Broadcast.
 	statelessSubs *statelessSubMap
 }
@@ -97,12 +90,11 @@ func newStreamableTransport(s *Server, cfg transportConfig) *streamableTransport
 		config:        cfg,
 	}
 
-	// Construct the SEP-2575 stateless dispatcher + subscription map when
-	// the mode permits the stateless wire. Pure-Legacy mode leaves them
-	// nil; the detect helper short-circuits to the legacy path regardless
-	// of incoming shape, and broadcast() skips the nil-check no-op.
+	// Construct the SEP-2575 subscription map when the mode permits the
+	// stateless wire. Pure-Legacy mode leaves it nil; the detect helper
+	// short-circuits to the legacy path regardless of incoming shape, and
+	// broadcast() skips the nil-check no-op.
 	if cfg.statelessMode != stateless.ModeLegacyOnly {
-		t.statelessDispatcher = stateless.New(newStatelessBackend(s))
 		t.statelessSubs = newStatelessSubMap(
 			effectiveStatelessSubCap(s.options.statelessSubCap),
 			s.options.statelessSubRate,
@@ -264,7 +256,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// SEP-2575 stateless-wire routing. The detect helper inspects method,
 	// headers, and _meta to pick a dispatch path; pure-Legacy mode
 	// short-circuits to legacy regardless of incoming shape.
-	if t.statelessDispatcher != nil {
+	if t.config.statelessMode != stateless.ModeLegacyOnly {
 		if detectWireKind(r, body, &req, t.config.statelessMode) == wireStateless {
 			// subscriptions/listen is the only stateless method that
 			// returns a stream rather than a synchronous response. It

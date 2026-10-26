@@ -36,8 +36,8 @@ pushes the same error on the stream and returns 202, like its parse errors. No e
 batch runs. Older sessions keep the permissive path, and the stdio transport has never accepted
 batches at all.
 
-The stateless wire (`server/stateless/dispatch.go`) still has its own version-error path. Fold it
-through the resolver when #493 collapses the package.
+The stateless wire (`Server.dispatchStateless`, `server/stateless_dispatch.go`) still has its own
+version-error path. Fold it through the resolver when #493 gets to it.
 
 ---
 
@@ -69,14 +69,22 @@ their `tool "x":` style prefix. The `1637` rows in `TestWireParity` cover them.
 **Both wires run one request path** (#1625). `Server.runRequest` builds the per-request context
 and the chain (user middleware, then metrics, then trace outermost) around a terminal, and both
 wires come through it: the session wire from `dispatchWithOpts` with `wireLegacy`, the stateless
-wire from `statelessBackend.InvokeWithMiddleware` with `wireStateless`. What only a session has
+wire from `Server.dispatchStateless` with `wireStateless`. What only a session has
 (notify and request push with their interceptors, `ContextWithSession`, the session id, the
 detach strategy, the SSE retry hint) sits inside `if wire == wireLegacy`. Everything after it,
 the task bucket keyer, `Mcp-Method`, allowed roots, `NotifyResourceUpdated` and the content-chunk
-method, applies to both. The stateless dispatcher keeps only what is really its own (the
-removed-methods `-32601`, the `_meta` and version checks, serverInfo and resultType stamping) and
-then makes one `InvokeWithMiddleware` call for every method, `server/discover` included, so a
-middleware sees `server/discover` the way it sees `initialize` on the session wire.
+method, applies to both. `dispatchStateless` keeps only what is really the stateless wire's own
+(the removed-methods `-32601`, the `_meta` and version checks, serverInfo and resultType stamping)
+and then calls `runRequest` for every method, `server/discover` included, so a middleware sees
+`server/discover` the way it sees `initialize` on the session wire.
+
+That dispatcher used to live in `server/stateless` behind a `Backend` interface, because `server`
+imports `stateless` and not the other way round, and `statelessBackend` existed only to satisfy
+it. Once everything past the envelope checks was `runRequest` and the shared method table, the
+interface was glue, so #1625 moved the dispatcher into `server/stateless_dispatch.go` and deleted
+`Backend`, `New`, `Dispatcher` and the adapter. `server/stateless` keeps what callers import it
+for: `Mode`, `DiscoverResult`, the `subscriptions/listen` frames, `HTTPStatusForCode` and
+`RequestMetaFromContext`.
 
 Until #1625 the stateless chain was opt-in per handler in `server/stateless/handlers.go`, the
 opposite of the session wire. That is how `resources/read` (#1352) and the list methods (#1355)
@@ -118,9 +126,8 @@ A `server.Middleware` that short-circuits with `*core.AuthError` (SEP-2350 scope
 auth) now reaches the transport's shared `writeAuthError`, emitting HTTP 403 plus
 `WWW-Authenticate`. Previously it was folded into a generic `-32603` / HTTP 200, losing both.
 
-Mechanism: `stateless.Backend.InvokeWithMiddleware` returns `(*core.Response, error, bool)` and
-`stateless.Dispatcher.Dispatch` returns `(*core.Response, error)`. The middleware-bearing
-branches forward the raw error; `server/discover` wraps with `nil`. `handleStatelessPost` and
+Mechanism: `Server.dispatchStateless` returns `(*core.Response, error)`, and the error is the
+chain's short-circuit, forwarded raw with a nil response. `handleStatelessPost` and
 `handleStatelessPostSSE` call `writeAuthError` on a non-nil dispatch error. The SSE path is safe
 because middleware short-circuits before any frame is written, so `sseStarted` is always false.
 
@@ -321,7 +328,7 @@ because aborting the POST cancels the handler, but the in-process and stdio path
 transport built its POST without the context and waited on the response channel with no ctx case.
 So a cancelled call over any of those kept waiting for the tool to finish. All three take the
 caller's context now. The notification is skipped on the stateless wire, which removed it from the
-method set (`server/stateless/dispatch.go`, `removedLegacyMethods`).
+method set (`removedStatelessMethods` in `server/stateless_dispatch.go`).
 
 The other two looked like gaps and were not. A 403 on a static token does keep its scopes: they are
 on `*client.ClientAuthError` (servicekit's `AuthRetryError`) as `RequiredScopes`, and the flat
