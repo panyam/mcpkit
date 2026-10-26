@@ -346,7 +346,15 @@ func TestStatelessRouting_DualMode_ToolsCallMissingCap(t *testing.T) {
 	}
 	r := decode(t, resp)
 	if r.Error == nil || r.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Errorf("expected -32021, got %+v", r.Error)
+		t.Fatalf("expected -32021, got %+v", r.Error)
+	}
+	raw, _ := json.Marshal(r.Error.Data)
+	var data core.MissingRequiredClientCapabilityData
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("data did not decode: %v", err)
+	}
+	if data.RequiredCapabilities.Sampling == nil {
+		t.Errorf("RequiredCapabilities.Sampling missing; got %+v", data.RequiredCapabilities)
 	}
 }
 
@@ -430,5 +438,21 @@ func TestStatelessRouting_MissingRoutingHeadersReturn400(t *testing.T) {
 				t.Errorf("expected -32020, got %+v", r.Error)
 			}
 		})
+	}
+}
+
+// The stateless wire echoes the method in an Mcp-Method response header, as
+// the session wire does, since both stage it in runRequest (#1625).
+func TestStatelessResponseCarriesMcpMethod(t *testing.T) {
+	_, url, teardown := newStatelessTestServer(t, stateless.ModeStateless)
+	defer teardown()
+
+	resp := postStatelessJSON(t, url, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/list",
+		"params": validMetaParams(),
+	}, map[string]string{mcpProtocolVersionHeader: draftVersion})
+	defer resp.Body.Close()
+	if got := resp.Header.Get("Mcp-Method"); got != "tools/list" {
+		t.Errorf("Mcp-Method response header = %q, want tools/list", got)
 	}
 }

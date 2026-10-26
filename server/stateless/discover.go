@@ -1,8 +1,6 @@
 package stateless
 
 import (
-	"encoding/json"
-
 	core "github.com/panyam/mcpkit/core"
 )
 
@@ -40,15 +38,14 @@ type DiscoverResult struct {
 	CacheScope string `json:"cacheScope"`
 }
 
-// handleDiscover assembles the discover response from the backend. The
-// dispatcher has already validated the _meta envelope; we just snapshot
-// what the server is currently advertising and return it.
-func (d *Dispatcher) handleDiscover(id json.RawMessage) *core.Response {
-	return core.NewResponse(id, DiscoverResult{
-		SupportedVersions: d.Backend.SupportedVersions(),
-		Capabilities:      d.Backend.Capabilities(),
-		Instructions:      d.Backend.Instructions(),
+// NewDiscoverResult assembles the server/discover result from b. The backend's
+// method table answers server/discover with it, inside the middleware chain.
+func NewDiscoverResult(b Backend) DiscoverResult {
+	return DiscoverResult{
+		SupportedVersions: b.SupportedVersions(),
+		Capabilities:      b.Capabilities(),
+		Instructions:      b.Instructions(),
 		TTLMs:             0,
 		CacheScope:        core.CacheScopePublic,
-	})
+	}
 }

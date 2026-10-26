@@ -111,3 +111,17 @@ func TestAllowedRoots_NilWhenNoRoots(t *testing.T) {
 		t.Errorf("AllowedRoots = %v, want nil (no roots configured)", got)
 	}
 }
+
+// With no session (the stateless wire) the roots supplier rides on ctx (#1625).
+func TestSetAllowedRoots_NoSessionRidesOnCtx(t *testing.T) {
+	ctx := SetAllowedRoots(context.Background(), func() []string { return []string{"/workspace"} })
+	if IsPathAllowed(ctx, "/etc/passwd") {
+		t.Error("/etc/passwd allowed under /workspace")
+	}
+	if !IsPathAllowed(ctx, "/workspace/a.go") {
+		t.Error("/workspace/a.go refused under /workspace")
+	}
+	if got := AllowedRoots(ctx); len(got) != 1 || got[0] != "/workspace" {
+		t.Errorf("AllowedRoots = %v, want [/workspace]", got)
+	}
+}

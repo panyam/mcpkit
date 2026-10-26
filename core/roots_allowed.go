@@ -35,11 +35,11 @@ import (
 //
 // Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func IsPathAllowed(ctx context.Context, path string) bool {
-	sc := sessionFromContext(ctx)
-	if sc == nil || sc.allowedRoots == nil {
+	fn := allowedRootsFunc(ctx)
+	if fn == nil {
 		return true
 	}
-	roots := sc.allowedRoots()
+	roots := fn()
 	if roots == nil {
 		return true
 	}
@@ -60,24 +60,36 @@ func IsPathAllowed(ctx context.Context, path string) bool {
 //
 // Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func AllowedRoots(ctx context.Context) []string {
-	sc := sessionFromContext(ctx)
-	if sc == nil || sc.allowedRoots == nil {
+	fn := allowedRootsFunc(ctx)
+	if fn == nil {
 		return nil
 	}
-	return sc.allowedRoots()
+	return fn()
+}
+
+// allowedRootsFunc returns the supplier SetAllowedRoots installed, from the
+// session when there is one and from ctx otherwise.
+func allowedRootsFunc(ctx context.Context) func() []string {
+	if sc := sessionFromContext(ctx); sc != nil {
+		return sc.allowedRoots
+	}
+	fn, _ := ctx.Value(statelessAllowedRootsCtxKey).(func() []string)
+	return fn
 }
 
 // SetAllowedRoots installs an allowed-roots supplier on the session
 // stored in ctx. Exported for the server dispatch layer to wire in
-// the computed root set during session setup. Must be called AFTER
-// ContextWithSession.
+// the computed root set during session setup. Call it after
+// ContextWithSession; with no session in ctx (the stateless wire) the
+// supplier rides on the returned ctx instead.
 //
 // Deprecated: per SEP-2577. Retained in 0.4; removal deferred to a future release (~2027 at the earliest, issue 850). See docs/SEP_2577_DEPRECATIONS.md.
 func SetAllowedRoots(ctx context.Context, fn func() []string) context.Context {
 	if sc := sessionFromContext(ctx); sc != nil {
 		sc.allowedRoots = fn
+		return ctx
 	}
-	return ctx
+	return context.WithValue(ctx, statelessAllowedRootsCtxKey, fn)
 }
 
 // FileURIToPath converts a file:// URI to a local filesystem path.

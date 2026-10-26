@@ -248,7 +248,7 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 			if wireKindFromMessage(&req) == wireStateless {
 				// Same context the HTTP stateless path builds, minus what needs
 				// HTTP: no claims (stdio has no auth) and no response headers.
-				resp, dErr = statelessDispatcher.Dispatch(core.WithTaskBucketKeyer(ctx, s.dispatcher.taskBucketKeyer), &req)
+				resp, dErr = statelessDispatcher.Dispatch(ctx, &req)
 			} else {
 				resp, dErr = s.dispatchWithNotifyAndRequest(
 					dispatcher, ctx, nil,

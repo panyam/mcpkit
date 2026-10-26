@@ -200,23 +200,38 @@ func TestReadResource_ConformantDefault(t *testing.T) {
 // that sets TTLMs / CacheScope on its return value wins over the server-wide
 // WithReadResourceCacheControl default — the default only fills unset fields.
 func TestReadResource_HandlerOverridesCacheControl(t *testing.T) {
-	c := newReadTTLClient(t, core.IntPtr(5000), core.CacheScopePublic,
-		WithReadResourceCacheControl(30000, core.CacheScopePrivate))
+	for _, mode := range []client.ClientMode{client.ClientModeLegacyOnly, client.ClientModeStateless} {
+		t.Run(mode.String(), func(t *testing.T) {
+			srv := NewServer(core.ServerInfo{Name: "read-ttl-test", Version: "0.0.1"},
+				WithReadResourceCacheControl(30000, core.CacheScopePrivate))
+			srv.RegisterResource(
+				core.ResourceDef{URI: "file:///fixture", Name: "fixture", MimeType: "text/plain"},
+				func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+					return core.ResourceResult{
+						Contents:   []core.ResourceReadContent{{URI: req.URI, MimeType: "text/plain", Text: "ok"}},
+						TTLMs:      core.IntPtr(5000),
+						CacheScope: core.CacheScopePublic,
+					}, nil
+				},
+			)
+			c := connectListTTLClient(t, srv, client.WithClientMode(mode))
 
-	res, err := c.Call(t.Context(), "resources/read", map[string]any{"uri": "file:///fixture"})
-	if err != nil {
-		t.Fatalf("resources/read: %v", err)
-	}
-	var m map[string]any
-	if err := json.Unmarshal(res.Raw, &m); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if ttl, ok := m["ttlMs"].(float64); !ok || ttl != 5000 {
-		t.Errorf("ttlMs = %v, want 5000 (handler override); raw=%s", m["ttlMs"], res.Raw)
-	}
-	if m["cacheScope"] != core.CacheScopePublic {
-		t.Errorf("cacheScope = %v, want %q (handler override); raw=%s",
-			m["cacheScope"], core.CacheScopePublic, res.Raw)
+			res, err := c.Call(t.Context(), "resources/read", map[string]any{"uri": "file:///fixture"})
+			if err != nil {
+				t.Fatalf("resources/read: %v", err)
+			}
+			var m map[string]any
+			if err := json.Unmarshal(res.Raw, &m); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if ttl, ok := m["ttlMs"].(float64); !ok || ttl != 5000 {
+				t.Errorf("ttlMs = %v, want 5000 (handler override); raw=%s", m["ttlMs"], res.Raw)
+			}
+			if m["cacheScope"] != core.CacheScopePublic {
+				t.Errorf("cacheScope = %v, want %q (handler override); raw=%s",
+					m["cacheScope"], core.CacheScopePublic, res.Raw)
+			}
+		})
 	}
 }
 
@@ -302,14 +317,14 @@ func newReadTTLClient(t *testing.T, handlerTTL *int, handlerScope string, opts .
 
 // connectListTTLClient serves srv over httptest and returns a connected
 // client, registering cleanup for both.
-func connectListTTLClient(t *testing.T, srv *Server) *client.Client {
+func connectListTTLClient(t *testing.T, srv *Server, opts ...client.ClientOption) *client.Client {
 	t.Helper()
 
 	handler := srv.Handler(WithStreamableHTTP(true))
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 
-	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "list-ttl-client", Version: "0.0.1"})
+	c := client.NewClient(ts.URL+"/mcp", core.ClientInfo{Name: "list-ttl-client", Version: "0.0.1"}, opts...)
 	if err := c.Connect(t.Context()); err != nil {
 		t.Fatalf("connect: %v", err)
 	}

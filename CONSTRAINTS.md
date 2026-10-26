@@ -13,7 +13,7 @@ Current state, worth knowing before trusting one:
 | Constraint | Enforced? |
 |---|---|
 | C4 | **CI gate** — `make check-ext-isolation`, run by `.github/workflows/test.yml` |
-| C7 | **CI gate** — `make check-stateless-middleware`, run by `.github/workflows/test.yml` |
+| C7 | **Structural** since #1625 (one route into the chain), pinned by tests in `make test` |
 | C8 | **CI gate** — `make check-recipe-complexity`, run by `.github/workflows/test.yml` |
 | C1, C2, C3 | manual `grep` recipes; nothing runs them |
 | C5, C9 | says so explicitly; no automated check exists |
@@ -128,27 +128,28 @@ A middleware registered with `server.WithMiddleware` must see a given JSON-RPC m
 SEP-2575 stateless wire if and only if it sees it on the session wire. Anything else means a
 policy holds on one transport and not the other, and the deployment cannot tell.
 
-The session wire gets this for free: `server.go` wraps `d.Dispatch` with the chain and filters by
-nothing, so every method passes through. The stateless wire dispatches per method in
-`server/stateless/handlers.go`, and a handler reaches the chain only by calling
-`Backend.InvokeWithMiddleware` itself. Omitting that call is invisible: the method still works,
-the response still looks right, and the middleware simply never runs.
+Both wires get this from structure since #1625. The session wire wraps `d.Dispatch` with the
+chain in `Server.runRequest`, and the stateless dispatcher (`server/stateless/dispatch.go`) makes
+exactly one call past its envelope checks, `Backend.InvokeWithMiddleware`, which runs the same
+`runRequest` with `wireStateless`. The method table sits at the end of the chain on both wires, so
+there is no per-method handler left that could forget to call it.
 
-That is not hypothetical. `handleResourcesRead` never called it, so a scope gate applied to
-`tools/call` and `prompts/get` and silently did not apply to `resources/read` on that wire. A
-caller refused a tool could ask for the resource instead and be served. Fixed in #1352, and found
-by an external conformance suite rather than by our own tests, which passed throughout.
+It used to be otherwise, and that is why this is a constraint at all. The stateless wire
+dispatched per method in `server/stateless/handlers.go`, and a handler reached the chain only by
+calling `InvokeWithMiddleware` itself. Omitting that call was invisible: the method still worked,
+the response still looked right, and the middleware never ran. `handleResourcesRead` did exactly
+that, so a scope gate applied to `tools/call` and silently did not apply to `resources/read` on
+that wire (#1352, found by an external conformance suite while our own tests passed). The four
+`*/list` methods and `completion/complete` followed in #1355, and `server/discover` was answered
+above the chain until #1625. The metrics and trace middleware, which `runRequest` installs, never
+saw a stateless request until #1625 either.
 
-**No known divergence.** The four `*/list` methods and `completion/complete` skipped the chain on
-the stateless wire until #1355, so a middleware that filtered `tools/list` filtered it on one wire
-only. The checker's `ALLOWED` is empty now, and an entry added there is a new decision that needs a
-reason in its PR. The listings went through the chain rather than out of it because the session
-wire already let a middleware rewrite them, and the room bridge depends on doing so.
-
-**Verify:** `make check-stateless-middleware`, wired into `.github/workflows/test.yml`. It parses
-each `handle*` in `server/stateless/handlers.go` and fails on any that neither calls
-`InvokeWithMiddleware` nor appears in `ALLOWED`. Confirmed to catch the real regression: removing
-the call from `handleResourcesRead` makes it exit 1 naming that handler.
+**Verify:** `TestDispatch_EveryMethodGoesThroughTheBackend` (`server/stateless`) checks that every
+method past the envelope, `server/discover` and unknown methods included, reaches the backend, and
+the `TestWireParity` rows `1355 middleware sees every method`, `1625 middleware sees the handshake`
+and `1625 metrics and trace see both wires` check it end to end on both wires. All run in
+`make test`. The `make check-stateless-middleware` script that guarded the per-method handlers went
+with them.
 
 ## C8: Makefiles and justfiles dispatch; they do not hold shell scripts
 

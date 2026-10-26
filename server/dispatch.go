@@ -405,17 +405,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 	// point, so every tool/resource/prompt/completion/custom handler is covered.
 	// A request (has an ID) gets a -32603 internal error; a notification gets
 	// nil. Panic detail + stack go to the log, never to the wire (issue 420).
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("mcpkit: recovered panic in handler dispatch",
-				"method", req.Method, "panic", r, "stack", string(debug.Stack()))
-			if req.ID != nil {
-				resp = core.NewErrorResponse(id, core.ErrCodeInternal, "internal error")
-			} else {
-				resp = nil
-			}
-		}
-	}()
+	defer recoverHandlerPanic(req, &resp)
 
 	// 2026-07-28 final revision: every result carries the generalized
 	// resultType discriminator. Stamped at this single exit point so every
@@ -516,6 +506,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 			}
 			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}
+	}
+}
+
+// recoverHandlerPanic turns a panic below dispatch into a -32603 for a
+// request, or no response for a notification. Both wires defer it around
+// their method table (#1625). Panic detail and stack go to the log, never to
+// the wire (issue 420).
+func recoverHandlerPanic(req *core.Request, resp **core.Response) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	slog.Error("mcpkit: recovered panic in handler dispatch",
+		"method", req.Method, "panic", r, "stack", string(debug.Stack()))
+	*resp = nil
+	if req.ID != nil {
+		*resp = core.NewErrorResponse(req.ID, core.ErrCodeInternal, "internal error")
 	}
 }
 

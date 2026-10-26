@@ -63,29 +63,40 @@ timeouts, the server-wide `WithToolTimeout` (it lived in the session-only termin
 in `server.go`), the `MaxCompletionValues` cap, and handler error messages without
 their `tool "x":` style prefix. The `1637` rows in `TestWireParity` cover them.
 
-The rest of the stateless method table and the middleware chain are still separate,
-which is #1625. Context the session path sets in `dispatchWithNotifyAndRequest`
-(metrics and trace middleware, content-chunk method, `NotifyResourceUpdated`, allowed
-roots) is not set on the stateless wire, and that also belongs to #1625.
-
 `make verify-dual` (#478) drives example walkthroughs over both wires to catch this class; see
 `examples/DUAL_MODE_AUDIT.md`.
 
-Every request-bearing stateless handler now traverses the middleware chain: `resources/read` since
-#1352, and the four `*/list` methods plus `completion/complete` since #1355. The backend's terminal
-(`statelessBackend.InvokeWithMiddleware`) answers those five from the registry, so a new method
-routed through the chain needs a terminal case there too, or it comes back `-32601`. The handlers
-in `server/stateless/handlers.go` keep their own answer only for test fakes with no chain.
-`server/discover` is still answered outside the chain.
+**Both wires run one request path** (#1625). `Server.runRequest` builds the per-request context
+and the chain (user middleware, then metrics, then trace outermost) around a terminal, and both
+wires come through it: the session wire from `dispatchWithOpts` with `wireLegacy`, the stateless
+wire from `statelessBackend.InvokeWithMiddleware` with `wireStateless`. What only a session has
+(notify and request push with their interceptors, `ContextWithSession`, the session id, the
+detach strategy, the SSE retry hint) sits inside `if wire == wireLegacy`. Everything after it,
+the task bucket keyer, `Mcp-Method`, allowed roots, `NotifyResourceUpdated` and the content-chunk
+method, applies to both. The stateless dispatcher keeps only what is really its own (the
+removed-methods `-32601`, the `_meta` and version checks, serverInfo and resultType stamping) and
+then makes one `InvokeWithMiddleware` call for every method, `server/discover` included, so a
+middleware sees `server/discover` the way it sees `initialize` on the session wire.
 
-That leaves the chain opt-in per handler, the opposite of the session wire, where it wraps
-`d.Dispatch` once and nothing below can skip it. #1625 moves the stateless chain above the method
-switch and shares one method table between the wires. The rule it follows, set 2026-10-24: the
-session wire stays through roughly 18 months of deprecation, so seeing where the wires differ
-matters more than code that never branches. Prefer one shared handler with an explicit
-`if session … else …` where behaviour differs over a second per-wire handler. A grep for the branch
-finds every parity difference, a feature missing on one wire can't hide as code nobody wrote (which
-is how #1355 lived), and retiring the session wire is deleting the session arms.
+Until #1625 the stateless chain was opt-in per handler in `server/stateless/handlers.go`, the
+opposite of the session wire. That is how `resources/read` (#1352) and the list methods (#1355)
+skipped it, and it also meant a stateless request never met the metrics or trace middleware, the
+content-chunk method, `NotifyResourceUpdated`, or `WithAllowedRoots`. The last one mattered:
+`core.IsPathAllowed` answers true when nothing is installed, so a stateless caller got past a
+server's static roots. `SetAllowedRoots` and `SetNotifyResourceUpdated` put their function on ctx
+when there is no session now. A handler panic also went unrecovered on stateless, which over stdio
+would take the process down; the terminal defers `recoverHandlerPanic` like the session `Dispatch`.
+
+The terminal's method table is still a second switch in `statelessBackend`, and the session-only
+pieces outside it (notify interceptors don't wrap the stateless SSE notify func) are still open.
+Folding the two method tables into one is the rest of #1625.
+
+The rule for wire differences, set 2026-10-24: the session wire stays through roughly 18 months of
+deprecation, so seeing where the wires differ matters more than code that never branches. Prefer
+one shared handler with an explicit `if wire == …` where behaviour differs over a second per-wire
+handler. A grep for the branch finds every parity difference, a feature missing on one wire can't
+hide as code nobody wrote (which is how #1355 lived), and retiring the session wire is deleting the
+session arms.
 
 `make exercise-wire` (#1555) checks this class. `server/wireparity_test.go` sends
 the same 2026-07-28 requests over both wires and compares, with `knownWireDifferences` naming every

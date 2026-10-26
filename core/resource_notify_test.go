@@ -48,9 +48,12 @@ func TestNotifyResourceUpdated_NoSubscriptionsIsNoop(t *testing.T) {
 
 // TestSetNotifyResourceUpdated_NoSessionIsNoop verifies that
 // SetNotifyResourceUpdated on a bare context doesn't panic.
-func TestSetNotifyResourceUpdated_NoSessionIsNoop(t *testing.T) {
-	ctx := SetNotifyResourceUpdated(context.Background(), func(uri string) {})
-	if ctx != context.Background() {
-		t.Error("expected same context back when no session present")
+// With no session (the stateless wire) the notifier rides on ctx (#1625).
+func TestSetNotifyResourceUpdated_NoSessionRidesOnCtx(t *testing.T) {
+	var got string
+	ctx := SetNotifyResourceUpdated(context.Background(), func(uri string) { got = uri })
+	NotifyResourceUpdated(ctx, "test://x")
+	if got != "test://x" {
+		t.Errorf("notifier saw %q, want test://x", got)
 	}
 }

@@ -11,17 +11,12 @@ import (
 // fakeBackend is a minimal Backend for dispatcher tests. Each field is
 // optional; nil functions return empty values.
 type fakeBackend struct {
-	info      core.ServerInfo
-	caps      core.ServerCapabilities
-	versions  []string
-	tools     []core.ToolDef
-	tool      func(name string) (core.ToolDef, core.ToolHandler, bool)
-	resource  func(uri string) (core.ResourceDef, core.ResourceHandler, bool)
-	ttlMs     *int
-	scope     string
-	readTTL   *int
-	readScope string
-	authErr   error // when non-nil, InvokeWithMiddleware short-circuits with it
+	info     core.ServerInfo
+	caps     core.ServerCapabilities
+	versions []string
+	authErr  error             // when non-nil, InvokeWithMiddleware short-circuits with it
+	invoked  []string          // methods that reached InvokeWithMiddleware
+	lastMeta *core.RequestMeta // the _meta envelope the last call carried on ctx
 }
 
 func (f *fakeBackend) ServerInfo() core.ServerInfo           { return f.info }
@@ -33,48 +28,25 @@ func (f *fakeBackend) SupportedVersions() []string {
 	}
 	return f.versions
 }
-func (f *fakeBackend) Tools() []core.ToolDef { return f.tools }
-func (f *fakeBackend) Tool(name string) (core.ToolDef, core.ToolHandler, bool) {
-	if f.tool != nil {
-		return f.tool(name)
-	}
-	return core.ToolDef{}, nil, false
-}
-func (f *fakeBackend) Resources() []core.ResourceDef { return nil }
-func (f *fakeBackend) Resource(uri string) (core.ResourceDef, core.ResourceHandler, bool) {
-	if f.resource != nil {
-		return f.resource(uri)
-	}
-	return core.ResourceDef{}, nil, false
-}
-func (f *fakeBackend) ResourceTemplates() []core.ResourceTemplate { return nil }
-func (f *fakeBackend) ResourceTemplate(string) (core.ResourceTemplate, core.TemplateHandler, bool) {
-	return core.ResourceTemplate{}, nil, false
-}
-func (f *fakeBackend) MatchResourceTemplate(string) (core.ResourceTemplate, core.TemplateHandler, map[string]string, bool) {
-	return core.ResourceTemplate{}, nil, nil, false
-}
-func (f *fakeBackend) Prompts() []core.PromptDef { return nil }
-func (f *fakeBackend) Prompt(string) (core.PromptDef, core.PromptHandler, bool) {
-	return core.PromptDef{}, nil, false
-}
-func (f *fakeBackend) Completion(string, string) (core.CompletionHandler, bool) { return nil, false }
-func (f *fakeBackend) ListTTLMs() *int                                          { return f.ttlMs }
-func (f *fakeBackend) ListCacheScope() string                                   { return f.scope }
-func (f *fakeBackend) ReadTTLMs() *int                                          { return f.readTTL }
-func (f *fakeBackend) ReadCacheScope() string                                   { return f.readScope }
 
-// InvokeWithMiddleware returns (nil, nil, false) so the dispatcher falls back
-// to its built-in per-method handler. The fake doesn't model server-level
-// middleware or custom-method registrations — both belong to production
-// statelessBackend (server package). The authErr field, when set, models a
-// middleware short-circuit so dispatch_autherror_test.go can assert the error
-// propagates out of Dispatch unfolded.
-func (f *fakeBackend) InvokeWithMiddleware(context.Context, *core.Request) (*core.Response, error, bool) {
+// InvokeWithMiddleware stands in for the server's chain and method table. It
+// answers server/discover and the three list methods, and -32601 otherwise.
+// The authErr field models a middleware short-circuit so
+// dispatch_autherror_test.go can assert the error propagates out of Dispatch
+// unfolded.
+func (f *fakeBackend) InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, error) {
+	f.invoked = append(f.invoked, req.Method)
+	f.lastMeta = RequestMetaFromContext(ctx)
 	if f.authErr != nil {
-		return nil, f.authErr, true
+		return nil, f.authErr
 	}
-	return nil, nil, false
+	switch req.Method {
+	case "server/discover":
+		return core.NewResponse(req.ID, NewDiscoverResult(f)), nil
+	case "tools/list", "resources/list", "prompts/list":
+		return core.NewResponse(req.ID, map[string]any{}), nil
+	}
+	return core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound, "method not found: "+req.Method), nil
 }
 
 // validMetaParams is a params blob with the minimum valid _meta envelope.
@@ -192,82 +164,6 @@ func TestDispatch_UnsupportedVersionReturns32022(t *testing.T) {
 	}
 }
 
-// TestDispatch_ResourcesReadAppliesReadCacheDefaults pins the legacy↔stateless
-// parity for SEP-2549: a server configured with WithReadResourceCacheControl
-// must emit the same ttlMs / cacheScope hints on resources/read over the
-// stateless wire as it does on the legacy wire, and a handler-set value must
-// win over the default.
-func TestDispatch_ResourcesReadAppliesReadCacheDefaults(t *testing.T) {
-	ttl := 4200
-	resWith := func(r core.ResourceResult) func(string) (core.ResourceDef, core.ResourceHandler, bool) {
-		return func(string) (core.ResourceDef, core.ResourceHandler, bool) {
-			return core.ResourceDef{URI: "file://x"}, func(core.ResourceContext, core.ResourceRequest) (core.ResourceResult, error) {
-				return r, nil
-			}, true
-		}
-	}
-	readReq := func() *core.Request {
-		return &core.Request{
-			JSONRPC: "2.0",
-			ID:      json.RawMessage("9"),
-			Method:  "resources/read",
-			Params: core.NewRawJSON(json.RawMessage(`{
-				"uri": "file://x",
-				"_meta": {
-					"io.modelcontextprotocol/protocolVersion": "2026-07-28",
-					"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
-					"io.modelcontextprotocol/clientCapabilities": {}
-				}
-			}`)),
-		}
-	}
-	decode := func(t *testing.T, resp *core.Response) core.ResourceResult {
-		t.Helper()
-		if resp == nil || resp.Error != nil {
-			t.Fatalf("resources/read failed: %+v", resp)
-		}
-		raw, _ := json.Marshal(resp.Result)
-		var got core.ResourceResult
-		if err := json.Unmarshal(raw, &got); err != nil {
-			t.Fatalf("decode result: %v", err)
-		}
-		return got
-	}
-
-	t.Run("default applied when handler leaves hints unset", func(t *testing.T) {
-		d := New(&fakeBackend{
-			readTTL:   &ttl,
-			readScope: "private",
-			resource:  resWith(core.ResourceResult{}),
-		})
-		resp, _ := d.Dispatch(context.Background(), readReq())
-		got := decode(t, resp)
-		if got.TTLMs == nil || *got.TTLMs != ttl {
-			t.Errorf("TTLMs = %v, want %d (read default)", got.TTLMs, ttl)
-		}
-		if got.CacheScope != "private" {
-			t.Errorf("CacheScope = %q, want private (read default)", got.CacheScope)
-		}
-	})
-
-	t.Run("handler value overrides the default", func(t *testing.T) {
-		handlerTTL := 99
-		d := New(&fakeBackend{
-			readTTL:   &ttl,
-			readScope: "private",
-			resource:  resWith(core.ResourceResult{TTLMs: &handlerTTL, CacheScope: "public"}),
-		})
-		resp, _ := d.Dispatch(context.Background(), readReq())
-		got := decode(t, resp)
-		if got.TTLMs == nil || *got.TTLMs != handlerTTL {
-			t.Errorf("TTLMs = %v, want %d (handler override)", got.TTLMs, handlerTTL)
-		}
-		if got.CacheScope != "public" {
-			t.Errorf("CacheScope = %q, want public (handler override)", got.CacheScope)
-		}
-	})
-}
-
 func TestDispatch_ServerDiscoverShape(t *testing.T) {
 	caps := core.ServerCapabilities{Tools: &core.ToolsCap{ListChanged: true}}
 	info := core.ServerInfo{Name: "test", Version: "0.0.1"}
@@ -361,64 +257,6 @@ func TestDispatch_StampsServerInfoOnEveryResult(t *testing.T) {
 	}
 }
 
-func TestDispatch_ToolsCallMissingCapReturns32003(t *testing.T) {
-	// The dispatcher should translate a typed *core.MissingCapabilityError
-	// from a tool handler into a JSON-RPC -32021 response with the
-	// required-cap payload shape. Locked here so future refactors of
-	// translateToolError surface in this test, not the conformance audit.
-	required := core.ClientCapabilities{Sampling: &struct{}{}}
-	h := func(ctx core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
-		return core.ToolResult{}, &core.MissingCapabilityError{
-			Required: required,
-			Message:  "this tool requires sampling",
-		}
-	}
-	d := New(&fakeBackend{
-		tool: func(name string) (core.ToolDef, core.ToolHandler, bool) {
-			if name == "test_missing_capability" {
-				return core.ToolDef{Name: name}, h, true
-			}
-			return core.ToolDef{}, nil, false
-		},
-	})
-
-	params := json.RawMessage(`{
-		"name": "test_missing_capability",
-		"arguments": {},
-		"_meta": {
-			"io.modelcontextprotocol/protocolVersion": "2026-07-28",
-			"io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"},
-			"io.modelcontextprotocol/clientCapabilities": {}
-		}
-	}`)
-	req := &core.Request{
-		JSONRPC: "2.0",
-		ID:      json.RawMessage("5"),
-		Method:  "tools/call",
-		Params:  core.NewRawJSON(params),
-	}
-	resp, _ := d.Dispatch(context.Background(), req)
-	if resp == nil || resp.Error == nil {
-		t.Fatal("expected -32021 for missing-capability tool")
-	}
-	if resp.Error.Code != core.ErrCodeMissingRequiredClientCapability {
-		t.Errorf("got code %d, want %d (-32021)",
-			resp.Error.Code, core.ErrCodeMissingRequiredClientCapability)
-	}
-	if got := HTTPStatusForCode(resp.Error.Code); got != 400 {
-		t.Errorf("HTTPStatusForCode(-32021) = %d, want 400", got)
-	}
-
-	raw, _ := json.Marshal(resp.Error.Data)
-	var data core.MissingRequiredClientCapabilityData
-	if err := json.Unmarshal(raw, &data); err != nil {
-		t.Fatalf("data did not decode: %v", err)
-	}
-	if data.RequiredCapabilities.Sampling == nil {
-		t.Errorf("RequiredCapabilities.Sampling missing; got %+v", data.RequiredCapabilities)
-	}
-}
-
 func TestDispatch_UnknownMethodReturns32601(t *testing.T) {
 	d := New(&fakeBackend{})
 	req := &core.Request{
@@ -433,6 +271,32 @@ func TestDispatch_UnknownMethodReturns32601(t *testing.T) {
 	}
 	if got := HTTPStatusForCode(resp.Error.Code); got != 404 {
 		t.Errorf("HTTPStatusForCode(-32601) = %d, want 404", got)
+	}
+}
+
+// TestDispatch_EveryMethodGoesThroughTheBackend pins #1625: past the envelope
+// checks there is one route, so server/discover and an unknown method reach
+// the backend's chain exactly like tools/list does, and a removed method or a
+// bad envelope never does.
+func TestDispatch_EveryMethodGoesThroughTheBackend(t *testing.T) {
+	for _, tc := range []struct {
+		method string
+		params json.RawMessage
+		want   bool
+	}{
+		{"server/discover", validMetaParams(t), true},
+		{"tools/list", validMetaParams(t), true},
+		{"frobnicate", validMetaParams(t), true},
+		{"initialize", validMetaParams(t), false},
+		{"tools/list", json.RawMessage(`{}`), false},
+	} {
+		f := &fakeBackend{}
+		New(f).Dispatch(context.Background(), &core.Request{
+			JSONRPC: "2.0", ID: json.RawMessage("1"), Method: tc.method, Params: core.NewRawJSON(tc.params),
+		})
+		if got := len(f.invoked) == 1 && f.invoked[0] == tc.method; got != tc.want {
+			t.Errorf("%s with params %s: backend saw %v, want reached=%v", tc.method, tc.params, f.invoked, tc.want)
+		}
 	}
 }
 
