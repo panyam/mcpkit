@@ -147,3 +147,18 @@ func TestRoomArgs_RegisterRefusesOneNamedLikeTheBridgesOwn(t *testing.T) {
 		assert.Panics(t, func() { b.Register(srv) }, name)
 	}
 }
+
+// detach names the room it left, as attach names the one it joined, so a
+// caller that attached by the host's argument knows which to stop watching
+// (#1640).
+func TestRoomArgs_DetachNamesTheRoomItLeft(t *testing.T) {
+	st := newStack(t, rooms.WithRoomOf(designRoom, designArgs))
+	a := st.agent(t, "alice", allScopes...)
+	ok, out := call(t, a, "attach", map[string]any{"design": "b.kicad_sch"})
+	require.True(t, ok, out)
+	res, err := a.ToolCallFull(t.Context(), "detach", map[string]any{"design": "b.kicad_sch"})
+	require.NoError(t, err)
+	require.False(t, res.IsError, text(res))
+	b, _ := json.Marshal(res.StructuredContent)
+	assert.JSONEq(t, `{"resource":"`+roomB+`"}`, string(b))
+}

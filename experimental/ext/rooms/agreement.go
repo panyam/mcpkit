@@ -198,7 +198,9 @@ func (b *Bridge) detach(tc core.ToolContext, req core.ToolRequest) (core.ToolRes
 	notify := s.notify
 	b.mu.Unlock()
 	core.Notify(notify, "notifications/tools/list_changed", nil)
-	return core.TextResult("Detached from " + resource + ". Pages that agreed to you still do; their users revoke that on the page."), nil
+	res := core.TextResult("Detached from " + resource + ". Pages that agreed to you still do; their users revoke that on the page.")
+	res.StructuredContent = map[string]any{"resource": resource}
+	return res, nil
 }
 
 func (b *Bridge) listPages(tc core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {

@@ -98,7 +98,12 @@ func New(ctx context.Context, cfg Config) (*FrontEnd, error) {
 	}
 	f.sink = &Sink{Notify: f.notify}
 
-	opts := []client.ClientOption{client.WithToolsListChangedHandler(func() { go f.syncTools(f.ctx) })}
+	// Events need the session wire: the bridge refuses a subscription with no
+	// session, and attach sets no default room without one.
+	opts := []client.ClientOption{
+		client.WithClientMode(client.ClientModeLegacyOnly),
+		client.WithToolsListChangedHandler(func() { go f.syncTools(f.ctx) }),
+	}
 	if cfg.Token != "" {
 		opts = append(opts, client.WithTokenSource(bearer(cfg.Token)))
 	}
@@ -215,19 +220,33 @@ func (f *FrontEnd) proxy(name string) core.ToolHandler {
 			return core.ErrorResult("bridge: " + err.Error()), nil
 		}
 		if !res.IsError {
-			var args struct {
-				Resource string `json:"resource"`
-			}
-			_ = json.Unmarshal(req.Arguments, &args)
 			switch name {
 			case "attach":
-				f.watch(args.Resource)
+				f.watch(roomOf(res, req))
 			case "detach":
-				f.unwatch(args.Resource)
+				f.unwatch(roomOf(res, req))
 			}
 		}
 		return *res, nil
 	}
+}
+
+// roomOf is the room an attach or detach acted on. The bridge names it in the
+// result's resource, which is the only place it appears when the bridge maps
+// rooms from the host's own arguments (rooms.WithRoomOf); the call's resource
+// argument covers a bridge that doesn't say.
+func roomOf(res *core.ToolResult, req core.ToolRequest) string {
+	var out, args struct {
+		Resource string `json:"resource"`
+	}
+	if b, err := json.Marshal(res.StructuredContent); err == nil {
+		_ = json.Unmarshal(b, &out)
+	}
+	if out.Resource != "" {
+		return out.Resource
+	}
+	_ = json.Unmarshal(req.Arguments, &args)
+	return args.Resource
 }
 
 // watch subscribes to every room event type for resource, once.
