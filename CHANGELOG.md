@@ -9,6 +9,14 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **`taskIds` on `subscriptions/listen`** (#1523). `tasks.Register` installs
+  ext-tasks' filter key, so a stateless client hears `notifications/tasks` for
+  the tasks it names, limited to the ones it could read with `tasks/get`; one
+  that hasn't declared the extension gets `-32021`. `Server.NotifyListeners`
+  is the new delivery path behind it: listen streams only, each applying its
+  filter.
+
 ### Changed
 - **A request with a valid bearer token passes the Origin check** (#1547). The
   Streamable HTTP transport's DNS-rebinding check used to refuse an

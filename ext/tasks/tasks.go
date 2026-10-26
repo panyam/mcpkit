@@ -72,6 +72,9 @@ func (c *Config) defaults() {
 type v2TaskRuntime struct {
 	store    server.TaskStore
 	registry *server.Registry
+	// listeners is Server.NotifyListeners: where notifications/tasks goes
+	// for subscriptions/listen streams that asked for the task (#1523).
+	listeners func(ctx context.Context, method string, params any)
 
 	// tp is the optional SEP-414 P6 TracerProvider (issue 659). Defaulted
 	// to core.NoopTracerProvider{} by Config.defaults() so call sites can
@@ -98,6 +101,7 @@ func newV2TaskRuntime(cfg Config) *v2TaskRuntime {
 	return &v2TaskRuntime{
 		store:              cfg.Store,
 		registry:           cfg.Server.Registry(),
+		listeners:          cfg.Server.NotifyListeners,
 		tp:                 cfg.TracerProvider,
 		active:             make(map[string]*activeTask),
 		taskErrors:         make(map[string]*core.TaskError),
@@ -347,6 +351,10 @@ func Register(cfg Config) {
 
 	// Install v2 middleware for tools/call interception (gated on extension).
 	srv.UseMiddleware(taskV2Middleware(srv.Registry(), rt, cfg))
+
+	// ext-tasks' taskIds key on subscriptions/listen, so a stateless client
+	// can hear notifications/tasks for its own tasks (#1523).
+	_ = srv.RegisterSubscriptionFilter(taskIDsFilterKey(rt))
 
 	// Register tasks/* protocol methods (SEP-2663: get + update + cancel),
 	// gated on session-level extension support.
@@ -623,6 +631,7 @@ func spawnGoAsyncTask(
 			store:         store,
 			inputState:    inputState,
 			progressToken: progressToken,
+			listeners:     rt.listeners,
 		}
 		bgCtx = WithTaskContext(bgCtx, tc)
 		// SEP-2663 G6: notifications/progress and notifications/message MUST
@@ -997,7 +1006,7 @@ func notifyV2TaskStatus(ctx context.Context, rt *v2TaskRuntime, store server.Tas
 		}
 	}
 
-	core.Notify(ctx, "notifications/tasks", payload)
+	publishTaskStatus(ctx, func(m string, p any) { core.Notify(ctx, m, p) }, rt.listeners, payload)
 }
 
 // notifyV2TaskStatusFromInfo sends a status notification through the live
@@ -1013,5 +1022,5 @@ func notifyV2TaskStatusFromInfo(ctx core.MethodContext, rt *v2TaskRuntime, info 
 			payload.Error = te
 		}
 	}
-	ctx.Notify("notifications/tasks", payload)
+	publishTaskStatus(ctx, func(m string, p any) { ctx.Notify(m, p) }, rt.listeners, payload)
 }
