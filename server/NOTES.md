@@ -133,9 +133,20 @@ header-free half of `detectWireKind`: `initialize` goes to the session, `server/
 `_meta.protocolVersion` goes to the stateless dispatcher, and anything else to the session. There
 is no `stateless.Mode` for stdio, because a stdio server has one client and no operator choosing
 a URL's wire. A 2026-07-28 session that sends `_meta` on every request lands on stateless, the
-same as dual-mode HTTP, so whatever #1628 decides for HTTP should land in `wireKindFromMessage`
-and stdio inherits it. Before #1637 a stateless client over stdio got `-32600 server not
+same as dual-mode HTTP, under the rule below. Before #1637 a stateless client over stdio got `-32600 server not
 initialized`, and an adaptive one failed `Connect` on the probe.
+
+**In dual mode `_meta` wins over the session id** (#1628). `detectWireKind` checks
+`_meta.protocolVersion` (signal 3) before `Mcp-Session-Id` (signal 4), so a client that ran
+`initialize` at 2026-07-28 and then sends the required `_meta` on every call is served by the
+stateless dispatcher, and its session caps and GET SSE push go unused. We kept it that way on
+purpose. 2026-07-28 drops `initialize`, so a session at that version is back-compat only, and
+push on 2026-07-28 is `subscriptions/listen`. Reordering would have meant a session lookup inside
+detection plus a Go client option to negotiate 2026-07-28 in `initialize` (it always sends
+2025-11-25), for a client shape the spec is retiring. A deployment that really needs the session
+served picks `ModeLegacyOnly`, which is what `parityWires` does. Revisit if someone needs push
+on a 2026-07-28 session. #1625 builds on this: in dual mode the session arm of a shared handler
+only ever sees traffic without `_meta`.
 
 **An adaptive probe has three ways to hear "no stateless wire here"**: `-32601` in a 200, HTTP
 404, or HTTP 400 with a body that is not a JSON-RPC error. The last is what go-sdk, the

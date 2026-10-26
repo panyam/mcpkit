@@ -374,6 +374,11 @@ func TestStatelessRouting_DetectionPriorities(t *testing.T) {
 				mcpSessionIDHeader:       "abc",
 				mcpProtocolVersionHeader: draftVersion,
 			}, false, wireLegacy},
+		{"session-id + _meta → stateless (_meta wins, #1628)", "tools/list",
+			map[string]string{
+				mcpSessionIDHeader:       "abc",
+				mcpProtocolVersionHeader: draftVersion,
+			}, true, wireStateless},
 		{"no signals → legacy default", "tools/list", nil, false, wireLegacy},
 	}
 	for _, c := range cases {

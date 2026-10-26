@@ -44,6 +44,14 @@ func (k wireKind) String() string {
 //	4. Mcp-Session-Id HTTP header present → legacy (mid-session call)
 //	5. Otherwise → legacy under Dual mode (backward compat)
 //
+// Signal 3 before 4 is a decision (#1628): in Dual mode _meta wins over the
+// session id. A client that initialized a session at 2026-07-28 must send
+// _meta on every request, so all its follow-ups reach the stateless
+// dispatcher and its session caps and GET SSE push are never consulted.
+// 2026-07-28 drops initialize, so such a session is back-compat only; a
+// client that wants push on that version uses subscriptions/listen. A
+// deployment that needs the session served uses ModeLegacyOnly.
+//
 // The HTTP MCP-Protocol-Version header is intentionally NOT a wire
 // signal: per the MCP 2025-11-25 transport spec it's a universal
 // post-initialize requirement on every HTTP request regardless of
