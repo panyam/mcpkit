@@ -269,6 +269,27 @@ per-session state:</p>
 </span></span><span style="display:flex;"><span>})
 </span></span></code></pre><p>Hooks run in order on the goroutine closing the session, so keep them short. The stateless wire has<br />
 no sessions and fires none.</p>
+<h2 id="remote-deployments">Remote deployments <a class="anchor" href="#remote-deployments">¶</a></h2>
+<p>The Streamable HTTP transport validates <code>Origin</code> to stop DNS rebinding, as the spec requires. With<br />
+no <code>WithAllowedOrigins</code> it admits only localhost, and a request that sends no <code>Origin</code> is judged by<br />
+its <code>Host</code> instead. That is the right default on a laptop and refuses everything on a server<br />
+reached as <code>mcp.example.com</code>: curl, Go clients and Claude Code send no <code>Origin</code> and a public<br />
+<code>Host</code>, and a browser sends a non-localhost <code>Origin</code>, so all of them get a 403. List the server&rsquo;s<br />
+own name, plus any browser extension that calls it:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>handler <span style="color:#000;font-weight:bold">:=</span> srv.<span style="color:#900;font-weight:bold">Handler</span>(
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithStreamableHTTP</span>(<span style="color:#000;font-weight:bold">true</span>),
+</span></span><span style="display:flex;"><span>    server.<span style="color:#900;font-weight:bold">WithAllowedOrigins</span>(
+</span></span><span style="display:flex;"><span>        <span style="color:#d14">&#34;mcp.example.com&#34;</span>,                                   <span style="color:#998;font-style:italic">// non-browser and same-origin clients
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>        <span style="color:#d14">&#34;chrome-extension://abcdefghijklmnopabcdefghijklmnop&#34;</span>, <span style="color:#998;font-style:italic">// one extension, by ID
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>    ),
+</span></span><span style="display:flex;"><span>)
+</span></span></code></pre><p>Entries match on host only, so an entry&rsquo;s scheme isn&rsquo;t compared.</p>
+<p>A request whose <code>Authorization: Bearer</code> token the server accepts (<code>WithBearerToken</code>, or an<br />
+<code>ext/auth</code> validator through <code>WithAuth</code>) passes whatever its <code>Origin</code>. A rebinding page is<br />
+same-origin with the server from the browser&rsquo;s point of view, but it can&rsquo;t attach a bearer token,<br />
+so the check has nothing to protect there. An extension that has completed OAuth therefore works<br />
+without an allowlist entry; one that calls before it has a token, such as during discovery, still<br />
+needs one.</p>
 <h2 id="refusing-for-lack-of-scope">Refusing for lack of scope <a class="anchor" href="#refusing-for-lack-of-scope">¶</a></h2>
 <p>Middleware that refuses a request returns <code>core.InsufficientScope(&quot;pages:act&quot;)</code>, which the server<br />
 writes as a 403 with <code>WWW-Authenticate: Bearer error=&quot;insufficient_scope&quot;, scope=&quot;pages:act&quot;</code>, the<br />
