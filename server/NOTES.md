@@ -183,6 +183,16 @@ notification got a `-32603`. Notifications also skip the session's in-flight tra
 id, where every one of them shared the key `null` and a second concurrent one was refused as a
 duplicate. The client sends notifications without an `id` member since the same change.
 
+**Stateless streams are not resumable, on purpose** (#825). The 2026-07-28 Streamable HTTP
+revision says "Resumable SSE streams via `Last-Event-ID` are not supported", and a server SHOULD
+ignore the header. So the stateless POST SSE writer and the `subscriptions/listen` writer emit no
+`id:` lines, nothing on that wire reads `Last-Event-ID`, and a stateless listener that reconnects
+starts clean. That also settles SEP-2567's "event IDs unique across every stream the server manages":
+with no ids there is nothing to collide. The session wire keeps per-session ids (`newEventIDGen`)
+and replays by `(sessionID, lastID)`, which is right for the revisions that resume, since they
+have sessions. `stateless_resumption_test.go` pins both stream shapes with an event store
+configured.
+
 **An adaptive probe has three ways to hear "no stateless wire here"**: `-32601` in a 200, HTTP
 404, or HTTP 400 with a body that is not a JSON-RPC error. The last is what go-sdk, the
 TypeScript SDK and mcpkit's own legacy-only transport (before #1637) send for a request without
