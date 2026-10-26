@@ -879,10 +879,18 @@ func (d *Dispatcher) handleResourcesList(wire wireKind, id json.RawMessage, para
 // version, or 2026-07-28 on the stateless wire.
 func (d *Dispatcher) handleResourcesRead(ctx context.Context, wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope struct {
-		URI string `json:"uri"`
+		URI  string         `json:"uri"`
+		Meta *toolsCallMeta `json:"_meta,omitempty"`
 	}
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
+	}
+	rctx := func(ctx context.Context) core.ResourceContext {
+		rc := core.NewResourceContext(ctx)
+		if envelope.Meta != nil {
+			rc = rc.WithProgressToken(envelope.Meta.ProgressToken)
+		}
+		return rc
 	}
 
 	// Look up handler under RLock, execute outside lock
@@ -894,7 +902,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, wire wireKind, id 
 			defer cancel()
 			ctx = tctx
 		}
-		result, err := entry.handler(core.NewResourceContext(ctx), core.ResourceRequest{URI: envelope.URI})
+		result, err := entry.handler(rctx(ctx), core.ResourceRequest{URI: envelope.URI})
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource %q: %v", envelope.URI, err))
 		}
@@ -926,7 +934,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, wire wireKind, id 
 			defer cancel()
 			ctx = tctx
 		}
-		result, err := matchedHandler(core.NewResourceContext(ctx), matchedURI, matchedParams)
+		result, err := matchedHandler(rctx(ctx), matchedURI, matchedParams)
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
 		}
@@ -1029,6 +1037,7 @@ type promptsGetEnvelope struct {
 	Arguments      map[string]any      `json:"arguments,omitempty"`
 	InputResponses core.InputResponses `json:"inputResponses,omitempty"`
 	RequestState   string              `json:"requestState,omitempty"`
+	Meta           *toolsCallMeta      `json:"_meta,omitempty"`
 }
 
 func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
@@ -1094,6 +1103,9 @@ func (d *Dispatcher) handlePromptsGet(ctx context.Context, id json.RawMessage, p
 	}
 
 	pc := core.NewPromptContextWithMRTR(ctx, mergedResponses, envelope.RequestState)
+	if envelope.Meta != nil {
+		pc = pc.WithProgressToken(envelope.Meta.ProgressToken)
+	}
 	result, err := entry.handler(pc, req)
 	if err != nil {
 		return core.NewErrorResponse(id, core.ErrCodePromptError, fmt.Sprintf("prompt %q: %v", envelope.Name, err))

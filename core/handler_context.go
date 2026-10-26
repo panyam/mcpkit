@@ -37,6 +37,7 @@ type ToolContext struct {
 // methods — resources don't support progress or content streaming.
 type ResourceContext struct {
 	BaseContext
+	progressToken any // set by dispatch from _meta.progressToken
 }
 
 // PromptContext is the context passed to PromptHandler and
@@ -46,6 +47,7 @@ type ResourceContext struct {
 // the first call, and decode `ctx.InputResponse("key")` on the second.
 type PromptContext struct {
 	BaseContext
+	progressToken any // set by dispatch from _meta.progressToken
 
 	// inputResponses + requestState carry the SEP-2322 ephemeral MRTR
 	// continuation payload — the client echoes them back into the SAME
@@ -107,7 +109,7 @@ func NewToolContextWithMRTR(ctx context.Context, progressToken any, inputRespons
 
 // NewResourceContext constructs a ResourceContext from a standard context.Context.
 func NewResourceContext(ctx context.Context) ResourceContext {
-	return ResourceContext{BaseContext{ctx, sessionFromContext(ctx)}}
+	return ResourceContext{BaseContext: BaseContext{ctx, sessionFromContext(ctx)}}
 }
 
 // NewPromptContext constructs a PromptContext from a standard context.Context.
@@ -497,7 +499,7 @@ func (tc ToolContext) DetachFromClient() ToolContext {
 // DetachFromClient returns a ResourceContext that preserves session state but is
 // NOT cancelled when the client disconnects.
 func (rc ResourceContext) DetachFromClient() ResourceContext {
-	return ResourceContext{rc.BaseContext.DetachFromClient()}
+	return ResourceContext{BaseContext: rc.BaseContext.DetachFromClient(), progressToken: rc.progressToken}
 }
 
 // DetachFromClient returns a PromptContext that preserves session state but is
@@ -505,9 +507,60 @@ func (rc ResourceContext) DetachFromClient() ResourceContext {
 func (pc PromptContext) DetachFromClient() PromptContext {
 	return PromptContext{
 		BaseContext:    pc.BaseContext.DetachFromClient(),
+		progressToken:  pc.progressToken,
 		inputResponses: pc.inputResponses,
 		requestState:   pc.requestState,
 	}
+}
+
+// WithProgressToken returns rc carrying token, the request's
+// _meta.progressToken, so the handler can call Progress. The dispatch layer
+// sets it; nil means the client asked for no progress.
+func (rc ResourceContext) WithProgressToken(token any) ResourceContext {
+	rc.progressToken = token
+	return rc
+}
+
+// Progress sends a notifications/progress for this resources/read, against
+// the request's progress token. No-op if the client didn't ask for progress.
+func (rc ResourceContext) Progress(progress, total float64, message string) {
+	emitProgress(rc.BaseContext, rc.progressToken, progress, total, message)
+}
+
+// ProgressToken returns the request's progress token, or nil if not set.
+func (rc ResourceContext) ProgressToken() any {
+	return rc.progressToken
+}
+
+// WithProgressToken returns pc carrying token, the request's
+// _meta.progressToken, so the handler can call Progress. The dispatch layer
+// sets it; nil means the client asked for no progress.
+func (pc PromptContext) WithProgressToken(token any) PromptContext {
+	pc.progressToken = token
+	return pc
+}
+
+// Progress sends a notifications/progress for this prompts/get, against the
+// request's progress token. No-op if the client didn't ask for progress.
+func (pc PromptContext) Progress(progress, total float64, message string) {
+	emitProgress(pc.BaseContext, pc.progressToken, progress, total, message)
+}
+
+// ProgressToken returns the request's progress token, or nil if not set.
+func (pc PromptContext) ProgressToken() any {
+	return pc.progressToken
+}
+
+func emitProgress(bc BaseContext, token any, progress, total float64, message string) {
+	if token == nil {
+		return
+	}
+	bc.Notify("notifications/progress", ProgressNotification{
+		ProgressToken: token,
+		Progress:      progress,
+		Total:         total,
+		Message:       message,
+	})
 }
 
 // --- ToolContext-only methods ---
@@ -529,15 +582,7 @@ func (tc ToolContext) ProgressToken() any {
 // No-op if token is nil. Prefer ctx.Progress() when the token is stored
 // in the context (TypedTool handlers, or dispatch with NewToolContextWithProgress).
 func (tc ToolContext) EmitProgress(token any, progress, total float64, message string) {
-	if token == nil {
-		return
-	}
-	tc.Notify("notifications/progress", ProgressNotification{
-		ProgressToken: token,
-		Progress:      progress,
-		Total:         total,
-		Message:       message,
-	})
+	emitProgress(tc.BaseContext, token, progress, total, message)
 }
 
 // EmitContent sends a partial content block to the client during tool
