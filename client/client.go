@@ -756,10 +756,21 @@ func (c *Client) doConnect() error {
 		// discover works, capture ServerInfo + extensions; on RPC error or
 		// method-not-found, proceed with an unpopulated ServerInfo and let the
 		// first real request succeed. (issue 829)
-		if dr, fallback, err := c.adaptiveProbe(); err == nil && !fallback {
+		//
+		// The probe is also the only round trip a stateless Connect makes, so
+		// it is what tells a reachable server from one that isn't. A refused
+		// connection, a 401 or a 5xx fails Connect, so a Group reports the
+		// server failed or needing login rather than ready. Before, every
+		// probe error was dropped and an unreachable server showed as ready
+		// until its first real call (chakra#112).
+		dr, fallback, err := c.adaptiveProbe()
+		switch {
+		case err == nil && !fallback:
 			c.ServerInfo = dr.ServerInfo
 			c.Instructions = dr.Instructions
 			c.captureServerExtensions(dr.Capabilities)
+		case err != nil && !errors.Is(err, errDiscoverRejected):
+			return fmt.Errorf("stateless connect: %w", err)
 		}
 		c.startKeepalive()
 		return nil
