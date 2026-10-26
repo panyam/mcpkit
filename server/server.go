@@ -740,6 +740,7 @@ func NewServer(info core.Implementation, opts ...Option) *Server {
 	s.dispatcher.listCacheScope = s.options.listCacheScope
 	s.dispatcher.readTTLMs = s.options.readTTLMs
 	s.dispatcher.readCacheScope = s.options.readCacheScope
+	s.dispatcher.toolTimeout = s.options.toolTimeout
 	// issue 7 — install metrics middleware (and the sessions-active
 	// up-down counter for the streamable transport) when a non-Noop
 	// MeterProvider is configured. Zero-overhead when nil / Noop —
@@ -998,13 +999,9 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 		ctx = core.WithContentChunkMethod(ctx, s.options.contentChunkMethod)
 	}
 
-	// Build the terminal handler: dispatch with optional tool timeout.
+	// Build the terminal handler. WithToolTimeout is applied inside
+	// handleToolsCall, which both wires share.
 	handler := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
-		if s.options.toolTimeout > 0 && req.Method == "tools/call" {
-			tctx, cancel := context.WithTimeout(ctx, s.options.toolTimeout)
-			defer cancel()
-			return d.Dispatch(tctx, req), nil
-		}
 		return d.Dispatch(ctx, req), nil
 	})
 

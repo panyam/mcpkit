@@ -2,9 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
@@ -222,81 +219,6 @@ func (b *statelessBackend) ListCacheScope() string {
 	return scope
 }
 
-// readResourceForStateless resolves and reads a resource on the stateless
-// wire, mirroring the session dispatcher: exact URIs first, then templates in
-// registration order, then the SEP-2549 cache-hint defaults.
-//
-// This runs inside the middleware chain (see InvokeWithMiddleware), which
-// tools/call and prompts/get already did and resources/read did not. That gap
-// meant a middleware-based gate did not apply to resource reads on this wire
-// at all, so an authorization middleware could be bypassed by asking for a
-// resource instead of calling a tool.
-func (b *statelessBackend) readResourceForStateless(ctx context.Context, req *core.Request) *core.Response {
-	var env struct {
-		URI string `json:"uri"`
-	}
-	if err := json.Unmarshal(req.Params.Raw(), &env); err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"invalid resources/read params: "+err.Error())
-	}
-
-	var (
-		result core.ResourceResult
-		err    error
-		found  bool
-	)
-	if _, handler, ok := b.Resource(env.URI); ok {
-		result, err = handler(core.NewResourceContext(ctx), core.ResourceRequest{URI: env.URI})
-		found = true
-	} else if _, handler, params, ok := b.MatchResourceTemplate(env.URI); ok {
-		result, err = handler(core.NewResourceContext(ctx), env.URI, params)
-		found = true
-	}
-	if !found {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"unknown resource: "+env.URI)
-	}
-	if err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeResourceError, err.Error())
-	}
-	if result.TTLMs == nil {
-		result.TTLMs = b.ReadTTLMs()
-	}
-	if result.CacheScope == "" {
-		result.CacheScope = b.ReadCacheScope()
-	}
-	return core.NewResponse(req.ID, result)
-}
-
-// completeForStateless answers completion/complete from the registered
-// completion handlers. A (ref, name|uri) pair with no handler gets an empty
-// list, matching the stateless dispatcher's own fallback.
-func (b *statelessBackend) completeForStateless(ctx context.Context, req *core.Request) *core.Response {
-	var env struct {
-		Ref      core.CompletionRef      `json:"ref"`
-		Argument core.CompletionArgument `json:"argument"`
-	}
-	if err := json.Unmarshal(req.Params.Raw(), &env); err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"invalid completion/complete params: "+err.Error())
-	}
-	key := env.Ref.Name
-	if env.Ref.Type == "ref/resource" {
-		key = env.Ref.URI
-	}
-	handler, ok := b.Completion(env.Ref.Type, key)
-	if !ok {
-		return core.NewResponse(req.ID, core.CompletionCompleteResult{
-			Completion: core.CompletionResult{Values: []string{}},
-		})
-	}
-	result, err := handler(core.NewPromptContext(ctx), env.Ref, env.Argument)
-	if err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeCompletionError, err.Error())
-	}
-	return core.NewResponse(req.ID, core.CompletionCompleteResult{Completion: result})
-}
-
 // MatchResourceTemplate matches uri against registered templates in
 // registration order, mirroring Dispatcher.handleResourcesRead on the session
 // wire so a URI resolves to the same definition on both.
@@ -330,11 +252,13 @@ func (b *statelessBackend) ReadCacheScope() string {
 // InvokeWithMiddleware runs the server's middleware chain (s.options.middleware)
 // around a terminal handler that dispatches by method:
 //
-//   - "tools/call" → look up the registered tool, invoke it, translate
-//     *core.MissingCapabilityError into a SEP-2575 -32021 response.
-//   - "prompts/get", "resources/read", "completion/complete" and the four
-//     */list methods → answer from the registry, as the session dispatcher
-//     does, so a middleware sees and can rewrite them on this wire too (#1355).
+//   - "tools/call", "prompts/get", "resources/read", "completion/complete" →
+//     the session dispatcher's own handlers, called with wireStateless, so
+//     every check and timeout they run applies here too (#1637). Where the
+//     wires differ, the handler branches on wire.
+//   - the four */list methods → answer from the registry, as the session
+//     dispatcher does, so a middleware sees and can rewrite them on this wire
+//     too (#1355).
 //   - any other method → consult s.dispatcher.customHandlers (the map populated
 //     by Server.HandleMethod, used by tasks.Register for tasks/get|update|cancel).
 //     Returns -32601 when no handler is registered for the method.
@@ -360,11 +284,11 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 	terminal := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
 		switch req.Method {
 		case "tools/call":
-			return b.callToolForStateless(ctx, req), nil
+			return b.s.dispatcher.handleToolsCall(ctx, wireStateless, req.ID, req.Params.Raw()), nil
 		case "prompts/get":
-			return b.callPromptForStateless(ctx, req), nil
+			return b.s.dispatcher.handlePromptsGet(ctx, req.ID, req.Params.Raw()), nil
 		case "resources/read":
-			return b.readResourceForStateless(ctx, req), nil
+			return b.s.dispatcher.handleResourcesRead(ctx, wireStateless, req.ID, req.Params.Raw()), nil
 		case "tools/list":
 			// The stateless wire reads fileInputs from the request's _meta (#1515).
 			return core.NewResponse(req.ID, toolsListResult(b.reg(), req.Params.Raw(), core.HasFileInputs(ctx), b.ListTTLMs(), b.ListCacheScope())), nil
@@ -375,7 +299,7 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 		case "prompts/list":
 			return core.NewResponse(req.ID, core.PromptsListResult{Prompts: b.Prompts(), TTLMs: b.ListTTLMs(), CacheScope: b.ListCacheScope()}), nil
 		case "completion/complete":
-			return b.completeForStateless(ctx, req), nil
+			return b.s.dispatcher.handleCompletionComplete(ctx, req.ID, req.Params.Raw()), nil
 		default:
 			if h, ok := b.s.dispatcher.customHandlers[req.Method]; ok {
 				return h(core.NewMethodContext(ctx), req.ID, req.Params.Raw()), nil
@@ -403,150 +327,4 @@ func (b *statelessBackend) InvokeWithMiddleware(ctx context.Context, req *core.R
 		return nil, err, true
 	}
 	return resp, nil, true
-}
-
-// callToolForStateless mirrors the legacy Dispatcher.handleToolsCall MRTR
-// flow on the stateless wire: decode the full SEP-2322 envelope
-// (inputResponses + requestState alongside the tool name + arguments),
-// verify the echoed requestState through the shared mrtrRuntime, merge
-// accumulated answers from prior rounds into the current call, populate
-// ToolContext with the merged view, and reshape any handler-returned
-// InputRequiredResult into a wire response that carries a freshly-minted
-// requestState. Without this parity the stateless tools/call path strips
-// every MRTR field on entry, which is why upstream's input-required-result-*
-// conformance scenarios fail with "Expected InputRequiredResult..." before
-// this change.
-//
-// progressToken is read off the same envelope (params._meta.progressToken),
-// not the SEP-2575 _meta envelope (which is for protocolVersion / clientInfo
-// / clientCapabilities). The stateless dispatcher's _meta validation runs
-// upstream of this call so we don't re-validate here.
-func (b *statelessBackend) callToolForStateless(ctx context.Context, req *core.Request) *core.Response {
-	var env toolsCallEnvelope
-	if err := req.Params.Bind(&env); err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"invalid tools/call params: "+err.Error())
-	}
-	def, handler, ok := b.Tool(env.Name)
-	if !ok {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"unknown tool: "+env.Name)
-	}
-
-	// SEP-2356 file-input validation parity with the legacy dispatch path
-	// (Dispatcher.handleToolsCall). Without this the SEP-2575 stateless wire
-	// skips size/MIME enforcement entirely and invalid file args reach the
-	// handler — same -32602 + structured `data` contract on both wires.
-	if b.s.dispatcher.validateFileInputs {
-		if resp := b.s.dispatcher.validateFileInputArgs(req.ID, def.InputSchema, env.Arguments); resp != nil {
-			return resp
-		}
-	}
-
-	// SEP-2322: verify the echoed requestState (rejects tampered or expired
-	// tokens before the handler ever runs) and pull out the accumulated
-	// inputResponses carried inside it from prior rounds.
-	prevState, err := b.s.dispatcher.mrtr.verifyRequestState(env.RequestState, env.Name)
-	if err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"invalid requestState: "+err.Error())
-	}
-	mergedResponses := mergeInputResponses(prevState.Answered, env.InputResponses)
-
-	var progressToken any
-	if env.Meta != nil {
-		progressToken = env.Meta.ProgressToken
-	}
-
-	tc := core.NewToolContextWithMRTR(ctx, progressToken, mergedResponses, env.RequestState)
-	result, err := handler(tc, core.ToolRequest{
-		Name:           env.Name,
-		Arguments:      env.Arguments,
-		RequestID:      req.ID,
-		InputResponses: mergedResponses,
-		RequestState:   env.RequestState,
-		ProgressToken:  progressToken,
-	})
-	if err != nil {
-		var missing *core.MissingCapabilityError
-		if errors.As(err, &missing) {
-			return core.NewErrorResponseWithData(
-				req.ID,
-				core.ErrCodeMissingRequiredClientCapability,
-				missing.Error(),
-				core.MissingRequiredClientCapabilityData{
-					RequiredCapabilities: missing.Required,
-				},
-			)
-		}
-		// Plain handler error becomes isError content in a SUCCESS JSON-RPC
-		// response, matching the legacy dispatch path (server/dispatch.go
-		// handleToolsCall). For SEP-2663 task-creating calls this is load-
-		// bearing: the v2 task middleware sees resp.Error == nil and stores
-		// the task as `completed` with isError, per spec — not as `failed`.
-		result = core.ErrorResult(fmt.Sprintf("tool %q: %v", env.Name, err))
-	}
-
-	// SEP-2322 reshape: an InputRequiredResult variant gets a freshly-minted
-	// requestState carrying the merged accumulated answers so the next round
-	// sees them too. Every other ToolResponse flows through as-is.
-	switch r := result.(type) {
-	case core.InputRequiredResult:
-		return core.NewResponse(req.ID, core.InputRequiredResult{
-			InputRequests: r.InputRequests,
-			RequestState:  b.s.dispatcher.mrtr.mintRequestState(env.Name, mergedResponses),
-		})
-	default:
-		return core.NewResponse(req.ID, result)
-	}
-}
-
-// callPromptForStateless mirrors callToolForStateless above on the
-// prompts/get surface: decode the SEP-2322 MRTR envelope, verify+merge
-// requestState via the shared mrtrRuntime, populate PromptContext with
-// the MRTR view, and reshape any handler-returned InputRequiredResult
-// (PromptResponse variant) with a freshly-minted requestState. SEP-2322
-// scopes the input-required flow to any request method whose response
-// shape can accept it — prompts/get is the canonical second surface and
-// the conformance scenario `input-required-result-non-tool-request`
-// exercises it.
-func (b *statelessBackend) callPromptForStateless(ctx context.Context, req *core.Request) *core.Response {
-	var env promptsGetEnvelope
-	if err := req.Params.Bind(&env); err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"invalid prompts/get params: "+err.Error())
-	}
-	_, handler, ok := b.Prompt(env.Name)
-	if !ok {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"unknown prompt: "+env.Name)
-	}
-
-	prevState, err := b.s.dispatcher.mrtr.verifyRequestState(env.RequestState, env.Name)
-	if err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodeInvalidParams,
-			"invalid requestState: "+err.Error())
-	}
-	mergedResponses := mergeInputResponses(prevState.Answered, env.InputResponses)
-
-	pc := core.NewPromptContextWithMRTR(ctx, mergedResponses, env.RequestState)
-	result, err := handler(pc, core.PromptRequest{
-		Name:           env.Name,
-		Arguments:      env.Arguments,
-		InputResponses: mergedResponses,
-		RequestState:   env.RequestState,
-	})
-	if err != nil {
-		return core.NewErrorResponse(req.ID, core.ErrCodePromptError, err.Error())
-	}
-
-	switch r := result.(type) {
-	case core.InputRequiredResult:
-		return core.NewResponse(req.ID, core.InputRequiredResult{
-			InputRequests: r.InputRequests,
-			RequestState:  b.s.dispatcher.mrtr.mintRequestState(env.Name, mergedResponses),
-		})
-	default:
-		return core.NewResponse(req.ID, result)
-	}
 }

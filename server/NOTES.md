@@ -43,18 +43,30 @@ through the resolver when #493 collapses the package.
 
 ## Stateless-wire dispatch parity — the recurring failure mode
 
-**`server/stateless_backend.go::callToolForStateless` must mirror every pre-handler step
-`Dispatcher.handleToolsCall` runs**, or features silently no-op on the SEP-2575 wire.
+**The stateless wire calls the session dispatcher's own handlers for `tools/call`,
+`prompts/get`, `resources/read` and `completion/complete`**, passing `wireStateless`
+(#1637). Where the wires really differ, the handler branches on `wire`. Grep for
+`wire == wireStateless` to find every such difference. Today there are two: the
+`-32021` mapping of `*core.MissingCapabilityError` in `handleToolsCall`, and the
+features cache hints are shaped for in `applyReadCacheControl`.
 
-This has bitten us repeatedly. A dispatch feature added to the legacy path but not to
-`callToolForStateless` works on legacy and fails silently on stateless, and conformance often
-misses it because the task and file-input suites run legacy while the stateless suite uses the
-cart fixture.
+Until #1637 each of those methods had a hand-written copy in
+`server/stateless_backend.go`, and every dispatch feature added to the session handler
+had to be mirrored by hand. Forgetting worked on the session wire and failed silently
+on stateless, and conformance usually missed it because the task and file-input
+suites run on the session wire while the stateless suite uses the cart fixture. Three
+landed that way before anyone noticed the pattern (MRTR, SEP-2356 file inputs, the
+client-side SEP-2243 `Mcp-Name` header for task ops). agni then found schema
+validation missing (#1637), and an audit of the four copies turned up six more:
+prompt argument validation, per-tool / per-prompt / per-resource / per-template
+timeouts, the server-wide `WithToolTimeout` (it lived in the session-only terminal
+in `server.go`), the `MaxCompletionValues` cap, and handler error messages without
+their `tool "x":` style prefix. The `1637` rows in `TestWireParity` cover them.
 
-Three landed this way:
-- MRTR (decodes the full envelope: `inputResponses` plus `requestState`, verifies, merges, re-mints)
-- SEP-2356 file-input validation (`validateFileInputArgs` before the handler)
-- client-side SEP-2243 `Mcp-Name` routing header for task ops
+The rest of the stateless method table and the middleware chain are still separate,
+which is #1625. Context the session path sets in `dispatchWithNotifyAndRequest`
+(metrics and trace middleware, content-chunk method, `NotifyResourceUpdated`, allowed
+roots) is not set on the stateless wire, and that also belongs to #1625.
 
 `make verify-dual` (#478) drives example walkthroughs over both wires to catch this class; see
 `examples/DUAL_MODE_AUDIT.md`.

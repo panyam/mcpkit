@@ -150,6 +150,10 @@ type Dispatcher struct {
 	readTTLMs      *int
 	readCacheScope string
 
+	// toolTimeout is the server-wide WithToolTimeout, applied to every
+	// tools/call on both wires before any per-tool Timeout.
+	toolTimeout time.Duration
+
 	// allowLegacyOnDraft is an opt-in back-compat escape hatch: when true,
 	// the legacy initialize+session wire is accepted on 2026-07-28 without
 	// per-request _meta enforcement. Default false — SEP-2575 (Accepted)
@@ -190,14 +194,18 @@ type Dispatcher struct {
 // resources/read result. A handler that already set either field on its
 // return value keeps that value (per-read override); the server-wide
 // default from WithReadResourceCacheControl fills only the unset fields.
-func (d *Dispatcher) applyReadCacheControl(r *core.ResourceResult) {
+func (d *Dispatcher) applyReadCacheControl(wire wireKind, r *core.ResourceResult) {
 	if r.TTLMs == nil {
 		r.TTLMs = d.readTTLMs
 	}
 	if r.CacheScope == "" {
 		r.CacheScope = d.readCacheScope
 	}
-	r.TTLMs, r.CacheScope = cacheHints(d.protocolFeatures(), r.TTLMs, r.CacheScope, core.CacheScopePrivate)
+	features := d.protocolFeatures()
+	if wire == wireStateless {
+		features = statelessFeatures
+	}
+	r.TTLMs, r.CacheScope = cacheHints(features, r.TTLMs, r.CacheScope, core.CacheScopePrivate)
 }
 
 // listCacheHints is the ttlMs and cacheScope for a session-wire list result,
@@ -334,6 +342,7 @@ func (d *Dispatcher) newSession() *Dispatcher {
 		listCacheScope:       d.listCacheScope,
 		readTTLMs:            d.readTTLMs,
 		readCacheScope:       d.readCacheScope,
+		toolTimeout:          d.toolTimeout,
 		allowLegacyOnDraft:   d.allowLegacyOnDraft,
 		allowReinitialize:    d.allowReinitialize,
 		configuredVersions:   d.configuredVersions,
@@ -482,11 +491,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 		case "tools/list":
 			return d.handleToolsList(id, req.Params.Raw())
 		case "tools/call":
-			return d.handleToolsCall(ctx, id, req.Params.Raw())
+			return d.handleToolsCall(ctx, wireLegacy, id, req.Params.Raw())
 		case "resources/list":
 			return d.handleResourcesList(id, req.Params.Raw())
 		case "resources/read":
-			return d.handleResourcesRead(ctx, id, req.Params.Raw())
+			return d.handleResourcesRead(ctx, wireLegacy, id, req.Params.Raw())
 		case "resources/templates/list":
 			return d.handleResourcesTemplatesList(id, req.Params.Raw())
 		case "resources/subscribe":
@@ -646,7 +655,10 @@ func parsePaginationParams(params json.RawMessage) (cursor string, pageSize int)
 	return p.Cursor, defaultPageSize
 }
 
-func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+// handleToolsCall serves tools/call on both wires: the stateless backend calls
+// it with wireStateless, so a step added here runs on both. Where the wires
+// genuinely differ, the difference is an explicit branch on wire (#1625).
+func (d *Dispatcher) handleToolsCall(ctx context.Context, wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope toolsCallEnvelope
 	if err := json.Unmarshal(params, &envelope); err != nil {
 		return core.NewErrorResponse(id, core.ErrCodeInvalidParams, err.Error())
@@ -713,7 +725,13 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	// key. Handler always sees the unified map regardless of round count.
 	mergedResponses := mergeInputResponses(prevState.Answered, envelope.InputResponses)
 
-	// Apply per-tool timeout if set (overrides server-wide WithToolTimeout)
+	// Server-wide WithToolTimeout, then the per-tool timeout inside it. Nested
+	// deadlines mean the shorter of the two wins.
+	if d.toolTimeout > 0 {
+		tctx, cancel := context.WithTimeout(ctx, d.toolTimeout)
+		defer cancel()
+		ctx = tctx
+	}
 	if entry.def.Timeout > 0 {
 		tctx, cancel := context.WithTimeout(ctx, entry.def.Timeout)
 		defer cancel()
@@ -736,6 +754,19 @@ func (d *Dispatcher) handleToolsCall(ctx context.Context, id json.RawMessage, pa
 	tc := core.NewToolContextWithMRTR(ctx, progressToken, mergedResponses, envelope.RequestState)
 	resp, hErr := entry.handler(tc, req)
 	if hErr != nil {
+		// -32021 carries the capabilities the client must add to its next
+		// request's _meta. Only the stateless wire has a per-request _meta to
+		// retry with; a session client declared its caps once at initialize,
+		// so there it stays an isError result like any other handler error.
+		var missing *core.MissingCapabilityError
+		if wire == wireStateless && errors.As(hErr, &missing) {
+			return core.NewErrorResponseWithData(id, core.ErrCodeMissingRequiredClientCapability, missing.Error(),
+				core.MissingRequiredClientCapabilityData{RequiredCapabilities: missing.Required})
+		}
+		// A plain handler error is an isError result in a successful
+		// response. For SEP-2663 task-creating calls this matters: the v2 task
+		// middleware sees resp.Error == nil and stores the task as completed
+		// with isError, per spec, rather than failed.
 		resp = core.ErrorResult(fmt.Sprintf("tool %q: %v", envelope.Name, hErr))
 	}
 
@@ -804,7 +835,10 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
-func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage, params json.RawMessage) *core.Response {
+// handleResourcesRead serves resources/read on both wires. wire picks the
+// protocol features the cache hints are shaped for: the session's negotiated
+// version, or 2026-07-28 on the stateless wire.
+func (d *Dispatcher) handleResourcesRead(ctx context.Context, wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	var envelope struct {
 		URI string `json:"uri"`
 	}
@@ -825,7 +859,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource %q: %v", envelope.URI, err))
 		}
-		d.applyReadCacheControl(&result)
+		d.applyReadCacheControl(wire, &result)
 		return core.NewResponse(id, result)
 	}
 
@@ -857,7 +891,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, id json.RawMessage
 		if err != nil {
 			return core.NewErrorResponse(id, core.ErrCodeResourceError, fmt.Sprintf("resource template %q: %v", matchedTmplURI, err))
 		}
-		d.applyReadCacheControl(&result)
+		d.applyReadCacheControl(wire, &result)
 		return core.NewResponse(id, result)
 	}
 
