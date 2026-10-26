@@ -768,21 +768,17 @@ client ← {}   ← empty ack; the handler continues asynchronously
 <hr />
 <h2 id="11-multi-tenancy-on-the-stateless-wire">11. Multi-tenancy on the stateless wire <a class="anchor" href="#11-multi-tenancy-on-the-stateless-wire">¶</a></h2>
 <p>A production-deployment note worth knowing upfront.</p>
-<p><a href="https://github.com/panyam/mcpkit/blob/main/server/stateless_backend.go"><code>server/stateless_backend.go:236-240</code></a> documents the current state:</p>
-<blockquote>
-<p>All stateless task store entries currently key under sessionID=&quot;&quot;<br />
-(no session). This means stateless tasks share one bucket per process,<br />
-which is acceptable for the single-tenant fixtures the conformance<br />
-suite covers; multi-tenant deployments should layer an auth-subject-<br />
-keyed store wrapper. Tracked for a follow-up.</p>
-</blockquote>
-<p>What this means in practice:</p>
+<p>By default the task store buckets tasks by session ID:</p>
 <ul>
 <li>On the legacy wire, every request carries an <code>Mcp-Session-Id</code> header → <code>core.GetSessionID(ctx)</code> returns the live session ID → the task store buckets tasks per session → users can&rsquo;t see each other&rsquo;s tasks.</li>
 <li>On the stateless wire, there is no session → <code>core.GetSessionID(ctx)</code> returns <code>&quot;&quot;</code> → all tasks land in the <code>&quot;&quot;</code> bucket → in a multi-tenant deployment, every user&rsquo;s tasks share the same bucket.</li>
 </ul>
-<p>Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. Multi-tenant deployments have a real isolation hole today: <code>tasks/get</code>, <code>tasks/cancel</code>, and <code>tasks/update</code> look up by <code>(taskID, sessionID)</code>, and with <code>sessionID=&quot;&quot;</code> across users they can read / cancel / update each other&rsquo;s tasks.</p>
-<p>The fix is tracked in <a href="https://github.com/panyam/mcpkit/issues/485">issue 485</a>, a <code>TaskBucketKeyer</code> hook that lets deployers derive the bucket key from an auth subject (or any other request attribute) without <code>ext/tasks</code> taking a hard dependency on <code>ext/auth</code>. Until that lands, multi-tenant stateless deployments should layer their own keyed-store wrapper.</p>
+<p>Single-tenant deployments (one user per process, demos, conformance fixtures) are unaffected. A multi-tenant stateless deployment would otherwise have a real isolation hole: <code>tasks/get</code>, <code>tasks/cancel</code>, and <code>tasks/update</code> look up by <code>(taskID, sessionID)</code>, and with <code>sessionID=&quot;&quot;</code> across users they could read / cancel / update each other&rsquo;s tasks.</p>
+<p>Install a <code>server.WithTaskBucketKeyer</code> (<a href="https://github.com/panyam/mcpkit/issues/485">issue 485</a>) to derive the bucket from an authenticated subject instead. It takes a raw <code>context.Context</code>, so neither <code>ext/tasks</code> nor mcpkit depends on <code>ext/auth</code>:</p>
+<pre tabindex="0" style="background-color:#fff;"><code><span style="display:flex;"><span>server.<span style="color:#900;font-weight:bold">WithTaskBucketKeyer</span>(<span style="color:#000;font-weight:bold">func</span>(ctx context.Context) <span style="color:#458;font-weight:bold">string</span> {
+</span></span><span style="display:flex;"><span>    <span style="color:#000;font-weight:bold">return</span> auth.<span style="color:#900;font-weight:bold">SubjectFromContext</span>(ctx) <span style="color:#998;font-style:italic">// your auth accessor
+</span></span></span><span style="display:flex;"><span><span style="color:#998;font-style:italic"></span>})
+</span></span></code></pre><p>It applies to both the v1 and v2 task surfaces, on both wires.</p>
 <hr />
 <h2 id="12-quick-reference">12. Quick reference <a class="anchor" href="#12-quick-reference">¶</a></h2>
 <h3 id="server-setup">Server setup <a class="anchor" href="#server-setup">¶</a></h3>
