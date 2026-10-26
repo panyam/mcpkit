@@ -15,9 +15,9 @@ import (
 // The conformance scenarios in `input-required-result-*` POST tools/call with
 // no prior initialize handshake, carrying `_meta.{protocolVersion,clientInfo,
 // clientCapabilities}` per-request and (on retry) `inputResponses` + the
-// echoed `requestState`. The legacy `Dispatcher.handleToolsCall` decodes the
-// MRTR envelope and reshapes `InputRequiredResult` responses; the stateless
-// `callToolForStateless` path must do the same.
+// echoed `requestState`. `Dispatcher.handleToolsCall` decodes the MRTR
+// envelope and reshapes `InputRequiredResult` responses, and the stateless
+// wire calls the same handler (#1637).
 //
 // Each test sets up a single tool that emits an InputRequiredResult on the
 // first round and a complete ToolResult on the second, then drives both

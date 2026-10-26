@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
@@ -284,6 +286,118 @@ func TestWireParity(t *testing.T) {
 		}
 	})
 
+	t.Run("1637 a stray tool argument is a tool error", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			opts     []Option
+			wantRuns bool
+		}{
+			{"validation on", nil, false},
+			{"validation off", []Option{WithSchemaValidation(false)}, true},
+		} {
+			var runs atomic.Int64
+			for _, w := range parityWires(t, handlerParityFixture(t, &runs, tc.opts...), map[string]any{}) {
+				runs.Store(0)
+				res, rpcErr := w.call(t, "tools/call", map[string]any{
+					"name": "strict", "arguments": map[string]any{"design": "x", "desing": "y"},
+				})
+				if rpcErr != nil {
+					t.Fatalf("%s, %s wire: %v", tc.name, w.name, rpcErr)
+				}
+				isError := string(res["isError"]) == "true"
+				if isError == tc.wantRuns || (runs.Load() > 0) != tc.wantRuns {
+					t.Errorf("%s, %s wire: isError=%v, handler ran %d times; want handler to run: %v",
+						tc.name, w.name, isError, runs.Load(), tc.wantRuns)
+				}
+			}
+		}
+	})
+
+	t.Run("1637 prompt arguments are checked against their schema", func(t *testing.T) {
+		for _, w := range parityWires(t, handlerParityFixture(t, new(atomic.Int64)), map[string]any{}) {
+			_, rpcErr := w.call(t, "prompts/get", map[string]any{
+				"name": "strict_prompt", "arguments": map[string]any{"size": "huge"},
+			})
+			if rpcErr == nil || rpcErr.Code != core.ErrCodeInvalidParams {
+				t.Errorf("%s wire: prompts/get with an out-of-enum argument = %v, want -32602", w.name, rpcErr)
+			}
+		}
+	})
+
+	t.Run("1637 timeouts reach the handler", func(t *testing.T) {
+		for _, tc := range []struct {
+			name, method string
+			opts         []Option
+			params       map[string]any
+		}{
+			{"per-tool", "tools/call", nil, map[string]any{"name": "timed_tool"}},
+			{"server-wide", "tools/call", []Option{WithToolTimeout(time.Minute)}, map[string]any{"name": "deadline_tool"}},
+			{"per-prompt", "prompts/get", nil, map[string]any{"name": "timed_prompt"}},
+			{"per-resource", "resources/read", nil, map[string]any{"uri": "test://timed"}},
+			{"per-template", "resources/read", nil, map[string]any{"uri": "test://timed/1"}},
+		} {
+			for _, w := range parityWires(t, handlerParityFixture(t, new(atomic.Int64), tc.opts...), map[string]any{}) {
+				res, rpcErr := w.call(t, tc.method, cloneParams(tc.params))
+				if rpcErr != nil {
+					t.Fatalf("%s, %s wire: %v", tc.name, w.name, rpcErr)
+				}
+				if raw, _ := json.Marshal(res); !strings.Contains(string(raw), "deadline=true") {
+					t.Errorf("%s, %s wire: handler saw no deadline: %s", tc.name, w.name, raw)
+				}
+			}
+		}
+	})
+
+	t.Run("1637 completion values are capped", func(t *testing.T) {
+		for _, w := range parityWires(t, handlerParityFixture(t, new(atomic.Int64)), map[string]any{}) {
+			res, rpcErr := w.call(t, "completion/complete", map[string]any{
+				"ref":      map[string]any{"type": "ref/prompt", "name": "timed_prompt"},
+				"argument": map[string]any{"name": "x", "value": ""},
+			})
+			if rpcErr != nil {
+				t.Fatalf("%s wire: %v", w.name, rpcErr)
+			}
+			var c struct {
+				Values  []string `json:"values"`
+				Total   int      `json:"total"`
+				HasMore bool     `json:"hasMore"`
+			}
+			_ = json.Unmarshal(res["completion"], &c)
+			if len(c.Values) != core.MaxCompletionValues || c.Total != 2*core.MaxCompletionValues || !c.HasMore {
+				t.Errorf("%s wire: %d values, total %d, hasMore %v; want %d, %d, true",
+					w.name, len(c.Values), c.Total, c.HasMore, core.MaxCompletionValues, 2*core.MaxCompletionValues)
+			}
+		}
+	})
+
+	t.Run("1637 handler errors read the same", func(t *testing.T) {
+		wires := parityWires(t, handlerParityFixture(t, new(atomic.Int64)), map[string]any{})
+		for _, c := range []struct {
+			method string
+			params map[string]any
+		}{
+			{"prompts/get", map[string]any{"name": "boom_prompt"}},
+			{"resources/read", map[string]any{"uri": "test://boom"}},
+			{"resources/read", map[string]any{"uri": "test://boom/1"}},
+			{"completion/complete", map[string]any{
+				"ref":      map[string]any{"type": "ref/prompt", "name": "boom_prompt"},
+				"argument": map[string]any{"name": "x", "value": ""},
+			}},
+		} {
+			var got [2]string
+			for i, w := range wires {
+				_, rpcErr := w.call(t, c.method, cloneParams(c.params))
+				if rpcErr == nil {
+					t.Fatalf("%s %v, %s wire: no error", c.method, c.params, w.name)
+				}
+				got[i] = fmt.Sprintf("%d %s", rpcErr.Code, rpcErr.Message)
+			}
+			if got[0] != got[1] {
+				t.Errorf("%s %v differs\n  session:   %s\n  stateless: %s", c.method, c.params, got[0], got[1])
+			}
+		}
+	})
+
 	t.Run("same result on both wires", func(t *testing.T) {
 		wires := parityWires(t, parityFixture(t), map[string]any{})
 		for _, c := range parityCalls {
@@ -323,4 +437,81 @@ func canonicalParityResult(res map[string]json.RawMessage) string {
 		fmt.Fprintf(&b, "%s=%s ", k, res[k])
 	}
 	return b.String()
+}
+
+// handlerParityFixture adds what the 1637 rows call to parityFixture. Every
+// timed handler answers "deadline=<bool>" so a row can see whether its
+// timeout reached the handler's context. runs counts calls to "strict".
+func handlerParityFixture(t *testing.T, runs *atomic.Int64, opts ...Option) *Server {
+	t.Helper()
+	s := parityFixture(t, opts...)
+	deadline := func(ctx context.Context) string {
+		_, ok := ctx.Deadline()
+		return fmt.Sprintf("deadline=%v", ok)
+	}
+	boom := errors.New("boom")
+
+	s.RegisterTool(core.ToolDef{
+		Name: "strict",
+		InputSchema: map[string]any{
+			"type":                 "object",
+			"properties":           map[string]any{"design": map[string]any{"type": "string"}},
+			"additionalProperties": false,
+		},
+	}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+		runs.Add(1)
+		return core.TextResult("ran"), nil
+	})
+	for _, def := range []core.ToolDef{
+		{Name: "timed_tool", Timeout: time.Minute},
+		{Name: "deadline_tool"},
+	} {
+		s.RegisterTool(def, func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
+			return core.TextResult(deadline(ctx)), nil
+		})
+	}
+
+	s.RegisterPrompt(core.PromptDef{
+		Name:      "strict_prompt",
+		Arguments: []core.PromptArgument{{Name: "size", Schema: map[string]any{"type": "string", "enum": []any{"small", "large"}}}},
+	}, func(core.PromptContext, core.PromptRequest) (core.PromptResponse, error) {
+		return core.PromptResult{}, nil
+	})
+	s.RegisterPrompt(core.PromptDef{Name: "timed_prompt", Timeout: time.Minute},
+		func(ctx core.PromptContext, _ core.PromptRequest) (core.PromptResponse, error) {
+			return core.PromptResult{Messages: []core.PromptMessage{{Role: "user", Content: core.Content{Type: "text", Text: deadline(ctx)}}}}, nil
+		})
+	s.RegisterPrompt(core.PromptDef{Name: "boom_prompt"},
+		func(core.PromptContext, core.PromptRequest) (core.PromptResponse, error) { return nil, boom })
+
+	s.RegisterResource(core.ResourceDef{URI: "test://timed", Name: "timed", Timeout: time.Minute},
+		func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: req.URI, Text: deadline(ctx)}}}, nil
+		})
+	s.RegisterResourceTemplate(core.ResourceTemplate{URITemplate: "test://timed/{id}", Name: "timed_tmpl", Timeout: time.Minute},
+		func(ctx core.ResourceContext, uri string, _ map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, Text: deadline(ctx)}}}, nil
+		})
+	s.RegisterResource(core.ResourceDef{URI: "test://boom", Name: "boom"},
+		func(core.ResourceContext, core.ResourceRequest) (core.ResourceResult, error) {
+			return core.ResourceResult{}, boom
+		})
+	s.RegisterResourceTemplate(core.ResourceTemplate{URITemplate: "test://boom/{id}", Name: "boom_tmpl"},
+		func(core.ResourceContext, string, map[string]string) (core.ResourceResult, error) {
+			return core.ResourceResult{}, boom
+		})
+
+	many := make([]string, 2*core.MaxCompletionValues)
+	for i := range many {
+		many[i] = fmt.Sprintf("v%d", i)
+	}
+	s.RegisterCompletion("ref/prompt", "timed_prompt",
+		func(core.PromptContext, core.CompletionRef, core.CompletionArgument) (core.CompletionResult, error) {
+			return core.CompletionResult{Values: many}, nil
+		})
+	s.RegisterCompletion("ref/prompt", "boom_prompt",
+		func(core.PromptContext, core.CompletionRef, core.CompletionArgument) (core.CompletionResult, error) {
+			return core.CompletionResult{}, boom
+		})
+	return s
 }
