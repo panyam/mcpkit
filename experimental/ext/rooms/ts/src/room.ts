@@ -19,6 +19,7 @@ const PAIRING_OFFER = "notifications/rooms/pairing_offer";
 const PAIRED_BY_CODE = "notifications/rooms/paired_by_code";
 const PRESENCE = "notifications/rooms/presence";
 const NOTIFY = "notifications/rooms/notify";
+const TOOL_REFUSED = "notifications/rooms/tool_refused";
 
 /** How long an agent's attach code stays acceptable, matching `rooms.DefaultAgentCodeTTL`. */
 const AGENT_CODE_TTL_MS = 10 * 60 * 1000;
@@ -79,6 +80,12 @@ export interface PairedByCode extends PairingRequest {
  * or attached to its room without calling yet. It names a principal, never a
  * session.
  */
+/** A page tool a bridge will not offer, with the bridge's reason. */
+export interface ToolRefusal {
+  name: string;
+  reason: string;
+}
+
 export interface Presence extends Principal {
   /** When a bridge last saw it, never later than the page's own clock. */
   lastSeen: Date;
@@ -203,6 +210,22 @@ export interface ToolRoom {
    */
   presence(): Presence[];
   /**
+   * Called when a bridge refuses one of the page's tools, with the bridge's
+   * reason: a name the bridge reserves, one its host did not declare, or a
+   * schema or read-only hint that differs from the one the bridge already
+   * offers. Agents never see a refused tool, so this is where a page tells
+   * its user that tool will not be called. A bridge refuses again each time
+   * it relists the page's tools; the page reports a name once per
+   * registration, and again only if the reason changes.
+   */
+  onToolRefused(fn: (refused: ToolRefusal) => void): void;
+  /**
+   * The refusals the page has heard for tools it still registers, by name,
+   * so a page that installs `onToolRefused` late can catch up. Registering
+   * or unregistering the name again clears its entry.
+   */
+  refusedTools(): ToolRefusal[];
+  /**
    * Installs the handler for the host's notifications named `name`, which the
    * host sends its pages with the bridge's `Notify` (no agent involved),
    * replacing any before it. `data` is what the host sent, `null` when it
@@ -275,6 +298,8 @@ class Page implements ToolRoom {
   // Merged agent presence, by subject and client.
   private seen = new Map<string, Presence>();
   private onPresenceFn?: (agents: Presence[]) => void;
+  private refused = new Map<string, ToolRefusal>();
+  private onToolRefusedFn?: (refused: ToolRefusal) => void;
   private notifyHandlers = new Map<string, (data: unknown) => void>();
   private left = false;
   private modelContext?: ModelContextLike;
@@ -356,6 +381,7 @@ class Page implements ToolRoom {
 
   registerTool(tool: PageTool): { unregister(): void } {
     this.tools.set(tool.name, tool);
+    this.refused.delete(tool.name);
     if (this.modelContext) this.native.set(tool.name, this.modelContext.registerTool(tool));
     this.notifyBridges("notifications/tools/list_changed");
     return { unregister: () => this.unregisterTool(tool.name) };
@@ -363,6 +389,7 @@ class Page implements ToolRoom {
 
   unregisterTool(name: string): void {
     if (!this.tools.delete(name)) return;
+    this.refused.delete(name);
     const handle = this.native.get(name) as { unregister?: () => void } | undefined;
     handle?.unregister?.();
     this.native.delete(name);
@@ -451,6 +478,14 @@ class Page implements ToolRoom {
     this.onPresenceFn = fn;
   }
 
+  onToolRefused(fn: (refused: ToolRefusal) => void): void {
+    this.onToolRefusedFn = fn;
+  }
+
+  refusedTools(): ToolRefusal[] {
+    return [...this.refused.values()];
+  }
+
   onNotify(name: string, fn: (data: unknown) => void): { off(): void } {
     this.notifyHandlers.set(name, fn);
     return {
@@ -521,6 +556,15 @@ class Page implements ToolRoom {
       case PRESENCE:
         this.mergePresence(m.params);
         return;
+      case TOOL_REFUSED: {
+        const name = m.params?.name;
+        if (typeof name !== "string" || !this.tools.has(name)) return;
+        const refusal = { name, reason: typeof m.params?.reason === "string" ? m.params.reason : "" };
+        if (this.refused.get(name)?.reason === refusal.reason) return;
+        this.refused.set(name, refusal);
+        this.onToolRefusedFn?.(refusal);
+        return;
+      }
       case NOTIFY:
         if (typeof m.params?.name === "string") this.notifyHandlers.get(m.params.name)?.(m.params.data ?? null);
         return;
