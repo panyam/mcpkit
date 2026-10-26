@@ -300,6 +300,25 @@ func TestStatelessRouting_LegacyOnly_DiscoverFallsThrough(t *testing.T) {
 	}
 }
 
+// An adaptive client probes before it has a session, so a legacy-only server
+// has to answer that probe with -32601 too, not refuse it for the missing
+// Mcp-Session-Id (#1637).
+func TestStatelessRouting_LegacyOnly_SessionlessDiscoverIs32601(t *testing.T) {
+	_, url, teardown := newStatelessTestServer(t, stateless.ModeLegacyOnly)
+	defer teardown()
+
+	resp := postStatelessJSON(t, url, map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "server/discover", "params": validMetaParams(),
+	}, map[string]string{mcpProtocolVersionHeader: draftVersion})
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status %d, want 200; body=%s", resp.StatusCode, body)
+	}
+	if r := decode(t, resp); r.Error == nil || r.Error.Code != core.ErrCodeMethodNotFound {
+		t.Errorf("expected -32601, got %+v", r.Error)
+	}
+}
+
 // TestStatelessRouting_DualMode_ToolsCallMissingCap404 verifies the
 // end-to-end -32021 + HTTP 400 path: a tool handler returns
 // *core.MissingCapabilityError, the dispatcher translates it, and

@@ -26,7 +26,8 @@ const (
 	// strict-back-compat opt-out path).
 	ClientModeLegacyOnly ClientMode = iota
 
-	// ClientModeAdaptive probes server/discover first; on -32601 falls
+	// ClientModeAdaptive probes server/discover first; on -32601, HTTP
+	// 404, or a plain-text HTTP 400 from a session-only server, falls
 	// back to the legacy initialize handshake. Once a server is
 	// classified as stateless, subsequent calls carry the _meta envelope
 	// and the MCP-Protocol-Version HTTP header. Default.

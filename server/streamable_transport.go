@@ -321,6 +321,17 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 	// Non-initialize: require session
 	sessionID := r.Header.Get(mcpSessionIDHeader)
 	if sessionID == "" {
+		// server/discover is how an adaptive client asks whether this URL
+		// speaks the stateless wire. A session-only server answers no with
+		// -32601, which the client reads as "fall back to initialize"; the
+		// 400 below would end its Connect instead (#1637).
+		if req.Method == "server/discover" {
+			w.Header().Set("Content-Type", "application/json")
+			raw, _ := marshalJSON(core.NewErrorResponse(req.ID, core.ErrCodeMethodNotFound,
+				"method not found: server/discover (this server speaks only the session wire)"))
+			w.Write(raw)
+			return
+		}
 		http.Error(w, "missing "+mcpSessionIDHeader+" header", http.StatusBadRequest)
 		return
 	}

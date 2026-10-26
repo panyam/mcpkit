@@ -31,6 +31,7 @@ import (
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/internal/stdioframe"
+	"github.com/panyam/mcpkit/server/stateless"
 )
 
 // StdioOption configures the stdio transport.
@@ -129,7 +130,11 @@ func (s *Server) RunStdio(ctx context.Context, opts ...StdioOption) error {
 }
 
 func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
-	// Single session — IO is always 1:1 client-to-server.
+	// Single session — IO is always 1:1 client-to-server. stdio serves both
+	// wires, like dual mode on HTTP: a request that carries a stateless
+	// signal goes to the SEP-2575 dispatcher and everything else to the
+	// session (#1637).
+	statelessDispatcher := stateless.New(newStatelessBackend(s))
 	dispatcher := s.newSession()
 	dispatcher.sessionID = "stdio"
 	defer dispatcher.Close()
@@ -238,11 +243,25 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 				continue
 			}
 
-			// Dispatch through the standard server pipeline.
-			resp, dErr := s.dispatchWithNotifyAndRequest(
-				dispatcher, ctx, nil,
-				dispatcher.getNotifyFunc(), requestFunc, &req,
-			)
+			var resp *core.Response
+			var dErr error
+			if wireKindFromMessage(&req) == wireStateless {
+				// Same context the HTTP stateless path builds, minus what needs
+				// HTTP: no claims (stdio has no auth) and no response headers.
+				resp, dErr = statelessDispatcher.Dispatch(core.WithTaskBucketKeyer(ctx, s.dispatcher.taskBucketKeyer), &req)
+			} else {
+				resp, dErr = s.dispatchWithNotifyAndRequest(
+					dispatcher, ctx, nil,
+					dispatcher.getNotifyFunc(), requestFunc, &req,
+				)
+			}
+
+			// JSON-RPC never answers a notification, even with an error.
+			// Both dispatchers can return one for an id-less request (an
+			// unknown method, or any method before initialize).
+			if req.ID == nil {
+				continue
+			}
 
 			// stdio has no transport-level error path (no HTTP status codes), so
 			// we surface a transport-level short-circuit as a JSON-RPC error.
@@ -250,7 +269,6 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 				resp = core.NewErrorResponse(req.ID, core.ErrCodeServerError, dErr.Error())
 			}
 
-			// Notifications produce no response.
 			if resp == nil {
 				continue
 			}
