@@ -9,6 +9,25 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **Breaking: `server/stateless.Backend` shrinks to the discover metadata plus
+  `InvokeWithMiddleware`, which now returns `(*core.Response, error)`** (#1625).
+  The registry getters (`Tools`, `Tool`, `Resources`, `Resource`,
+  `ResourceTemplates`, `ResourceTemplate`, `MatchResourceTemplate`, `Prompts`,
+  `Prompt`, `Completion`, `ListTTLMs`, `ListCacheScope`, `ReadTTLMs`,
+  `ReadCacheScope`) and the third `ok` return existed only for the stateless
+  dispatcher's per-method fallbacks, which are gone: every method past the
+  envelope checks now goes through `InvokeWithMiddleware`. `NewDiscoverResult`
+  builds the `server/discover` result. Nothing outside mcpkit implements the
+  interface; no downstream repo needs edits.
+- **Stateless requests now get the same per-request path as session ones**
+  (#1625): metrics and trace middleware, panic recovery (`-32603`), the
+  `Mcp-Method` response header, `WithContentChunkMethod`,
+  `NotifyResourceUpdated`, and the static `WithAllowedRoots` policy, which
+  `core.IsPathAllowed` used to answer true for on that wire.
+  `core.SetAllowedRoots` and `core.SetNotifyResourceUpdated` keep their
+  signatures and now attach to ctx when there is no session.
+
 ## [0.8.2] - 2026-10-17
 
 A patch release that brings mcpkit's protocol types in line with the MCP
