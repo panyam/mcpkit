@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/panyam/mcpkit/client"
+	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 	"github.com/panyam/mcpkit/experimental/ext/rooms"
@@ -356,4 +357,55 @@ func pageAsks(t *testing.T, st *rt.Stack, f *FrontEnd, h *host, text string) *ro
 	assert.Eventually(t, func() bool { return len(h.channelMessages()) > before }, 3*time.Second, 10*time.Millisecond, "no channel message for the ask")
 	time.Sleep(300 * time.Millisecond)
 	return p
+}
+
+// A page tool's progress reaches Claude Code against the host's own progress
+// token, through the bridge and the front end (#1603).
+func TestFrontEnd_ForwardsAPageToolsProgress(t *testing.T) {
+	st := rt.New(t)
+	f, h := connect(t, st)
+	res := h.request(3, "tools/call", map[string]any{"name": "attach", "arguments": map[string]any{"resource": rt.Room}})
+	require.NotEqual(t, "true", string(res["isError"]))
+
+	p := st.Page(t, "alice", rt.Room)
+	p.RegisterTool(rooms.PageTool{Name: "count", Execute: func(_ context.Context, call rooms.PageCall) (core.ToolResult, error) {
+		call.Progress(1, 2, "one")
+		call.Progress(2, 2, "two")
+		return core.TextResult("counted"), nil
+	}})
+	p.SetAgentsAllowed(true)
+	st.WaitAgreed(t, f.bridge.SessionID(), rt.Room, p.ID())
+	require.Eventually(t, func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.tools["count"]
+	}, 3*time.Second, 10*time.Millisecond, "the page's tool reaches the front end")
+
+	res = h.request(4, "tools/call", map[string]any{"name": "count", "arguments": map[string]any{}, "_meta": map[string]any{"progressToken": "host-tok"}})
+	require.NotEqual(t, "true", string(res["isError"]))
+	var got []string
+	for _, n := range h.notifications("notifications/progress") {
+		var params struct {
+			ProgressToken string `json:"progressToken"`
+			Message       string `json:"message"`
+		}
+		require.NoError(t, json.Unmarshal(n, &params))
+		assert.Equal(t, "host-tok", params.ProgressToken)
+		got = append(got, params.Message)
+	}
+	assert.Equal(t, []string{"one", "two"}, got)
+}
+
+func (h *host) notifications(method string) []json.RawMessage {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []json.RawMessage
+	for _, n := range h.notes {
+		var m string
+		_ = json.Unmarshal(n["method"], &m)
+		if m == method {
+			out = append(out, n["params"])
+		}
+	}
+	return out
 }

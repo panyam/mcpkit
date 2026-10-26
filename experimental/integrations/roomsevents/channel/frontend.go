@@ -100,8 +100,11 @@ func New(ctx context.Context, cfg Config) (*FrontEnd, error) {
 
 	// Events need the session wire: the bridge refuses a subscription with no
 	// session, and attach sets no default room without one.
+	// The GET stream carries the list_changed a page's tools send when they
+	// register after attach, outside any call of ours.
 	opts := []client.ClientOption{
 		client.WithClientMode(client.ClientModeLegacyOnly),
+		client.WithGetSSEStream(),
 		client.WithToolsListChangedHandler(func() { go f.syncTools(f.ctx) }),
 	}
 	if cfg.Token != "" {
@@ -207,12 +210,19 @@ func (f *FrontEnd) syncTools(ctx context.Context) error {
 	return nil
 }
 
-// proxy forwards one tool to the bridge. After a successful attach it starts
-// the room's event streams, and after a detach it stops them.
+// proxy forwards one tool to the bridge, and the bridge's progress back
+// against the host's own token. After a successful attach it starts the
+// room's event streams, and after a detach it stops them.
 func (f *FrontEnd) proxy(name string) core.ToolHandler {
 	return func(tc core.ToolContext, req core.ToolRequest) (core.ToolResponse, error) {
 		f.capture(tc)
-		res, err := f.bridge.ToolCallFull(tc, name, req.Arguments)
+		var opts []client.CallOption
+		if tc.ProgressToken() != nil {
+			opts = append(opts, client.WithProgress(func(p core.ProgressNotification) {
+				tc.Progress(p.Progress, p.Total, p.Message)
+			}))
+		}
+		res, err := f.bridge.ToolCallWith(tc, name, req.Arguments, opts...)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return nil, err
