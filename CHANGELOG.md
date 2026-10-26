@@ -9,7 +9,22 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.14] - 2026-10-26
+
+Full write-up: [`docs/releases/v0.8.14.md`](docs/releases/v0.8.14.md).
+
+### Added
+- **`events.ErrSubscribeForbidden`**: an `OnSubscribe` refusal that wraps it is
+  `-32024` Forbidden in every delivery mode (PR 1646). `ResourceContext` and
+  `PromptContext` gain `Progress` and `ProgressToken` (PR 1646).
+
 ### Fixed
+- **Notifications carry no `id`, and no transport answers one** (#1520). The
+  client omits a nil `id`; the server runs the handler and drops the reply on
+  every transport, HTTP answering `202`. Concurrent notifications on one
+  session no longer collide in in-flight tracking.
+- **A refused event stream is never confirmed**, and events are no longer
+  lost while a bridge run waits for approval (#1603, PR 1646).
 - **A stateless `Connect` fails when the server can't be reached or refuses
   the credentials.** The `server/discover` probe is the only round trip a
   stateless `Connect` makes, and every probe error was dropped, so a `Group`
