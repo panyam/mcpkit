@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/experimental/ext/events"
+	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 )
 
 // Watch statuses. A terminated watch was ended upstream (auth revoked, the
@@ -243,33 +243,9 @@ func matchesAll(haystack string, terms []string) bool {
 	return true
 }
 
-// listEvents follows nextCursor until the server stops sending one.
+// listEvents reads the server's whole events/list catalog.
 func listEvents(ctx context.Context, up Upstream) ([]events.EventDef, error) {
-	var all []events.EventDef
-	cursor := ""
-	for range 100 {
-		params := map[string]any{}
-		if cursor != "" {
-			params["cursor"] = cursor
-		}
-		res, err := up.Client.Call(ctx, "events/list", params)
-		if err != nil {
-			return nil, err
-		}
-		var page struct {
-			Events     []events.EventDef `json:"events"`
-			NextCursor string            `json:"nextCursor"`
-		}
-		if err := json.Unmarshal(res.Raw, &page); err != nil {
-			return nil, fmt.Errorf("decode events/list: %w", err)
-		}
-		all = append(all, page.Events...)
-		if page.NextCursor == "" {
-			return all, nil
-		}
-		cursor = page.NextCursor
-	}
-	return nil, fmt.Errorf("events/list did not finish after 100 pages")
+	return eventsclient.List(ctx, up.Client)
 }
 
 // Watch subscribes to a qualified event with arguments, and stores

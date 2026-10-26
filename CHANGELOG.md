@@ -16,6 +16,11 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   that hasn't declared the extension gets `-32021`. `Server.NotifyListeners`
   is the new delivery path behind it: listen streams only, each applying its
   filter.
+- **`eventsclient.List`** (#1651) reads a server's whole `events/list`
+  catalog, following `nextCursor`, and returns `ErrListOverrun` past 1000
+  pages rather than a truncated list. The events bridge uses it in place of
+  its own loop, so a host such as chakra no longer needs to decode
+  `events/list` itself.
 
 ### Changed
 - **A request with a valid bearer token passes the Origin check** (#1547). The
