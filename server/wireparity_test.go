@@ -36,6 +36,9 @@ type parityWire struct {
 	// initResult is the initialize result on the session wire and the
 	// server/discover result on the stateless wire.
 	initResult map[string]json.RawMessage
+	// notify posts method as a notification, with no id member or with
+	// "id":null, and returns the HTTP status and body.
+	notify func(t *testing.T, method string, nullID bool) (int, string)
 }
 
 func parityFixture(t *testing.T, opts ...Option) *Server {
@@ -152,6 +155,26 @@ func parityWires(t *testing.T, s *Server, caps map[string]any) []parityWire {
 		t.Fatalf("server/discover: %v", rpcErr)
 	}
 	stateless.initResult = discover
+	notifyOn := func(sid string) func(t *testing.T, method string, nullID bool) (int, string) {
+		return func(t *testing.T, method string, nullID bool) (int, string) {
+			t.Helper()
+			body := map[string]any{"jsonrpc": "2.0", "method": method, "params": map[string]any{"_meta": meta}}
+			if nullID {
+				body["id"] = nil
+			}
+			headers := map[string]string{mcpProtocolVersionHeader: draftVersion}
+			url := statelessURL
+			if sid != "" {
+				headers[mcpSessionIDHeader] = sid
+				url = sessionURL
+			}
+			resp := postStatelessJSON(t, url, body, headers)
+			defer resp.Body.Close()
+			b, _ := io.ReadAll(resp.Body)
+			return resp.StatusCode, string(b)
+		}
+	}
+	session.notify, stateless.notify = notifyOn(sid), notifyOn("")
 	return []parityWire{session, stateless}
 }
 
@@ -530,6 +553,29 @@ func TestWireParity(t *testing.T) {
 			}
 			if got := seen.Load() - before; got != 1 {
 				t.Errorf("%s wire: interceptor saw the handler's notification %d times, want 1", w.name, got)
+			}
+		}
+	})
+
+	t.Run("1520 a notification gets no response on either wire", func(t *testing.T) {
+		s := parityFixture(t)
+		s.HandleMethod("notifications/parity_panics", func(core.MethodContext, json.RawMessage, json.RawMessage) *core.Response {
+			panic("boom")
+		})
+		for _, w := range parityWires(t, s, map[string]any{}) {
+			for _, method := range []string{"notifications/parity_unknown", "notifications/parity_panics"} {
+				for _, nullID := range []bool{false, true} {
+					if status, body := w.notify(t, method, nullID); status != http.StatusAccepted || strings.TrimSpace(body) != "" {
+						t.Errorf("%s wire, %s (id null=%v): HTTP %d %q, want 202 and no body", w.name, method, nullID, status, body)
+					}
+				}
+			}
+			// SEP-2575 removed notifications/cancelled, and a removed method is
+			// refused with 404; a notification still gets no JSON-RPC body.
+			if w.name == "stateless" {
+				if status, body := w.notify(t, "notifications/cancelled", false); status != http.StatusNotFound || strings.TrimSpace(body) != "" {
+					t.Errorf("stateless wire, notifications/cancelled: HTTP %d %q, want 404 and no body", status, body)
+				}
 			}
 		}
 	})

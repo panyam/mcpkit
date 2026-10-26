@@ -27,7 +27,7 @@ type Request struct {
 func (r Request) MarshalJSON() ([]byte, error) {
 	return MarshalJSON(struct {
 		JSONRPC string          `json:"jsonrpc"`
-		ID      json.RawMessage `json:"id"`
+		ID      json.RawMessage `json:"id,omitempty"`
 		Method  string          `json:"method"`
 		Params  json.RawMessage `json:"params,omitempty"`
 	}{r.JSONRPC, r.ID, r.Method, r.Params.Raw()})

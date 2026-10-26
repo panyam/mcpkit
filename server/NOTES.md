@@ -173,6 +173,16 @@ served picks `ModeLegacyOnly`, which is what `parityWires` does. Revisit if some
 on a 2026-07-28 session. #1625 builds on this: in dual mode the session arm of a shared handler
 only ever sees traffic without `_meta`.
 
+**A notification never gets a JSON-RPC reply, on any transport** (#1520). The handler runs and
+the reply is dropped, in the session `Dispatch`, in `dispatchStateless` and on stdio, so HTTP
+answers `202` with no body. A refused notification on the stateless wire (a removed method, a bad
+envelope) gets only its HTTP status, `404` or `400`. "Notification" means `req.IsNotification()`,
+which counts `"id":null` as well as a missing `id`; a raw `ID == nil` check misses the first,
+which is how stdio kept answering `"id":null` after #1639 and how a panicking `"id":null`
+notification got a `-32603`. Notifications also skip the session's in-flight tracking, keyed by
+id, where every one of them shared the key `null` and a second concurrent one was refused as a
+duplicate. The client sends notifications without an `id` member since the same change.
+
 **An adaptive probe has three ways to hear "no stateless wire here"**: `-32601` in a 200, HTTP
 404, or HTTP 400 with a body that is not a JSON-RPC error. The last is what go-sdk, the
 TypeScript SDK and mcpkit's own legacy-only transport (before #1637) send for a request without

@@ -79,6 +79,13 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
+	if req.IsNotification() {
+		// A refused notification (a removed method, a bad envelope) gets its
+		// HTTP status and no JSON-RPC body, since JSON-RPC never answers a
+		// notification (#1520).
+		w.WriteHeader(stateless.HTTPStatusForCode(resp.Error.Code))
+		return
+	}
 
 	applyStagedResponseHeaders(w, ctx)
 	writeStatelessResponse(w, resp)
