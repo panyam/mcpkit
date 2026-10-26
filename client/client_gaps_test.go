@@ -246,3 +246,34 @@ func TestClose_DoesNotRaceRequestsInFlight(t *testing.T) {
 	wg.Wait()
 	assert.Equal(t, 1, g.deleteCount(), "one DELETE, however many requests were in flight")
 }
+
+func TestToolCall_WithMcpParamHeadersStillHonoursCancellation(t *testing.T) {
+	g := newGapsServer(t, nil)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	g.srv.RegisterTool(core.ToolDef{
+		Name: "slow",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"region": map[string]any{"type": "string", "x-mcp-header": "Region"}},
+		},
+	}, func(tc core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
+		select {
+		case <-release:
+		case <-tc.Done():
+		}
+		return core.TextResult("late"), nil
+	})
+	c := client.NewClient(g.url, core.ClientInfo{Name: "c", Version: "1"})
+	require.NoError(t, c.Connect(t.Context()))
+	t.Cleanup(func() { c.Close() })
+	_, err := c.ListTools(t.Context())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = c.ToolCall(ctx, "slow", map[string]any{"region": "us-west"})
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), 2*time.Second)
+}
