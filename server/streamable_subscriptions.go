@@ -246,7 +246,7 @@ func (m *statelessSubMap) fanout(method string, params any) {
 //  7. Loop on the subscriber's frame channel, write each as an SSE
 //     data: line. Exit on client disconnect.
 //  8. Unregister on exit.
-func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r *http.Request, req *core.Request) {
+func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r *http.Request, claims *core.Claims, req *core.Request) {
 	// The subscriptionId is this id, so a listen without one has nothing
 	// to tag its frames with.
 	id := req.ID
@@ -295,7 +295,12 @@ func (t *streamableTransport) handleStatelessSubscribe(w http.ResponseWriter, r 
 		return
 	}
 
+	// A filter key's Accept checks per item that the caller may see what it
+	// asks for (taskIds runs the tasks/get binding), so it gets the caller's
+	// claims and task bucket keyer as a handler would (#1523).
 	acceptCtx := core.WithRequestMeta(r.Context(), reqMeta)
+	acceptCtx = core.WithStatelessClaims(acceptCtx, claims)
+	acceptCtx = core.WithTaskBucketKeyer(acceptCtx, t.server.dispatcher.taskBucketKeyer)
 	caps := t.server.dispatcher.statelessCapabilities()
 	accepted, err := t.server.resolveFilter(acceptCtx, params.Notifications, caps)
 	if err != nil {

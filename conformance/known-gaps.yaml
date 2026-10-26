@@ -26,7 +26,7 @@ scenarios:
     note: "Server-side x-mcp-header param validation not implemented and cmd/testserver has no annotated tool; scoped in issue 1111, activates when upstream conformance PR 325 merges."
   "tasks-status-notifications":
     issue: "https://github.com/panyam/mcpkit/issues/433"
-    note: "Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen (server/stateless/subscriptions.go) and is ready to be graded."
+    note: "Deliberately skipped: the upstream scenario predates subscriptions/listen and awaits its rewrite. mcpkit implements subscriptions/listen with ext-tasks' taskIds key since issue 1523 (ext/tasks/listen.go), so a rewritten scenario can grade it."
   "server-stateless":
     issue: "upstream conformance test bug"
     note: "ServerRejectsUndeclaredCapability checks requiredCapabilities as string-array but SEP-2575 schema says object — mcpkit follows schema. Tracked in CLAUDE.md gotchas."

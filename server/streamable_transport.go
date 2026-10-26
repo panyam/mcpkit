@@ -264,7 +264,7 @@ func (t *streamableTransport) handlePost(w http.ResponseWriter, r *http.Request)
 			// returns a stream rather than a synchronous response. It
 			// runs its own SSE pump independent of the dispatcher.
 			if req.Method == "subscriptions/listen" {
-				t.handleStatelessSubscribe(w, r, &req)
+				t.handleStatelessSubscribe(w, r, claims, &req)
 				return
 			}
 			// Issue #753: a stateless POST that accepts SSE opens the
@@ -952,6 +952,12 @@ func (t *streamableTransport) broadcast(_ context.Context, method string, params
 		}
 		return true
 	})
+	t.broadcastToListeners(method, params)
+}
+
+// broadcastToListeners fans a notification out to this transport's open
+// subscriptions/listen streams, each applying its own filter.
+func (t *streamableTransport) broadcastToListeners(method string, params any) {
 	if t.statelessSubs != nil {
 		t.statelessSubs.fanout(method, params)
 	}

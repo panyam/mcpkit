@@ -206,6 +206,15 @@ check, and nothing else. Only the bearer form counts, since a cookie-accepting v
 accept what a rebound page does send. `origin_remote_test.go` pins each case, the rebinding shape
 included. Remote deployments list their own host (`server/README.md` § Remote deployments).
 
+**Per-caller notifications go to listen streams through `NotifyListeners`** (#1523). `Broadcast`
+reaches every session's GET stream as well as every listen stream, which is right for list-changed
+and wrong for a task's status, so ext-tasks' `notifications/tasks` goes out on the session (as
+before) and through `Server.NotifyListeners`, which reaches only `subscriptions/listen` streams
+and lets each stream's filter decide. The `taskIds` key's `Accept` runs the `tasks/get` binding per
+ID, so the listen handler now puts the caller's claims and task bucket keyer on its accept context,
+the way `runRequest` does for a handler. `NotifyListeners` is local: a listener on another replica
+doesn't hear it.
+
 **An adaptive probe has three ways to hear "no stateless wire here"**: `-32601` in a 200, HTTP
 404, or HTTP 400 with a body that is not a JSON-RPC error. The last is what go-sdk, the
 TypeScript SDK and mcpkit's own legacy-only transport (before #1637) send for a request without

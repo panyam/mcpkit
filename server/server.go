@@ -35,6 +35,9 @@ type Server struct {
 	sessionClosers      []sessionCloser
 	allSessionClosers   []func()
 	sessionBroadcasters []func(ctx context.Context, method string, params any)
+	// listenBroadcasters fan a notification out to open subscriptions/listen
+	// streams only, one per Streamable HTTP transport (NotifyListeners).
+	listenBroadcasters []func(method string, params any)
 	subRegistry         *subscriptionRegistry      // nil when subscriptions not enabled
 	subFilters          subscriptionFilterRegistry // extension keys for the subscriptions/listen filter
 
@@ -1203,6 +1206,31 @@ func (s *Server) BroadcastToSessions(ctx context.Context, method string, params 
 	}
 }
 
+// NotifyListeners delivers a notification to the open subscriptions/listen
+// streams whose filter admits it, and to nothing else: not to session
+// streams, and not through a NotificationRelay. It is for notifications that
+// belong to one caller rather than to everyone, where a filter key decides
+// who gets them. ext/tasks sends notifications/tasks this way, so a stateless
+// client that listens with taskIds hears its own tasks while other sessions
+// hear nothing (#1523). Listeners on other replicas are not reached.
+func (s *Server) NotifyListeners(ctx context.Context, method string, params any) {
+	if tc := core.TraceContextFromContext(ctx); !tc.IsZero() {
+		params = core.InjectTraceContextIntoParams(params, tc)
+	}
+	s.mu.Lock()
+	fanouts := append([]func(string, any){}, s.listenBroadcasters...)
+	s.mu.Unlock()
+	for _, fanout := range fanouts {
+		fanout(method, params)
+	}
+}
+
+func (s *Server) registerListenBroadcaster(fanout func(method string, params any)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.listenBroadcasters = append(s.listenBroadcasters, fanout)
+}
+
 // registerTransportSessions registers a transport's session management callbacks.
 // Called by transports during Handler() creation.
 func (s *Server) registerTransportSessions(closeOne sessionCloser, closeAll func(), broadcast func(ctx context.Context, method string, params any)) {
@@ -1238,6 +1266,7 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 		// Streamable HTTP only
 		stT := newStreamableTransport(s, cfg)
 		s.registerTransportSessions(stT.closeSession, stT.closeAllSessions, stT.broadcast)
+		s.registerListenBroadcaster(stT.broadcastToListeners)
 		handler = stT.handler()
 	} else {
 		// Both enabled: SSE at /sse + /message, Streamable HTTP at base prefix
@@ -1250,6 +1279,7 @@ func (s *Server) Handler(opts ...TransportOption) http.Handler {
 		if cfg.streamableHTTP {
 			stT := newStreamableTransport(s, cfg)
 			s.registerTransportSessions(stT.closeSession, stT.closeAllSessions, stT.broadcast)
+			s.registerListenBroadcaster(stT.broadcastToListeners)
 			mux.HandleFunc(prefix, stT.handleRoot)
 		}
 		handler = mux

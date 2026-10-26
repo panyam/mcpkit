@@ -90,6 +90,7 @@ The `examples/mrtr` reference fixture's `test_tool_with_task` walks this exact p
 | `tasks.Config` | Holds `Server`, `Store`, `DefaultTTLMs`, `DefaultPollMs`, `TracerProvider`. |
 | `tasks.TaskContext` | Typed-context for tool handlers running as v2 tasks. Exposes `TaskID()`, `ProgressToken()`, `SetStatus(status)`, `SetStatusMessage(msg)`, `TaskElicit(req)`, `TaskSample(req)`. Both setters return `ErrTaskTerminal` once the task has finished. |
 | `tasks.WithTaskContext` / `tasks.GetTaskContext` | Context wiring (mirrors core's typed-context pattern). |
+| `tasks.TaskIDsFilterKey` (`"taskIds"`) | The `subscriptions/listen` filter key `Register` installs. A stateless client lists the task IDs it wants, and gets `notifications/tasks` for them on the listen stream. IDs the caller couldn't read with `tasks/get` are dropped from the acknowledgement, and a client that hasn't declared the extension gets `-32021`. Session clients keep getting `notifications/tasks` on their GET stream as before. |
 
 ## Tracing (SEP-414 P6, issue 659)
 

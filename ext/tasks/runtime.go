@@ -59,6 +59,8 @@ type TaskContext struct {
 	store         server.TaskStore
 	inputState    *v2InputState // SEP-2663 input request flow
 	progressToken any           // original _meta.progressToken from client
+	// listeners is Server.NotifyListeners, for status sent to listen streams.
+	listeners func(ctx context.Context, method string, params any)
 }
 
 type taskContextKey struct{}
@@ -142,7 +144,7 @@ func (tc *TaskContext) update(fn func(*core.TaskInfo)) error {
 	if terminal {
 		return ErrTaskTerminal
 	}
-	notifyTransitionStatus(tc.Context, tc.store, tc.taskID, tc.sessionID)
+	notifyTransitionStatus(tc.Context, tc.store, tc.listeners, tc.taskID, tc.sessionID)
 	return nil
 }
 
@@ -246,7 +248,7 @@ func (tc *TaskContext) requestInput(methodPrefix, jsonRpcMethod string, params j
 // transition (working ↔ input_required). For terminal statuses the goroutine
 // uses notifyV2TaskStatus (which inlines result/error via the runtime); this
 // helper is the rt-free path used during in-progress transitions.
-func notifyTransitionStatus(ctx context.Context, store server.TaskStore, taskID, sessionID string) {
+func notifyTransitionStatus(ctx context.Context, store server.TaskStore, listeners func(context.Context, string, any), taskID, sessionID string) {
 	info, ok := store.Get(taskID, sessionID)
 	if !ok {
 		return
@@ -254,5 +256,5 @@ func notifyTransitionStatus(ctx context.Context, store server.TaskStore, taskID,
 	payload := core.DetailedTask{
 		TaskInfoV2: toTaskInfoV2(info),
 	}
-	core.Notify(ctx, "notifications/tasks", payload)
+	publishTaskStatus(ctx, func(m string, p any) { core.Notify(ctx, m, p) }, listeners, payload)
 }
