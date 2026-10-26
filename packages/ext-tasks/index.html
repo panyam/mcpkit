@@ -349,6 +349,10 @@
 <td><code>tasks.WithTaskContext</code> / <code>tasks.GetTaskContext</code></td>
 <td>Context wiring (mirrors core&rsquo;s typed-context pattern).</td>
 </tr>
+<tr>
+<td><code>tasks.TaskIDsFilterKey</code> (<code>&quot;taskIds&quot;</code>)</td>
+<td>The <code>subscriptions/listen</code> filter key <code>Register</code> installs. A stateless client lists the task IDs it wants, and gets <code>notifications/tasks</code> for them on the listen stream. IDs the caller couldn&rsquo;t read with <code>tasks/get</code> are dropped from the acknowledgement, and a client that hasn&rsquo;t declared the extension gets <code>-32021</code>. Session clients keep getting <code>notifications/tasks</code> on their GET stream as before.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="tracing-sep-414-p6-issue-659">Tracing (SEP-414 P6, issue 659) <a class="anchor" href="#tracing-sep-414-p6-issue-659">¶</a></h2>
