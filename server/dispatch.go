@@ -201,17 +201,21 @@ func (d *Dispatcher) applyReadCacheControl(wire wireKind, r *core.ResourceResult
 	if r.CacheScope == "" {
 		r.CacheScope = d.readCacheScope
 	}
-	features := d.protocolFeatures()
-	if wire == wireStateless {
-		features = statelessFeatures
-	}
-	r.TTLMs, r.CacheScope = cacheHints(features, r.TTLMs, r.CacheScope, core.CacheScopePrivate)
+	r.TTLMs, r.CacheScope = cacheHints(d.wireFeatures(wire), r.TTLMs, r.CacheScope, core.CacheScopePrivate)
 }
 
-// listCacheHints is the ttlMs and cacheScope for a session-wire list result,
-// at the negotiated version.
-func (d *Dispatcher) listCacheHints() (*int, string) {
-	return cacheHints(d.protocolFeatures(), d.listTTLMs, d.listCacheScope, core.CacheScopePublic)
+// wireFeatures is the protocol feature set a result on wire is shaped for:
+// the session's negotiated version, or 2026-07-28 on the stateless wire.
+func (d *Dispatcher) wireFeatures(wire wireKind) ProtocolFeatures {
+	if wire == wireStateless {
+		return statelessFeatures
+	}
+	return d.protocolFeatures()
+}
+
+// listCacheHints is the ttlMs and cacheScope for a list result on wire.
+func (d *Dispatcher) listCacheHints(wire wireKind) (*int, string) {
+	return cacheHints(d.wireFeatures(wire), d.listTTLMs, d.listCacheScope, core.CacheScopePublic)
 }
 
 // SetNotifyFunc sets the notification delivery function for this dispatcher.
@@ -477,36 +481,59 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 		defer cancel()
 		defer d.inflight.Delete(reqID)
 
-		switch req.Method {
-		case "tools/list":
-			return d.handleToolsList(id, req.Params.Raw())
-		case "tools/call":
-			return d.handleToolsCall(ctx, wireLegacy, id, req.Params.Raw())
-		case "resources/list":
-			return d.handleResourcesList(id, req.Params.Raw())
-		case "resources/read":
-			return d.handleResourcesRead(ctx, wireLegacy, id, req.Params.Raw())
-		case "resources/templates/list":
-			return d.handleResourcesTemplatesList(id, req.Params.Raw())
-		case "resources/subscribe":
-			return d.handleResourcesSubscribe(id, req.Params.Raw())
-		case "resources/unsubscribe":
-			return d.handleResourcesUnsubscribe(id, req.Params.Raw())
-		case "prompts/list":
-			return d.handlePromptsList(id, req.Params.Raw())
-		case "prompts/get":
-			return d.handlePromptsGet(ctx, id, req.Params.Raw())
-		case "logging/setLevel":
-			return d.handleLoggingSetLevel(id, req.Params.Raw())
-		case "completion/complete":
-			return d.handleCompletionComplete(ctx, id, req.Params.Raw())
-		default:
-			if h, ok := d.customHandlers[req.Method]; ok {
-				return h(core.NewMethodContext(ctx), id, req.Params.Raw())
+		return d.route(ctx, wireLegacy, id, req)
+	}
+}
+
+// route is the method table both wires share (#1625). The session wire calls
+// it from Dispatch once the session is initialized; the stateless wire calls
+// it from dispatchStateless's terminal. Where a method exists on one wire only,
+// or behaves differently, the arm branches on wire, so grepping for wire ==
+// finds every difference. Everything else is the same on both by
+// construction.
+func (d *Dispatcher) route(ctx context.Context, wire wireKind, id json.RawMessage, req *core.Request) *core.Response {
+	params := req.Params.Raw()
+	switch req.Method {
+	case "server/discover":
+		// The stateless wire's handshake. A session has initialize instead,
+		// so there it falls through to custom handlers like any other name.
+		if wire == wireStateless {
+			return core.NewResponse(id, d.discoverResult())
+		}
+	case "tools/list":
+		return d.handleToolsList(ctx, wire, id, params)
+	case "tools/call":
+		return d.handleToolsCall(ctx, wire, id, params)
+	case "resources/list":
+		return d.handleResourcesList(wire, id, params)
+	case "resources/read":
+		return d.handleResourcesRead(ctx, wire, id, params)
+	case "resources/templates/list":
+		return d.handleResourcesTemplatesList(wire, id, params)
+	case "prompts/list":
+		return d.handlePromptsList(wire, id, params)
+	case "prompts/get":
+		return d.handlePromptsGet(ctx, id, params)
+	case "completion/complete":
+		return d.handleCompletionComplete(ctx, id, params)
+	case "resources/subscribe", "resources/unsubscribe", "logging/setLevel":
+		// Session state. The stateless dispatcher refuses these before the
+		// chain (SEP-2575 removed them), so only a session reaches here.
+		if wire == wireLegacy {
+			switch req.Method {
+			case "resources/subscribe":
+				return d.handleResourcesSubscribe(id, params)
+			case "resources/unsubscribe":
+				return d.handleResourcesUnsubscribe(id, params)
+			default:
+				return d.handleLoggingSetLevel(id, params)
 			}
-			return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 		}
 	}
+	if h, ok := d.customHandlers[req.Method]; ok {
+		return h(core.NewMethodContext(ctx), id, params)
+	}
+	return core.NewErrorResponse(id, core.ErrCodeMethodNotFound, "method not found: "+req.Method)
 }
 
 // recoverHandlerPanic turns a panic below dispatch into a -32603 for a
@@ -604,10 +631,15 @@ func (d *Dispatcher) handleInitialize(id json.RawMessage, params json.RawMessage
 	})
 }
 
-func (d *Dispatcher) handleToolsList(id json.RawMessage, params json.RawMessage) *core.Response {
-	// The session wire reads fileInputs from the initialize handshake.
-	ttlMs, scope := d.listCacheHints()
-	return core.NewResponse(id, toolsListResult(d.Reg, params, d.clientCaps.FileInputs != nil, ttlMs, scope))
+func (d *Dispatcher) handleToolsList(ctx context.Context, wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
+	// The session wire reads fileInputs from the initialize handshake, the
+	// stateless wire from the request's _meta (#1515).
+	fileInputs := d.clientCaps.FileInputs != nil
+	if wire == wireStateless {
+		fileInputs = core.HasFileInputs(ctx)
+	}
+	ttlMs, scope := d.listCacheHints(wire)
+	return core.NewResponse(id, toolsListResult(d.Reg, params, fileInputs, ttlMs, scope))
 }
 
 // toolsListResult builds the tools/list result for both wires, which differ
@@ -825,7 +857,7 @@ func toolValidationErrorResult(toolName string, ve *ValidationErrors) core.ToolR
 
 // --- Resources ---
 
-func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handleResourcesList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	cursor, _ := parsePaginationParams(params)
 
 	d.Reg.mu.RLock()
@@ -838,7 +870,7 @@ func (d *Dispatcher) handleResourcesList(id json.RawMessage, params json.RawMess
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(resources, cursor, defaultPageSize)
-	ttlMs, scope := d.listCacheHints()
+	ttlMs, scope := d.listCacheHints(wire)
 	return core.NewResponse(id, core.ResourcesListResult{Resources: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
@@ -905,7 +937,7 @@ func (d *Dispatcher) handleResourcesRead(ctx context.Context, wire wireKind, id 
 	return core.NewErrorResponse(id, core.ErrCodeInvalidParams, "unknown resource: "+envelope.URI)
 }
 
-func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handleResourcesTemplatesList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	cursor, _ := parsePaginationParams(params)
 
 	d.Reg.mu.RLock()
@@ -918,7 +950,7 @@ func (d *Dispatcher) handleResourcesTemplatesList(id json.RawMessage, params jso
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(templates, cursor, defaultPageSize)
-	ttlMs, scope := d.listCacheHints()
+	ttlMs, scope := d.listCacheHints(wire)
 	return core.NewResponse(id, core.ResourceTemplatesListResult{ResourceTemplates: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 
@@ -972,7 +1004,7 @@ func (d *Dispatcher) handleResourcesUnsubscribe(id json.RawMessage, params json.
 
 // --- Prompts ---
 
-func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessage) *core.Response {
+func (d *Dispatcher) handlePromptsList(wire wireKind, id json.RawMessage, params json.RawMessage) *core.Response {
 	cursor, _ := parsePaginationParams(params)
 
 	d.Reg.mu.RLock()
@@ -985,7 +1017,7 @@ func (d *Dispatcher) handlePromptsList(id json.RawMessage, params json.RawMessag
 	d.Reg.mu.RUnlock()
 
 	page, nextCursor, _ := paginate(prompts, cursor, defaultPageSize)
-	ttlMs, scope := d.listCacheHints()
+	ttlMs, scope := d.listCacheHints(wire)
 	return core.NewResponse(id, core.PromptsListResult{Prompts: page, NextCursor: nextCursor, TTLMs: ttlMs, CacheScope: scope})
 }
 

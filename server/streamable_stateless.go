@@ -21,7 +21,7 @@ import (
 //
 //  1. Cross-check MCP-Protocol-Version HTTP header against
 //     _meta[protocolVersion]. Disagreement → -32020 + HTTP 400.
-//  2. Dispatch via t.statelessDispatcher.Dispatch (which itself
+//  2. Dispatch via Server.dispatchStateless (which itself
 //     validates _meta and protocol-version against the supported
 //     list, threads RequestMeta through ctx, and routes by method).
 //  3. Map JSON-RPC code → HTTP status via stateless.HTTPStatusForCode
@@ -63,7 +63,7 @@ func (t *streamableTransport) handleStatelessPost(w http.ResponseWriter, r *http
 	// sessionCtx that the stateless wire deliberately does not create.
 	ctx := core.WithResponseHeaderCollector(r.Context())
 	ctx = core.WithStatelessClaims(ctx, claims)
-	resp, dErr := t.statelessDispatcher.Dispatch(ctx, req)
+	resp, dErr := t.server.dispatchStateless(ctx, req)
 
 	// A non-nil dispatch error is a middleware short-circuit (typically
 	// *core.AuthError). Surface it through the shared writeAuthError so the
@@ -171,7 +171,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 		}
 		writeSSE(raw)
 	})
-	dispatchCtx = core.WithStatelessNotifyFunc(dispatchCtx, requestNotify)
+	dispatchCtx = core.WithStatelessNotifyFunc(dispatchCtx, t.server.interceptNotify(requestNotify))
 
 	// Header / _meta version cross-check (mirrored from handleStatelessPost).
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {
@@ -188,7 +188,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 		return
 	}
 
-	resp, dErr := t.statelessDispatcher.Dispatch(dispatchCtx, req)
+	resp, dErr := t.server.dispatchStateless(dispatchCtx, req)
 
 	// A middleware short-circuit (typically *core.AuthError) fires before the
 	// handler runs, so no SSE frame has been written yet (sseStarted is false).

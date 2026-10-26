@@ -1,9 +1,8 @@
-// Package stateless implements the SEP-2575 stateless wire — server/discover,
-// per-request _meta envelope dispatch, subscriptions/listen, and the new
-// HTTP-status error mapping. Designed so the legacy session wire and this
-// wire can be served from one URL via the parent server package's Dual mode,
-// and so removing the legacy wire is a single-package deletion that leaves
-// this code untouched.
+// Package stateless holds the SEP-2575 stateless wire's public types and
+// configuration: the wire Mode a server serves, the server/discover result,
+// the subscriptions/listen frames, and the JSON-RPC code to HTTP status
+// mapping. The dispatch itself lives in the parent server package, where both
+// wires share one request path and method table (#1625).
 //
 // Spec: https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575
 package stateless

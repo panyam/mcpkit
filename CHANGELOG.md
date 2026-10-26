@@ -10,16 +10,15 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 ## [Unreleased]
 
 ### Changed
-- **Breaking: `server/stateless.Backend` shrinks to the discover metadata plus
-  `InvokeWithMiddleware`, which now returns `(*core.Response, error)`** (#1625).
-  The registry getters (`Tools`, `Tool`, `Resources`, `Resource`,
-  `ResourceTemplates`, `ResourceTemplate`, `MatchResourceTemplate`, `Prompts`,
-  `Prompt`, `Completion`, `ListTTLMs`, `ListCacheScope`, `ReadTTLMs`,
-  `ReadCacheScope`) and the third `ok` return existed only for the stateless
-  dispatcher's per-method fallbacks, which are gone: every method past the
-  envelope checks now goes through `InvokeWithMiddleware`. `NewDiscoverResult`
-  builds the `server/discover` result. Nothing outside mcpkit implements the
-  interface; no downstream repo needs edits.
+- **Breaking: `server/stateless` no longer holds a dispatcher** (#1625).
+  `stateless.Dispatcher`, `stateless.New` and the `stateless.Backend`
+  interface are gone. The stateless wire's envelope checks moved into the
+  `server` package, after which every method runs the same request path and
+  method table as the session wire, so the interface had nothing left to
+  abstract. `server/stateless` keeps `Mode` and its helpers, `DiscoverResult`,
+  the `subscriptions/listen` frames, `HTTPStatusForCode` and
+  `RequestMetaFromContext`, which is everything outside `server` used.
+  Nothing outside mcpkit implemented `Backend`; no downstream repo needs edits.
 - **Stateless requests now get the same per-request path as session ones**
   (#1625): metrics and trace middleware, panic recovery (`-32603`), the
   `Mcp-Method` response header, `WithContentChunkMethod`,
@@ -27,6 +26,11 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   `core.IsPathAllowed` used to answer true for on that wire.
   `core.SetAllowedRoots` and `core.SetNotifyResourceUpdated` keep their
   signatures and now attach to ctx when there is no session.
+- **Both wires share one method table** (#1625). The stateless
+  `resources/list`, `resources/templates/list` and `prompts/list` now honour
+  the cursor like the session wire (invisible until a page size is set,
+  #1356), and `WithNotifyInterceptor` now wraps notifications a handler sends
+  on the stateless SSE response.
 
 ## [0.8.2] - 2026-10-17
 

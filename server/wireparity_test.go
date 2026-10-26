@@ -510,6 +510,30 @@ func TestWireParity(t *testing.T) {
 		}
 	})
 
+	t.Run("1625 notify interceptors see both wires", func(t *testing.T) {
+		var seen atomic.Int64
+		intercept := func(method string, params any, next core.NotifyFunc) {
+			if method == "notifications/parity" {
+				seen.Add(1)
+			}
+			next(method, params)
+		}
+		s := parityFixture(t, WithNotifyInterceptor(intercept))
+		s.RegisterTool(core.ToolDef{Name: "notifies"}, func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
+			ctx.Notify("notifications/parity", map[string]any{})
+			return core.TextResult("ok"), nil
+		})
+		for _, w := range parityWires(t, s, map[string]any{}) {
+			before := seen.Load()
+			if _, rpcErr := w.call(t, "tools/call", map[string]any{"name": "notifies", "arguments": map[string]any{}}); rpcErr != nil {
+				t.Fatalf("%s tools/call: %v", w.name, rpcErr)
+			}
+			if got := seen.Load() - before; got != 1 {
+				t.Errorf("%s wire: interceptor saw the handler's notification %d times, want 1", w.name, got)
+			}
+		}
+	})
+
 	t.Run("same result on both wires", func(t *testing.T) {
 		wires := parityWires(t, parityFixture(t), map[string]any{})
 		for _, c := range parityCalls {
