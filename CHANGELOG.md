@@ -9,6 +9,17 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **A request with a valid bearer token passes the Origin check** (#1547). The
+  Streamable HTTP transport's DNS-rebinding check used to refuse an
+  authenticated browser extension (`Origin: chrome-extension://…`) on a remote
+  server. A rebound page can't attach a bearer token, so an
+  `Authorization: Bearer` request the server's validator accepts now passes
+  whatever its `Origin`; unauthenticated requests are checked as before.
+  `server/README.md` gains a "Remote deployments" section: with no
+  `WithAllowedOrigins`, a server reached under a public name refuses every
+  unauthenticated client, and listing its own host fixes that.
+
 ## [0.8.14] - 2026-10-26
 
 Full write-up: [`docs/releases/v0.8.14.md`](docs/releases/v0.8.14.md).

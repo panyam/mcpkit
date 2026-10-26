@@ -193,6 +193,19 @@ and replays by `(sessionID, lastID)`, which is right for the revisions that resu
 have sessions. `stateless_resumption_test.go` pins both stream shapes with an event store
 configured.
 
+**The Origin check defaults to localhost, and a valid bearer token skips it** (#1547). With no
+`WithAllowedOrigins` the Streamable HTTP transport uses servicekit's `NewLocalhostOriginChecker`,
+whose `CheckRequest` falls back to `Host` when `Origin` is absent. So a server reached under a
+public name refused every client, non-browser ones included, which #1547 first described wrongly as
+"no Origin passes" (tests never saw it because `httptest` sends a `127.0.0.1` Host). The fix is
+narrow on purpose. Admitting "no Origin" or "Origin equals Host" by default would reopen DNS
+rebinding, because a rebound page *is* same-origin with its own name and sends no `Origin` on its
+same-origin GETs. What a rebound page can't do is attach a bearer token, so
+`Server.bearerAuthenticated` lets an `Authorization: Bearer` request the validator accepts past the
+check, and nothing else. Only the bearer form counts, since a cookie-accepting validator would
+accept what a rebound page does send. `origin_remote_test.go` pins each case, the rebinding shape
+included. Remote deployments list their own host (`server/README.md` § Remote deployments).
+
 **An adaptive probe has three ways to hear "no stateless wire here"**: `-32601` in a 200, HTTP
 404, or HTTP 400 with a body that is not a JSON-RPC error. The last is what go-sdk, the
 TypeScript SDK and mcpkit's own legacy-only transport (before #1637) send for a request without
