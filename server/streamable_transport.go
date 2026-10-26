@@ -115,9 +115,11 @@ func (t *streamableTransport) handler() http.Handler {
 }
 
 // handleRoot routes requests by HTTP method at the base prefix.
-// Validates Origin/Host headers to prevent DNS rebinding attacks per MCP spec.
+// Validates Origin/Host headers to prevent DNS rebinding attacks per MCP spec,
+// except for a request whose bearer token the server accepts: a rebinding
+// page has no way to attach one (#1547).
 func (t *streamableTransport) handleRoot(w http.ResponseWriter, r *http.Request) {
-	if !t.originChecker.CheckRequest(r) {
+	if !t.originChecker.CheckRequest(r) && !t.server.bearerAuthenticated(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

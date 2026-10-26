@@ -1573,7 +1573,16 @@ func WithKeepalivePeriod(d time.Duration) TransportOption {
 }
 
 // WithAllowedOrigins sets the allowed Origin header values for DNS rebinding protection.
-// When empty (default), only localhost origins are accepted.
+// When empty (default), only localhost origins are accepted, and a request with no
+// Origin is judged by its Host the same way. So a server reached under a public
+// name refuses every client until it lists that name:
+//
+//	server.WithAllowedOrigins("mcp.example.com")                       // non-browser and same-origin clients
+//	server.WithAllowedOrigins("mcp.example.com", "chrome-extension://<id>") // plus one browser extension
+//
+// Entries match on host only, so the scheme of an entry is not compared. A request
+// whose bearer token the server accepts (WithBearerToken, WithAuth) passes whatever
+// its Origin (#1547); see server/README.md § Remote deployments.
 func WithAllowedOrigins(origins ...string) TransportOption {
 	return func(c *transportConfig) { c.allowedOrigins = origins }
 }
@@ -1727,6 +1736,24 @@ func (s *Server) CheckAuth(r *http.Request) (*core.Claims, error) {
 		return cp.Claims(r), nil
 	}
 	return nil, nil
+}
+
+// bearerAuthenticated reports whether r carries an Authorization: Bearer token
+// that the server's auth validator accepts. The Streamable HTTP transport lets
+// such a request past the Origin check (#1547): DNS rebinding works by making
+// a hostile page same-origin with the server, and a browser never attaches a
+// bearer header on its own, so a page that rebinds has no token to send.
+// Only the bearer form counts, since a validator that also accepted cookies
+// would be accepting something a rebound page does send.
+func (s *Server) bearerAuthenticated(r *http.Request) bool {
+	if s.options.authValidator == nil {
+		return false
+	}
+	scheme, _, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return false
+	}
+	return s.options.authValidator.Validate(r) == nil
 }
 
 // IsPublicMethod returns true if the given JSON-RPC method is in the server's

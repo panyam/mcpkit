@@ -38,6 +38,34 @@ srv.OnSessionClose(func(ctx context.Context, sessionID string) {
 Hooks run in order on the goroutine closing the session, so keep them short. The stateless wire has
 no sessions and fires none.
 
+## Remote deployments
+
+The Streamable HTTP transport validates `Origin` to stop DNS rebinding, as the spec requires. With
+no `WithAllowedOrigins` it admits only localhost, and a request that sends no `Origin` is judged by
+its `Host` instead. That is the right default on a laptop and refuses everything on a server
+reached as `mcp.example.com`: curl, Go clients and Claude Code send no `Origin` and a public
+`Host`, and a browser sends a non-localhost `Origin`, so all of them get a 403. List the server's
+own name, plus any browser extension that calls it:
+
+```go
+handler := srv.Handler(
+    server.WithStreamableHTTP(true),
+    server.WithAllowedOrigins(
+        "mcp.example.com",                                   // non-browser and same-origin clients
+        "chrome-extension://abcdefghijklmnopabcdefghijklmnop", // one extension, by ID
+    ),
+)
+```
+
+Entries match on host only, so an entry's scheme isn't compared.
+
+A request whose `Authorization: Bearer` token the server accepts (`WithBearerToken`, or an
+`ext/auth` validator through `WithAuth`) passes whatever its `Origin`. A rebinding page is
+same-origin with the server from the browser's point of view, but it can't attach a bearer token,
+so the check has nothing to protect there. An extension that has completed OAuth therefore works
+without an allowlist entry; one that calls before it has a token, such as during discovery, still
+needs one.
+
 ## Refusing for lack of scope
 
 Middleware that refuses a request returns `core.InsufficientScope("pages:act")`, which the server
