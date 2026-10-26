@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -398,6 +400,31 @@ func TestWireParity(t *testing.T) {
 		}
 	})
 
+	t.Run("1637 stdio serves the stateless wire", func(t *testing.T) {
+		s := parityFixture(t)
+		var httpStateless parityWire
+		for _, w := range parityWires(t, s, map[string]any{}) {
+			if w.name == "stateless" {
+				httpStateless = w
+			}
+		}
+		stdio := stdioStatelessWire(t, s)
+		for _, c := range parityCalls {
+			want, rpcErr := httpStateless.call(t, c.method, cloneParams(c.params))
+			if rpcErr != nil {
+				t.Fatalf("http %s: %v", c.method, rpcErr)
+			}
+			got, rpcErr := stdio(t, c.method, cloneParams(c.params))
+			if rpcErr != nil {
+				t.Errorf("stdio %s: %v", c.method, rpcErr)
+				continue
+			}
+			if g, w := canonicalParityResult(got), canonicalParityResult(want); g != w {
+				t.Errorf("%s differs\n  stdio: %s\n  http:  %s", c.method, g, w)
+			}
+		}
+	})
+
 	t.Run("same result on both wires", func(t *testing.T) {
 		wires := parityWires(t, parityFixture(t), map[string]any{})
 		for _, c := range parityCalls {
@@ -514,4 +541,60 @@ func handlerParityFixture(t *testing.T, runs *atomic.Int64, opts ...Option) *Ser
 			return core.CompletionResult{}, boom
 		})
 	return s
+}
+
+// stdioStatelessWire serves s over an io.Pipe pair and returns a call func
+// that sends each request with the 2026-07-28 _meta envelope and no
+// initialize, as a stateless client would over stdio.
+func stdioStatelessWire(t *testing.T, s *Server) func(t *testing.T, method string, params map[string]any) (map[string]json.RawMessage, *core.Error) {
+	t.Helper()
+	sr, cw := io.Pipe()
+	cr, sw := io.Pipe()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_ = s.RunIO(ctx, sr, sw)
+		sw.Close()
+	}()
+	t.Cleanup(func() {
+		cancel()
+		cw.Close()
+	})
+	lines := bufio.NewScanner(cr)
+	lines.Buffer(make([]byte, 1<<20), 1<<20)
+	var nextID int
+	return func(t *testing.T, method string, params map[string]any) (map[string]json.RawMessage, *core.Error) {
+		t.Helper()
+		if params == nil {
+			params = map[string]any{}
+		}
+		params["_meta"] = map[string]any{
+			"io.modelcontextprotocol/protocolVersion":    draftVersion,
+			"io.modelcontextprotocol/clientInfo":         map[string]any{"name": "parity", "version": "1"},
+			"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+		}
+		nextID++
+		frame, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": nextID, "method": method, "params": params})
+		if _, err := cw.Write(append(frame, '\n')); err != nil {
+			t.Fatalf("stdio write: %v", err)
+		}
+		if !lines.Scan() {
+			t.Fatalf("stdio %s: no response (%v)", method, lines.Err())
+		}
+		var resp struct {
+			Result map[string]any `json:"result"`
+			Error  *core.Error    `json:"error"`
+		}
+		if err := json.Unmarshal(lines.Bytes(), &resp); err != nil {
+			t.Fatalf("stdio %s: %v: %s", method, err, lines.Bytes())
+		}
+		if resp.Error != nil {
+			return nil, resp.Error
+		}
+		// Re-marshal through any, as parityWires does, so key order matches.
+		out := make(map[string]json.RawMessage, len(resp.Result))
+		for k, v := range resp.Result {
+			out[k], _ = json.Marshal(v)
+		}
+		return out, nil
+	}
 }

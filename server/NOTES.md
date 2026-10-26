@@ -128,6 +128,21 @@ major release; the doc block spells out the migration.
 This asymmetry was empirically re-confirmed by the client conformance harness, where a blanket
 `ClientModeAdaptive` breaks legacy mocks in the same suite.
 
+**stdio is always dual** (#1637). It routes each message with `wireKindFromMessage`, the
+header-free half of `detectWireKind`: `initialize` goes to the session, `server/discover` or a
+`_meta.protocolVersion` goes to the stateless dispatcher, and anything else to the session. There
+is no `stateless.Mode` for stdio, because a stdio server has one client and no operator choosing
+a URL's wire. A 2026-07-28 session that sends `_meta` on every request lands on stateless, the
+same as dual-mode HTTP, so whatever #1628 decides for HTTP should land in `wireKindFromMessage`
+and stdio inherits it. Before #1637 a stateless client over stdio got `-32600 server not
+initialized`, and an adaptive one failed `Connect` on the probe.
+
+**An adaptive probe has three ways to hear "no stateless wire here"**: `-32601` in a 200, HTTP
+404, or HTTP 400 with a body that is not a JSON-RPC error. The last is what go-sdk, the
+TypeScript SDK and mcpkit's own legacy-only transport (before #1637) send for a request without
+`Mcp-Session-Id`, since they check the header before the method. A 400 carrying a JSON-RPC error
+(`-32020`, `-32022`) is a stateless server refusing the probe, and stays fatal.
+
 ---
 
 ## Handler return ABI is a sealed interface (#486, PR 487)

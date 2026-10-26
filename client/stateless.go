@@ -33,8 +33,9 @@ import (
 //     legacy HTTPStatusError shape.
 
 // adaptiveProbe sends server/discover and classifies the response.
-// Returns the discover result on success; ok=false when the server
-// returned -32601 (no stateless wire); error on any other failure.
+// Returns the discover result on success; fallback=true when the server
+// says it has no stateless wire (-32601, HTTP 404, or a 400 without a
+// JSON-RPC error body); error on any other failure.
 //
 // Called by Connect under ClientModeAdaptive *before* the legacy
 // initialize handshake. The probe carries the same _meta envelope
@@ -78,6 +79,19 @@ func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err err
 			// handled below).
 			if httpErr.StatusCode == 404 {
 				return nil, true, nil
+			}
+			// A session-only server that checks for Mcp-Session-Id before
+			// method dispatch refuses the probe with a 400 and a plain-text
+			// body (go-sdk, the TypeScript SDK, mcpkit before #1637). That is
+			// a no as well. A 400 carrying a JSON-RPC error is a stateless
+			// server rejecting this probe (say -32020 or -32022), which is
+			// fatal like any other JSON-RPC error below.
+			if httpErr.StatusCode == 400 {
+				rpcResp := tryDecodeJSONRPC([]byte(httpErr.Body))
+				if rpcResp == nil || rpcResp.Error == nil || rpcResp.Error.Code == core.ErrCodeMethodNotFound {
+					return nil, true, nil
+				}
+				return nil, false, fmt.Errorf("server/discover failed: %s", rpcResp.Error.Message)
 			}
 		}
 		return nil, false, callErr

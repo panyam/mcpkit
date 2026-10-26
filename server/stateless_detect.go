@@ -64,8 +64,30 @@ func detectWireKind(r *http.Request, body []byte, req *core.Request, mode statel
 	case stateless.ModeStateless:
 		return wireStateless
 	}
-	// stateless.ModeDual — full detection.
+	// stateless.ModeDual — full detection. Signals 1-3 come from the
+	// message itself, shared with stdio.
+	if k := wireKindFromMessage(req); k != wireUnknown {
+		return k
+	}
 
+	// Signal 4: legacy session id present.
+	if r.Header.Get(mcpSessionIDHeader) != "" {
+		return wireLegacy
+	}
+
+	// Signal 5: Dual default — fall back to legacy for backward compat.
+	// A stateless client that forgot both _meta and server/discover
+	// will surface as a legacy-shaped missing-session error, which is
+	// the right "wake up" signal.
+	return wireLegacy
+}
+
+// wireKindFromMessage is the part of dual-mode detection that needs nothing
+// but the message: signals 1-3 of detectWireKind. It returns wireUnknown when
+// the message carries no wire signal, which HTTP resolves with the
+// Mcp-Session-Id header and stdio resolves to the session wire. stdio has no
+// headers, so this is all of its detection.
+func wireKindFromMessage(req *core.Request) wireKind {
 	// Signal 1: distinctly-legacy methods.
 	switch req.Method {
 	case "initialize", "notifications/initialized", "initialized":
@@ -82,17 +104,7 @@ func detectWireKind(r *http.Request, body []byte, req *core.Request, mode statel
 	if hasStatelessMetaProtocolVersion(req.Params.Raw()) {
 		return wireStateless
 	}
-
-	// Signal 4: legacy session id present.
-	if r.Header.Get(mcpSessionIDHeader) != "" {
-		return wireLegacy
-	}
-
-	// Signal 5: Dual default — fall back to legacy for backward compat.
-	// A stateless client that forgot both _meta and server/discover
-	// will surface as a legacy-shaped missing-session error, which is
-	// the right "wake up" signal.
-	return wireLegacy
+	return wireUnknown
 }
 
 // hasStatelessMetaProtocolVersion peeks the params blob for the
