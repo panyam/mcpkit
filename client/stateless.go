@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	core "github.com/panyam/mcpkit/core"
@@ -48,6 +49,13 @@ import (
 // helper which calls into the same machinery and surfaces -32601 /
 // HTTP 404 as a typed *UnsupportedDiscoverError instead of a
 // fallback bool.
+// errDiscoverRejected marks a server/discover the server answered but refused
+// or answered badly: a JSON-RPC error, or a result that doesn't decode. The
+// server is reachable and speaking the wire, which is what a stateless-mode
+// Connect needs to know (see doConnect). Any other probe error, a refused
+// connection, a 401 or a 5xx, means it isn't.
+var errDiscoverRejected = errors.New("server/discover failed")
+
 func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err error) {
 	params := map[string]any{
 		"_meta": c.buildRequestMeta(),
@@ -91,7 +99,7 @@ func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err err
 				if rpcResp == nil || rpcResp.Error == nil || rpcResp.Error.Code == core.ErrCodeMethodNotFound {
 					return nil, true, nil
 				}
-				return nil, false, fmt.Errorf("server/discover failed: %s", rpcResp.Error.Message)
+				return nil, false, fmt.Errorf("%w: %s", errDiscoverRejected, rpcResp.Error.Message)
 			}
 		}
 		return nil, false, callErr
@@ -106,11 +114,11 @@ func (c *Client) adaptiveProbe() (result *DiscoverResult, fallback bool, err err
 		// fatal — the server speaks the wire (got far enough to emit
 		// a JSON-RPC envelope) but rejected the call for a non-recoverable
 		// reason (invalid _meta, version mismatch, etc.).
-		return nil, false, fmt.Errorf("server/discover failed: %s", resp.Error.Message)
+		return nil, false, fmt.Errorf("%w: %s", errDiscoverRejected, resp.Error.Message)
 	}
 	var dr DiscoverResult
 	if err := json.Unmarshal(resp.Result, &dr); err != nil {
-		return nil, false, fmt.Errorf("server/discover returned malformed result: %w", err)
+		return nil, false, fmt.Errorf("%w: malformed result: %v", errDiscoverRejected, err)
 	}
 	// Spec PR 3002 moved server identity from the result body to
 	// _meta[io.modelcontextprotocol/serverInfo]. Prefer the _meta form;

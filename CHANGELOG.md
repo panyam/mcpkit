@@ -9,6 +9,15 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Fixed
+- **A stateless `Connect` fails when the server can't be reached or refuses
+  the credentials.** The `server/discover` probe is the only round trip a
+  stateless `Connect` makes, and every probe error was dropped, so a `Group`
+  showed a down or unauthorised server as ready until its first real call
+  (chakra#112). A refused connection, a 5xx or a 401 now fails `Connect`, and a
+  401 classifies as needs-login. A server that answers `discover` with a
+  JSON-RPC error, or doesn't implement it (issue 829), still connects.
+
 ## [0.8.13] - 2026-10-26
 
 The stateless wire now behaves like the session wire, and stdio serves it.
