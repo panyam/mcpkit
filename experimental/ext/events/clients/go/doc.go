@@ -17,6 +17,9 @@
 //     wire envelope's Data field into the typed Data parameter, and
 //     delivers Event[Data] values on the Events() channel.
 //
+// List reads the server's events/list catalog across every page, and
+// WatchListChanged says when to read it again.
+//
 // Every mode drops a second delivery of the same eventId by default; share a
 // Deduper across modes to drop the overlap between them. EventSink is the
 // interface a bridge hands each arrived event to, on its way to a model.
