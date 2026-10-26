@@ -9,6 +9,10 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.15] - 2026-10-26
+
+Full write-up: [`docs/releases/v0.8.15.md`](docs/releases/v0.8.15.md).
+
 ### Added
 - **`taskIds` on `subscriptions/listen`** (#1523). `tasks.Register` installs
   ext-tasks' filter key, so a stateless client hears `notifications/tasks` for
