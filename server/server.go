@@ -911,30 +911,79 @@ func (s *Server) dispatchWithNotifyAndRequest(d *Dispatcher, ctx context.Context
 // core.EmitSSERetry can emit a "retry:" field on the current stream.
 // Non-SSE transports pass nil and EmitSSERetry becomes a silent no-op.
 func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *core.Claims, notify core.NotifyFunc, request core.RequestFunc, sseRetry func(ms int), req *core.Request) (*core.Response, error) {
-	// Wrap outgoing notifications with interceptors (first registered = outermost).
-	for i := len(s.options.notifyInterceptors) - 1; i >= 0; i-- {
-		next := notify
-		interceptor := s.options.notifyInterceptors[i]
-		notify = func(method string, params any) { interceptor(method, params, next) }
-	}
+	return s.runRequest(ctx, wireLegacy, d, req, sessionIO{claims, notify, request, sseRetry},
+		func(ctx context.Context, req *core.Request) (*core.Response, error) {
+			return d.Dispatch(ctx, req), nil
+		})
+}
 
-	// Wrap outgoing server-to-client requests with interceptors.
-	if request != nil {
-		for i := len(s.options.requestInterceptors) - 1; i >= 0; i-- {
-			next := request
-			interceptor := s.options.requestInterceptors[i]
-			request = func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				return interceptor(ctx, method, params, next)
+// sessionIO is what a session transport hands runRequest: the caller's
+// claims and the push functions for its stream. The stateless wire has none
+// of these and passes the zero value.
+type sessionIO struct {
+	claims   *core.Claims
+	notify   core.NotifyFunc
+	request  core.RequestFunc
+	sseRetry func(ms int)
+}
+
+// runRequest builds the per-request context and runs req through the
+// middleware chain to terminal. Both wires come through here (#1625): the
+// session wire from dispatchWithOpts and the stateless wire from
+// statelessBackend.InvokeWithMiddleware. What only a session has is inside
+// the wire == wireLegacy branch; everything after it applies to both.
+func (s *Server) runRequest(ctx context.Context, wire wireKind, d *Dispatcher, req *core.Request, sio sessionIO, terminal MiddlewareFunc) (*core.Response, error) {
+	if wire == wireLegacy {
+		notify, request, claims, sseRetry := sio.notify, sio.request, sio.claims, sio.sseRetry
+		// Wrap outgoing notifications with interceptors (first registered = outermost).
+		for i := len(s.options.notifyInterceptors) - 1; i >= 0; i-- {
+			next := notify
+			interceptor := s.options.notifyInterceptors[i]
+			notify = func(method string, params any) { interceptor(method, params, next) }
+		}
+
+		// Wrap outgoing server-to-client requests with interceptors.
+		if request != nil {
+			for i := len(s.options.requestInterceptors) - 1; i >= 0; i-- {
+				next := request
+				interceptor := s.options.requestInterceptors[i]
+				request = func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return interceptor(ctx, method, params, next)
+				}
 			}
 		}
+
+		// Inject session context so tool handlers can send notifications, requests,
+		// and access authenticated claims and client capabilities.
+		ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
+
+		// Set the session ID so middleware and handlers can access it via ctx.SessionID().
+		core.SetSessionID(ctx, d.sessionID)
+
+		// Register a detach strategy for background goroutines (e.g., async tasks).
+		// The strategy replaces the POST-scoped requestFunc and notifyFunc (which
+		// write to the now-closed response stream) with session-level equivalents
+		// that use the persistent GET SSE stream. This allows background goroutines
+		// to send notifications (progress, logging) and server-to-client requests
+		// (elicitation, sampling) after the original HTTP request has returned.
+		ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
+			c = context.WithoutCancel(c)
+			// Replace transport-scoped functions. Each Replace* returns a new
+			// context — chain them so both replacements take effect.
+			if push := d.getPushRequest(); push != nil {
+				c = core.ReplaceSessionRequestFunc(c, d.makeRequestFunc(push))
+			}
+			if bgNotify := d.getNotifyFunc(); bgNotify != nil {
+				c = core.ReplaceSessionNotifyFunc(c, bgNotify)
+			}
+			return c
+		})
+
+		// Wire the SSE retry-hint emitter if provided by the transport layer.
+		if sseRetry != nil {
+			ctx = core.SetSSERetryHint(ctx, sseRetry)
+		}
 	}
-
-	// Inject session context so tool handlers can send notifications, requests,
-	// and access authenticated claims and client capabilities.
-	ctx = core.ContextWithSession(ctx, notify, request, &d.logLevel, &d.clientCaps, claims)
-
-	// Set the session ID so middleware and handlers can access it via ctx.SessionID().
-	core.SetSessionID(ctx, d.sessionID)
 
 	// Install the task-store bucket keyer (issue 485) so the v1/v2 task
 	// surfaces resolve isolation via core.TaskBucketKey. Nil = no-op (default
@@ -950,30 +999,6 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 	// carry it through to the wire.
 	if req.Method != "" {
 		core.SetResponseHeader(ctx, "Mcp-Method", req.Method)
-	}
-
-	// Register a detach strategy for background goroutines (e.g., async tasks).
-	// The strategy replaces the POST-scoped requestFunc and notifyFunc (which
-	// write to the now-closed response stream) with session-level equivalents
-	// that use the persistent GET SSE stream. This allows background goroutines
-	// to send notifications (progress, logging) and server-to-client requests
-	// (elicitation, sampling) after the original HTTP request has returned.
-	ctx = core.SetDetachStrategy(ctx, func(c context.Context) context.Context {
-		c = context.WithoutCancel(c)
-		// Replace transport-scoped functions. Each Replace* returns a new
-		// context — chain them so both replacements take effect.
-		if push := d.getPushRequest(); push != nil {
-			c = core.ReplaceSessionRequestFunc(c, d.makeRequestFunc(push))
-		}
-		if bgNotify := d.getNotifyFunc(); bgNotify != nil {
-			c = core.ReplaceSessionNotifyFunc(c, bgNotify)
-		}
-		return c
-	})
-
-	// Wire the SSE retry-hint emitter if provided by the transport layer.
-	if sseRetry != nil {
-		ctx = core.SetSSERetryHint(ctx, sseRetry)
 	}
 
 	// Wire allowed-roots enforcement (#197). The closure computes the
@@ -999,11 +1024,7 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 		ctx = core.WithContentChunkMethod(ctx, s.options.contentChunkMethod)
 	}
 
-	// Build the terminal handler. WithToolTimeout is applied inside
-	// handleToolsCall, which both wires share.
-	handler := MiddlewareFunc(func(ctx context.Context, req *core.Request) (*core.Response, error) {
-		return d.Dispatch(ctx, req), nil
-	})
+	handler := terminal
 
 	// Wrap with user middleware (reverse order: first registered = outermost).
 	for i := len(s.options.middleware) - 1; i >= 0; i-- {

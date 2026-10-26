@@ -425,6 +425,91 @@ func TestWireParity(t *testing.T) {
 		}
 	})
 
+	t.Run("1625 middleware sees the handshake", func(t *testing.T) {
+		var mu sync.Mutex
+		var seen []string
+		record := func(ctx context.Context, req *core.Request, next MiddlewareFunc) (*core.Response, error) {
+			mu.Lock()
+			seen = append(seen, req.Method)
+			mu.Unlock()
+			return next(ctx, req)
+		}
+		parityWires(t, parityFixture(t, WithMiddleware(record)), map[string]any{})
+		mu.Lock()
+		defer mu.Unlock()
+		for _, m := range []string{"initialize", "server/discover"} {
+			if !slices.Contains(seen, m) {
+				t.Errorf("middleware saw %v, want %s", seen, m)
+			}
+		}
+	})
+
+	t.Run("1625 metrics and trace see both wires", func(t *testing.T) {
+		meter, tracer := newFakeMeter(), &fakeTracerProvider{}
+		toolCalls := func() int {
+			meter.mu.Lock()
+			c := meter.counters[metricNameToolCalls]
+			meter.mu.Unlock()
+			if c == nil {
+				return 0
+			}
+			return len(c.snapshot())
+		}
+		s := parityFixture(t, WithMeterProvider(meter), WithTracerProvider(tracer))
+		for _, w := range parityWires(t, s, map[string]any{}) {
+			calls, spans := toolCalls(), len(tracer.snapshot())
+			if _, rpcErr := w.call(t, "tools/call", map[string]any{"name": "upload_report", "arguments": map[string]any{}}); rpcErr != nil {
+				t.Fatalf("%s tools/call: %v", w.name, rpcErr)
+			}
+			if got := toolCalls(); got != calls+1 {
+				t.Errorf("%s wire: %s went from %d to %d, want one more", w.name, metricNameToolCalls, calls, got)
+			}
+			if got := len(tracer.snapshot()); got <= spans {
+				t.Errorf("%s wire: no span recorded for tools/call", w.name)
+			}
+		}
+	})
+
+	t.Run("1625 a panicking handler is an internal error", func(t *testing.T) {
+		s := parityFixture(t)
+		s.RegisterTool(core.ToolDef{Name: "panics"}, func(core.ToolContext, core.ToolRequest) (core.ToolResponse, error) {
+			panic("boom")
+		})
+		for _, w := range parityWires(t, s, map[string]any{}) {
+			_, rpcErr := w.call(t, "tools/call", map[string]any{"name": "panics", "arguments": map[string]any{}})
+			if rpcErr == nil || rpcErr.Code != core.ErrCodeInternal {
+				t.Errorf("%s wire: tools/call on a panicking tool = %v, want %d", w.name, rpcErr, core.ErrCodeInternal)
+			}
+		}
+	})
+
+	t.Run("1625 handlers get the same request context", func(t *testing.T) {
+		relay := &countingRelay{}
+		s := parityFixture(t, WithContentChunkMethod("x/chunk"), WithSubscriptions(), WithNotificationRelay(relay),
+			WithAllowedRoots("/workspace"))
+		s.RegisterTool(core.ToolDef{Name: "ctx_probe"}, func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
+			core.NotifyResourceUpdated(ctx, "test://static")
+			return core.TextResult(fmt.Sprintf("chunk=%s etcAllowed=%v",
+				core.ContentChunkMethodFromContext(ctx), core.IsPathAllowed(ctx, "/etc/passwd"))), nil
+		})
+		for _, w := range parityWires(t, s, map[string]any{}) {
+			before := relay.n.Load()
+			res, rpcErr := w.call(t, "tools/call", map[string]any{"name": "ctx_probe", "arguments": map[string]any{}})
+			if rpcErr != nil {
+				t.Fatalf("%s tools/call: %v", w.name, rpcErr)
+			}
+			if !strings.Contains(string(res["content"]), "chunk=x/chunk") {
+				t.Errorf("%s wire: handler saw no content chunk method: %s", w.name, res["content"])
+			}
+			if !strings.Contains(string(res["content"]), "etcAllowed=false") {
+				t.Errorf("%s wire: WithAllowedRoots(/workspace) let /etc/passwd through: %s", w.name, res["content"])
+			}
+			if got := relay.n.Load(); got != before+1 {
+				t.Errorf("%s wire: NotifyResourceUpdated published %d times, want 1", w.name, got-before)
+			}
+		}
+	})
+
 	t.Run("same result on both wires", func(t *testing.T) {
 		wires := parityWires(t, parityFixture(t), map[string]any{})
 		for _, c := range parityCalls {
@@ -598,3 +683,9 @@ func stdioStatelessWire(t *testing.T, s *Server) func(t *testing.T, method strin
 		return out, nil
 	}
 }
+
+// countingRelay counts what the subscription registry publishes, which is
+// how a test sees core.NotifyResourceUpdated reach it.
+type countingRelay struct{ n atomic.Int64 }
+
+func (r *countingRelay) Publish(context.Context, string, any) { r.n.Add(1) }

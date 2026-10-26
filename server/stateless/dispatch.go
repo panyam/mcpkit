@@ -14,17 +14,9 @@ import (
 // validates up front and threads through context so handlers can read
 // per-request capabilities via core.ClientSupportsExtensionForRequest.
 //
-// Method coverage on this commit:
-//
-//	server/discover                tools/list   tools/call
-//	resources/list                 resources/read
-//	resources/templates/list       prompts/list   prompts/get
-//	completion/complete
-//
-// Removed legacy methods (initialize, ping, logging/setLevel,
-// resources/(un)subscribe, etc.) short-circuit to -32601; the transport
-// layer maps that to HTTP 404. subscriptions/listen and the MRTR-routed
-// sample/elicit path land in follow-up commits.
+// It owns what is specific to this wire: the removed-methods -32601, the
+// _meta and version checks, and the serverInfo / resultType stamping. Every
+// method that gets past those goes through Backend.InvokeWithMiddleware.
 type Dispatcher struct {
 	Backend Backend
 }
@@ -58,8 +50,7 @@ var removedLegacyMethods = map[string]struct{}{
 // (HTTPStatusForCode) at the transport boundary.
 //
 // A non-nil error is a middleware short-circuit (typically *core.AuthError)
-// raised by the backend's middleware chain on tools/call, prompts/get, or a
-// custom method. The transport surfaces it via writeAuthError — emitting the
+// raised by the backend's middleware chain. The transport surfaces it via writeAuthError — emitting the
 // correct HTTP status (e.g. 403) + WWW-Authenticate header — so the stateless
 // wire matches the legacy wire's auth signaling instead of folding it into a
 // generic -32603 body (issue 815). When err is non-nil the *core.Response is nil.
@@ -134,57 +125,16 @@ func (d *Dispatcher) dispatch(ctx context.Context, req *core.Request) (*core.Res
 	// ctx.ClientCaps() can read it without an import cycle.
 	ctx = core.WithRequestMeta(ctx, meta)
 
-	// Every request-bearing handler routes through the backend's middleware
-	// chain and returns (resp, err); the err is a middleware short-circuit
-	// forwarded to the transport's writeAuthError. server/discover is
-	// answered here directly.
-	switch req.Method {
-	case "server/discover":
-		return d.handleDiscover(id), nil
-	case "tools/list":
-		return d.handleToolsList(ctx, id, req.Params.Raw())
-	case "tools/call":
-		return d.handleToolsCall(ctx, id, req.Params.Raw())
-	case "resources/list":
-		return d.handleResourcesList(ctx, id, req.Params.Raw())
-	case "resources/read":
-		return d.handleResourcesRead(ctx, id, req.Params.Raw())
-	case "resources/templates/list":
-		return d.handleResourcesTemplatesList(ctx, id, req.Params.Raw())
-	case "prompts/list":
-		return d.handlePromptsList(ctx, id, req.Params.Raw())
-	case "prompts/get":
-		return d.handlePromptsGet(ctx, id, req.Params.Raw())
-	case "completion/complete":
-		return d.handleCompletionComplete(ctx, id, req.Params.Raw())
-	default:
-		// Any other method (custom JSON-RPC verbs registered via
-		// Server.HandleMethod — events/poll, events/list,
-		// events/subscribe, tasks/get|update|cancel, future SEPs,
-		// caller-defined endpoints) goes through the backend's
-		// middleware-aware path so:
-		//   - extension capability gating (handler emits -32021 if the
-		//     per-request _meta.io.modelcontextprotocol/clientCapabilities
-		//     omits the extension declaration), and
-		//   - any server-level middleware (auth, logging, tracing)
-		//     applies on the stateless wire too.
-		//
-		// Backends without middleware support (test fakes) return
-		// ok=false here — which surfaces as -32601 "method not found"
-		// below, mirroring the legacy dispatcher's behavior for the
-		// same scenario.
-		out := &core.Request{
-			JSONRPC: "2.0",
-			ID:      id,
-			Method:  req.Method,
-			Params:  req.Params,
-		}
-		if resp, err, ok := d.Backend.InvokeWithMiddleware(ctx, out); ok {
-			return resp, err
-		}
-		return core.NewErrorResponse(id, core.ErrCodeMethodNotFound,
-			"method not found: "+req.Method), nil
-	}
+	// Everything past the envelope runs through the backend's middleware
+	// chain, server/discover included, so no method on this wire can skip
+	// it (#1625). The method table lives at the end of that chain, shared
+	// with the session wire.
+	return d.Backend.InvokeWithMiddleware(ctx, &core.Request{
+		JSONRPC: "2.0",
+		ID:      id,
+		Method:  req.Method,
+		Params:  req.Params,
+	})
 }
 
 // RequestMetaFromContext returns the validated SEP-2575 _meta envelope

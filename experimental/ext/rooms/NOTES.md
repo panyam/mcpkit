@@ -9,9 +9,8 @@ bridge registers each page tool there once and installs a `tools/list` middlewar
 tools of rooms the session has not attached to. The call handler re-checks attachment, so a session
 that names a tool it was never shown is refused.
 
-This has a cost on the stateless wire, where a handler that skips `InvokeWithMiddleware` bypasses
-the chain (C7). The bridge refuses to attach without a session, so nothing is callable there, but
-an unfiltered `tools/list` would show every room's tool names.
+The stateless wire runs the same chain (C7), so the `tools/list` filter runs there too. The
+bridge refuses to attach without a session, so nothing is callable there.
 
 A name is one definition bridge-wide, which is why the first page to register a name fixes its
 schema. That is the simplest answer to #1581's open question about mismatched page versions.

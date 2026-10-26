@@ -101,6 +101,11 @@ const (
 	// equivalent — BaseContext.Notify coalesces the two so events/stream
 	// (and any other streaming handler) works identically on either wire.
 	statelessNotifyCtxKey
+	// statelessAllowedRootsCtxKey and statelessResourceNotifierCtxKey carry
+	// what SetAllowedRoots and SetNotifyResourceUpdated install when there is
+	// no sessionCtx to put it on, which is the stateless wire (#1625).
+	statelessAllowedRootsCtxKey
+	statelessResourceNotifierCtxKey
 )
 
 // ContextWithSession returns a context carrying the session's notification state,

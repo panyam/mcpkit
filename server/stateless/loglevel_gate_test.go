@@ -69,24 +69,10 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// The handler-visible view: a ToolHandler running under
-			// Dispatcher.Dispatch reads meta via
-			// stateless.RequestMetaFromContext(ctx).
-			var captured *core.RequestMeta
-
-			d := New(&fakeBackend{
-				tool: func(name string) (core.ToolDef, core.ToolHandler, bool) {
-					if name == "spy_log_level" {
-						return core.ToolDef{Name: name},
-							func(ctx core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
-								captured = RequestMetaFromContext(ctx)
-								return core.TextResult("ok"), nil
-							}, true
-					}
-					return core.ToolDef{}, nil, false
-				},
-			})
-
+			// The handler-visible view: everything the backend runs for
+			// this request, handler included, gets this ctx, so the fake
+			// backend reads meta the way a handler would.
+			f := &fakeBackend{}
 			params := json.RawMessage(`{"name":"spy_log_level","arguments":{},"_meta":` + tc.meta + `}`)
 			req := &core.Request{
 				JSONRPC: "2.0",
@@ -94,10 +80,8 @@ func TestRequestMeta_LogLevelThreadingExposedToHandlers(t *testing.T) {
 				Method:  "tools/call",
 				Params:  core.NewRawJSON(params),
 			}
-			resp, _ := d.Dispatch(context.Background(), req)
-			if resp == nil || resp.Error != nil {
-				t.Fatalf("tools/call errored: %+v", resp)
-			}
+			New(f).Dispatch(context.Background(), req)
+			captured := f.lastMeta
 			if captured == nil {
 				t.Fatal("handler did not see a RequestMeta in ctx")
 			}

@@ -33,13 +33,6 @@ jobs:
       - name: No cross-extension requires
         run: ./scripts/check-ext-isolation.sh
 
-      # C7. A stateless handler that skips InvokeWithMiddleware means a
-      # middleware applies on the session wire and not on this one, which for
-      # an authorization gate is a bypass (#1352). Invisible to the suites:
-      # the method still works and the response still looks right.
-      - name: Stateless handlers route through middleware
-        run: ./scripts/check-stateless-middleware.sh
-
       # C8. A recipe holding a shell script has to be written twice, once in
       # Make's dialect and once in just's, and the copies drift. That is how
       # `just clean-backends` came to wipe the events volumes while promising

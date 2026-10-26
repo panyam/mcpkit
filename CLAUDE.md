@@ -136,17 +136,15 @@ These span packages and will bite on a task that never opens a routed doc.
   `scripts/pre-commit-hook.sh` (local, opt-in via `make setup-hooks`) and
   `scripts/check-no-binaries.sh` (whole-tree, wired into `test.yml`, the actual gate).
   `HANDOFF.md` / `HANDOFF_*.md` are gitignored for the same `git add -A` reason.
-- **A stateless handler that skips `InvokeWithMiddleware` is a silent middleware bypass.** The
-  session wire wraps `d.Dispatch` with the chain and filters by nothing, so it sees every method.
-  The SEP-2575 wire dispatches per method in `server/stateless/handlers.go` and reaches the chain
-  only if the handler calls `Backend.InvokeWithMiddleware` itself. Omit it and the method still
-  works, the response still looks right, and the middleware never runs. `resources/read` was in
-  that state until #1352: a scope gate held on `tools/call` and not on `resources/read`, so a caller
-  refused a tool could ask for the resource. Constraint C7, gated by
-  `make check-stateless-middleware`. Every handler routes since #1355, so the script's `ALLOWED`
-  is empty and an entry there is a new decision. #1625 moves the chain above the method switch so
-  the bypass can't be written, and sets the rule for wire differences: one shared handler with an
-  explicit wire branch, not a handler per wire (`server/NOTES.md` § Stateless-wire dispatch parity).
+- **Both wires run one request path, and wire differences are explicit branches in it.** Since
+  #1625 the stateless dispatcher makes a single `Backend.InvokeWithMiddleware` call past its
+  envelope checks, which runs `Server.runRequest` with `wireStateless`, the same function the
+  session wire uses. Per-request context, user middleware, metrics and trace all live there, with
+  the session-only parts inside `if wire == wireLegacy`. Before that the stateless wire dispatched
+  per method and each handler had to call the chain itself; `resources/read` didn't (#1352), so a
+  scope gate held on `tools/call` and not on the resource. Don't add a stateless path that answers
+  above `InvokeWithMiddleware`, and put a new wire difference in a `wire` branch of the shared code
+  rather than a second handler (`server/NOTES.md` § Stateless-wire dispatch parity, constraint C7).
 - **Makefiles and justfiles dispatch; they do not hold shell scripts.** Control flow, or four or
   more statements, goes in `scripts/` and the recipe calls it. Nearly every directory carries both
   a `Makefile` and a `justfile`, and in `examples/` they must stay name-and-behavior identical
