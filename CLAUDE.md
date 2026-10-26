@@ -111,7 +111,10 @@ each worked in its own worktree:
 - **#1552** (`mission_wire_2026_07_28`): a 2026-07-28 client gets spec-correct results from mcpkit
   on both wires. Exercise `make exercise-wire`: session-vs-stateless parity rows
   (`TestWireParity` in `server/` and `experimental/ext/agents`, one row per ticket) plus
-  `testconf testconf-stateless testconf-agents`. A new wire bug gets a row there first.
+  `testconf testconf-stateless testconf-agents`. A new wire bug gets a row there first. Those
+  rows are the only cross-wire check anywhere: each upstream suite grades one wire on its own
+  fixture (`testconf` on `cmd/testserver` sessions, `testconf-stateless` on the cart example), so
+  #1352, #1355 and the #1637 gaps all shipped with every suite green.
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
   Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
   directives) closed with #1624, which tags a tree without them.
@@ -205,7 +208,9 @@ These span packages and will bite on a task that never opens a routed doc.
   and pushing tags, both work on the PAT, which is why a release push succeeds and the *first* push
   of a new branch does not. The `gho_` login carries `workflow`, so hand that push to it:
   `env -u GH_TOKEN git -c credential.helper='!gh auth git-credential' push -u https://github.com/panyam/mcpkit.git <branch>`.
-  Cost a round-trip on #1405.
+  Cost a round-trip on #1405. Pushing to a URL leaves no remote-tracking ref, so a bare
+  `--force-with-lease` after a rebase is refused; name the sha you expect,
+  `--force-with-lease=<branch>:<old-sha>`.
   **SSH pushes use the agent, not a key file.** `~/.ssh/id_github` does not exist in the container —
   only `~/.ssh/agent.sock`, which holds the right key. Use
   `SSH_AUTH_SOCK=~/.ssh/agent.sock git push …`; the `-i ~/.ssh/id_github` form fails with
@@ -258,7 +263,8 @@ These span packages and will bite on a task that never opens a routed doc.
   downstream assumed a stable order, and it surfaces as flakiness somewhere else.
 - **The Keycloak suite (`tests/keycloak`) runs only on auth-path PRs, `main` and nightly**
   (`keycloak-interop.yml`, #1597). A change elsewhere that breaks auth on the wire shows up there
-  later, not on its own PR. Locally, `make testkcl-auto` (`KC_PORT=8181` if 8180 is taken).
+  later, not on its own PR. Locally, `make testkcl-auto`, with `KC_PORT=<free port>` if 8180 is
+  taken; it refuses any port that serves no `mcpkit-test` realm, and 8181 is often taken too.
 - **`@panyam/mcpkit-rooms` (npm) is released with mcpkit.** `make bump-root` sets
   `experimental/ext/rooms/ts/package.json`'s version, `make check-rooms-ts-version` holds it to the
   rooms module's pin in CI, and the root tag publishes it (`publish-npm-rooms.yml`, which
@@ -272,6 +278,12 @@ These span packages and will bite on a task that never opens a routed doc.
 - **A mutation that breaks the build reads as a pass** to a red-before-green runner that greps for
   `--- FAIL`. Check for `build failed` too, or a "no test went red" result means nothing. It hid two
   mutations in #1613 until a direct run showed the build error.
+- **A clean `make testall` needs setup it does not do** (#1551). Stages 8f and 8g fail in 0s
+  without a `../conf-pending` checkout (point `MCPCONFORMANCE_FILE_INPUTS_PATH` and
+  `MCPCONFORMANCE_AUTH_PATH` at any `pending` checkout, e.g. `../conf-pending-v080`), stage 9
+  needs a free `KC_PORT`, and the protogen stage can delete the generated files under
+  `examples/protogen/`, so run `git checkout -- examples/protogen` before staging anything after
+  a testall. testall also skips `testconf-stateless` and `testconf-client`; run those by hand.
 - **`make test-examples` runs in no workflow, so a broken example test ships green.** `test.yml`
   runs `scripts/check-examples-build.sh`, which compiles each module's *packages* and not their
   `_test.go` files, and mentions `test-examples` only in a comment explaining why it exists.
