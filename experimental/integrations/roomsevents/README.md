@@ -92,6 +92,11 @@ reports no error.
 Code's v2 runtime doesn't register a channel server that negotiates 2026-07-28, because that
 revision can't carry channel messages.
 
+Its own connection to the bridge stays on the session wire too, whatever `MCPKIT_CLIENT_MODE` says,
+because the bridge only takes event subscriptions from a session that attached. It watches the room
+`attach` reports in its result, so a bridge that maps rooms from its host's arguments
+(`rooms.WithRoomOf`) works when the agent attaches with those arguments and no `resource`.
+
 ## Go API
 
 - `roomsevents.New`, `(*Events).Publish`, `Register`, `Bind`, `Sources`: the events side.

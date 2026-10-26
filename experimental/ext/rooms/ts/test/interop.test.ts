@@ -401,6 +401,27 @@ describe("a TypeScript page behind the Go bridge", () => {
     expect(callers[0]).toEqual({ subject: "alice" });
   });
 
+  it("hears when the bridge refuses one of its tools, and why", async () => {
+    const first = await page("alice", showSheet);
+    first.setAgentsAllowed(true);
+    const a = await agent("alice");
+    await waitPaired(a, first.id);
+
+    const p = await pageWith({}, "alice");
+    const heard: Array<{ name: string; reason: string }> = [];
+    p.onToolRefused((r) => heard.push(r));
+    const drifted = p.registerTool({ ...showSheet, inputSchema: { type: "object", properties: { page: { type: "number" } } } });
+    p.registerTool({ name: "hello", execute: () => "hi" });
+    await eventually(async () => heard.length > 0, 5000, "the refusal");
+
+    expect(heard).toHaveLength(1);
+    expect(heard[0].name).toBe("show_sheet");
+    expect(heard[0].reason).not.toBe("");
+    expect(p.refusedTools()).toEqual(heard);
+    drifted.unregister();
+    expect(p.refusedTools()).toEqual([]);
+  });
+
   it("rejects a join the relay refuses", async () => {
     await expect(joinToolRoom({ relay: info.relay, room: ROOM, token: "not-a-jwt" })).rejects.toThrow();
   });

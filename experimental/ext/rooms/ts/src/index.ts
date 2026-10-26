@@ -9,7 +9,7 @@ export {
   DEFAULT_PAIRING_CODE_TTL_MS,
   DEFAULT_PRESENCE_TTL_MS,
 } from "./room.js";
-export type { JoinToolRoomOptions, ToolRoom, PairingRequest, PairedByCode, Principal, Presence, ModelContextLike } from "./room.js";
+export type { JoinToolRoomOptions, ToolRoom, PairingRequest, PairedByCode, Principal, Presence, ModelContextLike, ToolRefusal } from "./room.js";
 export { DEFAULT_SEND_RATE } from "./sender.js";
 export { registerOnApp } from "./app.js";
 export type { AppToolRegistry } from "./app.js";

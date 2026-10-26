@@ -51,12 +51,13 @@ func (tokens) Claims(r *http.Request) *core.Claims {
 	return &core.Claims{Subject: sub, Scopes: allScopes}
 }
 
-// New starts a stack and stops it when t ends.
-func New(t *testing.T) *Stack {
+// New starts a stack and stops it when t ends. opts are added to the bridge's
+// own, after its page events.
+func New(t *testing.T, opts ...rooms.Option) *Stack {
 	t.Helper()
 	st := &Stack{Relay: memroom.New()}
 	ev := roomsevents.New()
-	st.Bridge = rooms.New(st.Relay.Transport("bridge"), rooms.WithPageEvents(ev.Publish))
+	st.Bridge = rooms.New(st.Relay.Transport("bridge"), append([]rooms.Option{rooms.WithPageEvents(ev.Publish)}, opts...)...)
 	srv := server.NewServer(core.ServerInfo{Name: "rooms-events-test", Version: "0"}, server.WithAuth(tokens{}))
 	st.Bridge.Register(srv)
 	ev.Register(srv, st.Bridge, events.Config{StreamHeartbeatInterval: time.Hour})

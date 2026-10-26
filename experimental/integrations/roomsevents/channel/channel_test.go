@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/panyam/mcpkit/client"
 	"github.com/panyam/mcpkit/experimental/ext/events"
 	eventsclient "github.com/panyam/mcpkit/experimental/ext/events/clients/go"
 	"github.com/panyam/mcpkit/experimental/ext/rooms"
@@ -279,4 +280,80 @@ func listPagesText(f *FrontEnd) string {
 func mustMarshal(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// A bridge built WithRoomOf takes the room from the host's own argument, so the
+// agent's attach carries no resource. The front end watches the room the
+// bridge says it attached to (#1640).
+func TestFrontEnd_WatchesTheRoomTheBridgeResolved(t *testing.T) {
+	st := rt.New(t, rooms.WithRoomOf(func(args map[string]any) (string, error) {
+		d, _ := args["design"].(string)
+		return "design:demo/" + d, nil
+	}, rooms.RoomArgs{"design": {"type": "string"}}))
+	f, h := connect(t, st)
+
+	res := h.request(3, "tools/call", map[string]any{"name": "attach", "arguments": map[string]any{"design": "board.kicad_sch"}})
+	require.NotEqual(t, "true", string(res["isError"]))
+	p := pageAsks(t, st, f, h, "why is SDA flagged?")
+	msgs := h.channelMessages()
+	require.Len(t, msgs, 1)
+	var meta map[string]string
+	require.NoError(t, json.Unmarshal(msgs[0]["meta"], &meta))
+	assert.Equal(t, "room.ask", meta["event"])
+	assert.Equal(t, rt.Room, meta["resource"])
+
+	_ = h.request(4, "tools/call", map[string]any{"name": "detach", "arguments": map[string]any{"design": "board.kicad_sch"}})
+	f.mu.Lock()
+	_, still := f.watching[rt.Room]
+	f.mu.Unlock()
+	assert.False(t, still, "detach by the host's argument closes the room's streams")
+	require.NoError(t, p.Ask("still there?"))
+	time.Sleep(300 * time.Millisecond)
+	assert.Len(t, h.channelMessages(), 1, "after detach the room's events stop")
+}
+
+// Events need the session wire, so the front end stays on it whatever
+// MCPKIT_CLIENT_MODE says.
+func TestFrontEnd_StaysOnTheSessionWireUnderStatelessMode(t *testing.T) {
+	t.Setenv(client.ClientModeEnvVar, "stateless")
+	st := rt.New(t)
+	f, h := connect(t, st)
+
+	res := h.request(3, "tools/call", map[string]any{"name": "attach", "arguments": map[string]any{"resource": rt.Room}})
+	require.NotEqual(t, "true", string(res["isError"]))
+	pageAsks(t, st, f, h, "why is SDA flagged?")
+	assert.Len(t, h.channelMessages(), 1)
+}
+
+// connect starts a front end on st as alice and completes Claude Code's side
+// of the handshake.
+func connect(t *testing.T, st *rt.Stack) (*FrontEnd, *host) {
+	t.Helper()
+	f, err := New(t.Context(), Config{BridgeURL: st.URL, Token: rt.Token("alice"), Logf: t.Logf})
+	require.NoError(t, err)
+	t.Cleanup(f.Close)
+	h := startHost(t, f)
+	h.request(1, "initialize", map[string]any{
+		"protocolVersion": "2025-11-25",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "claude-code", "version": "2"},
+	})
+	_, _ = h.w.Write([]byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n"))
+	return f, h
+}
+
+// pageAsks opens alice's page in rt.Room after an attach, lets her agent in,
+// and asks text, waiting up to three seconds for a channel message.
+func pageAsks(t *testing.T, st *rt.Stack, f *FrontEnd, h *host, text string) *rooms.Page {
+	t.Helper()
+	p := st.Page(t, "alice", rt.Room)
+	require.Eventually(t, func() bool { return f.bridgeSeesPage(p.ID()) }, 3*time.Second, 10*time.Millisecond)
+	p.SetAgentsAllowed(true)
+	st.WaitAgreed(t, f.bridge.SessionID(), rt.Room, p.ID())
+	time.Sleep(200 * time.Millisecond)
+	before := len(h.channelMessages())
+	require.NoError(t, p.Ask(text))
+	assert.Eventually(t, func() bool { return len(h.channelMessages()) > before }, 3*time.Second, 10*time.Millisecond, "no channel message for the ask")
+	time.Sleep(300 * time.Millisecond)
+	return p
 }

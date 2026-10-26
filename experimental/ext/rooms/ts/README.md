@@ -80,6 +80,12 @@ An entry drops out an hour after it was last seen (`presenceTtlMs`). The same ca
 `ctx.caller` applies: without `trustBridges`, any peer in the room can send the page a report, so
 show it as a hint, not as a record.
 
+`onToolRefused(fn)` reports a tool a bridge won't offer, as `{ name, reason }`: a name the bridge
+reserves, one its host didn't declare (`WithPageTools`), or a schema or read-only hint that differs
+from the one the bridge already offers. Agents never see a refused tool, so this is where the page
+can tell its user. `refusedTools()` lists the refusals still standing, for a page that installs the
+callback late. Registering the name again clears its entry.
+
 ## Hearing from the host
 
 ```ts
