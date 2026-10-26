@@ -255,9 +255,10 @@ func (s *Server) runIOInternal(ctx context.Context, cfg stdioConfig) error {
 			}
 
 			// JSON-RPC never answers a notification, even with an error.
-			// Both dispatchers can return one for an id-less request (an
-			// unknown method, or any method before initialize).
-			if req.ID == nil {
+			// The session dispatcher can still return one for an id-less
+			// request (any method before initialize). IsNotification
+			// treats "id":null as a notification too.
+			if req.IsNotification() {
 				continue
 			}
 

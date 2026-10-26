@@ -138,3 +138,26 @@ func TestRequestIsNotification(t *testing.T) {
 		})
 	}
 }
+
+// JSON-RPC 2.0 defines a notification as a request without an id member, so a
+// nil ID is left out rather than written as null (#1520). Any ID the caller
+// set, null included, is written as given.
+func TestRequestMarshalOmitsNilID(t *testing.T) {
+	for _, tc := range []struct {
+		id   json.RawMessage
+		want string
+	}{
+		{nil, `{"jsonrpc":"2.0","method":"notifications/initialized"}`},
+		{json.RawMessage("0"), `{"jsonrpc":"2.0","id":0,"method":"notifications/initialized"}`},
+		{json.RawMessage(`"a"`), `{"jsonrpc":"2.0","id":"a","method":"notifications/initialized"}`},
+		{json.RawMessage("null"), `{"jsonrpc":"2.0","id":null,"method":"notifications/initialized"}`},
+	} {
+		got, err := json.Marshal(Request{JSONRPC: "2.0", ID: tc.id, Method: "notifications/initialized"})
+		if err != nil {
+			t.Fatalf("marshal id %s: %v", tc.id, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("id %s: got %s, want %s", tc.id, got, tc.want)
+		}
+	}
+}

@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"runtime"
 	"slices"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	core "github.com/panyam/mcpkit/core"
 	"github.com/panyam/mcpkit/server/stateless"
@@ -290,5 +293,42 @@ func TestDispatchStateless_HandlerSeesLogLevel(t *testing.T) {
 		if captured.LogLevel != lvl {
 			t.Errorf("captured.LogLevel = %q, want %q", captured.LogLevel, lvl)
 		}
+	}
+}
+
+// Two notifications in flight on one session both run. In-flight tracking
+// keys by id, and before #1520 every notification shared the key "null", so
+// the second was refused as a duplicate request without running.
+func TestDispatch_ConcurrentNotificationsBothRun(t *testing.T) {
+	s := NewServer(core.ServerInfo{Name: "test", Version: "1"})
+	release := make(chan struct{})
+	var ran atomic.Int64
+	s.HandleMethod("notifications/slow", func(core.MethodContext, json.RawMessage, json.RawMessage) *core.Response {
+		ran.Add(1)
+		<-release
+		return nil
+	})
+	d := s.newSession()
+	d.initialized = true
+	notification := &core.Request{JSONRPC: "2.0", Method: "notifications/slow"}
+
+	done := make(chan *core.Response, 2)
+	for range 2 {
+		go func() { done <- d.Dispatch(context.Background(), notification) }()
+	}
+	// Before the fix the second Dispatch returns at once without running the
+	// handler, so wait for both to be inside it rather than for a fixed count.
+	deadline := time.Now().Add(2 * time.Second)
+	for ran.Load() < 2 && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	close(release)
+	for range 2 {
+		if resp := <-done; resp != nil {
+			t.Errorf("notification response = %+v, want none", resp)
+		}
+	}
+	if got := ran.Load(); got != 2 {
+		t.Errorf("handler ran %d times, want 2", got)
 	}
 }

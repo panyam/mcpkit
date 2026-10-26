@@ -87,11 +87,18 @@ func (s *Server) dispatchStatelessUnstamped(ctx context.Context, req *core.Reque
 	ctx = core.WithRequestMeta(ctx, meta)
 
 	d := s.dispatcher
-	return s.runRequest(ctx, wireStateless, d, &core.Request{JSONRPC: "2.0", ID: id, Method: req.Method, Params: req.Params}, sessionIO{},
+	resp, err := s.runRequest(ctx, wireStateless, d, &core.Request{JSONRPC: "2.0", ID: id, Method: req.Method, Params: req.Params}, sessionIO{},
 		func(ctx context.Context, req *core.Request) (resp *core.Response, err error) {
 			defer recoverHandlerPanic(req, &resp)
 			return d.route(ctx, wireStateless, req.ID, req), nil
 		})
+	// JSON-RPC never answers a notification, even with an error (#1520). The
+	// refusals above (removed method, bad envelope) still come back, and the
+	// transport sends only their HTTP status.
+	if req.IsNotification() {
+		return nil, err
+	}
+	return resp, err
 }
 
 // discoverResult is the server/discover result: what this server speaks and

@@ -469,6 +469,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *core.Request) (resp *cor
 			}
 		}
 
+		// JSON-RPC never answers a notification, even with an error: the
+		// handler runs and the reply is dropped (#1520). Notifications have
+		// no id to cancel by, so they skip in-flight tracking, where every
+		// one of them would otherwise share the key "null".
+		if req.IsNotification() {
+			d.route(ctx, wireLegacy, id, req)
+			return nil
+		}
+
 		// Track in-flight request for cancellation support.
 		// Reject duplicate request IDs within the same session to prevent
 		// cancellation confusion (the old cancelFn would be overwritten).
@@ -548,7 +557,7 @@ func recoverHandlerPanic(req *core.Request, resp **core.Response) {
 	slog.Error("mcpkit: recovered panic in handler dispatch",
 		"method", req.Method, "panic", r, "stack", string(debug.Stack()))
 	*resp = nil
-	if req.ID != nil {
+	if !req.IsNotification() {
 		*resp = core.NewErrorResponse(req.ID, core.ErrCodeInternal, "internal error")
 	}
 }

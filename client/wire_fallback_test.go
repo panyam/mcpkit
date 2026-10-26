@@ -66,18 +66,22 @@ func TestStdioServesBothWires(t *testing.T) {
 	}
 }
 
+// A notification gets no reply on stdio, whether it omits id or sends
+// "id":null (#1520).
 func TestStdioStatelessNotificationGetsNoResponse(t *testing.T) {
-	srv := newTestMCPServer()
-	var out bytes.Buffer
-	in := strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/whatever","params":{"_meta":{` +
-		`"io.modelcontextprotocol/protocolVersion":"` + core.DraftProtocolVersion2026V1 + `",` +
-		`"io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"},` +
-		`"io.modelcontextprotocol/clientCapabilities":{}}}}` + "\n")
-	if err := srv.RunIO(context.Background(), in, &out); err != nil {
-		t.Fatalf("RunIO: %v", err)
-	}
-	if out.Len() != 0 {
-		t.Errorf("server answered a notification: %s", out.String())
+	for _, idMember := range []string{"", `"id":null,`} {
+		srv := newTestMCPServer()
+		var out bytes.Buffer
+		in := strings.NewReader(`{"jsonrpc":"2.0",` + idMember + `"method":"notifications/whatever","params":{"_meta":{` +
+			`"io.modelcontextprotocol/protocolVersion":"` + core.DraftProtocolVersion2026V1 + `",` +
+			`"io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"},` +
+			`"io.modelcontextprotocol/clientCapabilities":{}}}}` + "\n")
+		if err := srv.RunIO(context.Background(), in, &out); err != nil {
+			t.Fatalf("RunIO: %v", err)
+		}
+		if out.Len() != 0 {
+			t.Errorf("id member %q: server answered a notification: %s", idMember, out.String())
+		}
 	}
 }
 

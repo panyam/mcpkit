@@ -45,12 +45,9 @@ func TestStdioTransport_WritesNewlineDelimited(t *testing.T) {
 	go tr.Notify(t.Context(), &core.Request{JSONRPC: "2.0", Method: "notifications/initialized"})
 
 	line := readLineWithin(t, bufio.NewReader(serverIn), 5*time.Second)
-	require.True(t, strings.HasSuffix(line, "}\n"), "want one JSON object per line, got %q", line)
-	var msg struct {
-		Method string `json:"method"`
-	}
-	require.NoError(t, json.Unmarshal([]byte(line), &msg), "line is not JSON: %q", line)
-	assert.Equal(t, "notifications/initialized", msg.Method)
+	// Exact bytes: one object per line, and a notification carries no id
+	// member at all (#1520).
+	assert.Equal(t, `{"jsonrpc":"2.0","method":"notifications/initialized"}`+"\n", line)
 }
 
 // The #1517 repro against the real binary: a raw newline-delimited initialize,
