@@ -40,7 +40,7 @@ type DiscoverResult struct {
 
 // NewDiscoverResult assembles the server/discover result from b. The backend's
 // method table answers server/discover with it, inside the middleware chain.
-func NewDiscoverResult(b Backend) DiscoverResult {
+func NewDiscoverResult(b DiscoverSource) DiscoverResult {
 	return DiscoverResult{
 		SupportedVersions: b.SupportedVersions(),
 		Capabilities:      b.Capabilities(),

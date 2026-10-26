@@ -87,9 +87,16 @@ server's static roots. `SetAllowedRoots` and `SetNotifyResourceUpdated` put thei
 when there is no session now. A handler panic also went unrecovered on stateless, which over stdio
 would take the process down; the terminal defers `recoverHandlerPanic` like the session `Dispatch`.
 
-The terminal's method table is still a second switch in `statelessBackend`, and the session-only
-pieces outside it (notify interceptors don't wrap the stateless SSE notify func) are still open.
-Folding the two method tables into one is the rest of #1625.
+**Both wires share one method table**, `Dispatcher.route(ctx, wire, id, req)`. The session
+`Dispatch` calls it once the session is initialized, and the stateless terminal calls it with
+`wireStateless`. The arms that differ branch on `wire`: `server/discover` answers only on the
+stateless wire (a session has `initialize`), `resources/(un)subscribe` and `logging/setLevel` only
+on the session wire, and the list handlers take their cache-hint feature set and, for `tools/list`,
+the fileInputs declaration from the wire. Before this the stateless terminal had its own switch,
+whose `resources/list`, `resources/templates/list` and `prompts/list` ignored the cursor. Nothing
+paginates by default (#1356), so no test could see it, but the first page size anyone set would
+have split the wires. `WithNotifyInterceptor` now wraps the stateless SSE notify func too, through
+the same `Server.interceptNotify` the session path uses.
 
 The rule for wire differences, set 2026-10-24: the session wire stays through roughly 18 months of
 deprecation, so seeing where the wires differ matters more than code that never branches. Prefer

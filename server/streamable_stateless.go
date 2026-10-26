@@ -171,7 +171,7 @@ func (t *streamableTransport) handleStatelessPostSSE(w http.ResponseWriter, r *h
 		}
 		writeSSE(raw)
 	})
-	dispatchCtx = core.WithStatelessNotifyFunc(dispatchCtx, requestNotify)
+	dispatchCtx = core.WithStatelessNotifyFunc(dispatchCtx, t.server.interceptNotify(requestNotify))
 
 	// Header / _meta version cross-check (mirrored from handleStatelessPost).
 	if hdrVer := r.Header.Get(mcpProtocolVersionHeader); hdrVer != "" {

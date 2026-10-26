@@ -15,6 +15,25 @@ import (
 // goes away, this Backend interface stays — the future "stateless-only"
 // server will still satisfy it.
 type Backend interface {
+	DiscoverSource
+
+	// InvokeWithMiddleware runs the server's middleware chain around the
+	// handler for req and returns the JSON-RPC response. The dispatcher calls
+	// it once for every method that gets past the envelope checks, so no
+	// method on this wire can skip the chain (#1625). Unknown methods come
+	// back as -32601 from the backend's own method table.
+	//
+	// A non-nil error is a middleware short-circuit (typically
+	// *core.AuthError) that the transport surfaces through writeAuthError,
+	// so both wires send the same 403 + WWW-Authenticate (issue 815). When
+	// err is nil the response is used verbatim.
+	InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, error)
+}
+
+// DiscoverSource is what server/discover reports: the server's identity,
+// guidance, capabilities and versions. The server's method table builds the
+// discover result from one, without needing a whole Backend.
+type DiscoverSource interface {
 	// ServerInfo returns the server's identity, stamped into every success
 	// result's _meta[io.modelcontextprotocol/serverInfo].
 	ServerInfo() core.Implementation
@@ -32,16 +51,4 @@ type Backend interface {
 	// SupportedVersions returns the protocol versions this server speaks
 	// on the stateless wire. Always includes core.DraftProtocolVersion2026V1.
 	SupportedVersions() []string
-
-	// InvokeWithMiddleware runs the server's middleware chain around the
-	// handler for req and returns the JSON-RPC response. The dispatcher calls
-	// it once for every method that gets past the envelope checks, so no
-	// method on this wire can skip the chain (#1625). Unknown methods come
-	// back as -32601 from the backend's own method table.
-	//
-	// A non-nil error is a middleware short-circuit (typically
-	// *core.AuthError) that the transport surfaces through writeAuthError,
-	// so both wires send the same 403 + WWW-Authenticate (issue 815). When
-	// err is nil the response is used verbatim.
-	InvokeWithMiddleware(ctx context.Context, req *core.Request) (*core.Response, error)
 }

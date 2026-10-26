@@ -917,6 +917,19 @@ func (s *Server) dispatchWithOpts(d *Dispatcher, ctx context.Context, claims *co
 		})
 }
 
+// interceptNotify wraps notify with the WithNotifyInterceptor chain, first
+// registered outermost. The session wire wraps its push func in runRequest;
+// the stateless wire has a notify func only on its SSE POST path, and wraps
+// it where the transport builds it (#1625).
+func (s *Server) interceptNotify(notify core.NotifyFunc) core.NotifyFunc {
+	for i := len(s.options.notifyInterceptors) - 1; i >= 0; i-- {
+		next := notify
+		interceptor := s.options.notifyInterceptors[i]
+		notify = func(method string, params any) { interceptor(method, params, next) }
+	}
+	return notify
+}
+
 // sessionIO is what a session transport hands runRequest: the caller's
 // claims and the push functions for its stream. The stateless wire has none
 // of these and passes the zero value.
@@ -935,12 +948,7 @@ type sessionIO struct {
 func (s *Server) runRequest(ctx context.Context, wire wireKind, d *Dispatcher, req *core.Request, sio sessionIO, terminal MiddlewareFunc) (*core.Response, error) {
 	if wire == wireLegacy {
 		notify, request, claims, sseRetry := sio.notify, sio.request, sio.claims, sio.sseRetry
-		// Wrap outgoing notifications with interceptors (first registered = outermost).
-		for i := len(s.options.notifyInterceptors) - 1; i >= 0; i-- {
-			next := notify
-			interceptor := s.options.notifyInterceptors[i]
-			notify = func(method string, params any) { interceptor(method, params, next) }
-		}
+		notify = s.interceptNotify(notify)
 
 		// Wrap outgoing server-to-client requests with interceptors.
 		if request != nil {

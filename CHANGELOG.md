@@ -27,6 +27,13 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   `core.IsPathAllowed` used to answer true for on that wire.
   `core.SetAllowedRoots` and `core.SetNotifyResourceUpdated` keep their
   signatures and now attach to ctx when there is no session.
+- **Both wires share one method table** (#1625). The stateless
+  `resources/list`, `resources/templates/list` and `prompts/list` now honour
+  the cursor like the session wire (invisible until a page size is set,
+  #1356), and `WithNotifyInterceptor` now wraps notifications a handler sends
+  on the stateless SSE response. `stateless.Backend` embeds the new
+  `stateless.DiscoverSource`, and `NewDiscoverResult` takes one; existing
+  `Backend` values still satisfy it.
 
 ## [0.8.2] - 2026-10-17
 

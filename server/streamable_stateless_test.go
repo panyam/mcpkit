@@ -106,9 +106,13 @@ func decode(t *testing.T, resp *http.Response) *core.Response {
 	defer resp.Body.Close()
 	payload := bytes.TrimSpace(body)
 
-	// SSE frame: skip past id:/event: lines, take the JSON after data:.
-	if idx := bytes.Index(payload, []byte("data:")); idx >= 0 {
+	// SSE: the response is the last data: frame, after any notifications
+	// the handler sent on the same stream.
+	if idx := bytes.LastIndex(payload, []byte("data:")); idx >= 0 {
 		payload = bytes.TrimSpace(payload[idx+len("data:"):])
+		if end := bytes.IndexByte(payload, '\n'); end >= 0 {
+			payload = payload[:end]
+		}
 	}
 
 	var out core.Response
