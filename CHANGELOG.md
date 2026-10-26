@@ -9,6 +9,12 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.13] - 2026-10-26
+
+The stateless wire now behaves like the session wire, and stdio serves it.
+Releases 0.8.3 to 0.8.12 are written up under `docs/releases/` only. Full
+write-up: [`docs/releases/v0.8.13.md`](docs/releases/v0.8.13.md).
+
 ### Changed
 - **Breaking: `server/stateless` no longer holds a dispatcher** (#1625).
   `stateless.Dispatcher`, `stateless.New` and the `stateless.Backend`
@@ -31,6 +37,20 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   the cursor like the session wire (invisible until a page size is set,
   #1356), and `WithNotifyInterceptor` now wraps notifications a handler sends
   on the stateless SSE response.
+- **In dual mode `_meta` wins over the session id**, now documented and pinned
+  by a test; no behaviour change (#1628).
+- **Room bridge:** `rooms-channel` watches the room `attach` reports (#1640),
+  `@panyam/mcpkit-rooms` adds `onToolRefused` and `refusedTools` (#1641), and
+  massrelay is v0.3.3 in Go and npm (PR 1636).
+
+### Fixed
+- **Stateless `tools/call`, `prompts/get`, `resources/read` and
+  `completion/complete` run the session handlers** (#1637), so input-schema
+  and prompt-argument validation, timeouts, the completion cap and error
+  prefixes match the session wire.
+- **stdio serves the stateless wire and stops answering notifications**, and
+  adaptive clients fall back from session-only servers, mcpkit's and other
+  SDKs' alike (#1637).
 
 ## [0.8.2] - 2026-10-17
 
