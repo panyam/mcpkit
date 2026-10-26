@@ -30,9 +30,3 @@ require (
 	golang.org/x/time v0.16.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/panyam/mcpkit => ../..
-
-replace github.com/panyam/mcpkit/cmd/common => ../common
-
-replace github.com/panyam/mcpkit/ext/skills => ../../ext/skills
