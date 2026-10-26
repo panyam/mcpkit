@@ -2,12 +2,6 @@ module github.com/panyam/mcpkit/tests/e2e
 
 go 1.26.9
 
-replace (
-	github.com/panyam/mcpkit => ../..
-	github.com/panyam/mcpkit/ext/auth => ../../ext/auth
-	github.com/panyam/mcpkit/ext/ui => ../../ext/ui
-)
-
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/panyam/mcpkit v0.8.13
