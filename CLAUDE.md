@@ -115,6 +115,10 @@ each worked in its own worktree:
   rows are the only cross-wire check anywhere: each upstream suite grades one wire on its own
   fixture (`testconf` on `cmd/testserver` sessions, `testconf-stateless` on the cart example), so
   #1352, #1355 and the #1637 gaps all shipped with every suite green.
+  The #1580 exercise (chakra's `make host-exercise`) runs against `../mcpkit/main` through chakra's
+  replaces, and that shared checkout is often stale or carries another session's edits. To grade
+  your own tree, `git clone --local` chakra into your scratch directory and rewrite every
+  `=> (../)+mcpkit/main` replace in its `go.mod` files to your checkout's absolute path.
 - **#1553** (`mission_release_installable`): every tagged module installs from the proxy at release.
   Exercise in the issue. #1488 (`go install …/cmd/mcpskills@<tag>` failing on in-repo `replace`
   directives) closed with #1624, which tags a tree without them.
@@ -261,6 +265,19 @@ These span packages and will bite on a task that never opens a routed doc.
   order both qualify. Constraint C10, added after the same bug turned up twice: `tools/list` on the
   apps bridge (#1408) and `events/list` (#1416). Every entry is present and correct, so no unit test catches it; what breaks is whatever
   downstream assumed a stable order, and it surfaces as flakiness somewhere else.
+- **A notification is `req.IsNotification()`, never `req.ID == nil`.** A peer may send `"id":null`,
+  which a raw nil check reads as a request, and JSON-RPC never answers a notification on any
+  transport (#1520). The same check skipped stdio's no-reply rule and gave a panicking `"id":null`
+  notification a `-32603`.
+- **A notification for one caller goes through `Server.NotifyListeners`, not `Broadcast`.**
+  `Broadcast` reaches every session's GET stream and the relay, which is right for list-changed and
+  leaks anything per-caller, such as a task's status (#1523). `NotifyListeners` reaches only
+  `subscriptions/listen` streams, each applying its own filter key.
+- **A server reached under a public name refuses every unauthenticated client by default.** With no
+  `WithAllowedOrigins` the Origin check admits only localhost and judges a request with no `Origin`
+  by its `Host`, so curl and Claude Code get a 403 too; only a valid bearer token skips it (#1547).
+  `httptest` sends a `127.0.0.1` Host, so no test sees this unless it sets `req.Host`. Deployers list
+  their own host (`server/README.md` § Remote deployments).
 - **The Keycloak suite (`tests/keycloak`) runs only on auth-path PRs, `main` and nightly**
   (`keycloak-interop.yml`, #1597). A change elsewhere that breaks auth on the wire shows up there
   later, not on its own PR. Locally, `make testkcl-auto`, with `KC_PORT=<free port>` if 8180 is
