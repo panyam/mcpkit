@@ -2,6 +2,7 @@ package events
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/panyam/mcpkit/core"
 )
@@ -125,6 +126,25 @@ func newNotFoundError(id json.RawMessage, kind, message string) *core.Response {
 // future spec revision can add a data shape in one place.
 func newForbiddenError(id json.RawMessage, message string) *core.Response {
 	return core.NewErrorResponse(id, ErrCodeForbidden, message)
+}
+
+// ErrSubscribeForbidden marks an OnSubscribe refusal as a permission
+// decision. A hook that returns an error wrapping it (fmt.Errorf("...: %w",
+// ErrSubscribeForbidden)) fails the subscribe, stream or first poll with
+// -32024 Forbidden. Any other hook error is -32025 ResourceExhausted
+// (data.limit "subscriptions"), as before. The message is the hook's error
+// either way.
+var ErrSubscribeForbidden = errors.New("forbidden")
+
+// newSubscribeRefusedError answers a subscribe, stream or poll that the
+// event type's OnSubscribe hook refused with err: -32024 when err wraps
+// ErrSubscribeForbidden, else -32025 with no cap, since an author's refusal
+// is not a server-side quota.
+func newSubscribeRefusedError(id json.RawMessage, err error) *core.Response {
+	if errors.Is(err, ErrSubscribeForbidden) {
+		return newForbiddenError(id, "on_subscribe rejected: "+err.Error())
+	}
+	return newResourceExhaustedError(id, "subscriptions", 0, "on_subscribe rejected: "+err.Error())
 }
 
 // newResourceExhaustedError returns a -32025 response with a typed

@@ -1462,7 +1462,7 @@ func (c *Client) callForToolCall(ctx context.Context, params map[string]any, hea
 	if len(headers) == 0 {
 		return c.Call(ctx, "tools/call", params)
 	}
-	cc := &CallContext{Headers: headers}
+	cc := &CallContext{Context: ctx, Headers: headers}
 	resp, err := c.rawCallWithContext("tools/call", params, cc)
 	if err != nil {
 		return nil, err

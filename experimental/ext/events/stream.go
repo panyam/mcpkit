@@ -295,7 +295,11 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		// observes active and immediately triggers a yield could see
 		// the yield miss this stream because the slot wasn't yet
 		// registered.
-		evCh, sender := sub.Subscribe(ctx, SubscribeOpts{
+		// The slot lives until the handler returns, which for a stream
+		// on_subscribe refuses is right away.
+		subCtx, cancelSub := context.WithCancel(ctx)
+		defer cancelSub()
+		evCh, sender := sub.Subscribe(subCtx, SubscribeOpts{
 			Principal:      principal,
 			SubscriptionID: streamSubID,
 			Arguments:      req.Arguments,
@@ -324,6 +328,19 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 		// registered above (via sub.Subscribe) is what fires for both
 		// origin-replica yields and cross-replica relays.
 
+		// Lifecycle hooks for push (SEP-3415 §"Server SDK guidance" →
+		// "Subscription lifecycle hooks" L691). on_subscribe fires
+		// after the channel is acquired, so a hook can already
+		// EmitToSubscription, and before active: a refusal is one of
+		// "events/stream's immediate errors" (L267), answered with no
+		// stream opened (#1603). on_unsubscribe fires on every return
+		// path via defer.
+		hc := newHookContext(ctx, principal, streamSubID, DeliveryModePush)
+		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Arguments); err != nil {
+			return newSubscribeRefusedError(id, err)
+		}
+		defer safeOnUnsubscribe(def.OnUnsubscribe, hc, req.Arguments)
+
 		// Send the confirmation notification. The loop below reads
 		// from evCh; active goes out via ctx.Notify before the loop
 		// starts, so any events queued on evCh between Subscribe and
@@ -333,24 +350,6 @@ func registerStream(srv *server.Server, reg *Registry, unsafeAnon string, heartb
 			Cursor:    initialCursor,
 			Meta:      streamMeta(id),
 		})
-
-		// Lifecycle hooks for push (SEP-3415 §"Server SDK guidance" →
-		// "Subscription lifecycle hooks" L691). on_subscribe fires
-		// after the channel is acquired (the subscription is now
-		// live and would receive events); on_unsubscribe fires on
-		// every return path via defer.
-		hc := newHookContext(ctx, principal, streamSubID, DeliveryModePush)
-		if err := safeOnSubscribe(def.OnSubscribe, hc, req.Arguments); err != nil {
-			// Author rejected provisioning; close out the stream
-			// before any delivery happens. Returning an error here
-			// produces a JSON-RPC error response per the spec's
-			// "events/stream's immediate errors" at L267.
-			// Cap unknown at this site — author-defined refusal is
-			// not a server-side quota, so Max is omitted.
-			return newResourceExhaustedError(id, "subscriptions", 0,
-				"on_subscribe rejected: "+err.Error())
-		}
-		defer safeOnUnsubscribe(def.OnUnsubscribe, hc, req.Arguments)
 
 		ticker := time.NewTicker(heartbeat)
 		defer ticker.Stop()

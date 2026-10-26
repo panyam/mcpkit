@@ -70,7 +70,10 @@ By default the daemon asks a person. A run that needs outward tools waits, `appr
 - `-approval-timeout 0` denies outward tools at once, which is what a daemon nobody watches should run with.
 - `-approve-outward` approves them for every run, unattended, for rules the user has decided to trust. It wins over the timeout.
 
-A waiting run holds back later events for the same watch; other watches carry on. Pending approvals live in memory only. A daemon that restarts has forgotten them, and the runs that were waiting ended with the process. Their events come back from the watch's cursor, so each one asks again.
+A waiting run holds back later events for the same watch; other watches carry on. The held-back
+events queue per watch, up to `Config.QueueSize` (1024 by default). Past that the watch's receiver
+answers 503, and the server retries for a few seconds before giving up, so a burst longer than the
+queue during a long wait comes back only from the cursor on the next restart. Pending approvals live in memory only. A daemon that restarts has forgotten them, and the runs that were waiting ended with the process. Their events come back from the watch's cursor, so each one asks again.
 
 In Go, set the same `*bridge.PendingApprover` as the sink's `Approver` and as `Config.Approvals`. Its `OnPending` hook is told about each new request, on its own goroutine, which is where a notifier goes: the daemon logs it, and announcing it in the session that made the watch is #1581's live-session sink.
 

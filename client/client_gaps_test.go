@@ -137,37 +137,27 @@ func TestToolCallWith_SendsMcpParamHeadersLikeToolCall(t *testing.T) {
 	assert.Equal(t, "us-west", g.toolHdrs[1].Get("Mcp-Param-Region"), "ToolCallWith")
 }
 
-type progressTokenKey struct{}
-
-// progressPrimitivesServer serves a resource and a prompt that each report
-// progress 1..2 of 2 against the request's progress token. Resource and prompt
-// handlers aren't handed the token, so a middleware lifts it into ctx.
+// progressPrimitivesServer serves a resource, a resource template and a
+// prompt that each report progress 1..2 of 2 through their context.
 func progressPrimitivesServer(t *testing.T) string {
 	t.Helper()
 	srv := server.NewServer(core.ServerInfo{Name: "p", Version: "1"})
-	srv.UseMiddleware(func(ctx context.Context, req *core.Request, next server.MiddlewareFunc) (*core.Response, error) {
-		var p struct {
-			Meta struct {
-				ProgressToken any `json:"progressToken"`
-			} `json:"_meta"`
-		}
-		if req.Params.Bind(&p) == nil && p.Meta.ProgressToken != nil {
-			ctx = context.WithValue(ctx, progressTokenKey{}, p.Meta.ProgressToken)
-		}
-		return next(ctx, req)
-	})
-	report := func(bc core.BaseContext) {
-		token := bc.Value(progressTokenKey{})
-		for i := 1; i <= 2; i++ {
-			bc.Notify("notifications/progress", core.ProgressNotification{ProgressToken: token, Progress: float64(i), Total: 2})
-		}
-	}
 	srv.RegisterResource(core.ResourceDef{URI: "file:///r", Name: "r"}, func(ctx core.ResourceContext, req core.ResourceRequest) (core.ResourceResult, error) {
-		report(ctx.BaseContext)
+		for i := 1; i <= 2; i++ {
+			ctx.Progress(float64(i), 2, "")
+		}
 		return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: req.URI, Text: "body"}}}, nil
 	})
+	srv.RegisterResourceTemplate(core.ResourceTemplate{URITemplate: "file:///t/{name}", Name: "t"}, func(ctx core.ResourceContext, uri string, _ map[string]string) (core.ResourceResult, error) {
+		for i := 1; i <= 2; i++ {
+			ctx.Progress(float64(i), 2, "")
+		}
+		return core.ResourceResult{Contents: []core.ResourceReadContent{{URI: uri, Text: "templated"}}}, nil
+	})
 	srv.RegisterPrompt(core.PromptDef{Name: "p"}, func(ctx core.PromptContext, _ core.PromptRequest) (core.PromptResponse, error) {
-		report(ctx.BaseContext)
+		for i := 1; i <= 2; i++ {
+			ctx.Progress(float64(i), 2, "")
+		}
 		return core.PromptResult{Messages: []core.PromptMessage{{Role: "user", Content: core.Content{Type: "text", Text: "hi"}}}}, nil
 	})
 	ts := httptest.NewServer(srv.Handler(server.WithStreamableHTTP(true), server.WithSSE(false)))
@@ -185,6 +175,19 @@ func TestReadResourceWith_DeliversItsProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, res.Contents, 1)
 	assert.Equal(t, "body", res.Contents[0].Text)
+	assert.Equal(t, []float64{1, 2}, log.progress())
+}
+
+func TestReadResourceWith_DeliversATemplatesProgress(t *testing.T) {
+	c := client.NewClient(progressPrimitivesServer(t), core.ClientInfo{Name: "c", Version: "1"})
+	require.NoError(t, c.Connect(t.Context()))
+	t.Cleanup(func() { c.Close() })
+
+	var log progressLog
+	res, err := c.ReadResourceWith(t.Context(), "file:///t/x", client.WithProgress(log.add))
+	require.NoError(t, err)
+	require.Len(t, res.Contents, 1)
+	assert.Equal(t, "templated", res.Contents[0].Text)
 	assert.Equal(t, []float64{1, 2}, log.progress())
 }
 
@@ -245,4 +248,35 @@ func TestClose_DoesNotRaceRequestsInFlight(t *testing.T) {
 	require.NoError(t, c.Close())
 	wg.Wait()
 	assert.Equal(t, 1, g.deleteCount(), "one DELETE, however many requests were in flight")
+}
+
+func TestToolCall_WithMcpParamHeadersStillHonoursCancellation(t *testing.T) {
+	g := newGapsServer(t, nil)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	g.srv.RegisterTool(core.ToolDef{
+		Name: "slow",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"region": map[string]any{"type": "string", "x-mcp-header": "Region"}},
+		},
+	}, func(tc core.ToolContext, _ core.ToolRequest) (core.ToolResponse, error) {
+		select {
+		case <-release:
+		case <-tc.Done():
+		}
+		return core.TextResult("late"), nil
+	})
+	c := client.NewClient(g.url, core.ClientInfo{Name: "c", Version: "1"})
+	require.NoError(t, c.Connect(t.Context()))
+	t.Cleanup(func() { c.Close() })
+	_, err := c.ListTools(t.Context())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = c.ToolCall(ctx, "slow", map[string]any{"region": "us-west"})
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), 2*time.Second)
 }

@@ -23,13 +23,12 @@ detached session already.
 request's context, so the adapter records which session opened each stream (by subscription id) and
 looks it up there.
 
-## A refused stream opens first
+## A refused stream is refused up front
 
-experimental/ext/events sends `notifications/events/active` before it runs `OnSubscribe`, so when
-`OnSubscribe` refuses, the client's `Stream` has already returned and the call then ends with the
-refusal (`-32025`, "on_subscribe rejected"). The test asserts what a client sees, a call that ends
-in an error and delivers nothing, and the front end logs a stream that ends that way. Fixing the
-order belongs in experimental/ext/events.
+experimental/ext/events used to send `notifications/events/active` before it ran `OnSubscribe`, so a
+stream opened before `attach` was confirmed and then ended with `-32025`. Since #1603 the hook runs
+first, and the attach check wraps `events.ErrSubscribeForbidden`, so the client's `Stream` fails at
+once with `-32024`.
 
 ## The channel contract, and what was checked
 

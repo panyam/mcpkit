@@ -60,9 +60,11 @@ type ControlError struct {
 // (e.g., when the receiver is constructed before the application has
 // decided what value to subscribe with).
 //
-// Buffered to 64 events; callers should drain Events() promptly. A full
-// channel causes the receiver to drop new deliveries silently rather
-// than block the inbound HTTP handler.
+// Buffered to 64 events; callers should drain Events() promptly. A
+// delivery that finds the channel full is dropped rather than blocking the
+// inbound HTTP handler, and answered 503 so the server retries it. The
+// server gives up after a few retries, so a consumer that can stall for
+// longer (one waiting on a person, say) should drain into its own queue.
 func NewReceiver[Data any](secret string, opts ...ReceiverOption) *Receiver[Data] {
 	cfg := receiverConfig{tolerance: events.DefaultTimestampTolerance, now: time.Now}
 	for _, o := range opts {
@@ -261,9 +263,10 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	// Non-blocking send. A full channel signals a slow consumer; we'd
 	// rather drop than back up the registry's delivery loop. A dropped
-	// event is forgotten so a retry of it is delivered. The send happens
-	// under the lock Close takes, so a Close racing this request cannot
-	// close the channel between the check and the send.
+	// event is forgotten and answered 503, so the server's retry of it is
+	// delivered. The send happens under the lock Close takes, so a Close
+	// racing this request cannot close the channel between the check and
+	// the send.
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
@@ -280,6 +283,9 @@ func (r *Receiver[Data]) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			r.dedup.Forget(key)
 		}
 		r.rejected++
+		r.mu.Unlock()
+		http.Error(w, "receiver busy", http.StatusServiceUnavailable)
+		return
 	}
 	r.mu.Unlock()
 

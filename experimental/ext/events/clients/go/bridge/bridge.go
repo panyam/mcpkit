@@ -69,12 +69,22 @@ type Config struct {
 	// Logf reports delivery and resubscribe failures. Nil uses log.Printf.
 	Logf func(format string, args ...any)
 
+	// QueueSize bounds the events each watch holds while its sink is busy,
+	// such as a run waiting on a PendingApprover. Past it the watch's
+	// receiver fills and answers 503, so the server retries for a few
+	// seconds and then gives up; a restart replays those from the cursor.
+	// Zero means DefaultQueueSize.
+	QueueSize int
+
 	// Approvals, when set, gives the bridge's MCP server the approvals,
 	// approve and deny tools over it. Set the same PendingApprover as the
 	// sink's Approver (HeadlessClaudeSink.Approver), so the requests its runs
 	// park are the ones these tools answer.
 	Approvals *PendingApprover
 }
+
+// DefaultQueueSize is Config.QueueSize when unset.
+const DefaultQueueSize = 1024
 
 // Bridge holds the watches and their live subscriptions. Construct with New,
 // call Start to resume persisted watches, serve Handler for webhooks, and
@@ -98,6 +108,7 @@ type Bridge struct {
 // subscription and the loop handing events to the sink.
 type liveWatch struct {
 	recv   *eventsclient.Receiver[json.RawMessage]
+	queue  chan eventsclient.Event[json.RawMessage]
 	sub    *eventsclient.Subscription
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -238,7 +249,11 @@ func (b *Bridge) run(ctx context.Context, w Watch) error {
 	}
 	recv := eventsclient.NewReceiver[json.RawMessage](w.Secret, eventsclient.WithDeduper(b.dedup))
 	lwCtx, cancel := context.WithCancel(b.ctx)
-	lw := &liveWatch{recv: recv, ctx: lwCtx, cancel: cancel, done: make(chan struct{})}
+	size := b.cfg.QueueSize
+	if size <= 0 {
+		size = DefaultQueueSize
+	}
+	lw := &liveWatch{recv: recv, queue: make(chan eventsclient.Event[json.RawMessage], size), ctx: lwCtx, cancel: cancel, done: make(chan struct{})}
 	recv.OnGap(func(cursor string) { b.setCursor(w.ID, &cursor) })
 	recv.OnTerminated(func(err eventsclient.ControlError) {
 		b.logf("bridge: watch %s terminated upstream: %d %s", w.ID, err.Code, err.Message)
@@ -265,16 +280,36 @@ func (b *Bridge) run(ctx context.Context, w Watch) error {
 		return err
 	}
 	lw.sub = sub
+	go lw.pump()
 	go b.deliverLoop(w, lw)
 	return nil
 }
 
+// pump moves the receiver's events into the watch's queue, so a sink that
+// blocks (a run waiting on approval) holds up the queue rather than the
+// receiver, which drops what it can't buffer.
+func (lw *liveWatch) pump() {
+	defer close(lw.queue)
+	for ev := range lw.recv.Events() {
+		select {
+		case lw.queue <- ev:
+		case <-lw.ctx.Done():
+			return
+		}
+	}
+}
+
 // deliverLoop hands one watch's events to the sink in arrival order, and
 // advances the persisted cursor after each, so a restart resumes after the
-// last event the sink was given.
+// last event the sink was given. A watch being stopped leaves the rest of
+// its queue undelivered and the cursor where it was, so a restart replays
+// them.
 func (b *Bridge) deliverLoop(w Watch, lw *liveWatch) {
 	defer close(lw.done)
-	for ev := range lw.recv.Events() {
+	for ev := range lw.queue {
+		if lw.ctx.Err() != nil {
+			return
+		}
 		d := eventsclient.Delivery{
 			Server:         w.Server,
 			Instruction:    w.Instruction,
@@ -293,6 +328,9 @@ func (b *Bridge) deliverLoop(w Watch, lw *liveWatch) {
 		}
 		d.Tools = w.Tools
 		if err := b.cfg.Sink.Deliver(lw.ctx, d); err != nil {
+			if lw.ctx.Err() != nil {
+				return
+			}
 			b.logf("bridge: watch %s: sink: %v", w.ID, err)
 			b.setError(w.ID, fmt.Errorf("event %s: %w", ev.EventID, err))
 		}

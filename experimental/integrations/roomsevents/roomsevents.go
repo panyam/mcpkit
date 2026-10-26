@@ -205,7 +205,7 @@ func (e *Events) onSubscribe(hc events.HookContext, params map[string]any) error
 	b := e.bridge
 	e.mu.Unlock()
 	if b == nil || sid == "" || !b.Attached(sid, resource) {
-		return fmt.Errorf("attach to %q before subscribing to its events", resource)
+		return fmt.Errorf("attach to %q before subscribing to its events: %w", resource, events.ErrSubscribeForbidden)
 	}
 	if id := hc.SubscriptionID(); id != "" {
 		e.mu.Lock()
@@ -234,5 +234,5 @@ func (e *Events) match(hc events.HookContext, ev events.Event, params map[string
 	b := e.bridge
 	e.mu.Unlock()
 	sid := e.sessionOf(hc)
-	return b != nil && sid != "" && b.Attached(sid, o.Resource) && b.PageAgreed(sid, o.Resource, rooms.PeerID(o.Page))
+	return b != nil && sid != "" && b.HearsPage(sid, o.Resource, rooms.PeerID(o.Page))
 }

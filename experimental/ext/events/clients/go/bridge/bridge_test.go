@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -500,4 +502,50 @@ func TestWatch_ViewWithoutToolsShowsTheCeiling(t *testing.T) {
 	view := structured[bridge.WatchView](t, callTool(t, c, "watch", map[string]any{"event": "ops/alert.fired", "instruction": "x"}))
 	assert.Equal(t, []string{"Read", "mcp__gmail__send"}, view.Tools)
 	assert.Equal(t, []string{"mcp__gmail__send"}, view.OutwardTools)
+}
+
+// gatedSink holds every delivery until open is closed, the way a run waiting
+// on a PendingApprover holds the watch's delivery loop.
+type gatedSink struct {
+	open chan struct{}
+	mu   sync.Mutex
+	ids  map[string]bool
+}
+
+func (s *gatedSink) Deliver(ctx context.Context, d eventsclient.Delivery) error {
+	select {
+	case <-s.open:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	s.mu.Lock()
+	s.ids[d.Event.EventID] = true
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *gatedSink) count() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.ids)
+}
+
+// A burst that arrives while the sink is blocked is queued per watch and
+// delivered once the sink frees up, rather than dropped by the receiver
+// (#1603).
+func TestWatch_BurstWhileTheSinkIsBlockedIsNotLost(t *testing.T) {
+	up := newUpstream(t)
+	sink := &gatedSink{open: make(chan struct{}), ids: map[string]bool{}}
+	c := agent(t, newBridge(t, newHookServer(t), sink, nil, map[string]upstream{"ops": up}))
+	res := callTool(t, c, "watch", map[string]any{"event": "ops/alert.fired", "instruction": "triage"})
+	require.False(t, res.IsError, res.Content[0].Text)
+
+	const burst = 200
+	for i := range burst {
+		require.NoError(t, up.yield(t.Context(), alert{Severity: "P1", Msg: strconv.Itoa(i)}))
+	}
+	time.Sleep(time.Second)
+	close(sink.open)
+	require.Eventually(t, func() bool { return sink.count() == burst }, 10*time.Second, 20*time.Millisecond,
+		"every event of the burst reaches the sink")
 }

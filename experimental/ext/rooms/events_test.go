@@ -131,3 +131,22 @@ func TestBridge_AttachedAndPageAgreed(t *testing.T) {
 	assert.True(t, st.bridge.PageAgreed(a.SessionID(), room, p.ID()))
 	assert.False(t, st.bridge.PageAgreed(a.SessionID(), "design:other", p.ID()))
 }
+
+// HearsPage is Attached and PageAgreed together, and a detach ends it even
+// though the page still agrees.
+func TestBridge_HearsPageNeedsAttachAndAgreement(t *testing.T) {
+	st := newStack(t)
+	a := st.agent(t, "alice", allScopes...)
+	p := st.page(t, "alice", room)
+	p.SetAgentsAllowed(true)
+	assert.False(t, st.bridge.HearsPage(a.SessionID(), room, p.ID()), "not attached")
+
+	a.attach(t, room)
+	a.waitPage(t, p.ID(), func(pi rooms.PageInfo) bool { return pi.Allowed })
+	assert.True(t, st.bridge.HearsPage(a.SessionID(), room, p.ID()))
+
+	ok, out := call(t, a, "detach", map[string]any{"resource": room})
+	require.True(t, ok, out)
+	assert.True(t, st.bridge.PageAgreed(a.SessionID(), room, p.ID()), "the page still agrees")
+	assert.False(t, st.bridge.HearsPage(a.SessionID(), room, p.ID()), "detached")
+}

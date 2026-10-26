@@ -158,9 +158,8 @@ func TestEvents_PageEventsOfItsOwnArriveAsPageEvent(t *testing.T) {
 	assert.JSONEq(t, `{"sheet":"s-power"}`, string(got.Data))
 }
 
-// The extension confirms a stream (notifications/events/active) before it runs
-// OnSubscribe, so a refused stream opens and then ends with the refusal. What
-// the client sees is a call that ends in an error and delivers nothing.
+// A stream opened before attach is refused up front as Forbidden, never
+// confirmed and then ended (#1603).
 func TestEvents_SubscribingBeforeAttachIsRefused(t *testing.T) {
 	st := rt.New(t)
 	a := st.Agent(t, "alice")
@@ -169,17 +168,19 @@ func TestEvents_SubscribingBeforeAttachIsRefused(t *testing.T) {
 		Arguments:        map[string]any{"resource": rt.Room},
 		DisableReconnect: true,
 	})
-	if err != nil {
-		return // refused up front, which is just as good
+	if err == nil {
+		t.Cleanup(call.Stop)
+		select {
+		case <-call.Done():
+			err = call.Err()
+		case <-time.After(3 * time.Second):
+			t.Fatal("a stream opened before attach stayed open")
+		}
 	}
-	t.Cleanup(call.Stop)
-	select {
-	case <-call.Done():
-		require.Error(t, call.Err())
-		assert.Contains(t, call.Err().Error(), "attach to")
-	case <-time.After(3 * time.Second):
-		t.Fatal("a stream opened before attach stayed open")
-	}
+	var rpcErr *client.RPCError
+	require.ErrorAs(t, err, &rpcErr)
+	assert.Equal(t, events.ErrCodeForbidden, rpcErr.Code)
+	assert.Contains(t, rpcErr.Message, "attach to")
 }
 
 // A page's events reach only sessions it agreed to, the same rule as calls.

@@ -86,6 +86,17 @@ func (b *Bridge) PageAgreed(sessionID, resource string, page PeerID) bool {
 	return b.agreedLocked(s.principal, resource, page)
 }
 
+// HearsPage reports whether the MCP session should hear page's events in
+// resource's room: it is attached there (Attached) and the page agreed to
+// its principal (PageAgreed). It checks both under one lock, so an event
+// fanned out to many subscriptions costs one acquisition per subscription.
+func (b *Bridge) HearsPage(sessionID, resource string, page PeerID) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	s := b.sessions[sessionID]
+	return s != nil && s.attached[resource] && b.agreedLocked(s.principal, resource, page)
+}
+
 // PageAgreedTo reports whether page, in resource's room, agreed to p, for a
 // caller with no MCP session.
 func (b *Bridge) PageAgreedTo(p Principal, resource string, page PeerID) bool {
