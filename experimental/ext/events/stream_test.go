@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -332,4 +333,32 @@ func TestStream_RejectsUndeclaredPush(t *testing.T) {
 	require.True(t, ok, "error data should name the unsupported mode, got %T", r.resp.Error.Data)
 	assert.Equal(t, "deliveryMode", data.Feature)
 	assert.Equal(t, "push", data.Value)
+}
+
+// SEP-3415: an invalid subscription gets an error and no stream is opened, so
+// a stream on_subscribe refuses is never confirmed with events/active.
+func TestStream_RefusedByOnSubscribeIsNeverConfirmed(t *testing.T) {
+	st := newStreamTestStack(t, "test-principal", withStreamSourceDef(EventDef{
+		Name: "fake.event", Description: "test", Delivery: []string{"push"},
+		OnSubscribe: func(HookContext, map[string]any) error { return errors.New("not today") },
+	}))
+	rs := st.startStream(t, validStreamParams())
+	var r streamResult
+	select {
+	case r = <-rs.done:
+	case <-time.After(time.Second):
+		t.Fatal("a refused stream should answer at once")
+	}
+	require.NoError(t, r.err)
+	require.NotNil(t, r.resp.Error)
+	assert.Equal(t, ErrCodeResourceExhausted, r.resp.Error.Code)
+	for {
+		select {
+		case n := <-st.notifs:
+			assert.NotEqual(t, "notifications/events/active", n.method, "a refused stream was confirmed")
+			continue
+		default:
+		}
+		break
+	}
 }

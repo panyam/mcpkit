@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -654,3 +655,28 @@ func TestLifecycle_Webhook_ConcurrentSubscribe_FiresOnce(t *testing.T) {
 type errStub string
 
 func (e errStub) Error() string { return string(e) }
+
+// A hook that wraps ErrSubscribeForbidden is refusing on permission, so the
+// caller gets -32024 Forbidden rather than -32025 in every delivery mode.
+func TestLifecycle_ForbiddenRefusalIsForbiddenInEveryMode(t *testing.T) {
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+	for mode, params := range map[string]map[string]any{
+		"events/stream": {"name": "lifecycle.test", "arguments": map[string]any{"sev": "high"}},
+		"events/poll":   {"name": "lifecycle.test", "arguments": map[string]any{"sev": "high"}},
+		"events/subscribe": {"name": "lifecycle.test", "arguments": map[string]any{"sev": "high"},
+			"delivery": map[string]any{"mode": "webhook", "url": receiver.URL, "secret": "whsec_" + strings.Repeat("a", 32)}},
+	} {
+		t.Run(mode, func(t *testing.T) {
+			hooks := &hookCounter{subscribeErr: fmt.Errorf("attach first: %w", ErrSubscribeForbidden)}
+			f := newLifecycleFixture(t, hooks)
+			defer f.close()
+			resp := f.dispatch(mode, params)
+			require.NotNil(t, resp.Error)
+			require.Equal(t, ErrCodeForbidden, resp.Error.Code)
+			require.Contains(t, resp.Error.Message, "attach first")
+		})
+	}
+}

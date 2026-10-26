@@ -209,13 +209,13 @@ type TransformFunc func(ctx HookContext, event Event, params map[string]any) (Ev
 // decorator — same answer as match/transform, since it's still
 // per-event-type state.
 //
-// Returning a non-nil error fails the subscribe call: the SDK
-// surfaces it as -32025 ResourceExhausted (data.limit="subscriptions")
-// today; a dedicated SubscribeFailed code may follow if a real use
-// case appears. The
-// SDK does NOT roll back webhook registration / push stream open on
-// hook failure; authors that need rollback should arrange it inside
-// the hook before returning the error.
+// Returning a non-nil error fails the subscribe, stream or first poll:
+// -32024 Forbidden when the error wraps ErrSubscribeForbidden, else -32025
+// ResourceExhausted (data.limit="subscriptions"). The SDK rolls back its own
+// state (the webhook registration, the poll lease, the quota slot), and a
+// refused stream is never confirmed with notifications/events/active.
+// Anything the hook itself provisioned before refusing is the hook's to
+// undo.
 type SubscribeFunc func(ctx HookContext, params map[string]any) error
 
 // UnsubscribeFunc fires once per subscription lifecycle on actual

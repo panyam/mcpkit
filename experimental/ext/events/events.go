@@ -692,10 +692,7 @@ func registerPoll(srv *server.Server, reg *Registry, unsafeAnon string, leases *
 				// state.
 				leases.Remove(principal, req.Name, req.Arguments)
 				quota.Release(principal, req.Name)
-				// Cap unknown at this site — author-defined refusal
-				// is not a server-side quota, so Max is omitted.
-				return newResourceExhaustedError(id, "subscriptions", 0,
-					"on_subscribe rejected: "+err.Error())
+				return newSubscribeRefusedError(id, err)
 			}
 		}
 
@@ -1019,10 +1016,7 @@ func registerSubscribe(srv *server.Server, reg *Registry, webhooks *WebhookRegis
 				// Unregister fires onRemove → quota.Release pairs
 				// with the Reserve above (one Release per Reserve).
 				webhooks.Unregister(canonical)
-				// Cap unknown at this site — author-defined refusal
-				// is not a server-side quota, so Max is omitted.
-				return newResourceExhaustedError(id, "subscriptions", 0,
-					"on_subscribe rejected: "+err.Error())
+				return newSubscribeRefusedError(id, err)
 			}
 			// Register this webhook target in the SubscriptionIndex
 			// AFTER on_subscribe succeeded — no half-provisioned

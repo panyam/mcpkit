@@ -205,7 +205,7 @@ func (e *Events) onSubscribe(hc events.HookContext, params map[string]any) error
 	b := e.bridge
 	e.mu.Unlock()
 	if b == nil || sid == "" || !b.Attached(sid, resource) {
-		return fmt.Errorf("attach to %q before subscribing to its events", resource)
+		return fmt.Errorf("attach to %q before subscribing to its events: %w", resource, events.ErrSubscribeForbidden)
 	}
 	if id := hc.SubscriptionID(); id != "" {
 		e.mu.Lock()
