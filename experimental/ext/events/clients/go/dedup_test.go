@@ -89,9 +89,10 @@ func TestReceiver_DeliversRetryOfDroppedEvent(t *testing.T) {
 	defer recv.Close()
 
 	for i := range 64 {
-		postSigned(t, recv, "fill-"+strconv.Itoa(i), "", time.Now())
+		require.Equal(t, http.StatusOK, postSigned(t, recv, "fill-"+strconv.Itoa(i), "", time.Now()))
 	}
-	postSigned(t, recv, "evt-late", "", time.Now())
+	assert.Equal(t, http.StatusServiceUnavailable, postSigned(t, recv, "evt-late", "", time.Now()),
+		"a dropped event is answered 503, which the server retries, not 200")
 	require.Equal(t, uint64(1), recv.Rejected())
 
 	<-recv.Events()
