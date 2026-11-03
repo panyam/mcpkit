@@ -157,7 +157,11 @@ func (t *StdioTransport) Call(ctx context.Context, req *core.Request) (*core.Res
 	case resp := <-ch:
 		return resp, nil
 	case <-t.done:
-		return nil, fmt.Errorf("stdio transport closed")
+		// The read loop ended because the peer's output closed, usually a
+		// server process that exited. Wrapping ErrUnexpectedEOF makes that a
+		// transient error, as a dropped HTTP connection is, so reconnection
+		// can start a fresh process.
+		return nil, fmt.Errorf("stdio transport closed: %w", io.ErrUnexpectedEOF)
 	}
 }
 

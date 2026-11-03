@@ -27,6 +27,10 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
   transient failure declared an empty `ClientCapabilities`, so a server
   reached again no longer knew the client took roots, elicitation or
   sampling. It now declares the same capabilities `Connect` does.
+- **A stdio server that exited mid-request wasn't a transient error.** The
+  pending call failed with `stdio transport closed`, which `IsTransientError`
+  didn't recognise, so a crashed command server was never reconnected. The
+  error now wraps `io.ErrUnexpectedEOF`.
 
 ## [0.8.15] - 2026-10-26
 

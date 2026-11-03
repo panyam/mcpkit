@@ -263,3 +263,17 @@ func TestCommandTransport_WithCleanEnv(t *testing.T) {
 	require.NoError(t, connect(client.WithCleanEnv(), client.WithEnv("STDIO=1")), "a variable given with WithEnv reaches a clean child")
 	require.NoError(t, connect(client.WithEnv("STDIO=1"), client.WithCleanEnv()), "option order doesn't matter")
 }
+
+// A server that dies with a request in flight is a transient failure, like a
+// dropped HTTP connection, so reconnection and availability handling treat a
+// crashed stdio server the way they treat an unreachable URL.
+func TestCommandTransport_ExitMidRequestIsTransient(t *testing.T) {
+	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithCommandTransport("sh", []string{"-c", "read line; exit 3"}),
+		client.WithConnectTimeout(5*time.Second),
+	)
+	defer c.Close()
+	err := c.Connect(t.Context())
+	require.Error(t, err)
+	assert.True(t, client.IsTransientError(err), "a child that exited mid-request: %v", err)
+}
