@@ -34,6 +34,18 @@ func WithMaxRetries(n int) ClientOption {
 	return func(c *Client) { c.maxRetries = n }
 }
 
+// WithReconnectWithoutReplay changes what a transient failure does when
+// WithMaxRetries is set: the client still reconnects (for a command
+// transport, that starts a fresh process), but it returns the failure instead
+// of sending the request again. A request that failed in flight may already
+// have run on a server that then died, so replaying it can run a tool twice.
+// Use this when the server's tools aren't safe to repeat, and let the caller
+// decide whether to retry. Notifications are still replayed. Without
+// WithMaxRetries it does nothing.
+func WithReconnectWithoutReplay() ClientOption {
+	return func(c *Client) { c.noReplay = true }
+}
+
 // WithReconnectBackoff sets the base delay for exponential backoff between
 // reconnection attempts. Default 1s. Actual delay is base * 2^attempt + jitter.
 func WithReconnectBackoff(d time.Duration) ClientOption {
@@ -97,7 +109,7 @@ func (c *Client) reconnect() error {
 	}
 	initReq.Params, _ = core.MarshalRawJSON(initializeParams{
 		ProtocolVersion: "2025-11-25",
-		Capabilities:    core.ClientCapabilities{},
+		Capabilities:    c.clientCapabilities(),
 		ClientInfo:      c.info,
 	})
 	data, _ := json.Marshal(initReq)
@@ -168,6 +180,25 @@ func (c *Client) retryWithReconnect(fn func() (*rpcResponse, error)) (*rpcRespon
 
 // retryNotifyWithReconnect is like retryWithReconnect but for notifications
 // (no response expected).
+// reconnectOnly re-establishes the connection after a transient failure
+// without resending anything, for WithReconnectWithoutReplay. It makes up to
+// maxRetries attempts with the same backoff retryWithReconnect uses, and gives
+// up quietly: the caller is already returning the original failure, and the
+// next request tries again.
+func (c *Client) reconnectOnly() {
+	baseDelay := c.baseDelay
+	if baseDelay == 0 {
+		baseDelay = time.Second
+	}
+	for attempt := range c.maxRetries {
+		delay := baseDelay * time.Duration(1<<uint(attempt))
+		time.Sleep(delay + time.Duration(rand.Int64N(int64(delay/4))))
+		if c.reconnect() == nil {
+			return
+		}
+	}
+}
+
 func (c *Client) retryNotifyWithReconnect(fn func() error) error {
 	baseDelay := c.baseDelay
 	if baseDelay == 0 {
