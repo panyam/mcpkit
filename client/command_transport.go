@@ -58,7 +58,8 @@ type CommandTransport struct {
 
 // commandOpts holds configuration set via CommandOption functions.
 type commandOpts struct {
-	env             []string      // additional env vars (KEY=VALUE), appended to os.Environ()
+	env             []string      // additional env vars (KEY=VALUE), appended to os.Environ() unless cleanEnv
+	cleanEnv        bool          // start from an empty environment instead of os.Environ()
 	dir             string        // working directory for the subprocess
 	shutdownTimeout time.Duration // time to wait after SIGTERM before SIGKILL (default 5s)
 	stderrWriter    io.Writer     // optional additional stderr destination
@@ -72,6 +73,17 @@ type CommandOption func(*commandOpts)
 // in KEY=VALUE format. These are appended to the current process environment.
 func WithEnv(env ...string) CommandOption {
 	return func(o *commandOpts) { o.env = append(o.env, env...) }
+}
+
+// WithCleanEnv starts the subprocess with an empty environment, so it sees
+// only the variables given with WithEnv rather than everything this process
+// has. Use it to keep credentials and other secrets in the parent's
+// environment away from a server that doesn't need them. Nothing is added
+// implicitly, not even PATH or HOME, so pass what the server needs (an npx or
+// uvx launcher usually needs both). The command name is resolved against this
+// process's PATH as usual, before the child starts.
+func WithCleanEnv() CommandOption {
+	return func(o *commandOpts) { o.cleanEnv = true }
 }
 
 // WithDir sets the working directory for the subprocess.
@@ -127,7 +139,12 @@ func (ct *CommandTransport) Connect(ctx context.Context) error {
 	if ct.opts.dir != "" {
 		cmd.Dir = ct.opts.dir
 	}
-	if len(ct.opts.env) > 0 {
+	switch {
+	case ct.opts.cleanEnv:
+		// A nil Env means "inherit" to os/exec, so a clean environment with
+		// nothing given has to be an empty, non-nil slice.
+		cmd.Env = append([]string{}, ct.opts.env...)
+	case len(ct.opts.env) > 0:
 		cmd.Env = append(cmd.Environ(), ct.opts.env...)
 	}
 
