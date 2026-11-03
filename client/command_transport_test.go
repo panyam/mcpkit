@@ -239,3 +239,41 @@ func TestCommandTransport_ShutdownTimeout(t *testing.T) {
 	elapsed := time.Since(start)
 	assert.Less(t, elapsed, 2*time.Second)
 }
+
+// WithCleanEnv starts the subprocess with only the variables WithEnv names.
+// The test server speaks stdio only when STDIO=1, so setting it in this
+// process tells inherited from given: an inheriting child connects, a clean
+// one times out unless STDIO=1 is passed explicitly.
+func TestCommandTransport_WithCleanEnv(t *testing.T) {
+	bin := buildTestServer(t)
+	t.Setenv("STDIO", "1")
+	connect := func(opts ...client.CommandOption) error {
+		c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
+			client.WithTransport(client.NewCommandTransport(bin, nil, opts...)),
+			client.WithConnectTimeout(2*time.Second),
+		)
+		defer c.Close()
+		return c.Connect(t.Context())
+	}
+
+	require.NoError(t, connect(), "control: the child inherits STDIO=1 by default")
+	err := connect(client.WithCleanEnv(), client.WithEnv("PORT=0"))
+	require.Error(t, err, "a clean child must not see this process's STDIO=1")
+	assert.Contains(t, err.Error(), "timed out")
+	require.NoError(t, connect(client.WithCleanEnv(), client.WithEnv("STDIO=1")), "a variable given with WithEnv reaches a clean child")
+	require.NoError(t, connect(client.WithEnv("STDIO=1"), client.WithCleanEnv()), "option order doesn't matter")
+}
+
+// A server that dies with a request in flight is a transient failure, like a
+// dropped HTTP connection, so reconnection and availability handling treat a
+// crashed stdio server the way they treat an unreachable URL.
+func TestCommandTransport_ExitMidRequestIsTransient(t *testing.T) {
+	c := client.NewClient("", core.ClientInfo{Name: "test", Version: "1.0"},
+		client.WithCommandTransport("sh", []string{"-c", "read line; exit 3"}),
+		client.WithConnectTimeout(5*time.Second),
+	)
+	defer c.Close()
+	err := c.Connect(t.Context())
+	require.Error(t, err)
+	assert.True(t, client.IsTransientError(err), "a child that exited mid-request: %v", err)
+}

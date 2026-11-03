@@ -9,6 +9,29 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Added
+- **`client.WithCleanEnv()`**, a `CommandOption` that starts a stdio server
+  with an empty environment, so it sees only the variables given with
+  `WithEnv` instead of everything the client process has. Nothing is added
+  implicitly, not even `PATH` or `HOME`. chakra uses it for an allowlist of
+  what a stdio MCP server may see (chakra issue 161).
+- **`client.WithReconnectWithoutReplay()`**: with `WithMaxRetries` set, a
+  transient failure still reconnects (for a command transport, a fresh
+  process), but the failed request is returned as failed instead of being sent
+  again. A request that failed in flight may already have run on a server that
+  then died, so replaying it can run a tool twice. Notifications are still
+  replayed.
+
+### Fixed
+- **Reconnecting dropped the client's capabilities.** The re-initialize after a
+  transient failure declared an empty `ClientCapabilities`, so a server
+  reached again no longer knew the client took roots, elicitation or
+  sampling. It now declares the same capabilities `Connect` does.
+- **A stdio server that exited mid-request wasn't a transient error.** The
+  pending call failed with `stdio transport closed`, which `IsTransientError`
+  didn't recognise, so a crashed command server was never reconnected. The
+  error now wraps `io.ErrUnexpectedEOF`.
+
 ## [0.8.15] - 2026-10-26
 
 Full write-up: [`docs/releases/v0.8.15.md`](docs/releases/v0.8.15.md).

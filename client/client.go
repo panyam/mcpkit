@@ -449,6 +449,7 @@ type Client struct {
 
 	// Reconnection settings (zero values = disabled)
 	maxRetries int
+	noReplay   bool // WithReconnectWithoutReplay: reconnect but don't resend the failed request
 	baseDelay  time.Duration
 
 	// ServerInfo is populated after Connect.
@@ -792,30 +793,7 @@ func (c *Client) doConnect() error {
 		// Fallback: continue to the legacy initialize handshake below.
 	}
 
-	// Build client capabilities based on registered handlers
-	caps := core.ClientCapabilities{}
-	if c.samplingHandler != nil {
-		caps.Sampling = &struct{}{}
-	}
-	if c.elicitationHandler != nil {
-		cap := &core.ElicitationCap{Form: &core.ElicitationFormCap{}}
-		if c.elicitationURLSupport {
-			cap.URL = &core.ElicitationURLCap{}
-		}
-		caps.Elicitation = cap
-	}
-	if c.rootsHandler != nil {
-		caps.Roots = &core.RootsCap{ListChanged: true}
-	}
-	if c.fileInputs {
-		caps.FileInputs = &struct{}{}
-	}
-	if len(c.extensions) > 0 {
-		caps.Extensions = make(map[string]core.ClientExtensionCap, len(c.extensions))
-		for id, cap := range c.extensions {
-			caps.Extensions[id] = cap
-		}
-	}
+	caps := c.clientCapabilities()
 
 	// Initialize handshake
 	resp, err := c.rawCall("initialize", initializeParams{
@@ -910,6 +888,36 @@ func (c *Client) startKeepalive() {
 			}
 		}
 	})
+}
+
+// clientCapabilities is what the initialize handshake declares, built from the
+// registered handlers. Connect and the reconnect after a transient failure both
+// use it, so a server reached again sees the same client.
+func (c *Client) clientCapabilities() core.ClientCapabilities {
+	caps := core.ClientCapabilities{}
+	if c.samplingHandler != nil {
+		caps.Sampling = &struct{}{}
+	}
+	if c.elicitationHandler != nil {
+		cap := &core.ElicitationCap{Form: &core.ElicitationFormCap{}}
+		if c.elicitationURLSupport {
+			cap.URL = &core.ElicitationURLCap{}
+		}
+		caps.Elicitation = cap
+	}
+	if c.rootsHandler != nil {
+		caps.Roots = &core.RootsCap{ListChanged: true}
+	}
+	if c.fileInputs {
+		caps.FileInputs = &struct{}{}
+	}
+	if len(c.extensions) > 0 {
+		caps.Extensions = make(map[string]core.ClientExtensionCap, len(c.extensions))
+		for id, cap := range c.extensions {
+			caps.Extensions[id] = cap
+		}
+	}
+	return caps
 }
 
 // Close terminates the client session and transport.
@@ -1903,6 +1911,10 @@ func (c *Client) rawCallWithContext(method string, params any, cc *CallContext) 
 	}
 
 	resp, err := c.doRawCall(method, params, cc)
+	if err != nil && c.maxRetries > 0 && IsTransientError(err) && c.noReplay {
+		c.reconnectOnly()
+		return nil, err
+	}
 	if err != nil && c.maxRetries > 0 && IsTransientError(err) {
 		return c.retryWithReconnect(func() (*rpcResponse, error) {
 			return c.doRawCall(method, params, cc)
