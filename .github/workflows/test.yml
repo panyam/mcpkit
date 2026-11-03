@@ -133,7 +133,7 @@ jobs:
       - name: Run conformance suite
         run: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -169,7 +169,7 @@ jobs:
       - name: Run E2E tests (auth + apps)
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -210,7 +210,7 @@ jobs:
       - name: Rehearse a release and install every command from it
         run: make rehearse-release
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -243,7 +243,7 @@ jobs:
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -281,7 +281,7 @@ jobs:
       - name: Run experimental events Go client tests
         run: bash experimental/scripts/test-events-clients-go.sh
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -335,7 +335,7 @@ jobs:
       - name: Run the TypeScript page client tests
         run: bash experimental/scripts/test-rooms-ts.sh
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -394,7 +394,7 @@ jobs:
       - name: Typecheck the bridge and check the committed build is current
         run: bash ext/ui/scripts/check-bridge.sh
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -455,7 +455,7 @@ jobs:
       - name: Drive all four Views through /host
         run: bash scripts/test-e2e.sh
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
@@ -568,7 +568,7 @@ jobs:
         working-directory: mcpkit
         run: make check-snippets
 
-      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+      - if: github.ref == 'refs/heads/main' && !cancelled()
         uses: actions/cache/save@v6.1.0
         with:
           path: |
