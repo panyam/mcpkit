@@ -9,6 +9,10 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+## [0.8.16] - 2026-11-03
+
+Full write-up: [`docs/releases/v0.8.16.md`](docs/releases/v0.8.16.md).
+
 ### Added
 - **`client.WithCleanEnv()`**, a `CommandOption` that starts a stdio server
   with an empty environment, so it sees only the variables given with
