@@ -30,8 +30,13 @@ entry.
 
 From a green `main`:
 
-1. **Gate.** `make test` (add `make audit` / `make testall` for a stable minor;
-   a `-bN` pre-release can use `make test` alone).
+1. **Gate.** The commit you're releasing has a green `Test` run on main:
+   `gh run list --workflow test.yml --branch main --commit "$(git rev-parse HEAD)"`.
+   CI already ran the root suite `make test` runs, and the sub-module suites,
+   on it, so re-running it locally repeats that work. Run `make test` yourself
+   only when that run is missing or red.
+   A stable minor still adds `make audit` and `make testall`, which CI doesn't
+   cover.
 2. **Bump sub-module requires.** `make bump-root V=<version>` — repoints every
    sub-module's `require github.com/panyam/mcpkit` at `<version>`, and every
    tagged sub-module's requires on other tagged sub-modules too

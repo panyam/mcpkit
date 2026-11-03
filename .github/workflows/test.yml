@@ -12,9 +12,30 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # setup-go's own cache is off: it keys by Go version and the root go.sum
+      # alone, so every Go job here shares one key, the first job to finish
+      # saves a cache holding only its own modules and builds, and the others
+      # restore that, download and compile the rest, and can never save. Each
+      # job keeps its own cache instead (restore below, save at the end).
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      # Only main saves, a fresh entry per run, so the build cache follows the
+      # code. A PR restores main's latest for this job, falling back to one
+      # from before the last go.sum change. Tests run with -count=1, so only
+      # downloading and compiling are saved, never test results.
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - uses: actions/setup-node@v7
         with:
@@ -79,7 +100,7 @@ jobs:
         run: ./scripts/check-examples-build.sh
 
       - name: Run unit tests
-        run: go test ./... -v
+        run: go test ./... -v -count=1
 
       - name: Vet
         run: go vet ./...
@@ -112,27 +133,56 @@ jobs:
       - name: Run conformance suite
         run: npx -y @modelcontextprotocol/conformance server --url http://localhost:18799/mcp --expected-failures conformance/baseline.yml
 
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
   test-auth:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Run auth sub-module tests
-        run: cd ext/auth && go test ./... -v
+        run: cd ext/auth && go test ./... -v -count=1
 
       - name: Run E2E tests (auth + apps)
         run: cd tests/e2e && go test ./... -v -count=1 -timeout 60s
+
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
   # Every command in a tagged module failed `go install pkg@vX` at every
   # release until #1488, because the tags carried in-repo replaces. This runs
   # bump-pins and tag-all at a fake version in a clone and installs each
   # command from it. Full history because mcpskills-walkthrough pins the
   # untagged examples/common at a pseudo-version.
+
   release-rehearsal:
     runs-on: ubuntu-latest
     steps:
@@ -140,33 +190,88 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Rehearse a release and install every command from it
         run: make rehearse-release
+
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
   test-ui:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Run ui sub-module tests
         run: cd ext/ui && go test ./... -v -count=1 -timeout 30s
+
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
   test-events:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       # Neither events module ran in any workflow, so the Go client's dedup
       # and replay checks (#1558) would have shipped unrun.
@@ -176,14 +281,35 @@ jobs:
       - name: Run experimental events Go client tests
         run: bash experimental/scripts/test-events-clients-go.sh
 
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
   test-rooms:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Run experimental rooms tests
         run: bash experimental/scripts/test-rooms.sh
@@ -209,14 +335,35 @@ jobs:
       - name: Run the TypeScript page client tests
         run: bash experimental/scripts/test-rooms-ts.sh
 
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
   test-agents:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - name: Run experimental agents tests
         run: bash experimental/scripts/test-agents.sh
@@ -247,10 +394,19 @@ jobs:
       - name: Typecheck the bridge and check the committed build is current
         run: bash ext/ui/scripts/check-bridge.sh
 
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+
   # One Go backend serving the same app through four View runtimes, driven in
   # Chromium through upstream's reference AppBridge (issue 1474). The first
   # browser test in CI, so a View that stops working fails here rather than in
   # a reader's host.
+
   apps-any-frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -259,9 +415,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       - uses: pnpm/action-setup@v6
         with:
@@ -285,6 +454,14 @@ jobs:
 
       - name: Drive all four Views through /host
         run: bash scripts/test-e2e.sh
+
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
 
   conformance-report:
     # Regenerates CONFORMANCE.md against the current testserver + the upstream
@@ -331,9 +508,22 @@ jobs:
           ref: ${{ steps.pin.outputs.sha }}
           path: conf-upstream-main
 
-      - uses: actions/setup-go@v7
+      # Its own Go cache, as the test job explains.
+      - id: go
+        uses: actions/setup-go@v7
         with:
           go-version-file: mcpkit/go.mod
+          cache: false
+
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('mcpkit/**/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('mcpkit/**/go.sum') }}-
+            go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-
 
       # Must precede setup-node so its pnpm cache resolution finds the binary.
       # Also needed by the check-conformance-stale step below, which shells out
@@ -377,6 +567,14 @@ jobs:
       - name: Check Get Started snippets match the example
         working-directory: mcpkit
         run: make check-snippets
+
+      - if: (github.ref == 'refs/heads/main' || github.head_ref == 'ci/per-job-go-cache') && !cancelled()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ github.job }}-${{ hashFiles('mcpkit/**/go.sum') }}-${{ github.run_id }}
 
   apps-compat-report:
     # Mirrors conformance-report: regenerates conformance/apps/COMPAT.md
