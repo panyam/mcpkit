@@ -9,6 +9,14 @@ Releases before 0.3.0 were tag-only and are not back-filled here.
 
 ## [Unreleased]
 
+### Changed
+- **The stateless wire requires `MCP-Protocol-Version`.** A stateless request
+  without the header now gets HTTP 400 and `-32020`, as 2026-07-28 requires.
+  Before, the server accepted a request that carried the version only in
+  `_meta`. The check covers plain JSON, SSE responses and
+  `subscriptions/listen`. The mcpkit client already sends the header, so only
+  hand-built requests need to add it (#1569).
+
 ## [0.8.16] - 2026-11-03
 
 Full write-up: [`docs/releases/v0.8.16.md`](docs/releases/v0.8.16.md).
